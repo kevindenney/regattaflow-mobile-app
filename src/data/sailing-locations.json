@@ -1,0 +1,430 @@
+{
+  "venues": {
+    "san-francisco-bay": {
+      "id": "san-francisco-bay",
+      "name": "San Francisco Bay",
+      "region": "us-west-coast",
+      "country": "United States",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 37.8, "longitude": -122.4 },
+        "bounds": {
+          "southwest": { "latitude": 37.7, "longitude": -122.55 },
+          "northeast": { "latitude": 37.9, "longitude": -122.25 }
+        }
+      },
+      "features": {
+        "microClimate": true,
+        "complexCurrents": true,
+        "bridgeEffects": true,
+        "thermalWinds": true
+      },
+      "dataSources": {
+        "bathymetry": ["noaa-ncei"],
+        "weather": ["noaa-gfs", "noaa-buoys"],
+        "tides": ["noaa-coops"],
+        "charts": ["noaa-enc", "openseamap"]
+      },
+      "weatherStations": [
+        { "id": "TIBC1", "name": "Tiburon", "location": { "latitude": 37.89, "longitude": -122.45 } },
+        { "id": "ALCATRAZ", "name": "Alcatraz Island", "location": { "latitude": 37.826, "longitude": -122.423 } },
+        { "id": "ANMN6", "name": "Angel Island", "location": { "latitude": 37.86, "longitude": -122.43 } }
+      ],
+      "tideStations": [
+        { "id": "9414290", "name": "San Francisco", "location": { "latitude": 37.807, "longitude": -122.465 } },
+        { "id": "9414863", "name": "Richmond", "location": { "latitude": 37.929, "longitude": -122.4 } }
+      ],
+      "racingFeatures": {
+        "bigBoatSeries": {
+          "courseArea": {
+            "southwest": { "latitude": 37.82, "longitude": -122.48 },
+            "northeast": { "latitude": 37.87, "longitude": -122.43 }
+          },
+          "startLine": {
+            "start": { "latitude": 37.831, "longitude": -122.453 },
+            "end": { "latitude": 37.829, "longitude": -122.451 }
+          }
+        },
+        "berkeleyCircle": {
+          "center": { "latitude": 37.87, "longitude": -122.31 },
+          "radius": 1000
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Alcatraz Shoal",
+          "location": { "latitude": 37.823, "longitude": -122.421 },
+          "type": "shallow-water",
+          "depth": 2.1
+        }
+      ],
+      "optimizations": {
+        "windPrediction": "golden-gate-venturi-effect",
+        "currentAnalysis": "ebb-flood-patterns",
+        "thermalModeling": true,
+        "fogForecasting": true
+      }
+    },
+
+    "newport-rhode-island": {
+      "id": "newport-rhode-island",
+      "name": "Newport, Rhode Island",
+      "region": "us-east-coast",
+      "country": "United States",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 41.49, "longitude": -71.31 },
+        "bounds": {
+          "southwest": { "latitude": 41.45, "longitude": -71.35 },
+          "northeast": { "latitude": 41.53, "longitude": -71.27 }
+        }
+      },
+      "features": {
+        "openOcean": true,
+        "complexShore": true,
+        "gulfStreamAccess": true,
+        "bermudaRaceStart": true
+      },
+      "dataSources": {
+        "bathymetry": ["noaa-ncei"],
+        "weather": ["noaa-gfs", "noaa-buoys"],
+        "tides": ["noaa-coops"],
+        "charts": ["noaa-enc"]
+      },
+      "weatherStations": [
+        { "id": "BUZM3", "name": "Buzzards Bay", "location": { "latitude": 41.4, "longitude": -71.03 } },
+        { "id": "NWPR1", "name": "Newport", "location": { "latitude": 41.49, "longitude": -71.33 } }
+      ],
+      "tideStations": [
+        { "id": "8452660", "name": "Newport", "location": { "latitude": 41.505, "longitude": -71.326 } }
+      ],
+      "racingFeatures": {
+        "bermudaRaceStart": {
+          "startLine": {
+            "start": { "latitude": 41.495, "longitude": -71.315 },
+            "end": { "latitude": 41.493, "longitude": -71.313 }
+          },
+          "courseArea": "open-atlantic"
+        },
+        "blockIslandRace": {
+          "courseArea": {
+            "southwest": { "latitude": 41.15, "longitude": -71.6 },
+            "northeast": { "latitude": 41.5, "longitude": -71.15 }
+          }
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Brenton Reef",
+          "location": { "latitude": 41.426, "longitude": -71.302 },
+          "type": "shallow-water",
+          "depth": 3.0
+        }
+      ],
+      "optimizations": {
+        "gulfStreamAnalysis": true,
+        "coastalEffects": true,
+        "offshoreWeatherRouting": true,
+        "bermudaHighPressure": true
+      }
+    },
+
+    "cowes-isle-of-wight": {
+      "id": "cowes-isle-of-wight",
+      "name": "Cowes, Isle of Wight",
+      "region": "uk-solent",
+      "country": "United Kingdom",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 50.76, "longitude": -1.3 },
+        "bounds": {
+          "southwest": { "latitude": 50.7, "longitude": -1.4 },
+          "northeast": { "latitude": 50.82, "longitude": -1.2 }
+        }
+      },
+      "features": {
+        "complexTides": true,
+        "doubleTide": true,
+        "shelteredWater": true,
+        "commercialTraffic": true
+      },
+      "dataSources": {
+        "bathymetry": ["ukho", "emodnet"],
+        "weather": ["met-office-uk"],
+        "tides": ["ukho-tides"],
+        "charts": ["ukho-enc", "openseamap"]
+      },
+      "tideStations": [
+        { "id": "0113", "name": "Cowes", "location": { "latitude": 50.76, "longitude": -1.297 } },
+        { "id": "0114", "name": "Portsmouth", "location": { "latitude": 50.802, "longitude": -1.109 } }
+      ],
+      "racingFeatures": {
+        "cowesWeek": {
+          "courseAreas": [
+            {
+              "name": "Committee Boat Alpha",
+              "bounds": {
+                "southwest": { "latitude": 50.745, "longitude": -1.35 },
+                "northeast": { "latitude": 50.775, "longitude": -1.25 }
+              }
+            }
+          ]
+        },
+        "roundTheIsland": {
+          "course": "circumnavigation",
+          "distance": "50nm"
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Bramble Bank",
+          "location": { "latitude": 50.792, "longitude": -1.318 },
+          "type": "drying-bank",
+          "depth": 0.0
+        },
+        {
+          "name": "Ryde Middle",
+          "location": { "latitude": 50.765, "longitude": -1.275 },
+          "type": "shallow-water",
+          "depth": 1.5
+        }
+      ],
+      "optimizations": {
+        "tidalStrategy": "solent-double-tide",
+        "commercialTraffic": true,
+        "channelCrossing": true,
+        "windShadowEffects": true
+      }
+    },
+
+    "sydney-harbour": {
+      "id": "sydney-harbour",
+      "name": "Sydney Harbour",
+      "region": "australia-east-coast",
+      "country": "Australia",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": -33.855, "longitude": 151.21 },
+        "bounds": {
+          "southwest": { "latitude": -33.88, "longitude": 151.18 },
+          "northeast": { "latitude": -33.83, "longitude": 151.24 }
+        }
+      },
+      "features": {
+        "southerlyBuster": true,
+        "harborRacing": true,
+        "sydneyHobartStart": true,
+        "complexTopography": true
+      },
+      "dataSources": {
+        "bathymetry": ["aho-australia", "gebco"],
+        "weather": ["bom-australia"],
+        "tides": ["aho-tides"],
+        "charts": ["aho-enc", "openseamap"]
+      },
+      "weatherStations": [
+        { "id": "066062", "name": "Sydney Observatory Hill", "location": { "latitude": -33.859, "longitude": 151.205 } },
+        { "id": "066037", "name": "Sydney Harbour", "location": { "latitude": -33.857, "longitude": 151.242 } }
+      ],
+      "tideStations": [
+        { "id": "Sydney", "name": "Fort Denison", "location": { "latitude": -33.857, "longitude": 151.224 } }
+      ],
+      "racingFeatures": {
+        "sydneyHobartStart": {
+          "startLine": {
+            "start": { "latitude": -33.869, "longitude": 151.223 },
+            "end": { "latitude": -33.867, "longitude": 151.221 }
+          }
+        },
+        "18FooterSailing": {
+          "courseArea": {
+            "southwest": { "latitude": -33.87, "longitude": 151.22 },
+            "northeast": { "latitude": -33.84, "longitude": 151.26 }
+          }
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Shark Island",
+          "location": { "latitude": -33.873, "longitude": 151.244 },
+          "type": "island",
+          "clearance": 10.0
+        }
+      ],
+      "optimizations": {
+        "southerlyBusterDetection": true,
+        "harborWindEffects": true,
+        "eastAustralianCurrent": true,
+        "bassStraitRouting": true
+      }
+    },
+
+    "french-riviera": {
+      "id": "french-riviera",
+      "name": "French Riviera",
+      "region": "mediterranean-west",
+      "country": "France",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 43.55, "longitude": 7.0 },
+        "bounds": {
+          "southwest": { "latitude": 43.2, "longitude": 6.5 },
+          "northeast": { "latitude": 43.8, "longitude": 7.5 }
+        }
+      },
+      "features": {
+        "mistralWinds": true,
+        "thermalPatterns": true,
+        "superyachtRacing": true,
+        "luxuryVenues": true
+      },
+      "dataSources": {
+        "bathymetry": ["shom-france", "emodnet"],
+        "weather": ["meteofrance"],
+        "tides": ["shom-tides"],
+        "charts": ["shom-enc", "openseamap"]
+      },
+      "racingFeatures": {
+        "lesVoilesDeCannes": {
+          "courseArea": {
+            "southwest": { "latitude": 43.52, "longitude": 6.9 },
+            "northeast": { "latitude": 43.58, "longitude": 7.1 }
+          }
+        },
+        "monacoClassicWeek": {
+          "courseArea": {
+            "southwest": { "latitude": 43.72, "longitude": 7.4 },
+            "northeast": { "latitude": 43.78, "longitude": 7.46 }
+          }
+        }
+      },
+      "optimizations": {
+        "mistralForecasting": true,
+        "thermalWindModeling": true,
+        "superyachtOptimization": true,
+        "marinaDocking": true
+      }
+    }
+  },
+
+  "regions": {
+    "us-east-coast": {
+      "name": "US East Coast",
+      "primaryDataSources": ["noaa"],
+      "weatherModel": "gfs-nam",
+      "tideSystem": "atlantic-coast",
+      "seasonalPatterns": {
+        "summer": "thermal-dominated",
+        "winter": "frontal-systems"
+      }
+    },
+    "us-west-coast": {
+      "name": "US West Coast",
+      "primaryDataSources": ["noaa"],
+      "weatherModel": "gfs-nam",
+      "tideSystem": "pacific-coast",
+      "seasonalPatterns": {
+        "summer": "marine-layer-thermals",
+        "winter": "pacific-storms"
+      }
+    },
+    "uk-solent": {
+      "name": "UK Solent",
+      "primaryDataSources": ["ukho", "met-office"],
+      "weatherModel": "uk-met-office",
+      "tideSystem": "complex-european",
+      "seasonalPatterns": {
+        "summer": "thermal-sea-breeze",
+        "winter": "atlantic-depressions"
+      }
+    },
+    "mediterranean-west": {
+      "name": "Western Mediterranean",
+      "primaryDataSources": ["emodnet", "shom"],
+      "weatherModel": "ecmwf-ifs",
+      "tideSystem": "minimal-tidal",
+      "seasonalPatterns": {
+        "summer": "thermal-mistral",
+        "winter": "frontal-tramontane"
+      }
+    },
+    "australia-east-coast": {
+      "name": "Australian East Coast",
+      "primaryDataSources": ["aho", "bom"],
+      "weatherModel": "access-global",
+      "tideSystem": "pacific-australian",
+      "seasonalPatterns": {
+        "summer": "southerly-busters",
+        "winter": "east-coast-lows"
+      }
+    }
+  },
+
+  "dataSourceEndpoints": {
+    "premium": {
+      "mapbox-professional": "https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12",
+      "weatherapi-pro": "https://api.weatherapi.com/v1",
+      "predictwind-pro": "https://api.predictwind.com/v1",
+      "worldtides-pro": "https://www.worldtides.info/api/v3",
+      "marinetraffic-ais": "https://services.marinetraffic.com/api",
+      "meteomatics": "https://api.meteomatics.com"
+    },
+    "standard": {
+      "noaa-gfs": "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl",
+      "noaa-ncei": "https://www.ncei.noaa.gov/wms/nos-hydro",
+      "noaa-coops": "https://tidesandcurrents.noaa.gov/api/",
+      "noaa-enc": "https://nauticalcharts.noaa.gov/",
+      "gebco": "https://www.gebco.net/data_and_products/gebco_web_services/",
+      "emodnet": "https://ows.emodnet-bathymetry.eu/wms",
+      "openseamap": "https://tiles.openseamap.org/seamark/",
+      "open-meteo": "https://api.open-meteo.com/v1/marine",
+      "worldtides": "https://www.worldtides.info/api/v2"
+    }
+  },
+
+  "phasedRollout": {
+    "phase1": {
+      "timeframe": "Month 1-2",
+      "venues": [
+        "san-francisco-bay",
+        "newport-rhode-island",
+        "cowes-isle-of-wight"
+      ],
+      "features": ["basic-navigation", "weather-overlay", "tide-predictions"]
+    },
+    "phase2": {
+      "timeframe": "Month 2-3",
+      "venues": [
+        "french-riviera",
+        "sydney-harbour"
+      ],
+      "features": ["racing-features", "advanced-weather", "offline-caching"]
+    },
+    "phase3": {
+      "timeframe": "Month 4-6",
+      "venues": ["all-remaining-global-venues"],
+      "features": ["ai-route-optimization", "real-time-tracking", "community-features"]
+    }
+  },
+
+  "featurePriorities": {
+    "critical": [
+      "accurate-bathymetry",
+      "real-time-weather",
+      "tide-predictions",
+      "navigation-safety"
+    ],
+    "important": [
+      "race-course-optimization",
+      "offline-capability",
+      "wind-routing",
+      "local-knowledge"
+    ],
+    "enhanced": [
+      "ai-recommendations",
+      "community-sharing",
+      "historical-analysis",
+      "performance-tracking"
+    ]
+  }
+}

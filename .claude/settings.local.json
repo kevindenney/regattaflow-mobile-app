@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__browser-tools__wipeLogs",
+      "mcp__browser-tools__takeScreenshot",
+      "mcp__browser-tools__getConsoleErrors",
+      "mcp__browser-tools__getConsoleLogs",
+      "Read(//Users/kevindenney/.config/claude/weather-mcp-server/**)",
+      "Bash(go build:*)",
+      "Read(//Users/kevindenney/.config/claude/**)",
+      "Bash(npm install)",
+      "WebSearch",
+      "Bash(chmod:*)",
+      "WebFetch(domain:aisstream.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(open:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm run web:*)",
+      "mcp__browser-tools__getNetworkErrors",
+      "Bash(npm run build:*)",
+      "Bash(timeout 10 npm run dev)",
+      "Bash(pkill:*)",
+      "mcp__browser-tools__runDebuggerMode",
+      "mcp__browser-tools__runAuditMode",
+      "mcp__browser-tools__runAccessibilityAudit"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

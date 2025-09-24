@@ -836,6 +836,40 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
 
         <View style={styles.controls}>
         <View style={styles.controlGroup}>
+          {/* Zoom Controls */}
+          <View style={styles.zoomControls}>
+            <TouchableOpacity
+              style={styles.zoomButton}
+              onPress={() => {
+                console.log('🔍 Zoom in pressed');
+                const newZoom = Math.min(18, mapZoom + 1);
+                setMapZoom(newZoom);
+                setViewConfig(prev => ({
+                  ...prev,
+                  camera: { ...prev.camera, zoom: newZoom }
+                }));
+              }}
+              activeOpacity={0.8}
+            >
+              <ThemedText style={styles.zoomText}>+</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.zoomButton}
+              onPress={() => {
+                console.log('🔍 Zoom out pressed');
+                const newZoom = Math.max(5, mapZoom - 1);
+                setMapZoom(newZoom);
+                setViewConfig(prev => ({
+                  ...prev,
+                  camera: { ...prev.camera, zoom: newZoom }
+                }));
+              }}
+              activeOpacity={0.8}
+            >
+              <ThemedText style={styles.zoomText}>-</ThemedText>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
             style={[styles.controlButton, {
               backgroundColor: is3DMode ? '#0066CC' : '#E0E0E0',
@@ -1347,6 +1381,37 @@ const styles = StyleSheet.create({
   controlGroup: {
     flexDirection: 'row',
     gap: 8,
+  },
+  zoomControls: {
+    flexDirection: 'column',
+    gap: 2,
+  },
+  zoomButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#0066CC',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 4,
+      },
+    }),
+  },
+  zoomText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0066CC',
   },
   controlButton: {
     width: 44,

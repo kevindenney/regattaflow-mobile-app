@@ -1,3 +1,4 @@
+import mapboxgl from 'mapbox-gl';
 import maplibregl from 'maplibre-gl';
 import {
   MapEngine,

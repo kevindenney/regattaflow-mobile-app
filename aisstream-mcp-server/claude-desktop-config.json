@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aisstream": {
+      "command": "node",
+      "args": ["/Users/kevindenney/Developer/regattaflow-app/aisstream-mcp-server/dist/index.js"],
+      "env": {
+        "AISSTREAM_API_KEY": "01037d15e391c289c1d106479d8870e1df107f65"
+      }
+    }
+  }
+}

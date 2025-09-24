@@ -1,6 +1,27 @@
-# Welcome to your Expo app 👋
+# RegattaFlow - Professional Sailing & Racing App 🚤
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This is a professional maritime application built with [Expo](https://expo.dev) for sailing enthusiasts and racing teams.
+
+## Architecture Overview
+
+### Mapping Engine: MapLibre GL
+
+We use **MapLibre GL** as our primary mapping engine for the following reasons:
+
+- **Cost Effective**: Free and open source (vs $0.50-$5 per 1k requests for commercial alternatives)
+- **Maritime Focus**: Excellent integration with OpenSeaMap for nautical charts
+- **No Vendor Lock-in**: Full control over mapping capabilities
+- **Professional Features**: Advanced bathymetry, terrain rendering, and 3D visualization
+- **Bundle Size**: ~200KB smaller than commercial alternatives
+
+### Key Maritime Features
+
+- **Nautical Charts**: Integrated OpenSeaMap support
+- **Bathymetry Data**: NOAA and GEBCO integration for depth visualization
+- **Real-time Weather**: Professional weather services integration
+- **AIS Vessel Tracking**: Live vessel positions and fleet management
+- **Racing Tools**: Tactical analysis, laylines, and course planning
+- **3D Terrain**: Underwater topography and seafloor visualization
 
 ## Get started
 
@@ -35,12 +56,49 @@ npm run reset-project
 
 This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
-## Learn more
+## Maritime Development Setup
 
-To learn more about developing your project with Expo, look at the following resources:
+3. Configure API keys (optional)
+   ```bash
+   # Copy environment template
+   cp .env.example .env.local
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+   # Add your API keys for enhanced features:
+   # WEATHER_API_KEY=your_weather_api_key
+   # AISSTREAM_API_KEY=your_ais_api_key
+   ```
+
+4. Enable professional features
+   ```bash
+   # Professional mode enables advanced maritime features
+   npm run start -- --professional
+   ```
+
+## Technical Stack
+
+### Core Technologies
+- **React Native + Expo**: Cross-platform mobile development
+- **MapLibre GL**: Open source mapping and visualization
+- **TypeScript**: Type-safe development
+- **React Three Fiber**: 3D graphics and terrain rendering
+
+### Maritime Data Sources
+- **OpenSeaMap**: Nautical charts and marine navigation aids
+- **NOAA**: Bathymetry data and weather services
+- **GEBCO**: Global ocean depth data
+- **AIS Stream**: Real-time vessel tracking
+
+### Professional Services Integration
+- **Weather Services**: Multiple API providers for accurate marine weather
+- **Bathymetry Services**: High-resolution seabed mapping
+- **Tactical Services**: Racing strategy and navigation tools
+
+## Development Resources
+
+- [Expo documentation](https://docs.expo.dev/): Framework fundamentals and guides
+- [MapLibre GL Documentation](https://maplibre.org/maplibre-gl-js-docs/): Mapping capabilities
+- [OpenSeaMap](https://www.openseamap.org/): Nautical chart data source
+- [NOAA Data Services](https://www.noaa.gov/): Weather and bathymetry APIs
 
 ## Join the community
 

@@ -626,3 +626,28 @@ export interface FlyToOptions extends CameraOptions {
   curve?: number;
   maxDuration?: number;
 }
+
+// AIS Vessel Tracking Types
+export enum VesselType {
+  SAILING = 'sailing',
+  RACING_YACHT = 'racing_yacht',
+  MOTOR_YACHT = 'motor_yacht',
+  CARGO = 'cargo',
+  PASSENGER = 'passenger',
+  TANKER = 'tanker',
+  FISHING = 'fishing',
+  MILITARY = 'military',
+  UNKNOWN = 'unknown'
+}
+
+export enum NavigationStatus {
+  UNDER_WAY = 'under_way',
+  AT_ANCHOR = 'at_anchor',
+  NOT_UNDER_COMMAND = 'not_under_command',
+  RESTRICTED_MANEUVERABILITY = 'restricted_maneuverability',
+  CONSTRAINED_BY_DRAFT = 'constrained_by_draft',
+  MOORED = 'moored',
+  AGROUND = 'aground',
+  RACING = 'racing',
+  UNKNOWN = 'unknown'
+}
