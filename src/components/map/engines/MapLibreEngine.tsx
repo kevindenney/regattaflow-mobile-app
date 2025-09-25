@@ -1,5 +1,5 @@
 import mapboxgl from 'mapbox-gl';
-import maplibregl from 'maplibre-gl';
+// import maplibregl from 'maplibre-gl'; // TODO: Fix import.meta issue
 import {
   MapEngine,
   AdvancedMapConfig,
@@ -13,7 +13,7 @@ import {
 } from '@/src/lib/types/advanced-map';
 
 export class MapLibreEngine implements MapEngine {
-  private map: maplibregl.Map | null = null;
+  private map: any | null = null; // TODO: Fix maplibregl type
   private container: HTMLElement | null = null;
   private config: AdvancedMapConfig | null = null;
   private performanceMonitor: PerformanceMonitor;
@@ -26,8 +26,9 @@ export class MapLibreEngine implements MapEngine {
     this.container = container;
     this.config = config;
 
+    // TODO: Re-enable when import.meta issue is fixed
     // Create MapLibre GL map with optimized settings
-    this.map = new maplibregl.Map({
+    // this.map = new maplibregl.Map({
       container,
       style: this.getInitialStyle(config),
       center: [-122.4, 37.8], // San Francisco Bay default

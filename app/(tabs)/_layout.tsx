@@ -7,7 +7,16 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
+  console.log('🔸 TabLayout: Starting to render');
+  console.log('🔍 TabLayout: Current URL:', typeof window !== 'undefined' ? window.location.href : 'SSR');
+
   const colorScheme = useColorScheme();
+  console.log('🎨 TabLayout: Color scheme:', colorScheme);
+
+  const tabScreens = [
+    'dashboard', 'map', 'regattas', 'results', 'strategy', 'documents', 'profile'
+  ];
+  console.log('📱 TabLayout: Configured tab screens:', tabScreens);
 
   return (
     <Tabs
@@ -16,6 +25,13 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Dashboard',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+        }}
+      />
       <Tabs.Screen
         name="map"
         options={{
@@ -31,10 +47,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="results"
+        options={{
+          title: 'Results',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="trophy.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="strategy"
         options={{
           title: 'Strategy',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain.head.profile" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="documents"
+        options={{
+          title: 'Documents',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.fill" color={color} />,
         }}
       />
       <Tabs.Screen

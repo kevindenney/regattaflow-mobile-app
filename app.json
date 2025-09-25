@@ -23,7 +23,17 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "RegattaFlow - Sailing Race Strategy & Performance",
+      "shortName": "RegattaFlow",
+      "description": "AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide",
+      "lang": "en",
+      "scope": "/",
+      "themeColor": "#0066CC",
+      "backgroundColor": "#ffffff",
+      "display": "standalone",
+      "orientation": "portrait",
+      "bundler": "metro"
     },
     "plugins": [
       "expo-router",

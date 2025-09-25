@@ -3,7 +3,7 @@ import { StyleSheet, View, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Map3DView } from '@/src/components/map/Map3DView';
-import { ProfessionalMap3DView } from '@/src/components/map/ProfessionalMap3DView';
+import { ProfessionalMapScreen } from '@/src/components/map/ProfessionalMapScreen';
 import type { RaceMark, WeatherConditions, AdvancedWeatherConditions, NavigationResult } from '@/src/lib/types/map';
 import type { GeoLocation } from '@/src/lib/types/advanced-map';
 
@@ -151,14 +151,14 @@ export default function MapScreen() {
 
       {/* Render appropriate map component */}
       {professionalMode ? (
-        <ProfessionalMap3DView
+        <ProfessionalMapScreen
           venue={currentVenue}
           marks={sampleMarks}
+          initialWeather={currentWeather}
           onMarkPress={handleMarkPress}
           onMapPress={handleMapPress}
           onWeatherUpdate={handleWeatherUpdate}
           onNavigationCalculated={handleNavigationCalculated}
-          apiKeys={apiKeys}
           professionalMode={true}
         />
       ) : (

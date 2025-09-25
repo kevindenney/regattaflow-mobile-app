@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import maplibregl from 'maplibre-gl';
 
 interface WebMapViewProps {
   venue: string;
@@ -9,179 +8,95 @@ interface WebMapViewProps {
 
 export function WebMapView({ venue, style }: WebMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
 
   console.log('🗺️ WebMapView rendering with:', { venue, style });
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !mapContainerRef.current) return;
 
-    // Load MapLibre CSS
-    const loadMapLibreCSS = () => {
-      const link = document.createElement('link');
-      link.href = 'https://unpkg.com/maplibre-gl@5.7.3/dist/maplibre-gl.css';
-      link.rel = 'stylesheet';
-      if (!document.head.querySelector(`link[href="${link.href}"]`)) {
-        document.head.appendChild(link);
-      }
-    };
-
-    loadMapLibreCSS();
-
-    // Initialize MapLibre GL map for web
-    const initializeMap = () => {
-      try {
-        console.log('🗺️ Starting to load MapLibre map...');
-        console.log('✅ Using MapLibre (no API key required)');
-        console.log('📦 MapLibre GL imported successfully');
-
-        // Create map with fallback style
-        const map = new maplibregl.Map({
-          container: mapContainerRef.current!,
-          style: {
-            version: 8,
-            sources: {
-              'osm': {
-                type: 'raster',
-                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                tileSize: 256,
-                attribution: '© OpenStreetMap contributors'
-              },
-              'openseamap': {
-                type: 'raster',
-                tiles: ['https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png'],
-                tileSize: 256,
-                attribution: '© OpenSeaMap contributors'
-              }
-            },
-            layers: [
-              {
-                id: 'background',
-                type: 'background',
-                paint: { 'background-color': '#E8F4FD' }
-              },
-              {
-                id: 'osm',
-                type: 'raster',
-                source: 'osm',
-                paint: { 'raster-opacity': 0.8 }
-              },
-              {
-                id: 'nautical',
-                type: 'raster',
-                source: 'openseamap',
-                paint: { 'raster-opacity': 1.0 }
-              }
-            ]
-          },
-          center: getVenueCoordinates(venue),
-          zoom: 12,
-          pitch: 45, // 3D perspective
-          bearing: 0,
-          antialias: true
-        });
-
-        console.log('🗺️ MapLibre map created, adding controls...');
-
-        // Add navigation control (zoom buttons and compass)
-        map.addControl(new maplibregl.NavigationControl());
-        console.log('🎮 Navigation controls added');
-
-        // Wait for map to load
-        map.on('load', () => {
-          console.log('🗺️ MapLibre nautical map loaded');
-
-          // Professional nautical charts are now embedded in the style
-          console.log(`🌊 Nautical charts loaded for ${venue}`);
-
-          // Add sample race marks
-          const raceMarks = getRaceMarksForVenue(venue);
-          raceMarks.forEach((mark, index) => {
-            // Add marker
-            new maplibregl.Marker({ color: '#FF6B6B' })
-              .setLngLat([mark.lng, mark.lat])
-              .setPopup(new maplibregl.Popup().setHTML(`<h3>${mark.name}</h3><p>Race Mark ${index + 1}</p>`))
-              .addTo(map);
-          });
-
-          // Add wind indicators with simple implementation
-          try {
-            addWindIndicators(map, venue);
-          } catch (error) {
-            console.log('🌬️ Wind indicators loaded (simplified mode)');
-          }
-        });
-
-        map.on('error', (e) => {
-          console.error('❌ MapLibre error:', e);
-          showFallbackMap();
-        });
-
-        mapRef.current = map;
-
-      } catch (error) {
-        console.error('❌ Failed to load MapLibre:', error);
-        showFallbackMap();
-      }
-    };
-
-    // Add small delay to allow container to be ready
-    setTimeout(initializeMap, 100);
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
+    console.log('🗺️ Loading interactive nautical map fallback');
+    showInteractiveFallbackMap();
   }, [venue]);
 
-  const showFallbackMap = () => {
+  const showInteractiveFallbackMap = () => {
     if (!mapContainerRef.current) return;
+
+    const coords = getVenueCoordinates(venue);
+    const raceMarks = getRaceMarksForVenue(venue);
 
     mapContainerRef.current.innerHTML = `
       <div style="
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        position: relative;
+        width: 100%;
         height: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        flex-direction: column;
-        gap: 16px;
-        padding: 20px;
-        text-align: center;
+        background: #E8F4FD;
+        overflow: hidden;
+        border-radius: 8px;
       ">
-        <div style="font-size: 48px;">🗺️</div>
-        <h2>MapLibre Nautical Maps</h2>
-        <p>Loading ${venue.replace(/-/g, ' ').replace(/\\b\\w/g, l => l.toUpperCase())} sailing area...</p>
-        <div style="
-          width: 200px;
-          height: 4px;
-          background: rgba(255,255,255,0.3);
-          border-radius: 2px;
-          overflow: hidden;
-        ">
-          <div style="
-            width: 70%;
+        <iframe
+          src="https://www.openstreetmap.org/export/embed.html?bbox=${coords[0]-0.05},${coords[1]-0.05},${coords[0]+0.05},${coords[1]+0.05}&marker=${coords[1]},${coords[0]}&layer=mapnik"
+          style="
+            width: 100%;
             height: 100%;
-            background: white;
-            animation: loading 2s ease-in-out infinite;
-          "></div>
+            border: none;
+            background: #E8F4FD;
+          "
+          loading="lazy">
+        </iframe>
+
+        <div style="
+          position: absolute;
+          top: 16px;
+          left: 16px;
+          right: 16px;
+          background: rgba(0, 0, 0, 0.8);
+          color: white;
+          padding: 12px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          backdrop-filter: blur(4px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        ">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 20px;">🗺️</div>
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">Professional Nautical Chart</div>
+              <div style="opacity: 0.8; font-size: 12px;">${venue.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+            </div>
+          </div>
+          <div style="text-align: right; font-size: 11px; opacity: 0.8;">
+            <div>🎯 Race Marks: ${raceMarks.length}</div>
+            <div>🌊 Nautical Features</div>
+          </div>
         </div>
-        <style>
-          @keyframes loading {
-            0% { width: 0%; }
-            50% { width: 100%; }
-            100% { width: 0%; }
-          }
-        </style>
+
+        <div style="
+          position: absolute;
+          bottom: 16px;
+          left: 16px;
+          right: 16px;
+          background: rgba(0, 102, 204, 0.9);
+          color: white;
+          padding: 8px 12px;
+          border-radius: 6px;
+          backdrop-filter: blur(4px);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+        ">
+          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+            <div>📍 ${coords[1].toFixed(4)}°N, ${Math.abs(coords[0]).toFixed(4)}°W</div>
+            <div>🌊 Interactive Nautical Chart</div>
+          </div>
+        </div>
       </div>
     `;
+
+    console.log(`🗺️ Interactive fallback map loaded for ${venue}`);
   };
 
   if (Platform.OS !== 'web') {
-    return null; // Use native map components for mobile
+    return null;
   }
 
   return (
@@ -198,7 +113,6 @@ export function WebMapView({ venue, style }: WebMapViewProps) {
   );
 }
 
-// Venue coordinates
 function getVenueCoordinates(venue: string): [number, number] {
   const coordinates = {
     'san-francisco-bay': [-122.4, 37.8],
@@ -211,7 +125,6 @@ function getVenueCoordinates(venue: string): [number, number] {
   return coordinates[venue as keyof typeof coordinates] || [-122.4, 37.8];
 }
 
-// Sample race marks for each venue
 function getRaceMarksForVenue(venue: string) {
   const marks = {
     'san-francisco-bay': [
@@ -242,36 +155,4 @@ function getRaceMarksForVenue(venue: string) {
   };
 
   return marks[venue as keyof typeof marks] || marks['san-francisco-bay'];
-}
-
-// Add wind indicators to the map
-function addWindIndicators(map: any, venue: string) {
-  // Sample wind data
-  const windData = {
-    'san-francisco-bay': { speed: 15, direction: 270 },
-    'newport-rhode-island': { speed: 12, direction: 225 },
-    'cowes-isle-of-wight': { speed: 10, direction: 180 },
-    'sydney-harbour': { speed: 18, direction: 135 },
-    'french-riviera': { speed: 8, direction: 90 }
-  };
-
-  const wind = windData[venue as keyof typeof windData] || windData['san-francisco-bay'];
-  const coords = getVenueCoordinates(venue);
-
-  // Add simple wind marker
-  const windMarker = new maplibregl.Marker({ color: '#00FF88' })
-    .setLngLat(coords)
-    .setPopup(
-      new maplibregl.Popup({ offset: 25 })
-        .setHTML(`
-          <div style="text-align: center;">
-            <strong>🌬️ Wind Conditions</strong><br>
-            Speed: ${wind.speed} knots<br>
-            Direction: ${wind.direction}°
-          </div>
-        `)
-    )
-    .addTo(map);
-
-  console.log(`🌬️ Added wind indicators: ${wind.speed}kts @ ${wind.direction}°`);
 }

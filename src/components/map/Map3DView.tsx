@@ -1343,18 +1343,6 @@ const styles = StyleSheet.create({
     width: 120,
     height: 80,
   },
-  currentFlowArrows: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    pointerEvents: 'none',
-  },
-  currentArrow: {
-    position: 'absolute',
-    fontSize: 16,
-  },
   raceMark: {
     position: 'absolute',
     alignItems: 'center',
