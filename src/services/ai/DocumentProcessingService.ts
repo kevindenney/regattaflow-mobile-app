@@ -17,7 +17,7 @@ export class DocumentProcessingService {
   private knowledgeBase: Map<string, ProcessedDocument> = new Map();
 
   constructor() {
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
     if (!apiKey) {
       console.warn('Google AI API key not found. Some features will be limited.');
       // Initialize without API key for development

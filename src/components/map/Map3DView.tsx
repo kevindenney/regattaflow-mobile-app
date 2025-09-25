@@ -1153,7 +1153,10 @@ const styles = StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
-    pointerEvents: 'none',
+    ...Platform.select({
+      web: { pointerEvents: 'none' },
+      default: {}
+    }),
   },
   windParticle: {
     position: 'absolute',
@@ -1212,7 +1215,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    pointerEvents: 'none',
+    ...Platform.select({
+      web: { pointerEvents: 'none' },
+      default: {}
+    }),
     zIndex: 20,
   },
   measurementPoint: {
@@ -1292,7 +1298,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    pointerEvents: 'none',
+    ...Platform.select({
+      web: { pointerEvents: 'none' },
+      default: {}
+    }),
   },
   currentArrow: {
     position: 'absolute',
@@ -1509,7 +1518,10 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 50, // Above nautical chart
-    pointerEvents: 'none',
+    ...Platform.select({
+      web: { pointerEvents: 'none' },
+      default: {}
+    }),
   },
   startLine: {
     position: 'absolute',
@@ -1641,7 +1653,10 @@ const styles = StyleSheet.create({
     minWidth: 30,
     minHeight: 24,
     zIndex: 100, // Above all elements
-    pointerEvents: 'none',
+    ...Platform.select({
+      web: { pointerEvents: 'none' },
+      default: {}
+    }),
     shadowColor: '#000',
     shadowOffset: { width: 1, height: 1 },
     shadowOpacity: 0.5,
