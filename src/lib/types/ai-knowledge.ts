@@ -36,6 +36,8 @@ export type DocumentClass =
   | 'venue_guide'
   | 'weather_guide'
   | 'technical_manual'
+  | 'safety_guide'
+  | 'cultural_brief'
   | 'other';
 
 // Document analysis result
@@ -48,11 +50,53 @@ export interface DocumentAnalysis {
   venue: string | null;
   summary: string;
   confidence?: number;
+  // Enhanced fields based on yacht club educational standards
+  safetyProtocols?: SafetyProtocol[];
+  culturalProtocols?: CulturalProtocol[];
+  equipmentRecommendations?: EquipmentRecommendation[];
+  competitiveIntelligence?: CompetitiveIntelligence[];
+}
+
+// Safety protocol from document analysis
+export interface SafetyProtocol {
+  type: 'offshore_preparation' | 'equipment_check' | 'crew_briefing' | 'emergency_procedure' | 'weather_limits';
+  requirement: string;
+  importance: 'mandatory' | 'recommended' | 'suggested';
+  consequences?: string;
+  compliance?: string;
+}
+
+// Cultural protocol from document analysis
+export interface CulturalProtocol {
+  situation: string;
+  expectedBehavior: string;
+  importance: 'critical' | 'important' | 'helpful';
+  consequences?: string;
+  regionalContext?: string;
+}
+
+// Equipment recommendation from document analysis
+export interface EquipmentRecommendation {
+  category: 'sails' | 'rigging' | 'electronics' | 'safety' | 'navigation' | 'crew_gear';
+  item: string;
+  reasoning: string;
+  priority: 'essential' | 'recommended' | 'optional';
+  conditions?: string[];
+  alternatives?: string[];
+}
+
+// Competitive intelligence from document analysis
+export interface CompetitiveIntelligence {
+  type: 'local_knowledge' | 'tactical_advantage' | 'course_specific' | 'conditions_based';
+  insight: string;
+  strategicValue: 'high' | 'medium' | 'low';
+  applicability: string[];
+  sources?: string[];
 }
 
 // Strategy insight from AI analysis
 export interface StrategyInsight {
-  type: 'tactical' | 'strategic' | 'rules' | 'conditions' | 'general';
+  type: 'tactical' | 'strategic' | 'rules' | 'conditions' | 'safety' | 'cultural' | 'general';
   title: string;
   description: string;
   confidence: number; // 0-1
@@ -60,6 +104,10 @@ export interface StrategyInsight {
   applicableConditions: string[];
   priority?: 'high' | 'medium' | 'low';
   source?: string; // Document filename
+  // Enhanced fields from professional sailing education
+  safetyConsiderations?: string;
+  culturalContext?: string;
+  educationalValue?: string;
 }
 
 // Racing document types
@@ -268,6 +316,96 @@ export interface SimilaritySearchResult {
   }>;
 }
 
+// Race course extraction from sailing instructions
+export interface RaceCourseExtraction {
+  courseLayout: {
+    type: 'windward_leeward' | 'triangle' | 'trapezoid' | 'olympic' | 'reaching' | 'other';
+    description: string;
+    confidence: number;
+  };
+  marks: Array<{
+    name: string;
+    position?: {
+      latitude?: number;
+      longitude?: number;
+      description: string;
+      confidence: number;
+    };
+    type: 'start' | 'windward' | 'leeward' | 'wing' | 'gate' | 'finish' | 'other';
+    color?: string;
+    shape?: string;
+  }>;
+  boundaries: Array<{
+    type: 'racing_area' | 'no_go' | 'restricted' | 'safety';
+    description: string;
+    coordinates?: Array<{
+      latitude: number;
+      longitude: number;
+    }>;
+    confidence: number;
+  }>;
+  schedule: {
+    warningSignal?: Date;
+    preparatorySignal?: Date;
+    startingSignal?: Date;
+    timeLimit?: number; // minutes
+    sequences?: Array<{
+      class: string;
+      startTime: Date;
+    }>;
+    confidence: number;
+  };
+  distances: {
+    [leg: string]: {
+      distance?: number;
+      unit?: 'nm' | 'km' | 'm';
+      bearing?: number;
+      confidence: number;
+    };
+  };
+  startLine: {
+    type: 'line' | 'gate';
+    description: string;
+    bias?: 'port' | 'starboard' | 'neutral';
+    length?: number;
+    confidence: number;
+  };
+  requirements: {
+    equipment: string[];
+    crew: string[];
+    safety: string[];
+    registration: string[];
+    confidence: number;
+  };
+  weatherLimits: {
+    windMin?: number;
+    windMax?: number;
+    waveMax?: number;
+    visibility?: number;
+    thunderstorm?: boolean;
+    confidence: number;
+  };
+  extractionMetadata: {
+    documentType: 'sailing_instructions' | 'notice_of_race' | 'course_diagram';
+    source: string;
+    extractedAt: Date;
+    overallConfidence: number;
+    processingNotes: string[];
+  };
+}
+
+// Course coordinate validation result
+export interface CoordinateValidation {
+  isValid: boolean;
+  confidence: number;
+  suggestedCorrection?: {
+    latitude: number;
+    longitude: number;
+    reason: string;
+  };
+  warnings: string[];
+}
+
 // AI model configuration
 export interface AIModelConfig {
   model: string; // 'gemini-1.5-pro', etc.
@@ -311,5 +449,7 @@ export type {
   StrategyChatSession,
   SimilaritySearchResult,
   AIModelConfig,
-  KnowledgeBaseStats
+  KnowledgeBaseStats,
+  RaceCourseExtraction,
+  CoordinateValidation
 };

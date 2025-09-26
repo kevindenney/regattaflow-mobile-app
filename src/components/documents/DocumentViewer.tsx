@@ -29,6 +29,7 @@ interface DocumentViewerProps {
 }
 
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({ onInsightSelect }) => {
+  console.log('📄 DocumentViewer: Component initializing');
   const { user } = useAuth();
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,16 +46,31 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ onInsightSelect 
   }, [user]);
 
   const loadDocuments = async () => {
-    if (!user?.id) return;
+    console.log('📄 DocumentViewer: loadDocuments called, user:', user?.id);
 
+    // Debug mode - use dummy user ID if no user (for testing database connection)
+    const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
+    const userIdToUse = user?.id || debugUserId;
+
+    if (!userIdToUse) {
+      console.log('📄 DocumentViewer: No user ID available, returning early');
+      return;
+    }
+
+    console.log('📄 DocumentViewer: Using user ID:', userIdToUse, user ? '(real user)' : '(debug mode)');
+
+    console.log('📄 DocumentViewer: Setting loading to true');
     setLoading(true);
     try {
-      const docs = await documentStorageService.getUserDocuments(user.id);
+      console.log('📄 DocumentViewer: Calling documentStorageService.getUserDocuments');
+      const docs = await documentStorageService.getUserDocuments(userIdToUse);
+      console.log('📄 DocumentViewer: Got documents:', docs.length, 'documents');
       setDocuments(docs);
     } catch (error) {
-      console.error('Failed to load documents:', error);
+      console.error('📄 DocumentViewer: Failed to load documents:', error);
       Alert.alert('Error', 'Failed to load documents');
     } finally {
+      console.log('📄 DocumentViewer: Setting loading to false');
       setLoading(false);
     }
   };

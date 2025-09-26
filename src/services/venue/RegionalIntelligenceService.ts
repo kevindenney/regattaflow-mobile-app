@@ -372,6 +372,31 @@ export class RegionalIntelligenceService {
           confidence: 'high',
           source: 'data_analysis',
         },
+        // Enhanced with yacht club educational insights
+        {
+          situation: 'Hong Kong harbor racing start',
+          recommendation: 'Account for commercial traffic patterns and ferry schedules - maintain safety zone awareness',
+          confidence: 'high',
+          source: 'expert',
+        },
+        {
+          situation: 'Monsoon season racing',
+          recommendation: 'Monitor typhoon warnings closely, have emergency protocols ready, consider heavier weather gear',
+          confidence: 'high',
+          source: 'expert',
+        },
+        {
+          situation: 'Dragon class racing tactics',
+          recommendation: 'Emphasize precise boat handling and crew coordination - small boats amplify tactical errors',
+          confidence: 'high',
+          source: 'expert',
+        },
+        {
+          situation: 'International crew racing in Hong Kong',
+          recommendation: 'Brief crew on local racing customs, yacht club protocols, and Cantonese sailing terminology',
+          confidence: 'moderate',
+          source: 'community',
+        },
       ],
       equipmentRecommendations: [
         {
@@ -388,6 +413,28 @@ export class RegionalIntelligenceService {
           priority: 'essential',
           localAvailability: 'readily_available',
         },
+        // Enhanced with yacht club safety and preparation standards
+        {
+          category: 'safety',
+          item: 'Typhoon preparedness kit',
+          reasoning: 'Hong Kong monsoon season requires enhanced safety protocols based on yacht club training',
+          priority: 'essential',
+          localAvailability: 'readily_available',
+        },
+        {
+          category: 'electronics',
+          item: 'AIS transponder',
+          reasoning: 'Commercial shipping traffic requires enhanced collision avoidance in Hong Kong waters',
+          priority: 'essential',
+          localAvailability: 'readily_available',
+        },
+        {
+          category: 'crew_gear',
+          item: 'Multilingual racing rule book',
+          reasoning: 'International crews benefit from English/Chinese rule references for protest situations',
+          priority: 'recommended',
+          localAvailability: 'limited',
+        },
       ],
       performanceFactors: [
         {
@@ -401,6 +448,31 @@ export class RegionalIntelligenceService {
           impact: 'high',
           description: 'Wind strength varies dramatically by time of day',
           optimization: 'Plan race schedule around thermal cycle',
+        },
+        // Enhanced with yacht club educational insights
+        {
+          factor: 'Commercial traffic management',
+          impact: 'high',
+          description: 'Hong Kong harbor requires constant awareness of shipping traffic and ferry schedules',
+          optimization: 'Monitor AIS, maintain safe distances, know ferry schedules and shipping lanes',
+        },
+        {
+          factor: 'Cultural racing protocols',
+          impact: 'moderate',
+          description: 'International racing in Hong Kong requires cultural awareness and protocol compliance',
+          optimization: 'Learn local yacht club customs, respect hierarchical racing culture, understand protest procedures',
+        },
+        {
+          factor: 'Dragon class specific techniques',
+          impact: 'high',
+          description: 'Hong Kong Dragon racing emphasizes precision boat handling and crew coordination',
+          optimization: 'Focus on crew synchronization, precise steering, optimal weight placement, and tactical positioning',
+        },
+        {
+          factor: 'Monsoon season adaptation',
+          impact: 'high',
+          description: 'Seasonal wind patterns and typhoon activity significantly affect racing strategies',
+          optimization: 'Monitor weather forecasts closely, have contingency plans, adapt sail inventory for conditions',
         },
       ],
     };
@@ -420,12 +492,89 @@ export class RegionalIntelligenceService {
           importance: 'helpful',
           timing: 'on_arrival',
         },
+        // Enhanced with Hong Kong yacht club educational insights
+        {
+          situation: 'RHKYC protocol compliance',
+          protocol: 'Formal introduction to commodore and racing officers, respect club hierarchy and traditions',
+          importance: 'critical',
+          timing: 'on_arrival',
+        },
+        {
+          situation: 'Dragon class racing etiquette',
+          protocol: 'Maintain high standards of seamanship, respect fleet camaraderie, follow class association protocols',
+          importance: 'important',
+          timing: 'during_event',
+        },
+        {
+          situation: 'International crew briefing',
+          protocol: 'Brief international crew on Hong Kong racing customs, protest procedures, and cultural expectations',
+          importance: 'critical',
+          timing: 'before_arrival',
+        },
+        {
+          situation: 'Post-race social customs',
+          protocol: 'Participate in prize giving and social events - important for relationship building and racing community',
+          importance: 'important',
+          timing: 'after_event',
+        },
+        {
+          situation: 'Safety briefing compliance',
+          protocol: 'Mandatory safety briefings for offshore racing - demonstrate knowledge of emergency procedures',
+          importance: 'critical',
+          timing: 'before_arrival',
+        },
       ],
       languageSupport: {
         primaryLanguage: 'English',
-        translationAvailable: false,
-        keyPhrases: [], // Not needed for English-speaking venue
-        sailingTerminology: [], // Standard English terms
+        translationAvailable: true,
+        keyPhrases: [
+          {
+            english: 'Good racing',
+            local: '好風好浪 (hou fung hou long)',
+            pronunciation: 'hoh fung hoh long',
+            context: 'Post-race congratulations',
+          },
+          {
+            english: 'Thank you for the race',
+            local: '多謝賽事 (do je soi si)',
+            pronunciation: 'doh jeh sai see',
+            context: 'Post-race courtesy',
+          },
+          {
+            english: 'Safety first',
+            local: '安全第一 (on chuen dai yat)',
+            pronunciation: 'ahn chern dai yaht',
+            context: 'Safety briefings',
+          },
+          {
+            english: 'Fair sailing',
+            local: '公平競賽 (gong ping ging choi)',
+            pronunciation: 'gong ping ging choi',
+            context: 'Race ethics and sportsmanship',
+          },
+        ],
+        sailingTerminology: [
+          {
+            term: 'Start line',
+            localEquivalent: '起航線 (hei hong sin)',
+            usage: 'Race committee communications',
+          },
+          {
+            term: 'Port tack',
+            localEquivalent: '左舷搶風 (jo huen cheung fung)',
+            usage: 'Tactical discussions',
+          },
+          {
+            term: 'Protest',
+            localEquivalent: '抗議 (kong yih)',
+            usage: 'Rule enforcement and disputes',
+          },
+          {
+            term: 'Mark rounding',
+            localEquivalent: '繞標 (yiu biu)',
+            usage: 'Course navigation and tactics',
+          },
+        ],
       },
       networkingOpportunities: [
         {
@@ -636,10 +785,7 @@ export class RegionalIntelligenceService {
         },
       ],
       sailingServices: (() => {
-        console.log('🏁 SAILING SERVICES: Starting for venue:', venue.id, venue.name);
-
         if (venue.id === 'hong-kong') {
-          console.log('🏁 SAILING SERVICES: Generating Hong Kong data');
           const hongKongServices = {
         yachtClubs: [
           {
@@ -715,16 +861,6 @@ export class RegionalIntelligenceService {
           },
         ],
           };
-
-          console.log('🏁 SAILING SERVICES: Hong Kong data generated:', {
-            yachtClubs: hongKongServices.yachtClubs?.length || 0,
-            sailmakers: hongKongServices.sailmakers?.length || 0,
-            chandleries: hongKongServices.chandleries?.length || 0,
-            foulWeatherGear: hongKongServices.foulWeatherGear?.length || 0,
-            riggingServices: hongKongServices.riggingServices?.length || 0,
-            hasCantonese: hongKongServices.sailmakers?.some(s => s.languages?.includes('Cantonese')) || false,
-            hasDragonClass: hongKongServices.yachtClubs?.some(c => c.specialty?.includes('Dragon Class')) || false
-          });
 
           return hongKongServices;
         }

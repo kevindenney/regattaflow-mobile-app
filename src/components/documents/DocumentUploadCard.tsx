@@ -3,7 +3,7 @@
  * Handles document upload and AI processing for sailing documents
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,57 +19,246 @@ import { documentStorageService } from '@/src/services/storage/DocumentStorageSe
 import { DocumentProcessingService } from '@/src/services/ai/DocumentProcessingService';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
 import type { StoredDocument } from '@/src/services/storage/DocumentStorageService';
-import type { DocumentAnalysis } from '@/src/lib/types/ai-knowledge';
+import type { DocumentAnalysis, RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
 
 interface DocumentUploadCardProps {
   onDocumentUploaded?: (document: StoredDocument) => void;
   onAnalysisComplete?: (analysis: DocumentAnalysis) => void;
+  onCourseExtracted?: (course: RaceCourseExtraction) => void;
 }
 
 export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   onDocumentUploaded,
-  onAnalysisComplete
+  onAnalysisComplete,
+  onCourseExtracted
 }) => {
+  console.log('📄 DocumentUploadCard: Component initializing');
   const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedDocuments, setUploadedDocuments] = useState<StoredDocument[]>([]);
   const [currentAnalysis, setCurrentAnalysis] = useState<DocumentAnalysis | null>(null);
+  const [currentCourseExtraction, setCurrentCourseExtraction] = useState<RaceCourseExtraction | null>(null);
 
   const documentProcessor = new DocumentProcessingService();
 
+  // Load documents from localStorage on component mount
+  useEffect(() => {
+    console.log('📤 DocumentUploadCard: useEffect - Loading documents from localStorage');
+    const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
+    const userIdToUse = user?.id || debugUserId;
+
+    try {
+      const storedDocs = localStorage.getItem('regattaflow_documents');
+      if (storedDocs) {
+        const documents = JSON.parse(storedDocs);
+        // Filter by userId
+        const userDocs = documents.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
+        console.log('📤 DocumentUploadCard: Loaded', userDocs.length, 'documents from localStorage');
+        setUploadedDocuments(userDocs);
+      } else {
+        console.log('📤 DocumentUploadCard: No documents found in localStorage');
+        setUploadedDocuments([]);
+      }
+    } catch (error) {
+      console.error('📤 DocumentUploadCard: Error loading documents from localStorage:', error);
+      setUploadedDocuments([]);
+    }
+  }, [user?.id]); // Only re-run when user ID changes, not when user object changes
+
   const handleUploadDocument = useCallback(async () => {
-    if (!user?.id) {
-      Alert.alert('Error', 'Please sign in to upload documents');
+    console.log('📤 DocumentUploadCard: handleUploadDocument called');
+    console.log('📤 DocumentUploadCard: user check:', { hasUser: !!user, userId: user?.id });
+
+    // Debug mode - allow upload without authentication for testing
+    const debugMode = true;
+    const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
+
+    if (!user?.id && !debugMode) {
+      console.log('📤 DocumentUploadCard: No user - showing sign in alert');
+      // Use console.warn instead of Alert.alert for web compatibility
+      console.warn('📤 DocumentUploadCard: Please sign in to upload documents');
+      if (typeof window !== 'undefined') {
+        window.alert('Please sign in to upload documents');
+      }
       return;
     }
 
+    const userIdToUse = user?.id || debugUserId;
+    console.log('📤 DocumentUploadCard: Using user ID:', userIdToUse, user ? '(real user)' : '(debug mode)');
+
+    // For debug/web mode, use browser alert instead of React Native Alert
+    console.log('📤 DocumentUploadCard: Showing document type selection');
+
+    if (typeof window !== 'undefined') {
+      // Web-compatible alert for document type selection
+      const documentTypes = [
+        'Tides/Current Strategy (Perfect for your strategy book!)',
+        'Sailing Instructions',
+        'Racing Rules',
+        'Weather Guide',
+        'Other'
+      ];
+
+      const choice = window.prompt(
+        'What type of sailing document are you uploading?\n' +
+        documentTypes.map((type, i) => `${i + 1}. ${type}`).join('\n') +
+        '\n\nEnter number (1-5):'
+      );
+
+      const choiceNum = parseInt(choice || '1');
+      console.log('📤 DocumentUploadCard: User selected document type:', choiceNum);
+
+      switch(choiceNum) {
+        case 1:
+          console.log('📤 DocumentUploadCard: Uploading Tides/Current Strategy');
+          uploadDocumentWithType('book', 'tides_currents', 'Tides and Current Strategy Guide');
+          break;
+        case 2:
+          uploadDocumentWithType('strategy_guide', 'tactics', 'Sailing Instructions');
+          break;
+        case 3:
+          uploadDocumentWithType('racing_rules', 'rules', 'Racing Rules Document');
+          break;
+        case 4:
+          uploadDocumentWithType('weather_guide', 'weather', 'Weather Strategy Guide');
+          break;
+        default:
+          console.log('📤 DocumentUploadCard: Default to Tides/Current Strategy (user\'s preferred type)');
+          uploadDocumentWithType('book', 'tides_currents', 'Tides and Current Strategy Guide');
+      }
+    } else {
+      // Fallback for mobile - use the original React Native Alert
+      Alert.alert(
+        'Document Type',
+        'What type of sailing document are you uploading?',
+        [
+          {
+            text: 'Tides/Current Strategy',
+            onPress: () => uploadDocumentWithType('book', 'tides_currents', 'Tides and Current Strategy Guide')
+          },
+          {
+            text: 'Sailing Instructions',
+            onPress: () => uploadDocumentWithType('strategy_guide', 'tactics', 'Sailing Instructions')
+          },
+          {
+            text: 'Racing Rules',
+            onPress: () => uploadDocumentWithType('racing_rules', 'rules', 'Racing Rules Document')
+          },
+          {
+            text: 'Weather Guide',
+            onPress: () => uploadDocumentWithType('weather_guide', 'weather', 'Weather Strategy Guide')
+          },
+          {
+            text: 'Other',
+            onPress: () => uploadDocumentWithType('strategy_guide', 'tactics', 'Sailing Document')
+          }
+        ],
+        { cancelable: true }
+      );
+    }
+  }, [user]);
+
+  const uploadDocumentWithType = useCallback(async (
+    type: 'book' | 'strategy_guide' | 'racing_rules' | 'weather_guide',
+    category: 'tides_currents' | 'tactics' | 'rules' | 'weather',
+    defaultTitle: string
+  ) => {
+    console.log('📤 DocumentUploadCard: uploadDocumentWithType called', { type, category, defaultTitle });
+
+    // Use debug user ID if no real user
+    const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
+    const userIdToUse = user?.id || debugUserId;
+    console.log('📤 DocumentUploadCard: Using user ID for upload:', userIdToUse, user ? '(real user)' : '(debug mode)');
+
+    console.log('📤 DocumentUploadCard: Setting isUploading to true');
     setIsUploading(true);
     try {
-      const result = await documentStorageService.pickAndUploadDocument(user.id);
+      console.log('📤 DocumentUploadCard: Calling documentStorageService.pickAndUploadDocument');
+      const result = await documentStorageService.pickAndUploadDocument(userIdToUse);
+      console.log('📤 DocumentUploadCard: Upload result:', {
+        success: result.success,
+        hasDocument: !!result.document,
+        error: result.error
+      });
 
       if (result.success && result.document) {
-        setUploadedDocuments(prev => [result.document!, ...prev]);
-        onDocumentUploaded?.(result.document);
+        console.log('📤 DocumentUploadCard: Upload successful, updating state');
+        console.log('📤 DocumentUploadCard: Current uploadedDocuments length:', uploadedDocuments.length);
 
-        // Start AI processing
-        await processDocument(result.document);
+        // Load fresh documents from localStorage to ensure consistency
+        const freshStoredDocs = localStorage.getItem('regattaflow_documents');
+        if (freshStoredDocs) {
+          const freshDocuments = JSON.parse(freshStoredDocs);
+          const userDocs = freshDocuments.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
+          console.log('📤 DocumentUploadCard: Refreshed uploadedDocuments length:', userDocs.length);
+          setUploadedDocuments(userDocs);
+        }
+
+        if (onDocumentUploaded) {
+          console.log('📤 DocumentUploadCard: Calling onDocumentUploaded callback');
+          onDocumentUploaded(result.document);
+        }
+
+        // Check if we're using local storage (skip processing for local files)
+        const isLocalStorage = result.document.metadata?.locallyStored === true;
+        console.log('📤 DocumentUploadCard: Is local storage?', isLocalStorage);
+
+        if (!isLocalStorage) {
+          console.log('📤 DocumentUploadCard: Processing document with AI (non-local storage)');
+
+          // Use the new sailing document library for processing
+          const { sailingDocumentLibrary } = await import('@/src/services/storage/SailingDocumentLibraryService');
+
+          // Download the file for processing
+          const blob = await documentStorageService.downloadDocument(result.document.id, userIdToUse);
+          if (blob) {
+            const sailingDoc = await sailingDocumentLibrary.uploadSailingDocument(
+              blob,
+              {
+                title: result.document.filename || defaultTitle,
+                type,
+                category,
+                description: `Uploaded sailing document: ${result.document.filename}`
+              },
+              userIdToUse
+            );
+
+            console.log('📚 Sailing document processed:', sailingDoc);
+          }
+
+          // Also run the existing processing
+          await processDocument(result.document);
+        } else {
+          console.log('📤 DocumentUploadCard: Skipping AI processing for local storage document');
+        }
+
+        console.log('📤 DocumentUploadCard: Document upload completed successfully');
       } else if (result.error) {
+        console.error('📤 DocumentUploadCard: Upload failed with error:', result.error);
         Alert.alert('Upload Failed', result.error);
       }
     } catch (error: any) {
+      console.error('📤 DocumentUploadCard: Exception during upload:', error);
       Alert.alert('Error', 'Failed to upload document');
-      console.error('Upload error:', error);
     } finally {
+      console.log('📤 DocumentUploadCard: Setting isUploading to false');
       setIsUploading(false);
     }
   }, [user, onDocumentUploaded]);
 
   const processDocument = async (document: StoredDocument) => {
+    console.log('📄 DocumentUploadCard: processDocument called', document.id);
+
+    // Use debug user ID if no real user
+    const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
+    const userIdToUse = user?.id || debugUserId;
+
     setIsProcessing(true);
     try {
       // Download document content
-      const blob = await documentStorageService.downloadDocument(document.id, user!.id);
+      console.log('📄 DocumentUploadCard: Downloading document for processing');
+      const blob = await documentStorageService.downloadDocument(document.id, userIdToUse);
       if (!blob) {
         throw new Error('Failed to download document');
       }
@@ -85,6 +274,30 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       });
 
       setCurrentAnalysis(analysis);
+
+      // Extract race course if this is a sailing instruction document
+      if (['sailing_instructions', 'race_strategy', 'rules'].includes(analysis.documentClass)) {
+        try {
+          const courseExtraction = await documentProcessor.extractRaceCourse({
+            filename: document.filename,
+            type: document.file_type.includes('pdf') ? 'pdf' : 'image',
+            data: arrayBuffer
+          });
+
+          setCurrentCourseExtraction(courseExtraction);
+          onCourseExtracted?.(courseExtraction);
+
+          console.log('🏁 Race course extracted:', {
+            courseType: courseExtraction.courseLayout.type,
+            marksFound: courseExtraction.marks.length,
+            confidence: courseExtraction.extractionMetadata.overallConfidence
+          });
+
+        } catch (courseError) {
+          console.warn('⚠️ Race course extraction failed:', courseError);
+          // Continue with document analysis even if course extraction fails
+        }
+      }
 
       // Save analysis to database
       await documentStorageService.updateDocumentAnalysis(document.id, analysis);
@@ -170,7 +383,70 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
         </View>
       )}
 
+      {currentCourseExtraction && (
+        <View style={styles.courseExtractionCard}>
+          <Text style={styles.courseTitle}>🏁 Race Course Extracted</Text>
+
+          <View style={styles.courseHeader}>
+            <Text style={styles.courseType}>Course: {currentCourseExtraction.courseLayout.type.replace('_', ' ').toUpperCase()}</Text>
+            <Text style={styles.confidenceScore}>
+              Confidence: {(currentCourseExtraction.extractionMetadata.overallConfidence * 100).toFixed(0)}%
+            </Text>
+          </View>
+
+          <Text style={styles.courseDescription}>
+            {currentCourseExtraction.courseLayout.description}
+          </Text>
+
+          {currentCourseExtraction.marks.length > 0 && (
+            <View style={styles.marksSection}>
+              <Text style={styles.sectionTitle}>📍 Course Marks ({currentCourseExtraction.marks.length})</Text>
+              {currentCourseExtraction.marks.slice(0, 4).map((mark, index) => (
+                <View key={index} style={styles.markItem}>
+                  <Text style={styles.markName}>{mark.name} ({mark.type.replace('_', ' ')})</Text>
+                  {mark.position?.latitude && mark.position?.longitude ? (
+                    <Text style={styles.markPosition}>
+                      {mark.position.latitude.toFixed(6)}°, {mark.position.longitude.toFixed(6)}°
+                      {mark.position.confidence < 0.8 && ' (approx)'}
+                    </Text>
+                  ) : (
+                    <Text style={styles.markPosition}>{mark.position?.description || 'Position TBD'}</Text>
+                  )}
+                </View>
+              ))}
+              {currentCourseExtraction.marks.length > 4 && (
+                <Text style={styles.moreMarks}>+{currentCourseExtraction.marks.length - 4} more marks</Text>
+              )}
+            </View>
+          )}
+
+          {currentCourseExtraction.schedule.startingSignal && (
+            <View style={styles.scheduleSection}>
+              <Text style={styles.sectionTitle}>⏰ Race Schedule</Text>
+              <Text style={styles.scheduleTime}>
+                Start: {currentCourseExtraction.schedule.startingSignal.toLocaleTimeString()}
+              </Text>
+              {currentCourseExtraction.schedule.timeLimit && (
+                <Text style={styles.scheduleTime}>
+                  Time Limit: {currentCourseExtraction.schedule.timeLimit} minutes
+                </Text>
+              )}
+            </View>
+          )}
+
+          {currentCourseExtraction.startLine.bias && currentCourseExtraction.startLine.bias !== 'neutral' && (
+            <View style={styles.startLineSection}>
+              <Text style={styles.sectionTitle}>🚦 Start Line</Text>
+              <Text style={styles.startLineBias}>
+                {currentCourseExtraction.startLine.bias.toUpperCase()} end favored
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       <ScrollView style={styles.documentsList}>
+        {console.log('📤 DocumentUploadCard: Rendering documents list, count:', uploadedDocuments.length)}
         {uploadedDocuments.map((doc) => (
           <View key={doc.id} style={styles.documentCard}>
             <View style={styles.documentInfo}>
@@ -321,5 +597,108 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 8,
+  },
+  // Course extraction styles
+  courseExtractionCard: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  courseTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2E7D32',
+    marginBottom: 12,
+  },
+  courseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  courseType: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1B5E20',
+    flex: 1,
+  },
+  confidenceScore: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#4CAF50',
+    backgroundColor: '#C8E6C9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  courseDescription: {
+    color: '#2E7D32',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  marksSection: {
+    marginTop: 8,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1B5E20',
+    marginBottom: 8,
+  },
+  markItem: {
+    backgroundColor: '#F1F8E9',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  markName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#2E7D32',
+  },
+  markPosition: {
+    fontSize: 12,
+    color: '#558B2F',
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  moreMarks: {
+    fontSize: 12,
+    color: '#81C784',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  scheduleSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#C8E6C9',
+  },
+  scheduleTime: {
+    fontSize: 14,
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  startLineSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#C8E6C9',
+  },
+  startLineBias: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF6F00',
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
   },
 });

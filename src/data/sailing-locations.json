@@ -277,7 +277,9 @@
         "complexTopography": true,
         "internationalRacing": true,
         "dragonClassRacing": true,
-        "typhoonSeason": true
+        "typhoonSeason": true,
+        "multiVenueClubs": true,
+        "offshoreRacing": true
       },
       "dataSources": {
         "bathymetry": ["hko-hong-kong", "gebco"],
@@ -293,6 +295,117 @@
         { "id": "HKO_TM", "name": "Tsim Sha Tsui", "location": { "latitude": 22.294, "longitude": 114.172 } },
         { "id": "HKO_QBC", "name": "Quarry Bay", "location": { "latitude": 22.289, "longitude": 114.219 } }
       ],
+      "yachtClubs": [
+        {
+          "id": "rhkyc",
+          "name": "Royal Hong Kong Yacht Club",
+          "founded": 1849,
+          "website": "https://www.rhkyc.org.hk",
+          "multipleVenues": true,
+          "venues": {
+            "kellettIsland": {
+              "name": "Kellett Island Clubhouse",
+              "type": "headquarters",
+              "coordinates": { "latitude": 22.2950, "longitude": 114.1794 },
+              "location": "Victoria Harbor, Causeway Bay",
+              "facilities": {
+                "dining": ["Main restaurant", "Deck bar", "Coffee shop"],
+                "recreation": ["Swimming pool", "Gym", "Billiards room"],
+                "marine": ["Guest moorings (limited)", "Tender service"],
+                "events": ["Function rooms", "Rooftop terrace", "Wedding facilities"]
+              },
+              "accessibility": {
+                "public": ["MTR Causeway Bay (10min walk)", "Taxi", "Bus"],
+                "marine": "Club launch from Wan Chai",
+                "parking": "Limited valet parking available"
+              }
+            },
+            "middleIsland": {
+              "name": "Middle Island",
+              "type": "racing-station",
+              "coordinates": { "latitude": 22.2178, "longitude": 114.2467 },
+              "location": "Repulse Bay, Hong Kong Island South",
+              "facilities": {
+                "racing": ["Race committee deck", "Start boat berths", "Mark storage"],
+                "training": ["Dinghy park", "Junior sailing center", "Safety boats"],
+                "social": ["BBQ area", "Beach bar", "Swimming beach"],
+                "parking": "Ample free parking"
+              },
+              "racingAreas": {
+                "primary": "Southern waters of Hong Kong Island",
+                "boundaries": {
+                  "east": "Stanley Peninsula",
+                  "west": "Aberdeen Channel",
+                  "south": "Lamma Island"
+                }
+              }
+            },
+            "shelterCove": {
+              "name": "Shelter Cove Marina",
+              "type": "marina-facility",
+              "coordinates": { "latitude": 22.3583, "longitude": 114.2897 },
+              "location": "Port Shelter, Sai Kung",
+              "facilities": {
+                "marine": ["250 wet berths", "Hardstand storage (150 boats)", "Fuel dock"],
+                "technical": ["35-ton haulout", "Repairs", "Chandlery"],
+                "amenities": ["Restaurant", "Swimming pool", "Free WiFi", "Parking (300 spaces)"]
+              },
+              "advantages": {
+                "protection": "Certified typhoon shelter",
+                "access": "Gateway to eastern waters and outlying islands",
+                "cruising": "Base for Sai Kung and eastern territories"
+              }
+            }
+          },
+          "racingProgram": {
+            "yearRound": {
+              "wednesday": "Wednesday Night Series (Victoria Harbor)",
+              "saturday": "Saturday Club Racing (Middle Island)",
+              "training": "Junior and youth programs"
+            },
+            "signature": {
+              "aroundIsland": {
+                "name": "Around the Island Race",
+                "distance": "30 nautical miles",
+                "participation": "300+ boats",
+                "timing": "October/November"
+              }
+            },
+            "offshore": {
+              "chinaSeaRace": {
+                "destination": "Manila, Philippines",
+                "distance": "565 nautical miles",
+                "timing": "Good Friday",
+                "route": "Via Pratas Reef"
+              },
+              "southChinaRegatta": {
+                "destinations": ["Nha Trang, Vietnam", "Sanya, Hainan"],
+                "format": "Rally with competitive divisions",
+                "timing": "Post Chinese New Year"
+              }
+            }
+          },
+          "classes": ["IRC", "HKPN", "J/80", "Etchells", "Dragon", "Laser", "Optimist"]
+        },
+        {
+          "id": "hhyc",
+          "name": "Hebe Haven Yacht Club",
+          "founded": 1970,
+          "website": "https://www.hhyc.org.hk",
+          "coordinates": { "latitude": 22.3167, "longitude": 114.2667 },
+          "location": "Pak Sha Wan, Sai Kung",
+          "specialties": ["Cruising", "Family sailing", "Dinghy racing"]
+        },
+        {
+          "id": "abc",
+          "name": "Aberdeen Boat Club",
+          "founded": 1967,
+          "website": "https://www.abc.org.hk",
+          "coordinates": { "latitude": 22.2497, "longitude": 114.1556 },
+          "location": "Aberdeen Harbor, Hong Kong Island",
+          "specialties": ["Dragon racing", "Etchells", "Social sailing"]
+        }
+      ],
       "racingFeatures": {
         "dragonWorldChampionships": {
           "courseArea": {
@@ -304,18 +417,49 @@
             "end": { "latitude": 22.284, "longitude": 114.187 }
           }
         },
-        "hkrnysRacing": {
+        "victoriaHarborSeries": {
+          "location": "Central Victoria Harbor",
           "courseArea": {
             "southwest": { "latitude": 22.26, "longitude": 114.16 },
             "northeast": { "latitude": 22.32, "longitude": 114.22 }
-          }
+          },
+          "schedule": "Wednesday evenings, Saturday afternoons"
         },
         "chinaSeaRace": {
           "startLine": {
             "start": { "latitude": 22.285, "longitude": 114.18 },
             "end": { "latitude": 22.287, "longitude": 114.182 }
           },
-          "destination": "manila-philippines"
+          "destination": "manila-philippines",
+          "checkpoints": ["Pratas Reef", "Luzon Strait"]
+        }
+      },
+      "racingAreas": {
+        "victoriaHarbor": {
+          "name": "Victoria Harbor",
+          "bounds": {
+            "southwest": { "latitude": 22.26, "longitude": 114.15 },
+            "northeast": { "latitude": 22.32, "longitude": 114.22 }
+          },
+          "characteristics": ["Urban sailing", "Commercial traffic", "Spectator friendly"],
+          "hazards": ["Ferries", "Commercial vessels", "Strong tides"]
+        },
+        "easternWaters": {
+          "name": "Eastern Waters",
+          "bounds": {
+            "southwest": { "latitude": 22.20, "longitude": 114.20 },
+            "northeast": { "latitude": 22.35, "longitude": 114.35 }
+          },
+          "characteristics": ["Open water", "Consistent winds", "Racing focus"],
+          "courses": ["Around the Island", "Coastal passage races"]
+        },
+        "lammaChannel": {
+          "name": "Lamma Channel",
+          "bounds": {
+            "southwest": { "latitude": 22.18, "longitude": 114.10 },
+            "northeast": { "latitude": 22.28, "longitude": 114.18 }
+          },
+          "characteristics": ["Wind shadows", "Current effects", "Tactical racing"]
         }
       },
       "localHazards": [
@@ -323,37 +467,80 @@
           "name": "Lamma Island",
           "location": { "latitude": 22.225, "longitude": 114.133 },
           "type": "island-complex",
-          "windShadow": true
+          "windShadow": true,
+          "description": "Creates significant wind shadows and current effects"
         },
         {
           "name": "Stonecutters Island",
           "location": { "latitude": 22.325, "longitude": 114.133 },
           "type": "commercial-port",
-          "shipping": true
+          "shipping": true,
+          "description": "Heavy commercial traffic and container ships"
+        },
+        {
+          "name": "High-speed ferries",
+          "type": "traffic-hazard",
+          "routes": ["Central-Macau", "TST-Central", "Inter-island services"],
+          "precautions": "Maintain constant watch, give way early"
         }
       ],
+      "logistics": {
+        "transportation": {
+          "airport": {
+            "distance": "45km to most sailing venues",
+            "transfer": ["Taxi (45-60min)", "Airport Express + MTR", "Private transfer"],
+            "customs": "Temporary import available for racing equipment"
+          },
+          "local": {
+            "mtr": "Excellent coverage to most venues",
+            "taxi": "24/7 availability, English-speaking drivers",
+            "bus": "Comprehensive network",
+            "parking": "Limited at harbor venues, ample at Sai Kung"
+          }
+        },
+        "accommodation": {
+          "central": ["Mandarin Oriental", "Conrad", "Island Shangri-La"],
+          "causewayBay": ["Park Lane", "Excelsior", "Times Square area"],
+          "saiKung": ["Seaside guesthouses", "Village houses", "Camping options"]
+        },
+        "provisioning": {
+          "chandleries": ["Simpson Marine", "Asia Marine", "Jeanneau HK"],
+          "supermarkets": ["PARKnSHOP", "Wellcome", "City'super"],
+          "dining": "World-class restaurants, dim sum, international cuisine"
+        }
+      },
       "optimizations": {
         "monsoonForecasting": true,
         "typhoonTracking": true,
         "cityWindEffects": true,
         "commercialTrafficAvoidance": true,
-        "multilingualSupport": ["english", "cantonese", "mandarin"]
+        "multilingualSupport": ["english", "cantonese", "mandarin"],
+        "multiVenueNavigation": true,
+        "crossHarborLogistics": true
       },
       "culturalContext": {
         "primaryLanguages": ["English", "Cantonese"],
         "sailingSeasons": {
-          "optimal": "October-April",
-          "typhoon": "May-November"
+          "optimal": "October-April (cool, dry, steady winds)",
+          "typhoon": "May-November (hot, humid, storm risk)"
         },
         "localCustoms": {
-          "prizeGiving": "Formal ceremonies expected",
-          "networking": "Business relationships important",
-          "hospitality": "Reciprocal club arrangements common"
+          "prizeGiving": "Formal ceremonies expected, speeches in English and Cantonese",
+          "networking": "Business relationships important, exchange of business cards",
+          "hospitality": "Reciprocal club arrangements common across Asia-Pacific",
+          "dining": "Post-race dining traditional, dim sum popular"
         },
         "businessCulture": {
-          "punctuality": "Critical for all events",
-          "hierarchy": "Respect for senior sailors",
-          "socializing": "Post-race dinners traditional"
+          "punctuality": "Critical for all events, 'Hong Kong time' is punctual",
+          "hierarchy": "Respect for senior sailors and commodores",
+          "socializing": "Post-race dinners and drinks expected",
+          "formality": "Business casual to formal depending on event"
+        },
+        "practicalTips": {
+          "currency": "Hong Kong Dollar (HKD), widely accepted cards",
+          "language": "English widely spoken in sailing community",
+          "tipping": "10% in restaurants, round up for taxis",
+          "weather": "Check typhoon warnings during season"
         }
       }
     },

@@ -24,6 +24,7 @@ interface ProfessionalMap3DViewProps {
   config?: Partial<AdvancedMapConfig>;
   venue?: string; // Venue ID from sailing-locations.json
   marks?: RaceMark[];
+  clubMarkers?: any[]; // Yacht club markers
   onMarkPress?: (mark: RaceMark) => void;
   onMapPress?: (coordinates: GeoLocation) => void;
   onWeatherUpdate?: (weather: AdvancedWeatherConditions) => void;
@@ -36,6 +37,7 @@ export function ProfessionalMap3DView({
   config,
   venue = 'san-francisco-bay',
   marks = [],
+  clubMarkers = [],
   onMarkPress,
   onMapPress,
   onWeatherUpdate,
@@ -43,6 +45,12 @@ export function ProfessionalMap3DView({
   apiKeys,
   professionalMode = true
 }: ProfessionalMap3DViewProps) {
+  // Debug logging for received props
+  console.log('🗺️ ProfessionalMap3DView DEBUG:');
+  console.log('  venue:', venue);
+  console.log('  marks received:', marks?.length || 0, 'race course marks');
+  console.log('  clubMarkers received:', clubMarkers?.length || 0, 'club markers');
+
   // Core state
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapEngine, setMapEngine] = useState<MapLibreEngine | null>(null);
@@ -447,6 +455,10 @@ export function ProfessionalMap3DView({
       {/* Professional Map Container */}
       <WebMapView
         venue={venue}
+        marks={marks}
+        clubMarkers={clubMarkers}
+        onMarkPress={onMarkPress}
+        onMapPress={onMapPress}
         style={{
           position: 'absolute',
           top: 0,

@@ -1,4 +1,4 @@
-import mapboxgl from 'mapbox-gl';
+// import mapboxgl from 'mapbox-gl';
 // import maplibregl from 'maplibre-gl'; // TODO: Fix import.meta issue
 import {
   MapEngine,
@@ -29,24 +29,29 @@ export class MapLibreEngine implements MapEngine {
     // TODO: Re-enable when import.meta issue is fixed
     // Create MapLibre GL map with optimized settings
     // this.map = new maplibregl.Map({
-      container,
-      style: this.getInitialStyle(config),
-      center: [-122.4, 37.8], // San Francisco Bay default
-      zoom: config.camera.zoom,
-      pitch: config.camera.pitch,
-      bearing: config.camera.bearing,
-      antialias: config.rendering.antiAliasing,
-      maxZoom: 22,
-      maxPitch: 85,
-      preserveDrawingBuffer: true, // For screenshots
-      trackResize: true,
-      transformRequest: this.transformRequest.bind(this)
-    });
+    //   container,
+    //   style: this.getInitialStyle(config),
+    //   center: [-122.4, 37.8], // San Francisco Bay default
+    //   zoom: config.camera.zoom,
+    //   pitch: config.camera.pitch,
+    //   bearing: config.camera.bearing,
+    //   antialias: config.rendering.antiAliasing,
+    //   maxZoom: 22,
+    //   maxPitch: 85,
+    //   preserveDrawingBuffer: true, // For screenshots
+    //   trackResize: true,
+    //   transformRequest: this.transformRequest.bind(this)
+    // });
 
-    // Wait for map to load
-    await new Promise<void>((resolve, reject) => {
-      this.map!.once('load', resolve);
-      this.map!.once('error', reject);
+    // Temporary mock implementation for development
+    this.map = this.createMockMap(container, config);
+
+    // Simulate map loading
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        console.log('🗺️ Mock map initialized for development');
+        resolve();
+      }, 100);
     });
 
     console.log('🗺️ MapLibre GL initialized successfully');
@@ -360,7 +365,121 @@ export class MapLibreEngine implements MapEngine {
     return maplibreLayer;
   }
 
-  private transformRequest(url: string, resourceType: string): maplibregl.RequestParameters {
+  private createMockMap(container: HTMLElement, config: AdvancedMapConfig): any {
+    // Create a mock map object that provides the interface expected by the components
+    const mockMap = {
+      // Mock event system
+      _events: {} as { [key: string]: Function[] },
+
+      once(event: string, callback: Function) {
+        if (!this._events[event]) this._events[event] = [];
+        const wrappedCallback = (...args: any[]) => {
+          callback(...args);
+          this.off(event, wrappedCallback);
+        };
+        this._events[event].push(wrappedCallback);
+
+        // Immediately trigger load event for development
+        if (event === 'load') {
+          setTimeout(() => callback(), 10);
+        }
+      },
+
+      on(event: string, callback: Function) {
+        if (!this._events[event]) this._events[event] = [];
+        this._events[event].push(callback);
+      },
+
+      off(event: string, callback?: Function) {
+        if (!this._events[event]) return;
+        if (callback) {
+          this._events[event] = this._events[event].filter(cb => cb !== callback);
+        } else {
+          delete this._events[event];
+        }
+      },
+
+      // Mock camera methods
+      setCamera(options: any) {
+        console.log('📷 Mock setCamera:', options);
+      },
+
+      easeTo(options: any) {
+        console.log('🎬 Mock easeTo:', options);
+      },
+
+      flyTo(options: any) {
+        console.log('✈️ Mock flyTo:', options);
+      },
+
+      // Mock layer methods
+      addLayer(layer: any) {
+        console.log('🗂️ Mock addLayer:', layer.id);
+      },
+
+      removeLayer(layerId: string) {
+        console.log('🗑️ Mock removeLayer:', layerId);
+      },
+
+      addSource(sourceId: string, source: any) {
+        console.log('📡 Mock addSource:', sourceId);
+      },
+
+      removeSource(sourceId: string) {
+        console.log('📡 Mock removeSource:', sourceId);
+      },
+
+      // Mock utility methods
+      getStyle() {
+        return { layers: [], sources: {} };
+      },
+
+      setStyle(style: any) {
+        console.log('🎨 Mock setStyle');
+      },
+
+      getBearing() { return 0; },
+      setBearing(bearing: number) { console.log('🧭 Mock setBearing:', bearing); },
+
+      getPitch() { return config.camera.pitch || 0; },
+      setPitch(pitch: number) { console.log('📐 Mock setPitch:', pitch); },
+
+      getZoom() { return config.camera.zoom || 10; },
+      setZoom(zoom: number) { console.log('🔍 Mock setZoom:', zoom); },
+
+      getCenter() { return { lng: -122.4, lat: 37.8 }; },
+      setCenter(center: any) { console.log('🎯 Mock setCenter:', center); },
+
+      // Mock performance methods
+      setRenderWorldCopies() {},
+      setMaxTileCacheSize() {},
+
+      // Mock container
+      getContainer() { return container; }
+    };
+
+    // Style the container to show it's a mock map
+    container.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    container.style.position = 'relative';
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.style.color = 'white';
+    container.style.fontSize = '18px';
+    container.style.fontWeight = 'bold';
+    container.innerHTML = `
+      <div style="text-align: center; z-index: 1000; position: relative;">
+        <div style="font-size: 48px; margin-bottom: 16px;">🗺️</div>
+        <div>Interactive Nautical Chart</div>
+        <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">Mock Map for Development</div>
+        <div style="font-size: 12px; opacity: 0.6; margin-top: 4px;">Venue Intelligence Loading...</div>
+      </div>
+    `;
+
+    return mockMap;
+  }
+
+  private transformRequest(url: string, resourceType: string): any {
     // Add authentication headers if needed
     return {
       url,

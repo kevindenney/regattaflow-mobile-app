@@ -51,7 +51,7 @@ export class VenueDetectionService {
       await this.detectVenueFromLocation(this.currentLocation);
 
       // Start continuous location monitoring
-      this.startLocationMonitoring();
+      await this.startLocationMonitoring();
 
       return true;
     } catch (error) {
@@ -63,26 +63,32 @@ export class VenueDetectionService {
   /**
    * Start continuous GPS monitoring for venue changes
    */
-  private startLocationMonitoring() {
+  private async startLocationMonitoring() {
     console.log('🌍 Starting continuous location monitoring');
 
-    this.watchId = Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 30000, // Check every 30 seconds
-        distanceInterval: 1000, // Check when moved 1km
-      },
-      async (location) => {
-        const newLocation: Coordinates = [location.coords.longitude, location.coords.latitude];
+    try {
+      this.watchId = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 30000, // Check every 30 seconds
+          distanceInterval: 1000, // Check when moved 1km
+        },
+        async (location) => {
+          const newLocation: Coordinates = [location.coords.longitude, location.coords.latitude];
 
-        // Only process if location changed significantly
-        if (this.hasLocationChangedSignificantly(newLocation)) {
-          console.log('🌍 Location changed significantly:', newLocation);
-          this.currentLocation = newLocation;
-          await this.detectVenueFromLocation(newLocation);
+          // Only process if location changed significantly
+          if (this.hasLocationChangedSignificantly(newLocation)) {
+            console.log('🌍 Location changed significantly:', newLocation);
+            this.currentLocation = newLocation;
+            await this.detectVenueFromLocation(newLocation);
+          }
         }
-      }
-    );
+      );
+      console.log('🌍 Location monitoring started successfully');
+    } catch (error) {
+      console.error('🌍 Failed to start location monitoring:', error);
+      this.watchId = null;
+    }
   }
 
   /**
@@ -328,8 +334,8 @@ export class VenueDetectionService {
     if (newVenue) {
       console.log(`🌍 Now at: ${newVenue.name} (${newVenue.country})`);
       console.log(`🌍 Venue type: ${newVenue.venueType}`);
-      console.log(`🌍 Cultural context: ${newVenue.culturalContext.sailingCulture.tradition}`);
-      console.log(`🌍 Primary language: ${newVenue.culturalContext.primaryLanguages[0]?.name}`);
+      console.log(`🌍 Cultural context: ${newVenue.culturalContext?.sailingCulture?.tradition || 'Unknown'}`);
+      console.log(`🌍 Primary language: ${newVenue.culturalContext?.primaryLanguages?.[0]?.name || 'Unknown'}`);
     }
   }
 
@@ -358,7 +364,7 @@ export class VenueDetectionService {
       // First venue - basic adaptations
       adaptations.push({
         category: 'weather_source',
-        description: `Switch to ${to.weatherSources.primary.name} for local weather`,
+        description: `Switch to ${to.weatherSources?.primary?.name || 'local weather source'} for local weather`,
         priority: 'important',
         actionRequired: 'Automatic weather source configuration',
         userCanConfigure: false,
@@ -378,10 +384,10 @@ export class VenueDetectionService {
     // Compare venues for specific adaptations needed
 
     // Language adaptation
-    if (from.culturalContext.primaryLanguages[0]?.code !== to.culturalContext.primaryLanguages[0]?.code) {
+    if (from.culturalContext?.primaryLanguages?.[0]?.code !== to.culturalContext?.primaryLanguages?.[0]?.code) {
       adaptations.push({
         category: 'language',
-        description: `Language change: ${from.culturalContext.primaryLanguages[0]?.name} → ${to.culturalContext.primaryLanguages[0]?.name}`,
+        description: `Language change: ${from.culturalContext?.primaryLanguages?.[0]?.name || 'Unknown'} → ${to.culturalContext?.primaryLanguages?.[0]?.name || 'Unknown'}`,
         priority: 'important',
         actionRequired: 'Load language pack and sailing terminology',
         userCanConfigure: true,
@@ -389,10 +395,10 @@ export class VenueDetectionService {
     }
 
     // Currency adaptation
-    if (from.culturalContext.economicFactors.currency !== to.culturalContext.economicFactors.currency) {
+    if (from.culturalContext?.economicFactors?.currency !== to.culturalContext?.economicFactors?.currency) {
       adaptations.push({
         category: 'currency',
-        description: `Currency change: ${from.culturalContext.economicFactors.currency} → ${to.culturalContext.economicFactors.currency}`,
+        description: `Currency change: ${from.culturalContext?.economicFactors?.currency || 'Unknown'} → ${to.culturalContext?.economicFactors?.currency || 'Unknown'}`,
         priority: 'important',
         actionRequired: 'Update currency display and cost estimates',
         userCanConfigure: false,
@@ -400,10 +406,10 @@ export class VenueDetectionService {
     }
 
     // Weather source adaptation
-    if (from.weatherSources.primary.name !== to.weatherSources.primary.name) {
+    if (from.weatherSources?.primary?.name !== to.weatherSources?.primary?.name) {
       adaptations.push({
         category: 'weather_source',
-        description: `Weather source change: ${from.weatherSources.primary.name} → ${to.weatherSources.primary.name}`,
+        description: `Weather source change: ${from.weatherSources?.primary?.name || 'Unknown'} → ${to.weatherSources?.primary?.name || 'Unknown'}`,
         priority: 'critical',
         actionRequired: 'Switch weather data providers',
         userCanConfigure: false,
@@ -411,10 +417,10 @@ export class VenueDetectionService {
     }
 
     // Cultural adaptation
-    if (from.culturalContext.sailingCulture.formality !== to.culturalContext.sailingCulture.formality) {
+    if (from.culturalContext?.sailingCulture?.formality !== to.culturalContext?.sailingCulture?.formality) {
       adaptations.push({
         category: 'cultural',
-        description: `Cultural shift: ${from.culturalContext.sailingCulture.formality} → ${to.culturalContext.sailingCulture.formality}`,
+        description: `Cultural shift: ${from.culturalContext?.sailingCulture?.formality || 'Unknown'} → ${to.culturalContext?.sailingCulture?.formality || 'Unknown'}`,
         priority: 'helpful',
         actionRequired: 'Review cultural protocols and etiquette',
         userCanConfigure: true,
@@ -468,27 +474,56 @@ export class VenueDetectionService {
    * Manually set venue (for testing or user override)
    */
   async setVenueManually(venueId: string): Promise<void> {
-    console.log(`🌍 Manual venue selection: ${venueId}`);
+    console.log(`🌍 DEBUG: Manual venue selection starting: ${venueId}`);
 
-    // Find the venue by ID from our venue database
-    const venueData = this.venues[venueId];
-    if (!venueData) {
-      console.error(`🌍 Venue not found: ${venueId}`);
-      return;
+    try {
+      // Load global sailing venues database
+      const venuesData = await import('../../data/sailing-locations.json');
+      console.log('🌍 DEBUG: Venues data loaded:', Object.keys(venuesData));
+      const venues = venuesData.venues;
+      console.log('🌍 DEBUG: Available venues:', Object.keys(venues || {}));
+
+      // Find the venue by ID from our venue database (venues is an object, not array)
+      const venueData = venues[venueId];
+      console.log('🌍 DEBUG: Looking for venueId:', venueId);
+      console.log('🌍 DEBUG: Found venue data:', venueData);
+
+      if (!venueData) {
+        console.error(`🌍 Venue not found: ${venueId}`);
+        console.error('🌍 Available venues:', Object.keys(venues || {}));
+        return;
+      }
+
+      // Create venue object
+      const venue: SailingVenue = {
+        id: venueData.id,
+        name: venueData.name,
+        coordinates: venueData.coordinates.center,
+        country: venueData.country,
+        venueType: venueData.priority === 1 ? 'premier' : 'regional',
+        culturalContext: venueData.culturalContext,
+        weatherSources: {
+          primary: {
+            name: 'Regional Weather Service',
+            type: 'regional_model',
+            region: venueData.region,
+            accuracy: 'high',
+            forecastHorizon: 72,
+            updateFrequency: 6,
+            specialties: ['marine', 'wind'],
+          },
+          updateFrequency: 6,
+          reliability: 0.85,
+        },
+      };
+
+      console.log(`🌍 DEBUG: Created venue object:`, venue);
+      console.log(`🌍 Manually switching to venue: ${venue.name}`);
+      await this.switchToVenue(venue);
+      console.log(`🌍 DEBUG: switchToVenue completed for: ${venue.name}`);
+    } catch (error) {
+      console.error('🌍 DEBUG: Error in setVenueManually:', error);
     }
-
-    // Create venue object
-    const venue: SailingVenue = {
-      id: venueData.id,
-      name: venueData.name,
-      coordinates: venueData.coordinates.center,
-      country: venueData.country,
-      venueType: venueData.priority === 1 ? 'premier' : 'regional',
-      culturalContext: venueData.culturalContext,
-    };
-
-    console.log(`🌍 Manually switching to venue: ${venue.name}`);
-    await this.switchToVenue(venue);
   }
 
   /**
@@ -521,13 +556,62 @@ export class VenueDetectionService {
   }
 
   /**
+   * Register callback for venue detection events
+   */
+  onVenueDetected(callback: (venue: SailingVenue | null) => void): void {
+    this.detectionCallbacks.push(callback);
+    console.log('🌍 DEBUG: Venue detection callback registered');
+  }
+
+  /**
+   * Register callback for venue transition events
+   */
+  onVenueTransition(callback: (transition: VenueTransition) => void): void {
+    this.transitionCallbacks.push(callback);
+    console.log('🌍 DEBUG: Venue transition callback registered');
+  }
+
+  /**
+   * Notify all listeners of venue detection
+   */
+  private notifyVenueDetection(venue: SailingVenue | null): void {
+    console.log(`🌍 DEBUG: Notifying ${this.detectionCallbacks.length} detection listeners of venue: ${venue?.name || 'None'}`);
+    this.detectionCallbacks.forEach(callback => {
+      try {
+        callback(venue);
+      } catch (error) {
+        console.error('🌍 Error in venue detection callback:', error);
+      }
+    });
+  }
+
+  /**
+   * Notify all listeners of venue transition
+   */
+  private notifyVenueTransition(transition: VenueTransition): void {
+    console.log(`🌍 DEBUG: Notifying ${this.transitionCallbacks.length} transition listeners of: ${transition.fromVenue?.name || 'None'} → ${transition.toVenue.name}`);
+    this.transitionCallbacks.forEach(callback => {
+      try {
+        callback(transition);
+      } catch (error) {
+        console.error('🌍 Error in venue transition callback:', error);
+      }
+    });
+  }
+
+  /**
    * Stop venue detection and cleanup
    */
   async cleanup(): Promise<void> {
     console.log('🌍 Cleaning up venue detection service');
 
     if (this.watchId) {
-      this.watchId.remove();
+      try {
+        this.watchId.remove();
+        console.log('🌍 Location monitoring stopped successfully');
+      } catch (error) {
+        console.error('🌍 Error stopping location monitoring:', error);
+      }
       this.watchId = null;
     }
 

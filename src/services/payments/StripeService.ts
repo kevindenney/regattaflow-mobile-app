@@ -4,7 +4,7 @@
  */
 
 import { Platform } from 'react-native';
-import { supabase } from '@/src/lib/supabase';
+import { supabase } from '@/src/services/supabase';
 
 export interface SubscriptionPlan {
   id: string;
@@ -290,20 +290,23 @@ export class StripeService {
   async initializeStripe(): Promise<void> {
     if (Platform.OS === 'web') {
       // Stripe.js is loaded via script tag for web
+      console.log('Stripe: Web platform detected, skipping mobile initialization');
       return;
     }
 
     try {
-      // Initialize Stripe SDK for mobile
-      const { StripeProvider, initStripe } = await import('@stripe/stripe-react-native');
+      // Only import Stripe React Native on mobile platforms
+      if (Platform.OS !== 'web') {
+        const { initStripe } = await import('@stripe/stripe-react-native');
 
-      await initStripe({
-        publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
-        merchantIdentifier: 'merchant.com.regattaflow',
-        urlScheme: 'regattaflow'
-      });
+        await initStripe({
+          publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
+          merchantIdentifier: 'merchant.com.regattaflow',
+          urlScheme: 'regattaflow'
+        });
 
-      console.log('Stripe initialized for mobile');
+        console.log('Stripe initialized for mobile');
+      }
     } catch (error) {
       console.error('Failed to initialize Stripe:', error);
     }
@@ -346,14 +349,21 @@ export class StripeService {
       // On mobile, handle with Stripe React Native SDK
       if (Platform.OS === 'web') {
         // Redirect to payment page or handle inline
-        window.location.href = data.paymentUrl;
+        if (typeof window !== 'undefined') {
+          window.location.href = data.paymentUrl;
+        }
       } else {
-        // Use Stripe SDK for mobile payment sheet
-        const { presentPaymentSheet } = await import('@stripe/stripe-react-native');
-        const { error } = await presentPaymentSheet();
+        try {
+          // Use Stripe SDK for mobile payment sheet
+          const { presentPaymentSheet } = await import('@stripe/stripe-react-native');
+          const { error } = await presentPaymentSheet();
 
-        if (error) {
-          throw error;
+          if (error) {
+            throw error;
+          }
+        } catch (importError) {
+          console.error('Failed to import Stripe React Native:', importError);
+          throw new Error('Payment not available on this platform');
         }
       }
 

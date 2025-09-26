@@ -1,0 +1,435 @@
+{
+  "standardCourses": {
+    "windward-leeward": {
+      "type": "windward-leeward",
+      "description": "Classic upwind-downwind racing course",
+      "variations": {
+        "WL2": {
+          "name": "Windward-Leeward 2 legs",
+          "legs": 2,
+          "description": "Beat to windward mark, run to leeward gate, finish upwind",
+          "marks": ["start", "windward", "leeward_gate", "finish"],
+          "sequence": ["start", "windward", "leeward_gate", "windward", "finish"],
+          "distance": "0.8-1.2 nautical miles per leg"
+        },
+        "WL3": {
+          "name": "Windward-Leeward 3 legs",
+          "legs": 3,
+          "sequence": ["start", "windward", "leeward_gate", "windward", "leeward_gate", "finish"],
+          "distance": "0.8-1.2 nautical miles per leg"
+        },
+        "WL4": {
+          "name": "Windward-Leeward 4 legs",
+          "legs": 4,
+          "sequence": ["start", "windward", "leeward_gate", "windward", "leeward_gate", "windward", "finish"],
+          "distance": "0.8-1.2 nautical miles per leg"
+        }
+      },
+      "marks": {
+        "start": {
+          "type": "line",
+          "description": "Committee boat and pin end",
+          "bias": "Usually slightly favors one end"
+        },
+        "windward": {
+          "type": "inflatable",
+          "rounding": "port",
+          "description": "Weather mark positioned upwind"
+        },
+        "leeward_gate": {
+          "type": "gate",
+          "marks": 2,
+          "spacing": "50-100m apart",
+          "rounding": "either mark to port"
+        },
+        "finish": {
+          "type": "line",
+          "position": "upwind or downwind",
+          "description": "Committee boat and mark"
+        }
+      },
+      "tactics": {
+        "start": "Line bias, wind shifts, clear air",
+        "upwind": "Shifts, lift/header, current effects",
+        "downwind": "Pressure, angles, mark room",
+        "markRounding": "Inside overlap rules, room at marks"
+      }
+    },
+
+    "triangle": {
+      "type": "triangle",
+      "description": "Traditional triangle course with reaching legs",
+      "variations": {
+        "olympic": {
+          "name": "Olympic Triangle",
+          "description": "Classic triangle with 60-degree angles",
+          "sequence": ["start", "windward", "reaching_1", "reaching_2", "windward", "finish"],
+          "angles": {
+            "windward_to_reach1": 60,
+            "reach1_to_reach2": 120,
+            "reach2_to_windward": 60
+          }
+        },
+        "modified": {
+          "name": "Modified Triangle",
+          "description": "Triangle with windward finish",
+          "sequence": ["start", "windward", "reaching_1", "reaching_2", "finish_windward"]
+        }
+      },
+      "marks": {
+        "windward": {
+          "type": "inflatable",
+          "rounding": "port"
+        },
+        "reaching_1": {
+          "type": "inflatable",
+          "rounding": "port",
+          "bearing": "60 degrees from windward"
+        },
+        "reaching_2": {
+          "type": "inflatable",
+          "rounding": "port",
+          "bearing": "120 degrees from reaching_1"
+        }
+      }
+    },
+
+    "coastal": {
+      "type": "coastal",
+      "description": "Point-to-point or around-the-cans racing using fixed marks",
+      "variations": {
+        "around-the-buoys": {
+          "name": "Around the Buoys",
+          "description": "Course using government navigation marks",
+          "marks": "Government buoys, lighthouses, islands"
+        },
+        "point-to-point": {
+          "name": "Point to Point",
+          "description": "Start at one location, finish at another",
+          "navigation": "Free choice of route"
+        },
+        "island-circuit": {
+          "name": "Island Circuit",
+          "description": "Circumnavigation of island or peninsula",
+          "examples": ["Around the Island (Hong Kong)", "Round Island Race (IOW)"]
+        }
+      }
+    },
+
+    "distance": {
+      "type": "distance",
+      "description": "Long-distance offshore racing",
+      "categories": {
+        "overnight": {
+          "distance": "100-300 nautical miles",
+          "duration": "12-36 hours",
+          "examples": ["Newport-Bermuda", "Sydney-Hobart"]
+        },
+        "ocean": {
+          "distance": "500+ nautical miles",
+          "duration": "3-10 days",
+          "examples": ["Transpac", "China Sea Race"]
+        },
+        "round-the-world": {
+          "distance": "25,000+ nautical miles",
+          "duration": "9 months",
+          "examples": ["Volvo Ocean Race", "Vendée Globe"]
+        }
+      }
+    }
+  },
+
+  "specificCourses": {
+    "hong-kong": {
+      "region": "Asia-Pacific",
+      "venue": "Hong Kong waters",
+      "courses": {
+        "victoria-harbor-wl": {
+          "id": "hk-vh-wl",
+          "name": "Victoria Harbor Windward-Leeward",
+          "type": "windward-leeward",
+          "location": "Central Victoria Harbor",
+          "coordinates": {
+            "raceArea": {
+              "center": [114.2000, 22.2900],
+              "bounds": {
+                "southwest": [114.1600, 22.2600],
+                "northeast": [114.2200, 22.3200]
+              }
+            },
+            "marks": {
+              "start_committee_boat": [114.1850, 22.2850],
+              "start_pin": [114.1870, 22.2830],
+              "windward": [114.1900, 22.3000],
+              "leeward_port": [114.1880, 22.2750],
+              "leeward_starboard": [114.1920, 22.2750]
+            }
+          },
+          "conditions": {
+            "wind": "Monsoon influenced, 8-15 knots typical",
+            "current": "Strong tidal influence",
+            "hazards": ["Commercial traffic", "Ferries", "Harbor traffic"]
+          },
+          "clubs": ["rhkyc"],
+          "schedule": "Wednesday evenings, Saturday afternoons",
+          "classes": ["IRC", "HKPN", "J/80", "Etchells"]
+        },
+
+        "around-island": {
+          "id": "hk-around-island",
+          "name": "Around the Island Race",
+          "type": "coastal",
+          "description": "Circumnavigation of Hong Kong Island",
+          "distance": "30 nautical miles",
+          "course": {
+            "start": [114.1800, 22.2800],
+            "checkpoints": [
+              {
+                "name": "Stanley",
+                "coordinates": [114.2167, 22.2167],
+                "rounding": "leave to port"
+              },
+              {
+                "name": "Shek O",
+                "coordinates": [114.2500, 22.2167],
+                "rounding": "leave to port"
+              },
+              {
+                "name": "Cape Collinson",
+                "coordinates": [114.2667, 22.2333],
+                "rounding": "leave to port"
+              },
+              {
+                "name": "Green Island",
+                "coordinates": [114.1167, 22.3500],
+                "rounding": "leave to starboard"
+              }
+            ],
+            "finish": [114.1800, 22.2800]
+          },
+          "records": {
+            "monohull": "2h 47m 3s (2019)",
+            "multihull": "2h 12m 45s (2018)"
+          },
+          "participation": "300+ boats annually",
+          "timing": "October/November"
+        },
+
+        "china-sea-race": {
+          "id": "hk-china-sea",
+          "name": "Rolex China Sea Race",
+          "type": "distance",
+          "description": "Hong Kong to Manila offshore race",
+          "distance": "565 nautical miles",
+          "course": {
+            "start": [114.1800, 22.2800],
+            "waypoints": [
+              {
+                "name": "Pratas Reef",
+                "coordinates": [116.7167, 20.7000],
+                "type": "turning_mark"
+              }
+            ],
+            "finish": [120.9667, 14.6000]
+          },
+          "timing": "Good Friday (biennial)",
+          "records": {
+            "elapsed": "2d 19h 32m 28s (2014)"
+          }
+        }
+      }
+    },
+
+    "san-francisco": {
+      "region": "US West Coast",
+      "venue": "San Francisco Bay",
+      "courses": {
+        "big-boat-circle": {
+          "id": "sfb-big-boat",
+          "name": "Big Boat Racing Circle",
+          "type": "windward-leeward",
+          "location": "Central San Francisco Bay",
+          "coordinates": {
+            "raceArea": {
+              "center": [-122.4500, 37.8500],
+              "bounds": {
+                "southwest": [-122.4800, 37.8200],
+                "northeast": [-122.4300, 37.8700]
+              }
+            }
+          },
+          "conditions": {
+            "wind": "Westerly thermal, 15-25 knots",
+            "current": "Strong tidal currents",
+            "challenges": ["Wind gradients", "Current effects", "Commercial traffic"]
+          },
+          "events": ["Rolex Big Boat Series"],
+          "clubs": ["sfyc"]
+        }
+      }
+    },
+
+    "solent": {
+      "region": "UK",
+      "venue": "The Solent",
+      "courses": {
+        "cowes-week": {
+          "id": "solent-cowes-week",
+          "name": "Cowes Week Racing Areas",
+          "type": "mixed",
+          "location": "Multiple areas in The Solent",
+          "areas": [
+            {
+              "name": "Committee Boat Alpha",
+              "coordinates": {
+                "center": [-1.3000, 50.7600],
+                "bounds": {
+                  "southwest": [-1.3500, 50.7450],
+                  "northeast": [-1.2500, 50.7750]
+                }
+              }
+            },
+            {
+              "name": "Committee Boat Bravo",
+              "coordinates": {
+                "center": [-1.2000, 50.7800],
+                "bounds": {
+                  "southwest": [-1.2500, 50.7650],
+                  "northeast": [-1.1500, 50.7950]
+                }
+              }
+            }
+          ],
+          "conditions": {
+            "wind": "SW prevailing, 10-20 knots",
+            "tide": "Complex double tide system",
+            "challenges": ["Tidal complexity", "Commercial shipping"]
+          },
+          "timing": "First week of August",
+          "clubs": ["rys"]
+        }
+      }
+    },
+
+    "sydney": {
+      "region": "Australia",
+      "venue": "Sydney Harbour and Tasman Sea",
+      "courses": {
+        "sydney-hobart": {
+          "id": "syd-hobart",
+          "name": "Rolex Sydney Hobart Yacht Race",
+          "type": "distance",
+          "description": "Sydney to Hobart offshore race",
+          "distance": "628 nautical miles",
+          "course": {
+            "start": [151.2233, -33.8567],
+            "checkpoints": [
+              {
+                "name": "Sydney Heads",
+                "coordinates": [151.2833, -33.8333]
+              },
+              {
+                "name": "Gabo Island",
+                "coordinates": [149.9167, -37.5667]
+              },
+              {
+                "name": "Tasman Island",
+                "coordinates": [148.0000, -43.2333]
+              }
+            ],
+            "finish": [147.3311, -42.8822]
+          },
+          "timing": "Boxing Day (December 26)",
+          "records": {
+            "line_honours": "1d 9h 15m 24s (2017)",
+            "corrected_time": "Various by handicap system"
+          },
+          "challenges": ["Bass Strait", "Southerly busters", "Tasman Sea conditions"]
+        }
+      }
+    }
+  },
+
+  "courseElements": {
+    "marks": {
+      "inflatable": {
+        "description": "Temporary racing marks",
+        "colors": ["Orange", "Yellow", "Red"],
+        "shapes": ["Cylinder", "Tetrahedron"],
+        "sizes": ["Small (1.5m)", "Medium (2.5m)", "Large (4m)"]
+      },
+      "government": {
+        "description": "Fixed navigation aids",
+        "types": ["Buoys", "Beacons", "Lighthouses"],
+        "characteristics": "Permanent, charted positions"
+      },
+      "virtual": {
+        "description": "GPS coordinate waypoints",
+        "usage": "Offshore racing, long courses",
+        "verification": "GPS tracking systems"
+      }
+    },
+
+    "lines": {
+      "start": {
+        "configuration": "Committee boat and pin end",
+        "length": "Appropriate for fleet size",
+        "signals": "Visual flags and sound signals"
+      },
+      "finish": {
+        "types": ["Upwind", "Downwind", "Reaching"],
+        "configuration": "Committee boat and mark"
+      },
+      "gate": {
+        "spacing": "50-100m between marks",
+        "advantage": "Spreads fleet, reduces congestion"
+      }
+    },
+
+    "timing": {
+      "start_sequence": {
+        "warning": "5 minutes before start",
+        "preparatory": "4 minutes before start",
+        "one_minute": "1 minute before start",
+        "start": "Start signal"
+      },
+      "recalls": {
+        "individual": "I flag - individual boats over early",
+        "general": "First Substitute - general recall",
+        "black_flag": "Black flag - boats over early are DSQ"
+      }
+    }
+  },
+
+  "raceManagement": {
+    "course_setup": {
+      "wind_assessment": "Current and forecast wind direction",
+      "mark_positioning": "Appropriate angles and distances",
+      "safety": "Clear of hazards and traffic"
+    },
+
+    "course_changes": {
+      "wind_shifts": "Adjust mark positions for major shifts",
+      "shortening": "Finish at earlier mark if needed",
+      "abandonment": "Cancel race if unsafe conditions"
+    },
+
+    "communications": {
+      "vhf": "Race committee frequencies",
+      "flags": "Visual signals per Racing Rules",
+      "digital": "Apps and websites for results"
+    }
+  },
+
+  "metadata": {
+    "lastUpdated": "2025-01-24",
+    "dataVersion": "1.0",
+    "standards": ["World Sailing Racing Rules", "ISAF Course Configurations"],
+    "sources": [
+      "World Sailing",
+      "National sailing authorities",
+      "Major yacht clubs",
+      "Race management guides"
+    ]
+  }
+}

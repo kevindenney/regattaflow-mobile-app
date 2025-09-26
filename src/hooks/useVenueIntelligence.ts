@@ -65,6 +65,8 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
     adaptationRequired: false,
   });
 
+  console.log('🎯 HOOK INIT DEBUG: useVenueIntelligence hook created with initial state:', state);
+
   /**
    * Initialize venue detection system
    */
@@ -131,6 +133,22 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
         // Load intelligence for already-detected venue
         await loadVenueIntelligence(currentVenue);
       }
+
+      // Set up venue detection callback
+      venueDetectionService.onVenueDetected((venue) => {
+        console.log(`🎯 DEBUG: Hook received venue detection: ${venue?.name || 'None'}`);
+
+        setState(prev => ({
+          ...prev,
+          currentVenue: venue,
+          isDetecting: false,
+        }));
+
+        // Load intelligence for new venue
+        if (venue) {
+          loadVenueIntelligence(venue);
+        }
+      });
 
       // Set up venue transition callback
       venueDetectionService.onVenueTransition((transition) => {

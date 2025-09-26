@@ -14,9 +14,9 @@ export default function TabLayout() {
   console.log('🎨 TabLayout: Color scheme:', colorScheme);
 
   const tabScreens = [
-    'dashboard', 'map', 'regattas', 'results', 'strategy', 'documents', 'profile'
+    'documents', 'dashboard', 'map', 'regattas', 'results', 'strategy', 'profile'
   ];
-  console.log('📱 TabLayout: Configured tab screens:', tabScreens);
+  console.log('📱 TabLayout: Configured tab screens (DOCUMENTS FIRST):', tabScreens);
 
   return (
     <Tabs
@@ -25,6 +25,13 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
+      <Tabs.Screen
+        name="documents"
+        options={{
+          title: 'Documents',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.fill" color={color} />,
+        }}
+      />
       <Tabs.Screen
         name="dashboard"
         options={{
@@ -58,13 +65,6 @@ export default function TabLayout() {
         options={{
           title: 'Strategy',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain.head.profile" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="documents"
-        options={{
-          title: 'Documents',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.fill" color={color} />,
         }}
       />
       <Tabs.Screen

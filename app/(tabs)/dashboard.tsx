@@ -8,7 +8,8 @@ import { useAuth } from '@/src/lib/contexts/AuthContext';
 
 export default function DashboardScreen() {
   console.log('📊 Dashboard: Component loading - PROTECTED VERSION');
-  console.log('🔍 Dashboard: Current URL:', typeof window !== 'undefined' ? window.location.href : 'SSR');
+  const currentURL = typeof window !== 'undefined' ? window.location.href : 'SSR';
+  console.log('🔍 Dashboard: Current URL:', currentURL);
 
   const { user, userProfile, signOut, loading } = useAuth();
 

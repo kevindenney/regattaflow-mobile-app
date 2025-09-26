@@ -272,6 +272,8 @@ interface LayerControlSystem {
     racing: RacingLayers;
     safety: SafetyLayers;
     historical: HistoricalLayers;
+    venues: VenueIntelligenceLayers;
+    logistics: LogisticsLayers;
   };
   visibility: LayerVisibilityManager;
   ordering: LayerOrderManager;
@@ -288,7 +290,68 @@ interface CustomOverlay {
 }
 ```
 
-#### 5.2 AIS Vessel Tracking Integration
+#### 5.2 Venue Intelligence Layers
+```typescript
+// src/services/venues/VenueIntelligenceService.ts
+interface VenueIntelligenceLayers {
+  yachtClubs: {
+    markers: YachtClubMarker[];
+    clustering: 'Smart grouping by zoom level';
+    popup: 'Detailed club information cards';
+    multiVenue: 'Connected venue visualization';
+  };
+
+  raceCourses: {
+    active: ActiveCourseOverlay[];
+    historical: HistoricalCourseData[];
+    permanent: PermanentMarkLayer[];
+    virtual: VirtualMarkLayer[];
+  };
+
+  facilities: {
+    marinas: MarinaFacilityLayer;
+    services: ServiceProviderLayer;
+    logistics: LogisticsProviderLayer;
+    emergency: EmergencyServiceLayer;
+  };
+
+  conditions: {
+    windPatterns: VenueWindPatternLayer;
+    currentFlows: CurrentPatternLayer;
+    tidalZones: TidalZoneLayer;
+    hazards: NavigationHazardLayer;
+  };
+}
+
+class VenueVisualizationEngine {
+  renderYachtClubNetwork(club: YachtClub): void {
+    // Multi-venue clubs like RHKYC with connected facilities
+    if (club.multipleVenues) {
+      this.renderPrimaryMarker(club.headquarters);
+      this.renderSatelliteVenues(club.venues);
+      this.renderConnectionLines(club.venues);
+    }
+  }
+
+  renderRaceCourses(venue: SailingVenue): void {
+    // Overlay race courses with interactive details
+    venue.raceCourses.forEach(course => {
+      this.renderCourseMarks(course.marks);
+      this.renderCourseSequence(course.sequence);
+      this.attachCourseData(course.metadata);
+    });
+  }
+
+  renderLogisticsNetwork(venue: SailingVenue): void {
+    // Show transportation, accommodation, provisioning
+    this.renderTransportationHubs(venue.logistics.transportation);
+    this.renderAccommodationOptions(venue.logistics.accommodation);
+    this.renderProvisioningServices(venue.logistics.provisioning);
+  }
+}
+```
+
+#### 5.3 AIS Vessel Tracking Integration
 ```typescript
 // src/services/tracking/AISTrackingService.ts
 class AISTrackingService {
@@ -303,13 +366,51 @@ class AISTrackingService {
 }
 ```
 
+#### 5.4 Yacht Club Web Scraping Integration
+```typescript
+// src/services/scraping/ClubDataScraper.ts
+class ClubDataScraper {
+  async scrapeClubWebsite(club: YachtClub): Promise<ClubIntelligence> {
+    const scraped = await Promise.all([
+      this.extractRaceCalendar(club.website),
+      this.parseNoticesOfRace(club.website + '/racing/notices'),
+      this.extractCourseInformation(club.website + '/courses'),
+      this.parseResults(club.website + '/results')
+    ]);
+
+    return this.consolidateClubData(scraped);
+  }
+
+  async extractRaceCourses(document: Document): Promise<RaceCourse[]> {
+    // Parse sailing instructions and NORs for GPS coordinates
+    const courses = [];
+    const coordinates = this.extractGPSCoordinates(document);
+    const markNames = this.extractMarkNames(document);
+    const sequences = this.extractCourseSequences(document);
+
+    return this.buildCourseDefinitions(coordinates, markNames, sequences);
+  }
+
+  async monitorClubUpdates(clubs: YachtClub[]): Promise<void> {
+    // Real-time monitoring of club website changes
+    clubs.forEach(club => {
+      this.scheduleRegularScraping(club, '0 6 * * *'); // Daily at 6 AM
+      this.watchForDocumentChanges(club.website + '/racing');
+    });
+  }
+}
+```
+
 **Phase 5 Tasks:**
-- [ ] Build advanced layer control panel
+- [ ] Build advanced layer control panel with venue intelligence
+- [ ] Implement yacht club multi-venue visualization
+- [ ] Create race course overlay system
 - [ ] Integrate AIS vessel tracking
-- [ ] Create custom overlay system
-- [ ] Implement fleet monitoring dashboard
+- [ ] Build web scraping for club data
+- [ ] Implement logistics layer visualization
 - [ ] Add historical race data visualization
 - [ ] Build layer preset management
+- [ ] Create venue-specific map configurations
 
 ### Phase 6: Integration & Polish (Week 6)
 
@@ -362,15 +463,20 @@ regattaflow-app/
 │   │       │   ├── BathymetryLayer.tsx         # 3D terrain rendering
 │   │       │   ├── WeatherLayer.tsx            # Advanced weather viz
 │   │       │   ├── VesselTrackingLayer.tsx     # AIS integration
-│   │       │   └── CustomOverlayLayer.tsx      # User overlays
+│   │       │   ├── CustomOverlayLayer.tsx      # User overlays
+│   │       │   ├── VenueIntelligenceLayer.tsx  # Yacht club intelligence
+│   │       │   ├── RaceCourseLayer.tsx         # Race course visualization
+│   │       │   └── LogisticsLayer.tsx          # Venue logistics overlay
 │   │       ├── controls/
 │   │       │   ├── AdvancedLayerControl.tsx    # Professional layer panel
 │   │       │   ├── WeatherControls.tsx         # Weather time controls
-│   │       │   └── NavigationTools.tsx         # Measurement tools
+│   │       │   ├── NavigationTools.tsx         # Measurement tools
+│   │       │   └── VenueControls.tsx           # Venue selection and filtering
 │   │       └── tools/
 │   │           ├── MeasurementTools.tsx        # Advanced measurements
 │   │           ├── NavigationCalculator.tsx    # Sailing calculations
-│   │           └── LaylineCalculator.tsx       # Race strategy tools
+│   │           ├── LaylineCalculator.tsx       # Race strategy tools
+│   │           └── VenueIntelligenceTool.tsx   # Venue analysis tools
 │   ├── services/
 │   │   ├── weather/
 │   │   │   ├── NOAAMarineService.ts           # NOAA integration
@@ -381,8 +487,17 @@ regattaflow-app/
 │   │   │   └── TerrainProcessor.ts            # 3D terrain generation
 │   │   ├── tracking/
 │   │   │   └── AISTrackingService.ts          # Vessel tracking
+│   │   ├── venues/
+│   │   │   ├── VenueIntelligenceService.ts    # Venue data processing
+│   │   │   ├── YachtClubService.ts            # Club data management
+│   │   │   └── RaceCourseService.ts           # Course data processing
+│   │   ├── scraping/
+│   │   │   ├── ClubDataScraper.ts             # Web scraping engine
+│   │   │   ├── DocumentParser.ts              # NOR/SI parsing
+│   │   │   └── CourseExtractor.ts             # GPS coordinate extraction
 │   │   └── offline/
 │   │       ├── AdvancedTileCache.ts           # Smart caching
+│   │       ├── VenueDataCache.ts              # Offline venue intelligence
 │   │       └── ServiceWorkerManager.ts       # Offline functionality
 │   ├── lib/
 │   │   ├── navigation/
@@ -395,12 +510,18 @@ regattaflow-app/
 │   │       ├── advanced-map.ts                # Enhanced map types
 │   │       ├── weather.ts                     # Weather data types
 │   │       ├── navigation.ts                  # Navigation types
-│   │       └── racing.ts                      # Race-specific types
+│   │       ├── racing.ts                      # Race-specific types
+│   │       ├── venues.ts                      # Venue intelligence types
+│   │       ├── yacht-clubs.ts                 # Yacht club data types
+│   │       └── race-courses.ts                # Race course definitions
 │   └── hooks/
 │       ├── useAdvancedMap.ts                  # Main map hook
 │       ├── useWeatherData.ts                  # Weather data hook
 │       ├── useOfflineCapability.ts            # Offline functionality
-│       └── useVesselTracking.ts               # Fleet tracking hook
+│       ├── useVesselTracking.ts               # Fleet tracking hook
+│       ├── useVenueIntelligence.ts            # Venue data and intelligence
+│       ├── useYachtClubs.ts                   # Club data management
+│       └── useRaceCourses.ts                  # Race course data
 ```
 
 ## Data Models
@@ -485,6 +606,51 @@ interface RaceStrategy {
   startLineAdvantage: StartPositionAnalysis;
   markRoundingPlan: MarkRoundingStrategy[];
   contingencyPlans: ContingencyPlan[];
+}
+
+// Venue Intelligence data structures
+interface VenueIntelligence {
+  yachtClub: YachtClubData;
+  raceCourses: RaceCourseLibrary;
+  logistics: VenueLogistics;
+  conditions: LocalConditions;
+  intelligence: LocalKnowledge;
+}
+
+interface YachtClubData {
+  id: string;
+  name: string;
+  founded: number;
+  multipleVenues: boolean;
+  headquarters: VenueLocation;
+  venues?: VenueLocation[];
+  racingProgram: RacingProgram;
+  facilities: ClubFacilities;
+  membership: MembershipInfo;
+  contacts: ContactInfo;
+}
+
+interface RaceCourseLibrary {
+  standardCourses: StandardCourse[];
+  customCourses: CustomCourse[];
+  historicalTracks: HistoricalRaceTrack[];
+  conditions: CourseConditions;
+}
+
+interface VenueLogistics {
+  transportation: TransportationHub[];
+  accommodation: AccommodationOption[];
+  provisioning: ProvisioningService[];
+  marine: MarineService[];
+  emergency: EmergencyService[];
+}
+
+interface LocalKnowledge {
+  windPatterns: WindPattern[];
+  currentEffects: CurrentPattern[];
+  tacticalAdvice: TacticalTip[];
+  localHazards: NavigationHazard[];
+  bestPractices: LocalBestPractice[];
 }
 ```
 

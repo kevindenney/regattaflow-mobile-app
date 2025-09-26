@@ -332,7 +332,87 @@ interface SpectatorExperience {
 - Result celebrations
 - Social sharing tools
 
-### 8. Analytics & Reporting
+### 8. Venue & Logistics Management
+
+#### Multi-Venue Club Operations
+```typescript
+interface MultiVenueManagement {
+  venueCoordination: {
+    scheduling: 'Cross-venue race calendar';
+    resources: 'Equipment and staff allocation';
+    transportation: 'Inter-venue logistics';
+    communication: 'Unified messaging system';
+  };
+
+  facilityManagement: {
+    headquarters: 'Main clubhouse operations';
+    racingStations: 'Satellite venue management';
+    marina: 'Berth and storage coordination';
+    maintenance: 'Multi-site maintenance scheduling';
+  };
+
+  example_RHKYC: {
+    kellettIsland: 'Social hub and administration';
+    middleIsland: 'Primary racing operations';
+    shelterCove: 'Marina and cruising base';
+    coordination: 'Unified event management';
+  };
+}
+```
+
+#### Venue Intelligence Integration
+```typescript
+interface VenueIntelligenceIntegration {
+  courseLibrary: {
+    standardCourses: 'Club-specific course definitions';
+    courseHistory: 'Historical usage and results';
+    conditionsData: 'Course performance by weather';
+    optimization: 'AI-suggested course configurations';
+  };
+
+  logisticsOptimization: {
+    participantFlow: 'Optimal arrival and departure times';
+    parkingManagement: 'Space allocation and directions';
+    facilitiesUsage: 'Restaurant, bars, amenities planning';
+    emergencyPlanning: 'Safety protocols by venue';
+  };
+
+  weatherIntegration: {
+    venueSpecific: 'Microclimate data for each location';
+    forecastAccuracy: 'Historical forecast vs actual';
+    raceDecisions: 'GO/NO-GO decision support';
+    courseAdjustments: 'Real-time course modifications';
+  };
+}
+```
+
+#### Automated Venue Data Collection
+```typescript
+interface VenueDataCollection {
+  webScraping: {
+    competitorClubs: 'Monitor other clubs for best practices';
+    industryData: 'Sailing industry trends and standards';
+    regulatoryUpdates: 'Safety and racing rule changes';
+    weatherServices: 'Enhanced local forecasting';
+  };
+
+  participantFeedback: {
+    venueRatings: 'Facility and service ratings';
+    coursePreferences: 'Popular course configurations';
+    logisticsIssues: 'Transportation and parking feedback';
+    suggestions: 'Improvement recommendations';
+  };
+
+  operationalData: {
+    usagePatterns: 'Peak times and facility utilization';
+    costAnalysis: 'Venue operational costs';
+    efficiency: 'Time-motion studies of operations';
+    benchmarking: 'Comparison with peer clubs';
+  };
+}
+```
+
+### 9. Analytics & Reporting
 
 #### Event Analytics
 ```typescript
@@ -342,27 +422,39 @@ interface EventAnalytics {
     demographics: 'Age, location, experience';
     retention: 'Repeat participants';
     growth: 'Year-over-year';
+    venuePreferences: 'Most popular venues and courses';
   };
   operational: {
-    efficiency: 'Time per race';
-    accuracy: 'Protest rates';
-    satisfaction: 'Participant feedback';
-    financial: 'Revenue and costs';
+    efficiency: 'Time per race by venue';
+    accuracy: 'Protest rates by course type';
+    satisfaction: 'Participant feedback by venue';
+    financial: 'Revenue and costs by venue';
+    logistics: 'Transportation and parking utilization';
   };
   performance: {
-    raceQuality: 'Competition metrics';
-    conditions: 'Weather patterns';
-    safety: 'Incident tracking';
+    raceQuality: 'Competition metrics by course';
+    conditions: 'Weather patterns by venue';
+    safety: 'Incident tracking by location';
+    courseOptimization: 'Best performing configurations';
+  };
+  venueIntelligence: {
+    utilizationRates: 'Venue capacity and usage';
+    memberFlow: 'Movement patterns between venues';
+    seasonalTrends: 'Venue popularity by season';
+    costEffectiveness: 'ROI by venue investment';
   };
 }
 ```
 
-#### Reports & Documentation
-- Event summary reports
-- Financial reconciliation
-- Participant feedback analysis
-- Safety incident reports
-- Annual racing statistics
+#### Enhanced Reports & Documentation
+- Event summary reports with venue breakdown
+- Financial reconciliation by venue
+- Participant feedback analysis by location
+- Safety incident reports with geographic data
+- Annual racing statistics with venue intelligence
+- Venue utilization and optimization reports
+- Logistics efficiency analysis
+- Cross-venue member engagement metrics
 
 ## Pricing Model
 

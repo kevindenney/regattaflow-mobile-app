@@ -15,8 +15,66 @@ import {
   Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { stripeService, SubscriptionPlan, SubscriptionStatus } from '@/src/services/payments/StripeService';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
+
+// Web-only stub to completely avoid Stripe React Native imports
+const webStripeService = {
+  plans: [
+    {
+      id: 'basic',
+      name: 'Basic',
+      price: 0,
+      priceId: '',
+      features: ['Basic race tracking', '3 document uploads/month', 'Weather forecasts', 'Basic analytics']
+    },
+    {
+      id: 'professional',
+      name: 'Professional',
+      price: 29,
+      priceId: '',
+      features: [
+        'Unlimited race tracking',
+        'Unlimited document uploads',
+        'AI strategy analysis',
+        'Advanced analytics',
+        'Multi-venue support',
+        'Performance insights',
+        'Priority support'
+      ],
+      popular: true
+    },
+    {
+      id: 'team',
+      name: 'Team',
+      price: 49,
+      priceId: '',
+      features: [
+        'Everything in Professional',
+        'Team collaboration',
+        'Coach integration',
+        'Custom training plans',
+        'Team analytics',
+        'API access',
+        'Dedicated support'
+      ]
+    }
+  ],
+  getSubscriptionStatus: async () => ({ active: false }),
+  createCheckoutSession: async () => ({ error: 'Subscription management coming soon for web' }),
+  createPortalSession: async () => ({ error: 'Billing portal coming soon for web' }),
+  cancelSubscription: async () => ({ success: false, error: 'Cancellation coming soon for web' }),
+  resumeSubscription: async () => ({ success: false, error: 'Resume coming soon for web' })
+};
+
+// Use web service for now to avoid Stripe React Native completely
+const stripeService = webStripeService;
+
+interface SubscriptionStatus {
+  active: boolean;
+  plan?: any;
+  currentPeriodEnd?: Date;
+  cancelAtPeriodEnd?: boolean;
+}
 
 export const SubscriptionManager: React.FC = () => {
   const { user } = useAuth();
@@ -160,6 +218,16 @@ export const SubscriptionManager: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
+      {/* Web Platform Notice */}
+      {Platform.OS === 'web' && (
+        <View style={styles.webNotice}>
+          <Ionicons name="information-circle" size={20} color="#007AFF" />
+          <Text style={styles.webNoticeText}>
+            Subscription management is optimized for mobile. Web features coming soon!
+          </Text>
+        </View>
+      )}
+
       {/* Current Subscription Status */}
       {subscriptionStatus.active && subscriptionStatus.plan && (
         <View style={styles.currentPlanCard}>
@@ -513,5 +581,19 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     color: '#666',
+  },
+  webNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    margin: 16,
+    padding: 16,
+    borderRadius: 8,
+    gap: 12,
+  },
+  webNoticeText: {
+    flex: 1,
+    color: '#1976D2',
+    fontSize: 14,
   },
 });

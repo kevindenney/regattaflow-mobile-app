@@ -1,11 +1,19 @@
 # Global Sailing Venues & Regional Intelligence Integration
-*Living Document - Last Updated: September 25, 2025*
+*Living Document - Last Updated: January 2025*
 
 ## Overview
-Transform RegattaFlow into a globally-aware sailing intelligence platform that automatically adapts to local sailing conditions, cultural contexts, and regional racing intelligence. This system makes RegattaFlow feel like a local sailing expert wherever sailors compete worldwide.
+Transform RegattaFlow into a globally-aware sailing intelligence platform with **map-first visualization** that automatically adapts to local sailing conditions, cultural contexts, and regional racing intelligence. This system provides comprehensive yacht club logistics, automated race course mapping, and venue-specific intelligence layered on interactive nautical charts.
 
 ## Vision Statement
-**"RegattaFlow should be the OnX Maps for sailing - but globally intelligent. Whether Bram is racing familiar Hong Kong waters or competing at Cowes Week for the first time, the system automatically provides the most relevant local knowledge, weather data, and cultural context while maintaining his global sailing development goals."**
+**"RegattaFlow is the definitive nautical intelligence platform - combining OnX Maps-level cartography with comprehensive yacht club logistics. The map is the primary interface, with all venue intelligence, race courses, and local knowledge layered on nautical charts. Whether navigating RHKYC's three venues across Hong Kong waters or planning a Mediterranean superyacht circuit, sailors see everything they need on the map."**
+
+## Core Innovation: Map-Centric Intelligence
+### Primary Interface Philosophy
+- **Map First**: Nautical chart is the main view, not a secondary feature
+- **Layered Intelligence**: All data visualized on the map canvas
+- **Interactive Discovery**: Tap venues, clubs, and courses for details
+- **Real-Time Context**: Live weather, currents, and vessel positions
+- **Offline Capability**: Full map functionality without connectivity
 
 ## Global Sailing Ecosystem
 
@@ -88,11 +96,33 @@ interface PremierRacingCenters {
   asiaPacific: {
     hongKong: {
       coordinates: [114.1694, 22.3193];
-      clubs: ['Royal Hong Kong YC', 'Hebe Haven YC', 'Aberdeen BC'];
-      specialties: ['Around the Island Race', 'Dragon racing'];
+      clubs: [
+        {
+          name: 'Royal Hong Kong Yacht Club',
+          venues: [
+            { name: 'Kellett Island', type: 'main-clubhouse', harbor: 'Victoria Harbor' },
+            { name: 'Middle Island', type: 'racing-station', location: 'Repulse Bay' },
+            { name: 'Shelter Cove', type: 'marina', location: 'Port Shelter, Sai Kung' }
+          ],
+          raceCourses: {
+            harbor: ['Victoria Harbor Series', 'Wednesday Night Racing'],
+            coastal: ['Round the Island Race', 'Lamma Island Circuit'],
+            offshore: ['China Sea Race to Manila', 'South China Regatta to Vietnam', 'Hong Kong to Hainan']
+          }
+        },
+        'Hebe Haven YC',
+        'Aberdeen BC'
+      ];
+      specialties: ['Around the Island Race', 'Dragon racing', 'International offshore racing'];
       windPatterns: 'Monsoon-driven, seasonal variations';
       culturalNotes: 'East-meets-West sailing culture, typhoon season';
       localLanguages: ['English', 'Cantonese', 'Mandarin'];
+      mapFeatures: {
+        primaryChart: 'Hong Kong Marine Department Charts',
+        racingAreas: ['Victoria Harbor', 'Eastern Waters', 'Lamma Channel', 'Port Shelter'],
+        navigationHazards: ['Commercial traffic', 'High-speed ferries', 'Typhoon shelters'],
+        viewingPoints: ['The Peak', 'Tsim Sha Tsui Waterfront', 'Cyberport']
+      };
     };
     sydneyHarbour: {
       coordinates: [151.2093, -33.8688];
@@ -118,6 +148,107 @@ interface PremierRacingCenters {
 - **Southern Ocean**: Perth, Melbourne, Tasmania
 - **Baltic Sea**: Stockholm, Helsinki, St. Petersburg
 - **North Sea**: Hamburg, Amsterdam, Gothenburg
+
+## Yacht Club Intelligence & Logistics System
+
+### Automated Club Data Extraction
+```typescript
+interface YachtClubIntelligence {
+  webScraping: {
+    clubWebsites: 'Automated course extraction from NORs/SIs';
+    raceCalendars: 'Real-time event synchronization';
+    courseLibrary: 'GPS waypoint extraction and mapping';
+    resultsIntegration: 'Historical performance data';
+  };
+
+  venueMapping: {
+    multiLocation: 'Clubs with multiple venues (e.g., RHKYC)';
+    racingAreas: 'Defined course boundaries and marks';
+    facilities: 'Launch ramps, visitor berths, fuel docks';
+    logistics: 'Parking, storage, crane capacity';
+  };
+
+  courseVisualization: {
+    standardCourses: 'Windward-leeward, triangle, coastal';
+    customCourses: 'Club-specific permanent courses';
+    distanceRaces: 'Offshore destinations with routing';
+    virtualMarks: 'GPS coordinates for inflatable marks';
+  };
+}
+```
+
+### Example: Royal Hong Kong Yacht Club Mapping
+```typescript
+const RHKYC_Intelligence = {
+  headquarters: {
+    kellettIsland: {
+      coordinates: [22.2950, 114.1794],
+      facilities: ['Main dining', 'Bar', 'Pool', 'Gym'],
+      berthing: 'Limited visitor moorings',
+      racing: 'Victoria Harbor weeknight series'
+    }
+  },
+
+  racingVenues: {
+    middleIsland: {
+      coordinates: [22.2178, 114.2467],
+      purpose: 'Primary racing station',
+      facilities: ['Race committee base', 'Mark boat storage'],
+      courses: {
+        olympic: 'Windward-leeward courses',
+        passage: 'Round Island races',
+        dragon: 'Dragon class specific courses'
+      }
+    },
+
+    shelterCove: {
+      coordinates: [22.3583, 114.2897],
+      harbor: 'Port Shelter, Sai Kung',
+      facilities: ['Marina', '250 berths', 'Haul-out'],
+      conditions: 'Protected water, ideal for training'
+    }
+  },
+
+  offshoreCourses: {
+    chinaSeaRace: {
+      start: 'Victoria Harbor',
+      finish: 'Manila, Philippines',
+      distance: '565nm',
+      route: 'Via Pratas Reef'
+    },
+    southChinaRegatta: {
+      destinations: ['Nha Trang, Vietnam', 'Sanya, Hainan'],
+      season: 'Post-Chinese New Year'
+    }
+  }
+};
+```
+
+### Race Course Scraping Architecture
+```typescript
+interface CourseScrapingService {
+  sources: {
+    officialSites: 'Yacht club websites';
+    racingRules: 'Notice of Race, Sailing Instructions';
+    resultsPortals: 'National authority databases';
+    trackingData: 'AIS and GPS race replays';
+  };
+
+  extraction: {
+    waypoints: 'GPS coordinate parsing';
+    courseDescriptions: 'Natural language processing';
+    diagrams: 'Image recognition for course maps';
+    updates: 'Real-time amendment monitoring';
+  };
+
+  mapping: {
+    projection: 'WGS84 to local chart datum';
+    visualization: '3D course rendering';
+    conditions: 'Historical wind/current overlays';
+    optimization: 'Fastest route calculations';
+  };
+}
+```
 
 ## Location-Aware User Experience Architecture
 
@@ -310,6 +441,77 @@ interface TravelModeExperience {
     networkIntroductions: 'Local sailing community connections';
     equipmentSetup: 'Local condition optimization';
     practiceRecommendations: 'Acclimatization sailing schedule';
+  };
+}
+```
+
+## Map-Centric Navigation Architecture
+
+### Primary Map Interface
+```typescript
+interface NauticalMapInterface {
+  baseLayer: {
+    charts: 'NOAA ENC, UKHO, OpenSeaMap amalgamation';
+    bathymetry: 'High-resolution depth contours';
+    satellite: 'Optional overlay for reference';
+    terrain: '3D elevation for land features';
+  };
+
+  intelligenceLayers: {
+    venues: 'Yacht clubs, marinas, facilities';
+    raceCourses: 'Active and historical courses';
+    weather: 'Live wind, current, wave data';
+    vessels: 'AIS tracking, fleet positions';
+    hazards: 'Navigation warnings, restricted areas';
+  };
+
+  interactivity: {
+    venueDetails: 'Tap for club info, facilities, contacts';
+    coursePreview: 'View course details, conditions, records';
+    routePlanning: 'Draw custom routes with waypoints';
+    measurements: 'Distance, bearing, ETA calculations';
+  };
+
+  visualization: {
+    mode: '2D/3D toggle with smooth transitions';
+    clustering: 'Smart grouping at zoom levels';
+    heatmaps: 'Popular sailing areas, race density';
+    timeSlider: 'Historical and forecast conditions';
+  };
+}
+```
+
+### Yacht Club Venue Visualization
+```typescript
+interface ClubVenueVisualization {
+  multiVenueClubs: {
+    primaryMarker: 'Main clubhouse location';
+    satelliteVenues: 'Connected venue indicators';
+    relationshipLines: 'Visual venue connections';
+    unifiedView: 'Club-wide activity overview';
+  };
+
+  venueDetails: {
+    facilities: {
+      icons: 'Visual facility indicators';
+      capacity: 'Berths, moorings, dry storage';
+      services: 'Fuel, water, repairs, dining';
+      restrictions: 'Member-only, visitor access';
+    };
+
+    racingAreas: {
+      boundaries: 'Course area polygons';
+      permanentMarks: 'Fixed navigation marks';
+      typicalCourses: 'Common configurations';
+      conditions: 'Prevailing wind/current patterns';
+    };
+  };
+
+  logistics: {
+    transportation: 'Driving directions, parking';
+    accommodation: 'Nearby hotels, crew housing';
+    provisioning: 'Chandleries, supermarkets';
+    emergency: 'Hospitals, coast guard';
   };
 }
 ```
