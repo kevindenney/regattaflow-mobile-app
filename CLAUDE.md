@@ -50,16 +50,27 @@ npx expo export:web && vercel build  # Test production build
 ```
 
 #### Planning Documents
-- [nextjs-to-expo-migration.md](./plans/nextjs-to-expo-migration.md) - **ACTIVE: Migration from Next.js to Expo Universal**
+**Migration & Core Architecture:**
+- [nextjs-to-expo-migration.md](./plans/nextjs-to-expo-migration.md) - **COMPLETED: Migration from Next.js to Expo Universal**
 - [WORKFLOW.md](./plans/WORKFLOW.md) - Detailed development methodology
-- [example-feature.md](./plans/example-feature.md) - Template and reference
-- [regattaflow-master-plan.md](./plans/regattaflow-master-plan.md) - Complete product vision
 - [technical-architecture.md](./plans/technical-architecture.md) - System design with global infrastructure
+- [example-feature.md](./plans/example-feature.md) - Template and reference
+
+**Product Strategy & Vision:**
+- [regattaflow-master-plan.md](./plans/regattaflow-master-plan.md) - Complete product vision and roadmap
+- [regattaflow-expo-app.md](./plans/regattaflow-expo-app.md) - Expo app specific planning
+- [mobile-app-experience.md](./plans/mobile-app-experience.md) - Mobile user experience design
+- [frontend-ux-strategy.md](./plans/frontend-ux-strategy.md) - UI/UX strategy and patterns
+
+**Core Features:**
 - [global-sailing-venues.md](./plans/global-sailing-venues.md) - **CRITICAL: Global venue intelligence system**
 - [sailor-experience.md](./plans/sailor-experience.md) - Primary user experience with global features
 - [race-strategy-planning.md](./plans/race-strategy-planning.md) - OnX Maps for Sailing with regional intelligence
-- [coach-marketplace.md](./plans/coach-marketplace.md) - Coaching platform
-- [club-management.md](./plans/club-management.md) - Race committee tools
+- [onx-maps-advanced-mapping-system.md](./plans/onx-maps-advanced-mapping-system.md) - Advanced 3D mapping system
+
+**Business Features:**
+- [coach-marketplace.md](./plans/coach-marketplace.md) - Two-sided coaching marketplace
+- [club-management.md](./plans/club-management.md) - Race committee and club management tools
 
 ## Development Patterns
 
