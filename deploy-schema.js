@@ -7,7 +7,7 @@ const path = require('path');
 // Initialize Supabase client with service role
 const supabase = createClient(
   'https://qavekrwdbsobecwrfxwu.supabase.co',
-  '***REMOVED***'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhdmVrcndkYnNvYmVjd3JmeHd1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODkyNTczMiwiZXhwIjoyMDc0NTAxNzMyfQ.Lpmb-n5yVa9adBvp3GkqByWyEeBfRbbCVOhOjqsy4Xw'
 );
 
 async function deploySchema() {
