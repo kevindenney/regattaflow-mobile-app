@@ -24,6 +24,7 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
     adaptationRequired,
     initializeDetection,
     refreshIntelligence,
+    setVenueManually,
   } = useVenueIntelligence();
 
 
@@ -83,6 +84,32 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
             </ThemedText>
           </View>
         )}
+
+        {/* Venue Selector for Testing */}
+        <View style={styles.venueSelectorContainer}>
+          <ThemedText style={styles.venueSelectorTitle}>🌍 Test Venue Switch:</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.venueSelectorScroll}>
+            {['hong-kong', 'san-francisco-bay', 'newport-rhode-island'].map((venueId) => (
+              <TouchableOpacity
+                key={venueId}
+                style={[
+                  styles.venueButton,
+                  currentVenue?.id === venueId && styles.activeVenueButton
+                ]}
+                onPress={() => setVenueManually(venueId)}
+              >
+                <ThemedText style={[
+                  styles.venueButtonText,
+                  currentVenue?.id === venueId && styles.activeVenueButtonText
+                ]}>
+                  {venueId === 'hong-kong' && '🇭🇰 Hong Kong'}
+                  {venueId === 'san-francisco-bay' && '🇺🇸 SF Bay'}
+                  {venueId === 'newport-rhode-island' && '🇺🇸 Newport'}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* Adaptation Required Alert */}
         {adaptationRequired && lastTransition && (
@@ -330,6 +357,11 @@ function CulturalIntelligence({ cultural }: { cultural: any }) {
 }
 
 function LogisticsIntelligence({ logistics }: { logistics: any }) {
+  // 🐛 DEBUG: Log logistics data structure
+  console.log('🐛 LogisticsIntelligence received data:', logistics);
+  console.log('🐛 sailingServices data:', logistics?.sailingServices);
+  console.log('🐛 sailingServices keys:', logistics?.sailingServices ? Object.keys(logistics.sailingServices) : 'undefined');
+
   return (
     <View style={styles.intelligenceSection}>
       {/* Transportation */}
@@ -1116,4 +1148,41 @@ const styles = StyleSheet.create({
   pricingmoderate: { backgroundColor: '#ffc107', color: '#000' },
   pricingcompetitive: { backgroundColor: '#28a745' },
   pricingaffordable: { backgroundColor: '#17a2b8' },
+
+  // Venue Selector Styles
+  venueSelectorContainer: {
+    backgroundColor: '#f1f3f4',
+    padding: 12,
+    marginBottom: 8,
+  },
+  venueSelectorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  venueSelectorScroll: {
+    flexDirection: 'row',
+  },
+  venueButton: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+  },
+  activeVenueButton: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  venueButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  activeVenueButtonText: {
+    color: '#fff',
+  },
 });

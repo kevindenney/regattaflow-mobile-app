@@ -470,12 +470,25 @@ export class VenueDetectionService {
   async setVenueManually(venueId: string): Promise<void> {
     console.log(`🌍 Manual venue selection: ${venueId}`);
 
-    // TODO: Load venue from database
-    const venue = await this.findNearestVenue([-122.4194, 37.7749]); // Mock for now
-
-    if (venue) {
-      await this.switchToVenue(venue);
+    // Find the venue by ID from our venue database
+    const venueData = this.venues[venueId];
+    if (!venueData) {
+      console.error(`🌍 Venue not found: ${venueId}`);
+      return;
     }
+
+    // Create venue object
+    const venue: SailingVenue = {
+      id: venueData.id,
+      name: venueData.name,
+      coordinates: venueData.coordinates.center,
+      country: venueData.country,
+      venueType: venueData.priority === 1 ? 'premier' : 'regional',
+      culturalContext: venueData.culturalContext,
+    };
+
+    console.log(`🌍 Manually switching to venue: ${venue.name}`);
+    await this.switchToVenue(venue);
   }
 
   /**

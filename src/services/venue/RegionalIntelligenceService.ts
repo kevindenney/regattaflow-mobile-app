@@ -438,6 +438,9 @@ export class RegionalIntelligenceService {
       ],
     };
 
+    // 🐛 DEBUG: Log venue ID for sailing services generation
+    console.log('🐛 DEBUG: Generating logistics for venue:', venue.id, venue.name);
+
     const logisticalIntelligence: LogisticalIntelligence = {
       transportation: {
         airport: venue.id === 'hong-kong' ? 'Hong Kong International Airport (HKG)' : 'San Francisco International (SFO)',
@@ -632,7 +635,12 @@ export class RegionalIntelligenceService {
           recommendations: ['Book rigging services in advance', 'Bring backup equipment'],
         },
       ],
-      sailingServices: venue.id === 'hong-kong' ? {
+      sailingServices: (() => {
+        console.log('🏁 SAILING SERVICES: Starting for venue:', venue.id, venue.name);
+
+        if (venue.id === 'hong-kong') {
+          console.log('🏁 SAILING SERVICES: Generating Hong Kong data');
+          const hongKongServices = {
         yachtClubs: [
           {
             name: 'Royal Hong Kong Yacht Club',
@@ -706,7 +714,235 @@ export class RegionalIntelligenceService {
             pricing: 'premium',
           },
         ],
-      } : undefined,
+          };
+
+          console.log('🏁 SAILING SERVICES: Hong Kong data generated:', {
+            yachtClubs: hongKongServices.yachtClubs?.length || 0,
+            sailmakers: hongKongServices.sailmakers?.length || 0,
+            chandleries: hongKongServices.chandleries?.length || 0,
+            foulWeatherGear: hongKongServices.foulWeatherGear?.length || 0,
+            riggingServices: hongKongServices.riggingServices?.length || 0,
+            hasCantonese: hongKongServices.sailmakers?.some(s => s.languages?.includes('Cantonese')) || false,
+            hasDragonClass: hongKongServices.yachtClubs?.some(c => c.specialty?.includes('Dragon Class')) || false
+          });
+
+          return hongKongServices;
+        }
+
+        if (venue.id === 'san-francisco-bay') {
+          return {
+        yachtClubs: [
+          {
+            name: 'St. Francis Yacht Club',
+            specialty: 'Big boat racing, J/Class, America\'s Cup history',
+            contact: '+1 (415) 563-6363',
+            location: 'Marina District, San Francisco',
+            reputation: 'excellent',
+          },
+          {
+            name: 'San Francisco Yacht Club',
+            specialty: 'One-design racing, Laser, J/24, social events',
+            contact: '+1 (415) 789-5222',
+            location: 'Belvedere Island',
+            reputation: 'excellent',
+          },
+          {
+            name: 'Richmond Yacht Club',
+            specialty: 'Dinghy racing, youth sailing, informal atmosphere',
+            contact: '+1 (510) 237-2821',
+            location: 'Richmond Marina',
+            reputation: 'high',
+          },
+        ],
+        sailmakers: [
+          {
+            name: 'North Sails San Francisco',
+            specialty: 'Big boat racing sails, America\'s Cup technology',
+            contact: '+1 (415) 339-3000',
+            languages: ['English', 'Spanish'],
+            pricing: 'premium',
+          },
+          {
+            name: 'Doyle Sails San Francisco',
+            specialty: 'Custom racing sails, one-design optimization',
+            contact: '+1 (510) 523-9411',
+            languages: ['English'],
+            pricing: 'moderate',
+          },
+          {
+            name: 'Pineapple Sails',
+            specialty: 'Racing sails, cruising sails, local Bay knowledge',
+            contact: '+1 (510) 522-2200',
+            languages: ['English'],
+            pricing: 'competitive',
+          },
+        ],
+        chandleries: [
+          {
+            name: 'West Marine (Sausalito)',
+            specialty: 'Complete marine supplies, electronics, safety gear',
+            contact: '+1 (415) 332-1178',
+            location: 'Sausalito',
+            pricing: 'moderate',
+          },
+          {
+            name: 'Defender Marine (Alameda)',
+            specialty: 'Discount marine supplies, rigging hardware',
+            contact: '+1 (510) 747-0550',
+            location: 'Alameda Marina',
+            pricing: 'competitive',
+          },
+          {
+            name: 'Sailrite Kits',
+            specialty: 'DIY sail repair kits, canvas work supplies',
+            contact: '+1 (260) 244-4647',
+            location: 'Online/Mail order',
+            pricing: 'affordable',
+          },
+        ],
+        foulWeatherGear: [
+          {
+            name: 'West Marine Sailing Gear',
+            specialty: 'Helly Hansen, Musto, recreational sailing gear',
+            contact: '+1 (415) 332-1178',
+            languages: ['English'],
+            pricing: 'moderate',
+          },
+          {
+            name: 'Fisheries Supply (Seattle ship)',
+            specialty: 'Commercial grade foul weather gear, boots',
+            contact: '+1 (206) 632-4462',
+            languages: ['English'],
+            pricing: 'competitive',
+          },
+        ],
+        riggingServices: [
+          {
+            name: 'Svendsens Marine',
+            specialty: 'Complete rigging services, mast work, America\'s Cup experience',
+            contact: '+1 (510) 522-2886',
+            languages: ['English'],
+            pricing: 'premium',
+          },
+          {
+            name: 'Alameda Rigging',
+            specialty: 'Standing and running rigging, racing optimization',
+            contact: '+1 (510) 521-4865',
+            languages: ['English'],
+            pricing: 'moderate',
+          },
+        ],
+          };
+        }
+
+        if (venue.id === 'newport-rhode-island') {
+          return {
+        yachtClubs: [
+          {
+            name: 'Newport Harbor Yacht Club',
+            specialty: 'Offshore racing, Newport Bermuda Race, J/Class',
+            contact: '+1 (401) 849-2261',
+            location: 'Newport Harbor',
+            reputation: 'excellent',
+          },
+          {
+            name: 'New York Yacht Club (Newport Station)',
+            specialty: 'America\'s Cup history, classic yacht racing',
+            contact: '+1 (401) 849-3200',
+            location: 'Harbour Court, Newport',
+            reputation: 'excellent',
+          },
+          {
+            name: 'Ida Lewis Yacht Club',
+            specialty: 'Women\'s sailing, competitive racing, social events',
+            contact: '+1 (401) 846-1969',
+            location: 'Newport Harbor',
+            reputation: 'excellent',
+          },
+        ],
+        sailmakers: [
+          {
+            name: 'North Sails Newport',
+            specialty: 'America\'s Cup technology, offshore racing sails',
+            contact: '+1 (401) 846-8424',
+            languages: ['English'],
+            pricing: 'premium',
+          },
+          {
+            name: 'Doyle Sails Newport',
+            specialty: 'Custom racing sails, America\'s Cup heritage',
+            contact: '+1 (401) 847-4326',
+            languages: ['English'],
+            pricing: 'premium',
+          },
+          {
+            name: 'Quantum Sails Newport',
+            specialty: 'One-design racing, cruising sails, sail training',
+            contact: '+1 (401) 846-8003',
+            languages: ['English'],
+            pricing: 'moderate',
+          },
+        ],
+        chandleries: [
+          {
+            name: 'Defender Marine (Newport)',
+            specialty: 'Complete marine supplies, rigging, electronics',
+            contact: '+1 (401) 847-4200',
+            location: 'Newport Harbor',
+            pricing: 'competitive',
+          },
+          {
+            name: 'West Marine (Newport)',
+            specialty: 'Recreational boating supplies, safety equipment',
+            contact: '+1 (401) 849-4142',
+            location: 'Newport',
+            pricing: 'moderate',
+          },
+          {
+            name: 'Newport Nautical Supply',
+            specialty: 'Traditional marine hardware, yacht restoration',
+            contact: '+1 (401) 847-4000',
+            location: 'Thames Street, Newport',
+            pricing: 'premium',
+          },
+        ],
+        foulWeatherGear: [
+          {
+            name: 'Helly Hansen Newport',
+            specialty: 'Professional sailing gear, America\'s Cup quality',
+            contact: '+1 (401) 849-6644',
+            languages: ['English'],
+            pricing: 'premium',
+          },
+          {
+            name: 'Patagonia Newport',
+            specialty: 'Eco-friendly sailing apparel, casual gear',
+            contact: '+1 (401) 849-2262',
+            languages: ['English'],
+            pricing: 'moderate',
+          },
+        ],
+        riggingServices: [
+          {
+            name: 'Hall Spars & Rigging',
+            specialty: 'Carbon spars, America\'s Cup rigging, superyacht systems',
+            contact: '+1 (401) 846-2400',
+            languages: ['English'],
+            pricing: 'premium',
+          },
+          {
+            name: 'Goetz Custom Boats Rigging',
+            specialty: 'Custom rigging, racing optimization, classic yachts',
+            contact: '+1 (401) 849-5087',
+            languages: ['English'],
+            pricing: 'premium',
+          },
+        ],
+          };
+        }
+
+        return undefined;
+      })(),
       costEstimates: [
         {
           category: 'accommodation',
