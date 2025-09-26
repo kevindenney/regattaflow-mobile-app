@@ -13,19 +13,19 @@ export interface CourseCoordinates {
     northeast: [number, number];
   };
   marks?: { [markName: string]: [number, number] };
-  checkpoints?: Array<{
+  checkpoints?: {
     name: string;
     coordinates: [number, number];
     rounding?: string;
     type?: string;
-  }>;
+  }[];
   start?: [number, number];
   finish?: [number, number];
-  waypoints?: Array<{
+  waypoints?: {
     name: string;
     coordinates: [number, number];
     type: string;
-  }>;
+  }[];
 }
 
 export interface RaceCourse {
@@ -202,13 +202,13 @@ export class RaceCourseService {
   /**
    * Get course marks for mapping
    */
-  getCourseMarks(courseId: string): Array<{
+  getCourseMarks(courseId: string): {
     id: string;
     name: string;
     coordinates: [number, number];
     type: 'start' | 'finish' | 'turning' | 'waypoint';
     color?: string;
-  }> {
+  }[] {
     const course = this.courses.get(courseId);
     if (!course?.coordinates?.marks) return [];
 

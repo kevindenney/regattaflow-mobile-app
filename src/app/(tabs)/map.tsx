@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Alert } from 'react-native';
+import { StyleSheet, View, Alert, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Map3DView } from '@/src/components/map/Map3DView';
 import { ProfessionalMapScreen } from '@/src/components/map/ProfessionalMapScreen';
+import { RaceCourseVisualization } from '@/src/components/map/RaceCourseVisualization';
 import type { RaceMark, WeatherConditions, AdvancedWeatherConditions, NavigationResult } from '@/src/lib/types/map';
 import type { GeoLocation } from '@/src/lib/types/advanced-map';
+import type { RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
 
 const sampleMarks: RaceMark[] = [
   {
@@ -55,6 +57,8 @@ export default function MapScreen() {
   const [professionalMode, setProfessionalMode] = useState(true);
   const [currentVenue, setCurrentVenue] = useState('san-francisco-bay');
   const [currentWeather, setCurrentWeather] = useState<AdvancedWeatherConditions | null>(null);
+  const [courseVisualizationMode, setCourseVisualizationMode] = useState(false);
+  const [extractedCourse, setExtractedCourse] = useState<RaceCourseExtraction | null>(null);
 
   // Professional API keys (these would come from secure storage)
   const apiKeys = {
@@ -101,34 +105,205 @@ export default function MapScreen() {
     );
   };
 
+  // Create sample extracted course data for demonstration
+  const createSampleExtractedCourse = (): RaceCourseExtraction => ({
+    courseLayout: {
+      type: 'windward_leeward',
+      description: 'Windward/leeward course with start and finish at committee boat',
+      confidence: 0.9
+    },
+    marks: [
+      {
+        name: 'Committee Boat',
+        position: {
+          latitude: 37.8,
+          longitude: -122.4,
+          description: 'Committee boat at north end of start line',
+          confidence: 0.95
+        },
+        type: 'start',
+        color: 'orange',
+        shape: 'boat'
+      },
+      {
+        name: 'Pin End',
+        position: {
+          latitude: 37.799,
+          longitude: -122.401,
+          description: 'Pin buoy at south end of start line',
+          confidence: 0.95
+        },
+        type: 'start',
+        color: 'orange',
+        shape: 'cylindrical'
+      },
+      {
+        name: 'Windward Mark',
+        position: {
+          latitude: 37.82,
+          longitude: -122.39,
+          description: 'Yellow inflatable buoy to be rounded to port',
+          confidence: 0.85
+        },
+        type: 'windward',
+        color: 'yellow',
+        shape: 'inflatable'
+      },
+      {
+        name: 'Leeward Gate Port',
+        position: {
+          latitude: 37.785,
+          longitude: -122.405,
+          description: 'Red inflatable buoy - port gate mark',
+          confidence: 0.8
+        },
+        type: 'leeward',
+        color: 'red',
+        shape: 'inflatable'
+      },
+      {
+        name: 'Leeward Gate Starboard',
+        position: {
+          latitude: 37.785,
+          longitude: -122.395,
+          description: 'Red inflatable buoy - starboard gate mark',
+          confidence: 0.8
+        },
+        type: 'leeward',
+        color: 'red',
+        shape: 'inflatable'
+      }
+    ],
+    boundaries: [],
+    schedule: {
+      warningSignal: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes from now
+      preparatorySignal: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
+      startingSignal: new Date(Date.now() + 0), // Now
+      confidence: 0.9
+    },
+    distances: {
+      beat: {
+        distance: 1.2,
+        unit: 'nm',
+        bearing: 45,
+        confidence: 0.85
+      },
+      run: {
+        distance: 1.2,
+        unit: 'nm',
+        bearing: 225,
+        confidence: 0.85
+      },
+      total: {
+        distance: 3.6,
+        unit: 'nm',
+        confidence: 0.8
+      }
+    },
+    startLine: {
+      type: 'line',
+      description: 'Start line between committee boat and pin buoy',
+      bias: 'neutral',
+      length: 150,
+      confidence: 0.9
+    },
+    requirements: {
+      equipment: ['Life jackets', 'VHF Radio', 'Sound signals'],
+      crew: ['Maximum 4 crew'],
+      safety: ['Check in required before start'],
+      registration: ['Online registration by 10:00 AM'],
+      confidence: 0.7
+    },
+    weatherLimits: {
+      windMax: 25,
+      waveMax: 2,
+      visibility: 1000,
+      thunderstorm: false,
+      confidence: 0.8
+    },
+    extractionMetadata: {
+      documentType: 'sailing_instructions',
+      source: 'SF Bay Race Week - Sailing Instructions.pdf',
+      extractedAt: new Date(),
+      overallConfidence: 0.85,
+      processingNotes: ['GPS coordinates extracted from document', 'Schedule parsed successfully']
+    }
+  });
+
+  const handleCourseVisualizationToggle = () => {
+    setCourseVisualizationMode(!courseVisualizationMode);
+    if (!courseVisualizationMode && !extractedCourse) {
+      // Create sample course when entering visualization mode
+      setExtractedCourse(createSampleExtractedCourse());
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
-      {/* Professional Mode Toggle */}
+      {/* Mode Toggle */}
       <View style={styles.header}>
         <ThemedText type="title">
-          {professionalMode ? 'RegattaFlow Professional' : 'RegattaFlow Standard'}
+          {courseVisualizationMode ? 'AI Course Visualization' :
+           professionalMode ? 'RegattaFlow Professional' : 'RegattaFlow Standard'}
         </ThemedText>
         <View style={styles.modeToggle}>
-          <ThemedText
-            type="subtitle"
+          <TouchableOpacity
             style={[
               styles.modeButton,
-              !professionalMode && styles.activeModeButton
+              courseVisualizationMode && styles.activeModeButton
             ]}
-            onPress={() => setProfessionalMode(false)}
+            onPress={handleCourseVisualizationToggle}
           >
-            Standard
-          </ThemedText>
-          <ThemedText
-            type="subtitle"
+            <ThemedText
+              type="subtitle"
+              style={[
+                { textAlign: 'center' },
+                courseVisualizationMode && { color: '#FFFFFF' }
+              ]}
+            >
+              🏁 Course AI
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
               styles.modeButton,
-              professionalMode && styles.activeModeButton
+              !professionalMode && !courseVisualizationMode && styles.activeModeButton
             ]}
-            onPress={() => setProfessionalMode(true)}
+            onPress={() => {
+              setProfessionalMode(false);
+              setCourseVisualizationMode(false);
+            }}
           >
-            Professional
-          </ThemedText>
+            <ThemedText
+              type="subtitle"
+              style={[
+                { textAlign: 'center' },
+                !professionalMode && !courseVisualizationMode && { color: '#FFFFFF' }
+              ]}
+            >
+              Standard
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              professionalMode && !courseVisualizationMode && styles.activeModeButton
+            ]}
+            onPress={() => {
+              setProfessionalMode(true);
+              setCourseVisualizationMode(false);
+            }}
+          >
+            <ThemedText
+              type="subtitle"
+              style={[
+                { textAlign: 'center' },
+                professionalMode && !courseVisualizationMode && { color: '#FFFFFF' }
+              ]}
+            >
+              Professional
+            </ThemedText>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -150,7 +325,13 @@ export default function MapScreen() {
       </View>
 
       {/* Render appropriate map component */}
-      {professionalMode ? (
+      {courseVisualizationMode ? (
+        <RaceCourseVisualization
+          courseExtraction={extractedCourse}
+          weather={sampleWeather}
+          onMarkPress={handleMarkPress}
+        />
+      ) : professionalMode ? (
         <ProfessionalMapScreen
           venue={currentVenue}
           marks={sampleMarks}
@@ -170,8 +351,36 @@ export default function MapScreen() {
         />
       )}
 
+      {/* Course Visualization Info Panel */}
+      {courseVisualizationMode && extractedCourse && (
+        <View style={styles.courseInfo}>
+          <View style={styles.infoRow}>
+            <ThemedText type="default">
+              🏁 {extractedCourse.courseLayout.type.replace('_', ' ').toUpperCase()}
+            </ThemedText>
+            <ThemedText type="default">
+              ✅ {Math.round(extractedCourse.extractionMetadata.overallConfidence * 100)}% confidence
+            </ThemedText>
+          </View>
+          <View style={styles.infoRow}>
+            <ThemedText type="default">
+              📍 {extractedCourse.marks.length} marks extracted
+            </ThemedText>
+            <ThemedText type="default">
+              📄 {extractedCourse.extractionMetadata.source.split('.')[0]}
+            </ThemedText>
+          </View>
+          {selectedMark && (
+            <View style={styles.selectedInfo}>
+              <ThemedText type="subtitle">Selected: {selectedMark.name}</ThemedText>
+              <ThemedText type="default">Type: {selectedMark.type}</ThemedText>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Professional Info Panel */}
-      {professionalMode && currentWeather && (
+      {professionalMode && !courseVisualizationMode && currentWeather && (
         <View style={styles.professionalInfo}>
           <View style={styles.infoRow}>
             <ThemedText type="default">
@@ -194,7 +403,7 @@ export default function MapScreen() {
       )}
 
       {/* Standard Info Panel */}
-      {!professionalMode && (
+      {!professionalMode && !courseVisualizationMode && (
         <View style={styles.info}>
           <View style={styles.infoRow}>
             <ThemedText type="default">📍 Race Area: San Francisco Bay</ThemedText>
@@ -267,6 +476,15 @@ const styles = StyleSheet.create({
   info: {
     marginTop: 16,
     gap: 8,
+  },
+  courseInfo: {
+    marginTop: 16,
+    gap: 8,
+    backgroundColor: '#1a1a2e',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#007AFF',
   },
   professionalInfo: {
     marginTop: 16,

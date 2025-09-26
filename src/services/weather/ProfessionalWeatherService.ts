@@ -407,13 +407,13 @@ export class ProfessionalWeatherService {
   }
 
   // Utility methods
-  private weightedAverage(values: Array<{ value: number; weight: number }>): number {
+  private weightedAverage(values: { value: number; weight: number }[]): number {
     const totalWeight = values.reduce((sum, v) => sum + v.weight, 0);
     const weightedSum = values.reduce((sum, v) => sum + (v.value * v.weight), 0);
     return weightedSum / totalWeight;
   }
 
-  private circularAverage(values: Array<{ value: number; weight: number }>): number {
+  private circularAverage(values: { value: number; weight: number }[]): number {
     // Handle circular averaging for wind direction
     let x = 0, y = 0, totalWeight = 0;
 
@@ -428,7 +428,7 @@ export class ProfessionalWeatherService {
     return ((avgRad * 180 / Math.PI) + 360) % 360;
   }
 
-  private calculateEnsembleConfidence(sources: Array<Partial<AdvancedWeatherConditions>>): number {
+  private calculateEnsembleConfidence(sources: Partial<AdvancedWeatherConditions>[]): number {
     // Calculate confidence based on agreement between sources
     const validSources = sources.filter(s => s.wind);
     if (validSources.length < 2) return 0.5;

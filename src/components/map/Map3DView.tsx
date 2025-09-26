@@ -58,7 +58,7 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
 
   // Enhanced wind visualization state
-  const [windParticles, setWindParticles] = useState<Array<{
+  const [windParticles, setWindParticles] = useState<{
     id: number;
     x: number;
     y: number;
@@ -66,7 +66,7 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
     vy: number;
     life: number;
     intensity: number;
-  }>>([]);
+  }[]>([]);
 
   // Advanced weather layers state
   const [weatherLayers, setWeatherLayers] = useState({
@@ -80,7 +80,7 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
 
   // Measurement tools state - OnX Maps inspired
   const [measurementMode, setMeasurementMode] = useState<'off' | 'distance' | 'area'>('off');
-  const [measurementPoints, setMeasurementPoints] = useState<Array<{x: number, y: number, lat?: number, lon?: number}>>([]);
+  const [measurementPoints, setMeasurementPoints] = useState<{x: number, y: number, lat?: number, lon?: number}[]>([]);
   const [measurements, setMeasurements] = useState<{
     distance?: string;
     bearing?: string;

@@ -257,8 +257,18 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
    */
   const cleanup = useCallback(async () => {
     console.log('🎯 Cleaning up venue intelligence');
-    await venueDetectionService.cleanup();
-    regionalIntelligenceService.clearCache();
+
+    try {
+      if (venueDetectionService && typeof venueDetectionService.cleanup === 'function') {
+        await venueDetectionService.cleanup();
+      }
+
+      if (regionalIntelligenceService && typeof regionalIntelligenceService.clearCache === 'function') {
+        regionalIntelligenceService.clearCache();
+      }
+    } catch (error) {
+      console.error('❌ Cleanup failed:', error);
+    }
   }, []);
 
   // Cleanup on unmount

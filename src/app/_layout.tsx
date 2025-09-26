@@ -8,6 +8,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 // Add debugging console logs
 console.log('🚀 RootLayout: Starting to load');
 
+// Load browser database setup for console access (development only)
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  import('@/src/scripts/browser-db-setup');
+}
+
 let AuthProvider: any;
 try {
   const authModule = require('@/src/lib/contexts/AuthContext');

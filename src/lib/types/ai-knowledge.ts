@@ -242,7 +242,7 @@ export interface RacingScenario {
   };
   course: {
     type: string;
-    marks: Array<{ name: string; position: [number, number] }>;
+    marks: { name: string; position: [number, number] }[];
     distances: { [leg: string]: number };
   };
   strategy: {
@@ -310,10 +310,10 @@ export interface StrategyChatSession {
 export interface SimilaritySearchResult {
   documentId: string;
   similarity: number;
-  relevantSections: Array<{
+  relevantSections: {
     text: string;
     confidence: number;
-  }>;
+  }[];
 }
 
 // Race course extraction from sailing instructions
@@ -323,7 +323,7 @@ export interface RaceCourseExtraction {
     description: string;
     confidence: number;
   };
-  marks: Array<{
+  marks: {
     name: string;
     position?: {
       latitude?: number;
@@ -334,25 +334,25 @@ export interface RaceCourseExtraction {
     type: 'start' | 'windward' | 'leeward' | 'wing' | 'gate' | 'finish' | 'other';
     color?: string;
     shape?: string;
-  }>;
-  boundaries: Array<{
+  }[];
+  boundaries: {
     type: 'racing_area' | 'no_go' | 'restricted' | 'safety';
     description: string;
-    coordinates?: Array<{
+    coordinates?: {
       latitude: number;
       longitude: number;
-    }>;
+    }[];
     confidence: number;
-  }>;
+  }[];
   schedule: {
     warningSignal?: Date;
     preparatorySignal?: Date;
     startingSignal?: Date;
     timeLimit?: number; // minutes
-    sequences?: Array<{
+    sequences?: {
       class: string;
       startTime: Date;
-    }>;
+    }[];
     confidence: number;
   };
   distances: {

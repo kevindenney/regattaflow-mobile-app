@@ -142,13 +142,13 @@ export class YachtClubService {
   /**
    * Get club venues with coordinates
    */
-  getClubVenuesWithCoordinates(clubId: string): Array<{
+  getClubVenuesWithCoordinates(clubId: string): {
     id: string;
     name: string;
     coordinates: [number, number]; // [lng, lat] for MapLibre
     type: string;
     location: string;
-  }> {
+  }[] {
     const club = this.clubs.get(clubId);
     if (!club) return [];
 

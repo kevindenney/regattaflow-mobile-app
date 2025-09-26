@@ -9,7 +9,7 @@ import {
 export class NOAABathymetryService {
   private baseUrl = 'https://gis.ngdc.noaa.gov/arcgis/rest/services';
   private cache = new Map<string, any>();
-  private requestQueue: Array<{ key: string; promise: Promise<any> }> = [];
+  private requestQueue: { key: string; promise: Promise<any> }[] = [];
 
   /**
    * Get bathymetry tiles for a given bounding box and zoom level

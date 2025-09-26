@@ -191,7 +191,115 @@ interface StandardRaceCourses {
 }
 ```
 
-### 3. Web Scraping Architecture
+### 3. Race Builder Integration Architecture
+
+#### Visual Race Builder Intelligence Integration
+```typescript
+interface RaceBuilderIntelligenceIntegration {
+  venueIntelligence: {
+    autoLoad: {
+      venue: 'Automatic venue detection when race officer opens builder';
+      bathymetry: 'Real-time depth data for mark placement validation';
+      hazards: 'Known obstacles and restricted areas overlay';
+      infrastructure: 'Permanent marks and racing infrastructure display';
+    };
+
+    conditions: {
+      weather: 'Live weather integration for course orientation';
+      tidal: 'Current predictions for tactical course design';
+      historical: 'Seasonal patterns and condition intelligence';
+      microclimate: 'Venue-specific wind and current patterns';
+    };
+
+    optimization: {
+      markPlacement: 'AI-suggested optimal mark positions';
+      courseLength: 'Fleet size and skill-appropriate distances';
+      safetyZones: 'Automatic hazard avoidance and escape routes';
+      spectatorViewing: 'Optimal positioning for family engagement';
+    };
+  };
+
+  clubCustomization: {
+    templates: {
+      saved: 'Club library of frequently used course configurations';
+      optimized: 'AI-learned optimal courses for specific conditions';
+      seasonal: 'Condition-specific course variations';
+      class: 'Fleet-specific course designs and requirements';
+    };
+
+    intelligence: {
+      local: 'Accumulated local knowledge and racing patterns';
+      performance: 'Historical race quality and participant feedback';
+      safety: 'Incident patterns and risk mitigation strategies';
+      logistics: 'Optimal timing and operational considerations';
+    };
+  };
+
+  distributionOptimization: {
+    sailorIntegration: {
+      automatic: 'Instant delivery to registered sailor RegattaFlow accounts';
+      notification: 'Push alerts for course publication and amendments';
+      intelligence: 'Enhanced AI strategy using precise club data';
+      feedback: 'Sailor performance data shared back with clubs';
+    };
+
+    dataQuality: {
+      precision: 'GPS-precise coordinates from visual builder';
+      validation: 'Automated safety and compliance checking';
+      versioning: 'Amendment tracking and change management';
+      standardization: 'Consistent data formats across all clubs';
+    };
+  };
+}
+```
+
+#### RHKYC Multi-Venue Race Builder Integration
+```typescript
+interface RHKYCMultiVenueIntegration {
+  venueSelection: {
+    kellett: {
+      use: 'Social events, presentations, post-race gatherings';
+      raceBuilder: 'Administrative interface for race planning';
+      integration: 'Seamless switching between RHKYC venues';
+    };
+
+    middleIsland: {
+      use: 'Primary race management and course building';
+      intelligence: {
+        courses: 'Library of Middle Island racing configurations';
+        conditions: 'Repulse Bay-specific weather and current patterns';
+        optimization: 'AI-learned optimal mark positions';
+        safety: 'Local hazard awareness and emergency procedures';
+      };
+      workflow: {
+        design: 'Visual course builder with Middle Island intelligence';
+        validation: 'Automatic depth and hazard checking';
+        distribution: 'Instant delivery to sailor apps';
+        execution: 'Real-time course amendments and updates';
+      };
+    };
+
+    shelterCove: {
+      use: 'Alternative venue for specific conditions';
+      intelligence: {
+        access: 'Eastern waters course configurations';
+        protection: 'Typhoon-safe alternative racing';
+        logistics: 'Marina-based race management';
+        conditions: 'Port Shelter-specific environmental data';
+      };
+    };
+  };
+
+  crossVenueIntelligence: {
+    comparison: 'Optimal venue selection based on conditions';
+    switching: 'Seamless venue changes with course reconfiguration';
+    logistics: 'Participant notification and coordination';
+    analytics: 'Performance comparison across RHKYC venues';
+  };
+}
+```
+
+### 4. Web Scraping Architecture (Enhanced for Race Builder Support)
 
 #### Intelligent Data Collection
 ```typescript
@@ -492,31 +600,31 @@ interface LogisticsMapLayers {
 }
 ```
 
-## Implementation Strategy
+## Implementation Strategy (Race Builder Integrated)
 
 ### Phase 1: Foundation (Week 1-2)
-1. **Data Models**: Define comprehensive schemas
-2. **Web Scraping**: Build extraction framework
-3. **Database**: Set up storage architecture
-4. **API Design**: Create access endpoints
+1. **Venue Intelligence Database**: Comprehensive venue data models
+2. **Race Builder Integration APIs**: Real-time data feeds to visual builders
+3. **Multi-Venue Architecture**: Support for clubs with multiple locations
+4. **Condition Intelligence**: Live weather and environmental data integration
 
-### Phase 2: Core Features (Week 3-4)
-1. **Club Mapping**: Implement multi-venue visualization
-2. **Course Extraction**: Automate course parsing
-3. **Logistics Data**: Populate facility information
-4. **Map Integration**: Layer all data on charts
+### Phase 2: Race Builder Support (Week 3-4)
+1. **Intelligent Course Templates**: Venue-optimized course configurations
+2. **AI Optimization Engine**: Automated mark placement and validation
+3. **Real-time Distribution**: Instant sailor app data delivery
+4. **Cross-Venue Intelligence**: Multi-location club support
 
-### Phase 3: Intelligence (Week 5-6)
-1. **Pattern Recognition**: Learn from historical data
-2. **Optimization**: Route and logistics suggestions
-3. **Predictions**: Weather and condition forecasting
-4. **Alerts**: Changes and updates notification
+### Phase 3: Enhanced Intelligence (Week 5-6)
+1. **Machine Learning Integration**: AI-powered course optimization
+2. **Predictive Analytics**: Race quality and safety predictions
+3. **Community Intelligence**: Crowdsourced venue knowledge
+4. **Performance Analytics**: Race builder effectiveness metrics
 
-### Phase 4: User Experience (Week 7-8)
-1. **Interface Design**: Intuitive map interactions
-2. **Mobile Optimization**: Responsive design
-3. **Offline Capability**: Essential data caching
-4. **Sharing Features**: Social and team coordination
+### Phase 4: Global Expansion (Week 7-8)
+1. **International Venue Database**: Global yacht club integration
+2. **Multi-Language Support**: International race builder localization
+3. **Cultural Intelligence**: Regional sailing customs and protocols
+4. **Scale Architecture**: Support for thousands of clubs worldwide
 
 ## Success Metrics
 
@@ -589,10 +697,12 @@ interface LogisticsMapLayers {
 - **Communication**: Club messaging systems
 
 ## Related Documents
-- [Global Sailing Venues](./global-sailing-venues.md)
-- [OnX Maps Advanced Mapping](./onx-maps-advanced-mapping-system.md)
-- [Club Management](./club-management.md)
-- [Master Plan](./regattaflow-master-plan.md)
+- [Yacht Club Race Builder System](../RegattaFlowWebsite/plans/yacht-club-race-builder-system.md) - Visual race builder specifications
+- [Club Management](../RegattaFlowWebsite/plans/club-management.md) - Enhanced club features with race builder
+- [Race Strategy Planning](../RegattaFlowWebsite/plans/race-strategy-planning.md) - OnXMaps-style interface integration
+- [Global Sailing Venues](./global-sailing-venues.md) - Venue intelligence database
+- [OnX Maps Advanced Mapping](./onx-maps-advanced-mapping-system.md) - Interface design patterns
+- [Master Plan](../RegattaFlowWebsite/plans/regattaflow-master-plan.md) - Updated club-centric strategy
 
 ---
 *This document defines the comprehensive yacht club logistics and intelligence system that will make RegattaFlow the essential tool for sailing logistics worldwide.*

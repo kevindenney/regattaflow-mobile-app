@@ -107,17 +107,17 @@ export interface ProtocolReminder {
 export interface LanguageSupport {
   primaryLanguage: string;
   translationAvailable: boolean;
-  keyPhrases: Array<{
+  keyPhrases: {
     english: string;
     local: string;
     pronunciation?: string;
     context: string;
-  }>;
-  sailingTerminology: Array<{
+  }[];
+  sailingTerminology: {
     term: string;
     localEquivalent: string;
     usage: string;
-  }>;
+  }[];
 }
 
 export interface NetworkingOpportunity {
