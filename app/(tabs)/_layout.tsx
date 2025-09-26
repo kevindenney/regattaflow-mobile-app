@@ -14,9 +14,9 @@ export default function TabLayout() {
   console.log('🎨 TabLayout: Color scheme:', colorScheme);
 
   const tabScreens = [
-    'documents', 'dashboard', 'map', 'regattas', 'results', 'strategy', 'profile'
+    'documents', 'dashboard', 'map', 'coaches', 'regattas', 'results', 'strategy', 'profile'
   ];
-  console.log('📱 TabLayout: Configured tab screens (DOCUMENTS FIRST):', tabScreens);
+  console.log('📱 TabLayout: Configured tab screens (DOCUMENTS FIRST, COACHES ADDED):', tabScreens);
 
   return (
     <Tabs
@@ -44,6 +44,13 @@ export default function TabLayout() {
         options={{
           title: 'Map',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="map.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="coaches"
+        options={{
+          title: 'Coaches',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="graduationcap.fill" color={color} />,
         }}
       />
       <Tabs.Screen
