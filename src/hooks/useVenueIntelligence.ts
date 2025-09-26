@@ -11,7 +11,7 @@ import type {
   LocationDetection,
 } from '@/src/lib/types/global-venues';
 import type { RegionalIntelligenceData } from '@/src/services/venue/RegionalIntelligenceService';
-import { venueDetectionService } from '@/src/services/venue/VenueDetectionService';
+import { venueDetectionService } from '@/src/services/location/VenueDetectionService';
 import { regionalIntelligenceService } from '@/src/services/venue/RegionalIntelligenceService';
 
 export interface VenueIntelligenceState {
@@ -72,6 +72,8 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
    */
   const initializeDetection = useCallback(async (): Promise<boolean> => {
     console.log('🎯 Initializing venue intelligence system');
+    console.log('🎯 [DEBUG] About to call venueDetectionService.initialize()');
+    console.log('🎯 [DEBUG] VenueDetectionService object:', venueDetectionService);
 
     setState(prev => ({ ...prev, isDetecting: true, detectionError: null }));
 
@@ -89,27 +91,34 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
         return false;
       }
 
-      // Set up venue detection callback
-      console.log('🎯 Hook Init - Setting up venue detection callback');
-      venueDetectionService.onVenueDetected(async (venue) => {
-        console.log(`🎯 Hook Callback - Venue detected: ${venue?.name || 'None'}`);
-        console.log(`🎯 Hook Callback - Setting state with venue:`, venue);
+      // Set up venue detection callback using correct API
+      console.log('🎯 Hook Init - Setting up venue detection callback with addLocationListener');
+      venueDetectionService.addLocationListener(async (locationUpdate) => {
+        console.log(`🎯 Hook Callback - Location update received:`, {
+          venue: locationUpdate.venue?.name || 'None',
+          changed: locationUpdate.changed,
+          coordinates: locationUpdate.coordinates
+        });
 
         setState(prev => {
           console.log(`🎯 Hook Callback - Previous state:`, { currentVenue: prev.currentVenue?.name || null });
           const newState = {
             ...prev,
-            currentVenue: venue,
-            locationStatus: venueDetectionService.getDetectionStatus(),
+            currentVenue: locationUpdate.venue,
+            locationStatus: {
+              coordinates: locationUpdate.coordinates,
+              timestamp: locationUpdate.timestamp,
+              venue: locationUpdate.venue
+            } as LocationDetection,
           };
           console.log(`🎯 Hook Callback - New state:`, { currentVenue: newState.currentVenue?.name || null });
           return newState;
         });
 
-        // Load intelligence for new venue
-        if (venue) {
-          await loadVenueIntelligence(venue);
-        } else {
+        // Load intelligence for new venue only if venue changed
+        if (locationUpdate.changed && locationUpdate.venue) {
+          await loadVenueIntelligence(locationUpdate.venue);
+        } else if (locationUpdate.changed && !locationUpdate.venue) {
           setState(prev => ({
             ...prev,
             intelligence: null,
@@ -127,44 +136,19 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
         setState(prev => ({
           ...prev,
           currentVenue,
-          locationStatus: venueDetectionService.getDetectionStatus(),
+          locationStatus: {
+            coordinates: { latitude: 0, longitude: 0 }, // Will be updated when location is available
+            timestamp: new Date(),
+            venue: currentVenue
+          } as LocationDetection,
         }));
 
         // Load intelligence for already-detected venue
         await loadVenueIntelligence(currentVenue);
       }
 
-      // Set up venue detection callback
-      venueDetectionService.onVenueDetected((venue) => {
-        console.log(`🎯 DEBUG: Hook received venue detection: ${venue?.name || 'None'}`);
-
-        setState(prev => ({
-          ...prev,
-          currentVenue: venue,
-          isDetecting: false,
-        }));
-
-        // Load intelligence for new venue
-        if (venue) {
-          loadVenueIntelligence(venue);
-        }
-      });
-
-      // Set up venue transition callback
-      venueDetectionService.onVenueTransition((transition) => {
-        console.log(`🎯 Venue transition: ${transition.fromVenue?.name || 'None'} → ${transition.toVenue.name}`);
-
-        setState(prev => ({
-          ...prev,
-          lastTransition: transition,
-          adaptationRequired: transition.adaptationRequired.length > 0,
-        }));
-
-        // Log adaptation requirements
-        if (transition.adaptationRequired.length > 0) {
-          console.log('🎯 Adaptations required:', transition.adaptationRequired.map(a => a.description));
-        }
-      });
+      // Note: Venue detection callback already set up above with addLocationListener
+      // No additional callbacks needed as LocationUpdate provides all information
 
       setState(prev => ({ ...prev, isDetecting: false }));
       console.log('🎯 Venue intelligence system initialized successfully');
@@ -214,7 +198,7 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
    */
   const setVenueManually = useCallback(async (venueId: string) => {
     console.log(`🎯 Manual venue selection: ${venueId}`);
-    await venueDetectionService.setVenueManually(venueId);
+    await venueDetectionService.setManualVenue(venueId);
   }, []);
 
   /**

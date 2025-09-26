@@ -6,7 +6,7 @@
  */
 
 import { Platform } from 'react-native';
-import { globalVenueDatabase } from './GlobalVenueDatabase';
+import { supabaseVenueService } from './SupabaseVenueService';
 import type {
   SailingVenue,
   Coordinates,
@@ -34,8 +34,8 @@ export class VenueDetectionService {
     console.log('🌍 Initializing venue detection...');
 
     try {
-      // Initialize the global venue database first
-      await globalVenueDatabase.initialize();
+      // Initialize the Supabase venue service first
+      await supabaseVenueService.initializeVenueSchema();
 
       if (Platform.OS === 'web') {
         // Browser-based detection
@@ -106,7 +106,7 @@ export class VenueDetectionService {
       }
 
       navigator.geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
           console.log('✅ Browser location permission granted');
 
           // Immediately detect venue from current position
@@ -117,9 +117,14 @@ export class VenueDetectionService {
 
           console.log(`🌍 Browser GPS location: ${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}`);
           this.currentLocation = coordinates;
-          this.detectVenueFromCoordinates(coordinates);
 
-          resolve(true);
+          try {
+            await this.detectVenueFromCoordinates(coordinates);
+            resolve(true);
+          } catch (error) {
+            console.warn('🌍 Venue detection failed:', error);
+            resolve(true); // Still resolve true since location was obtained
+          }
         },
         (error) => {
           console.warn('🌍 Browser location permission denied or failed:', error.message);
@@ -153,7 +158,9 @@ export class VenueDetectionService {
         if (this.hasLocationChangedSignificantly(coordinates)) {
           console.log(`🌍 Browser GPS update: ${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}`);
           this.currentLocation = coordinates;
-          this.detectVenueFromCoordinates(coordinates);
+          this.detectVenueFromCoordinates(coordinates).catch(error => {
+            console.error('🌍 GPS venue detection failed:', error);
+          });
         }
       },
       (error) => {
@@ -201,7 +208,9 @@ export class VenueDetectionService {
       const venueId = timezoneVenueMap[timezone];
 
       if (venueId) {
-        const venue = globalVenueDatabase.getVenueById(venueId);
+        // Try to find venue by ID in Supabase database
+        const allVenues = await supabaseVenueService.getAllVenues();
+        const venue = allVenues.find(v => v.id === venueId);
         if (venue) {
           console.log(`🌍 Venue detected from timezone (${timezone}): ${venue.name}`);
           this.updateCurrentVenue(venue);
@@ -212,7 +221,8 @@ export class VenueDetectionService {
       // Fallback: try to detect region from timezone
       const region = this.detectRegionFromTimezone(timezone);
       if (region) {
-        const regionalVenues = globalVenueDatabase.getVenuesByRegion(region);
+        const allVenues = await supabaseVenueService.getAllVenues();
+        const regionalVenues = allVenues.filter(v => v.region === region);
         if (regionalVenues.length > 0) {
           // Select the most prominent venue in the region
           const primaryVenue = regionalVenues.find(v => v.venueType === 'premier') || regionalVenues[0];
@@ -272,28 +282,33 @@ export class VenueDetectionService {
   }
 
   /**
-   * Detect venue from GPS coordinates using the GlobalVenueDatabase
+   * Detect venue from GPS coordinates using the Supabase database
    */
-  private detectVenueFromCoordinates(coordinates: Coordinates): void {
+  private async detectVenueFromCoordinates(coordinates: Coordinates): Promise<void> {
     console.log(`🌍 Detecting venue at coordinates: [${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}]`);
 
-    // Try different radius sizes for detection
-    const radiusSizes = [25, 50, 100]; // km
-    let detectedVenue: SailingVenue | null = null;
+    try {
+      // Try different radius sizes for detection
+      const radiusSizes = [25, 50, 100]; // km
+      let detectedVenue: SailingVenue | null = null;
 
-    for (const radius of radiusSizes) {
-      detectedVenue = globalVenueDatabase.findVenueByLocation(coordinates, radius);
-      if (detectedVenue) {
-        console.log(`🌍 Venue detected within ${radius}km: ${detectedVenue.name}`);
-        break;
+      for (const radius of radiusSizes) {
+        detectedVenue = await supabaseVenueService.findVenueByLocation(coordinates, radius);
+        if (detectedVenue) {
+          console.log(`🌍 Venue detected within ${radius}km: ${detectedVenue.name}`);
+          break;
+        }
       }
-    }
 
-    if (!detectedVenue) {
-      console.log('🌍 No venue found near current location');
-    }
+      if (!detectedVenue) {
+        console.log('🌍 No venue found near current location');
+      }
 
-    this.updateCurrentVenue(detectedVenue);
+      this.updateCurrentVenue(detectedVenue);
+    } catch (error) {
+      console.error('🌍 Failed to detect venue from coordinates:', error);
+      this.updateCurrentVenue(null);
+    }
   }
 
 
@@ -565,14 +580,28 @@ export class VenueDetectionService {
   async selectVenue(venueId: string): Promise<boolean> {
     console.log(`🌍 Manually selecting venue: ${venueId}`);
 
-    const venue = globalVenueDatabase.getVenueById(venueId);
-    if (!venue) {
-      console.error(`❌ Venue not found: ${venueId}`);
+    try {
+      const allVenues = await supabaseVenueService.getAllVenues();
+      const venue = allVenues.find(v => v.id === venueId);
+
+      if (!venue) {
+        console.error(`❌ Venue not found: ${venueId}`);
+        return false;
+      }
+
+      this.updateCurrentVenue(venue);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to select venue ${venueId}:`, error);
       return false;
     }
+  }
 
-    this.updateCurrentVenue(venue);
-    return true;
+  /**
+   * Manually set venue (alias for selectVenue for hook compatibility)
+   */
+  async setVenueManually(venueId: string): Promise<void> {
+    await this.selectVenue(venueId);
   }
 
   /**
@@ -605,8 +634,8 @@ export class VenueDetectionService {
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
       return new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
-          (position) => {
-            this.detectVenueFromCoordinates([
+          async (position) => {
+            await this.detectVenueFromCoordinates([
               position.coords.longitude,
               position.coords.latitude
             ]);

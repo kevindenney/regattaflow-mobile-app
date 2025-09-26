@@ -108,7 +108,7 @@ export default function CourseBuilderScreen() {
 
       // Read file as base64
       const fileContent = await FileSystem.readAsStringAsync(document.uri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64' as any,
       });
 
       // Convert to ArrayBuffer

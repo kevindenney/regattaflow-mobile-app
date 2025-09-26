@@ -40,6 +40,8 @@ interface RaceCourseOverlay {
 }
 
 export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProps) {
+  console.log('🗺️ [DEBUG] VenueIntelligenceMapView component rendered!');
+
   // Venue intelligence hook
   const {
     currentVenue,
@@ -407,7 +409,17 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
     );
   };
 
+  // DEBUG: Log the actual values causing the loading state
+  console.log('🗺️ VenueIntelligenceMapView DEBUG - Component state check:');
+  console.log('  isDetecting:', isDetecting);
+  console.log('  currentVenue:', currentVenue?.name || 'null');
+  console.log('  shouldShowLoading:', isDetecting || !currentVenue);
+
   if (isDetecting || !currentVenue) {
+    console.log('🗺️ VenueIntelligenceMapView DEBUG - Showing loading state because:');
+    console.log('  isDetecting:', isDetecting);
+    console.log('  !currentVenue:', !currentVenue);
+
     return (
       <View style={[styles.container, style]}>
         <View style={styles.loadingContainer}>
