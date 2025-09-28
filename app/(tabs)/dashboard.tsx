@@ -4,9 +4,10 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
-import RaceDashboard from '@/src/components/dashboard/RaceDashboard';
+import RaceDashboard from '@/components/dashboard/RaceDashboard';
+import { AppHeader } from '@/components/layout/AppHeader';
 
 export default function DashboardScreen() {
   console.log('🎯 Dashboard: AI-Powered Sailing Intelligence Hub loading');
@@ -64,8 +65,10 @@ export default function DashboardScreen() {
 
   if (showWelcome) {
     return (
-      <View style={styles.welcomeContainer}>
-        <Text style={styles.welcomeTitle}>🏆 Welcome to RegattaFlow</Text>
+      <SafeAreaView style={{ flex: 1 }}>
+        <AppHeader title="Dashboard" />
+        <View style={styles.welcomeContainer}>
+          <Text style={styles.welcomeTitle}>🏆 Welcome to RegattaFlow</Text>
         <Text style={styles.welcomeSubtitle}>
           The "OnX Maps for Sailing" Experience
         </Text>
@@ -104,11 +107,17 @@ export default function DashboardScreen() {
           <Text style={styles.userText}>⚓ Welcome aboard, {userProfile?.full_name || user.email}!</Text>
           <Text style={styles.tierText}>Plan: {userProfile?.subscription_tier || 'Free'}</Text>
         </View>
-      </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  return <RaceDashboard />;
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <AppHeader title="Dashboard" />
+      <RaceDashboard />
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({

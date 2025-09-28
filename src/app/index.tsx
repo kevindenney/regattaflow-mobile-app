@@ -7,13 +7,14 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, SafeAreaView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/src/lib/utils/userTypeRouting';
 import { HeroTabs } from '@/src/components/landing/HeroTabs';
 import { ScrollFix } from '@/src/components/landing/ScrollFix';
 
 export default function LandingPage() {
   console.log('✅ [LANDING] LandingPage component loading with HeroTabs');
 
-  const { user, loading } = useAuth();
+  const { user, loading, userProfile, userType } = useAuth();
   const [forceShowLanding, setForceShowLanding] = useState(false);
 
   // Debug logging for height issues
@@ -26,13 +27,8 @@ export default function LandingPage() {
     documentHeight: typeof document !== 'undefined' ? document.documentElement.scrollHeight : 'N/A'
   });
 
-  // Auto-redirect authenticated users to dashboard
-  useEffect(() => {
-    if (!loading && user) {
-      console.log('✅ [LANDING] User authenticated, redirecting to dashboard');
-      router.replace('/(tabs)/dashboard');
-    }
-  }, [user, loading]);
+  // Note: Auto-redirect logic moved to AuthContext to avoid conflicts with OAuth routing
+  // The AuthContext now handles all post-authentication routing
 
   // Timeout to force show landing page if auth takes too long
   useEffect(() => {

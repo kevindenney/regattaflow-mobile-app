@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from '@/src/components/themed-text';
 import { useVenueIntelligence } from '@/src/hooks/useVenueIntelligence';
 import type { RegionalIntelligenceData } from '@/src/services/venue/RegionalIntelligenceService';
 

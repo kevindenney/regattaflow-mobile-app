@@ -6,9 +6,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { DocumentUploadCard } from '@/src/components/documents/DocumentUploadCard';
-import type { StoredDocument } from '@/src/services/storage/DocumentStorageService';
-import type { DocumentAnalysis, RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
+import { DocumentUploadCard } from '@/components/documents/DocumentUploadCard';
+import type { StoredDocument } from '@/services/storage/DocumentStorageService';
+import type { DocumentAnalysis, RaceCourseExtraction } from '@/lib/types/ai-knowledge';
 
 export default function DocumentsScreen() {
   console.log('📄 Documents: AI-Powered Document Processing Loading');

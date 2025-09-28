@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
+import { ThemedText } from '../../../components/themed-text';
+import { Button } from '../ui/button';
 import { RaceCourse, WeatherData } from './RaceBuilder';
 
 export interface WeatherIntegrationProps {

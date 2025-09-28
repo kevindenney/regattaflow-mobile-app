@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Button } from '@/components/ui/button';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
+import { Button } from '@/src/components/ui';
 import { CourseDesigner } from './CourseDesigner';
 import { CourseTemplateLibrary } from './CourseTemplateLibrary';
 import { WeatherIntegration } from './WeatherIntegration';

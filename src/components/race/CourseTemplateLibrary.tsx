@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
+import { ThemedText } from '../../../components/themed-text';
+import { Button } from '../ui/button';
 import { RaceCourse, Mark } from './RaceBuilder';
-import raceCourseData from '@/data/race-courses.json';
+import raceCourseData from '../../data/race-courses.json';
 
 export interface CourseTemplateLibraryProps {
   onCourseSelect: (course: RaceCourse) => void;

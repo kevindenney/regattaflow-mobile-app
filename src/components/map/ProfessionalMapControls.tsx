@@ -5,8 +5,8 @@
 
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
 import { BottomSheet } from '@gorhom/bottom-sheet';
 import type {
   MapInteractionMode,

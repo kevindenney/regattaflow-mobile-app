@@ -9,6 +9,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 console.log('🚀 RootLayout: Starting to load');
 
 let AuthProvider: any;
+let StripeProvider: any;
+
 try {
   const authModule = require('@/src/lib/contexts/AuthContext');
   AuthProvider = authModule.AuthProvider;
@@ -18,6 +20,19 @@ try {
   // Create a fallback provider
   AuthProvider = ({ children }: { children: React.ReactNode }) => {
     console.log('🔄 Using fallback AuthProvider');
+    return children;
+  };
+}
+
+try {
+  const stripeModule = require('@/providers/StripeProvider');
+  StripeProvider = stripeModule.default;
+  console.log('✅ RootLayout: StripeProvider loaded successfully', !!StripeProvider);
+} catch (error) {
+  console.error('❌ RootLayout: Failed to load StripeProvider', error);
+  // Create a fallback provider
+  StripeProvider = ({ children }: { children: React.ReactNode }) => {
+    console.log('🔄 Using fallback StripeProvider');
     return children;
   };
 }
@@ -45,19 +60,21 @@ export default function RootLayout() {
     console.log('📁 RootLayout: Stack screens configured:', ['(auth)', '(tabs)', 'modal']);
     return (
       <AuthProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack
-            screenOptions={{
-              headerShown: false
-            }}
-          >
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
+        <StripeProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack
+              screenOptions={{
+                headerShown: false
+              }}
+            >
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </StripeProvider>
       </AuthProvider>
     );
   } catch (error) {

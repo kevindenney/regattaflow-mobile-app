@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, ScrollView } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
+import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { getDashboardRoute } from '@/src/lib/utils/userTypeRouting';
 
 const onboardingSteps = [
   {
@@ -30,27 +32,100 @@ const onboardingSteps = [
     emoji: '🌬️',
   },
   {
-    title: 'GPS Race Tracking',
-    subtitle: 'Analyze your performance',
-    description: 'Record your races, analyze your tracks, and improve your racing with detailed post-race insights.',
-    emoji: '📍',
+    title: 'Choose Your Role',
+    subtitle: 'How do you use RegattaFlow?',
+    description: 'Select your primary role to customize your experience.',
+    emoji: '⛵',
+    isUserTypeSelection: true,
+  },
+];
+
+const userTypeOptions = [
+  {
+    type: 'sailor' as const,
+    title: 'Sailor',
+    description: 'Racing and performance tracking',
+    emoji: '🏁',
+  },
+  {
+    type: 'coach' as const,
+    title: 'Coach',
+    description: 'Teaching and instruction',
+    emoji: '🎯',
+  },
+  {
+    type: 'club' as const,
+    title: 'Club/Organizer',
+    description: 'Event management and results',
+    emoji: '🏆',
   },
 ];
 
 export default function OnboardingScreen() {
   const [currentStep, setCurrentStep] = useState(0);
+  const [selectedUserType, setSelectedUserType] = useState<'sailor' | 'coach' | 'club' | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const { user, updateUserProfile, userProfile } = useAuth();
   const step = onboardingSteps[currentStep];
 
   const handleNext = () => {
     if (currentStep < onboardingSteps.length - 1) {
       setCurrentStep(currentStep + 1);
-    } else {
-      router.replace('/(auth)/login');
+    } else if (selectedUserType) {
+      handleCompleteOnboarding();
     }
   };
 
-  const handleSkip = () => {
-    router.replace('/(auth)/login');
+  const handleCompleteOnboarding = async () => {
+    if (!selectedUserType || !user) return;
+
+    setIsCompleting(true);
+    try {
+      console.log('🔍 [ONBOARDING] Completing onboarding for user:', user.id, 'as:', selectedUserType);
+
+      // Update user profile with selected type and mark onboarding as completed
+      await updateUserProfile({
+        user_type: selectedUserType,
+        onboarding_completed: true,
+      });
+
+      console.log('✅ [ONBOARDING] Onboarding completed successfully');
+
+      // Route to the appropriate dashboard
+      const dashboardRoute = getDashboardRoute(selectedUserType);
+      console.log('🔍 [ONBOARDING] Routing to:', dashboardRoute);
+      router.replace(dashboardRoute);
+
+    } catch (error: any) {
+      console.error('🔴 [ONBOARDING] Failed to complete onboarding:', error);
+      Alert.alert('Setup Error', 'Failed to complete setup. Please try again.');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
+  const handleSkip = async () => {
+    if (!user) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
+    try {
+      console.log('🔍 [ONBOARDING] Skipping onboarding, defaulting to sailor');
+
+      // Default to sailor if skipping
+      await updateUserProfile({
+        user_type: 'sailor',
+        onboarding_completed: true,
+      });
+
+      const dashboardRoute = getDashboardRoute('sailor');
+      router.replace(dashboardRoute);
+
+    } catch (error: any) {
+      console.error('🔴 [ONBOARDING] Failed to skip onboarding:', error);
+      router.replace('/(auth)/login');
+    }
   };
 
   return (
@@ -66,6 +141,26 @@ export default function OnboardingScreen() {
           <ThemedText type="default">{step.description}</ThemedText>
         </View>
 
+        {/* User Type Selection */}
+        {step.isUserTypeSelection && (
+          <View style={styles.userTypeContainer}>
+            {userTypeOptions.map((option) => (
+              <TouchableOpacity
+                key={option.type}
+                style={[
+                  styles.userTypeOption,
+                  selectedUserType === option.type && styles.selectedUserType,
+                ]}
+                onPress={() => setSelectedUserType(option.type)}
+              >
+                <ThemedText style={styles.userTypeEmoji}>{option.emoji}</ThemedText>
+                <ThemedText style={styles.userTypeTitle}>{option.title}</ThemedText>
+                <ThemedText style={styles.userTypeDescription}>{option.description}</ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         <View style={styles.indicators}>
           {onboardingSteps.map((_, index) => (
             <View
@@ -80,15 +175,24 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.actions}>
-        <View style={styles.buttonPlaceholder} onTouchEnd={handleSkip}>
-          <ThemedText type="default">⏩ Skip</ThemedText>
-        </View>
+        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+          <ThemedText style={styles.skipButtonText}>⏩ Skip</ThemedText>
+        </TouchableOpacity>
 
-        <View style={styles.buttonPlaceholder} onTouchEnd={handleNext}>
-          <ThemedText type="default">
-            {currentStep === onboardingSteps.length - 1 ? '🚀 Get Started' : '➡️ Next'}
+        <TouchableOpacity
+          style={[
+            styles.nextButton,
+            (step.isUserTypeSelection && !selectedUserType) && styles.buttonDisabled,
+            isCompleting && styles.buttonDisabled
+          ]}
+          onPress={handleNext}
+          disabled={(step.isUserTypeSelection && !selectedUserType) || isCompleting}
+        >
+          <ThemedText style={styles.nextButtonText}>
+            {isCompleting ? '⏳ Setting up...' :
+             currentStep === onboardingSteps.length - 1 ? '🚀 Get Started' : '➡️ Next'}
           </ThemedText>
-        </View>
+        </TouchableOpacity>
       </View>
     </ThemedView>
   );
@@ -117,6 +221,40 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     paddingHorizontal: 20,
   },
+  userTypeContainer: {
+    width: '100%',
+    marginBottom: 40,
+    gap: 16,
+  },
+  userTypeOption: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    minHeight: 120,
+    justifyContent: 'center',
+  },
+  selectedUserType: {
+    backgroundColor: '#EBF8FF',
+    borderColor: '#0066CC',
+  },
+  userTypeEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  userTypeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  userTypeDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+  },
   indicators: {
     flexDirection: 'row',
     gap: 8,
@@ -137,11 +275,31 @@ const styles = StyleSheet.create({
     padding: 32,
     gap: 16,
   },
-  buttonPlaceholder: {
+  skipButton: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    color: '#64748B',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  nextButton: {
     flex: 1,
     backgroundColor: '#0066CC',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  nextButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

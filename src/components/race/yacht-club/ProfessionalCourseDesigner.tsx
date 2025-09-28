@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
+import { ThemedText } from '@/src/components/themed-text';
+import { Button } from '@/src/components/ui/button';
 import { OfficialRaceCourse, OfficialMark } from './YachtClubRaceBuilder';
 
 interface ProfessionalCourseDesignerProps {

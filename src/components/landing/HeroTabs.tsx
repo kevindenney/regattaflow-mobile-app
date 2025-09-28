@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { NavigationHeader } from '@/src/components/navigation/NavigationHeader';
 import { SailorRaceStrategyMap } from './maps/SailorRaceStrategyMap';
 import { YachtClubManagementMap } from './maps/YachtClubManagementMap';
 import { CoachRaceReplay } from './maps/CoachRaceReplay';
@@ -434,6 +435,9 @@ export function HeroTabs() {
           🏆 Join 10,000+ sailors using AI-powered race strategy • Free 14-day trial
         </Text>
       </LinearGradient>
+
+      {/* Navigation Header */}
+      <NavigationHeader />
 
       {/* Main content */}
       <View style={styles.content}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, Dimensions, Platform } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from '@/src/components/themed-text';
 import { MapLibreEngine } from './engines/MapLibreEngine';
 import { ProfessionalWeatherService } from '@/src/services/weather/ProfessionalWeatherService';
 import { NOAABathymetryService } from '@/src/services/bathymetry/NOAABathymetryService';

@@ -1,104 +1,110 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Alert } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  Alert,
+  SafeAreaView,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Map3DView } from '@/src/components/map/Map3DView';
-import { ProfessionalMapScreen } from '@/src/components/map/ProfessionalMapScreen';
-import type { RaceMark, WeatherConditions, AdvancedWeatherConditions, NavigationResult } from '@/src/lib/types/map';
-import type { GeoLocation } from '@/src/lib/types/advanced-map';
+import Map3D, { Map3DRef } from '@/components/mapping/Map3D';
 
-const sampleMarks: RaceMark[] = [
-  {
-    id: '1',
-    name: 'Start',
-    position: { latitude: 37.8, longitude: -122.4 },
-    type: 'start',
-    rounding: 'port',
-  },
-  {
-    id: '2',
-    name: 'Mark 1',
-    position: { latitude: 37.81, longitude: -122.39 },
-    type: 'windward',
-    rounding: 'port',
-  },
-  {
-    id: '3',
-    name: 'Finish',
-    position: { latitude: 37.79, longitude: -122.41 },
-    type: 'finish',
-    rounding: 'port',
-  },
-];
+interface RaceMark {
+  id: string;
+  name: string;
+  type: 'start' | 'windward' | 'leeward' | 'gate' | 'finish';
+  lat: number;
+  lng: number;
+}
 
-const sampleWeather: WeatherConditions = {
-  wind: {
-    speed: 12,
-    direction: 225,
-    gusts: 15,
-  },
-  tide: {
-    height: 2.1,
-    direction: 'flood',
-    speed: 0.8,
-  },
-  waves: {
-    height: 1.2,
-    period: 6,
-    direction: 210,
-  },
-  timestamp: new Date(),
-};
+interface RaceCourse {
+  id: string;
+  name: string;
+  type: 'windward_leeward' | 'triangle' | 'olympic' | 'custom';
+  marks: RaceMark[];
+  instructions: string;
+  safety_notes: string[];
+}
 
 export default function MapScreen() {
-  const [selectedMark, setSelectedMark] = useState<RaceMark | null>(null);
-  const [professionalMode, setProfessionalMode] = useState(true);
-  const [currentVenue, setCurrentVenue] = useState('san-francisco-bay');
-  const [currentWeather, setCurrentWeather] = useState<AdvancedWeatherConditions | null>(null);
+  const map3DRef = useRef<Map3DRef>(null);
+  const [currentStyle, setCurrentStyle] = useState<'tactical' | 'racing' | 'navigation' | 'satellite'>('tactical');
 
-  // Professional API keys (these would come from secure storage)
-  const apiKeys = {
-    // MapLibre is open source - no API key needed for mapping
-    'weatherapi-pro': '2d09ab7694e3475cbd080025252409',
-    'predictwind-pro': 'demo-key',
-    'worldtides-pro': 'demo-key',
-    'aisstream-api': '01037d15e391c289c1d106479d8870e1df107f65',
-    'meteomatics': 'demo-key',
-    'meteomatics-user': 'demo-user'
+  // Demo race course - Windward-Leeward in San Francisco Bay
+  const demoCourse: RaceCourse = {
+    id: 'demo_course',
+    name: 'San Francisco Bay Demo Course',
+    type: 'windward_leeward',
+    marks: [
+      {
+        id: 'start',
+        name: 'Start Line',
+        type: 'start',
+        lat: 37.7749,
+        lng: -122.4194,
+      },
+      {
+        id: 'windward',
+        name: 'Windward Mark',
+        type: 'windward',
+        lat: 37.7769,
+        lng: -122.4194,
+      },
+      {
+        id: 'leeward',
+        name: 'Leeward Mark',
+        type: 'leeward',
+        lat: 37.7729,
+        lng: -122.4194,
+      },
+      {
+        id: 'finish',
+        name: 'Finish Line',
+        type: 'finish',
+        lat: 37.7749,
+        lng: -122.4194,
+      },
+    ],
+    instructions: 'Windward-leeward course in San Francisco Bay. Start between committee boat and pin. Round windward mark to port, leeward mark to port, finish between committee boat and pin.',
+    safety_notes: [
+      'Monitor VHF channel 72 for race committee communications',
+      'Be aware of commercial traffic in shipping lanes',
+      'All competitors must wear life jackets',
+    ],
   };
 
-  const handleMarkPress = (mark: RaceMark) => {
-    setSelectedMark(mark);
+  const switchMapStyle = async (style: typeof currentStyle) => {
+    setCurrentStyle(style);
+    if (map3DRef.current) {
+      await map3DRef.current.switchStyle(style);
+    }
+  };
+
+  const loadDemoCourse = async () => {
+    if (map3DRef.current) {
+      await map3DRef.current.displayRaceCourse(demoCourse);
+      Alert.alert(
+        '🏁 Demo Course Loaded',
+        'This is a sample windward-leeward course in San Francisco Bay. Tap the map to add more marks or use the style buttons to see different map views.',
+        [{ text: 'Got it!' }]
+      );
+    }
+  };
+
+  const handleMapClick = async (coordinates: [number, number]) => {
     Alert.alert(
-      `Race Mark: ${mark.name}`,
-      `Type: ${mark.type}\nRounding: ${mark.rounding}`,
+      '📍 Map Clicked',
+      `Coordinates: ${coordinates[0].toFixed(6)}, ${coordinates[1].toFixed(6)}\n\nIn the Race Builder, this would add a new race mark at this location.`,
       [{ text: 'OK' }]
     );
   };
 
-  const handleMapPress = (coordinates: GeoLocation) => {
-    console.log('Map pressed at:', coordinates);
-  };
-
-  const handleWeatherUpdate = (weather: AdvancedWeatherConditions) => {
-    setCurrentWeather(weather);
-    console.log('🌤️ Weather updated:', {
-      wind: `${weather.wind.speed}kts @ ${weather.wind.direction}°`,
-      pressure: `${weather.pressure.sealevel}mb`,
-      confidence: `${Math.round(weather.forecast.confidence * 100)}%`
-    });
-  };
-
-  const handleNavigationCalculated = (result: NavigationResult) => {
-    console.log('🧭 Navigation calculated:', result);
-    Alert.alert(
-      'Tactical Analysis',
-      `Distance: ${result.distance.nauticalMiles} nm\n` +
-      `Bearing: ${result.bearing.true}°T\n` +
-      `ETA: ${result.time.estimatedDuration * 60} minutes\n` +
-      `Recommendation: ${result.time.courseRecommendation}`,
-      [{ text: 'OK' }]
-    );
+  const fitToCourse = () => {
+    if (map3DRef.current) {
+      map3DRef.current.fitToCourse();
+    }
   };
 
   return (

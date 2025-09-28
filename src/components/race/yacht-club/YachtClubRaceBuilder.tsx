@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Button } from '@/components/ui/button';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
+import { Button } from '@/src/components/ui';
 import { ProfessionalCourseDesigner } from './ProfessionalCourseDesigner';
 import { RaceManagementPanel } from './RaceManagementPanel';
 import { CoursePublishingPanel } from './CoursePublishingPanel';

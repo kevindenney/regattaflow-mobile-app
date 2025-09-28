@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from '@/src/components/themed-text';
 import { ProfessionalMap3DView } from '@/src/components/map/ProfessionalMap3DView';
 import { useVenueIntelligence } from '@/src/hooks/useVenueIntelligence';
 import { YachtClubService } from '@/src/services/venues/YachtClubService';

@@ -5,8 +5,8 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, View, Alert, TouchableOpacity } from 'react-native';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
+import { ThemedText } from '@/src/components/themed-text';
 // import { Canvas } from '@react-three/fiber'; // TODO: Re-enable with ES module fix
 import { WebMapView } from './WebMapView';
 

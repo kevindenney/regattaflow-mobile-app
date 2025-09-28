@@ -674,7 +674,7 @@ export class SupabaseVenueService {
 
       // Need more data, run the seeding
       console.log('📊 [SEED DEBUG] Need to add more venue data...');
-      const { seedVenueDatabase } = await import('@/src/scripts/seed-venues');
+      const { seedVenueDatabase } = await import('@/scripts/seed-venues');
       await seedVenueDatabase();
 
     } catch (error: any) {

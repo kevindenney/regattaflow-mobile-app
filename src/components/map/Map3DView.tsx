@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Animated, Platform, Image } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from '@/src/components/themed-text';
 import type { Map3DConfig, RaceMark, WeatherConditions } from '@/src/lib/types/map';
 
 interface Map3DViewProps {

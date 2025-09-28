@@ -5,14 +5,66 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
 
+type UserType = 'sailor' | 'club' | 'coach';
+
+interface UserTypeOption {
+  type: UserType;
+  title: string;
+  description: string;
+  icon: string;
+  features: string[];
+}
+
+const userTypeOptions: UserTypeOption[] = [
+  {
+    type: 'sailor',
+    title: 'Sailor',
+    description: 'Individual racer seeking AI-powered strategy and performance tracking',
+    icon: '⛵',
+    features: ['AI Race Strategy', 'Equipment Tracking', 'Performance Analytics', 'Coach Marketplace']
+  },
+  {
+    type: 'club',
+    title: 'Yacht Club',
+    description: 'Racing organization managing events, members, and race operations',
+    icon: '🏁',
+    features: ['Event Management', 'Race Committee Tools', 'Results Publishing', 'Member Management']
+  },
+  {
+    type: 'coach',
+    title: 'Coach',
+    description: 'Professional instructor offering services and performance analysis',
+    icon: '👨‍🏫',
+    features: ['Client Management', 'Marketplace Profile', 'Performance Analysis', 'Session Booking']
+  }
+];
+
 export default function SignupScreen() {
+  const [step, setStep] = useState<'userType' | 'details'>('userType');
+  const [selectedUserType, setSelectedUserType] = useState<UserType | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const { signUp, loading } = useAuth();
 
+  const handleUserTypeSelection = (userType: UserType) => {
+    setSelectedUserType(userType);
+    setStep('details');
+  };
+
+  const handleBack = () => {
+    if (step === 'details') {
+      setStep('userType');
+    }
+  };
+
   const handleSignup = async () => {
+    if (!selectedUserType) {
+      Alert.alert('Error', 'Please select your user type');
+      return;
+    }
+
     if (!email || !password || !fullName) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -24,7 +76,7 @@ export default function SignupScreen() {
     }
 
     try {
-      await signUp(email, password, fullName);
+      await signUp(email, password, fullName, selectedUserType);
       Alert.alert(
         'Success!',
         'Account created successfully. Please check your email for verification.',
@@ -35,6 +87,57 @@ export default function SignupScreen() {
     }
   };
 
+  if (step === 'userType') {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ThemedView style={styles.content}>
+          <View style={styles.header}>
+            <ThemedText type="title">Welcome to RegattaFlow</ThemedText>
+            <ThemedText type="subtitle">Choose your role to get started</ThemedText>
+          </View>
+
+          <ScrollView style={styles.userTypeContainer}>
+            {userTypeOptions.map((option) => (
+              <TouchableOpacity
+                key={option.type}
+                style={[
+                  styles.userTypeCard,
+                  selectedUserType === option.type && styles.userTypeCardSelected
+                ]}
+                onPress={() => handleUserTypeSelection(option.type)}
+              >
+                <View style={styles.userTypeHeader}>
+                  <ThemedText style={styles.userTypeIcon}>{option.icon}</ThemedText>
+                  <View style={styles.userTypeTitle}>
+                    <ThemedText type="subtitle">{option.title}</ThemedText>
+                    <ThemedText style={styles.userTypeDescription}>{option.description}</ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.userTypeFeatures}>
+                  {option.features.map((feature, index) => (
+                    <ThemedText key={index} style={styles.userTypeFeature}>
+                      • {feature}
+                    </ThemedText>
+                  ))}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <ThemedText style={styles.footerText} onPress={() => router.push('/(auth)/login')}>
+              🔑 Already have an account? Sign in
+            </ThemedText>
+          </View>
+        </ThemedView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -42,8 +145,15 @@ export default function SignupScreen() {
     >
       <ThemedView style={styles.content}>
         <View style={styles.header}>
-          <ThemedText type="title">Join RegattaFlow</ThemedText>
-          <ThemedText type="subtitle">Start your sailing strategy journey</ThemedText>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <ThemedText style={styles.backButtonText}>← Back</ThemedText>
+          </TouchableOpacity>
+          <ThemedText type="title">Create Your Account</ThemedText>
+          <ThemedText type="subtitle">
+            {selectedUserType === 'sailor' && 'Join as a Sailor ⛵'}
+            {selectedUserType === 'club' && 'Join as a Yacht Club 🏁'}
+            {selectedUserType === 'coach' && 'Join as a Coach 👨‍🏫'}
+          </ThemedText>
         </View>
 
         <ScrollView style={styles.form}>
@@ -106,21 +216,13 @@ export default function SignupScreen() {
               <ThemedText style={styles.buttonText}>Create Account</ThemedText>
             )}
           </TouchableOpacity>
-
-          <View style={styles.buttonPlaceholder}>
-            <ThemedText type="default" onPress={() => router.push('/(auth)/login')}>
-              🔑 Already have an account? Sign in
-            </ThemedText>
-          </View>
         </ScrollView>
 
         <View style={styles.features}>
-          <ThemedText type="subtitle">What you&apos;ll get:</ThemedText>
-          <ThemedText type="default">🗺️ 3D nautical maps</ThemedText>
-          <ThemedText type="default">🧠 AI race strategy</ThemedText>
-          <ThemedText type="default">🌊 Real-time weather data</ThemedText>
-          <ThemedText type="default">📱 GPS race tracking</ThemedText>
-          <ThemedText type="default">👥 Crew collaboration</ThemedText>
+          <ThemedText type="subtitle">What you'll get as a {selectedUserType}:</ThemedText>
+          {userTypeOptions.find(opt => opt.type === selectedUserType)?.features.map((feature, index) => (
+            <ThemedText key={index} type="default">✓ {feature}</ThemedText>
+          ))}
         </View>
       </ThemedView>
     </KeyboardAvoidingView>
@@ -140,15 +242,76 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
   },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#0066CC',
+    fontWeight: '600',
+  },
+
+  // User Type Selection Styles
+  userTypeContainer: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  userTypeCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  userTypeCardSelected: {
+    borderColor: '#0066CC',
+    backgroundColor: '#F0F7FF',
+  },
+  userTypeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  userTypeIcon: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  userTypeTitle: {
+    flex: 1,
+  },
+  userTypeDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  userTypeFeatures: {
+    marginTop: 8,
+  },
+  userTypeFeature: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  footerText: {
+    fontSize: 16,
+    color: '#0066CC',
+    fontWeight: '600',
+  },
+
+  // Form Styles
   form: {
     gap: 16,
     marginBottom: 32,
-  },
-  buttonPlaceholder: {
-    backgroundColor: '#0066CC',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
   },
   features: {
     alignItems: 'center',

@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useAuth } from '@/lib/contexts/AuthContext';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
 import { RaceBuilder } from './RaceBuilder';
 import { SailorRaceInterface } from './SailorRaceInterface';
 import { CoachRaceInterface } from './CoachRaceInterface';

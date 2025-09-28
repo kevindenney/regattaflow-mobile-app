@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { raceStrategyEngine, type RaceStrategy, type RaceConditions } from '@/src/services/ai/RaceStrategyEngine';
+import { raceStrategyEngine, type RaceStrategy, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
 
 interface StrategyCard {
   title: string;

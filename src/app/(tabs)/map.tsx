@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Alert, TouchableOpacity } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
 import { Map3DView } from '@/src/components/map/Map3DView';
 import { ProfessionalMapScreen } from '@/src/components/map/ProfessionalMapScreen';
 import { RaceCourseVisualization } from '@/src/components/map/RaceCourseVisualization';

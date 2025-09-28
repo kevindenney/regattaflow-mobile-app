@@ -14,8 +14,8 @@ import {
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/src/components/themed-text';
+import { ThemedView } from '@/src/components/themed-view';
 // import { BottomSheet } from '@gorhom/bottom-sheet'; // TODO: Re-enable with animation support
 import { DocumentProcessingService } from '@/src/services/ai/DocumentProcessingService';
 import type {

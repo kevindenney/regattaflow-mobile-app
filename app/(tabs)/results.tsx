@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
-import { supabase } from '@/src/services/supabase';
+import { supabase } from '@/services/supabase';
 import { Tabs, router } from 'expo-router';
 
 interface Regatta {

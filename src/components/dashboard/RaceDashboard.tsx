@@ -21,6 +21,7 @@ import { venueDetectionService, type SailingVenue, type LocationUpdate } from '@
 import { DocumentProcessingService } from '@/src/services/ai/DocumentProcessingService';
 import RaceCourseVisualization3D from '@/src/components/strategy/RaceCourseVisualization3D';
 import RaceDayInterface from '@/src/components/racing/RaceDayInterface';
+import { AIRaceAnalysisDashboard } from '@/src/components/ai/AIRaceAnalysisDashboard';
 import type { DocumentAnalysis, RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
 
 interface DashboardState {
@@ -31,6 +32,7 @@ interface DashboardState {
   raceMode: 'preparation' | 'racing' | 'analysis';
   showRaceDayInterface: boolean;
   show3DVisualization: boolean;
+  showAIAnalysis: boolean;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -44,7 +46,8 @@ export const RaceDashboard: React.FC = () => {
     recentDocuments: [],
     raceMode: 'preparation',
     showRaceDayInterface: false,
-    show3DVisualization: false
+    show3DVisualization: false,
+    showAIAnalysis: true // Start with AI analysis visible
   });
 
   const [demoConditions] = useState<RaceConditions>({
@@ -255,6 +258,13 @@ export const RaceDashboard: React.FC = () => {
     }));
   };
 
+  const toggleAIAnalysis = () => {
+    setDashboardState(prev => ({
+      ...prev,
+      showAIAnalysis: !prev.showAIAnalysis
+    }));
+  };
+
   const renderStatusCard = () => (
     <View style={styles.statusCard}>
       <View style={styles.statusHeader}>
@@ -319,6 +329,15 @@ export const RaceDashboard: React.FC = () => {
         <Ionicons name="cube" size={32} color="white" />
         <Text style={styles.actionButtonText}>3D Course</Text>
         <Text style={styles.actionButtonSubtext}>Visualize race course</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.actionButton, styles.aiAction]}
+        onPress={toggleAIAnalysis}
+      >
+        <Ionicons name="mic" size={32} color="white" />
+        <Text style={styles.actionButtonText}>AI Analysis</Text>
+        <Text style={styles.actionButtonSubtext}>Voice notes & insights</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -392,6 +411,64 @@ export const RaceDashboard: React.FC = () => {
         {renderActionButtons()}
         {renderStrategyOverview()}
 
+        {/* Race Calendar */}
+        <View style={styles.raceCalendar}>
+          <Text style={styles.sectionTitle}>📅 Upcoming Races</Text>
+          <View style={styles.raceList}>
+            <View style={styles.raceCard}>
+              <View style={styles.raceHeader}>
+                <Text style={styles.raceTitle}>Dragon World Championship</Text>
+                <Text style={styles.raceDate}>Oct 15-18</Text>
+              </View>
+              <Text style={styles.raceVenue}>
+                {dashboardState.currentVenue?.name || 'Hong Kong Yacht Club'}
+              </Text>
+              <Text style={styles.raceStatus}>📝 Preparing strategy</Text>
+            </View>
+
+            <View style={styles.raceCard}>
+              <View style={styles.raceHeader}>
+                <Text style={styles.raceTitle}>Regional Championship</Text>
+                <Text style={styles.raceDate}>Nov 2-3</Text>
+              </View>
+              <Text style={styles.raceVenue}>Royal Victoria Yacht Club</Text>
+              <Text style={styles.raceStatus}>⏰ Registration open</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Equipment Tracking */}
+        <View style={styles.equipmentTracking}>
+          <Text style={styles.sectionTitle}>⚙️ Equipment Setup</Text>
+          <View style={styles.equipmentList}>
+            <View style={styles.equipmentCard}>
+              <View style={styles.equipmentHeader}>
+                <Ionicons name="boat" size={24} color="#0066CC" />
+                <Text style={styles.equipmentTitle}>Dragon #HKG 123</Text>
+              </View>
+              <Text style={styles.equipmentConfig}>
+                Main: North Sails 3DL • Jib: North Sails Dacron • Spinnaker: North Sails AP
+              </Text>
+              <Text style={styles.equipmentCondition}>
+                Optimized for {demoConditions.wind.speed}kt winds at {dashboardState.currentVenue?.name || 'current venue'}
+              </Text>
+            </View>
+
+            <View style={styles.equipmentCard}>
+              <View style={styles.equipmentHeader}>
+                <Ionicons name="settings" size={24} color="#00CC44" />
+                <Text style={styles.equipmentTitle}>Tuning Setup</Text>
+              </View>
+              <Text style={styles.equipmentConfig}>
+                Mast rake: 32" • Shroud tension: 450lbs • Forestay: 650lbs
+              </Text>
+              <Text style={styles.equipmentCondition}>
+                Last updated: Race day at {dashboardState.currentVenue?.name || 'venue'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* Quick Stats */}
         <View style={styles.quickStats}>
           <Text style={styles.sectionTitle}>📊 Quick Stats</Text>
@@ -448,6 +525,31 @@ export const RaceDashboard: React.FC = () => {
           <Ionicons name="close" size={24} color="white" />
           <Text style={styles.exitRaceButtonText}>Exit Race Mode</Text>
         </TouchableOpacity>
+      </Modal>
+
+      {/* AI Race Analysis Dashboard Modal */}
+      <Modal
+        visible={dashboardState.showAIAnalysis}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>AI Race Analysis</Text>
+            <TouchableOpacity onPress={toggleAIAnalysis}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <AIRaceAnalysisDashboard
+            onStrategyGenerated={(strategy) => {
+              setDashboardState(prev => ({ ...prev, activeStrategy: strategy }));
+            }}
+            onInsightGenerated={(insight) => {
+              console.log('New tactical insight:', insight);
+            }}
+          />
+        </View>
       </Modal>
 
       {/* 3D Visualization Modal */}
@@ -583,6 +685,9 @@ const styles = StyleSheet.create({
   venueAction: {
     backgroundColor: '#8000FF',
   },
+  aiAction: {
+    backgroundColor: '#FF3B30',
+  },
   actionButtonText: {
     color: 'white',
     fontSize: isTablet ? 18 : 16,
@@ -652,6 +757,100 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+
+  // Race Calendar
+  raceCalendar: {
+    marginBottom: 24,
+  },
+  raceList: {
+    gap: 16,
+  },
+  raceCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0066CC',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  raceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  raceTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    flex: 1,
+  },
+  raceDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0066CC',
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  raceVenue: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 6,
+  },
+  raceStatus: {
+    fontSize: 14,
+    color: '#00CC44',
+    fontWeight: '600',
+  },
+
+  // Equipment Tracking
+  equipmentTracking: {
+    marginBottom: 24,
+  },
+  equipmentList: {
+    gap: 16,
+  },
+  equipmentCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#00CC44',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  equipmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  equipmentTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    flex: 1,
+  },
+  equipmentConfig: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  equipmentCondition: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
   },
 
   // Quick Stats

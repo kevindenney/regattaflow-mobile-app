@@ -164,10 +164,10 @@ export default function CoachCard({ coach, onPress, onBookPress }: CoachCardProp
             style={styles.bookButton}
             onPress={(e) => {
               e.stopPropagation();
-              onBookPress();
+              onPress(); // Navigate to profile instead of booking directly
             }}
           >
-            <Text style={styles.bookButtonText}>Book Session</Text>
+            <Text style={styles.bookButtonText}>View Profile</Text>
           </TouchableOpacity>
         </View>
       </View>

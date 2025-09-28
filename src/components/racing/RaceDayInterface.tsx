@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as KeepAwake from 'expo-keep-awake';
+import * as Location from 'expo-location';
 import { raceStrategyEngine, type RaceStrategy, type RaceConditions } from '@/src/services/ai/RaceStrategyEngine';
 import { venueDetectionService, type SailingVenue } from '@/src/services/location/VenueDetectionService';
 
@@ -31,13 +32,35 @@ interface RaceTimer {
 
 interface TacticalAlert {
   id: string;
-  type: 'wind_shift' | 'current_change' | 'mark_approach' | 'start_sequence' | 'weather_alert';
+  type: 'wind_shift' | 'current_change' | 'mark_approach' | 'start_sequence' | 'weather_alert' | 'gps_alert';
   priority: 'critical' | 'important' | 'info';
   title: string;
   message: string;
   timestamp: Date;
   acknowledged: boolean;
   action?: string;
+}
+
+interface GPSData {
+  latitude: number;
+  longitude: number;
+  altitude: number | null;
+  accuracy: number | null;
+  speed: number | null; // m/s
+  heading: number | null; // degrees
+  timestamp: number;
+}
+
+interface RacePosition {
+  distanceToStartLine: number; // meters
+  distanceToNextMark: number; // meters
+  currentLeg: 'start' | 'beat' | 'reach' | 'run' | 'finish';
+  position: number; // estimated position in fleet
+  laylineInfo: {
+    onPortLayline: boolean;
+    onStarboardLayline: boolean;
+    distanceToLayline: number;
+  };
 }
 
 interface RaceDayInterfaceProps {
@@ -65,9 +88,12 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
   const [currentConditions, setCurrentConditions] = useState<RaceConditions | null>(null);
   const [currentVenue, setCurrentVenue] = useState<SailingVenue | null>(null);
   const [tacticalAlerts, setTacticalAlerts] = useState<TacticalAlert[]>([]);
-  const [activeView, setActiveView] = useState<'overview' | 'tactical' | 'conditions' | 'emergency'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'tactical' | 'conditions' | 'gps' | 'emergency'>('overview');
   const [isRecording, setIsRecording] = useState(false);
   const [raceNotes, setRaceNotes] = useState<string[]>([]);
+  const [gpsData, setGpsData] = useState<GPSData | null>(null);
+  const [racePosition, setRacePosition] = useState<RacePosition | null>(null);
+  const [gpsPermission, setGpsPermission] = useState<'granted' | 'denied' | 'pending'>('pending');
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const alertSoundsRef = useRef<{ [key: string]: boolean }>({});
@@ -83,6 +109,9 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
 
     // Initialize venue detection
     initializeVenueDetection();
+
+    // Initialize GPS tracking
+    initializeGPSTracking();
 
     // Start race timer
     startRaceTimer();
@@ -115,6 +144,112 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
           message: `Racing at ${venue.name}. Local conditions and intelligence loaded.`,
           action: 'View Local Knowledge'
         });
+      }
+    }
+  };
+
+  const initializeGPSTracking = async () => {
+    try {
+      // Request permission for location access
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status === 'granted') {
+        setGpsPermission('granted');
+
+        // Start GPS tracking with high accuracy for race day
+        const locationSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 1000, // Update every second
+            distanceInterval: 1, // Update every meter
+          },
+          (location) => {
+            const newGpsData: GPSData = {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              altitude: location.coords.altitude,
+              accuracy: location.coords.accuracy,
+              speed: location.coords.speed,
+              heading: location.coords.heading,
+              timestamp: location.timestamp,
+            };
+
+            setGpsData(newGpsData);
+            updateRacePosition(newGpsData);
+          }
+        );
+
+        addTacticalAlert({
+          type: 'gps_alert',
+          priority: 'info',
+          title: '🛰️ GPS Active',
+          message: 'High-precision GPS tracking enabled for race navigation.',
+        });
+
+        // Store subscription for cleanup
+        return () => {
+          locationSubscription.remove();
+        };
+      } else {
+        setGpsPermission('denied');
+        addTacticalAlert({
+          type: 'gps_alert',
+          priority: 'important',
+          title: '📍 GPS Permission Required',
+          message: 'Enable location access for precise race tracking and navigation.',
+          action: 'Enable GPS'
+        });
+      }
+    } catch (error) {
+      console.error('GPS initialization error:', error);
+      addTacticalAlert({
+        type: 'gps_alert',
+        priority: 'important',
+        title: '⚠️ GPS Error',
+        message: 'Unable to initialize GPS tracking. Racing in offline mode.',
+      });
+    }
+  };
+
+  const updateRacePosition = (gps: GPSData) => {
+    // Calculate race position based on GPS and strategy
+    if (strategy && currentVenue) {
+      // Mock calculation - in real implementation, this would use course marks and strategy
+      const mockPosition: RacePosition = {
+        distanceToStartLine: Math.random() * 500,
+        distanceToNextMark: Math.random() * 1000,
+        currentLeg: raceTimer.raceStarted ? 'beat' : 'start',
+        position: Math.floor(Math.random() * 20) + 1,
+        laylineInfo: {
+          onPortLayline: Math.random() > 0.8,
+          onStarboardLayline: Math.random() > 0.8,
+          distanceToLayline: Math.random() * 200,
+        }
+      };
+
+      setRacePosition(mockPosition);
+
+      // Generate tactical alerts based on position
+      if (mockPosition.laylineInfo.onPortLayline && !alertSoundsRef.current['port_layline']) {
+        addTacticalAlert({
+          type: 'mark_approach',
+          priority: 'important',
+          title: '🏁 Port Layline',
+          message: 'On port layline to mark. Consider tacking.',
+        });
+        alertSoundsRef.current['port_layline'] = true;
+        Vibration.vibrate(100);
+      }
+
+      if (mockPosition.distanceToStartLine < 50 && !raceTimer.raceStarted && !alertSoundsRef.current['start_line_close']) {
+        addTacticalAlert({
+          type: 'start_sequence',
+          priority: 'critical',
+          title: '⚠️ Start Line Proximity',
+          message: 'Very close to start line. Monitor for early start.',
+        });
+        alertSoundsRef.current['start_line_close'] = true;
+        Vibration.vibrate([100, 50, 100]);
       }
     }
   };
@@ -425,6 +560,111 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
     </View>
   );
 
+  const renderGPSScreen = () => (
+    <View style={styles.screenContainer}>
+      <Text style={styles.screenTitle}>🛰️ GPS Navigation</Text>
+
+      {gpsPermission === 'denied' && (
+        <View style={styles.gpsWarning}>
+          <Ionicons name="warning" size={48} color="#FF8000" />
+          <Text style={styles.warningText}>GPS Access Required</Text>
+          <Text style={styles.warningSubtext}>
+            Enable location permissions for race navigation and position tracking.
+          </Text>
+          <TouchableOpacity
+            style={styles.enableGpsButton}
+            onPress={initializeGPSTracking}
+          >
+            <Text style={styles.enableGpsText}>Enable GPS</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {gpsPermission === 'granted' && gpsData && (
+        <View style={styles.gpsContent}>
+          {/* GPS Status */}
+          <View style={styles.gpsStatusCard}>
+            <Text style={styles.gpsStatusTitle}>📡 GPS Status</Text>
+            <Text style={styles.gpsStatusText}>
+              Accuracy: {gpsData.accuracy?.toFixed(1) || '--'}m
+            </Text>
+            <Text style={styles.gpsStatusText}>
+              Speed: {gpsData.speed ? (gpsData.speed * 1.944).toFixed(1) : '--'} kts
+            </Text>
+            <Text style={styles.gpsStatusText}>
+              Heading: {gpsData.heading?.toFixed(0) || '--'}°
+            </Text>
+          </View>
+
+          {/* Race Position */}
+          {racePosition && (
+            <View style={styles.racePositionCard}>
+              <Text style={styles.racePositionTitle}>🏁 Race Position</Text>
+              <View style={styles.positionGrid}>
+                <View style={styles.positionItem}>
+                  <Text style={styles.positionLabel}>Fleet Position</Text>
+                  <Text style={styles.positionValue}>#{racePosition.position}</Text>
+                </View>
+                <View style={styles.positionItem}>
+                  <Text style={styles.positionLabel}>Current Leg</Text>
+                  <Text style={styles.positionValue}>{racePosition.currentLeg.toUpperCase()}</Text>
+                </View>
+                <View style={styles.positionItem}>
+                  <Text style={styles.positionLabel}>To Start Line</Text>
+                  <Text style={styles.positionValue}>{racePosition.distanceToStartLine.toFixed(0)}m</Text>
+                </View>
+                <View style={styles.positionItem}>
+                  <Text style={styles.positionLabel}>To Next Mark</Text>
+                  <Text style={styles.positionValue}>{racePosition.distanceToNextMark.toFixed(0)}m</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Layline Information */}
+          {racePosition?.laylineInfo && (
+            <View style={styles.laylineCard}>
+              <Text style={styles.laylineTitle}>🧭 Layline Info</Text>
+              <View style={styles.laylineStatus}>
+                <View style={[styles.laylineIndicator, racePosition.laylineInfo.onPortLayline && styles.laylineActive]}>
+                  <Text style={styles.laylineText}>Port Layline</Text>
+                </View>
+                <View style={[styles.laylineIndicator, racePosition.laylineInfo.onStarboardLayline && styles.laylineActive]}>
+                  <Text style={styles.laylineText}>Starboard Layline</Text>
+                </View>
+              </View>
+              <Text style={styles.laylineDistance}>
+                Distance to layline: {racePosition.laylineInfo.distanceToLayline.toFixed(0)}m
+              </Text>
+            </View>
+          )}
+
+          {/* GPS Coordinates */}
+          <View style={styles.coordinatesCard}>
+            <Text style={styles.coordinatesTitle}>📍 Coordinates</Text>
+            <Text style={styles.coordinatesText}>
+              Lat: {gpsData.latitude.toFixed(6)}°
+            </Text>
+            <Text style={styles.coordinatesText}>
+              Lon: {gpsData.longitude.toFixed(6)}°
+            </Text>
+            {gpsData.altitude && (
+              <Text style={styles.coordinatesText}>
+                Alt: {gpsData.altitude.toFixed(1)}m
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {gpsPermission === 'pending' && (
+        <View style={styles.gpsLoading}>
+          <Text style={styles.loadingText}>Initializing GPS...</Text>
+        </View>
+      )}
+    </View>
+  );
+
   const renderEmergencyScreen = () => (
     <View style={[styles.screenContainer, styles.emergencyContainer]}>
       <Text style={styles.emergencyTitle}>⚠️ EMERGENCY</Text>
@@ -487,13 +727,14 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
         {activeView === 'overview' && renderOverviewScreen()}
         {activeView === 'tactical' && renderTacticalScreen()}
         {activeView === 'conditions' && renderConditionsScreen()}
+        {activeView === 'gps' && renderGPSScreen()}
         {activeView === 'emergency' && renderEmergencyScreen()}
       </View>
 
       {/* Navigation Bar */}
       {activeView !== 'emergency' && (
         <View style={styles.navigationBar}>
-          {(['overview', 'tactical', 'conditions'] as const).map(view => (
+          {(['overview', 'tactical', 'conditions', 'gps'] as const).map(view => (
             <TouchableOpacity
               key={view}
               style={[styles.navButton, activeView === view && styles.activeNavButton]}
@@ -502,7 +743,8 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
               <Ionicons
                 name={
                   view === 'overview' ? 'home' :
-                  view === 'tactical' ? 'compass' : 'cloudy'
+                  view === 'tactical' ? 'compass' :
+                  view === 'conditions' ? 'cloudy' : 'location'
                 }
                 size={24}
                 color={activeView === view ? '#0066CC' : '#666'}
@@ -511,7 +753,7 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
                 styles.navButtonText,
                 activeView === view && styles.activeNavButtonText
               ]}>
-                {view.charAt(0).toUpperCase() + view.slice(1)}
+                {view === 'gps' ? 'GPS' : view.charAt(0).toUpperCase() + view.slice(1)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -756,6 +998,160 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  // GPS Screen
+  gpsWarning: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  warningText: {
+    fontSize: isTablet ? 24 : 20,
+    fontWeight: '700',
+    color: '#FF8000',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  warningSubtext: {
+    fontSize: isTablet ? 18 : 16,
+    color: '#CCCCCC',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  enableGpsButton: {
+    backgroundColor: '#0066CC',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  enableGpsText: {
+    color: 'white',
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '700',
+  },
+  gpsContent: {
+    gap: 16,
+  },
+  gpsStatusCard: {
+    backgroundColor: '#1A1A1A',
+    padding: isTablet ? 20 : 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#00FF88',
+  },
+  gpsStatusTitle: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: '#00FF88',
+    marginBottom: 12,
+  },
+  gpsStatusText: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  racePositionCard: {
+    backgroundColor: '#1A1A1A',
+    padding: isTablet ? 20 : 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0066CC',
+  },
+  racePositionTitle: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: '#0066CC',
+    marginBottom: 12,
+  },
+  positionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  positionItem: {
+    flex: 1,
+    minWidth: isTablet ? 120 : 100,
+    alignItems: 'center',
+  },
+  positionLabel: {
+    fontSize: isTablet ? 14 : 12,
+    color: '#CCCCCC',
+    marginBottom: 4,
+  },
+  positionValue: {
+    fontSize: isTablet ? 20 : 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  laylineCard: {
+    backgroundColor: '#1A1A1A',
+    padding: isTablet ? 20 : 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF8000',
+  },
+  laylineTitle: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: '#FF8000',
+    marginBottom: 12,
+  },
+  laylineStatus: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  laylineIndicator: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#333333',
+    alignItems: 'center',
+  },
+  laylineActive: {
+    backgroundColor: '#FF8000',
+  },
+  laylineText: {
+    fontSize: isTablet ? 14 : 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  laylineDistance: {
+    fontSize: isTablet ? 14 : 12,
+    color: '#CCCCCC',
+    textAlign: 'center',
+  },
+  coordinatesCard: {
+    backgroundColor: '#1A1A1A',
+    padding: isTablet ? 20 : 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#CCCCCC',
+  },
+  coordinatesTitle: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: '#CCCCCC',
+    marginBottom: 12,
+  },
+  coordinatesText: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#FFFFFF',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  gpsLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: isTablet ? 20 : 18,
+    color: '#CCCCCC',
+  },
+
   // Navigation
   navigationBar: {
     flexDirection: 'row',
@@ -775,7 +1171,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   navButtonText: {
-    fontSize: isTablet ? 14 : 12,
+    fontSize: isTablet ? 14 : 10,
     color: '#666',
     marginTop: 4,
     fontWeight: '600',
