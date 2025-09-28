@@ -1,0 +1,333 @@
+-- External Racing Results System Database Schema
+-- Supports integration with major sailing organizations and results platforms
+
+-- External result sources configuration
+CREATE TABLE external_result_sources (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  base_url VARCHAR(500) NOT NULL,
+  api_key VARCHAR(500),
+  supported_regions TEXT[] DEFAULT '{}',
+  result_formats TEXT[] DEFAULT '{}',
+  poll_interval INTEGER DEFAULT 30, -- minutes
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Polling status tracking
+CREATE TABLE polling_status (
+  source_id VARCHAR(50) PRIMARY KEY REFERENCES external_result_sources(id),
+  last_poll_time TIMESTAMP WITH TIME ZONE,
+  last_success_time TIMESTAMP WITH TIME ZONE,
+  error_count INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  next_poll_time TIMESTAMP WITH TIME ZONE,
+  last_error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- External regattas discovered from polling
+CREATE TABLE external_regattas (
+  id VARCHAR(100) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  venue VARCHAR(200),
+  venue_id UUID REFERENCES sailing_venues(id),
+  start_date DATE,
+  end_date DATE,
+  boat_classes TEXT[] DEFAULT '{}',
+  status VARCHAR(20) DEFAULT 'upcoming', -- upcoming, ongoing, completed
+  entry_count INTEGER DEFAULT 0,
+  race_count INTEGER DEFAULT 0,
+  source_id VARCHAR(50) REFERENCES external_result_sources(id),
+  source_url VARCHAR(1000),
+  official_results BOOLEAN DEFAULT false,
+  raw_data JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- External race results
+CREATE TABLE external_race_results (
+  id VARCHAR(200) PRIMARY KEY,
+  regatta_id VARCHAR(100) REFERENCES external_regattas(id),
+  regatta_name VARCHAR(200),
+  venue VARCHAR(200),
+  race_number INTEGER,
+  race_date DATE,
+  sailor_name VARCHAR(100),
+  sail_number VARCHAR(50),
+  boat_class VARCHAR(50),
+  position INTEGER,
+  points DECIMAL(10,2),
+  finish_time TIMESTAMP WITH TIME ZONE,
+  dnf BOOLEAN DEFAULT false,
+  dsq BOOLEAN DEFAULT false,
+  ocs BOOLEAN DEFAULT false,
+  source_id VARCHAR(50) REFERENCES external_result_sources(id),
+  source_url VARCHAR(1000),
+  raw_data JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_race_result UNIQUE (regatta_id, race_number, sailor_name, sail_number)
+);
+
+-- Sailor performance tracking (enhanced with external results)
+CREATE TABLE sailor_performance (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sailor_id UUID REFERENCES sailor_profiles(id),
+  regatta_id VARCHAR(100),
+  race_number INTEGER,
+  position INTEGER,
+  points DECIMAL(10,2),
+  boat_class VARCHAR(50),
+  race_date DATE,
+  venue VARCHAR(200),
+  venue_id UUID REFERENCES sailing_venues(id),
+  source VARCHAR(20) DEFAULT 'manual', -- manual, external
+  source_id VARCHAR(50),
+  external_result_id VARCHAR(200) REFERENCES external_race_results(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Results matching log (tracks how external results are matched to sailors)
+CREATE TABLE results_matching_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  external_result_id VARCHAR(200) REFERENCES external_race_results(id),
+  sailor_id UUID REFERENCES sailor_profiles(id),
+  match_type VARCHAR(20), -- name_exact, name_fuzzy, sail_number, manual
+  confidence_score DECIMAL(3,2), -- 0.00 to 1.00
+  verified BOOLEAN DEFAULT false,
+  verified_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Data quality metrics
+CREATE TABLE data_quality_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id VARCHAR(50) REFERENCES external_result_sources(id),
+  regatta_id VARCHAR(100) REFERENCES external_regattas(id),
+  metric_type VARCHAR(50), -- completeness, accuracy, timeliness, consistency
+  metric_value DECIMAL(5,2),
+  measurement_date DATE DEFAULT CURRENT_DATE,
+  details JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_external_race_results_sailor_name ON external_race_results(sailor_name);
+CREATE INDEX idx_external_race_results_sail_number ON external_race_results(sail_number);
+CREATE INDEX idx_external_race_results_regatta_id ON external_race_results(regatta_id);
+CREATE INDEX idx_external_race_results_race_date ON external_race_results(race_date);
+CREATE INDEX idx_external_race_results_source_id ON external_race_results(source_id);
+CREATE INDEX idx_external_race_results_venue ON external_race_results(venue);
+
+CREATE INDEX idx_external_regattas_venue_id ON external_regattas(venue_id);
+CREATE INDEX idx_external_regattas_start_date ON external_regattas(start_date);
+CREATE INDEX idx_external_regattas_status ON external_regattas(status);
+CREATE INDEX idx_external_regattas_source_id ON external_regattas(source_id);
+
+CREATE INDEX idx_sailor_performance_sailor_id ON sailor_performance(sailor_id);
+CREATE INDEX idx_sailor_performance_race_date ON sailor_performance(race_date);
+CREATE INDEX idx_sailor_performance_venue_id ON sailor_performance(venue_id);
+CREATE INDEX idx_sailor_performance_source ON sailor_performance(source);
+
+CREATE INDEX idx_results_matching_log_external_result_id ON results_matching_log(external_result_id);
+CREATE INDEX idx_results_matching_log_sailor_id ON results_matching_log(sailor_id);
+
+-- Full-text search indexes
+CREATE INDEX idx_external_race_results_text_search ON external_race_results
+USING gin(to_tsvector('english', sailor_name || ' ' || regatta_name || ' ' || venue));
+
+CREATE INDEX idx_external_regattas_text_search ON external_regattas
+USING gin(to_tsvector('english', name || ' ' || venue));
+
+-- Row Level Security (RLS) policies
+ALTER TABLE external_result_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE polling_status ENABLE ROW LEVEL SECURITY;
+ALTER TABLE external_regattas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE external_race_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sailor_performance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE results_matching_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE data_quality_metrics ENABLE ROW LEVEL SECURITY;
+
+-- Public read access for external data (results are public information)
+CREATE POLICY "Allow public read access to external result sources"
+ON external_result_sources FOR SELECT
+USING (true);
+
+CREATE POLICY "Allow public read access to external regattas"
+ON external_regattas FOR SELECT
+USING (true);
+
+CREATE POLICY "Allow public read access to external race results"
+ON external_race_results FOR SELECT
+USING (true);
+
+-- Admin-only access for configuration and monitoring
+CREATE POLICY "Admin access to polling status"
+ON polling_status FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE auth.users.id = auth.uid()
+    AND auth.users.raw_user_meta_data->>'role' = 'admin'
+  )
+);
+
+CREATE POLICY "Admin access to data quality metrics"
+ON data_quality_metrics FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE auth.users.id = auth.uid()
+    AND auth.users.raw_user_meta_data->>'role' = 'admin'
+  )
+);
+
+-- Sailor access to their own performance data
+CREATE POLICY "Sailors can view their own performance"
+ON sailor_performance FOR SELECT
+USING (
+  auth.uid() = sailor_id OR
+  EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE auth.users.id = auth.uid()
+    AND auth.users.raw_user_meta_data->>'role' IN ('admin', 'coach')
+  )
+);
+
+CREATE POLICY "Authenticated users can view results matching log"
+ON results_matching_log FOR SELECT
+USING (auth.role() = 'authenticated');
+
+-- Functions for data processing
+
+-- Function to calculate sailor performance statistics
+CREATE OR REPLACE FUNCTION calculate_sailor_performance_stats(
+  p_sailor_id UUID,
+  p_start_date DATE DEFAULT CURRENT_DATE - INTERVAL '1 year',
+  p_end_date DATE DEFAULT CURRENT_DATE
+)
+RETURNS TABLE (
+  total_races INTEGER,
+  average_position DECIMAL(5,2),
+  best_position INTEGER,
+  podium_finishes INTEGER,
+  top_ten_finishes INTEGER,
+  total_regattas INTEGER,
+  venues_sailed INTEGER
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    COUNT(*)::INTEGER as total_races,
+    AVG(sp.position)::DECIMAL(5,2) as average_position,
+    MIN(sp.position)::INTEGER as best_position,
+    COUNT(CASE WHEN sp.position <= 3 THEN 1 END)::INTEGER as podium_finishes,
+    COUNT(CASE WHEN sp.position <= 10 THEN 1 END)::INTEGER as top_ten_finishes,
+    COUNT(DISTINCT sp.regatta_id)::INTEGER as total_regattas,
+    COUNT(DISTINCT sp.venue_id)::INTEGER as venues_sailed
+  FROM sailor_performance sp
+  WHERE sp.sailor_id = p_sailor_id
+    AND sp.race_date BETWEEN p_start_date AND p_end_date
+    AND sp.position IS NOT NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to find potential sailor matches for external results
+CREATE OR REPLACE FUNCTION find_sailor_matches(
+  p_sailor_name VARCHAR(100),
+  p_sail_number VARCHAR(50) DEFAULT NULL
+)
+RETURNS TABLE (
+  sailor_id UUID,
+  full_name VARCHAR(100),
+  sail_number VARCHAR(50),
+  match_type VARCHAR(20),
+  confidence_score DECIMAL(3,2)
+) AS $$
+BEGIN
+  -- Exact name and sail number match
+  IF p_sail_number IS NOT NULL THEN
+    RETURN QUERY
+    SELECT
+      sp.id,
+      sp.full_name,
+      sp.sail_number,
+      'exact'::VARCHAR(20),
+      1.00::DECIMAL(3,2)
+    FROM sailor_profiles sp
+    WHERE LOWER(sp.full_name) = LOWER(p_sailor_name)
+      AND sp.sail_number = p_sail_number;
+
+    IF FOUND THEN RETURN; END IF;
+  END IF;
+
+  -- Exact name match
+  RETURN QUERY
+  SELECT
+    sp.id,
+    sp.full_name,
+    sp.sail_number,
+    'name_exact'::VARCHAR(20),
+    0.95::DECIMAL(3,2)
+  FROM sailor_profiles sp
+  WHERE LOWER(sp.full_name) = LOWER(p_sailor_name);
+
+  IF FOUND THEN RETURN; END IF;
+
+  -- Sail number match only
+  IF p_sail_number IS NOT NULL THEN
+    RETURN QUERY
+    SELECT
+      sp.id,
+      sp.full_name,
+      sp.sail_number,
+      'sail_number'::VARCHAR(20),
+      0.85::DECIMAL(3,2)
+    FROM sailor_profiles sp
+    WHERE sp.sail_number = p_sail_number;
+
+    IF FOUND THEN RETURN; END IF;
+  END IF;
+
+  -- Fuzzy name match using similarity
+  RETURN QUERY
+  SELECT
+    sp.id,
+    sp.full_name,
+    sp.sail_number,
+    'name_fuzzy'::VARCHAR(20),
+    similarity(sp.full_name, p_sailor_name)::DECIMAL(3,2)
+  FROM sailor_profiles sp
+  WHERE similarity(sp.full_name, p_sailor_name) > 0.6
+  ORDER BY similarity(sp.full_name, p_sailor_name) DESC
+  LIMIT 5;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Insert default external result sources
+INSERT INTO external_result_sources (id, name, base_url, supported_regions, result_formats, poll_interval) VALUES
+('sailwave', 'Sailwave Results', 'https://www.sailwave.com', '{"global"}', '{"sailwave", "html"}', 30),
+('regattanetwork', 'Regatta Network', 'https://www.regattanetwork.com', '{"north-america", "europe"}', '{"json", "html"}', 15),
+('isaf_results', 'World Sailing Results', 'https://www.sailing.org', '{"global"}', '{"json", "xml"}', 60),
+('yacht_scoring', 'Yacht Scoring', 'https://yachtscoring.com', '{"global"}', '{"json", "html"}', 20),
+('raceqs', 'RaceQs', 'https://raceqs.com', '{"global"}', '{"json"}', 10),
+('manage2sail', 'Manage2Sail', 'https://www.manage2sail.com', '{"europe", "oceania"}', '{"json", "html"}', 25);
+
+-- Initialize polling status for all sources
+INSERT INTO polling_status (source_id, is_active, next_poll_time)
+SELECT id, active, NOW() + (poll_interval || ' minutes')::INTERVAL
+FROM external_result_sources
+WHERE active = true;
+
+COMMENT ON TABLE external_result_sources IS 'Configuration for external sailing results data sources';
+COMMENT ON TABLE polling_status IS 'Real-time status tracking for results polling system';
+COMMENT ON TABLE external_regattas IS 'Regatta information discovered from external sources';
+COMMENT ON TABLE external_race_results IS 'Individual race results imported from external sources';
+COMMENT ON TABLE sailor_performance IS 'Consolidated sailor performance data from all sources';
+COMMENT ON TABLE results_matching_log IS 'Audit log for matching external results to sailors';
+COMMENT ON TABLE data_quality_metrics IS 'Data quality monitoring and metrics';

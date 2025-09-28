@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, SafeAreaView, Platform } from 'react-native';
 import { router } from 'expo-router';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/src/lib/utils/userTypeRouting';
 import { HeroTabs } from '@/src/components/landing/HeroTabs';
 import { ScrollFix } from '@/src/components/landing/ScrollFix';
@@ -14,45 +14,11 @@ import { ScrollFix } from '@/src/components/landing/ScrollFix';
 export default function LandingPage() {
   console.log('✅ [LANDING] LandingPage component loading with HeroTabs');
 
-  const { user, loading, userProfile, userType } = useAuth();
-  const [forceShowLanding, setForceShowLanding] = useState(false);
+  const { signedIn, ready } = useAuth();
 
-  // Debug logging for height issues
-  console.log('🔍 [DEBUG] LandingPage render state:', {
-    platform: Platform.OS,
-    loading,
-    userExists: !!user,
-    forceShowLanding,
-    windowHeight: typeof window !== 'undefined' ? window.innerHeight : 'N/A',
-    documentHeight: typeof document !== 'undefined' ? document.documentElement.scrollHeight : 'N/A'
-  });
-
-  // Note: Auto-redirect logic moved to AuthContext to avoid conflicts with OAuth routing
-  // The AuthContext now handles all post-authentication routing
-
-  // Timeout to force show landing page if auth takes too long
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.log('🚨 [DEBUG] Auth loading timeout, forcing landing page display');
-        setForceShowLanding(true);
-      }
-    }, 3000); // 3 second timeout
-
-    return () => clearTimeout(timeout);
-  }, [loading]);
-
-  // Show loading state while checking auth (unless forced)
-  if (loading && !forceShowLanding) {
-    const Container = Platform.OS === 'web' ? View : SafeAreaView;
-    return (
-      <Container style={styles.container}>
-        <View style={styles.loadingContainer}>
-          {/* You could add a loading spinner here */}
-        </View>
-      </Container>
-    );
-  }
+  console.log('🏠 [LANDING] ===== LANDING PAGE RENDER =====');
+  console.log('🏠 [LANDING] Auth state:', { signedIn, ready });
+  console.log('🏠 [LANDING] ===== LANDING PAGE RENDER COMPLETE =====');
 
   // Show landing page for unauthenticated users (or if loading takes too long)
   const Container = Platform.OS === 'web' ? View : SafeAreaView;

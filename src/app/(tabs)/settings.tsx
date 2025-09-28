@@ -15,6 +15,9 @@ export default function SettingsScreen() {
   const { user, userProfile, signOut } = useAuth();
 
   const handleSignOut = async () => {
+    console.log('⚙️ [SETTINGS] Sign out button pressed');
+    console.log('⚙️ [SETTINGS] Current URL before alert:', window.location.href);
+
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
@@ -25,8 +28,16 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('⚙️ [SETTINGS] User confirmed sign out');
+              console.log('⚙️ [SETTINGS] About to call signOut() function');
+              console.log('⚙️ [SETTINGS] Current URL before signOut():', window.location.href);
+
               await signOut();
+
+              console.log('⚙️ [SETTINGS] signOut() completed');
+              console.log('⚙️ [SETTINGS] Current URL after signOut():', window.location.href);
             } catch (error) {
+              console.error('⚙️ [SETTINGS] Sign out error:', error);
               Alert.alert('Error', 'Failed to sign out');
             }
           },

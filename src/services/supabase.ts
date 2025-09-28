@@ -1,46 +1,25 @@
-import { createClient } from '@supabase/supabase-js'
+import {createClient} from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL!
+const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
 
-// Singleton pattern to prevent multiple clients and duplicate listeners
-let _supabase: ReturnType<typeof createClient> | undefined;
+// HMR-safe global cache (prevents re-creation on Fast Refresh)
+const g = globalThis as any
+g.__sb ||= {}
 
-export const supabase = (() => {
-  if (_supabase) {
-    console.log('🔄 [SUPABASE] Returning existing client instance');
-    return _supabase;
-  }
+export const supabase = g.__sb.client ||= createClient(url, anon, {
+  auth: {
+    detectSessionInUrl: true,  // A: auto OAuth handling
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  global: {headers: {'x-client-info':'regattaflow-app'}}
+})
 
-  console.log('🆕 [SUPABASE] Creating new client instance');
-  _supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false, // Handle manually for better control
-      redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/callback` : undefined,
-    },
-    global: {
-      fetch: (url, options = {}) => {
-        // Create timeout logic using AbortController
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-        return fetch(url, {
-          ...options,
-          signal: controller.signal,
-        }).finally(() => {
-          clearTimeout(timeoutId);
-        });
-      },
-      headers: {
-        'x-client-info': 'regattaflow-expo-app',
-      },
-    },
-  });
-
-  return _supabase;
-})();
+if (!g.__sb.logged) {
+  g.__sb.logged = true
+  console.log('[SB] Client singleton created')
+}
 
 // Database types
 export interface Database {
@@ -54,6 +33,8 @@ export interface Database {
           subscription_status: string
           subscription_tier: string
           stripe_customer_id: string
+          user_type: 'sailor' | 'coach' | 'club' | null
+          onboarding_completed: boolean
           created_at: string
         }
         Insert: {
@@ -63,6 +44,8 @@ export interface Database {
           subscription_status?: string
           subscription_tier?: string
           stripe_customer_id?: string
+          user_type?: 'sailor' | 'coach' | 'club' | null
+          onboarding_completed?: boolean
           created_at?: string
         }
         Update: {
@@ -72,6 +55,8 @@ export interface Database {
           subscription_status?: string
           subscription_tier?: string
           stripe_customer_id?: string
+          user_type?: 'sailor' | 'coach' | 'club' | null
+          onboarding_completed?: boolean
           created_at?: string
         }
       }

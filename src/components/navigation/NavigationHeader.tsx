@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
+import { signOutEverywhere } from '@/src/lib/auth-actions';
 
 interface NavigationHeaderProps {
   showLogo?: boolean;
@@ -38,27 +39,56 @@ export function NavigationHeader({
   const isOnboardingPage = pathname === '/onboarding';
 
   const handleDropdownToggle = () => {
+    console.log('🔴 [NAV-HEADER] User clicked dropdown toggle, current state:', dropdownVisible);
+
     if (dropdownVisible) {
+      console.log('🔴 [NAV-HEADER] Closing dropdown');
       setDropdownVisible(false);
     } else {
+      console.log('🔴 [NAV-HEADER] Opening dropdown...');
       // Get button position for dropdown placement
       buttonRef.current?.measure((x, y, width, height, pageX, pageY) => {
+        console.log('🔴 [NAV-HEADER] Button position:', { x, y, width, height, pageX, pageY });
         setDropdownPosition({
           x: pageX - 200 + width, // Position dropdown to the right edge of button
           y: pageY + height + 5, // Position below button with small gap
         });
+        console.log('🔴 [NAV-HEADER] Setting dropdown visible to true');
         setDropdownVisible(true);
       });
     }
   };
 
+  const [signingOut, setSigningOut] = useState(false);
+
   const handleSignOut = async () => {
+    if (signingOut) {
+      console.log('🔴 [NAV-HEADER] Sign out already in progress, ignoring click');
+      return;
+    }
+
+    setSigningOut(true);
+    setDropdownVisible(false);
+
     try {
-      setDropdownVisible(false);
-      await signOut();
-      router.replace('/');
+      console.log('🔴 [NAV-HEADER] ========== ROBUST SIGN OUT START ==========');
+      console.log('🔴 [NAV-HEADER] [AUTH] click sign out');
+
+      // Use the robust sign out utility
+      await signOutEverywhere();
+
+      console.log('🔴 [NAV-HEADER] [AUTH] signOut call completed - navigation handled by AuthProvider events');
+
     } catch (error) {
-      console.error('Sign out error:', error);
+      console.error('🔴 [NAV-HEADER] ========== SIGN OUT ERROR ==========');
+      console.error('🔴 [NAV-HEADER] Sign out failed:', error);
+
+      // Keep the user informed, don't silently fail
+      if (typeof window !== 'undefined') {
+        alert('Sign out failed. Check console for details.');
+      }
+    } finally {
+      setSigningOut(false);
     }
   };
 
@@ -199,9 +229,12 @@ export function NavigationHeader({
               <TouchableOpacity
                 style={[styles.dropdownItem, styles.signOutItem]}
                 onPress={handleSignOut}
+                disabled={signingOut}
               >
                 <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-                <Text style={[styles.dropdownItemText, styles.signOutText]}>Sign Out</Text>
+                <Text style={[styles.dropdownItemText, styles.signOutText]}>
+                  {signingOut ? 'Signing out...' : 'Sign Out'}
+                </Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>

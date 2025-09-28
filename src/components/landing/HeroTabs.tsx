@@ -10,7 +10,7 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { NavigationHeader } from '@/src/components/navigation/NavigationHeader';
 import { SailorRaceStrategyMap } from './maps/SailorRaceStrategyMap';
 import { YachtClubManagementMap } from './maps/YachtClubManagementMap';
@@ -395,16 +395,29 @@ export function HeroTabs() {
   const [activeTab, setActiveTab] = useState<UserType>('sailors');
   const { user } = useAuth();
   const { width, height } = useWindowDimensions();
-  const isDesktop = width > 768;
+
+  // Fix for React Native Web dimension issues - provide fallbacks
+  const safeWidth = width || (Platform.OS === 'web' ? 1200 : 400);
+  const safeHeight = height || (Platform.OS === 'web' ? 800 : 600);
+  const isDesktop = safeWidth > 768;
 
   // Debug logging for HeroTabs dimensions and layout
   console.log('🔍 [DEBUG] HeroTabs render state:', {
     platform: Platform.OS,
-    width,
-    height,
+    rawDimensions: { width, height },
+    safeDimensions: { width: safeWidth, height: safeHeight },
     isDesktop,
     activeTab,
-    scrollViewHeight: Platform.OS === 'web' ? '100vh' : 'auto'
+    isDimensionsProblem: width === 0 || height === 0
+  });
+
+  // Additional debug logging for layout debugging
+  console.log('🔍 [DEBUG] HeroTabs layout configuration:', {
+    containerMinHeight: Platform.OS === 'web' ? '100vh' : 'flex: 1',
+    contentMinHeight: Platform.OS === 'web' ? 'calc(100vh - 120px)' : 'flex: 1',
+    mapContainerHeight: 400,
+    isExpectedToBeVisible: safeWidth > 0 && safeHeight > 0,
+    appliedFallback: width === 0 || height === 0
   });
 
   const currentTab = tabData[activeTab];
@@ -762,7 +775,17 @@ export function HeroTabs() {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#F8FAFC',
-    minHeight: '100%',
+    minHeight: '100vh',
+    width: '100%',
+    ...Platform.select({
+      web: {
+        minHeight: '100vh',
+        height: 'auto',
+      },
+      default: {
+        flex: 1,
+      },
+    }),
   },
   marketingBanner: {
     paddingVertical: 12,
@@ -776,10 +799,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   content: {
-    flex: 1,
+    width: '100%',
     paddingHorizontal: 16,
     paddingTop: 32,
     paddingBottom: 64,
+    ...Platform.select({
+      web: {
+        minHeight: 'calc(100vh - 120px)', // Account for header height
+      },
+      default: {
+        flex: 1,
+      },
+    }),
   },
   tabContainer: {
     alignItems: 'center',
@@ -790,11 +821,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
   },
   tabButton: {
     paddingHorizontal: 24,
@@ -804,11 +842,18 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     backgroundColor: '#3B82F6',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+      },
+      default: {
+        shadowColor: '#3B82F6',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   tabButtonText: {
     fontSize: 14,
@@ -897,11 +942,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 8px rgba(59, 130, 246, 0.3)',
+      },
+      default: {
+        shadowColor: '#3B82F6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -918,11 +970,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
   },
   secondaryButtonText: {
     color: '#3B82F6',
@@ -962,10 +1021,28 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 500,
     alignSelf: 'center',
+    minHeight: 400,
+    ...Platform.select({
+      web: {
+        height: 400,
+      },
+      default: {
+        height: 400,
+      },
+    }),
   },
   mapContainerDesktop: {
     flex: 1,
     maxWidth: 600,
+    minHeight: 400,
+    ...Platform.select({
+      web: {
+        height: 400,
+      },
+      default: {
+        height: 400,
+      },
+    }),
   },
   phoneSection: {
     paddingVertical: 80,

@@ -30,10 +30,18 @@ export function ScrollFix() {
           overflow: visible !important;
         }
 
-        /* Target the ScrollView specifically */
-        div[style*="flex: 1"] {
+        /* Target the main app container */
+        div[style*="flex: 1"][style*="background-color"] {
           height: auto !important;
           min-height: 100vh;
+        }
+
+        /* Ensure components render with proper dimensions */
+        div[style*="width: 0px"][style*="height: 0px"] {
+          width: auto !important;
+          height: auto !important;
+          min-width: 100% !important;
+          min-height: 400px !important;
         }
 
         /* Ensure the main content is scrollable */

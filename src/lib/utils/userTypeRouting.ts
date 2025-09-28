@@ -1,4 +1,4 @@
-import { UserType } from '@/src/lib/contexts/AuthContext';
+import { UserType } from '@/src/providers/AuthProvider';
 
 /**
  * Get the correct dashboard route based on user type

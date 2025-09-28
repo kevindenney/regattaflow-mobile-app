@@ -1,68 +1,27 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-// import 'react-native-reanimated'; // TODO: Re-enable when animations are needed
+import {Slot} from 'expo-router'
+import {AuthProvider, useAuth, TEST_EXPORT} from '@/src/providers/AuthProvider'
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+console.log('🔥 [LAYOUT] Testing import:', TEST_EXPORT)
 
-// Add debugging console logs
-console.log('🚀 RootLayout: Starting to load');
+function Gate() {
+  const {ready} = useAuth()
+  console.log('🚪 [GATE] regattaflow-app gate:', {ready})
+  console.log('🚪 [GATE] Gate component is rendering, ready state:', ready)
 
-// Load browser database setup for console access (development only)
-// if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-//   import('@/scripts/browser-db-setup');
-// }
+  if (!ready) {
+    console.log('🚪 [GATE] Returning null because ready is false')
+    return null
+  }
 
-let AuthProvider: any;
-try {
-  const authModule = require('@/src/lib/contexts/AuthContext');
-  AuthProvider = authModule.AuthProvider;
-  console.log('✅ RootLayout: AuthProvider loaded successfully', !!AuthProvider);
-} catch (error) {
-  console.error('❌ RootLayout: Failed to load AuthProvider', error);
-  // Create a fallback provider
-  AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    console.log('🔄 Using fallback AuthProvider');
-    return children;
-  };
+  console.log('🚪 [GATE] Rendering Slot because ready is true')
+  return <Slot/>
 }
 
-export const unstable_settings = {
-  initialRouteName: '(tabs)',
-};
-
 export default function RootLayout() {
-  console.log('🎨 RootLayout: Starting render');
-
-  let colorScheme;
-  try {
-    colorScheme = useColorScheme();
-    console.log('✅ RootLayout: useColorScheme loaded', colorScheme);
-  } catch (error) {
-    console.error('❌ RootLayout: useColorScheme failed', error);
-    colorScheme = 'light';
-  }
-
-  try {
-    console.log('🔄 RootLayout: About to return JSX');
-    return (
-      <AuthProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="dashboard" />
-            <Stack.Screen name="results" />
-            <Stack.Screen name="documents" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </AuthProvider>
-    );
-  } catch (error) {
-    console.error('❌ RootLayout: Render failed', error);
-    return null;
-  }
+  console.log('🔥 [LAYOUT] regattaflow-app root layout render')
+  return (
+    <AuthProvider>
+      <Gate/>
+    </AuthProvider>
+  )
 }

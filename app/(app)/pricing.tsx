@@ -26,7 +26,13 @@ export default function PricingScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<'monthly' | 'yearly'>('yearly');
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
 
-  const {\n    products,\n    status,\n    loading,\n    purchaseProduct,\n    restorePurchases,\n  } = useSubscription();
+  const {
+    products,
+    status,
+    loading,
+    purchaseProduct,
+    restorePurchases,
+  } = useSubscription();
 
   // Filter products by selected period
   const filteredProducts = products.filter(p => p.billingPeriod === selectedPeriod);
