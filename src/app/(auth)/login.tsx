@@ -33,10 +33,13 @@ export default function LoginScreen() {
   useEffect(() => {
     console.log('🔍 [LOGIN] Auth state check:', { signedIn, ready, userProfile: !!userProfile, userType });
 
-    if (ready && signedIn && userProfile) {
-      console.log('🔍 [LOGIN] User is already authenticated, redirecting...');
+    if (ready && signedIn) {
+      console.log('🔍 [LOGIN] User is authenticated, determining redirect...');
 
-      if (shouldCompleteOnboarding(userProfile)) {
+      if (!userProfile) {
+        console.log('🔍 [LOGIN] No userProfile yet, defaulting to onboarding');
+        router.replace(getOnboardingRoute());
+      } else if (shouldCompleteOnboarding(userProfile)) {
         console.log('🔍 [LOGIN] User needs onboarding, redirecting to onboarding');
         router.replace(getOnboardingRoute());
       } else {
@@ -76,7 +79,10 @@ export default function LoginScreen() {
       needsOnboarding: shouldCompleteOnboarding(userProfile)
     });
 
-    if (shouldCompleteOnboarding(userProfile)) {
+    if (!userProfile) {
+      console.log('🔍 [LOGIN] No userProfile yet, defaulting to onboarding');
+      router.replace(getOnboardingRoute());
+    } else if (shouldCompleteOnboarding(userProfile)) {
       console.log('🔍 [LOGIN] Routing to onboarding');
       router.replace(getOnboardingRoute());
     } else {
@@ -99,8 +105,8 @@ export default function LoginScreen() {
     try {
       console.log('🔍 [LOGIN] About to call signIn()');
       await signIn(email, password);
-      console.log('🔍 [LOGIN] signIn() completed successfully');
-      routeAfterAuth();
+      console.log('🔍 [LOGIN] signIn() completed - AuthProvider will handle routing');
+      // Don't call routeAfterAuth() here - let AuthProvider handle routing after SIGNED_IN event
     } catch (error: any) {
       console.error('🔍 [LOGIN] signIn() failed:', error);
       Alert.alert('Login Failed', error.message);

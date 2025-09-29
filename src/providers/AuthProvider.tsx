@@ -5,6 +5,7 @@ import {Platform} from 'react-native'
 import {shouldCompleteOnboarding, getDashboardRoute} from '@/src/lib/utils/userTypeRouting'
 import {logAuthEvent, logAuthState} from '@/src/utils/errToText'
 import {bindAuthDiagnostics} from '@/src/utils/authDebug'
+import {signOutEverywhere} from '@/src/lib/auth-actions'
 
 // Bind diagnostics once at app boot
 bindAuthDiagnostics(supabase)
@@ -18,6 +19,7 @@ type AuthCtx = {
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName?: string) => Promise<void>
+  signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
   userProfile?: any
@@ -33,6 +35,7 @@ const Ctx = createContext<AuthCtx>({
   loading: false,
   signIn: async () => {},
   signUp: async () => {},
+  signOut: async () => {},
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
   updateUserProfile: async () => {},
@@ -42,22 +45,12 @@ const Ctx = createContext<AuthCtx>({
 })
 
 export function AuthProvider({children}:{children: React.ReactNode}) {
-  const [ready, setReady] = useState(true) // Temporary fix: start ready
+  const [ready, setReady] = useState(false) // Start as not ready until we check session
   const [signedIn, setSignedIn] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [userType, setUserType] = useState<UserType>(null)
-
-  // Emergency fallback to force ready state - for debugging
-  useEffect(() => {
-    const emergencyTimeout = setTimeout(() => {
-      console.warn('🚨 [AUTH] Emergency: forcing ready=true after 3000ms')
-      setReady(true)
-    }, 3000)
-
-    return () => clearTimeout(emergencyTimeout)
-  }, [])
 
   // Debug environment variables
   console.log('🔧 [AUTH] Environment check READY=TRUE:', {
@@ -119,7 +112,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           .single()
       } else {
         // Create new profile - include email and full_name from auth user
-        console.log('🔍 [AUTH] Creating new profile for OAuth user')
+        console.log('🔍 [AUTH] Creating new profile')
         const profileData = {
           id: uid,
           email: user?.email || '',
@@ -128,11 +121,35 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         }
         console.log('🔍 [AUTH] New profile data:', profileData)
 
-        result = await supabase
-          .from('users')
-          .insert(profileData)
-          .select()
-          .single()
+        try {
+          result = await supabase
+            .from('users')
+            .insert(profileData)
+            .select()
+            .single()
+        } catch (insertError: any) {
+          // If insert fails due to duplicate key (profile was created by trigger), try to fetch existing profile
+          if (insertError.code === '23505') {
+            console.log('🔄 [AUTH] Profile already exists (created by trigger), fetching it...')
+            const { data: triggerProfile, error: fetchError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', uid)
+              .single()
+
+            if (fetchError) throw fetchError
+
+            // Now update the existing profile with the provided updates
+            result = await supabase
+              .from('users')
+              .update(updates)
+              .eq('id', uid)
+              .select()
+              .single()
+          } else {
+            throw insertError
+          }
+        }
       }
 
       if (result.error) throw result.error
@@ -148,47 +165,68 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  // Initial auth state setup with watchdog timer
-  useEffect(()=>{
+  // Initial auth state setup with proper session restoration
+  useEffect(() => {
     console.log('🔥 [AUTH] useEffect initialization starting...')
     let alive = true
-    let watchdog = setTimeout(()=>{
-      console.warn('[AUTH] watchdog: forcing ready=true after 2500ms')
-      if (alive) setReady(true)
-    }, 2500)
 
-    ;(async ()=>{
+    const initializeAuth = async () => {
       try {
         console.log('[AUTH] Starting initialization...')
-        const {data, error} = await supabase.auth.getSession()
-        if (error) console.warn('[AUTH] getSession error:', error)
+
+        // Get current session
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.warn('[AUTH] getSession error:', sessionError)
+        }
+
         if (!alive) return
 
-        setSignedIn(!!data?.session)
-        setUser(data?.session?.user || null)
+        const session = sessionData?.session
+        const user = session?.user
 
-        if (data?.session?.user?.id) {
-          console.log('[AUTH] Fetching user profile...')
+        console.log('[AUTH] Session check result:', {
+          hasSession: !!session,
+          hasUser: !!user,
+          userEmail: user?.email
+        })
+
+        // Update auth state based on session
+        setSignedIn(!!session)
+        setUser(user || null)
+
+        // Fetch user profile if we have a user
+        if (user?.id) {
+          console.log('[AUTH] Fetching user profile for:', user.id)
           try {
-            await fetchUserProfile(data.session.user.id)
+            await fetchUserProfile(user.id)
           } catch (e) {
             console.warn('[AUTH] User profile fetch failed:', e)
           }
         }
 
-        console.log('[AUTH] Initialization complete')
+        console.log('[AUTH] Initialization complete, setting ready=true')
         setReady(true)
       } catch (e) {
-        console.warn('[AUTH] init exception:', e)
-        if (alive) setReady(true)
-      } finally {
-        clearTimeout(watchdog)
+        console.error('[AUTH] Initialization failed:', e)
+        if (alive) setReady(true) // Still set ready even if failed
       }
-    })()
+    }
 
-    return ()=>{
-      alive=false
-      clearTimeout(watchdog)
+    // Set a watchdog timer as fallback
+    const watchdogTimer = setTimeout(() => {
+      if (alive && !ready) {
+        console.warn('[AUTH] Watchdog: forcing ready=true after 3000ms')
+        setReady(true)
+      }
+    }, 3000)
+
+    initializeAuth()
+
+    return () => {
+      alive = false
+      clearTimeout(watchdogTimer)
     }
   }, []) // Run once on mount
 
@@ -230,12 +268,34 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       })
 
       if (evt === 'SIGNED_OUT') {
+        console.log('🚪 [AUTH] ===== SIGNED_OUT EVENT RECEIVED =====')
+        console.log('🚪 [AUTH] Starting state cleanup...')
+
+        // Clear all cached auth state
+        console.log('🚪 [AUTH] Clearing signedIn state...')
+        setSignedIn(false)
+        console.log('🚪 [AUTH] Clearing user state...')
+        setUser(null)
+        console.log('🚪 [AUTH] Clearing userProfile state...')
+        setUserProfile(null)
+        console.log('🚪 [AUTH] Clearing userType state...')
+        setUserType(null)
+        console.log('🚪 [AUTH] Clearing loading state...')
+        setLoading(false)
+
+        console.log('🚪 [AUTH] State cleanup complete. Starting navigation...')
         try {
           if (typeof window !== 'undefined') {
+            console.log('🚪 [AUTH] Replacing browser history state...')
             window.history.replaceState(null, '', '/')
           }
-        } catch {}
+        } catch (historyError) {
+          console.warn('🚪 [AUTH] History replace error:', historyError)
+        }
+
+        console.log('🚪 [AUTH] Navigating to login page...')
         router.replace('/(auth)/login')
+        console.log('🚪 [AUTH] ===== SIGNED_OUT HANDLER COMPLETE =====')
       }
 
       if (evt === 'SIGNED_IN' && session?.user?.id) {
@@ -262,6 +322,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           console.warn('[ROUTE] post-auth error:', e)
           console.log('🔔 [AUTH] Error occurred, routing to onboarding as fallback...')
           router.replace('/(auth)/onboarding')
+        } finally {
+          // Clear loading after auth processing completes
+          setLoading(false)
         }
       }
     })
@@ -287,8 +350,39 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         password,
       })
       if (error) throw error
-    } finally {
+      // Don't set loading(false) here - let onAuthStateChange handle it after user/profile are set
+    } catch (error) {
+      // Only clear loading on error, otherwise let auth state change handle it
       setLoading(false)
+      throw error
+    }
+  }
+
+  const signOut = async () => {
+    console.log('🚪 [AUTH] ===== SIGNOUT PROCESS STARTING =====')
+    console.log('🚪 [AUTH] Current state before signOut:', {
+      signedIn,
+      user: !!user,
+      userProfile: !!userProfile,
+      loading,
+      ready
+    })
+
+    setLoading(true)
+    console.log('🚪 [AUTH] Loading set to true')
+
+    try {
+      console.log('🚪 [AUTH] About to call signOutEverywhere()...')
+      await signOutEverywhere()
+      console.log('🚪 [AUTH] signOutEverywhere() completed successfully')
+      console.log('🚪 [AUTH] Waiting for SIGNED_OUT event to clear loading...')
+      // Don't set loading(false) here - let onAuthStateChange SIGNED_OUT handler clear it
+    } catch (error) {
+      console.error('🚪 [AUTH] ERROR in signOut process:', error)
+      console.log('🚪 [AUTH] Setting loading=false due to error')
+      // Only clear loading on error, otherwise let auth state change handle it
+      setLoading(false)
+      throw error
     }
   }
 
@@ -317,8 +411,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       console.log('✅ [AUTH] Supabase signUp successful:', data)
 
-      // Profile will be created automatically by database trigger
-      // or on first sign-in via onAuthStateChange listener
+      // Profile is created automatically by database trigger
+      // Check if profile was created and fetch it
+      if (data.user?.id) {
+        try {
+          console.log('🔍 [AUTH] Fetching automatically created profile...')
+          await fetchUserProfile(data.user.id)
+        } catch (profileError) {
+          console.warn('⚠️ [AUTH] Could not fetch profile immediately after signup:', profileError)
+          // This is not critical - profile fetch can happen later
+        }
+      }
 
       return data
     } catch (error) {
@@ -381,24 +484,27 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  const value = useMemo(() => ({
-    ready,
-    signedIn,
-    user,
-    loading,
-    signIn,
-    signUp,
-    signInWithGoogle,
-    signInWithApple,
-    biometricAvailable: false,
-    biometricEnabled: false,
-    userProfile,
-    userType,
-    updateUserProfile,
-    fetchUserProfile
-  }), [ready, signedIn, user, loading, userProfile, userType])
-
-  console.log('🔧 [AUTH] Context value created:', {ready, signedIn, userType})
+  const value = useMemo(() => {
+    console.log('🔧 [AUTH] Context value created:', {ready, signedIn, userType})
+    console.log('🔧 [AUTH] signOut function available:', typeof signOut)
+    return {
+      ready,
+      signedIn,
+      user,
+      loading,
+      signIn,
+      signUp,
+      signOut,
+      signInWithGoogle,
+      signInWithApple,
+      biometricAvailable: false,
+      biometricEnabled: false,
+      userProfile,
+      userType,
+      updateUserProfile,
+      fetchUserProfile
+    }
+  }, [ready, signedIn, user, loading, userProfile, userType])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

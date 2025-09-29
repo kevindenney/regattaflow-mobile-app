@@ -11,7 +11,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { signOutEverywhere } from '@/src/lib/auth-actions';
 
 export default function SettingsScreen() {
   const { user, userProfile, signOut } = useAuth();
@@ -30,14 +29,13 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('⚙️ [SETTINGS] User confirmed sign out via Settings fallback');
-              console.log('⚙️ [SETTINGS] About to call signOutEverywhere() function');
+              console.log('⚙️ [SETTINGS] User confirmed sign out via Settings');
+              console.log('⚙️ [SETTINGS] About to call signOut() function');
 
-              await signOutEverywhere();
+              await signOut();
 
-              console.log('⚙️ [SETTINGS] signOutEverywhere() completed successfully');
-              // AuthProvider will handle navigation via auth state change
-              setTimeout(() => router.replace('/(auth)/login'), 1500);
+              console.log('⚙️ [SETTINGS] signOut() completed successfully');
+              // AuthProvider will handle navigation via auth state change - no need for manual redirect
             } catch (error) {
               console.error('⚙️ [SETTINGS] Fallback sign out error:', error);
               Alert.alert('Error', 'Failed to sign out. Please try again.');

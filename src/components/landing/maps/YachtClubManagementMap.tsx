@@ -1,13 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-// SVG imports temporarily disabled to fix app loading
-// import Svg, {
-//   Rect,
-//   Circle,
-//   Path,
-//   G
-// } from 'react-native-svg';
+import Svg, {
+  Rect,
+  Circle,
+  Path,
+  G
+} from 'react-native-svg';
 
 export function YachtClubManagementMap() {
   return (

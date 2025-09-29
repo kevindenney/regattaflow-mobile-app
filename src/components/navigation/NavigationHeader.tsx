@@ -13,7 +13,6 @@ import {
 import { router, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { signOutEverywhere } from '@/src/lib/auth-actions';
 
 interface NavigationHeaderProps {
   showLogo?: boolean;
@@ -26,7 +25,8 @@ export function NavigationHeader({
   backgroundColor = '#FFFFFF',
   borderBottom = true
 }: NavigationHeaderProps) {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, signOut } = useAuth();
+  console.log('🛎️ [NAV] NavigationHeader signOut function:', typeof signOut)
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
   const pathname = usePathname();
@@ -226,9 +226,17 @@ export function NavigationHeader({
               <View style={styles.dropdownDivider} />
 
               <Pressable
-                onPress={() => {
-                  console.log('🛎️ [NAV] signOut pressed')
-                  void signOutEverywhere()
+                onPress={async () => {
+                  console.log('🛎️ [NAV] ===== SIGNOUT BUTTON PRESSED =====')
+                  console.log('🛎️ [NAV] Button click handler starting...')
+                  try {
+                    console.log('🛎️ [NAV] About to call signOut()...')
+                    await signOut()
+                    console.log('🛎️ [NAV] signOut() completed successfully')
+                  } catch (error) {
+                    console.error('🛎️ [NAV] signOut() failed:', error)
+                  }
+                  console.log('🛎️ [NAV] Button click handler complete')
                 }}
                 style={({ pressed }) => ({
                   paddingVertical: 10,
