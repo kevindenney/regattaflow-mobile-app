@@ -1,27 +1,61 @@
 import {Slot} from 'expo-router'
-import {AuthProvider, useAuth, TEST_EXPORT} from '@/src/providers/AuthProvider'
-
-console.log('🔥 [LAYOUT] Testing import:', TEST_EXPORT)
+import {AuthProvider, useAuth} from '@/src/providers/AuthProvider'
+import {View, Text, ActivityIndicator, StyleSheet} from 'react-native'
+import {useEffect} from 'react'
+import {Platform} from 'react-native'
 
 function Gate() {
   const {ready} = useAuth()
-  console.log('🚪 [GATE] regattaflow-app gate:', {ready})
-  console.log('🚪 [GATE] Gate component is rendering, ready state:', ready)
+
+  console.log('🚪 [GATE] Gate rendering, ready:', ready);
 
   if (!ready) {
-    console.log('🚪 [GATE] Returning null because ready is false')
-    return null
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0066CC" />
+        <Text style={styles.loadingText}>Loading RegattaFlow...</Text>
+      </View>
+    )
   }
 
-  console.log('🚪 [GATE] Rendering Slot because ready is true')
+  console.log('🚪 [GATE] About to render Slot...');
   return <Slot/>
 }
 
+function ErrorBoundary({children}:{children: React.ReactNode}) {
+  useEffect(()=>{
+    if (Platform.OS === 'web') {
+      window.addEventListener('error', (e)=>{
+        console.error('[UI] error', e.error || e)
+      })
+      return ()=>{}
+    }
+  }, [])
+
+  return <>{children}</>
+}
+
 export default function RootLayout() {
-  console.log('🔥 [LAYOUT] regattaflow-app root layout render')
   return (
-    <AuthProvider>
-      <Gate/>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Gate/>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 24
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#64748B'
+  }
+})

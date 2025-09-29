@@ -767,6 +767,148 @@ export function HeroTabs() {
           </View>
         </View>
 
+        {/* Final CTA Section */}
+        <View style={styles.finalCtaSection}>
+          <LinearGradient
+            colors={['#3B82F6', '#8B5CF6']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.finalCtaGradient}
+          >
+            <View style={styles.finalCtaContent}>
+              <Text style={styles.finalCtaTitle}>
+                Ready to transform your sailing?
+              </Text>
+              <Text style={styles.finalCtaSubtitle}>
+                Join thousands of sailors already using RegattaFlow to race smarter and faster.
+              </Text>
+              <View style={[styles.finalCtaButtons, isDesktop && styles.finalCtaButtonsDesktop]}>
+                <TouchableOpacity style={styles.finalCtaPrimary} onPress={handleGetStarted}>
+                  <Text style={styles.finalCtaPrimaryText}>Start Free Trial</Text>
+                  <Ionicons name="arrow-forward" size={20} color="#3B82F6" style={styles.buttonIcon} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.finalCtaSecondary} onPress={handleDemo}>
+                  <Ionicons name="play" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+                  <Text style={styles.finalCtaSecondaryText}>Watch Demo</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <View style={styles.footerContent}>
+            {/* Footer Grid */}
+            <View style={[styles.footerGrid, isDesktop && styles.footerGridDesktop]}>
+              {/* Brand Column */}
+              <View style={styles.footerBrand}>
+                <View style={styles.footerLogo}>
+                  <Ionicons name="anchor" size={32} color="#3B82F6" />
+                  <Text style={styles.footerLogoText}>RegattaFlow</Text>
+                </View>
+                <Text style={styles.footerDescription}>
+                  The complete sailing ecosystem for competitive sailors, yacht clubs, and coaches worldwide.
+                </Text>
+                <View style={styles.socialLinks}>
+                  <TouchableOpacity style={styles.socialLink}>
+                    <Ionicons name="logo-twitter" size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.socialLink}>
+                    <Ionicons name="logo-linkedin" size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.socialLink}>
+                    <Ionicons name="logo-instagram" size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.socialLink}>
+                    <Ionicons name="logo-youtube" size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Product Column */}
+              <View style={styles.footerColumn}>
+                <Text style={styles.footerColumnTitle}>Product</Text>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>For Sailors</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>For Yacht Clubs</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>For Coaches</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Pricing</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>API</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Resources Column */}
+              <View style={styles.footerColumn}>
+                <Text style={styles.footerColumnTitle}>Resources</Text>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Help Center</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Blog</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Guides</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Community</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Status</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Company Column */}
+              <View style={styles.footerColumn}>
+                <Text style={styles.footerColumnTitle}>Company</Text>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>About</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Careers</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Press</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Partners</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.footerLink}>
+                  <Text style={styles.footerLinkText}>Contact</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Footer Bottom */}
+            <View style={styles.footerBottom}>
+              <View style={[styles.footerBottomContent, isDesktop && styles.footerBottomContentDesktop]}>
+                <Text style={styles.copyright}>
+                  © 2024 RegattaFlow. All rights reserved.
+                </Text>
+                <View style={[styles.legalLinks, isDesktop && styles.legalLinksDesktop]}>
+                  <TouchableOpacity>
+                    <Text style={styles.legalLink}>Privacy Policy</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity>
+                    <Text style={styles.legalLink}>Terms of Service</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity>
+                    <Text style={styles.legalLink}>Cookie Policy</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
       </View>
     </View>
   );
@@ -1767,5 +1909,176 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     lineHeight: 24,
+  },
+  // Final CTA Section
+  finalCtaSection: {
+    marginTop: 80,
+  },
+  finalCtaGradient: {
+    paddingVertical: 80,
+    paddingHorizontal: 16,
+  },
+  finalCtaContent: {
+    maxWidth: 800,
+    alignSelf: 'center',
+    alignItems: 'center',
+  },
+  finalCtaTitle: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  finalCtaSubtitle: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    textAlign: 'center',
+    marginBottom: 48,
+    lineHeight: 28,
+  },
+  finalCtaButtons: {
+    gap: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  finalCtaButtonsDesktop: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  finalCtaPrimary: {
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 18,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  finalCtaPrimaryText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  finalCtaSecondary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 18,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  finalCtaSecondaryText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Footer
+  footer: {
+    backgroundColor: '#1F2937',
+    paddingVertical: 64,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  footerContent: {
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  footerGrid: {
+    gap: 48,
+    marginBottom: 48,
+  },
+  footerGridDesktop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  footerBrand: {
+    flex: 2,
+    marginRight: 48,
+  },
+  footerLogo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  footerLogoText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#F8FAFC',
+    marginLeft: 12,
+  },
+  footerDescription: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  socialLinks: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  socialLink: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerColumn: {
+    flex: 1,
+    minWidth: 150,
+  },
+  footerColumnTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginBottom: 20,
+  },
+  footerLink: {
+    marginBottom: 12,
+  },
+  footerLinkText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  footerBottom: {
+    paddingTop: 32,
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  footerBottomContent: {
+    gap: 24,
+    alignItems: 'center',
+  },
+  footerBottomContentDesktop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  copyright: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  legalLinks: {
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'center',
+  },
+  legalLinksDesktop: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+  legalLink: {
+    fontSize: 14,
+    color: '#9CA3AF',
   },
 });

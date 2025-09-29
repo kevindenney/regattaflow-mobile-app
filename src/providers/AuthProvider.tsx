@@ -18,7 +18,6 @@ type AuthCtx = {
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName?: string) => Promise<void>
-  signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
   userProfile?: any
@@ -34,7 +33,6 @@ const Ctx = createContext<AuthCtx>({
   loading: false,
   signIn: async () => {},
   signUp: async () => {},
-  signOut: async () => {},
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
   updateUserProfile: async () => {},
@@ -331,32 +329,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  // Legacy signOut method - kept for compatibility but deprecated
-  // Use signOutEverywhere from auth-actions.ts instead
-  const signOut = async () => {
-    console.log('🔥 [AUTH] ⚠️ DEPRECATED: Using legacy signOut method')
-    console.log('🔥 [AUTH] Use signOutEverywhere from auth-actions.ts instead')
-    console.log('🔥 [AUTH] Starting sign out process...')
-    console.log('🔥 [AUTH] Current state before signOut:', { signedIn, userType, hasUser: !!user })
-
-    setLoading(true)
-    try {
-      console.log('🔥 [AUTH] Calling supabase.auth.signOut...')
-      const { error } = await supabase.auth.signOut({ scope: 'global' })
-      if (error) {
-        console.error('🔥 [AUTH] Supabase signOut returned error:', error)
-        throw error
-      }
-      console.log('🔥 [AUTH] Supabase signOut completed successfully')
-      console.log('🔥 [AUTH] Legacy signOut completed')
-    } catch (error) {
-      console.error('🔥 [AUTH] Legacy signOut error:', error)
-      throw error
-    } finally {
-      console.log('🔥 [AUTH] Setting loading to false')
-      setLoading(false)
-    }
-  }
 
   const signInWithGoogle = async () => {
     setLoading(true)
@@ -416,7 +388,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     loading,
     signIn,
     signUp,
-    signOut,
     signInWithGoogle,
     signInWithApple,
     biometricAvailable: false,

@@ -47,9 +47,9 @@ export default function LoginScreen() {
     }
   }, [ready, signedIn, userProfile, userType]);
 
-  // Check for OAuth debug logs on component mount
+  // Check for OAuth debug logs on component mount (web only)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const logs = localStorage.getItem('oauth_debug_log');
       if (logs) {
         setDebugLogs(JSON.parse(logs));
@@ -278,7 +278,9 @@ export default function LoginScreen() {
               <TouchableOpacity
                 style={styles.clearDebugButton}
                 onPress={() => {
-                  localStorage.removeItem('oauth_debug_log');
+                  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    localStorage.removeItem('oauth_debug_log');
+                  }
                   setDebugLogs(null);
                 }}
               >

@@ -175,11 +175,11 @@ export const queryWithRetry = async <T>(
 export const testSupabaseConnectivity = async (): Promise<{ success: boolean; duration: number; error?: string }> => {
   const start = Date.now();
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+    const response = await fetch(`${url}/rest/v1/`, {
       method: 'GET',
       headers: {
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`
+        'apikey': anon,
+        'Authorization': `Bearer ${anon}`
       },
       signal: AbortSignal.timeout(5000)
     });

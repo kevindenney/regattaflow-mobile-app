@@ -18,6 +18,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { signOutEverywhere } from '@/src/lib/auth-actions';
+import { getDashboardRoute } from '@/src/lib/utils/userTypeRouting';
 
 interface AppHeaderProps {
   transparent?: boolean;
@@ -31,7 +33,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   title,
 }) => {
   const { width } = useWindowDimensions();
-  const { user, userProfile, userType, signOut, loading } = useAuth();
+  const { user, userProfile, userType, loading } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -57,20 +59,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       return;
     }
 
-    // Route to appropriate dashboard based on user type
-    switch (userType) {
-      case 'sailor':
-        router.push('/(tabs)/dashboard');
-        break;
-      case 'coach':
-        router.push('/(app)/coach/dashboard');
-        break;
-      case 'club':
-        router.push('/(app)/club/dashboard');
-        break;
-      default:
-        router.push('/(tabs)/dashboard');
-    }
+    // Use unified routing for all user types
+    const dashboardRoute = getDashboardRoute(userType);
+    console.log('🎯 [HEADER] Navigating to dashboard:', dashboardRoute);
+    router.push(dashboardRoute);
     setShowMobileMenu(false);
   };
 
@@ -96,7 +88,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           style: 'destructive',
           onPress: async () => {
             try {
-              await signOut();
+              await signOutEverywhere();
               setShowUserMenu(false);
               setShowMobileMenu(false);
               router.replace('/');

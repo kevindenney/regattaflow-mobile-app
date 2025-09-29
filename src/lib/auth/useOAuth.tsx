@@ -78,7 +78,9 @@ export const useGoogleAuth = () => {
       console.log('🔵 [OAUTH] ========================================');
       console.log('🔵 [OAUTH] Starting Google sign-in flow');
       console.log('🔍 [OAUTH] Platform:', Platform.OS);
-      console.log('🔍 [OAUTH] Current URL:', window.location.href);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        console.log('🔍 [OAUTH] Current URL:', window.location.href);
+      }
       console.log('🔍 [OAUTH] Environment variables check:', {
         GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
         GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
@@ -107,7 +109,7 @@ export const useGoogleAuth = () => {
         throw new Error('Supabase Anon Key not properly configured');
       }
 
-      if (Platform.OS === 'web') {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const redirectUrl = `${window.location.origin}/callback`;
         console.log('🔍 [OAUTH] Configured redirect URL:', redirectUrl);
         console.log('🔍 [OAUTH] Window origin:', window.location.origin);
@@ -248,7 +250,7 @@ export const useAppleAuth = () => {
 
   const signInWithApple = async (): Promise<void> => {
     try {
-      if (Platform.OS === 'web') {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
         // For web, use Supabase's direct OAuth flow
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'apple',

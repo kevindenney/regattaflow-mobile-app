@@ -42,26 +42,31 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
 
   const documentProcessor = new DocumentProcessingService();
 
-  // Load documents from localStorage on component mount
+  // Load documents from localStorage on component mount (web only)
   useEffect(() => {
-    console.log('📤 DocumentUploadCard: useEffect - Loading documents from localStorage');
-    const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
-    const userIdToUse = user?.id || debugUserId;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      console.log('📤 DocumentUploadCard: useEffect - Loading documents from localStorage');
+      const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
+      const userIdToUse = user?.id || debugUserId;
 
-    try {
-      const storedDocs = localStorage.getItem('regattaflow_documents');
-      if (storedDocs) {
-        const documents = JSON.parse(storedDocs);
-        // Filter by userId
-        const userDocs = documents.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
-        console.log('📤 DocumentUploadCard: Loaded', userDocs.length, 'documents from localStorage');
-        setUploadedDocuments(userDocs);
-      } else {
-        console.log('📤 DocumentUploadCard: No documents found in localStorage');
+      try {
+        const storedDocs = localStorage.getItem('regattaflow_documents');
+        if (storedDocs) {
+          const documents = JSON.parse(storedDocs);
+          // Filter by userId
+          const userDocs = documents.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
+          console.log('📤 DocumentUploadCard: Loaded', userDocs.length, 'documents from localStorage');
+          setUploadedDocuments(userDocs);
+        } else {
+          console.log('📤 DocumentUploadCard: No documents found in localStorage');
+          setUploadedDocuments([]);
+        }
+      } catch (error) {
+        console.error('📤 DocumentUploadCard: Error loading documents from localStorage:', error);
         setUploadedDocuments([]);
       }
-    } catch (error) {
-      console.error('📤 DocumentUploadCard: Error loading documents from localStorage:', error);
+    } else {
+      // For mobile, we would use a different storage mechanism
       setUploadedDocuments([]);
     }
   }, [user?.id]); // Only re-run when user ID changes, not when user object changes
@@ -186,13 +191,15 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
         console.log('📤 DocumentUploadCard: Upload successful, updating state');
         console.log('📤 DocumentUploadCard: Current uploadedDocuments length:', uploadedDocuments.length);
 
-        // Load fresh documents from localStorage to ensure consistency
-        const freshStoredDocs = localStorage.getItem('regattaflow_documents');
-        if (freshStoredDocs) {
-          const freshDocuments = JSON.parse(freshStoredDocs);
-          const userDocs = freshDocuments.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
-          console.log('📤 DocumentUploadCard: Refreshed uploadedDocuments length:', userDocs.length);
-          setUploadedDocuments(userDocs);
+        // Load fresh documents from localStorage to ensure consistency (web only)
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          const freshStoredDocs = localStorage.getItem('regattaflow_documents');
+          if (freshStoredDocs) {
+            const freshDocuments = JSON.parse(freshStoredDocs);
+            const userDocs = freshDocuments.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
+            console.log('📤 DocumentUploadCard: Refreshed uploadedDocuments length:', userDocs.length);
+            setUploadedDocuments(userDocs);
+          }
         }
 
         if (onDocumentUploaded) {

@@ -3,14 +3,18 @@ import { StyleSheet, View, Alert, KeyboardAvoidingView, Platform, TextInput, Tou
 import { router } from 'expo-router';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
-import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/src/lib/utils/userTypeRouting';
+import { useAuth } from '@/src/providers/AuthProvider';
+import { supabase } from '@/src/services/supabase';
+import { errToText } from '@/src/utils/errToText';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
 
 export default function SignupScreen() {
+  console.log('🧭 [SIGNUP] mounted');
+
+  const authProvider = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -18,7 +22,10 @@ export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
-  const { signUp, signInWithGoogle, signInWithApple, loading, userProfile, userType } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string|null>(null);
+
+  console.log('🔥 [SIGNUP] Component state:', { busy, hasMsg: !!msg, errorsCount: Object.keys(errors).length });
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
@@ -35,61 +42,128 @@ export default function SignupScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const withTimeout = async (promise: Promise<any>, ms: number) => {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms)
+    );
+    return Promise.race([promise, timeout]);
+  };
+
   const handleSignup = async () => {
-    if (!validateForm()) return;
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
 
     try {
-      await signUp(email, password, fullName);
-      Alert.alert(
-        'Success!',
-        'Account created successfully. Please check your email for verification.',
-        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
-      );
-    } catch (error: any) {
-      Alert.alert('Signup Failed', error.message);
+      console.log('🖱️ [SIGNUP] click', {
+        emailLen: email.length,
+        fullNameLen: fullName.length,
+        passwordLen: password.length,
+        confirmPasswordLen: confirmPassword.length,
+        email: email,
+        fullName: fullName
+      });
+
+      if (!email || !password || !fullName) {
+        console.log('❌ [SIGNUP] Missing required fields');
+        setMsg('Please fill all fields.');
+        return;
+      }
+
+      console.log('🔍 [SIGNUP] About to validate form...');
+      const isValid = validateForm();
+      console.log('🔍 [SIGNUP] Form validation result:', isValid);
+      console.log('🔍 [SIGNUP] Current errors:', errors);
+
+      if (!isValid) {
+        console.log('❌ [SIGNUP] Form validation failed');
+        return;
+      }
+
+      // Call the AuthProvider signup method
+      console.log('🔍 [SIGNUP] Calling AuthProvider.signUp...')
+      const signupResult = await withTimeout(
+        authProvider.signUp(email, password, fullName),
+        10000
+      )
+      console.log('✅ [SIGNUP] auth ok', {
+        userId: signupResult?.user?.id,
+        hasSession: !!signupResult?.session
+      })
+
+      // If user was created but not signed in (email confirmation required)
+      if (signupResult?.user && !signupResult?.session) {
+        console.log('📧 [SIGNUP] User created but needs email confirmation')
+        setMsg('Account created! Please check your email to confirm your account, then sign in.')
+        return
+      }
+
+      // If we have a session already, navigate manually
+      if (signupResult?.session) {
+        console.log('🎉 [SIGNUP] Signup successful with session! Proceeding to onboarding...')
+        router.replace('/(auth)/onboarding')
+      } else {
+        console.log('🎉 [SIGNUP] Signup successful! Please check your email to confirm your account.')
+        setMsg('Account created! Please check your email to confirm your account, then sign in.')
+      }
+    } catch (e: any) {
+      console.error('💥 [SIGNUP] exception', e);
+      setMsg(e?.message || 'Unexpected error. Check console.');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const routeAfterAuth = () => {
-    console.log('🔍 [SIGNUP] Determining post-auth route:', {
-      userProfile: !!userProfile,
-      userType,
-      needsOnboarding: shouldCompleteOnboarding(userProfile)
-    });
-
-    if (shouldCompleteOnboarding(userProfile)) {
-      console.log('🔍 [SIGNUP] Routing to onboarding');
-      router.replace(getOnboardingRoute());
-    } else {
-      const dashboardRoute = getDashboardRoute(userType);
-      console.log('🔍 [SIGNUP] Routing to dashboard:', dashboardRoute);
-      router.replace(dashboardRoute);
-    }
-  };
 
   const handleGoogleSignup = async () => {
-    console.log('🔍 [SIGNUP] Google signup button clicked');
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+
     try {
-      console.log('🔍 [SIGNUP] Calling signInWithGoogle()');
-      await signInWithGoogle();
-      console.log('🔍 [SIGNUP] Google sign-in succeeded, determining route');
-      routeAfterAuth();
+      if (Platform.OS === 'web') {
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081';
+        const redirectTo = `${currentOrigin}/callback`;
+
+        const {error} = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {redirectTo}
+        });
+
+        if (error) {
+          setMsg(errToText(error));
+        }
+      } else {
+        setMsg('Google sign-in not yet implemented for mobile');
+      }
     } catch (error: any) {
-      console.error('🔍 [SIGNUP] Google sign-up failed:', error);
-      Alert.alert('Google Sign Up Failed', error.message);
+      setMsg(errToText(error));
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleAppleSignup = async () => {
-    console.log('🔍 [SIGNUP] Apple signup button clicked');
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+
     try {
-      console.log('🔍 [SIGNUP] Calling signInWithApple()');
-      await signInWithApple();
-      console.log('🔍 [SIGNUP] Apple sign-in succeeded, determining route');
-      routeAfterAuth();
+      if (Platform.OS === 'web') {
+        const {error} = await supabase.auth.signInWithOAuth({
+          provider: 'apple'
+        });
+
+        if (error) {
+          setMsg(errToText(error));
+        }
+      } else if (Platform.OS === 'ios') {
+        setMsg('Apple sign-in not yet implemented for mobile');
+      }
     } catch (error: any) {
-      console.error('🔍 [SIGNUP] Apple sign-up failed:', error);
-      Alert.alert('Apple Sign Up Failed', error.message);
+      setMsg(errToText(error));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -256,16 +330,28 @@ export default function SignupScreen() {
 
             {/* Create Account Button */}
             <TouchableOpacity
-              style={[styles.primaryButton, loading && styles.buttonDisabled]}
-              onPress={handleSignup}
-              disabled={loading}
+              style={[styles.primaryButton, busy && styles.buttonDisabled]}
+              onPress={() => {
+                console.log('🔘 [SIGNUP] TouchableOpacity onPress fired!');
+                console.log('🔘 [SIGNUP] About to call handleSignup...');
+                handleSignup();
+              }}
+              disabled={busy}
+              activeOpacity={0.7}
             >
-              {loading ? (
+              {busy ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <ThemedText style={styles.primaryButtonText}>Create Account</ThemedText>
               )}
             </TouchableOpacity>
+
+            {/* Message Display */}
+            {msg && (
+              <View style={msg.includes('Account created') ? styles.successContainer : styles.errorContainer}>
+                <ThemedText style={msg.includes('Account created') ? styles.successMessage : styles.errorMessage}>{msg}</ThemedText>
+              </View>
+            )}
 
             {/* Sign In Link */}
             <TouchableOpacity
@@ -532,5 +618,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#374151',
     marginLeft: 12,
+  },
+  errorContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+  },
+  errorMessage: {
+    color: '#DC2626',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  successContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#D1FAE5',
+    borderRadius: 8,
+  },
+  successMessage: {
+    color: '#059669',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

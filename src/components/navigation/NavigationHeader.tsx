@@ -26,7 +26,7 @@ export function NavigationHeader({
   backgroundColor = '#FFFFFF',
   borderBottom = true
 }: NavigationHeaderProps) {
-  const { user, signOut, userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
   const pathname = usePathname();

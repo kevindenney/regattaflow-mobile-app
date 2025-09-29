@@ -30,7 +30,13 @@
       "mcp__supabase__apply_migration",
       "mcp__supabase__execute_sql",
       "Bash(curl:*)",
-      "Bash(npx expo start:*)"
+      "Bash(npx expo start:*)",
+      "Bash(lsof:*)",
+      "Bash(npx expo routes:*)",
+      "Bash(node:*)",
+      "Read(//dev/**)",
+      "Bash(npx playwright install:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": [],
     "ask": []

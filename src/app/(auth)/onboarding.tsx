@@ -5,6 +5,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
 import { supabase } from '@/src/services/supabase';
 import { errToText } from '@/src/utils/errToText';
+import { getDashboardRoute } from '@/src/lib/utils/userTypeRouting';
 
 const onboardingSteps = [
   {
@@ -134,10 +135,9 @@ export default function OnboardingScreen() {
         return;
       }
 
-      // Navigate to appropriate dashboard
-      const dashboardRoute = selectedUserType === 'sailor' ? '/(tabs)/dashboard' :
-                           selectedUserType === 'coach' ? '/(tabs)/coaching' :
-                           '/(tabs)/club';
+      // Navigate to appropriate dashboard using unified routing
+      const dashboardRoute = getDashboardRoute(selectedUserType);
+      console.log('[ONBOARD] Navigating to dashboard:', dashboardRoute);
       router.replace(dashboardRoute);
     } catch (e: any) {
       console.error('[ONBOARD] error:', e);
