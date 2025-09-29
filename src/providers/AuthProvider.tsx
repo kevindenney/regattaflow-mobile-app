@@ -25,7 +25,7 @@ type AuthCtx = {
   userProfile?: any
   userType?: UserType
   updateUserProfile: (updates: any) => Promise<void>
-  fetchUserProfile: () => Promise<void>
+  fetchUserProfile: () => Promise<any>
 }
 
 const Ctx = createContext<AuthCtx>({
@@ -39,7 +39,7 @@ const Ctx = createContext<AuthCtx>({
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
   updateUserProfile: async () => {},
-  fetchUserProfile: async () => {},
+  fetchUserProfile: async () => null,
   userType: null,
   userProfile: null,
 })
@@ -63,7 +63,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     const uid = userId || user?.id
     if (!uid) {
       console.log('🔍 [AUTH] fetchUserProfile: No user ID provided')
-      return
+      return null
     }
 
     try {
@@ -76,14 +76,16 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       if (error) {
         console.error('🔴 [AUTH] Failed to fetch user profile:', error)
-        return
+        return null
       }
 
       console.log('✅ [AUTH] User profile fetched:', data)
       setUserProfile(data)
       setUserType(data?.user_type as UserType)
+      return data
     } catch (error) {
       console.error('🔴 [AUTH] fetchUserProfile error:', error)
+      return null
     }
   }
 
@@ -300,11 +302,11 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       if (evt === 'SIGNED_IN' && session?.user?.id) {
         console.log('🔔 [AUTH] SIGNED_IN event - starting profile fetch and routing...')
-        await fetchUserProfile(session.user.id)
-        // Route after profile fetch
+
         try {
+          // Fetch profile and wait for it to be fully loaded
           console.log('🔔 [AUTH] Fetching profile data for routing decision...')
-          const profileData = await getProfileQuick(session.user.id)
+          const profileData = await fetchUserProfile(session.user.id)
           console.log('🔔 [AUTH] Profile data received:', profileData)
 
           const needsOnboarding = shouldCompleteOnboarding(profileData)
