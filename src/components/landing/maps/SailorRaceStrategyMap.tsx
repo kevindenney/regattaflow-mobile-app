@@ -2,15 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, {
-  Rect,
-  Circle,
-  Line,
-  Path,
-  Defs,
-  Pattern,
-  Marker
-} from 'react-native-svg';
+// SVG imports removed temporarily
 
 export function SailorRaceStrategyMap() {
   return (
@@ -21,10 +13,9 @@ export function SailorRaceStrategyMap() {
         end={{ x: 1, y: 1 }}
         style={styles.mapContainer}
       >
-        {/* SVG Race Course */}
-        <Svg width="100%" height="100%" viewBox="0 0 400 300" style={styles.svg}>
+        {/* SVG Race Course - Temporarily disabled */}
+        {/* <Svg width="100%" height="100%" viewBox="0 0 400 300" style={styles.svg}>
           <Defs>
-            {/* Water grid pattern */}
             <Pattern
               id="water-grid"
               x="0"
@@ -41,7 +32,6 @@ export function SailorRaceStrategyMap() {
               />
             </Pattern>
 
-            {/* Wind arrow marker */}
             <Marker
               id="wind-arrow"
               markerWidth="10"
@@ -55,15 +45,11 @@ export function SailorRaceStrategyMap() {
             </Marker>
           </Defs>
 
-          {/* Water surface grid */}
           <Rect width="100%" height="100%" fill="url(#water-grid)" opacity="0.2" />
-
-          {/* Course marks */}
           <Circle cx="200" cy="80" r="4" fill="#FFD700" />
           <Circle cx="150" cy="220" r="4" fill="#FF4444" />
           <Circle cx="250" cy="220" r="4" fill="#FF4444" />
 
-          {/* Wind direction arrow */}
           <Line
             x1="350"
             y1="50"
@@ -74,7 +60,6 @@ export function SailorRaceStrategyMap() {
             markerEnd="url(#wind-arrow)"
           />
 
-          {/* Boat tracks */}
           <Path
             d="M 200 250 Q 180 200 200 80 Q 220 200 200 250"
             fill="none"
@@ -82,7 +67,14 @@ export function SailorRaceStrategyMap() {
             strokeWidth="2"
             strokeDasharray="3,3"
           />
-        </Svg>
+        </Svg> */}
+
+        {/* Placeholder for SVG content */}
+        <View style={[styles.svg, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+          <Text style={{ color: 'white', textAlign: 'center', marginTop: 100 }}>
+            Race Course Visualization
+          </Text>
+        </View>
 
         {/* Strategy overlay cards */}
         <View style={styles.overlayContainer}>

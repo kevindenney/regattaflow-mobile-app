@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/src/lib/utils/userTypeRouting';
 
 const { width } = Dimensions.get('window');
@@ -27,7 +27,25 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [debugLogs, setDebugLogs] = useState<any>(null);
-  const { signIn, signInWithGoogle, signInWithApple, loading, userProfile, userType } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple, loading, userProfile, userType, signedIn, ready } = useAuth();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    console.log('🔍 [LOGIN] Auth state check:', { signedIn, ready, userProfile: !!userProfile, userType });
+
+    if (ready && signedIn && userProfile) {
+      console.log('🔍 [LOGIN] User is already authenticated, redirecting...');
+
+      if (shouldCompleteOnboarding(userProfile)) {
+        console.log('🔍 [LOGIN] User needs onboarding, redirecting to onboarding');
+        router.replace(getOnboardingRoute());
+      } else {
+        const dashboardRoute = getDashboardRoute(userType);
+        console.log('🔍 [LOGIN] Redirecting to dashboard:', dashboardRoute);
+        router.replace(dashboardRoute);
+      }
+    }
+  }, [ready, signedIn, userProfile, userType]);
 
   // Check for OAuth debug logs on component mount
   useEffect(() => {
@@ -69,12 +87,22 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    if (!validateForm()) return;
+    console.log('🔍 [LOGIN] ===== SIGN IN BUTTON PRESSED =====');
+    console.log('🔍 [LOGIN] Email:', email);
+    console.log('🔍 [LOGIN] Has password:', !!password);
+
+    if (!validateForm()) {
+      console.log('🔍 [LOGIN] Form validation failed');
+      return;
+    }
 
     try {
+      console.log('🔍 [LOGIN] About to call signIn()');
       await signIn(email, password);
+      console.log('🔍 [LOGIN] signIn() completed successfully');
       routeAfterAuth();
     } catch (error: any) {
+      console.error('🔍 [LOGIN] signIn() failed:', error);
       Alert.alert('Login Failed', error.message);
     }
   };

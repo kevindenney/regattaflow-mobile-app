@@ -2,10 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, {
-  Circle,
-  Path
-} from 'react-native-svg';
+// SVG imports temporarily disabled to fix app loading
+// import Svg, {
+//   Circle,
+//   Path
+// } from 'react-native-svg';
 
 export function CoachRaceReplay() {
   return (

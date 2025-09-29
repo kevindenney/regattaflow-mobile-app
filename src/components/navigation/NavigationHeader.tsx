@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   useWindowDimensions,
   Platform,
@@ -34,9 +35,9 @@ export function NavigationHeader({
   const buttonRef = useRef<TouchableOpacity>(null);
 
   // Determine which page we're on
-  const isLoginPage = pathname === '/login';
-  const isSignupPage = pathname === '/signup';
-  const isOnboardingPage = pathname === '/onboarding';
+  const isLoginPage = pathname === '/(auth)/login' || pathname === '/login';
+  const isSignupPage = pathname === '/(auth)/signup' || pathname === '/signup';
+  const isOnboardingPage = pathname === '/(auth)/onboarding' || pathname === '/onboarding';
 
   const handleDropdownToggle = () => {
     console.log('🔴 [NAV-HEADER] User clicked dropdown toggle, current state:', dropdownVisible);
@@ -62,33 +63,21 @@ export function NavigationHeader({
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    if (signingOut) {
-      console.log('🔴 [NAV-HEADER] Sign out already in progress, ignoring click');
-      return;
-    }
+    if (signingOut) return;
 
+    console.log('🛎️ [NAV] signOut pressed');
     setSigningOut(true);
-    setDropdownVisible(false);
 
     try {
-      console.log('🔴 [NAV-HEADER] ========== ROBUST SIGN OUT START ==========');
-      console.log('🔴 [NAV-HEADER] [AUTH] click sign out');
-
-      // Use the robust sign out utility
       await signOutEverywhere();
-
-      console.log('🔴 [NAV-HEADER] [AUTH] signOut call completed - navigation handled by AuthProvider events');
-
-    } catch (error) {
-      console.error('🔴 [NAV-HEADER] ========== SIGN OUT ERROR ==========');
-      console.error('🔴 [NAV-HEADER] Sign out failed:', error);
-
-      // Keep the user informed, don't silently fail
-      if (typeof window !== 'undefined') {
-        alert('Sign out failed. Check console for details.');
-      }
+      // AuthProvider will react to SIGNED_OUT; fallback safety:
+      setTimeout(() => router.replace('/(auth)/login'), 1500);
+    } catch (e) {
+      console.error('💥 [NAV] signOut error', e);
+      alert('Sign out failed. See console.');
     } finally {
       setSigningOut(false);
+      setDropdownVisible(false);
     }
   };
 
@@ -175,11 +164,14 @@ export function NavigationHeader({
           animationType="fade"
           onRequestClose={() => setDropdownVisible(false)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setDropdownVisible(false)}
-          >
+          <View style={styles.modalContainer}>
+            {/* Backdrop - handles outside clicks */}
+            <Pressable
+              style={styles.modalBackdrop}
+              onPress={() => setDropdownVisible(false)}
+            />
+
+            {/* Content - positioned dropdown menu */}
             <View
               style={[
                 styles.dropdown,
@@ -187,6 +179,7 @@ export function NavigationHeader({
                   position: 'absolute',
                   top: dropdownPosition.y,
                   left: dropdownPosition.x,
+                  zIndex: 1000,
                 } : {}
               ]}
             >
@@ -208,36 +201,50 @@ export function NavigationHeader({
               <View style={styles.dropdownDivider} />
 
               {/* Menu Items */}
-              <TouchableOpacity
-                style={styles.dropdownItem}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.dropdownItem,
+                  pressed && styles.dropdownItemPressed
+                ]}
                 onPress={() => handleNavigation('/(tabs)/dashboard')}
               >
                 <Ionicons name="apps" size={20} color="#374151" />
                 <Text style={styles.dropdownItemText}>Dashboard</Text>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                style={styles.dropdownItem}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.dropdownItem,
+                  pressed && styles.dropdownItemPressed
+                ]}
                 onPress={() => handleNavigation('/(tabs)/settings')}
               >
                 <Ionicons name="settings-outline" size={20} color="#374151" />
                 <Text style={styles.dropdownItemText}>Settings</Text>
-              </TouchableOpacity>
+              </Pressable>
 
               <View style={styles.dropdownDivider} />
 
-              <TouchableOpacity
-                style={[styles.dropdownItem, styles.signOutItem]}
-                onPress={handleSignOut}
+              <Pressable
+                onPress={() => {
+                  console.log('🛎️ [NAV] signOut pressed')
+                  void signOutEverywhere()
+                }}
+                style={({ pressed }) => ({
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  backgroundColor: pressed ? 'rgba(0,0,0,0.06)' : 'transparent'
+                })}
                 disabled={signingOut}
               >
                 <Ionicons name="log-out-outline" size={20} color="#EF4444" />
                 <Text style={[styles.dropdownItemText, styles.signOutText]}>
                   {signingOut ? 'Signing out...' : 'Sign Out'}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
-          </TouchableOpacity>
+          </View>
         </Modal>
       )}
     </>
@@ -343,13 +350,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#FFFFFF',
   },
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
+    position: 'relative',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 80,
-    paddingHorizontal: 16,
   },
   dropdown: {
     backgroundColor: '#FFFFFF',
@@ -402,6 +413,9 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  dropdownItemPressed: {
+    backgroundColor: '#F3F4F6',
+  },
   dropdownItemText: {
     fontSize: 14,
     fontWeight: '500',
@@ -409,6 +423,9 @@ const styles = StyleSheet.create({
   },
   signOutItem: {
     backgroundColor: '#FEF2F2',
+  },
+  signOutItemPressed: {
+    backgroundColor: '#FEE2E2',
   },
   signOutText: {
     color: '#EF4444',

@@ -12,10 +12,10 @@ export function getDashboardRoute(userType: UserType | null): string {
       return '/(tabs)/dashboard';
     case 'club':
       console.log('🔍 [ROUTING] Routing club to club dashboard');
-      return '/club/dashboard';
+      return '/(tabs)/club';
     case 'coach':
       console.log('🔍 [ROUTING] Routing coach to coach dashboard');
-      return '/coach/dashboard';
+      return '/(tabs)/dashboard';
     default:
       console.log('🔍 [ROUTING] Unknown user type, defaulting to sailor dashboard');
       return '/(tabs)/dashboard';
@@ -26,10 +26,18 @@ export function getDashboardRoute(userType: UserType | null): string {
  * Check if user has completed onboarding and has a valid user type
  */
 export function shouldCompleteOnboarding(userProfile: any): boolean {
-  const needsOnboarding = !userProfile?.onboarding_completed || !userProfile?.user_type;
+  // Legacy support: if user has user_type but no onboarding_completed flag, consider them completed
+  const hasUserType = !!userProfile?.user_type;
+  const onboardingCompleted = userProfile?.onboarding_completed || hasUserType; // Legacy fallback
+
+  const needsOnboarding = !onboardingCompleted || !hasUserType;
+
   console.log('🔍 [ROUTING] Checking onboarding status:', {
     onboardingCompleted: userProfile?.onboarding_completed,
     userType: userProfile?.user_type,
+    hasUserType,
+    legacyFallback: hasUserType && !userProfile?.onboarding_completed,
+    finalOnboardingCompleted: onboardingCompleted,
     needsOnboarding
   });
   return needsOnboarding;

@@ -1,9 +1,13 @@
 import {createContext, useContext, useEffect, useMemo, useState} from 'react'
 import {router} from 'expo-router'
 import {supabase} from '@/src/services/supabase'
-import {dumpSbStorage, logSession} from '@/src/utils/authDebug'
-import {getDashboardRoute, shouldCompleteOnboarding} from '@/src/lib/utils/userTypeRouting'
 import {Platform} from 'react-native'
+import {shouldCompleteOnboarding, getDashboardRoute} from '@/src/lib/utils/userTypeRouting'
+import {logAuthEvent, logAuthState} from '@/src/utils/errToText'
+import {bindAuthDiagnostics} from '@/src/utils/authDebug'
+
+// Bind diagnostics once at app boot
+bindAuthDiagnostics(supabase)
 
 export type UserType = 'sailor' | 'coach' | 'club' | null
 
@@ -13,7 +17,7 @@ type AuthCtx = {
   user: any | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, fullName?: string) => Promise<void>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
@@ -40,15 +44,25 @@ const Ctx = createContext<AuthCtx>({
 })
 
 export function AuthProvider({children}:{children: React.ReactNode}) {
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(true) // Temporary fix: start ready
   const [signedIn, setSignedIn] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [userType, setUserType] = useState<UserType>(null)
 
+  // Emergency fallback to force ready state - for debugging
+  useEffect(() => {
+    const emergencyTimeout = setTimeout(() => {
+      console.warn('🚨 [AUTH] Emergency: forcing ready=true after 3000ms')
+      setReady(true)
+    }, 3000)
+
+    return () => clearTimeout(emergencyTimeout)
+  }, [])
+
   // Debug environment variables
-  console.log('🔧 [AUTH] Environment check:', {
+  console.log('🔧 [AUTH] Environment check READY=TRUE:', {
     hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
     hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     platform: Platform.OS
@@ -136,48 +150,48 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  // Initial auth state setup - runs once
+  // Initial auth state setup with watchdog timer
   useEffect(()=>{
+    console.log('🔥 [AUTH] useEffect initialization starting...')
     let alive = true
+    let watchdog = setTimeout(()=>{
+      console.warn('[AUTH] watchdog: forcing ready=true after 2500ms')
+      if (alive) setReady(true)
+    }, 2500)
+
     ;(async ()=>{
       try {
-        console.log('🔧 [AUTH] Starting initialization...')
-
-        try {
-          dumpSbStorage()
-        } catch (e) {
-          console.warn('🔧 [AUTH] Storage dump failed:', e)
-        }
-
-        try {
-          await logSession(supabase, 'INITIAL_SESSION')
-        } catch (e) {
-          console.warn('🔧 [AUTH] Log session failed:', e)
-        }
-
-        const {data} = await supabase.auth.getSession()
+        console.log('[AUTH] Starting initialization...')
+        const {data, error} = await supabase.auth.getSession()
+        if (error) console.warn('[AUTH] getSession error:', error)
         if (!alive) return
-        console.log('🔧 [AUTH] Session retrieved:', !!data?.session)
+
         setSignedIn(!!data?.session)
         setUser(data?.session?.user || null)
+
         if (data?.session?.user?.id) {
-          console.log('🔧 [AUTH] Fetching user profile...')
+          console.log('[AUTH] Fetching user profile...')
           try {
             await fetchUserProfile(data.session.user.id)
           } catch (e) {
-            console.warn('🔧 [AUTH] User profile fetch failed:', e)
+            console.warn('[AUTH] User profile fetch failed:', e)
           }
         }
-        console.log('🔧 [AUTH] Initialization complete, setting ready=true')
+
+        console.log('[AUTH] Initialization complete')
         setReady(true)
-      } catch (error) {
-        console.error('🔴 [AUTH] Initialization failed, but setting ready=true anyway:', error)
-        // Set ready=true even on error so the app can show the landing page
-        setReady(true)
+      } catch (e) {
+        console.warn('[AUTH] init exception:', e)
+        if (alive) setReady(true)
+      } finally {
+        clearTimeout(watchdog)
       }
     })()
 
-    return ()=>{ alive=false }
+    return ()=>{
+      alive=false
+      clearTimeout(watchdog)
+    }
   }, []) // Run once on mount
 
   // Auth state change listener - depends on router for navigation
@@ -185,32 +199,70 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     let alive = true
 
     const {data:sub} = supabase.auth.onAuthStateChange(async (evt, session)=>{
-      console.log('🔔 auth evt:', evt, 'hasSession:', !!session)
-      if (!alive) return
+      console.log('🔔 [AUTH] ===== AUTH STATE CHANGE EVENT =====')
+      console.log('🔔 [AUTH] Event:', evt, 'hasSession:', !!session)
+      console.log('🔔 [AUTH] Component alive:', alive)
 
+      // Enhanced diagnostics
+      logAuthEvent('auth_state_change', {
+        event: evt,
+        hasSession: !!session,
+        sessionUser: session?.user?.email || 'N/A',
+        componentAlive: alive
+      })
+
+      if (!alive) {
+        console.log('🔔 [AUTH] Component not alive, returning early')
+        return
+      }
+
+      console.log('🔔 [AUTH] Updating auth state...')
       setSignedIn(!!session)
       setUser(session?.user || null)
+      console.log('🔔 [AUTH] Auth state updated:', { signedIn: !!session, hasUser: !!session?.user })
+
+      // Log updated state
+      logAuthState('after_state_update', {
+        ready: true, // We're in auth listener so ready should be true
+        signedIn: !!session,
+        user: session?.user,
+        userProfile: userProfile,
+        userType: userType,
+        loading: false
+      })
 
       if (evt === 'SIGNED_OUT') {
-        setUserProfile(null)
-        setUserType(null)
-        try { window.history.replaceState(null, '', '/') } catch {}
+        try {
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', '/')
+          }
+        } catch {}
         router.replace('/(auth)/login')
       }
 
       if (evt === 'SIGNED_IN' && session?.user?.id) {
+        console.log('🔔 [AUTH] SIGNED_IN event - starting profile fetch and routing...')
         await fetchUserProfile(session.user.id)
         // Route after profile fetch
         try {
+          console.log('🔔 [AUTH] Fetching profile data for routing decision...')
           const profileData = await getProfileQuick(session.user.id)
-          if (shouldCompleteOnboarding(profileData)) {
+          console.log('🔔 [AUTH] Profile data received:', profileData)
+
+          const needsOnboarding = shouldCompleteOnboarding(profileData)
+          console.log('🔔 [AUTH] shouldCompleteOnboarding result:', needsOnboarding)
+
+          if (needsOnboarding) {
+            console.log('🔔 [AUTH] Routing to onboarding...')
             router.replace('/(auth)/onboarding')
           } else {
             const dest = getDashboardRoute(profileData?.user_type)
+            console.log('🔔 [AUTH] Routing to dashboard:', dest)
             router.replace(dest)
           }
         } catch (e) {
           console.warn('[ROUTE] post-auth error:', e)
+          console.log('🔔 [AUTH] Error occurred, routing to onboarding as fallback...')
           router.replace('/(auth)/onboarding')
         }
       }
@@ -242,14 +294,38 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName?: string) => {
+    console.log('🚀 [AUTH] signUp called with:', { email, hasPassword: !!password, fullName })
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName || '',
+            name: fullName || ''
+          },
+          emailRedirectTo: Platform.OS === 'web'
+            ? `${window.location.origin}/callback`
+            : undefined
+        }
       })
-      if (error) throw error
+
+      if (error) {
+        console.error('❌ [AUTH] Supabase signUp error:', error)
+        throw error
+      }
+
+      console.log('✅ [AUTH] Supabase signUp successful:', data)
+
+      // Profile will be created automatically by database trigger
+      // or on first sign-in via onAuthStateChange listener
+
+      return data
+    } catch (error) {
+      console.error('❌ [AUTH] signUp failed:', error)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -260,14 +336,25 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const signOut = async () => {
     console.log('🔥 [AUTH] ⚠️ DEPRECATED: Using legacy signOut method')
     console.log('🔥 [AUTH] Use signOutEverywhere from auth-actions.ts instead')
+    console.log('🔥 [AUTH] Starting sign out process...')
+    console.log('🔥 [AUTH] Current state before signOut:', { signedIn, userType, hasUser: !!user })
 
+    setLoading(true)
     try {
+      console.log('🔥 [AUTH] Calling supabase.auth.signOut...')
       const { error } = await supabase.auth.signOut({ scope: 'global' })
-      if (error) throw error
+      if (error) {
+        console.error('🔥 [AUTH] Supabase signOut returned error:', error)
+        throw error
+      }
+      console.log('🔥 [AUTH] Supabase signOut completed successfully')
       console.log('🔥 [AUTH] Legacy signOut completed')
     } catch (error) {
       console.error('🔥 [AUTH] Legacy signOut error:', error)
       throw error
+    } finally {
+      console.log('🔥 [AUTH] Setting loading to false')
+      setLoading(false)
     }
   }
 
