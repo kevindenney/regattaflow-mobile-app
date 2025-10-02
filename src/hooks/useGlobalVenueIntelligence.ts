@@ -77,7 +77,6 @@ export function useGlobalVenueIntelligence() {
    * Initialize venue intelligence system
    */
   const initialize = useCallback(async () => {
-    console.log('🌍 Initializing Global Venue Intelligence...');
 
     try {
       setState(prev => ({ ...prev, isDetecting: true, error: null }));
@@ -98,14 +97,9 @@ export function useGlobalVenueIntelligence() {
       // Always set up callbacks, regardless of permission status
       // because we have timezone-based fallback detection
       setupVenueDetectionCallbacks();
-      console.log('🌍 Global Venue Intelligence initialized successfully');
-
-      if (!hasPermission) {
-        console.log('🌍 Using timezone-based venue detection');
-      }
 
     } catch (error: any) {
-      console.error('🌍 Failed to initialize venue intelligence:', error);
+      console.error('Failed to initialize venue intelligence:', error);
       setState(prev => ({
         ...prev,
         isDetecting: false,
@@ -129,7 +123,6 @@ export function useGlobalVenueIntelligence() {
   const setupVenueDetectionCallbacks = useCallback(() => {
     // Listen for venue detection
     venueDetector.onVenueDetected((venue: SailingVenue | null) => {
-      console.log('🌍 Venue detected:', venue?.name || 'Unknown location');
 
       setState(prev => {
         const isNewVenue = venue?.id !== prev.currentVenue?.id;
@@ -154,7 +147,6 @@ export function useGlobalVenueIntelligence() {
 
     // Listen for venue transitions
     venueDetector.onVenueTransition((transition: VenueTransition) => {
-      console.log('🌍 Venue transition:', transition.fromVenue?.name, '→', transition.toVenue.name);
 
       setState(prev => ({
         ...prev,
@@ -171,7 +163,6 @@ export function useGlobalVenueIntelligence() {
    * Load comprehensive intelligence for a venue
    */
   const loadVenueIntelligence = useCallback(async (venue: SailingVenue) => {
-    console.log('🌍 Loading intelligence for:', venue.name);
 
     try {
       // Get nearby venues for circuit planning
@@ -196,12 +187,6 @@ export function useGlobalVenueIntelligence() {
         isTransitioning: false
       }));
 
-      console.log('🌍 Venue intelligence loaded:', {
-        nearby: nearby.length,
-        hasBriefing: !!briefing,
-        recommendations: recommendations.length
-      });
-
     } catch (error: any) {
       console.error('🌍 Failed to load venue intelligence:', error);
       setState(prev => ({ ...prev, error: error.message }));
@@ -212,7 +197,6 @@ export function useGlobalVenueIntelligence() {
    * Handle venue transition with cultural adaptation
    */
   const handleVenueTransition = useCallback(async (transition: VenueTransition) => {
-    console.log('🌍 Processing venue transition...');
 
     // Mark venue as visited
     setState(prev => {
@@ -227,7 +211,6 @@ export function useGlobalVenueIntelligence() {
 
     // Generate adaptation requirements
     const adaptations = generateAdaptationRequirements(transition);
-    console.log('🌍 Adaptation requirements:', adaptations.length);
 
     // Complete transition
     setTimeout(() => {
@@ -243,7 +226,6 @@ export function useGlobalVenueIntelligence() {
    * Manually select a venue (when GPS detection is not available)
    */
   const selectVenue = useCallback(async (venueId: string) => {
-    console.log('🌍 Manually selecting venue:', venueId);
 
     const venue = globalVenueDatabase.getVenueById(venueId);
     if (!venue) {
@@ -306,7 +288,6 @@ export function useGlobalVenueIntelligence() {
    * Set home venue
    */
   const setHomeVenue = useCallback((venue: SailingVenue) => {
-    console.log('🌍 Setting home venue:', venue.name);
     setState(prev => ({ ...prev, homeVenue: venue }));
   }, []);
 

@@ -57,7 +57,6 @@ export class SailingDocumentLibraryService {
 
   constructor() {
     this.documentProcessor = new DocumentProcessingService();
-    console.log('📚 SailingDocumentLibraryService initialized');
   }
 
   /**

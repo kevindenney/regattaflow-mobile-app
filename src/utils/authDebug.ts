@@ -3,12 +3,11 @@ export const bindAuthDiagnostics = (supabase: any) => {
     const g = globalThis as any
     if (g.__authDebugBound) return
     g.__authDebugBound = true
-    console.log('🧪 [AUTHDBG] binding onAuthStateChange')
     supabase.auth.onAuthStateChange((evt: any, s: any) => {
-      console.log('🔔 auth evt', { evt, hasSession: !!s, uid: s?.user?.id })
+      // Auth state change listener registered
     })
   } catch (e) {
-    console.warn('auth debug bind error', e)
+    // Silent fail
   }
 }
 

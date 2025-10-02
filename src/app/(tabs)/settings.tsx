@@ -244,10 +244,7 @@ const styles = StyleSheet.create({
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    boxShadow: '0px 1px',
     elevation: 1,
     gap: 16,
   },
@@ -281,10 +278,7 @@ const styles = StyleSheet.create({
   settingsGroup: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    boxShadow: '0px 1px',
     elevation: 1,
   },
   settingItem: {

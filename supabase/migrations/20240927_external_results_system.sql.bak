@@ -2,7 +2,7 @@
 -- Supports integration with major sailing organizations and results platforms
 
 -- External result sources configuration
-CREATE TABLE external_result_sources (
+CREATE TABLE IF NOT EXISTS external_result_sources (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   base_url VARCHAR(500) NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE external_result_sources (
 );
 
 -- Polling status tracking
-CREATE TABLE polling_status (
+CREATE TABLE IF NOT EXISTS polling_status (
   source_id VARCHAR(50) PRIMARY KEY REFERENCES external_result_sources(id),
   last_poll_time TIMESTAMP WITH TIME ZONE,
   last_success_time TIMESTAMP WITH TIME ZONE,
@@ -29,11 +29,11 @@ CREATE TABLE polling_status (
 );
 
 -- External regattas discovered from polling
-CREATE TABLE external_regattas (
+CREATE TABLE IF NOT EXISTS external_regattas (
   id VARCHAR(100) PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
   venue VARCHAR(200),
-  venue_id UUID REFERENCES sailing_venues(id),
+  venue_id TEXT REFERENCES sailing_venues(id),
   start_date DATE,
   end_date DATE,
   boat_classes TEXT[] DEFAULT '{}',
@@ -49,7 +49,7 @@ CREATE TABLE external_regattas (
 );
 
 -- External race results
-CREATE TABLE external_race_results (
+CREATE TABLE IF NOT EXISTS external_race_results (
   id VARCHAR(200) PRIMARY KEY,
   regatta_id VARCHAR(100) REFERENCES external_regattas(id),
   regatta_name VARCHAR(200),
@@ -74,7 +74,7 @@ CREATE TABLE external_race_results (
 );
 
 -- Sailor performance tracking (enhanced with external results)
-CREATE TABLE sailor_performance (
+CREATE TABLE IF NOT EXISTS sailor_performance (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sailor_id UUID REFERENCES sailor_profiles(id),
   regatta_id VARCHAR(100),
@@ -84,7 +84,7 @@ CREATE TABLE sailor_performance (
   boat_class VARCHAR(50),
   race_date DATE,
   venue VARCHAR(200),
-  venue_id UUID REFERENCES sailing_venues(id),
+  venue_id TEXT REFERENCES sailing_venues(id),
   source VARCHAR(20) DEFAULT 'manual', -- manual, external
   source_id VARCHAR(50),
   external_result_id VARCHAR(200) REFERENCES external_race_results(id),
@@ -93,7 +93,7 @@ CREATE TABLE sailor_performance (
 );
 
 -- Results matching log (tracks how external results are matched to sailors)
-CREATE TABLE results_matching_log (
+CREATE TABLE IF NOT EXISTS results_matching_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   external_result_id VARCHAR(200) REFERENCES external_race_results(id),
   sailor_id UUID REFERENCES sailor_profiles(id),
@@ -105,7 +105,7 @@ CREATE TABLE results_matching_log (
 );
 
 -- Data quality metrics
-CREATE TABLE data_quality_metrics (
+CREATE TABLE IF NOT EXISTS data_quality_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id VARCHAR(50) REFERENCES external_result_sources(id),
   regatta_id VARCHAR(100) REFERENCES external_regattas(id),

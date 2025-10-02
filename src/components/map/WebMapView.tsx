@@ -13,8 +13,17 @@ interface WebMapViewProps {
 export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, onMapPress, style }: WebMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  console.log('🗺️ WebMapView rendering with:', { venue, style });
-  console.log('🗺️ WebMapView DEBUG: received', marks.length, 'race marks and', clubMarkers.length, 'club markers');
+  console.log('🗺️🔥🔥🔥🔥🔥🔥 WebMapView RENDER START =====');
+  console.log('🗺️🔥   venue:', venue, '(type:', typeof venue, ')');
+  console.log('🗺️🔥   marks:', marks?.length || 0, 'items');
+  console.log('🗺️🔥   clubMarkers:', clubMarkers?.length || 0, 'items');
+  console.log('🗺️🔥   style:', style);
+  console.log('🗺️🔥   style.width:', style?.width);
+  console.log('🗺️🔥   style.height:', style?.height);
+  console.log('🗺️🔥   style.position:', style?.position);
+  console.log('🗺️🔥   Platform.OS:', Platform.OS);
+  console.log('🗺️🔥   CRITICAL: This is the ACTUAL MAP COMPONENT!');
+  console.log('🗺️🔥   Stack trace:', new Error().stack?.split('\n').slice(0, 5));
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !mapContainerRef.current) return;
@@ -342,19 +351,35 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
   };
 
   if (Platform.OS !== 'web') {
+    console.log('🗺️🔥🔥🔥 WebMapView: Platform.OS is NOT web, returning null');
+    console.log('  Platform.OS value:', Platform.OS);
     return null;
   }
+
+  console.log('🗺️🔥🔥🔥 WebMapView ABOUT TO RETURN DIV:');
+  console.log('  ref:', mapContainerRef);
+
+  const mergedStyle = {
+    width: '100%',
+    height: '400px',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    ...style
+  };
+
+  console.log('🗺️🔥🔥🔥 WebMapView ABOUT TO RETURN <div>:');
+  console.log('🗺️🔥   mergedStyle:', mergedStyle);
+  console.log('🗺️🔥   mergedStyle.width:', mergedStyle.width);
+  console.log('🗺️🔥   mergedStyle.height:', mergedStyle.height);
+  console.log('🗺️🔥   mergedStyle.position:', mergedStyle.position);
+  console.log('🗺️🔥   mergedStyle.zIndex:', (mergedStyle as any).zIndex);
+  console.log('🗺️🔥   CRITICAL: This div should be visible with these styles!');
+  console.log('🗺️🔥   CRITICAL: If you see this log but no map, the div is rendering but invisible!');
 
   return (
     <div
       ref={mapContainerRef}
-      style={{
-        width: '100%',
-        height: '400px',
-        borderRadius: '8px',
-        overflow: 'hidden',
-        ...style
-      }}
+      style={mergedStyle}
     />
   );
 }

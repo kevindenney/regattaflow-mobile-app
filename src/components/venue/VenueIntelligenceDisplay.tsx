@@ -28,7 +28,7 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
   } = useVenueIntelligence();
 
 
-  const [selectedTab, setSelectedTab] = useState<'weather' | 'tactical' | 'cultural' | 'logistics'>('weather');
+  const [selectedTab, setSelectedTab] = useState<'weather' | 'tactical' | 'cultural' | 'logistics' | 'clubs' | 'racing' | 'services'>('weather');
 
   useEffect(() => {
     // Initialize venue detection when component mounts
@@ -89,7 +89,7 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
         <View style={styles.venueSelectorContainer}>
           <ThemedText style={styles.venueSelectorTitle}>🌍 Test Venue Switch:</ThemedText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.venueSelectorScroll}>
-            {['hong-kong', 'san-francisco-bay', 'newport-rhode-island'].map((venueId) => (
+            {['hong-kong-victoria-harbor', 'san-francisco-bay', 'newport-rhode-island'].map((venueId) => (
               <TouchableOpacity
                 key={venueId}
                 style={[
@@ -102,7 +102,7 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
                   styles.venueButtonText,
                   currentVenue?.id === venueId && styles.activeVenueButtonText
                 ]}>
-                  {venueId === 'hong-kong' && '🇭🇰 Hong Kong'}
+                  {venueId === 'hong-kong-victoria-harbor' && '🇭🇰 Hong Kong'}
                   {venueId === 'san-francisco-bay' && '🇺🇸 SF Bay'}
                   {venueId === 'newport-rhode-island' && '🇺🇸 Newport'}
                 </ThemedText>
@@ -125,8 +125,13 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
       </View>
 
       {/* Intelligence Tabs */}
-      <View style={styles.tabContainer}>
-        {(['weather', 'tactical', 'cultural', 'logistics'] as const).map((tab) => (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabContainer}
+        contentContainerStyle={styles.tabContentContainer}
+      >
+        {(['weather', 'clubs', 'racing', 'services', 'tactical', 'cultural', 'logistics'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, selectedTab === tab && styles.activeTab]}
@@ -134,13 +139,16 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
           >
             <ThemedText style={[styles.tabText, selectedTab === tab && styles.activeTabText]}>
               {tab === 'weather' && '🌤️ Weather'}
+              {tab === 'clubs' && '⚓️ Clubs'}
+              {tab === 'racing' && '🏁 Racing'}
+              {tab === 'services' && '🔧 Services'}
               {tab === 'tactical' && '🎯 Tactics'}
               {tab === 'cultural' && '🌍 Culture'}
               {tab === 'logistics' && '📋 Logistics'}
             </ThemedText>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Content */}
       <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
@@ -165,13 +173,19 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
 
 interface IntelligenceContentProps {
   intelligence: RegionalIntelligenceData;
-  selectedTab: 'weather' | 'tactical' | 'cultural' | 'logistics';
+  selectedTab: 'weather' | 'tactical' | 'cultural' | 'logistics' | 'clubs' | 'racing' | 'services';
 }
 
 function IntelligenceContent({ intelligence, selectedTab }: IntelligenceContentProps) {
   switch (selectedTab) {
     case 'weather':
       return <WeatherIntelligence weather={intelligence.weatherIntelligence} />;
+    case 'clubs':
+      return <ClubsIntelligence />;
+    case 'racing':
+      return <RacingIntelligence />;
+    case 'services':
+      return <ServicesIntelligence />;
     case 'tactical':
       return <TacticalIntelligence tactical={intelligence.tacticalIntelligence} />;
     case 'cultural':
@@ -357,11 +371,6 @@ function CulturalIntelligence({ cultural }: { cultural: any }) {
 }
 
 function LogisticsIntelligence({ logistics }: { logistics: any }) {
-  // 🐛 DEBUG: Log logistics data structure
-  console.log('🐛 LogisticsIntelligence received data:', logistics);
-  console.log('🐛 sailingServices data:', logistics?.sailingServices);
-  console.log('🐛 sailingServices keys:', logistics?.sailingServices ? Object.keys(logistics.sailingServices) : 'undefined');
-
   return (
     <View style={styles.intelligenceSection}>
       {/* Transportation */}
@@ -521,6 +530,415 @@ function LogisticsIntelligence({ logistics }: { logistics: any }) {
   );
 }
 
+// ============================================================================
+// NEW CLUB INTELLIGENCE COMPONENTS
+// ============================================================================
+
+function ClubsIntelligence() {
+  const [clubs, setClubs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { currentVenue } = useVenueIntelligence();
+
+  useEffect(() => {
+    if (!currentVenue) return;
+
+    const fetchClubs = async () => {
+      try {
+        const { supabase } = await import('@/src/services/supabase');
+        const { data, error } = await supabase
+          .from('yacht_clubs')
+          .select(`
+            id,
+            name,
+            short_name,
+            founded,
+            website,
+            prestige_level,
+            membership_type,
+            club_classes(class_name, fleet_size, racing_schedule),
+            club_facilities(type, name, available)
+          `)
+          .eq('venue_id', currentVenue.id);
+
+        if (error) throw error;
+        setClubs(data || []);
+      } catch (error) {
+        // Silent error - clubs will be empty
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClubs();
+  }, [currentVenue]);
+
+  if (loading) {
+    return (
+      <View style={styles.intelligenceSection}>
+        <ThemedText>Loading yacht clubs...</ThemedText>
+      </View>
+    );
+  }
+
+  if (!clubs.length) {
+    return (
+      <View style={styles.intelligenceSection}>
+        <ThemedText style={styles.sectionTitle}>⚓️ Yacht Clubs</ThemedText>
+        <ThemedText style={styles.noIntelligenceText}>
+          No club data available for this venue yet
+        </ThemedText>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.intelligenceSection}>
+      <ThemedText style={styles.sectionTitle}>⚓️ Yacht Clubs at {currentVenue?.name}</ThemedText>
+
+      {clubs.map((club) => (
+        <View key={club.id} style={styles.serviceItem}>
+          <ThemedText style={styles.serviceName}>
+            {club.name} {club.short_name && `(${club.short_name})`}
+          </ThemedText>
+          {club.founded && (
+            <ThemedText style={styles.serviceSpecialty}>
+              Founded {club.founded} • {club.prestige_level} • {club.membership_type}
+            </ThemedText>
+          )}
+          {club.website && (
+            <ThemedText style={styles.serviceContact}>🌐 {club.website}</ThemedText>
+          )}
+
+          {/* Club Classes */}
+          {club.club_classes && club.club_classes.length > 0 && (
+            <View style={{ marginTop: 8 }}>
+              <ThemedText style={{ fontSize: 14, fontWeight: '600', marginBottom: 4 }}>
+                Racing Classes ({club.club_classes.length}):
+              </ThemedText>
+              {club.club_classes.map((cls: any, idx: number) => (
+                <ThemedText key={idx} style={{ fontSize: 12, color: '#666', marginLeft: 8 }}>
+                  • {cls.class_name} {cls.fleet_size ? `(${cls.fleet_size} boats)` : ''}
+                </ThemedText>
+              ))}
+            </View>
+          )}
+
+          {/* Facilities */}
+          {club.club_facilities && club.club_facilities.length > 0 && (
+            <View style={{ marginTop: 8 }}>
+              <ThemedText style={{ fontSize: 14, fontWeight: '600', marginBottom: 4 }}>
+                Facilities:
+              </ThemedText>
+              {club.club_facilities.map((facility: any, idx: number) => (
+                <ThemedText key={idx} style={{ fontSize: 12, color: '#666', marginLeft: 8 }}>
+                  • {facility.name} ({facility.type}) {facility.available ? '✅' : '⏸️'}
+                </ThemedText>
+              ))}
+            </View>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function RacingIntelligence() {
+  const [races, setRaces] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { currentVenue } = useVenueIntelligence();
+
+  useEffect(() => {
+    if (!currentVenue) return;
+
+    const fetchRacing = async () => {
+      try {
+        const { supabase } = await import('@/src/services/supabase');
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Fetch upcoming races
+        const { data: raceData, error: raceError } = await supabase
+          .from('club_race_calendar')
+          .select(`
+            id,
+            event_name,
+            event_type,
+            start_date,
+            end_date,
+            entry_fee,
+            currency,
+            classes_included,
+            nor_url,
+            si_url,
+            results_url,
+            yacht_clubs(name)
+          `)
+          .eq('venue_id', currentVenue.id)
+          .gte('start_date', today)
+          .order('start_date', { ascending: true })
+          .limit(10);
+
+        if (raceError) throw raceError;
+        setRaces(raceData || []);
+
+        // Fetch documents
+        const { data: docData, error: docError } = await supabase
+          .from('club_documents')
+          .select(`
+            id,
+            title,
+            document_type,
+            url,
+            parsed,
+            publish_date,
+            yacht_clubs(name)
+          `)
+          .order('publish_date', { ascending: false })
+          .limit(10);
+
+        if (docError) throw docError;
+        setDocuments(docData || []);
+      } catch (error) {
+        // Silent error - data will be empty
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRacing();
+  }, [currentVenue]);
+
+  if (loading) {
+    return (
+      <View style={styles.intelligenceSection}>
+        <ThemedText>Loading race calendar...</ThemedText>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.intelligenceSection}>
+      <ThemedText style={styles.sectionTitle}>🏁 Race Calendar</ThemedText>
+
+      {races.length > 0 ? (
+        <View style={{ marginBottom: 24 }}>
+          <ThemedText style={styles.subSectionTitle}>Upcoming Events</ThemedText>
+          {races.map((race) => (
+            <View key={race.id} style={styles.serviceItem}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <ThemedText style={styles.serviceName}>{race.event_name}</ThemedText>
+                <ThemedText style={[styles.pricingBadge, styles.pricingmoderate]}>
+                  {race.event_type.replace('_', ' ')}
+                </ThemedText>
+              </View>
+              <ThemedText style={{ fontSize: 14, color: '#666', marginBottom: 4 }}>
+                📅 {new Date(race.start_date).toLocaleDateString()}
+                {race.end_date && ` - ${new Date(race.end_date).toLocaleDateString()}`}
+              </ThemedText>
+              {race.yacht_clubs && (
+                <ThemedText style={{ fontSize: 13, color: '#007AFF', marginBottom: 4 }}>
+                  🏛️ {race.yacht_clubs.name}
+                </ThemedText>
+              )}
+              {race.classes_included && race.classes_included.length > 0 && (
+                <ThemedText style={{ fontSize: 12, color: '#666' }}>
+                  Classes: {race.classes_included.join(', ')}
+                </ThemedText>
+              )}
+              {race.entry_fee && (
+                <ThemedText style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                  💰 Entry: {race.currency} {race.entry_fee}
+                </ThemedText>
+              )}
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                {race.nor_url && (
+                  <ThemedText style={{ fontSize: 11, color: '#007AFF' }}>📄 NOR</ThemedText>
+                )}
+                {race.si_url && (
+                  <ThemedText style={{ fontSize: 11, color: '#007AFF' }}>📋 SIs</ThemedText>
+                )}
+                {race.results_url && (
+                  <ThemedText style={{ fontSize: 11, color: '#007AFF' }}>🏆 Results</ThemedText>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <ThemedText style={styles.noIntelligenceText}>
+          No upcoming races scheduled at this venue
+        </ThemedText>
+      )}
+
+      {documents.length > 0 && (
+        <View>
+          <ThemedText style={styles.subSectionTitle}>Recent Documents</ThemedText>
+          {documents.map((doc) => (
+            <View key={doc.id} style={styles.serviceItem}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <ThemedText style={styles.serviceName}>{doc.title}</ThemedText>
+                {doc.parsed && (
+                  <ThemedText style={[styles.pricingBadge, styles.pricingcompetitive]}>
+                    ✅ Parsed
+                  </ThemedText>
+                )}
+              </View>
+              <ThemedText style={{ fontSize: 12, color: '#666' }}>
+                {doc.document_type} • {doc.publish_date ? new Date(doc.publish_date).toLocaleDateString() : 'N/A'}
+              </ThemedText>
+              {doc.yacht_clubs && (
+                <ThemedText style={{ fontSize: 12, color: '#007AFF', marginTop: 4 }}>
+                  {doc.yacht_clubs.name}
+                </ThemedText>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ServicesIntelligence() {
+  const [services, setServices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { currentVenue } = useVenueIntelligence();
+
+  useEffect(() => {
+    if (!currentVenue) return;
+
+    const fetchServices = async () => {
+      try {
+        const { supabase } = await import('@/src/services/supabase');
+        const { data, error } = await supabase
+          .from('club_services')
+          .select(`
+            id,
+            service_type,
+            business_name,
+            contact_name,
+            email,
+            phone,
+            website,
+            specialties,
+            classes_supported,
+            price_level,
+            preferred_by_club,
+            yacht_clubs(name)
+          `)
+          .eq('venue_id', currentVenue.id)
+          .order('preferred_by_club', { ascending: false });
+
+        if (error) throw error;
+        setServices(data || []);
+      } catch (error) {
+        // Silent error - services will be empty
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchServices();
+  }, [currentVenue]);
+
+  if (loading) {
+    return (
+      <View style={styles.intelligenceSection}>
+        <ThemedText>Loading local services...</ThemedText>
+      </View>
+    );
+  }
+
+  if (!services.length) {
+    return (
+      <View style={styles.intelligenceSection}>
+        <ThemedText style={styles.sectionTitle}>🔧 Local Services</ThemedText>
+        <ThemedText style={styles.noIntelligenceText}>
+          No service providers registered at this venue yet
+        </ThemedText>
+      </View>
+    );
+  }
+
+  // Group services by type
+  const servicesByType = services.reduce((acc: any, service) => {
+    if (!acc[service.service_type]) acc[service.service_type] = [];
+    acc[service.service_type].push(service);
+    return acc;
+  }, {});
+
+  const serviceIcons: Record<string, string> = {
+    sailmaker: '⛵',
+    rigger: '🔗',
+    coach: '👨‍🏫',
+    repair: '🔧',
+    storage: '📦',
+    transport: '🚐',
+    charter: '⚓'
+  };
+
+  return (
+    <View style={styles.intelligenceSection}>
+      <ThemedText style={styles.sectionTitle}>🔧 Local Services at {currentVenue?.name}</ThemedText>
+
+      {Object.entries(servicesByType).map(([type, typeServices]: [string, any]) => (
+        <View key={type} style={styles.serviceCategory}>
+          <ThemedText style={styles.serviceCategoryTitle}>
+            {serviceIcons[type] || '🔧'} {type.charAt(0).toUpperCase() + type.slice(1)}s ({typeServices.length})
+          </ThemedText>
+          {typeServices.map((service: any) => (
+            <View key={service.id} style={styles.serviceItem}>
+              <View style={styles.serviceHeader}>
+                <ThemedText style={styles.serviceName}>
+                  {service.business_name}
+                  {service.preferred_by_club && ' ⭐'}
+                </ThemedText>
+                {service.price_level && (
+                  <ThemedText style={[styles.pricingBadge, styles[`pricing${service.price_level}`]]}>
+                    {service.price_level}
+                  </ThemedText>
+                )}
+              </View>
+
+              {service.contact_name && (
+                <ThemedText style={{ fontSize: 13, color: '#666', marginBottom: 2 }}>
+                  👤 {service.contact_name}
+                </ThemedText>
+              )}
+              {service.email && (
+                <ThemedText style={styles.serviceContact}>📧 {service.email}</ThemedText>
+              )}
+              {service.phone && (
+                <ThemedText style={styles.serviceContact}>📞 {service.phone}</ThemedText>
+              )}
+              {service.website && (
+                <ThemedText style={styles.serviceContact}>🌐 {service.website}</ThemedText>
+              )}
+
+              {service.specialties && service.specialties.length > 0 && (
+                <ThemedText style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                  Specialties: {service.specialties.join(', ')}
+                </ThemedText>
+              )}
+              {service.classes_supported && service.classes_supported.length > 0 && (
+                <ThemedText style={{ fontSize: 12, color: '#666' }}>
+                  Classes: {service.classes_supported.join(', ')}
+                </ThemedText>
+              )}
+              {service.yacht_clubs && (
+                <ThemedText style={{ fontSize: 12, color: '#007AFF', marginTop: 4 }}>
+                  Affiliated with: {service.yacht_clubs.name}
+                </ThemedText>
+              )}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -617,15 +1035,19 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   tabContainer: {
-    flexDirection: 'row',
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e1e5e9',
   },
+  tabContentContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+  },
   tab: {
-    flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
+    minWidth: 100,
   },
   activeTab: {
     borderBottomWidth: 2,
@@ -687,10 +1109,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
     elevation: 3,
   },
   conditionsGrid: {
@@ -1087,10 +1506,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    boxShadow: '0px 1px',
     elevation: 2,
   },
   serviceHeader: {

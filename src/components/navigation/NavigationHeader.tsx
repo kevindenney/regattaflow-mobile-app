@@ -1,18 +1,17 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  Platform,
-  Modal,
-  Animated,
-} from 'react-native';
-import { router, usePathname } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/providers/AuthProvider';
+import { Ionicons } from '@expo/vector-icons';
+import { router, usePathname } from 'expo-router';
+import React, { useRef, useState } from 'react';
+import {
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
+} from 'react-native';
 
 interface NavigationHeaderProps {
   showLogo?: boolean;
@@ -25,14 +24,15 @@ export function NavigationHeader({
   backgroundColor = '#FFFFFF',
   borderBottom = true
 }: NavigationHeaderProps) {
-  const { user, userProfile, signOut } = useAuth();
-  console.log('🛎️ [NAV] NavigationHeader signOut function:', typeof signOut)
+  const { user, userProfile, signOut, userType } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
   const pathname = usePathname();
   const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [quickActionsVisible, setQuickActionsVisible] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0 });
   const buttonRef = useRef<TouchableOpacity>(null);
+  const quickActionsRef = useRef<TouchableOpacity>(null);
 
   // Determine which page we're on
   const isLoginPage = pathname === '/(auth)/login' || pathname === '/login';
@@ -40,21 +40,15 @@ export function NavigationHeader({
   const isOnboardingPage = pathname === '/(auth)/onboarding' || pathname === '/onboarding';
 
   const handleDropdownToggle = () => {
-    console.log('🔴 [NAV-HEADER] User clicked dropdown toggle, current state:', dropdownVisible);
-
     if (dropdownVisible) {
-      console.log('🔴 [NAV-HEADER] Closing dropdown');
       setDropdownVisible(false);
     } else {
-      console.log('🔴 [NAV-HEADER] Opening dropdown...');
       // Get button position for dropdown placement
       buttonRef.current?.measure((x, y, width, height, pageX, pageY) => {
-        console.log('🔴 [NAV-HEADER] Button position:', { x, y, width, height, pageX, pageY });
         setDropdownPosition({
           x: pageX - 200 + width, // Position dropdown to the right edge of button
           y: pageY + height + 5, // Position below button with small gap
         });
-        console.log('🔴 [NAV-HEADER] Setting dropdown visible to true');
         setDropdownVisible(true);
       });
     }
@@ -63,28 +57,69 @@ export function NavigationHeader({
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    if (signingOut) return;
+    if (signingOut) return
 
-    console.log('🛎️ [NAV] signOut pressed');
-    setSigningOut(true);
+    setSigningOut(true)
 
     try {
-      await signOutEverywhere();
-      // AuthProvider will react to SIGNED_OUT; fallback safety:
-      setTimeout(() => router.replace('/(auth)/login'), 1500);
+      await signOut()
+      // AuthProvider handles navigation; no extra fallback needed here
     } catch (e) {
-      console.error('💥 [NAV] signOut error', e);
-      alert('Sign out failed. See console.');
+      console.error('💥 [NAV] signOut error', e)
+      alert('Sign out failed. See console.')
     } finally {
-      setSigningOut(false);
-      setDropdownVisible(false);
+      setSigningOut(false)
+      setDropdownVisible(false)
     }
-  };
+  }
 
   const handleNavigation = (route: string) => {
     setDropdownVisible(false);
+    setQuickActionsVisible(false);
     router.push(route);
   };
+
+  const handleQuickActionsToggle = () => {
+    if (quickActionsVisible) {
+      setQuickActionsVisible(false);
+    } else {
+      // Get button position for dropdown placement
+      quickActionsRef.current?.measure((x, y, width, height, pageX, pageY) => {
+        setDropdownPosition({
+          x: pageX - 160, // Position dropdown to the left of button
+          y: pageY + height + 5, // Position below button with small gap
+        });
+        setQuickActionsVisible(true);
+      });
+    }
+  };
+
+  const getQuickActions = () => {
+    switch (userType) {
+      case 'sailor':
+        return [
+          { key: 'create-strategy', label: 'Create Strategy', icon: 'bulb-outline', route: '/(tabs)/dashboard' },
+          { key: 'upload-document', label: 'Upload Document', icon: 'document-outline', route: '/(tabs)/dashboard' },
+          { key: 'view-races', label: 'Upcoming Races', icon: 'trophy-outline', route: '/(tabs)/dashboard' },
+        ];
+      case 'coach':
+        return [
+          { key: 'schedule-session', label: 'Schedule Session', icon: 'calendar-outline', route: '/(tabs)/dashboard' },
+          { key: 'add-client', label: 'Add Client', icon: 'person-add-outline', route: '/(tabs)/dashboard' },
+          { key: 'view-earnings', label: 'View Earnings', icon: 'card-outline', route: '/(tabs)/dashboard' },
+        ];
+      case 'club':
+        return [
+          { key: 'create-event', label: 'Create Event', icon: 'add-circle-outline', route: '/(tabs)/dashboard' },
+          { key: 'manage-members', label: 'Manage Members', icon: 'people-outline', route: '/(tabs)/dashboard' },
+          { key: 'facility-status', label: 'Facilities', icon: 'business-outline', route: '/(tabs)/dashboard' },
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const quickActions = getQuickActions();
 
   return (
     <>
@@ -93,7 +128,12 @@ export function NavigationHeader({
         { backgroundColor },
         borderBottom && styles.withBorder
       ]}>
-        <View style={styles.navigationContent}>
+        <View
+          style={[
+            styles.navigationContent,
+            showLogo && styles.navigationContentCentered
+          ]}
+        >
           {/* Logo */}
           {showLogo && (
             <TouchableOpacity style={styles.logoContainer} onPress={() => router.push('/')}>
@@ -105,29 +145,32 @@ export function NavigationHeader({
           {/* Navigation Actions */}
           <View style={styles.navigationActions}>
             {user && !isOnboardingPage ? (
-              /* Authenticated User Dropdown - Hide during onboarding */
-              <TouchableOpacity
-                ref={buttonRef}
-                style={styles.userButton}
-                onPress={handleDropdownToggle}
-                activeOpacity={0.7}
-              >
-                <View style={styles.userInfo}>
-                  <View style={styles.avatar}>
-                    <Ionicons name="person" size={20} color="#FFFFFF" />
+              /* Authenticated User Actions */
+              <View style={styles.userActions}>
+                {/* User Dropdown */}
+                <TouchableOpacity
+                  ref={buttonRef}
+                  style={styles.userButton}
+                  onPress={handleDropdownToggle}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.userInfo}>
+                    <View style={styles.avatar}>
+                      <Ionicons name="person" size={20} color="#FFFFFF" />
+                    </View>
+                    {isDesktop && userProfile && (
+                      <Text style={styles.userName} numberOfLines={1}>
+                        {userProfile.full_name}
+                      </Text>
+                    )}
                   </View>
-                  {isDesktop && userProfile && (
-                    <Text style={styles.userName} numberOfLines={1}>
-                      {userProfile.full_name}
-                    </Text>
-                  )}
-                </View>
-                <Ionicons
-                  name={dropdownVisible ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color="#6B7280"
-                />
-              </TouchableOpacity>
+                  <Ionicons
+                    name={dropdownVisible ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              </View>
             ) : !user ? (
               /* Unauthenticated User Buttons - Context Aware */
               <View style={styles.authButtons}>
@@ -209,7 +252,12 @@ export function NavigationHeader({
                 onPress={() => handleNavigation('/(tabs)/dashboard')}
               >
                 <Ionicons name="apps" size={20} color="#374151" />
-                <Text style={styles.dropdownItemText}>Dashboard</Text>
+                <Text style={styles.dropdownItemText}>
+                  {userType === 'sailor' && 'Sailor Dashboard'}
+                  {userType === 'coach' && 'Coach Dashboard'}
+                  {userType === 'club' && 'Club Dashboard'}
+                  {!userType && 'Dashboard'}
+                </Text>
               </Pressable>
 
               <Pressable
@@ -227,16 +275,11 @@ export function NavigationHeader({
 
               <Pressable
                 onPress={async () => {
-                  console.log('🛎️ [NAV] ===== SIGNOUT BUTTON PRESSED =====')
-                  console.log('🛎️ [NAV] Button click handler starting...')
                   try {
-                    console.log('🛎️ [NAV] About to call signOut()...')
                     await signOut()
-                    console.log('🛎️ [NAV] signOut() completed successfully')
                   } catch (error) {
                     console.error('🛎️ [NAV] signOut() failed:', error)
                   }
-                  console.log('🛎️ [NAV] Button click handler complete')
                 }}
                 style={({ pressed }) => ({
                   paddingVertical: 10,
@@ -255,6 +298,66 @@ export function NavigationHeader({
           </View>
         </Modal>
       )}
+
+      {/* Quick Actions Modal */}
+      {user && (
+        <Modal
+          visible={quickActionsVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setQuickActionsVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            {/* Backdrop */}
+            <Pressable
+              style={styles.modalBackdrop}
+              onPress={() => setQuickActionsVisible(false)}
+            />
+
+            {/* Quick Actions Dropdown */}
+            <View
+              style={[
+                styles.quickActionsDropdown,
+                Platform.OS === 'web' ? {
+                  position: 'absolute',
+                  top: dropdownPosition.y,
+                  left: dropdownPosition.x,
+                  zIndex: 1000,
+                } : {}
+              ]}
+            >
+              <View style={styles.quickActionsHeader}>
+                <Ionicons name="flash" size={20} color="#3B82F6" />
+                <Text style={styles.quickActionsTitle}>
+                  {userType === 'sailor' && 'Sailor Actions'}
+                  {userType === 'coach' && 'Coach Actions'}
+                  {userType === 'club' && 'Club Actions'}
+                </Text>
+              </View>
+
+              <View style={styles.dropdownDivider} />
+
+              {quickActions.map((action) => (
+                <Pressable
+                  key={action.key}
+                  style={({ pressed }) => [
+                    styles.dropdownItem,
+                    pressed && styles.dropdownItemPressed
+                  ]}
+                  onPress={() => {
+                    handleNavigation(action.route);
+                  }}
+                >
+                  <Ionicons name={action.icon as any} size={18} color="#3B82F6" />
+                  <Text style={[styles.dropdownItemText, styles.quickActionItemText]}>
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </Modal>
+      )}
     </>
   );
 }
@@ -263,12 +366,14 @@ const styles = StyleSheet.create({
   navigationHeader: {
     paddingVertical: 16,
     paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
     zIndex: 1000,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)' }
+      : {
+          boxShadow: '0px 1px',
+          elevation: 1,
+        }
+    ),
   },
   withBorder: {
     borderBottomWidth: 1,
@@ -278,6 +383,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    width: '100%',
+  },
+  navigationContentCentered: {
     maxWidth: 1200,
     alignSelf: 'center',
     width: '100%',
@@ -293,7 +401,33 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   navigationActions: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginLeft: 'auto',
+    flexShrink: 0,
+    paddingRight: 12,
+  },
+  userActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  quickActionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    gap: 6,
+  },
+  quickActionsText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#3B82F6',
   },
   userButton: {
     flexDirection: 'row',
@@ -374,14 +508,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     minWidth: 240,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 8,
+        }
+    ),
   },
   dropdownHeader: {
     flexDirection: 'row',
@@ -437,5 +573,35 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     color: '#EF4444',
+  },
+  quickActionsDropdown: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 8,
+        }
+    ),
+  },
+  quickActionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    gap: 8,
+  },
+  quickActionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  quickActionItemText: {
+    color: '#3B82F6',
   },
 });

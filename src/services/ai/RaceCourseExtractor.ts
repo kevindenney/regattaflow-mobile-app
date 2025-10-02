@@ -23,7 +23,6 @@ export class RaceCourseExtractor {
     } else {
       this.gemini = new GoogleGenerativeAI(apiKey);
     }
-    console.log('🏁 RaceCourseExtractor initialized with Google AI Gemini');
   }
 
   /**

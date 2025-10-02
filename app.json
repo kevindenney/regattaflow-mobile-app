@@ -10,10 +10,16 @@
     "newArchEnabled": true,
     "deep": {
       "scheme": "regattaflow",
-      "hosts": ["auth", "regattaflow.app"]
+      "hosts": [
+        "auth",
+        "regattaflow.app"
+      ]
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_IOS_API_KEY"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +29,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_ANDROID_API_KEY"
+        }
+      }
     },
     "web": {
       "output": "static",
@@ -53,7 +64,8 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -7,6 +7,7 @@ import { CourseDesigner } from './CourseDesigner';
 import { CourseTemplateLibrary } from './CourseTemplateLibrary';
 import { WeatherIntegration } from './WeatherIntegration';
 import { CourseValidation } from './CourseValidation';
+import { CourseMap } from './shared/CourseMap';
 
 export interface RaceCourse {
   id: string;
@@ -41,7 +42,7 @@ const { width, height } = Dimensions.get('window');
 
 export function RaceBuilder() {
   const [currentCourse, setCurrentCourse] = useState<RaceCourse | null>(null);
-  const [activeTab, setActiveTab] = useState<'design' | 'templates' | 'weather' | 'validate'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'map' | 'templates' | 'weather' | 'validate'>('design');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const handleCourseSelect = (course: RaceCourse) => {
@@ -51,6 +52,16 @@ export function RaceBuilder() {
 
   const handleCourseUpdate = (updatedCourse: RaceCourse) => {
     setCurrentCourse(updatedCourse);
+  };
+
+  const handleMarkMove = (markId: string, coordinates: [number, number]) => {
+    if (!currentCourse) return;
+
+    const updatedMarks = currentCourse.marks.map(mark =>
+      mark.id === markId ? { ...mark, coordinates } : mark
+    );
+
+    handleCourseUpdate({ ...currentCourse, marks: updatedMarks });
   };
 
   const handlePublishCourse = async () => {
@@ -98,6 +109,7 @@ export function RaceBuilder() {
         contentContainerStyle={styles.tabContent}
       >
         <TabButton id="design" label="🎨 Course Design" active={activeTab === 'design'} />
+        <TabButton id="map" label="🗺️ Map" active={activeTab === 'map'} />
         <TabButton id="templates" label="📋 Templates" active={activeTab === 'templates'} />
         <TabButton id="weather" label="🌊 Weather" active={activeTab === 'weather'} />
         <TabButton id="validate" label="✅ Validate" active={activeTab === 'validate'} />
@@ -117,6 +129,24 @@ export function RaceBuilder() {
           <CourseTemplateLibrary
             onCourseSelect={handleCourseSelect}
           />
+        )}
+
+        {activeTab === 'map' && (
+          currentCourse ? (
+            <View style={styles.mapContainer}>
+              <CourseMap
+                course={currentCourse}
+                onMarkMove={handleMarkMove}
+                isEditable={!isPreviewMode}
+              />
+            </View>
+          ) : (
+            <View style={styles.mapEmptyState}>
+              <ThemedText type="subtitle" style={styles.mapEmptyText}>
+                Add a course from Design or Templates to unlock the interactive map.
+              </ThemedText>
+            </View>
+          )
         )}
 
         {activeTab === 'weather' && (
@@ -200,6 +230,20 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  mapContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  mapEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  mapEmptyText: {
+    color: '#6B7280',
+    textAlign: 'center',
   },
   actionBar: {
     flexDirection: 'row',

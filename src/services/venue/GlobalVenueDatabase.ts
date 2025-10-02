@@ -24,7 +24,6 @@ export class GlobalVenueDatabase {
   private useSupabase: boolean = true; // Try Supabase first, fallback to local
 
   constructor() {
-    console.log('🌍 GlobalVenueDatabase initializing with Supabase PostGIS integration...');
     this.supabaseService = new SupabaseVenueService();
   }
 

@@ -30,7 +30,6 @@ export class DocumentProcessingService {
     }
 
     this.courseExtractor = new RaceCourseExtractor();
-    console.log('📚 DocumentProcessingService initialized with Google AI Gemini');
   }
 
   /**

@@ -266,27 +266,21 @@ export class RegionalIntelligenceService {
   private intelligenceCallbacks: ((data: RegionalIntelligenceData) => void)[] = [];
 
   constructor() {
-    console.log('🧠 RegionalIntelligenceService initialized');
   }
 
   /**
    * Load complete regional intelligence for a venue
    */
   async loadVenueIntelligence(venue: SailingVenue): Promise<RegionalIntelligenceData> {
-    console.log(`🧠 Loading intelligence for ${venue.name}`);
-
     try {
       // Check cache first
       const cached = this.venueIntelligence.get(venue.id);
       if (cached && this.isIntelligenceFresh(cached)) {
-        console.log(`🧠 Using cached intelligence for ${venue.name}`);
         return cached;
       }
 
-      console.log(`🧠 Generating new intelligence for ${venue.name}...`);
       // Generate comprehensive intelligence
       const intelligence = await this.generateRegionalIntelligence(venue);
-      console.log(`🧠 Intelligence generation completed for ${venue.name}`);
 
       // Cache the intelligence
       this.venueIntelligence.set(venue.id, intelligence);
@@ -294,11 +288,8 @@ export class RegionalIntelligenceService {
       // Notify listeners
       this.notifyIntelligenceUpdate(intelligence);
 
-      console.log(`🧠 Intelligence loaded for ${venue.name}: ${Object.keys(intelligence).length} categories`);
-
       return intelligence;
     } catch (error) {
-      console.error(`🧠 Failed to load intelligence for ${venue.name}:`, error);
       throw error;
     }
   }
@@ -307,7 +298,6 @@ export class RegionalIntelligenceService {
    * Generate comprehensive regional intelligence
    */
   private async generateRegionalIntelligence(venue: SailingVenue): Promise<RegionalIntelligenceData> {
-    console.log(`🧠 Generating regional intelligence for ${venue.name} (${venue.id})`);
     // For now, return mock data for San Francisco Bay
     // TODO: Load from Supabase intelligence database
 
@@ -586,9 +576,6 @@ export class RegionalIntelligenceService {
         },
       ],
     };
-
-    // 🐛 DEBUG: Log venue ID for sailing services generation
-    console.log('🐛 DEBUG: Generating logistics for venue:', venue.id, venue.name);
 
     const logisticalIntelligence: LogisticalIntelligence = {
       transportation: {
@@ -1154,9 +1141,6 @@ export class RegionalIntelligenceService {
    * Generate cultural briefing for venue
    */
   private async generateCulturalBriefing(venue: SailingVenue): Promise<CulturalBriefing> {
-    console.log(`🧠 Generating cultural briefing for ${venue.name}`);
-    console.log(`🧠 Venue culturalContext:`, venue.culturalContext);
-
     // Mock cultural briefing for San Francisco Bay
     return {
       venueId: venue.id,
@@ -1223,7 +1207,6 @@ export class RegionalIntelligenceService {
   private isIntelligenceFresh(intelligence: RegionalIntelligenceData): boolean {
     const ageHours = (Date.now() - intelligence.lastUpdated.getTime()) / (1000 * 60 * 60);
     const isFresh = ageHours < 6; // Refresh every 6 hours
-    console.log(`🧠 Intelligence age: ${ageHours.toFixed(2)} hours, fresh: ${isFresh}`);
     return isFresh;
   }
 
@@ -1275,7 +1258,6 @@ export class RegionalIntelligenceService {
    * Clear cached intelligence
    */
   clearCache(): void {
-    console.log('🧠 Clearing intelligence cache');
     this.venueIntelligence.clear();
   }
 }

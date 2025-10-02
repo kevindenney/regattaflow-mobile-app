@@ -9,6 +9,7 @@ import { View, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'reac
 import { ThemedText } from '@/src/components/themed-text';
 import { ProfessionalMap3DView } from '@/src/components/map/ProfessionalMap3DView';
 import { useVenueIntelligence } from '@/src/hooks/useVenueIntelligence';
+import { GlobalVenuesMapLayer, useVenueMarkers } from '@/src/components/venue/GlobalVenuesMapLayer';
 import { YachtClubService } from '@/src/services/venues/YachtClubService';
 import { RaceCourseService } from '@/src/services/venues/RaceCourseService';
 import yachtClubsData from '@/src/data/yacht-clubs.json';
@@ -40,25 +41,35 @@ interface RaceCourseOverlay {
 }
 
 export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProps) {
-  console.log('🗺️ [DEBUG] VenueIntelligenceMapView component rendered!');
+  console.log('🗺️🔥 VenueIntelligenceMapView: ===== COMPONENT RENDERING =====');
 
   // Venue intelligence hook
+  const hookResult = useVenueIntelligence();
   const {
     currentVenue,
     isDetecting,
     intelligence,
     isLoadingIntelligence,
-    setVenueManually,
-    initializeDetection,
-  } = useVenueIntelligence();
+  } = hookResult;
+
+  console.log('🗺️🔥 VenueIntelligenceMapView: Hook returned:', {
+    hasCurrentVenue: !!currentVenue,
+    currentVenueName: currentVenue?.name || 'null',
+    currentVenueId: currentVenue?.id || 'null',
+    isDetecting,
+    hasIntelligence: !!intelligence,
+    isLoadingIntelligence,
+    allHookKeys: Object.keys(hookResult),
+  });
 
   // Debug logging for hook state
   useEffect(() => {
-    console.log('🌍 HOOK STATE DEBUG:');
-    console.log('  currentVenue:', currentVenue);
+    console.log('🗺️🔥 VenueIntelligenceMapView: HOOK STATE CHANGED:');
+    console.log('  currentVenue:', currentVenue?.name || 'null');
     console.log('  isDetecting:', isDetecting);
-    console.log('  intelligence:', intelligence);
+    console.log('  intelligence:', intelligence ? 'loaded' : 'null');
     console.log('  isLoadingIntelligence:', isLoadingIntelligence);
+    console.log('  Timestamp:', new Date().toISOString());
   }, [currentVenue, isDetecting, intelligence, isLoadingIntelligence]);
 
   // Map and venue state
@@ -68,41 +79,17 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
   const [mapMarks, setMapMarks] = useState<RaceMark[]>([]);
   const [clubMarkers, setClubMarkers] = useState<YachtClubMarker[]>([]);
   const [layerPanelVisible, setLayerPanelVisible] = useState(true);
+  const [showGlobalVenues, setShowGlobalVenues] = useState(true);
+
+  // Get global venue markers
+  const { markers: globalVenueMarkers, isLoading: loadingVenues } = useVenueMarkers();
 
   // Services
   const [yachtClubService] = useState(() => new YachtClubService());
   const [raceCourseService] = useState(() => new RaceCourseService());
 
-  // Initialize detection system and auto-select Hong Kong as default venue
-  useEffect(() => {
-    console.log('🌍 DEBUG: Auto-selection effect triggered');
-    console.log('🌍 DEBUG: currentVenue:', currentVenue);
-    console.log('🌍 DEBUG: isDetecting:', isDetecting);
-
-    const initializeAndSelectVenue = async () => {
-      if (!currentVenue && !isDetecting) {
-        console.log('🌍 DEBUG: Initializing detection system first...');
-
-        try {
-          // Initialize detection system (registers callbacks)
-          const initialized = await initializeDetection();
-          console.log('🌍 DEBUG: Detection system initialized:', initialized);
-
-          if (initialized) {
-            console.log('🌍 Auto-selecting Hong Kong as default venue');
-            await setVenueManually('hong-kong');
-            console.log('🌍 DEBUG: setVenueManually completed for hong-kong');
-          }
-        } catch (error) {
-          console.error('🌍 DEBUG: Initialization/selection failed:', error);
-        }
-      } else {
-        console.log('🌍 DEBUG: Auto-selection skipped - currentVenue exists or still detecting');
-      }
-    };
-
-    initializeAndSelectVenue();
-  }, []); // Empty dependency array - only run once on mount
+  // Note: Venue initialization is now handled by the parent venue screen
+  // This component just receives currentVenue as a prop via the hook
 
   // Screen dimensions for responsive layout
   const { width, height } = Dimensions.get('window');
@@ -262,7 +249,7 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
     <View style={[styles.venueSelector, isTablet && styles.venueSelectorTablet]}>
       <ThemedText style={styles.venueSelectorTitle}>🌍 Venue</ThemedText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {['hong-kong', 'san-francisco-bay', 'newport-rhode-island'].map((venueId) => (
+        {['hong-kong-victoria-harbor', 'san-francisco-bay', 'newport-rhode-island'].map((venueId) => (
           <TouchableOpacity
             key={venueId}
             style={[
@@ -275,7 +262,7 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
               styles.venueButtonText,
               currentVenue?.id === venueId && styles.activeVenueButtonText
             ]}>
-              {venueId === 'hong-kong' && '🇭🇰 Hong Kong'}
+              {venueId === 'hong-kong-victoria-harbor' && '🇭🇰 Hong Kong'}
               {venueId === 'san-francisco-bay' && '🇺🇸 SF Bay'}
               {venueId === 'newport-rhode-island' && '🇺🇸 Newport'}
             </ThemedText>
@@ -353,6 +340,22 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
               <ThemedText style={styles.layerItemText}>📋 Logistics & Services</ThemedText>
             </TouchableOpacity>
           </View>
+
+          {/* Global Venues Toggle */}
+          <View style={styles.layerSection}>
+            <TouchableOpacity
+              style={styles.layerItem}
+              onPress={() => setShowGlobalVenues(!showGlobalVenues)}
+            >
+              <View style={[
+                styles.courseToggle,
+                { backgroundColor: showGlobalVenues ? '#00CC88' : '#666' }
+              ]} />
+              <ThemedText style={styles.layerItemText}>
+                🌍 Global Venues ({globalVenueMarkers.length})
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
         </>
       )}
     </View>
@@ -410,15 +413,26 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
   };
 
   // DEBUG: Log the actual values causing the loading state
-  console.log('🗺️ VenueIntelligenceMapView DEBUG - Component state check:');
-  console.log('  isDetecting:', isDetecting);
-  console.log('  currentVenue:', currentVenue?.name || 'null');
-  console.log('  shouldShowLoading:', isDetecting || !currentVenue);
+  console.log('🗺️🔥🔥🔥 VenueIntelligenceMapView: ===== RENDERING DECISION =====');
+  console.log('🗺️🔥🔥🔥   isDetecting:', isDetecting, '(type:', typeof isDetecting, ')');
+  console.log('🗺️🔥🔥🔥   currentVenue:', currentVenue, '(type:', typeof currentVenue, ')');
+  console.log('🗺️🔥🔥🔥   currentVenue.name:', currentVenue?.name || 'null');
+  console.log('🗺️🔥🔥🔥   currentVenue.id:', currentVenue?.id || 'null');
+  console.log('🗺️🔥🔥🔥   currentVenue.coordinates:', currentVenue?.coordinates);
+  console.log('🗺️🔥🔥🔥   shouldShowLoading:', isDetecting || !currentVenue);
+  console.log('🗺️🔥🔥🔥   Condition breakdown:');
+  console.log('🗺️🔥🔥🔥     - isDetecting =', isDetecting, '→', isDetecting ? 'BLOCKING' : 'OK');
+  console.log('🗺️🔥🔥🔥     - !currentVenue =', !currentVenue, '→', !currentVenue ? 'BLOCKING' : 'OK');
+  console.log('🗺️🔥🔥🔥   CRITICAL: This component controls whether the map renders or shows loading!');
+  console.log('🗺️🔥🔥🔥   Stack trace for debugging:', new Error().stack);
 
   if (isDetecting || !currentVenue) {
-    console.log('🗺️ VenueIntelligenceMapView DEBUG - Showing loading state because:');
-    console.log('  isDetecting:', isDetecting);
-    console.log('  !currentVenue:', !currentVenue);
+    console.log('🗺️🚨🚨🚨 VenueIntelligenceMapView: ⚠️⚠️⚠️ SHOWING LOADING STATE ⚠️⚠️⚠️');
+    console.log('🗺️🚨   isDetecting =', isDetecting);
+    console.log('🗺️🚨   !currentVenue =', !currentVenue);
+    console.log('🗺️🚨   currentVenue value:', currentVenue);
+    console.log('🗺️🚨   THIS IS WHY THE MAP IS NOT RENDERING!');
+    console.log('🗺️🚨   Fix: Need to ensure currentVenue is set properly');
 
     return (
       <View style={[styles.container, style]}>
@@ -431,11 +445,19 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
     );
   }
 
+  console.log('🗺️✅✅✅ VenueIntelligenceMapView: ===== RENDERING MAP =====');
+  console.log('🗺️✅   Venue:', currentVenue.name);
+  console.log('🗺️✅   Venue ID:', currentVenue.id);
+  console.log('🗺️✅   Venue Coordinates:', currentVenue.coordinates);
+
   // Debug logging before render
-  console.log('🗺️ DEBUG: Rendering map with:');
-  console.log('  venue:', currentVenue.id);
-  console.log('  mapMarks:', mapMarks.length, 'race course marks');
-  console.log('  clubMarkers:', clubMarkers.length, 'club markers');
+  console.log('🗺️✅ DEBUG: Rendering map with:');
+  console.log('🗺️✅   venue:', currentVenue.id);
+  console.log('🗺️✅   mapMarks:', mapMarks.length, 'race course marks');
+  console.log('🗺️✅   clubMarkers:', clubMarkers.length, 'club markers');
+  console.log('🗺️✅   globalVenueMarkers:', globalVenueMarkers.length, 'global venues');
+  console.log('🗺️✅   showGlobalVenues:', showGlobalVenues);
+  console.log('🗺️✅   ProfessionalMap3DView component about to render...');
 
   return (
     <View style={[styles.container, style]}>
@@ -444,6 +466,7 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
         venue={currentVenue.id}
         marks={mapMarks}
         clubMarkers={clubMarkers}
+        venueMarkers={showGlobalVenues ? globalVenueMarkers : []}
         onMarkPress={handleMarkPress}
         onMapPress={handleMapPress}
         apiKeys={{
@@ -466,45 +489,10 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
         }}
       />
 
-      {/* Venue Selector Overlay */}
-      {renderVenueSelector()}
+      {/* Global Venues Layer Overlay */}
+      {showGlobalVenues && <GlobalVenuesMapLayer />}
 
-      {/* Layer Control Panel */}
-      {renderLayerPanel()}
-
-      {/* Selected Club Information */}
-      {renderClubInfoPanel()}
-
-      {/* Intelligence Summary Overlay */}
-      {intelligence && (
-        <View style={[styles.intelligenceSummary, isTablet && styles.intelligenceSummaryTablet]}>
-          <ThemedText style={styles.summaryTitle}>📊 Current Conditions</ThemedText>
-          <ThemedText style={styles.summaryText}>
-            {intelligence.weatherIntelligence?.currentConditions?.windSpeed}kt @ {intelligence.weatherIntelligence?.currentConditions?.windDirection}°
-          </ThemedText>
-          <ThemedText style={styles.summaryText}>
-            {intelligence.weatherIntelligence?.currentConditions?.temperature}°C •
-            {intelligence.weatherIntelligence?.racingRecommendations?.[0]}
-          </ThemedText>
-        </View>
-      )}
-
-      {/* Map Legend */}
-      <View style={styles.mapLegend}>
-        <ThemedText style={styles.legendTitle}>Legend</ThemedText>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendIcon, { backgroundColor: '#FF4444' }]} />
-          <ThemedText style={styles.legendText}>Headquarters</ThemedText>
-        </View>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendIcon, { backgroundColor: '#4444FF' }]} />
-          <ThemedText style={styles.legendText}>Racing Station</ThemedText>
-        </View>
-        <View style={styles.legendRow}>
-          <View style={[styles.legendIcon, { backgroundColor: '#44FF44' }]} />
-          <ThemedText style={styles.legendText}>Marina</ThemedText>
-        </View>
-      </View>
+      {/* Venue Selector Overlay - No other panels */}
     </View>
   );
 }
@@ -539,34 +527,31 @@ const styles = StyleSheet.create({
   // Venue Selector
   venueSelector: {
     position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
+    top: 16,
+    left: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 8,
+    padding: 8,
     zIndex: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
     elevation: 5,
+    maxWidth: 300,
   },
   venueSelectorTablet: {
-    right: 300, // Leave space for layer panel on tablets
+    maxWidth: 350,
   },
   venueSelectorTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
+    marginBottom: 6,
+    color: '#666',
   },
   venueButton: {
     backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginRight: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 6,
     borderWidth: 1,
     borderColor: '#e1e5e9',
   },
@@ -575,7 +560,7 @@ const styles = StyleSheet.create({
     borderColor: '#007AFF',
   },
   venueButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#666',
   },

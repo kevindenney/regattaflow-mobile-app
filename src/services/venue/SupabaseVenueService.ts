@@ -4,17 +4,15 @@
  * Leverages Supabase MCP for seamless database operations
  */
 
-import { supabase } from '@/src/services/supabase';
 import type {
-  SailingVenue,
-  VenueType,
-  Coordinates,
-  YachtClub,
-  UserVenueProfile,
-  VenueTransition,
-  CulturalBriefing,
-  GlobalRacingEvent
+    Coordinates,
+    GlobalRacingEvent,
+    SailingVenue,
+    UserVenueProfile,
+    VenueTransition,
+    VenueType
 } from '@/src/lib/types/global-venues';
+import { supabase } from '@/src/services/supabase';
 
 export class SupabaseVenueService {
   private isInitialized: boolean = false;
@@ -26,7 +24,61 @@ export class SupabaseVenueService {
   private readonly FAILURE_COOLDOWN_MS = 30000; // 30 seconds
 
   constructor() {
-    console.log('🌍 SupabaseVenueService initialized with MCP integration');
+  }
+
+  /**
+   * Return a lightweight venue list tailored for the currently signed-in sailor client
+   * Used by the dashboard to populate the "current venue" and nearby venue cards.
+   */
+  async listVenuesForClient(limit: number = 50, options?: { region?: string; country?: string }) {
+    // SKIP initialization in critical dashboard path - just query the table
+    // If table doesn't exist, we'll handle the error gracefully
+    // Initialization should happen separately via explicit admin/setup flow
+
+    try {
+      let query = supabase
+        .from('sailing_venues')
+        .select('id, name, country, region, venue_type, coordinates_lat, coordinates_lng, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(limit);
+
+      if (options?.region) {
+        query = query.eq('region', options.region);
+      }
+
+      if (options?.country) {
+        query = query.eq('country', options.country);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('❌ [CLIENT VENUES] Failed to fetch venues for client:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw error;
+      }
+
+      return (data || []).map((venue) => ({
+        id: venue.id,
+        name: venue.name,
+        country: venue.country,
+        region: venue.region,
+        venueType: venue.venue_type,
+        coordinates: [venue.coordinates_lng, venue.coordinates_lat] as [number | null, number | null],
+        updatedAt: venue.updated_at,
+      }));
+    } catch (error: any) {
+      console.error('💥 [CLIENT VENUES] Unexpected error while listing client venues:', {
+        message: error?.message,
+        stack: error?.stack?.substring(0, 400),
+      });
+
+      return [];
+    }
   }
 
   /**
@@ -35,7 +87,6 @@ export class SupabaseVenueService {
   async initializeVenueSchema(): Promise<void> {
     // Return cached initialization if already completed
     if (this.isInitialized) {
-      console.log('🌍 [DEBUG] Schema already initialized, skipping...');
       return;
     }
 
@@ -55,13 +106,8 @@ export class SupabaseVenueService {
 
     // Return ongoing initialization promise if already in progress
     if (this.initializationPromise) {
-      console.log('🌍 [DEBUG] Initialization already in progress, waiting...');
       return this.initializationPromise;
     }
-
-    console.log('🌍 [DEBUG] Starting Supabase venue schema initialization...');
-    console.log('🌍 [DEBUG] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...');
-    console.log('🌍 [DEBUG] Supabase Key exists:', !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
     // Create and cache the initialization promise
     this.initializationPromise = this._performInitialization();
@@ -87,35 +133,11 @@ export class SupabaseVenueService {
    */
   private async _performInitialization(): Promise<void> {
     try {
-      // Test basic Supabase connection first
-      console.log('🔍 [DEBUG] Testing basic Supabase connection...');
-      const { data: testData, error: testError } = await supabase
-        .from('_dummy_table_that_should_not_exist')
-        .select('*')
-        .limit(1);
-
-      if (testError) {
-        console.log('✅ [DEBUG] Supabase connection working (expected error for non-existent table)');
-        console.log('🔍 [DEBUG] Connection error details:', {
-          code: testError.code,
-          message: testError.message,
-          hint: testError.hint
-        });
-      }
-
       // Check if sailing_venues table exists
-      console.log('🔍 [DEBUG] Checking if sailing_venues table exists...');
       const { data: existingData, error: existingError } = await supabase
         .from('sailing_venues')
         .select('id')
         .limit(1);
-
-      if (existingError) {
-        console.log('❌ [DEBUG] sailing_venues table does not exist:', existingError.message);
-        console.log('🌱 [DEBUG] Will attempt to seed database...');
-      } else {
-        console.log('✅ [DEBUG] sailing_venues table exists, contains data:', existingData?.length || 0);
-      }
 
       // Only seed if table exists but has insufficient data
       if (!existingError) {
@@ -124,18 +146,12 @@ export class SupabaseVenueService {
           .from('sailing_venues')
           .select('*', { count: 'exact', head: true });
 
-        console.log(`✅ [DEBUG] sailing_venues table exists with ${count || 0} venues`);
-
         if (count && count >= 12) {
-          console.log('ℹ️ [DEBUG] Database already has sufficient venue data, skipping seeding');
           return;
         }
-
-        console.log('📊 [DEBUG] Need to add more venue data...');
       }
 
       // Try to seed - the seeding function will handle duplicates
-      console.log('🌱 [DEBUG] Starting seeding process...');
       await this.seedGlobalVenues();
 
     } catch (error: any) {
@@ -197,25 +213,19 @@ export class SupabaseVenueService {
    * Get all venues from database
    */
   async getAllVenues(): Promise<SailingVenue[]> {
-    console.log('🌍 [GET DEBUG] Loading all venues from Supabase PostGIS database...');
-
     // CRITICAL FIX: Always return empty array if initialization has failed
     // This prevents any component re-renders that could cause infinite loops
     if (this.initializationFailed) {
-      console.log('⚠️ [GET DEBUG] Schema initialization previously failed, returning empty venues (no retry)');
       return [];
     }
 
     // CRITICAL FIX: If not initialized, return empty array immediately
     // Do NOT attempt initialization during component render cycles
     if (!this.isInitialized) {
-      console.log('⚠️ [GET DEBUG] Schema not initialized, returning empty venues (initialization should happen at app startup)');
       return [];
     }
 
     try {
-
-      console.log('📤 [GET DEBUG] Querying sailing_venues table...');
       const { data, error } = await supabase
         .from('sailing_venues')
         .select(`
@@ -225,26 +235,10 @@ export class SupabaseVenueService {
         .order('name');
 
       if (error) {
-        console.error('❌ [GET DEBUG] Query failed:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        });
         throw error;
       }
 
-      console.log('✅ [GET DEBUG] Query successful');
-      console.log(`🔍 [GET DEBUG] Raw data count: ${data?.length || 0}`);
-      console.log('🔍 [GET DEBUG] First venue sample:', data?.[0] ? {
-        id: data[0].id,
-        name: data[0].name,
-        coordinates_lng: data[0].coordinates_lng,
-        coordinates_lat: data[0].coordinates_lat
-      } : 'No data');
-
       if (data && data.length > 0) {
-        console.log(`✅ [GET DEBUG] Loaded ${data.length} venues from Supabase, starting transformation...`);
 
         // Transform to match our SailingVenue interface
         const venues: SailingVenue[] = data.map(venue => ({
@@ -718,8 +712,6 @@ export class SupabaseVenueService {
    * Seed database with initial global venues (cached to prevent repeated seeding)
    */
   private async seedGlobalVenues(): Promise<void> {
-    console.log('🌍 [SEED DEBUG] Starting venue seeding process...');
-
     try {
       // Check if the table exists first
       const { data: testData, error: testError } = await supabase
@@ -729,13 +721,8 @@ export class SupabaseVenueService {
 
       if (testError && testError.code === 'PGRST205') {
         // Table doesn't exist - set up the database directly
-        console.log('🚨 [SEED DEBUG] sailing_venues table does not exist in Supabase');
-        console.log('🚀 [SEED DEBUG] Setting up Supabase database directly...');
-
         const { setupSupabaseDatabase } = await import('@/src/scripts/setup-supabase-db');
         await setupSupabaseDatabase();
-
-        console.log('✅ [SEED DEBUG] Supabase database setup completed!');
         return;
       }
 
@@ -748,18 +735,13 @@ export class SupabaseVenueService {
         .from('sailing_venues')
         .select('*', { count: 'exact', head: true });
 
-      console.log(`✅ [SEED DEBUG] sailing_venues table exists with ${count || 0} venues`);
-
       if (count && count >= 12) {
-        console.log('ℹ️ [SEED DEBUG] Database already has sufficient venue data, seeding complete');
         return;
       }
 
       // Need more data, run the seeding ONCE
-      console.log('📊 [SEED DEBUG] Adding venue data (this should only happen once)...');
       const { seedVenueDatabase } = await import('@/scripts/seed-venues');
       await seedVenueDatabase();
-      console.log('✅ [SEED DEBUG] Venue seeding completed successfully');
 
     } catch (error: any) {
       console.error('❌ [SEED DEBUG] Failed to seed venues:', {

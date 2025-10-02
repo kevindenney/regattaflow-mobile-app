@@ -1,98 +1,158 @@
 /**
- * Venue Intelligence Tab
- * Showcases RegattaFlow's "OnX Maps for Sailing" global venue intelligence system
+ * Venue Intelligence - Apple Maps-Style Interface
+ * Full-screen map with collapsible sidebar and floating controls
  */
 
-import React, { useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
-import { VenueIntelligenceDisplay } from '@/src/components/venue/VenueIntelligenceDisplay';
-import { VenueIntelligenceMapView } from '@/src/components/venue/VenueIntelligenceMapView';
+import { useVenueIntelligence } from '@/src/hooks/useVenueIntelligence';
+import { useSavedVenues } from '@/src/hooks/useSavedVenues';
+import { venueDetectionService } from '@/src/services/location/VenueDetectionService';
+import { VenueMapView } from '@/src/components/venue/VenueMapView';
+import { VenueSidebar } from '@/src/components/venue/VenueSidebar';
+import { MapControls, MapLayers } from '@/src/components/venue/MapControls';
+import { VenueDetailsSheet } from '@/src/components/venue/VenueDetailsSheet';
 
-type ViewMode = 'map' | 'data';
+interface Venue {
+  id: string;
+  name: string;
+  country: string;
+  region: string;
+  venue_type: string;
+  coordinates_lat: number;
+  coordinates_lng: number;
+}
 
-export default function VenueScreen() {
-  const [viewMode, setViewMode] = useState<ViewMode>('map');
-  const { width } = Dimensions.get('window');
-  const isTablet = width > 768;
+export default function VenueIntelligenceScreen() {
+  const { currentVenue, isDetecting, initializeDetection, setVenueManually } = useVenueIntelligence();
+  const { savedVenueIds, isLoading: savedVenuesLoading } = useSavedVenues();
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerContent}>
-        <View style={styles.titleSection}>
-          <ThemedText type="title">🌍 Global Venue Intelligence</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            OnX Maps for Sailing - Globally intelligent, locally expert
-          </ThemedText>
-        </View>
 
-        {/* View Mode Toggle */}
-        <View style={styles.viewToggle}>
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              styles.toggleButtonLeft,
-              viewMode === 'map' && styles.toggleButtonActive
-            ]}
-            onPress={() => setViewMode('map')}
-          >
-            <ThemedText style={[
-              styles.toggleButtonText,
-              viewMode === 'map' && styles.toggleButtonTextActive
-            ]}>
-              🗺️ Map
-            </ThemedText>
-          </TouchableOpacity>
+  // UI State
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [selectedVenueForSheet, setSelectedVenueForSheet] = useState<Venue | null>(null);
+  const [is3DEnabled, setIs3DEnabled] = useState(false);
+  const [areLayersVisible, setAreLayersVisible] = useState(true);
+  const [showOnlySavedVenues, setShowOnlySavedVenues] = useState(false);
+  const [mapLayers, setMapLayers] = useState<MapLayers>({
+    yachtClubs: true,
+    sailmakers: false,
+    riggers: false,
+    coaches: false,
+    chandlery: false,
+    clothing: false,
+    marinas: false,
+    repair: false,
+    engines: false,
+  });
 
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              styles.toggleButtonRight,
-              viewMode === 'data' && styles.toggleButtonActive
-            ]}
-            onPress={() => setViewMode('data')}
-          >
-            <ThemedText style={[
-              styles.toggleButtonText,
-              viewMode === 'data' && styles.toggleButtonTextActive
-            ]}>
-              📊 Data
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+  // Initialize venue detection
+  useEffect(() => {
+    const initVenue = async () => {
+      try {
+        await initializeDetection();
+      } catch (error) {
+        // Silent fail, user can select venue manually
+      }
+
+      // Auto-select default venue if no venue was detected
+      setTimeout(async () => {
+        const currentVenueCheck = venueDetectionService.getCurrentVenue();
+
+        if (!currentVenueCheck) {
+          try {
+            const success = await setVenueManually('hong-kong-victoria-harbor');
+            if (!success) {
+              await setVenueManually('newport-rhode-island');
+            }
+          } catch (error) {
+            // Silent fail, user can select venue manually
+          }
+        }
+      }, 500);
+    };
+
+    initVenue();
+  }, [initializeDetection, setVenueManually]);
+
+  // Handle venue selection from sidebar
+  const handleVenueSelect = async (venue: Venue) => {
+    await setVenueManually(venue.id);
+    setSelectedVenueForSheet(venue); // Show details sheet for selected venue
+  };
+
+  // Handle marker press on map
+  const handleMarkerPress = (venue: Venue) => {
+    setSelectedVenueForSheet(venue);
+  };
+
+  // Handle closing details sheet
+  const handleCloseSheet = () => {
+    setSelectedVenueForSheet(null);
+  };
+
+  if (isDetecting) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <ThemedText style={styles.loadingText}>🌍 Detecting your sailing venue...</ThemedText>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
-      {/* Header - only show on non-tablet or when in data mode */}
-      {(!isTablet || viewMode === 'data') && renderHeader()}
+      {/* Full-Screen Map Background */}
+      <View style={styles.mapContainer}>
+        <VenueMapView
+          currentVenue={currentVenue}
+          onVenueSelect={handleVenueSelect}
+          onMarkerPress={handleMarkerPress}
+          showAllVenues={true}
+          selectedVenue={selectedVenueForSheet}
+          showOnlySavedVenues={showOnlySavedVenues}
+          savedVenueIds={savedVenueIds}
+          is3DEnabled={is3DEnabled}
+          mapLayers={mapLayers}
+        />
+      </View>
 
-      {/* Main Content */}
-      {viewMode === 'map' ? (
-        <VenueIntelligenceMapView style={styles.mapView} />
-      ) : (
-        <VenueIntelligenceDisplay style={styles.intelligence} />
-      )}
+      {/* Left Sidebar - Collapsible Venue List */}
+      <VenueSidebar
+        currentVenue={currentVenue}
+        onSelectVenue={handleVenueSelect}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        showOnlySavedVenues={showOnlySavedVenues}
+        savedVenueIds={savedVenueIds}
+      />
 
-      {/* Floating Header for Map Mode on Tablet */}
-      {isTablet && viewMode === 'map' && (
-        <View style={styles.floatingHeader}>
-          <ThemedText style={styles.floatingTitle}>🌍 Global Venue Intelligence</ThemedText>
-          <ThemedText style={styles.floatingSubtitle}>OnX Maps for Sailing</ThemedText>
+      {/* Upper Right Map Controls */}
+      <MapControls
+        onToggle3D={() => setIs3DEnabled(!is3DEnabled)}
+        onToggleLayers={() => setAreLayersVisible(!areLayersVisible)}
+        onToggleSavedVenues={() => setShowOnlySavedVenues(!showOnlySavedVenues)}
+        onSearchNearby={initializeDetection}
+        is3DEnabled={is3DEnabled}
+        areLayersVisible={areLayersVisible}
+        showOnlySavedVenues={showOnlySavedVenues}
+        savedVenuesCount={savedVenueIds.size}
+        layers={mapLayers}
+        onLayersChange={setMapLayers}
+      />
 
-          <View style={styles.floatingToggle}>
-            <TouchableOpacity
-              style={styles.floatingToggleButton}
-              onPress={() => setViewMode('data')}
-            >
-              <ThemedText style={styles.floatingToggleText}>📊 Switch to Data View</ThemedText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      {/* Bottom Sheet - Venue Details */}
+      <VenueDetailsSheet
+        venue={selectedVenueForSheet}
+        onClose={handleCloseSheet}
+      />
     </ThemedView>
   );
 }
@@ -101,107 +161,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e1e5e9',
-    backgroundColor: '#fff',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  titleSection: {
-    flex: 1,
-    minWidth: 200,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  viewToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f3f4',
-    borderRadius: 8,
-    padding: 2,
-  },
-  toggleButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  toggleButtonLeft: {
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
-  },
-  toggleButtonRight: {
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  toggleButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  toggleButtonTextActive: {
-    color: '#fff',
-  },
-  mapView: {
-    flex: 1,
-  },
-  intelligence: {
-    flex: 1,
+  mapContainer: {
+    ...StyleSheet.absoluteFillObject,
   },
 
-  // Floating header for tablet map mode
-  floatingHeader: {
-    position: 'absolute',
-    top: 120,
-    left: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 300,
-    maxWidth: 320,
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  floatingTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
-  },
-  floatingSubtitle: {
-    fontSize: 14,
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
     color: '#666',
-    marginBottom: 12,
-  },
-  floatingToggle: {
-    alignItems: 'flex-start',
-  },
-  floatingToggleButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  floatingToggleText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

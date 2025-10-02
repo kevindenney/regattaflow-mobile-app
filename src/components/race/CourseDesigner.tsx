@@ -93,10 +93,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
   },
   chartTitle: {
     fontSize: 16,
@@ -119,10 +116,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
   },
   markLabel: {
     fontSize: 12,

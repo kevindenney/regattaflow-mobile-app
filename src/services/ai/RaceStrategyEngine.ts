@@ -117,8 +117,6 @@ export class RaceStrategyEngine {
 
     this.documentProcessor = new DocumentProcessingService();
     this.initializeVenueDatabase();
-
-    console.log('🧠 RaceStrategyEngine initialized - Ready to generate world-class sailing strategies');
   }
 
   /**
@@ -660,8 +658,6 @@ Format your response as structured tactical recommendations with specific action
         'Commercial shipping traffic'
       ]
     });
-
-    console.log('🌍 Venue database initialized with', this.venueDatabase.size, 'venues');
   }
 
   /**

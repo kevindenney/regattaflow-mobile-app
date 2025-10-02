@@ -482,10 +482,7 @@ const styles = StyleSheet.create({
     padding: 16,
     width: (width - 52) / 2, // Account for padding and gap
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 1px',
     elevation: 2,
   },
   statValue: {
@@ -580,10 +577,7 @@ const styles = StyleSheet.create({
     width: (width - 52) / 2,
     alignItems: 'center',
     gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 1px',
     elevation: 2,
   },
   actionButtonText: {

@@ -36,7 +36,7 @@ export interface VenueIntelligenceState {
 export interface VenueIntelligenceActions {
   // Venue control
   initializeDetection: () => Promise<boolean>;
-  setVenueManually: (venueId: string) => Promise<void>;
+  setVenueManually: (venueId: string) => Promise<boolean>;
   refreshIntelligence: () => Promise<void>;
 
   // Intelligence access
@@ -65,22 +65,53 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
     adaptationRequired: false,
   });
 
-  console.log('🎯 HOOK INIT DEBUG: useVenueIntelligence hook created with initial state:', state);
+  /**
+   * Sync service venue to state if there's a mismatch
+   * This handles cases where the service has a venue but the hook state doesn't
+   */
+  useEffect(() => {
+    const serviceVenue = venueDetectionService?.getCurrentVenue();
+    if (serviceVenue && !state.currentVenue) {
+      const syncVenue = async () => {
+        setState(prev => ({
+          ...prev,
+          currentVenue: serviceVenue,
+          locationStatus: {
+            coordinates: {
+              latitude: serviceVenue.coordinates.latitude,
+              longitude: serviceVenue.coordinates.longitude
+            },
+            timestamp: new Date(),
+            venue: serviceVenue
+          } as LocationDetection,
+        }));
+
+        // Load intelligence for the synced venue
+        try {
+          const intelligence = await regionalIntelligenceService.loadVenueIntelligence(serviceVenue);
+          setState(prev => ({
+            ...prev,
+            intelligence,
+            isLoadingIntelligence: false,
+          }));
+        } catch (error) {
+          // Silent fail during sync
+        }
+      };
+
+      syncVenue();
+    }
+  }, [state.currentVenue]); // Only run when state.currentVenue changes
 
   /**
    * Initialize venue detection system
    */
   const initializeDetection = useCallback(async (): Promise<boolean> => {
-    console.log('🎯 Initializing venue intelligence system');
-    console.log('🎯 [DEBUG] About to call venueDetectionService.initialize()');
-    console.log('🎯 [DEBUG] VenueDetectionService object:', venueDetectionService);
-
     setState(prev => ({ ...prev, isDetecting: true, detectionError: null }));
 
     try {
-      // Initialize venue detection service
+      // Initialize venue detection service (this tries GPS on native, falls back on web)
       const success = await venueDetectionService.initialize();
-      console.log('🎯 Hook Init - Venue detection service initialized:', success);
 
       if (!success) {
         setState(prev => ({
@@ -92,28 +123,16 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
       }
 
       // Set up venue detection callback using correct API
-      console.log('🎯 Hook Init - Setting up venue detection callback with addLocationListener');
       venueDetectionService.addLocationListener(async (locationUpdate) => {
-        console.log(`🎯 Hook Callback - Location update received:`, {
-          venue: locationUpdate.venue?.name || 'None',
-          changed: locationUpdate.changed,
-          coordinates: locationUpdate.coordinates
-        });
-
-        setState(prev => {
-          console.log(`🎯 Hook Callback - Previous state:`, { currentVenue: prev.currentVenue?.name || null });
-          const newState = {
-            ...prev,
-            currentVenue: locationUpdate.venue,
-            locationStatus: {
-              coordinates: locationUpdate.coordinates,
-              timestamp: locationUpdate.timestamp,
-              venue: locationUpdate.venue
-            } as LocationDetection,
-          };
-          console.log(`🎯 Hook Callback - New state:`, { currentVenue: newState.currentVenue?.name || null });
-          return newState;
-        });
+        setState(prev => ({
+          ...prev,
+          currentVenue: locationUpdate.venue,
+          locationStatus: {
+            coordinates: locationUpdate.coordinates,
+            timestamp: locationUpdate.timestamp,
+            venue: locationUpdate.venue
+          } as LocationDetection,
+        }));
 
         // Load intelligence for new venue only if venue changed
         if (locationUpdate.changed && locationUpdate.venue) {
@@ -129,10 +148,8 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
 
       // Fix race condition: Check if venue was already detected during initialization
       const currentVenue = venueDetectionService.getCurrentVenue();
-      console.log('🎯 Hook Init - Current venue after setup:', currentVenue?.name || 'None');
 
       if (currentVenue) {
-        console.log('🎯 Hook Init - Syncing already-detected venue to hook state');
         setState(prev => ({
           ...prev,
           currentVenue,
@@ -151,11 +168,9 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
       // No additional callbacks needed as LocationUpdate provides all information
 
       setState(prev => ({ ...prev, isDetecting: false }));
-      console.log('🎯 Venue intelligence system initialized successfully');
-
       return true;
     } catch (error) {
-      console.error('🎯 Failed to initialize venue intelligence:', error);
+      console.error('Failed to initialize venue intelligence:', error);
       setState(prev => ({
         ...prev,
         isDetecting: false,
@@ -172,19 +187,15 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
     setState(prev => ({ ...prev, isLoadingIntelligence: true, intelligenceError: null }));
 
     try {
-      console.log(`🎯 Loading intelligence for ${venue.name}`);
       const intelligence = await regionalIntelligenceService.loadVenueIntelligence(venue);
-      console.log(`🎯 Intelligence service returned:`, intelligence ? 'Data received' : 'null');
 
       setState(prev => ({
         ...prev,
         intelligence,
         isLoadingIntelligence: false,
       }));
-
-      console.log(`🎯 Intelligence loaded: ${intelligence.weatherIntelligence.forecast.length} weather forecasts, ${intelligence.tacticalIntelligence.localTactics.length} tactical recommendations`);
     } catch (error) {
-      console.error(`🎯 Failed to load intelligence for ${venue.name}:`, error);
+      console.error(`Failed to load intelligence for ${venue.name}:`, error);
       setState(prev => ({
         ...prev,
         isLoadingIntelligence: false,
@@ -196,10 +207,32 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
   /**
    * Manually set venue
    */
-  const setVenueManually = useCallback(async (venueId: string) => {
-    console.log(`🎯 Manual venue selection: ${venueId}`);
-    await venueDetectionService.setManualVenue(venueId);
-  }, []);
+  const setVenueManually = useCallback(async (venueId: string): Promise<boolean> => {
+    const success = await venueDetectionService.setManualVenue(venueId);
+
+    if (success) {
+      const newVenue = venueDetectionService.getCurrentVenue();
+
+      // CRITICAL FIX: Immediately update state after manual venue selection
+      // Don't rely solely on listener callback which may have timing issues
+      if (newVenue) {
+        setState(prev => ({
+          ...prev,
+          currentVenue: newVenue,
+          locationStatus: {
+            coordinates: { latitude: newVenue.coordinates.latitude, longitude: newVenue.coordinates.longitude },
+            timestamp: new Date(),
+            venue: newVenue
+          } as LocationDetection,
+        }));
+
+        // Load intelligence for the new venue
+        await loadVenueIntelligence(newVenue);
+      }
+    }
+
+    return success;
+  }, [loadVenueIntelligence]);
 
   /**
    * Refresh current intelligence
@@ -207,7 +240,6 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
   const refreshIntelligence = useCallback(async () => {
     if (!state.currentVenue) return;
 
-    console.log(`🎯 Refreshing intelligence for ${state.currentVenue.name}`);
     regionalIntelligenceService.clearCache();
     await loadVenueIntelligence(state.currentVenue);
   }, [state.currentVenue, loadVenueIntelligence]);
@@ -240,8 +272,6 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
    * Cleanup resources
    */
   const cleanup = useCallback(async () => {
-    console.log('🎯 Cleaning up venue intelligence');
-
     try {
       if (venueDetectionService && typeof venueDetectionService.cleanup === 'function') {
         await venueDetectionService.cleanup();
@@ -251,7 +281,7 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
         regionalIntelligenceService.clearCache();
       }
     } catch (error) {
-      console.error('❌ Cleanup failed:', error);
+      // Silent fail during cleanup
     }
   }, []);
 

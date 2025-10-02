@@ -41,27 +41,13 @@ interface UpcomingEvent {
 }
 
 export default function ClubDashboard() {
-  console.log('🏛️ Club Dashboard: Loading Club Management System');
-
   const { user, signedIn, ready, loading: authLoading } = useAuth();
   const { width } = useWindowDimensions();
   const isTablet = width > 768;
 
-  // Debug auth state
-  console.log('🏛️ [CLUB] ===== CLUB DASHBOARD RENDER =====');
-  console.log('🏛️ [CLUB] Current URL:', window.location.href);
-  console.log('🏛️ [CLUB] Auth state:', {
-    hasUser: !!user,
-    signedIn,
-    ready,
-    authLoading,
-    userEmail: user?.email || 'null'
-  });
-
   // Auth Guard: Redirect if not authenticated
   useEffect(() => {
     if (ready && !signedIn && !authLoading) {
-      console.log('🚨 [CLUB] Auth guard triggered - redirecting to landing');
       if (Platform.OS === 'web') {
         window.location.href = '/';
       } else {
@@ -82,7 +68,6 @@ export default function ClubDashboard() {
 
   const loadClubData = async () => {
     try {
-      console.log('🔄 Loading club management data...');
       await new Promise(resolve => setTimeout(resolve, 1200));
 
       setStats({
@@ -124,7 +109,6 @@ export default function ClubDashboard() {
         }
       ]);
 
-      console.log('✅ Club data loaded successfully');
     } catch (error) {
       console.error('❌ Failed to load club data:', error);
     } finally {
@@ -383,17 +367,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 2,
+        }
+    ),
   },
   headerContent: {
     flex: 1,
@@ -454,17 +434,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 3,
+        }
+    ),
   },
   statNumber: {
     fontSize: 28,
@@ -496,17 +472,13 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 8px rgba(0,0,0,0.15)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 4,
+        }
+    ),
   },
   primaryActionCard: {
     backgroundColor: 'transparent',
@@ -534,17 +506,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 3,
+        }
+    ),
   },
   eventInfo: {
     flex: 1,

@@ -40,7 +40,6 @@ export class DeveloperDocumentService {
 
   constructor() {
     this.documentProcessor = new DocumentProcessingService();
-    console.log('🔧 DeveloperDocumentService initialized');
   }
 
   /**

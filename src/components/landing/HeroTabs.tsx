@@ -77,8 +77,8 @@ const tabData: Record<UserType, TabContent> = {
     title: 'Master Every Race with AI-Powered Strategy',
     subtitle: 'From tactical planning to real-time race execution',
     features: [
-      { icon: 'wind', text: 'Weather Intelligence', color: '#3B82F6' },
-      { icon: 'anchor', text: 'Race Planning', color: '#10B981' },
+      { icon: 'cloud-outline', text: 'Weather Intelligence', color: '#3B82F6' },
+      { icon: 'location-outline', text: 'Race Planning', color: '#10B981' },
       { icon: 'trophy', text: 'Performance Analytics', color: '#8B5CF6' },
     ],
     mapComponent: () => <SailorRaceStrategyMap />,
@@ -184,7 +184,7 @@ const tabData: Record<UserType, TabContent> = {
     features: [
       { icon: 'people', text: 'Event Management', color: '#3B82F6' },
       { icon: 'trophy', text: 'Live Scoring', color: '#10B981' },
-      { icon: 'anchor', text: 'Course Management', color: '#8B5CF6' },
+      { icon: 'location-outline', text: 'Course Management', color: '#8B5CF6' },
     ],
     mapComponent: () => <YachtClubManagementMap />,
     ctaText: 'Manage Your Events',
@@ -401,25 +401,6 @@ export function HeroTabs() {
   const safeHeight = height || (Platform.OS === 'web' ? 800 : 600);
   const isDesktop = safeWidth > 768;
 
-  // Debug logging for HeroTabs dimensions and layout
-  console.log('🔍 [DEBUG] HeroTabs render state:', {
-    platform: Platform.OS,
-    rawDimensions: { width, height },
-    safeDimensions: { width: safeWidth, height: safeHeight },
-    isDesktop,
-    activeTab,
-    isDimensionsProblem: width === 0 || height === 0
-  });
-
-  // Additional debug logging for layout debugging
-  console.log('🔍 [DEBUG] HeroTabs layout configuration:', {
-    containerMinHeight: Platform.OS === 'web' ? '100vh' : 'flex: 1',
-    contentMinHeight: Platform.OS === 'web' ? 'calc(100vh - 120px)' : 'flex: 1',
-    mapContainerHeight: 400,
-    isExpectedToBeVisible: safeWidth > 0 && safeHeight > 0,
-    appliedFallback: width === 0 || height === 0
-  });
-
   const currentTab = tabData[activeTab];
 
   const handleGetStarted = () => {
@@ -569,7 +550,7 @@ export function HeroTabs() {
                         <View style={styles.tabRow}>
                           <View style={styles.tabItem}>
                             <View style={[styles.tabIcon, styles.tabIconActive]}>
-                              <Ionicons name="anchor" size={16} color="#FFFFFF" />
+                              <Ionicons name="boat-outline" size={16} color="#FFFFFF" />
                             </View>
                             <Text style={styles.tabLabelActive}>Race</Text>
                           </View>
@@ -710,7 +691,7 @@ export function HeroTabs() {
               {currentTab.testimonials.map((testimonial, index) => (
                 <View key={index} style={styles.testimonialCard}>
                   <View style={styles.testimonialQuote}>
-                    <Ionicons name="quote" size={24} color="#3B82F6" style={styles.quoteIcon} />
+                    <Ionicons name="chatbox-outline" size={24} color="#3B82F6" style={styles.quoteIcon} />
                     <Text style={styles.testimonialText}>"{testimonial.quote}"</Text>
                   </View>
                   <View style={styles.testimonialAuthor}>
@@ -804,7 +785,7 @@ export function HeroTabs() {
               {/* Brand Column */}
               <View style={styles.footerBrand}>
                 <View style={styles.footerLogo}>
-                  <Ionicons name="anchor" size={32} color="#3B82F6" />
+                  <Ionicons name="boat-outline" size={32} color="#3B82F6" />
                   <Text style={styles.footerLogoText}>RegattaFlow</Text>
                 </View>
                 <Text style={styles.footerDescription}>
@@ -963,18 +944,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 8,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 4,
+        }
+    ),
   },
   tabButton: {
     paddingHorizontal: 24,
@@ -984,18 +960,13 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     backgroundColor: '#3B82F6',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
-      },
-      default: {
-        shadowColor: '#3B82F6',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 3,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 3,
+        }
+    ),
   },
   tabButtonText: {
     fontSize: 14,
@@ -1084,18 +1055,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 4px 8px rgba(59, 130, 246, 0.3)',
-      },
-      default: {
-        shadowColor: '#3B82F6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 8px rgba(59, 130, 246, 0.3)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 4,
+        }
+    ),
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -1112,18 +1078,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 2,
+        }
+    ),
   },
   secondaryButtonText: {
     color: '#3B82F6',
@@ -1271,17 +1232,17 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    ...Platform.select({
-      web: {
-        width: '100%',
-        maxWidth: 350,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? {
+          width: '100%',
+          maxWidth: 350,
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+        }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 4,
+        }
+    ),
   },
   featureIcon: {
     fontSize: 32,
@@ -1375,17 +1336,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     padding: 32,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-    ...Platform.select({
-      web: {
-        width: '100%',
-        maxWidth: 380,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? {
+          width: '100%',
+          maxWidth: 380,
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 6,
+        }
+    ),
   },
   testimonialQuote: {
     marginBottom: 24,
@@ -1457,22 +1418,25 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     alignItems: 'center',
     position: 'relative',
-    ...Platform.select({
-      web: {
-        width: '100%',
-        maxWidth: 350,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? {
+          width: '100%',
+          maxWidth: 350,
+        }
+      : {}
+    ),
   },
   pricingCardPopular: {
     backgroundColor: '#FFFFFF',
     borderColor: '#3B82F6',
     borderWidth: 2,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(59, 130, 246, 0.1)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 6,
+        }
+    ),
   },
   popularBadge: {
     position: 'absolute',
@@ -1578,11 +1542,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F2937',
     borderRadius: 48,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 8px 16px rgba(0, 0, 0, 0.25)' }
+      : {
+          boxShadow: '0px 8px',
+          elevation: 8,
+        }
+    ),
   },
   phoneScreen: {
     width: '100%',
@@ -1704,14 +1670,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
     borderWidth: 1,
     borderColor: '#F3F4F6',
     minWidth: 80,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)' }
+      : {
+          boxShadow: '0px 1px',
+          elevation: 2,
+        }
+    ),
   },
   dataCardLabel: {
     fontSize: 10,
@@ -1780,13 +1748,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
     borderWidth: 1,
     borderColor: '#F3F4F6',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)' }
+      : {
+          boxShadow: '0px 1px',
+          elevation: 2,
+        }
+    ),
   },
   strategyHeader: {
     flexDirection: 'row',
@@ -1954,11 +1924,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 18,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 8px rgba(0, 0, 0, 0.15)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 6,
+        }
+    ),
   },
   finalCtaPrimaryText: {
     fontSize: 18,

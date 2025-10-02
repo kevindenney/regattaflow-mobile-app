@@ -1,82 +1,41 @@
 /**
- * Enhanced Sailor Dashboard - "OnX Maps for Sailing" Experience
- * Integrates global venue intelligence, AI race strategy, and advanced components
- * Represents the comprehensive sailor journey planned in sailor-experience.md
+ * Role-Specific Dashboard - Unified Dashboard with User Type Adaptation
+ * Supports Sailors (venue intelligence & strategy), Coaches (client management),
+ * and Clubs (operations & events) with dynamic tab-based navigation
  */
 
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  ScrollView,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  Platform,
-  ActivityIndicator,
-  RefreshControl,
-  TouchableOpacity,
-  useWindowDimensions
-} from 'react-native';
-import { router } from 'expo-router';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { GlobalVenueIntelligence } from '@/src/components/venue/GlobalVenueIntelligence';
-import { WeatherIntelligence } from '@/src/components/weather/WeatherIntelligence';
-import { AIRaceAnalysisDashboard } from '@/src/components/ai/AIRaceAnalysisDashboard';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
-import { useGlobalVenueIntelligence } from '@/src/hooks/useGlobalVenueIntelligence';
+import { router } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
-interface DashboardStats {
-  total_regattas: number;
-  total_documents: number;
-  avg_position: number;
-  best_position: number;
-  recent_races: number;
-  venues_visited: number;
-  global_ranking: number;
-}
+// Role-specific Overview Components (tabs removed, only showing overview)
+import { SailorOverviewEnhanced } from '@/src/components/dashboard/sailor';
+import { CoachOverview } from '@/src/components/dashboard/coach';
+import { ClubOverview } from '@/src/components/dashboard/club';
 
-interface RecentEvent {
-  id: string;
-  title: string;
-  start_date: string;
-  status: string;
-  position?: number;
-  fleet_size?: number;
-  venue?: string;
-  country?: string;
-}
-
-// VenueAdaptation interface removed - using real venue intelligence from hook
+// Role-specific Hooks
+import {
+    useClubDashboardData,
+    useCoachDashboardData,
+    useSailorDashboardData,
+} from '@/src/hooks';
 
 export default function DashboardScreen() {
-  console.log('🌍 Enhanced Dashboard: Loading Global Venue Intelligence System');
-  console.log('📊 Dashboard: "OnX Maps for Sailing" Experience Initializing');
-
-  const { user, signedIn, ready, loading: authLoading } = useAuth();
-  const { width } = useWindowDimensions();
-  const isTablet = width > 768;
-
-  // Debug auth state in dashboard
-  console.log('📊 [DASHBOARD] ===== DASHBOARD RENDER =====');
-  console.log('📊 [DASHBOARD] Current URL:', window.location.href);
-  console.log('📊 [DASHBOARD] Auth state:', {
-    hasUser: !!user,
-    signedIn,
-    ready,
-    authLoading,
-    userEmail: user?.email || 'null'
-  });
-  console.log('📊 [DASHBOARD] Component should render:', ready && signedIn);
-  console.log('📊 [DASHBOARD] ===== DASHBOARD RENDER COMPLETE =====');
+  const { user, signedIn, ready, loading: authLoading, userType } = useAuth();
 
   // Auth Guard: Redirect to landing page if not authenticated
   useEffect(() => {
     if (ready && !signedIn && !authLoading) {
-      console.log('🚨 [DASHBOARD] Auth guard triggered - user not signed in');
-      console.log('🚨 [DASHBOARD] Redirecting to landing page...');
-      console.log('🚨 [DASHBOARD] Current URL before redirect:', window.location.href);
-
       if (Platform.OS === 'web') {
         window.location.href = '/';
       } else {
@@ -85,380 +44,407 @@ export default function DashboardScreen() {
     }
   }, [ready, signedIn, authLoading]);
 
-  // Global Venue Intelligence - real location-aware system
-  const venueIntelligence = useGlobalVenueIntelligence();
-
-  const [loading, setLoading] = useState(true);
+  // State for refreshing
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
-  const [selectedSection, setSelectedSection] = useState<'overview' | 'venue' | 'weather' | 'strategy' | 'analytics'>('overview');
 
-  useEffect(() => {
-    loadEnhancedDashboardData();
-  }, []);
+  // Role-specific data hooks - must call all hooks (React rules)
+  const sailorData = useSailorDashboardData();
+  const coachData = useCoachDashboardData();
+  const clubData = useClubDashboardData();
 
-  const loadEnhancedDashboardData = async () => {
-    try {
-      console.log('🔄 Loading enhanced dashboard with global intelligence...');
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      // Enhanced stats with global context
-      setStats({
-        total_regattas: 23,
-        total_documents: 67,
-        avg_position: 4.2,
-        best_position: 1,
-        recent_races: 5,
-        venues_visited: 12,
-        global_ranking: 47
-      });
-
-      // Global sailing events with venue context
-      setRecentEvents([
-        {
-          id: '1',
-          title: 'Dragon World Championship Qualifier',
-          start_date: '2024-10-15',
-          status: 'upcoming',
-          fleet_size: 42,
-          venue: 'Royal Hong Kong Yacht Club',
-          country: 'Hong Kong'
-        },
-        {
-          id: '2',
-          title: 'Hiroshima Bay Dragon Cup',
-          start_date: '2024-09-22',
-          status: 'completed',
-          position: 3,
-          fleet_size: 28,
-          venue: 'Hiroshima Sailing Club',
-          country: 'Japan'
-        },
-        {
-          id: '3',
-          title: 'Mediterranean Dragon Circuit',
-          start_date: '2024-09-08',
-          status: 'completed',
-          position: 7,
-          fleet_size: 35,
-          venue: 'Porto Cervo',
-          country: 'Italy'
-        }
-      ]);
-
-      // Real venue intelligence will be loaded by the hook automatically
-
-      console.log('✅ Enhanced dashboard data loaded successfully');
-    } catch (error) {
-      console.error('❌ Failed to load enhanced dashboard data:', error);
-    } finally {
-      setLoading(false);
+  // Get appropriate data based on user type
+  const getCurrentData = () => {
+    switch (userType) {
+      case 'coach':
+        return coachData;
+      case 'club':
+        return clubData;
+      case 'sailor':
+      default:
+        return sailorData;
     }
   };
 
+  const currentData = getCurrentData();
+
+  // Handle refresh
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadEnhancedDashboardData();
-    setRefreshing(false);
+    // Data will refresh automatically via the hooks
+    setTimeout(() => setRefreshing(false), 1000);
   };
 
-  if (loading) {
+
+  // Show loading for auth or initial data load
+  if (authLoading || !ready || currentData.loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066CC" />
-        <Text style={styles.loadingText}>🌍 Initializing Global Sailing Intelligence...</Text>
-        <Text style={styles.loadingSubtext}>Loading venue detection and cultural adaptation</Text>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.loadingText}>
+          {userType === 'sailor' && '🌍 Initializing Global Sailing Intelligence...'}
+          {userType === 'coach' && '💼 Loading Coach Dashboard...'}
+          {userType === 'club' && '🏢 Loading Club Management...'}
+        </Text>
+        <Text style={styles.loadingSubtext}>
+          {userType === 'sailor' && 'Loading venue detection and strategy tools'}
+          {userType === 'coach' && 'Loading client data and marketplace information'}
+          {userType === 'club' && 'Loading events, members, and facilities'}
+        </Text>
       </View>
     );
   }
 
-  const renderOverviewSection = () => (
-    <ScrollView style={styles.overviewContent} showsVerticalScrollIndicator={false}>
-      {/* Global Context Header - Real Venue Intelligence */}
-      {venueIntelligence.currentVenue && (
-        <View style={styles.venueContextCard}>
-          <LinearGradient
-            colors={['#4C63D2', '#667eea']}
-            style={styles.venueHeader}
-          >
-            <View style={styles.venueInfo}>
-              <Text style={styles.venueTitle}>📍 Current Location</Text>
-              <Text style={styles.venueName}>{venueIntelligence.currentVenue.name}</Text>
-              <Text style={styles.venueLocation}>
-                {venueIntelligence.currentVenue.country} • {venueIntelligence.currentVenue.region}
-              </Text>
-              {venueIntelligence.isDetecting && (
-                <Text style={styles.detectionStatus}>🔍 Detecting location...</Text>
-              )}
-              {venueIntelligence.venueConfidence > 0 && (
-                <Text style={styles.confidenceLevel}>
-                  Confidence: {Math.round(venueIntelligence.venueConfidence * 100)}%
-                </Text>
-              )}
-            </View>
-            <View style={styles.cultureInfo}>
-              <Text style={styles.cultureLabel}>🌐 Cultural Context</Text>
-              <Text style={styles.cultureDetail}>
-                {venueIntelligence.currentVenue.culturalContext?.primaryLanguages?.[0]?.name || 'English'}
-              </Text>
-              <Text style={styles.cultureDetail}>
-                {venueIntelligence.currentVenue.culturalContext?.economicFactors?.currency || 'USD'}
-              </Text>
-              {venueIntelligence.isTransitioning && (
-                <Text style={styles.transitionStatus}>🔄 Adapting to venue...</Text>
-              )}
-            </View>
-          </LinearGradient>
-        </View>
-      )}
-
-      {/* No Venue Detected State */}
-      {!venueIntelligence.currentVenue && !venueIntelligence.isDetecting && (
-        <View style={styles.venueContextCard}>
-          <LinearGradient
-            colors={['#6B7280', '#9CA3AF']}
-            style={styles.venueHeader}
-          >
-            <View style={styles.venueInfo}>
-              <Text style={styles.venueTitle}>📍 Location Detection</Text>
-              <Text style={styles.venueName}>No venue detected</Text>
-              <Text style={styles.venueLocation}>
-                {venueIntelligence.detectionMethod === 'manual' ? 'Manual selection available' : 'Searching for sailing venues...'}
-              </Text>
-              <TouchableOpacity
-                style={styles.forceDetectionButton}
-                onPress={() => venueIntelligence.forceVenueDetection()}
-              >
-                <Text style={styles.forceDetectionText}>🔍 Detect Current Location</Text>
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
-        </View>
-      )}
-
-      {/* Enhanced Stats Grid */}
-      <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
-          <Ionicons name="trophy-outline" size={24} color="#0066CC" />
-          <Text style={styles.statNumber}>{stats?.total_regattas || 0}</Text>
-          <Text style={styles.statLabel}>Total Regattas</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Ionicons name="location-outline" size={24} color="#FF9800" />
-          <Text style={styles.statNumber}>{stats?.venues_visited || 0}</Text>
-          <Text style={styles.statLabel}>Venues Visited</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Ionicons name="podium-outline" size={24} color="#4CAF50" />
-          <Text style={styles.statNumber}>{stats?.avg_position?.toFixed(1) || '0.0'}</Text>
-          <Text style={styles.statLabel}>Avg Position</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Ionicons name="globe-outline" size={24} color="#9C27B0" />
-          <Text style={styles.statNumber}>#{stats?.global_ranking || 0}</Text>
-          <Text style={styles.statLabel}>Global Ranking</Text>
-        </View>
+  // Error state
+  if (currentData.error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Failed to load dashboard data</Text>
+        <Text style={styles.errorMessage}>{currentData.error}</Text>
       </View>
+    );
+  }
 
-      {/* AI-Powered Quick Actions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🧠 AI-Powered Actions</Text>
-        <View style={styles.actionsGrid}>
-          <TouchableOpacity
-            style={[styles.actionCard, styles.aiActionCard]}
-            onPress={() => setSelectedSection('strategy')}
-          >
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              style={styles.actionGradient}
-            >
-              <Ionicons name="bulb" size={28} color="white" />
-              <Text style={styles.aiActionText}>Generate Strategy</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+  // Render role-specific tab content
+  const renderTabContent = () => {
+    switch (userType) {
+      case 'sailor':
+        return renderSailorContent();
+      case 'coach':
+        return renderCoachContent();
+      case 'club':
+        return renderClubContent();
+      default:
+        return renderSailorContent();
+    }
+  };
 
-          <TouchableOpacity
-            style={[styles.actionCard, styles.aiActionCard]}
-            onPress={() => setSelectedSection('venue')}
-          >
-            <LinearGradient
-              colors={['#f093fb', '#f5576c']}
-              style={styles.actionGradient}
-            >
-              <Ionicons name="compass-outline" size={28} color="white" />
-              <Text style={styles.aiActionText}>Venue Intelligence</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+  const renderSailorContent = () => {
+    const data = sailorData;
+    // Always show overview - no tabs
+    return (
+      <SailorOverviewEnhanced
+        upcomingRaces={data.races?.map(race => ({
+          id: race.id,
+          title: race.name,
+          venue: race.venue,
+          country: 'USA', // This should come from venue data
+          startDate: race.startDate,
+          daysUntil: Math.ceil((new Date(race.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+          strategyStatus: race.hasStrategy ? 'ready' : 'pending',
+          weatherConfidence: race.weatherConfidence || 0,
+          hasDocuments: race.documentsReady,
+          hasTuningGuides: race.tuningGuideReady,
+          hasCrewAssigned: race.crewAssigned,
+          classId: race.classId
+        })) || []}
+        stats={{
+          totalRegattas: data.performance?.seasonStats?.totalRaces || 0,
+          venuesVisited: data.performance?.venueComparison?.length || 0,
+          avgPosition: data.performance?.seasonStats?.averagePosition || 0,
+          globalRanking: 0, // This would come from a global ranking system
+          recentRaces: data.performance?.recentResults?.length || 0,
+          strategyWinRate: 0 // This would be calculated from strategy outcomes
+        }}
+        currentVenue={data.venues.currentVenue ? {
+          name: data.venues.currentVenue.name,
+          country: data.venues.currentVenue.country,
+          confidence: data.venues.currentVenue.confidence,
+        } : undefined}
+        classes={data.classes || []}
+        activeClassId={data.activeClassId}
+        sailorId={user?.id}
+        onRacePress={(raceId) => console.log('Race pressed:', raceId)}
+        onPlanStrategy={(raceId) => console.log('Plan strategy:', raceId)}
+        onUploadDocuments={() => console.log('Upload documents')}
+        onCheckWeather={() => console.log('Check weather')}
+        onViewVenues={() => console.log('View venues')}
+        onClassChange={(classId) => sailorData.setActiveClassId(classId)}
+        onAddBoat={() => console.log('Add boat')}
+        fleetOverview={data.primaryFleetOverview}
+        fleetActivity={data.primaryFleetActivity}
+        onOpenFleet={() => router.push('/(tabs)/fleet')}
+      />
+    );
+  };
 
-          <TouchableOpacity
-            style={[styles.actionCard, styles.aiActionCard]}
-            onPress={() => setSelectedSection('weather')}
-          >
-            <LinearGradient
-              colors={['#4facfe', '#00f2fe']}
-              style={styles.actionGradient}
-            >
-              <Ionicons name="cloudy-outline" size={28} color="white" />
-              <Text style={styles.aiActionText}>Weather Intel</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </View>
+  const renderCoachContent_OLD = () => {
+    const data = coachData;
+    // Removed old tab logic - this function is not used anymore
+    return null;
+  };
 
-      {/* Global Race Events */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🌍 Global Racing Calendar</Text>
-        {recentEvents.map((event) => (
-          <TouchableOpacity key={event.id} style={styles.eventCard}>
-            <View style={styles.eventInfo}>
-              <Text style={styles.eventTitle}>{event.title}</Text>
-              <Text style={styles.eventVenue}>{event.venue} • {event.country}</Text>
-              <Text style={styles.eventDate}>{event.start_date}</Text>
-              {event.position && (
-                <Text style={styles.eventPosition}>
-                  🏆 Position: {event.position}/{event.fleet_size}
-                </Text>
-              )}
-            </View>
-            <View style={[styles.statusBadge,
-              { backgroundColor: event.status === 'completed' ? '#10B981' : '#F59E0B' }]}>
-              <Text style={styles.statusText}>{event.status}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
-  );
+  const renderSailorContent_OLD_TABS = () => {
+    const data = sailorData;
+    // Old tab-based code preserved for reference
+    switch ('removed') {
+      case 'strategy':
+        return (
+          <RaceStrategyTab
+            activeStrategy={data.strategies?.[0] ? {
+              id: data.strategies[0].id,
+              raceTitle: data.strategies[0].raceName,
+              venue: 'Venue TBD', // This would come from race data
+              startDate: new Date().toISOString(),
+              confidence: data.strategies[0].confidence,
+              status: 'ready' as const,
+              aiRecommendations: [
+                'Start on port tack in light conditions',
+                'Watch for wind shifts at 2pm',
+                'Conservative starts recommended'
+              ],
+              weatherConditions: {
+                windSpeed: '10-15 knots',
+                windDirection: 'SW',
+                confidence: 85
+              },
+              equipment: {
+                sail: 'Medium jib',
+                setup: 'Standard rake',
+                recommendation: 'Consider flattening sail in gusts'
+              },
+              tactical: {
+                startStrategy: 'Port tack, pin end favored',
+                upwindStrategy: 'Play the shifts, favor right side',
+                downwindStrategy: 'Gybe early to inside track'
+              }
+            } : undefined}
+            strategyLibrary={data.strategies?.map(strategy => ({
+              id: strategy.id,
+              raceTitle: strategy.raceName,
+              venue: 'Venue TBD',
+              startDate: new Date().toISOString(),
+              confidence: strategy.confidence,
+              status: 'ready' as const,
+              aiRecommendations: [],
+              weatherConditions: {
+                windSpeed: '10-15 knots',
+                windDirection: 'SW',
+                confidence: 85
+              },
+              equipment: {
+                sail: 'Medium jib',
+                setup: 'Standard rake',
+                recommendation: 'Standard setup'
+              },
+              tactical: {
+                startStrategy: 'TBD',
+                upwindStrategy: 'TBD',
+                downwindStrategy: 'TBD'
+              }
+            })) || []}
+            onGenerateStrategy={(raceId) => console.log('Generate strategy:', raceId)}
+            onViewStrategy={(strategyId) => console.log('View strategy:', strategyId)}
+            onUploadDocuments={() => setActiveTab('documents')}
+          />
+        );
+      case 'venues':
+        return (
+          <VenueIntelligenceTab
+            currentVenue={sailorData.venues.currentVenue}
+            nearbyVenues={sailorData.venues.nearbyVenues}
+            isDetecting={sailorData.venues.isDetecting}
+            onVenueSelect={(venueId) => console.log('Venue selected:', venueId)}
+            onForceDetection={() => console.log('Force venue detection')}
+            onViewVenueDetails={(venueId) => console.log('View venue details:', venueId)}
+          />
+        );
+      case 'documents':
+        return (
+          <DocumentsTab
+            documents={data.documents}
+            onDocumentPress={(documentId) => console.log('Document pressed:', documentId)}
+            onUploadDocument={() => console.log('Upload document')}
+            onProcessDocument={(documentId) => console.log('Process document:', documentId)}
+          />
+        );
+      case 'analytics':
+        return (
+          <AnalyticsTab
+            performanceData={{
+              raceResults: data.performance?.recentResults?.map((result, index) => ({
+                id: `race-${index}`,
+                event: result.raceName,
+                venue: result.venue,
+                date: result.date,
+                position: result.position,
+                fleet: result.fleet,
+                conditions: 'Moderate'
+              })) || [],
+              stats: {
+                totalRaces: data.performance?.seasonStats?.totalRaces || 0,
+                avgPosition: data.performance?.seasonStats?.averagePosition || 0,
+                bestPosition: Math.min(...(data.performance?.recentResults?.map(r => r.position) || [99])),
+                topThreeFinishes: data.performance?.seasonStats?.podiumFinishes || 0,
+                improvementTrend: data.performance?.seasonStats?.improvement || 0,
+                consistencyScore: 75
+              },
+              venuePerformance: data.performance?.venueComparison || [],
+              conditionsAnalysis: [
+                { conditions: 'Light Wind', races: 5, avgPosition: 3.2, strength: 'strong' },
+                { conditions: 'Medium Wind', races: 8, avgPosition: 5.5, strength: 'average' },
+                { conditions: 'Heavy Wind', races: 3, avgPosition: 8.0, strength: 'weak' }
+              ],
+              equipmentCorrelation: [
+                { setup: 'Light Air Setup', races: 5, avgPosition: 3.2, effectiveness: 85 },
+                { setup: 'Standard Setup', races: 8, avgPosition: 5.5, effectiveness: 70 },
+                { setup: 'Heavy Air Setup', races: 3, avgPosition: 8.0, effectiveness: 60 }
+              ]
+            }}
+            onViewRaceDetails={(raceId) => console.log('View race details:', raceId)}
+            onViewVenueAnalysis={(venue) => console.log('View venue analysis:', venue)}
+          />
+        );
+      default:
+        return renderSailorContent();
+    }
+  };
+
+  const renderCoachContent = () => {
+    const data = coachData;
+    // Always show overview - no tabs
+    return (
+      <CoachOverview
+        stats={{
+          activeClients: data.clients?.length ?? 0,
+          totalSessions: data.sessions?.length ?? 0,
+          monthlyEarnings: data.earnings?.monthly?.current ?? 0,
+          clientRetention: 0,
+          averageRating: 0,
+          marketplaceViews: 0,
+        }}
+        clients={data.clients ?? []}
+        upcomingSessions={data.sessions ?? []}
+        leads={data.leads ?? []}
+        earnings={data.earnings}
+        onClientPress={(clientId) => console.log('Client pressed:', clientId)}
+        onSessionPress={(sessionId) => console.log('Session pressed:', sessionId)}
+        onLeadPress={(leadId) => console.log('Lead pressed:', leadId)}
+        onViewAllClients={() => console.log('View all clients')}
+        onViewSchedule={() => console.log('View schedule')}
+        onViewEarnings={() => console.log('View earnings')}
+      />
+    );
+  };
+
+  const renderCoachContent_OLD_TABS = () => {
+    const data = coachData;
+    switch ('removed') {
+      case 'clients':
+        return (
+          <ClientsTab
+            clients={data.clients}
+            onClientPress={(clientId) => console.log('Client pressed:', clientId)}
+            onAddClient={() => console.log('Add new client')}
+            onScheduleSession={(clientId) => setActiveTab('schedule')}
+            onViewProgress={(clientId) => console.log('View progress:', clientId)}
+          />
+        );
+      case 'schedule':
+        return (
+          <ScheduleTab
+            events={data.sessions}
+            onEventPress={(eventId) => console.log('Event pressed:', eventId)}
+            onAddAvailability={() => console.log('Add availability')}
+            onBlockTime={() => console.log('Block time')}
+          />
+        );
+      case 'earnings':
+        return (
+          <EarningsTab
+            earningsData={data.earnings}
+            onViewTransaction={(transactionId) => console.log('Transaction pressed:', transactionId)}
+            onRequestPayout={() => console.log('Request payout')}
+            onViewTaxInfo={() => console.log('View tax info')}
+          />
+        );
+      case 'resources':
+        return (
+          <ResourcesTab
+            resources={data.resources}
+            onResourcePress={(resourceId) => console.log('Resource pressed:', resourceId)}
+            onCreateTemplate={() => console.log('Create template')}
+            onUploadResource={() => console.log('Upload resource')}
+          />
+        );
+      default:
+        return renderCoachContent();
+    }
+  };
+
+  const renderClubContent = () => {
+    const data = clubData;
+    // Always show overview - no tabs
+    return (
+      <ClubOverview
+        stats={data.stats}
+        events={data.events}
+        facilities={data.facilities}
+        recentActivity={data.recentActivity}
+        onEventPress={(eventId) => console.log('Event pressed:', eventId)}
+        onMemberPress={(memberId) => console.log('Member pressed:', memberId)}
+        onFacilityPress={(facilityId) => console.log('Facility pressed:', facilityId)}
+        onViewAllEvents={() => console.log('View all events')}
+        onViewAllMembers={() => console.log('View all members')}
+        onCreateEvent={() => console.log('Create event')}
+      />
+    );
+  };
+
+  const renderClubContent_OLD_TABS = () => {
+    const data = clubData;
+    switch ('removed') {
+      case 'events':
+        return (
+          <EventsTab
+            events={data.events}
+            volunteers={data.volunteers}
+            onEventPress={(eventId) => console.log('Event pressed:', eventId)}
+            onCreateEvent={() => console.log('Create new event')}
+            onManageRegistrations={(eventId) => console.log('Manage registrations:', eventId)}
+            onScheduleVolunteers={(eventId) => console.log('Schedule volunteers:', eventId)}
+          />
+        );
+      case 'members':
+        return (
+          <MembersTab
+            members={data.members}
+            onMemberPress={(memberId) => console.log('Member pressed:', memberId)}
+            onAddMember={() => console.log('Add new member')}
+            onSendMessage={(memberId) => console.log('Send message to:', memberId)}
+            onUpdateMembership={(memberId) => console.log('Update membership:', memberId)}
+          />
+        );
+      case 'facilities':
+        return (
+          <FacilitiesTab
+            facilities={data.facilities}
+            onFacilityPress={(facilityId) => console.log('Facility pressed:', facilityId)}
+            onScheduleMaintenance={(facilityId) => console.log('Schedule maintenance:', facilityId)}
+            onUpdateStatus={(facilityId, status) => console.log('Update status:', facilityId, status)}
+            onReserveFacility={(facilityId) => console.log('Reserve facility:', facilityId)}
+          />
+        );
+      case 'operations':
+        return (
+          <OperationsTab
+            financials={data.financials}
+            volunteers={data.volunteers}
+            onViewFinancials={() => console.log('View detailed financials')}
+            onManageVolunteers={() => console.log('Manage volunteers')}
+            onGenerateReport={() => console.log('Generate operations report')}
+            onContactMember={(memberId) => console.log('Contact member:', memberId)}
+          />
+        );
+      default:
+        return renderClubContent();
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Enhanced Header with Global Context */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.welcomeText}>Welcome back, {user?.user_metadata?.full_name?.split(' ')[0] || 'Sailor'}! 🌍</Text>
-          <Text style={styles.subtitle}>Global Sailing Intelligence Dashboard</Text>
-        </View>
-        {venueIntelligence.currentVenue && (
-          <View style={styles.venueIndicator}>
-            <Ionicons name="location" size={12} color="#0066CC" />
-            <Text style={styles.venueIndicatorText}>{venueIntelligence.currentVenue.country}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Section Navigation */}
-      <View style={styles.sectionNav}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {[
-            { key: 'overview', label: '🏠 Overview', icon: 'home' },
-            { key: 'venue', label: '🌍 Venue Intel', icon: 'location' },
-            { key: 'weather', label: '🌤️ Weather', icon: 'cloudy' },
-            { key: 'strategy', label: '🧠 AI Strategy', icon: 'bulb' },
-            { key: 'analytics', label: '📊 Analytics', icon: 'analytics' }
-          ].map(section => (
-            <TouchableOpacity
-              key={section.key}
-              style={[
-                styles.sectionButton,
-                selectedSection === section.key && styles.sectionButtonActive
-              ]}
-              onPress={() => setSelectedSection(section.key as any)}
-            >
-              <Text style={[
-                styles.sectionButtonText,
-                selectedSection === section.key && styles.sectionButtonTextActive
-              ]}>
-                {section.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Dynamic Content Based on Selection */}
+      {/* Dynamic Content Based on Role and Tab */}
       <View style={styles.content}>
-        {selectedSection === 'overview' && (
-          <ScrollView
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-          >
-            {renderOverviewSection()}
-          </ScrollView>
-        )}
-
-        {selectedSection === 'venue' && (
-          <GlobalVenueIntelligence
-            currentVenue={venueIntelligence.currentVenue}
-            nearbyVenues={venueIntelligence.nearbyVenues}
-            culturalBriefing={venueIntelligence.culturalBriefing}
-            isDetecting={venueIntelligence.isDetecting}
-            confidence={venueIntelligence.venueConfidence}
-            onVenueSelected={(venue) => {
-              console.log('📍 Venue selected manually:', venue.name);
-              venueIntelligence.selectVenue(venue.id);
-            }}
-            onForceDetection={venueIntelligence.forceVenueDetection}
-            onToggleFavorite={venueIntelligence.toggleFavoriteVenue}
-            showNearbyVenues={true}
-            showCulturalBriefing={true}
-            showWeatherPreview={true}
-            showVenueTransition={venueIntelligence.isTransitioning}
-          />
-        )}
-
-        {selectedSection === 'weather' && (
-          <WeatherIntelligence
-            venue={venueIntelligence.currentVenue}
-            nearbyVenues={venueIntelligence.nearbyVenues}
-            onRefresh={onRefresh}
-            isLoading={venueIntelligence.isDetecting}
-            weatherData={venueIntelligence.weather}
-            culturalContext={venueIntelligence.culturalBriefing}
-            regionalSources={venueIntelligence.currentVenue?.weatherSources}
-            showComparison={venueIntelligence.nearbyVenues.length > 0}
-            showRegionalContext={true}
-            onVenueWeatherSelected={(venue) => {
-              console.log('🌤️ Weather view switched to venue:', venue.name);
-              venueIntelligence.selectVenue(venue.id);
-            }}
-          />
-        )}
-
-        {selectedSection === 'strategy' && (
-          <AIRaceAnalysisDashboard
-            currentVenue={venueIntelligence.currentVenue}
-            venueIntelligence={venueIntelligence}
-            weatherData={venueIntelligence.weather}
-            culturalContext={venueIntelligence.culturalBriefing}
-            onStrategyGenerated={(strategy) => {
-              console.log('🧠 AI Strategy generated for venue:', venueIntelligence.currentVenue?.name);
-              console.log('🧠 Strategy confidence:', strategy.confidence);
-              console.log('🧠 Venue-adapted strategy:', strategy.venueSpecific);
-            }}
-            onInsightGenerated={(insight) => {
-              console.log('💡 Tactical insight:', insight.type);
-              console.log('💡 Venue context:', insight.venueContext);
-            }}
-            onVenueStrategyUpdate={(venueStrategy) => {
-              console.log('🌍 Venue-specific strategy updated:', venueStrategy.adaptations);
-            }}
-          />
-        )}
-
-        {selectedSection === 'analytics' && (
-          <View style={styles.comingSoonContainer}>
-            <Ionicons name="analytics" size={64} color="#DDD" />
-            <Text style={styles.comingSoonTitle}>Advanced Analytics</Text>
-            <Text style={styles.comingSoonText}>
-              Performance correlation, venue comparison, and championship progress tracking coming soon.
-            </Text>
-          </View>
-        )}
+        {renderTabContent()}
       </View>
     </SafeAreaView>
   );
@@ -489,326 +475,74 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
+    padding: 24,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }
+      : {
+          boxShadow: '0px 4px',
+          elevation: 3,
+        }
+    ),
   },
   headerContent: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-  },
-  venueIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
     gap: 4,
   },
-  venueIndicatorText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1D4ED8',
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  sectionNav: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingVertical: 8,
+  subtitle: {
+    fontSize: 15,
+    color: '#475569',
   },
-  sectionButton: {
+  quickActionsButton: {
+    marginTop: 16,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1D4ED8',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginHorizontal: 4,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    borderRadius: 999,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 10px 20px rgba(29,78,216,0.25)' }
+      : {
+          boxShadow: '0px 10px',
+          elevation: 6,
+        }
+    ),
   },
-  sectionButtonActive: {
-    backgroundColor: '#1E40AF',
-  },
-  sectionButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  sectionButtonTextActive: {
+  quickActionsText: {
     color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
     fontWeight: '600',
+    color: '#EF4444',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
-  },
-  overviewContent: {
-    flex: 1,
-  },
-  venueContextCard: {
-    margin: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
-  },
-  venueHeader: {
-    flexDirection: 'row',
-    padding: 20,
-  },
-  venueInfo: {
-    flex: 1,
-  },
-  venueTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 4,
-  },
-  venueName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  venueLocation: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  cultureInfo: {
-    alignItems: 'flex-end',
-  },
-  cultureLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 4,
-  },
-  cultureDetail: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 2,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1E293B',
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 16,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  aiActionCard: {
-    backgroundColor: 'transparent',
-  },
-  actionGradient: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 100,
-  },
-  aiActionText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  eventCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  eventInfo: {
-    flex: 1,
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  eventVenue: {
-    fontSize: 14,
-    color: '#3B82F6',
-    marginBottom: 2,
-    fontWeight: '500',
-  },
-  eventDate: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 2,
-  },
-  eventPosition: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '600',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  comingSoonContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  comingSoonTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#64748B',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  comingSoonText: {
-    fontSize: 16,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  // Venue Detection Styles
-  detectionStatus: {
-    fontSize: 12,
-    color: '#E5E7EB',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  confidenceLevel: {
-    fontSize: 11,
-    color: '#D1D5DB',
-    marginTop: 2,
-  },
-  transitionStatus: {
-    fontSize: 12,
-    color: '#FCD34D',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  forceDetectionButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  forceDetectionText: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '500',
   },
 });

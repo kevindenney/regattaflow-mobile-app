@@ -73,11 +73,6 @@ export class VenueDetectionService {
 
   constructor() {
     this.initializeVenueDatabase();
-    console.log('🧭 VenueDetectionService initialized with global sailing venue intelligence');
-
-    // Debug: Check Hong Kong venue radius
-    const hongKongVenue = this.venueDatabase.get('hong-kong');
-    console.log('🧭 [DEBUG] Hong Kong venue radius:', hongKongVenue?.coordinates.radius);
   }
 
   /**
@@ -85,48 +80,28 @@ export class VenueDetectionService {
    */
   async initialize(): Promise<boolean> {
     try {
-      console.log('🌍 [DEBUG] VenueDetectionService.initialize() starting...');
-
       // Request location permissions
-      console.log('🌍 [DEBUG] Requesting location permissions...');
       const { status } = await Location.requestForegroundPermissionsAsync();
-      console.log('🌍 [DEBUG] Location permission status:', status);
 
       if (status !== 'granted') {
-        console.warn('⚠️ Location permission not granted - venue detection will be limited');
         return false;
       }
 
       // Load cached venue from last session
-      console.log('🌍 [DEBUG] Loading cached venue...');
       await this.loadCachedVenue();
-      console.log('🌍 [DEBUG] Cached venue loaded, current venue:', this.currentVenue?.name || 'None');
 
       // Get current location and detect venue
-      console.log('🌍 [DEBUG] Getting current position...');
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
         timeout: 10000, // 10 second timeout
       });
-      console.log('🌍 [DEBUG] Current location obtained:', {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy
-      });
 
       this.lastKnownLocation = location;
 
-      console.log('🌍 [DEBUG] Detecting venue from location...');
       const detectionResult = await this.detectVenueFromLocation(location);
-      console.log('🌍 [DEBUG] Venue detection result:', {
-        venue: detectionResult.venue?.name || 'None',
-        confidence: detectionResult.confidence,
-        distance: detectionResult.distance
-      });
 
       // IMPORTANT: Notify listeners of initial venue detection
       if (detectionResult.venue) {
-        console.log('🌍 [DEBUG] Initial venue detected, notifying listeners immediately');
         const initialLocationUpdate: LocationUpdate = {
           coordinates: {
             latitude: location.coords.latitude,
@@ -141,27 +116,17 @@ export class VenueDetectionService {
 
         // Use setTimeout to ensure listeners are registered first
         setTimeout(() => {
-          console.log('🌍 [DEBUG] Sending delayed initial venue notification:', detectionResult.venue?.name);
           this.notifyListeners(initialLocationUpdate);
         }, 100);
       }
 
       // Start continuous location monitoring for venue transitions
-      console.log('🌍 [DEBUG] Starting location monitoring...');
       this.startLocationMonitoring();
-      console.log('🌍 [DEBUG] Location monitoring started');
 
       this.isInitialized = true;
-      console.log('✅ Venue detection service initialized successfully');
       return true;
 
     } catch (error) {
-      console.error('❌ Failed to initialize venue detection:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
       return false;
     }
   }
@@ -178,16 +143,13 @@ export class VenueDetectionService {
           distanceInterval: 100, // Or when moved 100 meters
         },
         async (location) => {
-          console.log('🌍 [DEBUG] Location monitoring callback triggered');
           this.lastKnownLocation = location;
 
           // Check if we've moved to a different venue
           const oldVenue = this.currentVenue;
-          console.log('🌍 [DEBUG] Before venue detection - oldVenue:', oldVenue?.name || 'None');
 
           await this.detectVenueFromLocation(location);
           const newVenue = this.currentVenue;
-          console.log('🌍 [DEBUG] After venue detection - newVenue:', newVenue?.name || 'None');
 
           // Notify listeners if venue changed
           const locationUpdate: LocationUpdate = {
@@ -202,18 +164,12 @@ export class VenueDetectionService {
             timestamp: new Date(location.timestamp)
           };
 
-          console.log('🌍 [DEBUG] Notifying listeners with locationUpdate:', {
-            venue: locationUpdate.venue?.name || 'None',
-            changed: locationUpdate.changed,
-            coordinates: `${locationUpdate.coordinates.latitude}, ${locationUpdate.coordinates.longitude}`
-          });
-
           this.notifyListeners(locationUpdate);
         }
       );
 
     } catch (error) {
-      console.error('❌ Failed to start location monitoring:', error);
+      // Silent fail, not critical
     }
   }
 
@@ -221,15 +177,8 @@ export class VenueDetectionService {
    * Detect venue from GPS location
    */
   private async detectVenueFromLocation(location: Location.LocationObject): Promise<VenueDetectionResult> {
-    console.log('🌍 [DEBUG] detectVenueFromLocation called with coordinates:', {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude
-    });
-
     const venues = Array.from(this.venueDatabase.values());
     const results: Array<{ venue: SailingVenue; distance: number; confidence: number }> = [];
-
-    console.log('🌍 [DEBUG] Checking distance to', venues.length, 'venues');
 
     // Calculate distances to all venues
     for (const venue of venues) {
@@ -240,18 +189,11 @@ export class VenueDetectionService {
         venue.coordinates.longitude
       );
 
-      console.log(`🌍 [DEBUG] Distance to ${venue.name}: ${Math.round(distance)}m (radius: ${venue.coordinates.radius}m)`);
-
       if (distance <= venue.coordinates.radius) {
         const confidence = this.calculateDetectionConfidence(distance, venue.coordinates.radius);
         results.push({ venue, distance, confidence });
-        console.log(`🌍 [DEBUG] ✅ ${venue.name} DETECTED with confidence ${confidence.toFixed(2)}`);
-      } else {
-        console.log(`🌍 [DEBUG] ❌ ${venue.name} too far (${Math.round(distance)}m > ${venue.coordinates.radius}m)`);
       }
     }
-
-    console.log('🌍 [DEBUG] Total venues within range:', results.length);
 
     // Sort by confidence (closest with highest confidence wins)
     results.sort((a, b) => b.confidence - a.confidence);
@@ -270,9 +212,7 @@ export class VenueDetectionService {
     if (detectedVenue && detectedVenue.id !== this.currentVenue?.id) {
       this.currentVenue = detectedVenue;
       await this.cacheCurrentVenue(detectedVenue);
-      console.log(`🎯 Venue detected: ${detectedVenue.name} (${Math.round(detectionResult.distance)}m away)`);
     } else if (!detectedVenue && this.currentVenue) {
-      console.log(`📍 Left venue: ${this.currentVenue.name}`);
       this.currentVenue = null;
       await AsyncStorage.removeItem('regattaflow_current_venue');
     }
@@ -342,13 +282,66 @@ export class VenueDetectionService {
    * Manually set current venue (for when GPS detection isn't available)
    */
   async setManualVenue(venueId: string): Promise<boolean> {
-    const venue = this.venueDatabase.get(venueId);
+    let venue = this.venueDatabase.get(venueId);
+
+    // If venue not in hardcoded list, try loading from Supabase
     if (!venue) {
-      console.error(`❌ Venue not found: ${venueId}`);
-      return false;
+      try {
+        // Import supabase client
+        const { supabase } = await import('../supabase');
+
+        const { data, error } = await supabase
+          .from('sailing_venues')
+          .select('*')
+          .eq('id', venueId)
+          .single();
+
+        if (error || !data) {
+          return false;
+        }
+
+        // Convert database venue to SailingVenue format
+        venue = {
+          id: data.id,
+          name: data.name,
+          region: data.region as any,
+          country: data.country,
+          city: data.city || data.name.split(' - ')[0] || '',
+          coordinates: {
+            latitude: data.coordinates_lat,
+            longitude: data.coordinates_lng,
+            radius: 5000 // Default 5km radius for manual selection
+          },
+          classification: data.venue_type as any,
+          characteristics: {
+            primaryUse: 'racing',
+            waterType: 'harbor',
+            protectionLevel: 'sheltered',
+            averageDepth: 10,
+            tidalRange: 2
+          },
+          localKnowledge: {
+            bestRacingWinds: 'Varies by season',
+            commonConditions: 'Local sailing conditions',
+            localEffects: [],
+            safetyConsiderations: [],
+            culturalNotes: []
+          },
+          timezone: data.time_zone || 'UTC',
+          supportedLanguages: ['en'],
+          lastUpdated: new Date()
+        };
+
+        // Cache it in the venue database for future use
+        this.venueDatabase.set(venueId, venue);
+
+      } catch (error) {
+        return false;
+      }
     }
 
     const oldVenue = this.currentVenue;
+
     this.currentVenue = venue;
     await this.cacheCurrentVenue(venue);
 
@@ -366,7 +359,6 @@ export class VenueDetectionService {
     };
 
     this.notifyListeners(locationUpdate);
-    console.log(`📍 Manually set venue: ${venue.name}`);
     return true;
   }
 
@@ -409,7 +401,7 @@ export class VenueDetectionService {
       try {
         listener(update);
       } catch (error) {
-        console.error('❌ Error in location listener:', error);
+        // Silent fail, continue notifying other listeners
       }
     });
   }
@@ -424,7 +416,7 @@ export class VenueDetectionService {
         timestamp: new Date().toISOString()
       }));
     } catch (error) {
-      console.error('❌ Failed to cache venue:', error);
+      // Silent fail, caching not critical
     }
   }
 
@@ -443,12 +435,11 @@ export class VenueDetectionService {
           const venue = this.venueDatabase.get(venueId);
           if (venue) {
             this.currentVenue = venue;
-            console.log(`📂 Loaded cached venue: ${venue.name}`);
           }
         }
       }
     } catch (error) {
-      console.error('❌ Failed to load cached venue:', error);
+      // Silent fail, cached venue not critical
     }
   }
 
@@ -461,18 +452,16 @@ export class VenueDetectionService {
       this.locationWatcher = null;
     }
     this.listeners = [];
-    console.log('🧹 Venue detection service cleaned up');
   }
 
   /**
    * Initialize the global venue database with 147+ major sailing venues
    */
   private initializeVenueDatabase(): void {
-    console.log('🧭 [DEBUG] initializeVenueDatabase() called - starting venue database initialization');
     const venues: SailingVenue[] = [
       // Asia-Pacific Championship Venues
       {
-        id: 'hong-kong',
+        id: 'hong-kong-victoria-harbor',
         name: 'Victoria Harbour, Hong Kong',
         region: 'asia-pacific',
         country: 'Hong Kong SAR',
@@ -662,20 +651,9 @@ export class VenueDetectionService {
     // Store venues in the database
     venues.forEach(venue => {
       this.venueDatabase.set(venue.id, venue);
-      if (venue.id === 'hong-kong') {
-        console.log(`🧭 [DEBUG] Hong Kong venue added with radius: ${venue.coordinates.radius}m`);
-      }
     });
-
-    console.log(`🌍 Initialized venue database with ${venues.length} sailing venues`);
-
-    // Verify Hong Kong venue radius after database initialization
-    const hongKongVerification = this.venueDatabase.get('hong-kong');
-    console.log('🧭 [DEBUG] Final Hong Kong verification - radius:', hongKongVerification?.coordinates.radius);
   }
 }
 
 // Export singleton instance
-console.log('🧭 [DEBUG] VenueDetectionService module loading - about to create singleton instance');
 export const venueDetectionService = new VenueDetectionService();
-console.log('🧭 [DEBUG] VenueDetectionService singleton created successfully');

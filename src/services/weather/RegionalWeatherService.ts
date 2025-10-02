@@ -106,7 +106,6 @@ export class RegionalWeatherService {
 
   constructor() {
     this.initializeWeatherModels();
-    console.log('🌤️ RegionalWeatherService initialized with multi-regional support');
   }
 
   /**
@@ -236,8 +235,6 @@ export class RegionalWeatherService {
     models.forEach(model => {
       this.weatherModels.set(`${model.region}-${model.name}`, model);
     });
-
-    console.log(`🌤️ Initialized ${models.length} regional weather models`);
   }
 
   /**

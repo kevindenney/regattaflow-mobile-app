@@ -17,11 +17,10 @@ config.resolver.alias = {
 };
 
 // Add support for import.meta in web platform
-config.transformer.getTransformOptions = async () => ({
-  transform: {
-    experimentalImportSupport: false,
-    inlineRequires: true,
-  },
-});
+const originalGetTransformOptions = config.transformer.getTransformOptions;
+config.transformer.getTransformOptions = async (...args) => {
+  process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+  return originalGetTransformOptions(...args);
+};
 
 module.exports = config;

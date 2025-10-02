@@ -1,29 +1,37 @@
 import { supabase } from '@/src/services/supabase'
 
+const AUTH_ACTIONS_DEBUG_ENABLED = false
+const authActionsLog = (...args: Parameters<typeof console.log>) => {
+  if (!AUTH_ACTIONS_DEBUG_ENABLED) {
+    return
+  }
+  console.log(...args)
+}
+
 export const signOutEverywhere = async () => {
-  console.log('[AUTH] signOut start')
+  authActionsLog('[AUTH] signOut start')
 
   // CRITICAL: Clean URL hash BEFORE calling signOut to prevent immediate re-authentication
-  console.log('[AUTH] Pre-emptive URL hash cleanup...')
+  authActionsLog('[AUTH] Pre-emptive URL hash cleanup...')
   try {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href)
-      console.log('[AUTH] Current URL:', url.href)
-      console.log('[AUTH] Current hash:', url.hash)
+      authActionsLog('[AUTH] Current URL:', url.href)
+      authActionsLog('[AUTH] Current hash:', url.hash)
 
       if (url.hash.includes('access_token') || url.hash.includes('refresh_token')) {
-        console.log('[AUTH] Found auth tokens in hash, cleaning BEFORE signOut...')
+        authActionsLog('[AUTH] Found auth tokens in hash, cleaning BEFORE signOut...')
         window.history.replaceState(null, '', url.origin + url.pathname)
-        console.log('[AUTH] Hash cleaned successfully before signOut')
+        authActionsLog('[AUTH] Hash cleaned successfully before signOut')
       } else {
-        console.log('[AUTH] No auth tokens found in hash')
+        authActionsLog('[AUTH] No auth tokens found in hash')
       }
     }
   } catch (e) {
     console.warn('[AUTH] pre-emptive hash scrub fail', e)
   }
 
-  console.log('[AUTH] About to call supabase.auth.signOut with global scope...')
+  authActionsLog('[AUTH] About to call supabase.auth.signOut with global scope...')
 
   try {
     // Add timeout to prevent infinite hanging
@@ -32,20 +40,20 @@ export const signOutEverywhere = async () => {
       setTimeout(() => reject(new Error('Supabase signOut timeout after 10 seconds')), 10000)
     )
 
-    console.log('[AUTH] Waiting for supabase.auth.signOut with 10s timeout...')
+    authActionsLog('[AUTH] Waiting for supabase.auth.signOut with 10s timeout...')
     const { error } = await Promise.race([signOutPromise, timeoutPromise]) as any
-    console.log('[AUTH] supabase.auth.signOut completed, error:', error)
+    authActionsLog('[AUTH] supabase.auth.signOut completed, error:', error)
 
     if (error) {
       console.error('[AUTH] signOut error:', error)
       // Don't throw on error - try to continue with manual cleanup
-      console.log('[AUTH] Continuing despite Supabase error...')
+      authActionsLog('[AUTH] Continuing despite Supabase error...')
     } else {
-      console.log('[AUTH] signOut success')
+      authActionsLog('[AUTH] signOut success')
     }
 
     // Manual state cleanup as fallback
-    console.log('[AUTH] Performing manual session cleanup...')
+    authActionsLog('[AUTH] Performing manual session cleanup...')
     try {
       // Clear local storage
       if (typeof window !== 'undefined') {
@@ -57,7 +65,7 @@ export const signOutEverywhere = async () => {
           }
         }
         keysToRemove.forEach(key => {
-          console.log('[AUTH] Clearing localStorage key:', key)
+          authActionsLog('[AUTH] Clearing localStorage key:', key)
           localStorage.removeItem(key)
         })
       }
@@ -65,12 +73,12 @@ export const signOutEverywhere = async () => {
       console.warn('[AUTH] Manual cleanup error:', e)
     }
 
-    console.log('[AUTH] signOutEverywhere completed successfully')
+    authActionsLog('[AUTH] signOutEverywhere completed successfully')
   } catch (error) {
     console.error('[AUTH] signOutEverywhere failed with error:', error)
 
     // Even if Supabase fails, try manual cleanup
-    console.log('[AUTH] Attempting manual cleanup after failure...')
+    authActionsLog('[AUTH] Attempting manual cleanup after failure...')
     try {
       if (typeof window !== 'undefined') {
         Object.keys(localStorage).forEach(key => {

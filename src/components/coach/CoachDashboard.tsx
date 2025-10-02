@@ -396,10 +396,7 @@ const styles = StyleSheet.create({
   },
   periodButtonActive: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 1px',
     elevation: 2,
   },
   periodButtonText: {
@@ -422,10 +419,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     width: '48%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
     elevation: 3,
   },
   earningsCard: {
@@ -465,10 +459,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     borderRadius: 12,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
     elevation: 3,
   },
   sectionTitle: {

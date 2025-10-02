@@ -455,7 +455,20 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       <ScrollView style={styles.documentsList}>
         {console.log('📤 DocumentUploadCard: Rendering documents list, count:', uploadedDocuments.length)}
         {uploadedDocuments.map((doc) => (
-          <View key={doc.id} style={styles.documentCard}>
+          <View
+            key={doc.id}
+            style={styles.documentCard}
+            {...(Platform.OS === 'web' && {
+              onMouseEnter: (e: any) => {
+                e.currentTarget.style.transform = 'translateX(4px)';
+                e.currentTarget.style.backgroundColor = '#F0F0F0';
+              },
+              onMouseLeave: (e: any) => {
+                e.currentTarget.style.transform = 'translateX(0)';
+                e.currentTarget.style.backgroundColor = '#F9F9F9';
+              },
+            })}
+          >
             <View style={styles.documentInfo}>
               <Ionicons
                 name={doc.file_type.includes('pdf') ? 'document' : 'image'}
@@ -487,12 +500,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
     elevation: 3,
-  },
+    ...(Platform.OS === 'web' && {
+      // @ts-ignore - Web-specific CSS properties
+      transition: 'box-shadow 0.2s ease-in-out',
+    }),
+  } as any,
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -583,7 +597,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F9F9',
     borderRadius: 8,
     marginBottom: 8,
-  },
+    ...(Platform.OS === 'web' && {
+      // @ts-ignore - Web-specific CSS properties
+      transition: 'transform 0.2s ease-in-out, background-color 0.2s ease-in-out',
+      cursor: 'pointer',
+    }),
+  } as any,
   documentInfo: {
     flexDirection: 'row',
     alignItems: 'center',

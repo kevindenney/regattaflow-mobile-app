@@ -24,14 +24,12 @@ export class VenueDetectionService {
   private isInitialized: boolean = false;
 
   constructor() {
-    console.log('🌍 VenueDetectionService initialized');
   }
 
   /**
    * Initialize venue detection with browser and mobile support
    */
   async initialize(): Promise<boolean> {
-    console.log('🌍 Initializing venue detection...');
 
     try {
       // Initialize the Supabase venue service first
@@ -57,7 +55,6 @@ export class VenueDetectionService {
    * Initialize browser-based geolocation
    */
   private async initializeBrowserDetection(): Promise<boolean> {
-    console.log('🌍 Initializing browser geolocation...');
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       console.warn('🌍 Geolocation not supported, using timezone detection');
@@ -86,7 +83,6 @@ export class VenueDetectionService {
    * Initialize React Native mobile detection (fallback to original Expo implementation)
    */
   private async initializeMobileDetection(): Promise<boolean> {
-    console.log('🌍 Mobile geolocation not implemented yet, using timezone detection');
 
     // For now, use timezone detection for mobile as well
     // TODO: Implement proper Expo Location integration for mobile
@@ -115,7 +111,6 @@ export class VenueDetectionService {
             position.coords.latitude
           ];
 
-          console.log(`🌍 Browser GPS location: ${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}`);
           this.currentLocation = coordinates;
 
           try {
@@ -156,7 +151,6 @@ export class VenueDetectionService {
 
         // Only process if location changed significantly
         if (this.hasLocationChangedSignificantly(coordinates)) {
-          console.log(`🌍 Browser GPS update: ${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}`);
           this.currentLocation = coordinates;
           this.detectVenueFromCoordinates(coordinates).catch(error => {
             console.error('🌍 GPS venue detection failed:', error);
@@ -173,19 +167,16 @@ export class VenueDetectionService {
       }
     );
 
-    console.log('🌍 Browser location watching started');
   }
 
   /**
    * Perform timezone-based venue detection for Hong Kong and other regions
    */
   private async performTimezoneBasedDetection(): Promise<void> {
-    console.log('🌍 Performing timezone-based venue detection...');
 
     try {
       // Get user's timezone
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      console.log(`🌍 Detected timezone: ${timezone}`);
 
       // Map common sailing locations to timezones - Hong Kong specifically!
       const timezoneVenueMap: Record<string, string> = {
@@ -212,7 +203,6 @@ export class VenueDetectionService {
         const allVenues = await supabaseVenueService.getAllVenues();
         const venue = allVenues.find(v => v.id === venueId);
         if (venue) {
-          console.log(`🌍 Venue detected from timezone (${timezone}): ${venue.name}`);
           this.updateCurrentVenue(venue);
           return;
         }
@@ -226,13 +216,11 @@ export class VenueDetectionService {
         if (regionalVenues.length > 0) {
           // Select the most prominent venue in the region
           const primaryVenue = regionalVenues.find(v => v.venueType === 'premier') || regionalVenues[0];
-          console.log(`🌍 Regional venue detected (${region}): ${primaryVenue.name}`);
           this.updateCurrentVenue(primaryVenue);
           return;
         }
       }
 
-      console.log('🌍 Could not detect venue from timezone:', timezone);
       this.updateCurrentVenue(null);
 
     } catch (error) {
@@ -285,7 +273,6 @@ export class VenueDetectionService {
    * Detect venue from GPS coordinates using the Supabase database
    */
   private async detectVenueFromCoordinates(coordinates: Coordinates): Promise<void> {
-    console.log(`🌍 Detecting venue at coordinates: [${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}]`);
 
     try {
       // Try different radius sizes for detection
@@ -295,13 +282,11 @@ export class VenueDetectionService {
       for (const radius of radiusSizes) {
         detectedVenue = await supabaseVenueService.findVenueByLocation(coordinates, radius);
         if (detectedVenue) {
-          console.log(`🌍 Venue detected within ${radius}km: ${detectedVenue.name}`);
           break;
         }
       }
 
       if (!detectedVenue) {
-        console.log('🌍 No venue found near current location');
       }
 
       this.updateCurrentVenue(detectedVenue);
@@ -369,7 +354,6 @@ export class VenueDetectionService {
       return;
     }
 
-    console.log(`🌍 Venue transition: ${previousVenue?.name || 'Unknown'} → ${venue?.name || 'Unknown'}`);
 
     // Handle venue transition
     if (previousVenue && venue && previousVenue.id !== venue.id) {
@@ -405,10 +389,6 @@ export class VenueDetectionService {
 
     // Log venue intelligence
     if (venue) {
-      console.log(`🌍 Now at: ${venue.name} (${venue.country})`);
-      console.log(`🌍 Venue type: ${venue.venueType}`);
-      console.log(`🌍 Cultural context: ${venue.culturalContext?.sailingCulture?.tradition || 'Unknown'}`);
-      console.log(`🌍 Primary language: ${venue.culturalContext?.primaryLanguages?.[0]?.name || 'Unknown'}`);
     }
   }
 
@@ -578,7 +558,6 @@ export class VenueDetectionService {
    * Manually select a venue
    */
   async selectVenue(venueId: string): Promise<boolean> {
-    console.log(`🌍 Manually selecting venue: ${venueId}`);
 
     try {
       const allVenues = await supabaseVenueService.getAllVenues();
@@ -629,7 +608,6 @@ export class VenueDetectionService {
    * Force a venue detection attempt
    */
   async forceDetection(): Promise<void> {
-    console.log('🌍 Forcing venue detection...');
 
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
       return new Promise((resolve) => {
@@ -662,12 +640,10 @@ export class VenueDetectionService {
    * Stop venue detection and cleanup
    */
   stop(): void {
-    console.log('🌍 Cleaning up venue detection service');
 
     if (this.watchId !== null) {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
         navigator.geolocation.clearWatch(this.watchId);
-        console.log('🌍 Browser location monitoring stopped');
       }
       this.watchId = null;
     }
@@ -678,14 +654,12 @@ export class VenueDetectionService {
     this.currentLocation = null;
     this.isInitialized = false;
 
-    console.log('🌍 Venue detection service stopped');
   }
 
   /**
    * Add cleanup method as alias for stop (for backward compatibility)
    */
   cleanup(): void {
-    console.log('🌍 [DEBUG] cleanup() called, delegating to stop()');
     this.stop();
   }
 }

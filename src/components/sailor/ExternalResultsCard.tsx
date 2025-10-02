@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/lib/contexts/AuthContext';
@@ -127,6 +128,16 @@ export const ExternalResultsCard: React.FC<ExternalResultsCardProps> = ({
     <TouchableOpacity
       style={[styles.compactCard, style]}
       onPress={() => setExpanded(true)}
+      {...(Platform.OS === 'web' && {
+        onMouseEnter: (e: any) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+        },
+        onMouseLeave: (e: any) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.1)';
+        },
+      })}
     >
       <View style={styles.compactHeader}>
         <View style={styles.compactIcon}>
@@ -243,12 +254,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 1px',
     elevation: 2,
-  },
+    ...(Platform.OS === 'web' && {
+      // @ts-ignore - Web-specific CSS properties
+      transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+      cursor: 'pointer',
+    }),
+  } as any,
   compactHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -279,12 +292,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    boxShadow: '0px 2px',
     elevation: 4,
-  },
+    ...(Platform.OS === 'web' && {
+      // @ts-ignore - Web-specific CSS properties
+      transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+    }),
+  } as any,
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

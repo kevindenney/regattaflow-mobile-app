@@ -15,19 +15,11 @@ import { ScrollFix } from '@/src/components/landing/ScrollFix';
 import SignupScreen from './(auth)/signup';
 
 export default function LandingPage() {
-  console.log('✅ [LANDING] LandingPage component loading with HeroTabs');
-
   const { signedIn, ready } = useAuth();
   const pathname = usePathname();
 
-  console.log('🏠 [LANDING] ===== LANDING PAGE RENDER =====');
-  console.log('🏠 [LANDING] Auth state:', { signedIn, ready });
-  console.log('🏠 [LANDING] Current pathname:', pathname);
-  console.log('🏠 [LANDING] ===== LANDING PAGE RENDER COMPLETE =====');
-
   // TEMPORARY DEBUG: If URL contains signup, show signup component
   if (pathname && (pathname.includes('signup') || pathname.includes('auth'))) {
-    console.log('🚨 [LANDING] TEMP DEBUG: Showing signup component because pathname contains signup/auth');
     return <SignupScreen />;
   }
 

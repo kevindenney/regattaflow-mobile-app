@@ -506,10 +506,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 25,
     elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    boxShadow: '0px 2px',
   },
   aiChatButtonText: {
     color: '#000000',

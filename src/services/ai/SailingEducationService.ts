@@ -70,7 +70,6 @@ export class SailingEducationService {
 
     // Initialize with core sailing education resources
     this.initializeEducationalResources();
-    console.log('📚 SailingEducationService initialized with professional educational framework');
   }
 
   /**
@@ -127,7 +126,6 @@ export class SailingEducationService {
       await this.updateVenueInsights(venueId, resource);
     }
 
-    console.log(`📚 Processed educational resource from ${organizationName}: ${resource.content.keyTopics.length} topics`);
     return resource;
   }
 
@@ -306,8 +304,6 @@ export class SailingEducationService {
       },
       ['hong-kong']
     );
-
-    console.log('📚 Initialized core sailing education resources');
   }
 
   /**

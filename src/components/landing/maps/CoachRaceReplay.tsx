@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, {
@@ -117,11 +117,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }
+      : {
+          boxShadow: '0px 2px',
+          elevation: 4,
+        }
+    ),
   },
   studentCard: {
     top: 16,

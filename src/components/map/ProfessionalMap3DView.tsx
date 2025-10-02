@@ -46,10 +46,15 @@ export function ProfessionalMap3DView({
   professionalMode = true
 }: ProfessionalMap3DViewProps) {
   // Debug logging for received props
-  console.log('🗺️ ProfessionalMap3DView DEBUG:');
-  console.log('  venue:', venue);
-  console.log('  marks received:', marks?.length || 0, 'race course marks');
-  console.log('  clubMarkers received:', clubMarkers?.length || 0, 'club markers');
+  console.log('🗺️🔥🔥🔥🔥🔥 ProfessionalMap3DView RENDER START =====');
+  console.log('🗺️🔥   venue:', venue);
+  console.log('🗺️🔥   venueType:', typeof venue);
+  console.log('🗺️🔥   marks received:', marks?.length || 0, 'race course marks');
+  console.log('🗺️🔥   clubMarkers received:', clubMarkers?.length || 0, 'club markers');
+  console.log('🗺️🔥   config:', config);
+  console.log('🗺️🔥   professionalMode:', professionalMode);
+  console.log('🗺️🔥   Platform.OS:', Platform.OS);
+  console.log('🗺️🔥   CRITICAL: This component IS rendering! Check if it returns the WebMapView...');
 
   // Core state
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -180,7 +185,27 @@ export function ProfessionalMap3DView({
     };
 
     initializeMap();
-  }, [venue, isInitialized]);
+  }, [isInitialized]);
+
+  // Update map camera when venue changes (after initialization)
+  useEffect(() => {
+    if (!mapEngine || !isInitialized || !venueConfig?.coordinates?.center) return;
+
+    console.log(`🎯 Flying to new venue: ${venue}`);
+
+    mapEngine.flyTo({
+      center: {
+        latitude: venueConfig.coordinates.center.latitude,
+        longitude: venueConfig.coordinates.center.longitude
+      },
+      zoom: 14,
+      bearing: 0,
+      pitch: 60
+    }, {
+      duration: 2000,
+      essential: true
+    });
+  }, [venue, mapEngine, isInitialized, venueConfig]);
 
   // Setup professional weather updates
   useEffect(() => {
@@ -449,6 +474,16 @@ export function ProfessionalMap3DView({
   }, [onMapPress, tacticalMode, calculateTacticalAdvantage]);
 
   const { width, height } = Dimensions.get('window');
+
+  console.log('🗺️🔥🔥🔥 ProfessionalMap3DView BEFORE RETURN:');
+  console.log('  Dimensions:', { width, height });
+  console.log('  About to render WebMapView with props:', {
+    venue,
+    marksCount: marks?.length,
+    clubMarkersCount: clubMarkers?.length,
+    hasOnMarkPress: !!onMarkPress,
+    hasOnMapPress: !!onMapPress,
+  });
 
   return (
     <View style={[styles.container, { width, height: height * 0.85 }]}>

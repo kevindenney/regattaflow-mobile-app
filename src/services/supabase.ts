@@ -1,4 +1,4 @@
-import {createClient} from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL!
 const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
@@ -18,7 +18,6 @@ export const supabase = g.__sb.client ||= createClient(url, anon, {
 
 if (!g.__sb.logged) {
   g.__sb.logged = true
-  console.log('[SB] Client singleton created')
 }
 
 // Database types
@@ -34,7 +33,7 @@ export interface Database {
           subscription_tier: string
           stripe_customer_id: string
           user_type: 'sailor' | 'coach' | 'club' | null
-          onboarding_completed: boolean
+          onboarding_completed?: boolean
           created_at: string
         }
         Insert: {
@@ -60,6 +59,202 @@ export interface Database {
           created_at?: string
         }
       }
+    boat_classes: {
+      Row: {
+        id: string
+        name: string
+        class_association: string | null
+        tuning_guide_url: string | null
+        auto_scrape_enabled: boolean | null
+        measurement_rules: any | null
+        metadata: any | null
+      }
+      Insert: {
+        id?: string
+        name: string
+        class_association?: string | null
+        tuning_guide_url?: string | null
+        auto_scrape_enabled?: boolean | null
+        measurement_rules?: any | null
+        metadata?: any | null
+      }
+      Update: {
+        id?: string
+        name?: string
+        class_association?: string | null
+        tuning_guide_url?: string | null
+        auto_scrape_enabled?: boolean | null
+        measurement_rules?: any | null
+        metadata?: any | null
+      }
+    }
+    sailor_classes: {
+      Row: {
+        sailor_id: string
+        class_id: string
+        is_primary: boolean | null
+        boat_name: string | null
+        sail_number: string | null
+        joined_at: string | null
+      }
+      Insert: {
+        sailor_id: string
+        class_id: string
+        is_primary?: boolean | null
+        boat_name?: string | null
+        sail_number?: string | null
+        joined_at?: string | null
+      }
+      Update: {
+        sailor_id?: string
+        class_id?: string
+        is_primary?: boolean | null
+        boat_name?: string | null
+        sail_number?: string | null
+        joined_at?: string | null
+      }
+    }
+    coach_specializations: {
+      Row: {
+        coach_id: string
+        class_id: string
+        experience_years: number | null
+        rate_per_session: number | null
+      }
+      Insert: {
+        coach_id: string
+        class_id: string
+        experience_years?: number | null
+        rate_per_session?: number | null
+      }
+      Update: {
+        coach_id?: string
+        class_id?: string
+        experience_years?: number | null
+        rate_per_session?: number | null
+      }
+    }
+    club_class_fleets: {
+      Row: {
+        club_id: string
+        class_id: string
+        fleet_captain_id: string | null
+        active_boats_count: number | null
+        fleet_notes: string | null
+      }
+      Insert: {
+        club_id: string
+        class_id: string
+        fleet_captain_id?: string | null
+        active_boats_count?: number | null
+        fleet_notes?: string | null
+      }
+      Update: {
+        club_id?: string
+        class_id?: string
+        fleet_captain_id?: string | null
+        active_boats_count?: number | null
+        fleet_notes?: string | null
+      }
+    }
+    boat_classes: {
+      Row: {
+        id: string
+        name: string
+        class_association: string | null
+        tuning_guide_url: string | null
+        auto_scrape_enabled: boolean | null
+        measurement_rules: any | null
+        metadata: any | null
+      }
+      Insert: {
+        id?: string
+        name: string
+        class_association?: string | null
+        tuning_guide_url?: string | null
+        auto_scrape_enabled?: boolean | null
+        measurement_rules?: any | null
+        metadata?: any | null
+      }
+      Update: {
+        id?: string
+        name?: string
+        class_association?: string | null
+        tuning_guide_url?: string | null
+        auto_scrape_enabled?: boolean | null
+        measurement_rules?: any | null
+        metadata?: any | null
+      }
+    }
+    sailor_classes: {
+      Row: {
+        sailor_id: string
+        class_id: string
+        is_primary: boolean | null
+        boat_name: string | null
+        sail_number: string | null
+        joined_at: string | null
+      }
+      Insert: {
+        sailor_id: string
+        class_id: string
+        is_primary?: boolean | null
+        boat_name?: string | null
+        sail_number?: string | null
+        joined_at?: string | null
+      }
+      Update: {
+        sailor_id?: string
+        class_id?: string
+        is_primary?: boolean | null
+        boat_name?: string | null
+        sail_number?: string | null
+        joined_at?: string | null
+      }
+    }
+    coach_specializations: {
+      Row: {
+        coach_id: string
+        class_id: string
+        experience_years: number | null
+        rate_per_session: number | null
+      }
+      Insert: {
+        coach_id: string
+        class_id: string
+        experience_years?: number | null
+        rate_per_session?: number | null
+      }
+      Update: {
+        coach_id?: string
+        class_id?: string
+        experience_years?: number | null
+        rate_per_session?: number | null
+      }
+    }
+    club_class_fleets: {
+      Row: {
+        club_id: string
+        class_id: string
+        fleet_captain_id: string | null
+        active_boats_count: number | null
+        fleet_notes: string | null
+      }
+      Insert: {
+        club_id: string
+        class_id: string
+        fleet_captain_id?: string | null
+        active_boats_count?: number | null
+        fleet_notes?: string | null
+      }
+      Update: {
+        club_id?: string
+        class_id?: string
+        fleet_captain_id?: string | null
+        active_boats_count?: number | null
+        fleet_notes?: string | null
+      }
+    }
       regattas: {
         Row: {
           id: string

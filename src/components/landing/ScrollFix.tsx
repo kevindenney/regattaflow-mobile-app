@@ -67,9 +67,6 @@ export function ScrollFix() {
       `;
       document.head.appendChild(style);
 
-      // Log for debugging
-      console.log('🔧 ScrollFix: Styles injected for scrolling');
-
       return () => {
         document.head.removeChild(style);
       };

@@ -111,10 +111,7 @@ const styles = StyleSheet.create({
     padding: 20,
     minWidth: 200,
     zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    boxShadow: '0px 4px',
     elevation: 8,
   },
   modalTitle: {

@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
+import { getDashboardRoute } from '@/src/lib/utils/userTypeRouting';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { supabase } from '@/src/services/supabase';
 import { errToText } from '@/src/utils/errToText';
-import { getDashboardRoute } from '@/src/lib/utils/userTypeRouting';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 const onboardingSteps = [
   {
@@ -62,7 +64,10 @@ const userTypeOptions = [
   },
 ];
 
+const SELECTED_ROLE_CACHE_KEY = 'regattaflow.selectedUserType';
+
 export default function OnboardingScreen() {
+  const { fetchUserProfile, userProfile } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedUserType, setSelectedUserType] = useState<'sailor' | 'coach' | 'club' | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,6 +87,24 @@ export default function OnboardingScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      const cachedRole = await AsyncStorage.getItem(SELECTED_ROLE_CACHE_KEY);
+      if (cachedRole === 'sailor' || cachedRole === 'coach' || cachedRole === 'club') {
+        setSelectedUserType(cachedRole);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (userProfile?.user_type && !selectedUserType) {
+      setSelectedUserType(userProfile.user_type);
+      AsyncStorage.setItem(SELECTED_ROLE_CACHE_KEY, userProfile.user_type).catch((error) => {
+        console.warn('[ONBOARD] Failed to cache selected user type:', error);
+      });
+    }
+  }, [userProfile, selectedUserType]);
+
   const handleNext = () => {
     if (currentStep < onboardingSteps.length - 1) {
       setCurrentStep(currentStep + 1);
@@ -96,6 +119,9 @@ export default function OnboardingScreen() {
 
   const handleUserTypeSelect = (type: 'sailor' | 'coach' | 'club') => {
     setSelectedUserType(type);
+    AsyncStorage.setItem(SELECTED_ROLE_CACHE_KEY, type).catch((error) => {
+      console.warn('[ONBOARD] Failed to cache selected user type:', error);
+    });
   };
 
   const handleGetStarted = async () => {
@@ -133,6 +159,15 @@ export default function OnboardingScreen() {
         console.warn('[ONBOARD] upsert blocked (RLS?):', upsertErr);
         setMsg(`Profile creation failed: ${errToText(upsertErr)}`);
         return;
+      }
+
+      try {
+        await fetchUserProfile(user.id);
+        if (selectedUserType) {
+          await AsyncStorage.setItem(SELECTED_ROLE_CACHE_KEY, selectedUserType);
+        }
+      } catch (profileError) {
+        console.warn('[ONBOARD] Failed to refresh profile after onboarding:', profileError);
       }
 
       // Navigate to appropriate dashboard using unified routing

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  Platform,
 } from 'react-native';
 import { CoachSearchResult } from '../../types/coach';
 
@@ -51,7 +52,21 @@ export default function CoachCard({ coach, onPress, onBookPress }: CoachCardProp
   };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.95}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      activeOpacity={0.95}
+      {...(Platform.OS === 'web' && {
+        onMouseEnter: (e: any) => {
+          e.currentTarget.style.transform = 'translateY(-4px)';
+          e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.15)';
+        },
+        onMouseLeave: (e: any) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+        },
+      })}
+    >
       <View style={styles.cardContent}>
         {/* Header Row */}
         <View style={styles.header}>
@@ -180,12 +195,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    boxShadow: '0px 2px',
     elevation: 3,
-  },
+    ...(Platform.OS === 'web' && {
+      // @ts-ignore - Web-specific CSS properties
+      transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+      cursor: 'pointer',
+    }),
+  } as any,
   cardContent: {
     padding: 20,
   },
