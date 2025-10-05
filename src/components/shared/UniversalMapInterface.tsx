@@ -18,7 +18,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
 import { ProfessionalMapScreen } from '@/src/components/map/ProfessionalMapScreen';
 import { WebMapView } from '@/src/components/map/WebMapView';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 interface UniversalMapInterfaceProps {
   userType: 'sailor' | 'coach' | 'club';

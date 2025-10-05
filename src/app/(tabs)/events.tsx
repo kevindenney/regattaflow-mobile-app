@@ -1,82 +1,191 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
+import EventService, { ClubEvent, EventRegistrationStats } from '@/src/services/eventService';
+import { format } from 'date-fns';
 
 export default function EventsScreen() {
+  const router = useRouter();
+  const [events, setEvents] = useState<ClubEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [eventStats, setEventStats] = useState<Record<string, EventRegistrationStats>>({});
+
+  useEffect(() => {
+    loadEvents();
+  }, []);
+
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      // For now, load public events. In production, filter by user's club
+      const data = await EventService.getUpcomingEvents(20);
+      setEvents(data);
+
+      // Load stats for each event
+      const statsPromises = data.map(async (event) => {
+        try {
+          const stats = await EventService.getRegistrationStats(event.id);
+          return { id: event.id, stats };
+        } catch (error) {
+          return { id: event.id, stats: null };
+        }
+      });
+
+      const statsResults = await Promise.all(statsPromises);
+      const statsMap: Record<string, EventRegistrationStats> = {};
+      statsResults.forEach(({ id, stats }) => {
+        if (stats) statsMap[id] = stats;
+      });
+      setEventStats(statsMap);
+    } catch (error) {
+      console.error('Error loading events:', error);
+      Alert.alert('Error', 'Failed to load events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'registration_open':
+        return '#10B981';
+      case 'registration_closed':
+      case 'in_progress':
+        return '#007AFF';
+      case 'completed':
+        return '#64748B';
+      case 'cancelled':
+        return '#EF4444';
+      default:
+        return '#F59E0B';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'registration_open':
+        return 'Registration Open';
+      case 'registration_closed':
+        return 'Registration Closed';
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'published':
+        return 'Published';
+      default:
+        return 'Draft';
+    }
+  };
+
+  const formatEventDate = (startDate: string, endDate: string) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (format(start, 'yyyy-MM-dd') === format(end, 'yyyy-MM-dd')) {
+      return format(start, 'MMM dd, yyyy');
+    }
+
+    return `${format(start, 'MMM dd')}-${format(end, 'dd, yyyy')}`;
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <ThemedText style={styles.title}>Events</ThemedText>
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => router.push('/club/event/create')}
+          >
             <Ionicons name="add-circle" size={32} color="#007AFF" />
           </TouchableOpacity>
         </View>
 
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="calendar-outline" size={24} color="#007AFF" />
-            <ThemedText style={styles.actionText}>New Event</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push('/club/event/create?type=regatta')}
+          >
             <Ionicons name="sailboat" size={24} color="#007AFF" />
             <ThemedText style={styles.actionText}>New Regatta</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push('/club/event/create?type=training')}
+          >
             <Ionicons name="school-outline" size={24} color="#007AFF" />
             <ThemedText style={styles.actionText}>Training</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push('/club/event/create?type=social')}
+          >
+            <Ionicons name="people-outline" size={24} color="#007AFF" />
+            <ThemedText style={styles.actionText}>Social</ThemedText>
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Upcoming Events</ThemedText>
 
-          {/* Placeholder event cards */}
-          {[
-            {
-              title: 'Spring Championship Regatta',
-              date: 'March 15-17, 2024',
-              participants: 45,
-              status: 'Registration Open',
-              color: '#10B981'
-            },
-            {
-              title: 'Junior Sailing Training',
-              date: 'March 22, 2024',
-              participants: 18,
-              status: 'Confirmed',
-              color: '#007AFF'
-            },
-            {
-              title: 'Club Social Evening',
-              date: 'March 30, 2024',
-              participants: 32,
-              status: 'Planning',
-              color: '#F59E0B'
-            },
-          ].map((event, i) => (
-            <TouchableOpacity key={i} style={styles.eventCard}>
-              <View style={[styles.eventStatus, { backgroundColor: event.color }]} />
-              <View style={styles.eventInfo}>
-                <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
-                <ThemedText style={styles.eventDate}>{event.date}</ThemedText>
-                <View style={styles.eventMeta}>
-                  <View style={styles.eventMetaItem}>
-                    <Ionicons name="people-outline" size={16} color="#64748B" />
-                    <ThemedText style={styles.eventMetaText}>{event.participants} registered</ThemedText>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: `${event.color}20` }]}>
-                    <ThemedText style={[styles.statusText, { color: event.color }]}>
-                      {event.status}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+            </View>
+          ) : events.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="calendar-outline" size={48} color="#CBD5E1" />
+              <ThemedText style={styles.emptyText}>No upcoming events</ThemedText>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => router.push('/club/event/create')}
+              >
+                <ThemedText style={styles.createButtonText}>Create Event</ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            events.map((event) => {
+              const stats = eventStats[event.id];
+              const statusColor = getStatusColor(event.status);
+
+              return (
+                <TouchableOpacity
+                  key={event.id}
+                  style={styles.eventCard}
+                  onPress={() => router.push(`/club/event/${event.id}`)}
+                >
+                  <View style={[styles.eventStatus, { backgroundColor: statusColor }]} />
+                  <View style={styles.eventInfo}>
+                    <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
+                    <ThemedText style={styles.eventDate}>
+                      {formatEventDate(event.start_date, event.end_date)}
                     </ThemedText>
+                    <View style={styles.eventMeta}>
+                      <View style={styles.eventMetaItem}>
+                        <Ionicons name="people-outline" size={16} color="#64748B" />
+                        <ThemedText style={styles.eventMetaText}>
+                          {stats?.approved_count || 0} registered
+                          {event.max_participants && ` / ${event.max_participants}`}
+                        </ThemedText>
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
+                        <ThemedText style={[styles.statusText, { color: statusColor }]}>
+                          {getStatusLabel(event.status)}
+                        </ThemedText>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#CBD5E1" />
-            </TouchableOpacity>
-          ))}
+                  <Ionicons name="chevron-forward" size={24} color="#CBD5E1" />
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         <View style={styles.section}>
@@ -323,5 +432,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
     textAlign: 'center',
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#64748B',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  createButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { supabase } from '../lib/supabase';
+import { supabase } from './supabase';
 import { CoachSearchResult, SailorProfile } from '../types/coach';
 
 interface MatchingCriteria {

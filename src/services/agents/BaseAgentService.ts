@@ -51,6 +51,7 @@ export class BaseAgentService {
 
     this.client = new Anthropic({
       apiKey: apiKey || 'dummy-key-for-development',
+      dangerouslyAllowBrowser: true,
     });
 
     this.config = {
@@ -79,7 +80,7 @@ export class BaseAgentService {
     // This is a simplified conversion - extend as needed for complex schemas
 
     if (zodSchema instanceof z.ZodObject) {
-      const shape = zodSchema._def.shape();
+      const shape = zodSchema._def.shape;
       const properties: Record<string, any> = {};
       const required: string[] = [];
 
@@ -116,12 +117,12 @@ export class BaseAgentService {
     if (schema instanceof z.ZodArray) {
       return {
         type: 'array',
-        items: this.zodSchemaToJsonSchema(schema.element),
+        items: this.zodSchemaToJsonSchema(schema._def.type as any),
         description: schema.description || '',
       };
     }
     if (schema instanceof z.ZodObject) {
-      const shape = schema._def.shape();
+      const shape = schema._def.shape;
       const properties: Record<string, any> = {};
       const required: string[] = [];
 
@@ -139,7 +140,7 @@ export class BaseAgentService {
       };
     }
     if (schema instanceof z.ZodOptional) {
-      return this.zodSchemaToJsonSchema(schema.unwrap());
+      return this.zodSchemaToJsonSchema(schema._def.innerType as any);
     }
 
     // Default fallback

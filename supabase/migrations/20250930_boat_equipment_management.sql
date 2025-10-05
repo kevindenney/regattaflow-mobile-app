@@ -339,6 +339,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_equipment_usage_trigger ON equipment_race_usage;
 CREATE TRIGGER update_equipment_usage_trigger
   AFTER INSERT ON equipment_race_usage
   FOR EACH ROW EXECUTE FUNCTION update_equipment_usage();
@@ -368,6 +369,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_tuning_performance_trigger ON equipment_race_usage;
 CREATE TRIGGER update_tuning_performance_trigger
   AFTER INSERT OR UPDATE ON equipment_race_usage
   FOR EACH ROW EXECUTE FUNCTION update_tuning_performance();
@@ -453,20 +455,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS check_equipment_maintenance_trigger ON boat_equipment;
 CREATE TRIGGER check_equipment_maintenance_trigger
   AFTER INSERT OR UPDATE OF total_usage_hours, status ON boat_equipment
   FOR EACH ROW EXECUTE FUNCTION check_equipment_maintenance_due();
 
 -- Standard updated_at triggers
+DROP TRIGGER IF EXISTS update_equipment_products_updated_at ON equipment_products;
 CREATE TRIGGER update_equipment_products_updated_at BEFORE UPDATE ON equipment_products
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_boat_equipment_updated_at ON boat_equipment;
 CREATE TRIGGER update_boat_equipment_updated_at BEFORE UPDATE ON boat_equipment
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_maintenance_logs_updated_at ON equipment_maintenance_logs;
 CREATE TRIGGER update_maintenance_logs_updated_at BEFORE UPDATE ON equipment_maintenance_logs
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_tuning_settings_updated_at ON boat_tuning_settings;
 CREATE TRIGGER update_tuning_settings_updated_at BEFORE UPDATE ON boat_tuning_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

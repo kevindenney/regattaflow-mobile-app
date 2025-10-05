@@ -62,7 +62,7 @@ export function VenueIntelTab({
     return (
       <View style={styles.detectingContainer}>
         <View style={styles.detectingContent}>
-          <MaterialCommunityIcons name="radar" size={48} color="#3B82F6" />
+          <MaterialCommunityIcons name="radar" size={48} color="#9333ea" />
           <Text style={styles.detectingTitle}>Detecting Your Location</Text>
           <Text style={styles.detectingText}>
             Searching for nearby sailing venues to provide local intelligence...
@@ -145,7 +145,7 @@ export function VenueIntelTab({
       >
         <View style={styles.venueHeader}>
           <LinearGradient
-            colors={['#4C63D2', '#667eea']}
+            colors={['#9333ea', '#7e22ce']}
             style={styles.venueHeaderGradient}
           >
             <View style={styles.venueHeaderInfo}>

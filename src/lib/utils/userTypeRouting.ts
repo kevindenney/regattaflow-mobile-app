@@ -1,4 +1,4 @@
-import { UserType } from '@/src/providers/AuthProvider';
+import { UserType } from '@/src/services/supabase';
 
 /**
  * Get the correct dashboard route based on user type
@@ -34,8 +34,8 @@ export function shouldCompleteOnboarding(userProfile: any): boolean {
 }
 
 /**
- * Get the onboarding route
+ * Get the onboarding route - now routes to persona selection
  */
 export function getOnboardingRoute(): string {
-  return '/(auth)/onboarding';
+  return '/(auth)/persona-selection';
 }

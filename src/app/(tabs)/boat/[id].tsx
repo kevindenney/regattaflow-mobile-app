@@ -9,7 +9,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -17,46 +16,38 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {
-  BoatEquipmentInventory,
-  MaintenanceTimeline,
-  TuningSettings,
-  EquipmentAlerts,
-  BoatActionMenu,
-  AddEquipmentForm,
-  LogMaintenanceForm,
-  CreateTuningSetupForm,
-  UploadDocumentForm,
-  AlertSubscriptionModal,
-  type EquipmentFormData,
-  type MaintenanceFormData,
-  type TuningSetupFormData,
-  type DocumentFormData,
-  type AlertSubscriptionData,
-} from '@/src/components/sailor';
+// Import components individually to avoid victory-native dependency
+import { BoatDetail } from '@/src/components/boats/BoatDetail';
+import { BoatCrewList } from '@/src/components/boats/BoatCrewList';
+import { SailInventory } from '@/src/components/boats/SailInventory';
+import { RiggingConfig } from '@/src/components/boats/RiggingConfig';
+import { MaintenanceSchedule } from '@/src/components/boats/MaintenanceSchedule';
+// PerformanceAnalysis - Not imported to avoid victory-native dependency on web
 
 interface BoatDetails {
   id: string;
+  sailorId: string;
+  classId: string;
   name: string;
   className: string;
   sailNumber?: string;
+  manufacturer?: string;
+  yearBuilt?: number;
+  hullMaterial?: string;
   isPrimary: boolean;
+  homeClub?: string;
+  storageLocation?: string;
+  ownership?: string;
 }
+
+type TabType = 'overview' | 'crew' | 'sails' | 'rigging' | 'equipment' | 'maintenance' | 'performance';
 
 export default function BoatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [boat, setBoat] = useState<BoatDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'equipment' | 'maintenance' | 'tuning' | 'alerts'>('equipment');
-
-  // Modal states
-  const [showActionMenu, setShowActionMenu] = useState(false);
-  const [showAddEquipmentForm, setShowAddEquipmentForm] = useState(false);
-  const [showLogMaintenanceForm, setShowLogMaintenanceForm] = useState(false);
-  const [showCreateTuningForm, setShowCreateTuningForm] = useState(false);
-  const [showUploadDocumentForm, setShowUploadDocumentForm] = useState(false);
-  const [showAlertSubscription, setShowAlertSubscription] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   useEffect(() => {
     loadBoatDetails();
@@ -69,47 +60,24 @@ export default function BoatDetailScreen() {
       // For now, using mock data
       setBoat({
         id: id || '',
+        sailorId: user?.id || '',
+        classId: '861d0d69-7f2e-41e8-9f97-0f410c1aa175', // Mock class ID (Dragon class)
         name: 'Dragonfly',
         className: 'Dragon',
         sailNumber: '1234',
+        manufacturer: 'Petticrows',
+        yearBuilt: 2018,
+        hullMaterial: 'Carbon Fiber',
         isPrimary: true,
+        homeClub: 'Royal Hong Kong Yacht Club',
+        storageLocation: 'RHKYC Kellett Island',
+        ownership: 'Owned',
       });
     } catch (error) {
       console.error('Error loading boat details:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Form submission handlers
-  const handleAddEquipment = (data: EquipmentFormData) => {
-    console.log('Adding equipment:', data);
-    // TODO: Save to Supabase
-    setShowAddEquipmentForm(false);
-  };
-
-  const handleLogMaintenance = (data: MaintenanceFormData) => {
-    console.log('Logging maintenance:', data);
-    // TODO: Save to Supabase
-    setShowLogMaintenanceForm(false);
-  };
-
-  const handleCreateTuningSetup = (data: TuningSetupFormData) => {
-    console.log('Creating tuning setup:', data);
-    // TODO: Save to Supabase
-    setShowCreateTuningForm(false);
-  };
-
-  const handleUploadDocument = (data: DocumentFormData) => {
-    console.log('Uploading document:', data);
-    // TODO: Save to Supabase
-    setShowUploadDocumentForm(false);
-  };
-
-  const handleSaveAlertSubscription = (data: AlertSubscriptionData) => {
-    console.log('Saving alert subscription:', data);
-    // TODO: Save to Supabase
-    setShowAlertSubscription(false);
   };
 
   if (loading) {
@@ -148,20 +116,84 @@ export default function BoatDetailScreen() {
           <Text style={styles.boatName}>{boat.name}</Text>
           <Text style={styles.boatClass}>{boat.className} {boat.sailNumber && `#${boat.sailNumber}`}</Text>
         </View>
-        <TouchableOpacity style={styles.editButton}>
-          <Ionicons name="settings-outline" size={24} color="#64748B" />
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push(`/(tabs)/boat/edit/${id}`)}
+        >
+          <Ionicons name="create-outline" size={24} color="#64748B" />
         </TouchableOpacity>
       </View>
 
       {/* Tab Navigation */}
-      <View style={styles.tabBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabBar}
+        contentContainerStyle={styles.tabBarContent}
+      >
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+          onPress={() => setActiveTab('overview')}
+        >
+          <Ionicons
+            name="information-circle"
+            size={18}
+            color={activeTab === 'overview' ? '#3B82F6' : '#64748B'}
+          />
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+            Overview
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'crew' && styles.tabActive]}
+          onPress={() => setActiveTab('crew')}
+        >
+          <Ionicons
+            name="people"
+            size={18}
+            color={activeTab === 'crew' ? '#3B82F6' : '#64748B'}
+          />
+          <Text style={[styles.tabText, activeTab === 'crew' && styles.tabTextActive]}>
+            Crew
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'sails' && styles.tabActive]}
+          onPress={() => setActiveTab('sails')}
+        >
+          <Ionicons
+            name="fish"
+            size={18}
+            color={activeTab === 'sails' ? '#3B82F6' : '#64748B'}
+          />
+          <Text style={[styles.tabText, activeTab === 'sails' && styles.tabTextActive]}>
+            Sails
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'rigging' && styles.tabActive]}
+          onPress={() => setActiveTab('rigging')}
+        >
+          <Ionicons
+            name="git-network"
+            size={18}
+            color={activeTab === 'rigging' ? '#3B82F6' : '#64748B'}
+          />
+          <Text style={[styles.tabText, activeTab === 'rigging' && styles.tabTextActive]}>
+            Rigging
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.tab, activeTab === 'equipment' && styles.tabActive]}
           onPress={() => setActiveTab('equipment')}
         >
           <Ionicons
             name="construct"
-            size={20}
+            size={18}
             color={activeTab === 'equipment' ? '#3B82F6' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'equipment' && styles.tabTextActive]}>
@@ -175,7 +207,7 @@ export default function BoatDetailScreen() {
         >
           <Ionicons
             name="build"
-            size={20}
+            size={18}
             color={activeTab === 'maintenance' ? '#3B82F6' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'maintenance' && styles.tabTextActive]}>
@@ -184,112 +216,60 @@ export default function BoatDetailScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'tuning' && styles.tabActive]}
-          onPress={() => setActiveTab('tuning')}
+          style={[styles.tab, activeTab === 'performance' && styles.tabActive]}
+          onPress={() => setActiveTab('performance')}
         >
           <Ionicons
-            name="settings"
-            size={20}
-            color={activeTab === 'tuning' ? '#3B82F6' : '#64748B'}
+            name="stats-chart"
+            size={18}
+            color={activeTab === 'performance' ? '#3B82F6' : '#64748B'}
           />
-          <Text style={[styles.tabText, activeTab === 'tuning' && styles.tabTextActive]}>
-            Tuning
+          <Text style={[styles.tabText, activeTab === 'performance' && styles.tabTextActive]}>
+            Performance
           </Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'alerts' && styles.tabActive]}
-          onPress={() => setActiveTab('alerts')}
-        >
-          <Ionicons
-            name="notifications"
-            size={20}
-            color={activeTab === 'alerts' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'alerts' && styles.tabTextActive]}>
-            Alerts
-          </Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
+        {activeTab === 'overview' && <BoatDetail boat={boat} />}
+        {activeTab === 'crew' && (
+          <BoatCrewList
+            boatId={boat.id}
+            sailorId={boat.sailorId}
+            classId={boat.classId}
+          />
+        )}
+        {activeTab === 'sails' && <SailInventory boatId={boat.id} />}
+        {activeTab === 'rigging' && <RiggingConfig boatId={boat.id} />}
         {activeTab === 'equipment' && (
-          <BoatEquipmentInventory boatId={boat.id} classId={boat.id} />
+          <View style={styles.placeholderContainer}>
+            <Ionicons name="construct-outline" size={64} color="#CBD5E1" />
+            <Text style={styles.placeholderText}>Equipment coming soon</Text>
+          </View>
         )}
-        {activeTab === 'maintenance' && (
-          <MaintenanceTimeline boatId={boat.id} />
+        {activeTab === 'maintenance' && <MaintenanceSchedule boatId={boat.id} />}
+        {activeTab === 'performance' && (
+          <View style={styles.placeholderContainer}>
+            <Ionicons name="stats-chart-outline" size={64} color="#CBD5E1" />
+            <Text style={styles.placeholderText}>Performance analytics coming soon</Text>
+            <Text style={{fontSize: 14, color: '#94A3B8', marginTop: 8, textAlign: 'center'}}>
+              Chart-based performance analysis will be available in the mobile app
+            </Text>
+          </View>
         )}
-        {activeTab === 'tuning' && (
-          <TuningSettings boatId={boat.id} classId={boat.id} />
-        )}
-        {activeTab === 'alerts' && (
-          <EquipmentAlerts boatId={boat.id} />
-        )}
-      </ScrollView>
+      </View>
 
       {/* Universal FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setShowActionMenu(true)}
+        onPress={() => {
+          // TODO: Add context-aware FAB actions
+          console.log('FAB pressed for tab:', activeTab);
+        }}
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
-
-      {/* Action Menu */}
-      <BoatActionMenu
-        visible={showActionMenu}
-        activeTab={activeTab}
-        onClose={() => setShowActionMenu(false)}
-        onAddEquipment={() => setShowAddEquipmentForm(true)}
-        onLogMaintenance={() => setShowLogMaintenanceForm(true)}
-        onCreateTuningSetup={() => setShowCreateTuningForm(true)}
-        onUploadDocument={() => setShowUploadDocumentForm(true)}
-        onManageAlertSubscription={() => setShowAlertSubscription(true)}
-      />
-
-      {/* Forms and Modals */}
-      <AddEquipmentForm
-        visible={showAddEquipmentForm}
-        boatId={boat.id}
-        classId={boat.id}
-        onClose={() => setShowAddEquipmentForm(false)}
-        onSubmit={handleAddEquipment}
-      />
-
-      <LogMaintenanceForm
-        visible={showLogMaintenanceForm}
-        boatId={boat.id}
-        equipmentList={[
-          { id: '1', name: 'Main #1 - All Purpose' },
-          { id: '2', name: 'Jib #2 - Heavy Air' },
-          { id: '3', name: 'Spinnaker - Code 0' },
-        ]}
-        onClose={() => setShowLogMaintenanceForm(false)}
-        onSubmit={handleLogMaintenance}
-      />
-
-      <CreateTuningSetupForm
-        visible={showCreateTuningForm}
-        boatId={boat.id}
-        classId={boat.id}
-        onClose={() => setShowCreateTuningForm(false)}
-        onSubmit={handleCreateTuningSetup}
-      />
-
-      <UploadDocumentForm
-        visible={showUploadDocumentForm}
-        boatId={boat.id}
-        onClose={() => setShowUploadDocumentForm(false)}
-        onSubmit={handleUploadDocument}
-      />
-
-      <AlertSubscriptionModal
-        visible={showAlertSubscription}
-        boatId={boat.id}
-        onClose={() => setShowAlertSubscription(false)}
-        onSave={handleSaveAlertSubscription}
-      />
     </SafeAreaView>
   );
 }
@@ -370,18 +350,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabBar: {
-    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
+  tabBarContent: {
+    paddingHorizontal: 8,
+  },
   tab: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
@@ -392,6 +374,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#64748B',
+    whiteSpace: 'nowrap',
   },
   tabTextActive: {
     color: '#3B82F6',
@@ -399,6 +382,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginTop: 16,
   },
   fab: {
     position: 'absolute',

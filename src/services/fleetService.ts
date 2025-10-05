@@ -84,6 +84,8 @@ class FleetService {
   }
 
   async getFleetsForUser(userId: string): Promise<FleetMembership[]> {
+    console.log('[FleetService] getFleetsForUser called with userId:', userId);
+
     const { data, error } = await supabase
       .from('fleet_members')
       .select(
@@ -99,19 +101,29 @@ class FleetService {
       .eq('user_id', userId)
       .eq('status', 'active');
 
+    console.log('[FleetService] Raw query result:', { data, error, dataCount: data?.length });
+
     if (error) {
-      console.error('Error fetching fleets for user:', error);
+      console.error('[FleetService] Error fetching fleets for user:', error);
       throw error;
     }
 
-    return (data || [])
-      .filter(item => item.fleet)
-      .map(item => ({
-        fleet: this.mapFleet(item.fleet),
-        role: (item.role ?? 'member') as FleetMembership['role'],
-        status: (item.status ?? 'active') as FleetMembership['status'],
-        joinedAt: item.joined_at,
-      }));
+    const filtered = (data || []).filter(item => item.fleet);
+    console.log('[FleetService] After filtering null fleets:', {
+      original: data?.length,
+      filtered: filtered.length,
+      nullFleets: data?.filter(item => !item.fleet).length
+    });
+
+    const mapped = filtered.map(item => ({
+      fleet: this.mapFleet(item.fleet),
+      role: (item.role ?? 'member') as FleetMembership['role'],
+      status: (item.status ?? 'active') as FleetMembership['status'],
+      joinedAt: item.joined_at,
+    }));
+
+    console.log('[FleetService] Returning mapped fleets:', mapped.length, mapped);
+    return mapped;
   }
 
   async getFleetOverview(fleetId: string): Promise<FleetOverview> {
@@ -267,6 +279,34 @@ class FleetService {
     }
 
     return count ?? 0;
+  }
+
+  /**
+   * Share a document with a fleet
+   */
+  async shareDocumentWithFleet(params: {
+    fleetId: string;
+    documentId: string;
+    sharedBy: string;
+    tags?: string[];
+    notifyFollowers?: boolean;
+  }): Promise<void> {
+    const { error } = await supabase
+      .from('fleet_documents')
+      .insert({
+        fleet_id: params.fleetId,
+        document_id: params.documentId,
+        shared_by: params.sharedBy,
+        tags: params.tags || [],
+        notify_followers: params.notifyFollowers ?? false,
+      });
+
+    if (error) {
+      console.error('Error sharing document with fleet:', error);
+      throw error;
+    }
+
+    // TODO: If notify_followers is true, create notifications for fleet followers
   }
 }
 

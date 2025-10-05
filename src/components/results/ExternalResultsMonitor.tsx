@@ -16,7 +16,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 interface PollingSource {
   id: string;

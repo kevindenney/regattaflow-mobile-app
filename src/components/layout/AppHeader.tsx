@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { signOutEverywhere } from '@/src/lib/auth-actions';
 import { getDashboardRoute } from '@/src/lib/utils/userTypeRouting';
 

@@ -3,12 +3,14 @@
  * Uses Google Maps JavaScript API for superior web rendering
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { StyleSheet, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/src/components/themed-text';
 import { supabase } from '@/src/services/supabase';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import Constants from 'expo-constants';
+import { GooglePlacesService, PlaceResult } from '@/src/services/GooglePlacesService';
+import type { ServiceType } from '@/src/services/SailingNetworkService';
 
 interface Venue {
   id: string;
@@ -534,7 +536,7 @@ export function VenueMapView({
   }, [mapLayers.sailmakers, mapLayers.riggers, mapLayers.coaches, mapLayers.chandlery,
       mapLayers.clothing, mapLayers.marinas, mapLayers.repair, mapLayers.engines]);
 
-  const fetchVenues = async () => {
+  const fetchVenues = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('sailing_venues')
@@ -549,9 +551,9 @@ export function VenueMapView({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchYachtClubs = async () => {
+  const fetchYachtClubs = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('yacht_clubs')
@@ -566,12 +568,66 @@ export function VenueMapView({
     } catch (error) {
       console.error('Error fetching yacht clubs:', error);
     }
-  };
+  }, []);
 
-  const fetchServices = async () => {
+  const fetchServices = useCallback(async () => {
     try {
-      // Fetch services with venue coordinates via foreign key
-      const { data, error } = await supabase
+      console.log('🔍 Fetching services via Google Places API...');
+
+      // Get map center (use current venue or Hong Kong default)
+      const center = currentVenue && currentVenue.coordinates_lat && currentVenue.coordinates_lng
+        ? { lat: currentVenue.coordinates_lat, lng: currentVenue.coordinates_lng }
+        : { lat: 22.2793, lng: 114.1628 }; // Hong Kong default
+
+      // Map layer keys to ServiceType
+      const layerToServiceType: Record<string, ServiceType> = {
+        sailmakers: 'sailmaker',
+        riggers: 'rigger',
+        coaches: 'coach',
+        chandlery: 'chandler',
+        clothing: 'clothing',
+        marinas: 'marina',
+        repair: 'repair',
+        engines: 'engine',
+      };
+
+      // Determine which service types to fetch based on enabled layers
+      const enabledServiceTypes: ServiceType[] = [];
+      Object.entries(mapLayers).forEach(([layerKey, isEnabled]) => {
+        if (isEnabled && layerToServiceType[layerKey]) {
+          enabledServiceTypes.push(layerToServiceType[layerKey]);
+        }
+      });
+
+      if (enabledServiceTypes.length === 0) {
+        console.log('📍 No service layers enabled, skipping fetch');
+        setServices([]);
+        return;
+      }
+
+      console.log('📍 Fetching service types:', enabledServiceTypes);
+
+      // Fetch all enabled service types in parallel
+      const placeResults = await Promise.all(
+        enabledServiceTypes.map(serviceType =>
+          GooglePlacesService.searchPlaces(serviceType, center, 50000) // 50km radius
+        )
+      );
+
+      // Flatten and convert PlaceResult[] to Service[]
+      const googlePlaces: Service[] = placeResults.flat().map((place: PlaceResult) => ({
+        id: place.placeId,
+        service_type: place.type,
+        business_name: place.name,
+        coordinates_lat: place.coordinates.lat,
+        coordinates_lng: place.coordinates.lng,
+        specialties: [],
+      }));
+
+      console.log(`✅ Fetched ${googlePlaces.length} places from Google Places API`);
+
+      // Optional: Also fetch from database and merge
+      const { data: dbServices } = await supabase
         .from('club_services')
         .select(`
           id,
@@ -589,15 +645,14 @@ export function VenueMapView({
         `)
         .order('business_name', { ascending: true });
 
-      if (error) throw error;
+      // Process DB services with coordinates
+      // PREFER club coordinates over venue coordinates since services are at clubs, not racing venues
+      const dbServicesWithCoords = await Promise.all((dbServices || []).map(async (service: any) => {
+        let lat = null;
+        let lng = null;
 
-      // For services with club_id but no venue coordinates, fetch yacht club coordinates separately
-      const servicesWithCoords = await Promise.all((data || []).map(async (service: any) => {
-        let lat = service.sailing_venues?.coordinates_lat;
-        let lng = service.sailing_venues?.coordinates_lng;
-
-        // If no venue coordinates but has club_id, fetch yacht club coordinates
-        if ((!lat || !lng) && service.club_id) {
+        // Try club coordinates first (more accurate for businesses)
+        if (service.club_id) {
           const { data: clubData } = await supabase
             .from('yacht_clubs')
             .select('coordinates_lat, coordinates_lng')
@@ -608,6 +663,12 @@ export function VenueMapView({
             lat = clubData.coordinates_lat;
             lng = clubData.coordinates_lng;
           }
+        }
+
+        // Fall back to venue coordinates only if club coordinates not found
+        if (!lat || !lng) {
+          lat = service.sailing_venues?.coordinates_lat;
+          lng = service.sailing_venues?.coordinates_lng;
         }
 
         return {
@@ -627,11 +688,26 @@ export function VenueMapView({
         };
       }));
 
-      setServices(servicesWithCoords.filter(s => s.coordinates_lat && s.coordinates_lng));
+      const validDbServices = dbServicesWithCoords.filter(s => s.coordinates_lat && s.coordinates_lng);
+
+      // Merge Google Places and DB services (deduplicate by name+coordinates)
+      const allServices = [...googlePlaces, ...validDbServices];
+      const uniqueServices = Array.from(
+        new Map(
+          allServices.map(s => [
+            `${s.business_name}_${s.coordinates_lat.toFixed(4)}_${s.coordinates_lng.toFixed(4)}`,
+            s
+          ])
+        ).values()
+      );
+
+      console.log(`📊 Total unique services: ${uniqueServices.length} (${googlePlaces.length} from Google, ${validDbServices.length} from DB)`);
+      setServices(uniqueServices);
     } catch (error) {
-      console.error('Error fetching services:', error);
+      console.error('❌ Error fetching services:', error);
+      setServices([]);
     }
-  };
+  }, [currentVenue, mapLayers]);
 
   if (loading) {
     return (

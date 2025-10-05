@@ -1,5 +1,5 @@
 // Coach Marketplace Service Layer
-import { supabase } from '../lib/supabase';
+import { supabase } from './supabase';
 import {
   CoachProfile,
   CoachService,
@@ -199,10 +199,20 @@ export class CoachMarketplaceService {
         query = query.gte('average_rating', filters.rating);
       }
 
+      // Time zone filter
+      if (filters.time_zone) {
+        query = query.eq('time_zone', filters.time_zone);
+      }
+
       // Apply price range filter on services
       if (filters.price_range) {
         query = query.gte('coach_services.base_price', filters.price_range[0])
                     .lte('coach_services.base_price', filters.price_range[1]);
+      }
+
+      // Session type filter - filter coaches who offer specific service types
+      if (filters.session_types?.length) {
+        query = query.in('coach_services.service_type', filters.session_types);
       }
 
       // Pagination
@@ -218,7 +228,7 @@ export class CoachMarketplaceService {
       if (error) throw error;
 
       // Transform data to include services and calculate next available slot
-      const searchResults: CoachSearchResult[] = await Promise.all(
+      let searchResults: CoachSearchResult[] = await Promise.all(
         (coaches || []).map(async (coach: any) => {
           const services = coach.coach_services || [];
           delete coach.coach_services; // Remove nested services from coach object
@@ -232,9 +242,16 @@ export class CoachMarketplaceService {
         })
       );
 
+      // Apply minimum match score filter if specified
+      if (filters.min_match_score !== undefined) {
+        searchResults = searchResults.filter(
+          coach => (coach.match_score || 0) >= filters.min_match_score!
+        );
+      }
+
       return {
         coaches: searchResults,
-        total_count: count || 0,
+        total_count: searchResults.length, // Update count after filtering
         page,
         per_page: perPage,
         filters_applied: filters

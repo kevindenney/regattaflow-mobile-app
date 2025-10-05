@@ -213,7 +213,7 @@ export function RaceStrategyTab({
         <DashboardSection title="🎯 Race Strategy Planning">
           <View style={styles.emptyStrategy}>
             <LinearGradient
-              colors={['#667eea', '#764ba2']}
+              colors={['#9333ea', '#7e22ce']}
               style={styles.emptyGradient}
             >
               <Ionicons name="compass" size={48} color="#FFFFFF" />
@@ -223,7 +223,7 @@ export function RaceStrategyTab({
                 style={styles.uploadButton}
                 onPress={onUploadDocuments}
               >
-                <Ionicons name="document-text" size={20} color="#667eea" />
+                <Ionicons name="document-text" size={20} color="#9333ea" />
                 <Text style={styles.uploadButtonText}>Upload Documents</Text>
               </TouchableOpacity>
             </LinearGradient>
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
   uploadButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#667eea',
+    color: '#9333ea',
   },
   libraryCard: {
     backgroundColor: '#FFFFFF',

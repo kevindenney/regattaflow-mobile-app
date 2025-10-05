@@ -137,8 +137,7 @@ export function NavigationHeader({
           {/* Logo */}
           {showLogo && (
             <TouchableOpacity style={styles.logoContainer} onPress={() => router.push('/')}>
-              <Ionicons name="boat" size={28} color="#3B82F6" />
-              <Text style={styles.logoText}>RegattaFlow</Text>
+              <Text style={styles.logoText}>regattaflow</Text>
             </TouchableOpacity>
           )}
 

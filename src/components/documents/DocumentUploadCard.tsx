@@ -17,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { documentStorageService } from '@/src/services/storage/DocumentStorageService';
 import { DocumentProcessingService } from '@/src/services/ai/DocumentProcessingService';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import type { StoredDocument } from '@/src/services/storage/DocumentStorageService';
 import type { DocumentAnalysis, RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
 

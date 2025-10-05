@@ -1,8 +1,26 @@
-import {Slot} from 'expo-router'
-import {AuthProvider, useAuth} from '@/src/providers/AuthProvider'
-import {View, Text, ActivityIndicator, StyleSheet} from 'react-native'
-import {useEffect} from 'react'
+import React, {useEffect} from 'react'
 import {Platform} from 'react-native'
+import {Stack} from 'expo-router'
+import {AuthProvider, useAuth} from '@/src/providers/AuthProvider'
+import StripeProvider from '@/src/providers/StripeProvider.native'
+import {GluestackUIProvider} from '@/src/components/ui/gluestack-ui-provider'
+import {ErrorBoundary} from '@/src/components/ui/error'
+import {NetworkStatusBanner} from '@/src/components/ui/network'
+import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
+import Splash from '@/src/components/Splash'
+import '@/global.css'
+
+// Configure React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes (formerly cacheTime)
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 // Suppress React Native Web deprecation warnings (from third-party libraries)
 if (typeof window !== 'undefined' && Platform.OS === 'web') {
@@ -20,32 +38,19 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
   };
 }
 
-function Gate() {
-  const {ready} = useAuth()
+function StackWithSplash() {
+  const {state} = useAuth()
 
-  if (!ready) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066CC" />
-        <Text style={styles.loadingText}>Loading RegattaFlow...</Text>
-      </View>
-    )
+  if (state === 'checking') {
+    return <Splash />
   }
 
-  return <Slot/>
-}
-
-function ErrorBoundary({children}:{children: React.ReactNode}) {
-  useEffect(()=>{
-    if (Platform.OS === 'web') {
-      window.addEventListener('error', (e)=>{
-        console.error('[UI] error', e.error || e)
-      })
-      return ()=>{}
-    }
-  }, [])
-
-  return <>{children}</>
+  return (
+    <>
+      <NetworkStatusBanner />
+      <Stack screenOptions={{headerShown: false}} />
+    </>
+  )
 }
 
 export default function RootLayout() {
@@ -54,10 +59,16 @@ export default function RootLayout() {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const style = document.createElement('style');
       style.textContent = `
-        html, body, #root {
+        html, body {
           height: 100%;
           margin: 0;
           padding: 0;
+          overflow: auto;
+        }
+        #root {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
         }
         .venueSplit {
           display: grid;
@@ -78,24 +89,15 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Gate/>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <GluestackUIProvider mode="light">
+          <StripeProvider>
+            <AuthProvider>
+              <StackWithSplash />
+            </AuthProvider>
+          </StripeProvider>
+        </GluestackUIProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   )
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 24
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#64748B'
-  }
-})

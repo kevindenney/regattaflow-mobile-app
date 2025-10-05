@@ -28,8 +28,21 @@ export interface TuningGuide {
   isPublic: boolean;
   downloads: number;
   rating: number;
+  extractedContent?: string;
+  extractedSections?: any[];
+  extractionStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  extractionError?: string;
+  extractedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface FleetTuningGuide extends TuningGuide {
+  sharedBy?: string;
+  sharedByName?: string;
+  shareNotes?: string;
+  isRecommended?: boolean;
+  sharedAt?: string;
 }
 
 export interface TuningGuideSource {
@@ -292,6 +305,100 @@ class TuningGuideService {
     return this.mapGuides(data || []);
   }
 
+  /**
+   * Get fleet tuning guides
+   */
+  async getFleetGuides(fleetId: string): Promise<FleetTuningGuide[]> {
+    const { data, error } = await supabase.rpc('get_fleet_tuning_guides', {
+      p_fleet_id: fleetId,
+    });
+
+    if (error) {
+      console.error('Error fetching fleet guides:', error);
+      throw error;
+    }
+
+    return (data || []).map((item: any) => ({
+      ...this.mapGuide({
+        id: item.guide_id,
+        title: item.guide_title,
+        source: item.guide_source,
+        file_url: item.guide_file_url,
+        description: item.guide_description,
+        tags: item.guide_tags,
+        year: item.guide_year,
+        extracted_content: item.guide_extracted_content,
+      }),
+      sharedBy: item.shared_by_id,
+      sharedByName: item.shared_by_name,
+      shareNotes: item.share_notes,
+      isRecommended: item.is_recommended,
+      sharedAt: item.shared_at,
+    }));
+  }
+
+  /**
+   * Share guide with fleet
+   */
+  async shareWithFleet(params: {
+    fleetId: string;
+    guideId: string;
+    notes?: string;
+    isRecommended?: boolean;
+  }): Promise<void> {
+    const { error } = await supabase.from('fleet_tuning_guides').insert({
+      fleet_id: params.fleetId,
+      guide_id: params.guideId,
+      shared_by: (await supabase.auth.getUser()).data.user?.id,
+      share_notes: params.notes,
+      is_recommended: params.isRecommended || false,
+    });
+
+    if (error) {
+      console.error('Error sharing guide with fleet:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all guides for sailor (personal + fleet guides)
+   */
+  async getAllSailorGuides(sailorId: string, classId?: string): Promise<{
+    personal: TuningGuide[];
+    fleet: FleetTuningGuide[];
+  }> {
+    // Get personal library
+    const personalGuides = await this.getSailorLibrary(sailorId);
+
+    // Get sailor's fleets
+    const { data: fleetData } = await supabase
+      .from('fleet_members')
+      .select('fleet_id')
+      .eq('user_id', sailorId)
+      .eq('status', 'active');
+
+    const fleetIds = fleetData?.map(f => f.fleet_id) || [];
+
+    // Get all fleet guides
+    const fleetGuidesPromises = fleetIds.map(fleetId => this.getFleetGuides(fleetId));
+    const fleetGuidesArrays = await Promise.all(fleetGuidesPromises);
+    const allFleetGuides = fleetGuidesArrays.flat();
+
+    // Filter by class if specified
+    const filteredPersonal = classId
+      ? personalGuides.filter(g => g.classId === classId)
+      : personalGuides;
+
+    const filteredFleet = classId
+      ? allFleetGuides.filter(g => g.classId === classId)
+      : allFleetGuides;
+
+    return {
+      personal: filteredPersonal,
+      fleet: filteredFleet,
+    };
+  }
+
   // Helper methods
   private mapGuide(data: any): TuningGuide {
     return {
@@ -317,6 +424,11 @@ class TuningGuideService {
       isPublic: data.is_public,
       downloads: data.downloads || 0,
       rating: data.rating || 0,
+      extractedContent: data.extracted_content,
+      extractedSections: data.extracted_sections,
+      extractionStatus: data.extraction_status,
+      extractionError: data.extraction_error,
+      extractedAt: data.extracted_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

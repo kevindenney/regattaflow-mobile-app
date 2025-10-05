@@ -15,7 +15,7 @@ import {
   Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 // Web-only stub to completely avoid Stripe React Native imports
 const webStripeService = {

@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { developerDocumentService, DeveloperTrainingUtils, type TrainingDocumentBatch } from '@/src/services/storage/DeveloperDocumentService';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 export const DeveloperDocumentUploader: React.FC = () => {
   const { user } = useAuth();

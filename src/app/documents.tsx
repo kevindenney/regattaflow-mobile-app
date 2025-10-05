@@ -16,7 +16,7 @@ import { DocumentUploadCard } from '@/src/components/documents/DocumentUploadCar
 import { DocumentViewer } from '@/src/components/documents/DocumentViewer';
 import { SubscriptionManager } from '@/src/components/subscription/SubscriptionManager';
 import { DeveloperDocumentUploader } from '@/src/components/developer/DeveloperDocumentUploader';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { useSailingDocuments } from '@/src/hooks/useSailingDocuments';
 
 export default function DocumentsScreen() {

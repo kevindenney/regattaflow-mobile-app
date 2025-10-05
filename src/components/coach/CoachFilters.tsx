@@ -8,7 +8,7 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
-import { CoachSearchFilters, SkillLevel } from '../../types/coach';
+import { CoachSearchFilters, SkillLevel, ServiceType } from '../../types/coach';
 
 interface CoachFiltersProps {
   filters: CoachSearchFilters;
@@ -28,11 +28,31 @@ const SKILL_LEVELS: SkillLevel[] = ['Beginner', 'Intermediate', 'Advanced', 'Pro
 
 const LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Italian', 'Chinese (Mandarin)'];
 
+const SESSION_TYPES: { value: ServiceType; label: string }[] = [
+  { value: 'on_water', label: 'On-Water Coaching' },
+  { value: 'video_review', label: 'Video Review' },
+  { value: 'strategy_session', label: 'Strategy Session' },
+  { value: 'race_analysis', label: 'Race Analysis' },
+  { value: 'live_coaching', label: 'Live Coaching' },
+];
+
+const TIME_ZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Paris',
+  'Asia/Hong_Kong',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+
 export default function CoachFilters({ filters, onApply, onClose }: CoachFiltersProps) {
   const [tempFilters, setTempFilters] = useState<CoachSearchFilters>(filters);
 
   const toggleArrayFilter = (
-    key: 'boat_classes' | 'specialties' | 'skill_levels' | 'languages',
+    key: 'boat_classes' | 'specialties' | 'skill_levels' | 'languages' | 'session_types',
     value: string
   ) => {
     const currentArray = tempFilters[key] || [];
@@ -44,6 +64,25 @@ export default function CoachFilters({ filters, onApply, onClose }: CoachFilters
       ...prev,
       [key]: newArray.length > 0 ? newArray : undefined,
     }));
+  };
+
+  const setTimeZone = (timezone: string | undefined) => {
+    setTempFilters(prev => ({
+      ...prev,
+      time_zone: timezone,
+    }));
+  };
+
+  const setMinMatchScore = (score: string) => {
+    const scoreValue = parseFloat(score);
+    if (isNaN(scoreValue) || scoreValue <= 0) {
+      setTempFilters(prev => ({ ...prev, min_match_score: undefined }));
+    } else {
+      setTempFilters(prev => ({
+        ...prev,
+        min_match_score: Math.min(Math.max(scoreValue, 0), 1), // Clamp between 0 and 1
+      }));
+    }
   };
 
   const setPriceRange = (min: string, max: string) => {
@@ -83,6 +122,9 @@ export default function CoachFilters({ filters, onApply, onClose }: CoachFilters
     if (tempFilters.price_range) count++;
     if (tempFilters.rating) count++;
     if (tempFilters.languages?.length) count++;
+    if (tempFilters.session_types?.length) count++;
+    if (tempFilters.time_zone) count++;
+    if (tempFilters.min_match_score) count++;
     return count;
   };
 
@@ -261,6 +303,78 @@ export default function CoachFilters({ filters, onApply, onClose }: CoachFilters
               ))}
             </View>
           </View>
+
+          {/* Session Types */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Session Types {tempFilters.session_types?.length ? `(${tempFilters.session_types.length})` : ''}
+            </Text>
+            <View style={styles.chipContainer}>
+              {SESSION_TYPES.map((sessionType) => (
+                <TouchableOpacity
+                  key={sessionType.value}
+                  style={[
+                    styles.chip,
+                    tempFilters.session_types?.includes(sessionType.value) && styles.chipSelected
+                  ]}
+                  onPress={() => toggleArrayFilter('session_types', sessionType.value)}
+                >
+                  <Text style={[
+                    styles.chipText,
+                    tempFilters.session_types?.includes(sessionType.value) && styles.chipTextSelected
+                  ]}>
+                    {sessionType.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Time Zone */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Time Zone</Text>
+            <View style={styles.chipContainer}>
+              {TIME_ZONES.map((timezone) => (
+                <TouchableOpacity
+                  key={timezone}
+                  style={[
+                    styles.chip,
+                    tempFilters.time_zone === timezone && styles.chipSelected
+                  ]}
+                  onPress={() => setTimeZone(tempFilters.time_zone === timezone ? undefined : timezone)}
+                >
+                  <Text style={[
+                    styles.chipText,
+                    tempFilters.time_zone === timezone && styles.chipTextSelected
+                  ]}>
+                    {timezone.replace('_', ' ')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Minimum Match Score */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Minimum Match Score (0-1)
+            </Text>
+            <Text style={styles.sectionDescription}>
+              Filter coaches by AI match score. Higher scores indicate better alignment with your goals.
+            </Text>
+            <TextInput
+              style={styles.matchScoreInput}
+              placeholder="e.g., 0.7 for 70% match"
+              value={tempFilters.min_match_score?.toString() || ''}
+              onChangeText={setMinMatchScore}
+              keyboardType="decimal-pad"
+            />
+            {tempFilters.min_match_score && (
+              <Text style={styles.matchScoreHint}>
+                Showing coaches with {Math.round(tempFilters.min_match_score * 100)}%+ match
+              </Text>
+            )}
+          </View>
         </ScrollView>
 
         {/* Footer */}
@@ -412,5 +526,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  matchScoreInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 8,
+  },
+  matchScoreHint: {
+    fontSize: 13,
+    color: '#0066CC',
+    fontWeight: '500',
   },
 });

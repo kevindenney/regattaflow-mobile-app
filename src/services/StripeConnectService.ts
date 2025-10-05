@@ -3,7 +3,14 @@
  * Handles Stripe Connect account creation, onboarding, and status checking
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/src/services/supabase';
+
+// Get Supabase function URL
+const getSupabaseFunctionUrl = (functionName: string) => {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) throw new Error('EXPO_PUBLIC_SUPABASE_URL not configured');
+  return `${supabaseUrl}/functions/v1/${functionName}`;
+};
 
 export interface StripeConnectStatus {
   connected: boolean;
@@ -32,16 +39,18 @@ export class StripeConnectService {
         throw new Error('User not authenticated');
       }
 
-      const response = await fetch(
-        `/api/stripe/connect/onboard?coachId=${coachId}&userId=${session.user.id}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const functionUrl = getSupabaseFunctionUrl('stripe-connect-status');
+      const params = new URLSearchParams({
+        coach_id: coachId,
+      });
+
+      const response = await fetch(`${functionUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch Stripe Connect status');
@@ -54,6 +63,100 @@ export class StripeConnectService {
         connected: false,
         needsOnboarding: true,
       };
+    }
+  }
+
+  /**
+   * Get current Stripe balance for a coach's connected account
+   */
+  static async getBalance(coachId: string): Promise<{
+    available: number; // amount in cents
+    pending: number;   // amount in cents
+    currency?: string;
+  }> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      const functionUrl = getSupabaseFunctionUrl('stripe-balance');
+      const params = new URLSearchParams({
+        coachId,
+        userId: session.user.id,
+      });
+
+      const response = await fetch(`${functionUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to fetch Stripe balance');
+      }
+
+      return {
+        available: typeof data.available === 'number' ? data.available : 0,
+        pending: typeof data.pending === 'number' ? data.pending : 0,
+        currency: data.currency || 'usd',
+      };
+    } catch (error) {
+      console.error('Error fetching Stripe balance:', error);
+      return { available: 0, pending: 0, currency: 'usd' };
+    }
+  }
+
+  /**
+   * List recent transactions/transfers for a coach's connected account
+   */
+  static async getTransactions(
+    coachId: string,
+    opts?: { limit?: number }
+  ): Promise<
+    Array<{
+      id: string;
+      amount: number; // cents
+      currency: string;
+      created: number; // unix epoch seconds
+      description?: string;
+      status?: string;
+      type?: string; // charge|transfer|payout
+    }>
+  > {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      const functionUrl = getSupabaseFunctionUrl('stripe-transactions');
+      const params = new URLSearchParams({
+        coachId,
+        userId: session.user.id,
+      });
+      if (opts?.limit) params.set('limit', String(opts.limit));
+
+      const response = await fetch(`${functionUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to fetch Stripe transactions');
+      }
+
+      return Array.isArray(data?.transactions) ? data.transactions : [];
+    } catch (error) {
+      console.error('Error fetching Stripe transactions:', error);
+      return [];
     }
   }
 
@@ -71,27 +174,28 @@ export class StripeConnectService {
         return { success: false, error: 'User not authenticated' };
       }
 
-      const response = await fetch('/api/stripe/connect/onboard', {
+      const functionUrl = getSupabaseFunctionUrl('create-stripe-connect-account');
+
+      const response = await fetch(functionUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          userId: session.user.id,
-          coachId,
-          returnUrl,
-          refreshUrl,
+          coach_id: coachId,
+          return_url: returnUrl,
+          refresh_url: refreshUrl,
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const error = await response.json();
-        return { success: false, error: error.error || 'Failed to start onboarding' };
+        return { success: false, error: data.error || 'Failed to start onboarding' };
       }
 
-      const { url } = await response.json();
-      return { success: true, url };
+      return { success: true, url: data.url };
     } catch (error: any) {
       console.error('Error starting Stripe Connect onboarding:', error);
       return { success: false, error: error.message };
@@ -108,25 +212,26 @@ export class StripeConnectService {
         return { success: false, error: 'User not authenticated' };
       }
 
-      const response = await fetch('/api/stripe/connect/dashboard', {
+      const functionUrl = getSupabaseFunctionUrl('stripe-connect-dashboard');
+
+      const response = await fetch(functionUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          userId: session.user.id,
-          coachId,
+          coach_id: coachId,
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const error = await response.json();
-        return { success: false, error: error.error || 'Failed to get dashboard link' };
+        return { success: false, error: data.error || 'Failed to get dashboard link' };
       }
 
-      const { url } = await response.json();
-      return { success: true, url };
+      return { success: true, url: data.url };
     } catch (error: any) {
       console.error('Error getting Stripe dashboard link:', error);
       return { success: false, error: error.message };

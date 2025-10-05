@@ -4,11 +4,11 @@
  * Core of RegattaFlow's "OnX Maps for Sailing" global intelligence system
  */
 
-import { BaseAgentService, AgentTool } from './BaseAgentService';
-import { z } from 'zod';
 import { supabase } from '@/src/services/supabase';
-import type { SailingVenue } from '@/src/lib/types/global-venues';
 import { RegionalIntelligenceService } from '@/src/services/venue/RegionalIntelligenceService';
+import { venueIntelligenceService, type VenueInsights } from '@/src/services/VenueIntelligenceService';
+import { z } from 'zod';
+import { AgentTool, BaseAgentService } from './BaseAgentService';
 
 export class VenueIntelligenceAgent extends BaseAgentService {
   private regionalIntelligenceService: RegionalIntelligenceService;
@@ -58,18 +58,38 @@ Only call this if you don't already have a confirmed venue ID.`,
       input_schema: z.object({
         latitude: z.number().describe('GPS latitude in decimal degrees'),
         longitude: z.number().describe('GPS longitude in decimal degrees'),
-        radiusKm: z.number().optional().default(50).describe('Search radius in kilometers (default: 50)'),
+        // Accept string or number and coerce to number to avoid Zod invalid_type
+        radiusKm: z.preprocess((v) => {
+          if (typeof v === 'string') return parseFloat(v);
+          return v;
+        }, z.number().optional().default(50)).describe('Search radius in kilometers (default: 50)'),
       }),
       execute: async (input) => {
         console.log('🔧 Tool: detect_venue_from_gps', input);
 
         try {
-          // Query venues within radius using PostGIS
-          const { data: venues, error } = await supabase.rpc('venues_within_radius', {
+          // Query venues within radius using PostGIS; fallback to bounding box if RPC missing
+          let { data: venues, error } = await supabase.rpc('venues_within_radius', {
             lat: input.latitude,
             lng: input.longitude,
             radius_km: input.radiusKm,
           });
+
+          if (error && (error as any)?.code?.startsWith?.('PGRST2')) {
+            const lat = input.latitude;
+            const lng = input.longitude;
+            const radiusKm = input.radiusKm ?? 50;
+            const latDelta = radiusKm / 111;
+            const lngDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
+            const fallback = await supabase.rpc('venues_within_bbox', {
+              min_lon: lng - lngDelta,
+              min_lat: lat - latDelta,
+              max_lon: lng + lngDelta,
+              max_lat: lat + latDelta,
+            });
+            venues = fallback.data as any[] | null;
+            error = fallback.error as any;
+          }
 
           if (error) throw error;
 
@@ -347,6 +367,268 @@ Critical for sailors who lose connectivity on the water.`,
       context: { venueId },
       maxIterations: 3, // Quick operation
     });
+  }
+
+  /**
+   * Check if cached insights exist for a venue (for current user)
+   */
+  async getCachedInsights(venueId: string, userId: string): Promise<{
+    insights: VenueInsights;
+    generatedAt: string;
+    expiresAt: string;
+    tokensUsed: number;
+    toolsUsed: string[];
+  } | null> {
+    try {
+      const { data, error } = await supabase
+        .from('venue_intelligence_cache')
+        .select('*')
+        .eq('venue_id', venueId)
+        .eq('user_id', userId)
+        .eq('agent_type', 'venue_intelligence')
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!data) return null;
+
+      return {
+        insights: data.insights as VenueInsights,
+        generatedAt: data.generated_at,
+        expiresAt: data.expires_at,
+        tokensUsed: data.tokens_used || 0,
+        toolsUsed: data.tools_used || [],
+      };
+    } catch (error: any) {
+      console.error('❌ Failed to get cached insights:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Cache venue insights for a user with performance tracking
+   */
+  async cacheInsights(
+    venueId: string,
+    userId: string,
+    insights: VenueInsights,
+    metadata: {
+      tokensUsed?: number;
+      toolsUsed?: string[];
+      generationTimeMs?: number;
+    } = {}
+  ) {
+    try {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+
+      await supabase.from('venue_intelligence_cache').upsert({
+        venue_id: venueId,
+        user_id: userId,
+        agent_type: 'venue_intelligence',
+        insights,
+        expires_at: expiresAt,
+        tokens_used: metadata.tokensUsed || null,
+        tools_used: metadata.toolsUsed || null,
+        generation_time_ms: metadata.generationTimeMs || null,
+      });
+
+      console.log('✅ Venue insights cached for 24 hours');
+    } catch (error: any) {
+      console.error('❌ Failed to cache insights:', error);
+    }
+  }
+
+  /**
+   * Invalidate cache for a venue (force refresh)
+   */
+  async invalidateCache(venueId: string, userId: string) {
+    try {
+      await supabase
+        .from('venue_intelligence_cache')
+        .delete()
+        .eq('venue_id', venueId)
+        .eq('user_id', userId)
+        .eq('agent_type', 'venue_intelligence');
+
+      console.log('✅ Cache invalidated for venue:', venueId);
+    } catch (error: any) {
+      console.error('❌ Failed to invalidate cache:', error);
+    }
+  }
+
+  /**
+   * High-level method: Analyze venue and provide AI insights
+   * Returns safety recommendations, racing tips, cultural notes, practice areas
+   * Checks cache first to avoid redundant AI calls
+   */
+  async analyzeVenue(venueId: string, userId?: string, forceRefresh: boolean = false) {
+    try {
+      // Check cache first (if userId provided and not forcing refresh)
+      if (userId && !forceRefresh) {
+        const cached = await this.getCachedInsights(venueId, userId);
+        if (cached) {
+          const ageHours = Math.floor(
+            (Date.now() - new Date(cached.generatedAt).getTime()) / (1000 * 60 * 60)
+          );
+          console.log(`✅ Using cached venue insights (${ageHours}h old)`);
+          return {
+            success: true,
+            insights: cached.insights,
+            fromCache: true,
+            cacheAge: `${ageHours}h ago`,
+            tokensUsed: cached.tokensUsed,
+            toolsUsed: cached.toolsUsed,
+          };
+        }
+      }
+
+      // Track performance for fresh generation
+      const startTime = Date.now();
+
+      // Load complete venue data
+      const { data: venue, error: venueError } = await supabase
+        .from('sailing_venues')
+        .select(`
+          *,
+          venue_conditions(*),
+          cultural_profiles(*),
+          weather_sources(*),
+          yacht_clubs(*)
+        `)
+        .eq('id', venueId)
+        .single();
+
+      if (venueError) throw venueError;
+      if (!venue) throw new Error(`Venue not found: ${venueId}`);
+
+      // Get regional intelligence
+      const intelligence = await this.regionalIntelligenceService.loadVenueIntelligence(venue);
+
+      // Build comprehensive context for AI analysis
+      const venueContext = {
+        venueName: venue.name,
+        country: venue.country,
+        region: venue.region,
+        venueType: venue.venue_type,
+        conditions: venue.venue_conditions?.[0] || {},
+        cultural: venue.cultural_profiles?.[0] || {},
+        weather: venue.weather_sources?.[0] || {},
+        clubs: venue.yacht_clubs || [],
+        intelligence: {
+          tactical: intelligence.tacticalIntelligence,
+          weather: intelligence.weatherIntelligence,
+          cultural: intelligence.culturalIntelligence,
+          logistical: intelligence.logisticalIntelligence,
+        },
+      };
+
+      // Run AI analysis
+      const result = await this.run({
+        userMessage: `Analyze this sailing venue and provide comprehensive insights for a sailor preparing to race here.
+
+Venue: ${venue.name}, ${venue.country}
+Region: ${venue.region}
+Type: ${venue.venue_type}
+
+Based on the venue data provided in context, please provide:
+
+1. **Safety Recommendations**: Key safety concerns, hazards, weather patterns to watch
+2. **Racing Tips**: Tactical advice, local racing strategies, wind patterns
+3. **Cultural Notes**: Important local customs, language tips, etiquette
+4. **Practice Areas**: Recommended areas for practicing, getting familiar with conditions
+5. **Optimal Conditions**: Best times to race, seasonal considerations
+
+Structure your response as actionable recommendations for a sailor new to this venue.`,
+        context: venueContext,
+        maxIterations: 5,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'AI analysis failed');
+      }
+
+      // Parse AI response into structured insights
+      const insights: VenueInsights = {
+        venueId,
+        venueName: venue.name,
+        analysis: String(result.result || ''),
+        generatedAt: new Date().toISOString(),
+        intelligence: venueContext.intelligence,
+        recommendations: {
+          safety: this.extractSection(String(result.result || ''), 'Safety'),
+          racing: this.extractSection(String(result.result || ''), 'Racing'),
+          cultural: this.extractSection(String(result.result || ''), 'Cultural'),
+          practice: this.extractSection(String(result.result || ''), 'Practice'),
+          timing: this.extractSection(String(result.result || ''), 'Optimal'),
+        },
+      };
+
+      // Save insights to database
+      const saveResult = await venueIntelligenceService.saveVenueInsights(insights);
+      if (!saveResult.success) {
+        console.warn('⚠️ Failed to save venue insights to database:', saveResult.error);
+      } else {
+        console.log('✅ Venue insights saved to database');
+      }
+
+      // Cache insights for user (if userId provided)
+      const generationTime = Date.now() - startTime;
+      if (userId) {
+        await this.cacheInsights(
+          venueId,
+          userId,
+          insights,
+          {
+            tokensUsed: result.tokensUsed,
+            toolsUsed: result.toolsUsed,
+            generationTimeMs: generationTime,
+          }
+        );
+      }
+
+      return {
+        success: true,
+        insights,
+        fromCache: false,
+        generationTimeMs: generationTime,
+        tokensUsed: result.tokensUsed,
+        toolsUsed: result.toolsUsed,
+      };
+    } catch (error: any) {
+      console.error('❌ Venue analysis failed:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to analyze venue',
+      };
+    }
+  }
+
+  /**
+   * Helper: Extract a section from AI response
+   */
+  private extractSection(response: string, sectionKeyword: string): string {
+    const lines = response.split('\n');
+    const sectionLines: string[] = [];
+    let inSection = false;
+
+    for (const line of lines) {
+      if (line.includes(sectionKeyword) && (line.includes('**') || line.includes('#'))) {
+        inSection = true;
+        continue;
+      }
+
+      if (inSection) {
+        if (line.startsWith('**') || line.startsWith('#')) {
+          // Hit next section
+          break;
+        }
+        if (line.trim()) {
+          sectionLines.push(line.trim());
+        }
+      }
+    }
+
+    return sectionLines.join('\n') || 'No specific recommendations available.';
   }
 }
 

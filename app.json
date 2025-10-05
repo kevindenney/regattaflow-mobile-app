@@ -64,6 +64,16 @@
           }
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow RegattaFlow to use your location for GPS race tracking and venue detection.",
+          "locationAlwaysPermission": "Allow RegattaFlow to track your GPS location during races.",
+          "locationWhenInUsePermission": "Allow RegattaFlow to access your location for race tracking and venue detection.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
       "expo-secure-store",
       "expo-web-browser"
     ],

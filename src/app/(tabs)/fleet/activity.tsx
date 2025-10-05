@@ -1,21 +1,39 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { DashboardSection } from '@/src/components/dashboard/shared';
+import { StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '@/src/providers/AuthProvider';
+import { useUserFleets } from '@/src/hooks/useFleetData';
+import { FleetActivityFeed } from '@/src/components/fleets/FleetActivityFeed';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function FleetActivityScreen() {
+  const { user } = useAuth();
+  const { fleets, loading } = useUserFleets(user?.id);
+
+  const activeFleet = fleets[0]?.fleet;
+
+  if (loading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!activeFleet || !user) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="chatbubbles-outline" size={64} color="#D1D5DB" />
+        <Text style={styles.emptyTitle}>No Active Fleet</Text>
+        <Text style={styles.emptyText}>
+          Join a fleet to see activity and connect with other sailors
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <DashboardSection
-        title="Fleet Activity"
-        subtitle="Full feed of fleet posts, uploads, and announcements"
-      >
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>Full activity feed coming soon</Text>
-          <Text style={styles.placeholderText}>
-            Detailed filters, reactions, and comments will live here so your fleet can collaborate in real time.
-          </Text>
-        </View>
-      </DashboardSection>
-    </ScrollView>
+    <View style={styles.container}>
+      <FleetActivityFeed fleetId={activeFleet.id} userId={user.id} />
+    </View>
   );
 }
 
@@ -24,24 +42,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 16,
   },
-  placeholderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    gap: 8,
-  },
-  placeholderTitle: {
-    fontSize: 18,
+  emptyTitle: {
+    fontSize: 20,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#1F2937',
   },
-  placeholderText: {
+  emptyText: {
     fontSize: 14,
     color: '#64748B',
+    textAlign: 'center',
     lineHeight: 20,
   },
 });

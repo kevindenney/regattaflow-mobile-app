@@ -38,7 +38,7 @@ export function logAuthState(context: string, state: {
   signedIn?: boolean;
   user?: any;
   userProfile?: any;
-  userType?: string;
+  userType?: 'sailor' | 'coach' | 'club' | null;
   loading?: boolean;
 }) {
   // Logging disabled for production

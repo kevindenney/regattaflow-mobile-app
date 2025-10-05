@@ -1,12 +1,17 @@
 /**
- * Boat List Screen - Overview of all boats with equipment summary
+ * Boat List Screen - Overview of individual boats (vessels)
+ *
+ * KEY DISTINCTION:
+ * - This screen shows INDIVIDUAL BOATS (e.g., "Dragonfly" - a specific Dragon)
+ * - NOT boat classes (e.g., Dragon, Etchells)
+ * - NOT fleets (e.g., "Hong Kong Dragon Fleet")
  */
 
 import { useAuth } from '@/src/providers/AuthProvider';
-import { useSailorDashboardData } from '@/src/hooks';
+import { sailorBoatService, type SailorBoat } from '@/src/services/SailorBoatService';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -19,15 +24,35 @@ import {
 
 export default function BoatListScreen() {
   const { user } = useAuth();
-  const { classes, loading } = useSailorDashboardData();
+  const [boats, setBoats] = useState<SailorBoat[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      loadBoats();
+    }
+  }, [user]);
+
+  const loadBoats = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      const boatList = await sailorBoatService.listBoatsForSailor(user.id);
+      setBoats(boatList);
+    } catch (error) {
+      console.error('Error loading boats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBoatPress = (boatId: string) => {
     router.push(`/(tabs)/boat/${boatId}`);
   };
 
   const handleAddBoat = () => {
-    // TODO: Navigate to add boat flow
-    console.log('Add boat');
+    router.push('/(tabs)/boat/add');
   };
 
   if (loading) {
@@ -52,12 +77,13 @@ export default function BoatListScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {classes.length === 0 ? (
+        {boats.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="boat-outline" size={64} color="#CBD5E1" />
             <Text style={styles.emptyTitle}>No boats yet</Text>
             <Text style={styles.emptyText}>
-              Add your first boat to start tracking equipment and maintenance
+              Add your first boat to start tracking equipment and maintenance.
+              Boats are individual vessels (like "Dragonfly"), separate from fleets.
             </Text>
             <TouchableOpacity onPress={handleAddBoat} style={styles.emptyButton}>
               <Text style={styles.emptyButtonText}>Add Boat</Text>
@@ -65,7 +91,7 @@ export default function BoatListScreen() {
           </View>
         ) : (
           <View style={styles.boatList}>
-            {classes.map((boat) => (
+            {boats.map((boat) => (
               <TouchableOpacity
                 key={boat.id}
                 style={styles.boatCard}
@@ -78,17 +104,17 @@ export default function BoatListScreen() {
                   <View style={styles.boatInfo}>
                     <View style={styles.boatTitleRow}>
                       <Text style={styles.boatName}>
-                        {boat.boatName || 'Unnamed Boat'}
+                        {boat.name}
                       </Text>
-                      {boat.isPrimary && (
+                      {boat.is_primary && (
                         <View style={styles.primaryBadge}>
                           <Text style={styles.primaryBadgeText}>Primary</Text>
                         </View>
                       )}
                     </View>
                     <Text style={styles.boatClass}>
-                      {boat.name}
-                      {boat.sailNumber && ` • Sail #${boat.sailNumber}`}
+                      {boat.boat_class?.name || 'Unknown Class'}
+                      {boat.sail_number && ` • Sail #${boat.sail_number}`}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
@@ -116,7 +142,7 @@ export default function BoatListScreen() {
       </ScrollView>
 
       {/* FAB for adding boats */}
-      {classes.length > 0 && (
+      {boats.length > 0 && (
         <TouchableOpacity style={styles.fab} onPress={handleAddBoat}>
           <Ionicons name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>

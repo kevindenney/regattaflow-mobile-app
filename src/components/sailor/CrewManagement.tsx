@@ -4,9 +4,12 @@
  */
 
 import {
+    AvailabilityStatus,
+    CrewCertification,
     CrewInvite,
     crewManagementService,
     CrewMember,
+    CrewMemberWithAvailability,
     CrewRole
 } from '@/src/services/crewManagementService';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,13 +64,24 @@ export function CrewManagement({
   compact = false,
   onManagePress,
 }: CrewManagementProps) {
-  const [crew, setCrew] = useState<CrewMember[]>([]);
+  const [crew, setCrew] = useState<CrewMemberWithAvailability[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<CrewMember | null>(null);
   const [inviteForm, setInviteForm] = useState<CrewInvite>({
     email: '',
     name: '',
     role: 'trimmer',
+  });
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    role: CrewRole;
+    notes: string;
+  }>({
+    name: '',
+    role: 'trimmer',
+    notes: '',
   });
 
   useEffect(() => {
@@ -77,7 +91,9 @@ export function CrewManagement({
   const loadCrew = async () => {
     try {
       setLoading(true);
-      const data = await crewManagementService.getCrewForClass(sailorId, classId);
+      // Get crew with availability for today
+      const today = new Date().toISOString().split('T')[0];
+      const data = await crewManagementService.getCrewWithAvailability(sailorId, classId, today);
       setCrew(data);
     } catch (err) {
       console.error('Error loading crew:', err);
@@ -135,6 +151,51 @@ export function CrewManagement({
     }
   };
 
+  const handleEditCrew = (member: CrewMember) => {
+    setSelectedMember(member);
+    setEditForm({
+      name: member.name,
+      role: member.role,
+      notes: member.notes || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedMember) return;
+
+    try {
+      await crewManagementService.updateCrewMember(selectedMember.id, {
+        name: editForm.name,
+        role: editForm.role,
+        notes: editForm.notes,
+      });
+      Alert.alert('Success', 'Crew member updated');
+      setShowEditModal(false);
+      setSelectedMember(null);
+      loadCrew();
+    } catch (err) {
+      console.error('Error updating crew:', err);
+      Alert.alert('Error', 'Failed to update crew member');
+    }
+  };
+
+  const handleTogglePrimary = async (member: CrewMember) => {
+    try {
+      await crewManagementService.setPrimaryCrew(member.id, !member.isPrimary);
+      Alert.alert(
+        'Success',
+        member.isPrimary
+          ? `${member.name} removed from primary crew`
+          : `${member.name} set as primary crew`
+      );
+      loadCrew();
+    } catch (err) {
+      console.error('Error toggling primary crew:', err);
+      Alert.alert('Error', 'Failed to update primary crew status');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -145,6 +206,32 @@ export function CrewManagement({
         return '#94A3B8';
       default:
         return '#64748B';
+    }
+  };
+
+  const getAvailabilityColor = (availability?: AvailabilityStatus) => {
+    switch (availability) {
+      case 'available':
+        return '#10B981';
+      case 'unavailable':
+        return '#EF4444';
+      case 'tentative':
+        return '#F59E0B';
+      default:
+        return '#10B981'; // Default to available
+    }
+  };
+
+  const getAvailabilityLabel = (availability?: AvailabilityStatus) => {
+    switch (availability) {
+      case 'available':
+        return 'Available';
+      case 'unavailable':
+        return 'Unavailable';
+      case 'tentative':
+        return 'Tentative';
+      default:
+        return 'Available';
     }
   };
 
@@ -279,9 +366,14 @@ export function CrewManagement({
                 onPress: () => console.log('View profile:', member.id),
               },
               {
-                label: 'Edit Role',
+                label: 'Edit Details',
                 icon: 'create-outline',
-                onPress: () => console.log('Edit role:', member.id),
+                onPress: () => handleEditCrew(member),
+              },
+              {
+                label: member.isPrimary ? 'Remove from Primary' : 'Set as Primary',
+                icon: 'star',
+                onPress: () => handleTogglePrimary(member),
               },
             ];
 
@@ -326,18 +418,50 @@ export function CrewManagement({
                 </View>
 
                 <View style={styles.crewInfo}>
-                  <Text style={styles.crewName} numberOfLines={1}>{member.name}</Text>
+                  <View style={styles.crewNameRow}>
+                    <Text style={styles.crewName} numberOfLines={1}>{member.name}</Text>
+                    {member.isPrimary && (
+                      <View style={styles.primaryBadge}>
+                        <Ionicons name="star" size={12} color="#F59E0B" />
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.crewEmail} numberOfLines={1}>{member.email}</Text>
-                  <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[member.role] + '15' }]}>
-                    <Text style={[styles.roleText, { color: ROLE_COLORS[member.role] }]}>
-                      {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                    </Text>
+                  <View style={styles.badgeRow}>
+                    <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[member.role] + '15' }]}>
+                      <Text style={[styles.roleText, { color: ROLE_COLORS[member.role] }]}>
+                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                      </Text>
+                    </View>
+                    {member.currentAvailability && (
+                      <View style={[styles.availabilityBadge, { backgroundColor: getAvailabilityColor(member.currentAvailability) + '15' }]}>
+                        <View style={[styles.availabilityDot, { backgroundColor: getAvailabilityColor(member.currentAvailability) }]} />
+                        <Text style={[styles.availabilityText, { color: getAvailabilityColor(member.currentAvailability) }]}>
+                          {getAvailabilityLabel(member.currentAvailability)}
+                        </Text>
+                      </View>
+                    )}
+                    {member.certifications && member.certifications.length > 0 && (
+                      <View style={styles.certificationsBadge}>
+                        <Ionicons name="shield-checkmark" size={12} color="#10B981" />
+                        <Text style={styles.certificationsText}>{member.certifications.length}</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
                 {member.status === 'pending' && (
                   <View style={styles.pendingBadge}>
                     <Text style={styles.pendingText}>Pending</Text>
+                  </View>
+                )}
+
+                {member.nextUnavailable && (
+                  <View style={styles.nextUnavailableBadge}>
+                    <Ionicons name="calendar-outline" size={12} color="#F59E0B" />
+                    <Text style={styles.nextUnavailableText}>
+                      Next unavailable: {new Date(member.nextUnavailable.startDate).toLocaleDateString()}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -443,6 +567,98 @@ export function CrewManagement({
             <TouchableOpacity style={styles.submitButton} onPress={handleInviteCrew}>
               <Ionicons name="send" size={18} color="#FFFFFF" />
               <Text style={styles.submitButtonText}>Send Invite</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Crew Member</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.form}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editForm.name}
+                  onChangeText={(name) => setEditForm({ ...editForm, name })}
+                  placeholder="Enter name"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Role</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.roleSelector}
+                >
+                  {(['helmsman', 'tactician', 'trimmer', 'bowman', 'pit', 'grinder', 'other'] as CrewRole[]).map(
+                    (role) => (
+                      <TouchableOpacity
+                        key={role}
+                        style={[
+                          styles.roleChip,
+                          editForm.role === role && styles.roleChipActive,
+                          editForm.role === role && {
+                            backgroundColor: ROLE_COLORS[role],
+                          },
+                        ]}
+                        onPress={() => setEditForm({ ...editForm, role })}
+                      >
+                        <Ionicons
+                          name={ROLE_ICONS[role] as any}
+                          size={16}
+                          color={
+                            editForm.role === role ? '#FFFFFF' : ROLE_COLORS[role]
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.roleChipText,
+                            editForm.role === role && styles.roleChipTextActive,
+                          ]}
+                        >
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </ScrollView>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Notes</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={editForm.notes}
+                  onChangeText={(notes) => setEditForm({ ...editForm, notes })}
+                  placeholder="Add notes about this crew member..."
+                  placeholderTextColor="#94A3B8"
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.submitButton} onPress={handleSaveEdit}>
+              <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>Save Changes</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -644,15 +860,30 @@ const styles = StyleSheet.create({
   crewInfo: {
     gap: 4,
   },
+  crewNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   crewName: {
     fontSize: 15,
     fontWeight: '700',
     color: '#1E293B',
   },
+  primaryBadge: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 4,
+  },
   crewEmail: {
     fontSize: 12,
     color: '#64748B',
     marginBottom: 4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
   },
   roleBadge: {
     paddingHorizontal: 8,
@@ -663,6 +894,55 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  availabilityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  availabilityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  availabilityText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  certificationsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#D1FAE5',
+    alignSelf: 'flex-start',
+  },
+  certificationsText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  nextUnavailableBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+  },
+  nextUnavailableText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#D97706',
   },
   pendingBadge: {
     backgroundColor: '#FEF3C7',
@@ -751,6 +1031,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1E293B',
     backgroundColor: '#F8FAFC',
+  },
+  textArea: {
+    minHeight: 100,
+    paddingTop: 12,
   },
   roleSelector: {
     gap: 8,

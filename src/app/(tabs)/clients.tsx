@@ -1,13 +1,83 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
+import { useAuth } from '@/src/providers/AuthProvider';
+import { coachingService, CoachingClient, ClientStats } from '@/src/services/CoachingService';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function ClientsScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [clients, setClients] = useState<CoachingClient[]>([]);
+  const [stats, setStats] = useState<ClientStats>({
+    activeClients: 0,
+    totalSessions: 0,
+    sessionsThisMonth: 0,
+    upcomingSessions: 0
+  });
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
+  const loadData = async () => {
+    if (!user) return;
+
+    try {
+      const [clientsData, statsData] = await Promise.all([
+        coachingService.getClients(user.id, 'active'),
+        coachingService.getCoachStats(user.id)
+      ]);
+
+      setClients(clientsData);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadData();
+  };
+
+  const handleClientPress = (clientId: string) => {
+    router.push(`/coach/client/${clientId}`);
+  };
+
+  const formatLastSession = (date?: string) => {
+    if (!date) return 'No sessions yet';
+    return `Last session: ${formatDistanceToNow(new Date(date), { addSuffix: true })}`;
+  };
+
+  if (loading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         <View style={styles.header}>
           <ThemedText style={styles.title}>My Clients</ThemedText>
           <TouchableOpacity style={styles.addButton}>
@@ -17,43 +87,79 @@ export default function ClientsScreen() {
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <ThemedText style={styles.statValue}>12</ThemedText>
+            <ThemedText style={styles.statValue}>{stats.activeClients}</ThemedText>
             <ThemedText style={styles.statLabel}>Active Clients</ThemedText>
           </View>
           <View style={styles.statCard}>
-            <ThemedText style={styles.statValue}>48</ThemedText>
+            <ThemedText style={styles.statValue}>{stats.sessionsThisMonth}</ThemedText>
             <ThemedText style={styles.statLabel}>Sessions This Month</ThemedText>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Recent Clients</ThemedText>
+        {stats.upcomingSessions > 0 && (
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statValue}>{stats.upcomingSessions}</ThemedText>
+              <ThemedText style={styles.statLabel}>Upcoming Sessions</ThemedText>
+            </View>
+            {stats.averageRating && (
+              <View style={styles.statCard}>
+                <ThemedText style={styles.statValue}>{stats.averageRating.toFixed(1)} ⭐</ThemedText>
+                <ThemedText style={styles.statLabel}>Average Rating</ThemedText>
+              </View>
+            )}
+          </View>
+        )}
 
-          {/* Placeholder client cards */}
-          {[1, 2, 3].map((i) => (
-            <TouchableOpacity key={i} style={styles.clientCard}>
-              <View style={styles.clientAvatar}>
-                <Ionicons name="person-circle" size={50} color="#CBD5E1" />
-              </View>
-              <View style={styles.clientInfo}>
-                <ThemedText style={styles.clientName}>Client Name {i}</ThemedText>
-                <ThemedText style={styles.clientDetail}>Dragon Class • Intermediate</ThemedText>
-                <ThemedText style={styles.clientDetail}>Last session: 2 days ago</ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#CBD5E1" />
+        {clients.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Active Clients</ThemedText>
+
+            {clients.map((client) => (
+              <TouchableOpacity
+                key={client.id}
+                style={styles.clientCard}
+                onPress={() => handleClientPress(client.id)}
+              >
+                <View style={styles.clientAvatar}>
+                  {client.sailor?.avatar_url ? (
+                    <Image
+                      source={{ uri: client.sailor.avatar_url }}
+                      style={{ width: 50, height: 50, borderRadius: 25 }}
+                    />
+                  ) : (
+                    <Ionicons name="person-circle" size={50} color="#CBD5E1" />
+                  )}
+                </View>
+                <View style={styles.clientInfo}>
+                  <ThemedText style={styles.clientName}>
+                    {client.sailor?.full_name || client.sailor?.email || 'Unknown Client'}
+                  </ThemedText>
+                  <ThemedText style={styles.clientDetail}>
+                    {client.primary_boat_class || 'No boat class'} • {client.skill_level || 'Unknown level'}
+                  </ThemedText>
+                  <ThemedText style={styles.clientDetail}>
+                    {formatLastSession(client.last_session_date)}
+                  </ThemedText>
+                  <ThemedText style={styles.clientDetail}>
+                    {client.total_sessions} session{client.total_sessions !== 1 ? 's' : ''} completed
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#CBD5E1" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="people-outline" size={64} color="#CBD5E1" />
+            <ThemedText style={styles.emptyText}>
+              Start building your client base
+            </ThemedText>
+            <TouchableOpacity style={styles.ctaButton}>
+              <ThemedText style={styles.ctaButtonText}>Find Sailors</ThemedText>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.emptyState}>
-          <Ionicons name="people-outline" size={64} color="#CBD5E1" />
-          <ThemedText style={styles.emptyText}>
-            Start building your client base
-          </ThemedText>
-          <TouchableOpacity style={styles.ctaButton}>
-            <ThemedText style={styles.ctaButtonText}>Import Clients</ThemedText>
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -63,6 +169,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',

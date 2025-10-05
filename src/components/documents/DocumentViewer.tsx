@@ -19,7 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { documentStorageService, StoredDocument } from '@/src/services/storage/DocumentStorageService';
 import { DocumentProcessingService } from '@/src/services/ai/DocumentProcessingService';
-import { useAuth } from '@/src/lib/contexts/AuthContext';
+import { useAuth } from '@/src/providers/AuthProvider';
 import type { StrategyInsight } from '@/src/lib/types/ai-knowledge';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');

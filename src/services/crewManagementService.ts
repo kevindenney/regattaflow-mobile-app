@@ -8,6 +8,16 @@ import { supabase } from './supabase';
 export type CrewRole = 'helmsman' | 'tactician' | 'trimmer' | 'bowman' | 'pit' | 'grinder' | 'other';
 export type CrewAccessLevel = 'view' | 'edit' | 'full';
 export type CrewStatus = 'active' | 'pending' | 'inactive';
+export type AvailabilityStatus = 'available' | 'unavailable' | 'tentative';
+
+export interface CrewCertification {
+  name: string;
+  issuer: string;
+  number?: string;
+  issuedDate?: string;
+  expiryDate?: string;
+  verified: boolean;
+}
 
 export interface CrewMember {
   id: string;
@@ -19,6 +29,8 @@ export interface CrewMember {
   role: CrewRole;
   accessLevel: CrewAccessLevel;
   status: CrewStatus;
+  isPrimary: boolean;
+  certifications: CrewCertification[];
   inviteToken?: string;
   inviteSentAt?: string;
   inviteAcceptedAt?: string;
@@ -28,12 +40,52 @@ export interface CrewMember {
   updatedAt: string;
 }
 
+export interface CrewAvailability {
+  id: string;
+  crewMemberId: string;
+  startDate: string;
+  endDate: string;
+  status: AvailabilityStatus;
+  reason?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrewMemberWithAvailability extends CrewMember {
+  currentAvailability?: AvailabilityStatus;
+  nextUnavailable?: { startDate: string; endDate: string; reason?: string };
+}
+
 export interface CrewInvite {
   email: string;
   name: string;
   role: CrewRole;
   accessLevel?: CrewAccessLevel;
   notes?: string;
+}
+
+export interface CrewRaceParticipation {
+  id: string;
+  crewMemberId: string;
+  regattaId: string;
+  raceNumber: number;
+  position: string;
+  performanceRating?: number;
+  notes?: string;
+  finishPosition?: number;
+  pointsScored?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrewRaceStats {
+  totalRaces: number;
+  avgFinish?: number;
+  avgPerformanceRating?: number;
+  positionsSailed: string[];
+  bestFinish?: number;
+  totalPoints?: number;
 }
 
 class CrewManagementService {
@@ -301,6 +353,8 @@ class CrewManagementService {
       role: data.role,
       accessLevel: data.access_level,
       status: data.status,
+      isPrimary: data.is_primary || false,
+      certifications: data.certifications || [],
       inviteToken: data.invite_token,
       inviteSentAt: data.invite_sent_at,
       inviteAcceptedAt: data.invite_accepted_at,
@@ -321,6 +375,524 @@ class CrewManagementService {
   private async sendInviteEmail(crewMember: any): Promise<void> {
     // TODO: Implement email sending via Supabase Edge Function or third-party service
     console.log(`Would send invite email to ${crewMember.email} with token ${crewMember.invite_token}`);
+  }
+
+  // ==========================================
+  // PRIMARY CREW METHODS
+  // ==========================================
+
+  /**
+   * Set a crew member as primary crew
+   */
+  async setPrimaryCrew(crewMemberId: string, isPrimary: boolean): Promise<void> {
+    const { error } = await supabase.rpc('set_primary_crew', {
+      p_crew_member_id: crewMemberId,
+      p_is_primary: isPrimary,
+    });
+
+    if (error) {
+      console.error('Error setting primary crew:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get primary crew for a class
+   */
+  async getPrimaryCrew(sailorId: string, classId: string): Promise<CrewMember[]> {
+    const { data, error } = await supabase
+      .from('crew_members')
+      .select('*')
+      .eq('sailor_id', sailorId)
+      .eq('class_id', classId)
+      .eq('is_primary', true)
+      .eq('status', 'active');
+
+    if (error) {
+      console.error('Error fetching primary crew:', error);
+      throw error;
+    }
+
+    return this.mapCrewMembers(data || []);
+  }
+
+  // ==========================================
+  // CERTIFICATION METHODS
+  // ==========================================
+
+  /**
+   * Add certification to crew member
+   */
+  async addCertification(
+    crewMemberId: string,
+    certification: CrewCertification
+  ): Promise<void> {
+    // Get current certifications
+    const { data: current, error: fetchError } = await supabase
+      .from('crew_members')
+      .select('certifications')
+      .eq('id', crewMemberId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching current certifications:', fetchError);
+      throw fetchError;
+    }
+
+    const currentCerts = current?.certifications || [];
+    const updatedCerts = [...currentCerts, certification];
+
+    // Update with new certification
+    const { error: updateError } = await supabase
+      .from('crew_members')
+      .update({ certifications: updatedCerts })
+      .eq('id', crewMemberId);
+
+    if (updateError) {
+      console.error('Error adding certification:', updateError);
+      throw updateError;
+    }
+  }
+
+  /**
+   * Update certification for crew member
+   */
+  async updateCertification(
+    crewMemberId: string,
+    certificationIndex: number,
+    certification: CrewCertification
+  ): Promise<void> {
+    // Get current certifications
+    const { data: current, error: fetchError } = await supabase
+      .from('crew_members')
+      .select('certifications')
+      .eq('id', crewMemberId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching current certifications:', fetchError);
+      throw fetchError;
+    }
+
+    const currentCerts = current?.certifications || [];
+    currentCerts[certificationIndex] = certification;
+
+    // Update with modified certification
+    const { error: updateError } = await supabase
+      .from('crew_members')
+      .update({ certifications: currentCerts })
+      .eq('id', crewMemberId);
+
+    if (updateError) {
+      console.error('Error updating certification:', updateError);
+      throw updateError;
+    }
+  }
+
+  /**
+   * Remove certification from crew member
+   */
+  async removeCertification(
+    crewMemberId: string,
+    certificationIndex: number
+  ): Promise<void> {
+    // Get current certifications
+    const { data: current, error: fetchError } = await supabase
+      .from('crew_members')
+      .select('certifications')
+      .eq('id', crewMemberId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching current certifications:', fetchError);
+      throw fetchError;
+    }
+
+    const currentCerts = current?.certifications || [];
+    currentCerts.splice(certificationIndex, 1);
+
+    // Update with certification removed
+    const { error: updateError } = await supabase
+      .from('crew_members')
+      .update({ certifications: currentCerts })
+      .eq('id', crewMemberId);
+
+    if (updateError) {
+      console.error('Error removing certification:', updateError);
+      throw updateError;
+    }
+  }
+
+  // ==========================================
+  // RACE PARTICIPATION METHODS
+  // ==========================================
+
+  /**
+   * Add race participation record
+   */
+  async addRaceParticipation(
+    crewMemberId: string,
+    participation: {
+      regattaId: string;
+      raceNumber: number;
+      position: string;
+      performanceRating?: number;
+      notes?: string;
+      finishPosition?: number;
+      pointsScored?: number;
+    }
+  ): Promise<CrewRaceParticipation> {
+    const { data, error } = await supabase
+      .from('crew_race_participation')
+      .insert({
+        crew_member_id: crewMemberId,
+        regatta_id: participation.regattaId,
+        race_number: participation.raceNumber,
+        position: participation.position,
+        performance_rating: participation.performanceRating,
+        notes: participation.notes,
+        finish_position: participation.finishPosition,
+        points_scored: participation.pointsScored,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding race participation:', error);
+      throw error;
+    }
+
+    return this.mapRaceParticipation(data);
+  }
+
+  /**
+   * Get race participation history for crew member
+   */
+  async getCrewRaceHistory(crewMemberId: string): Promise<CrewRaceParticipation[]> {
+    const { data, error } = await supabase
+      .from('crew_race_participation')
+      .select('*')
+      .eq('crew_member_id', crewMemberId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching race history:', error);
+      throw error;
+    }
+
+    return (data || []).map(this.mapRaceParticipation);
+  }
+
+  /**
+   * Get race statistics for crew member
+   */
+  async getCrewRaceStats(crewMemberId: string): Promise<CrewRaceStats> {
+    const { data, error } = await supabase.rpc('get_crew_race_stats', {
+      p_crew_member_id: crewMemberId,
+    });
+
+    if (error) {
+      console.error('Error fetching crew race stats:', error);
+      throw error;
+    }
+
+    const stats = data?.[0] || {};
+
+    return {
+      totalRaces: stats.total_races || 0,
+      avgFinish: stats.avg_finish || undefined,
+      avgPerformanceRating: stats.avg_performance_rating || undefined,
+      positionsSailed: stats.positions_sailed || [],
+      bestFinish: stats.best_finish || undefined,
+      totalPoints: stats.total_points || undefined,
+    };
+  }
+
+  /**
+   * Update race participation
+   */
+  async updateRaceParticipation(
+    participationId: string,
+    updates: Partial<{
+      position: string;
+      performanceRating: number;
+      notes: string;
+      finishPosition: number;
+      pointsScored: number;
+    }>
+  ): Promise<CrewRaceParticipation> {
+    const dbUpdates: any = {};
+
+    if (updates.position !== undefined) dbUpdates.position = updates.position;
+    if (updates.performanceRating !== undefined) dbUpdates.performance_rating = updates.performanceRating;
+    if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+    if (updates.finishPosition !== undefined) dbUpdates.finish_position = updates.finishPosition;
+    if (updates.pointsScored !== undefined) dbUpdates.points_scored = updates.pointsScored;
+
+    const { data, error } = await supabase
+      .from('crew_race_participation')
+      .update(dbUpdates)
+      .eq('id', participationId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating race participation:', error);
+      throw error;
+    }
+
+    return this.mapRaceParticipation(data);
+  }
+
+  // ==========================================
+  // AVAILABILITY METHODS
+  // ==========================================
+
+  /**
+   * Get crew availability for a specific date range
+   */
+  async getCrewAvailability(
+    crewMemberId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<CrewAvailability[]> {
+    let query = supabase
+      .from('crew_availability')
+      .select('*')
+      .eq('crew_member_id', crewMemberId);
+
+    if (startDate) {
+      query = query.gte('end_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('start_date', endDate);
+    }
+
+    const { data, error } = await query.order('start_date', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching crew availability:', error);
+      throw error;
+    }
+
+    return (data || []).map(this.mapAvailability);
+  }
+
+  /**
+   * Set crew availability for a date range
+   */
+  async setCrewAvailability(
+    crewMemberId: string,
+    availability: {
+      startDate: string;
+      endDate: string;
+      status: AvailabilityStatus;
+      reason?: string;
+      notes?: string;
+    }
+  ): Promise<CrewAvailability> {
+    const { data, error } = await supabase
+      .from('crew_availability')
+      .insert({
+        crew_member_id: crewMemberId,
+        start_date: availability.startDate,
+        end_date: availability.endDate,
+        status: availability.status,
+        reason: availability.reason,
+        notes: availability.notes,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error setting crew availability:', error);
+      throw error;
+    }
+
+    return this.mapAvailability(data);
+  }
+
+  /**
+   * Update crew availability
+   */
+  async updateCrewAvailability(
+    availabilityId: string,
+    updates: Partial<{
+      startDate: string;
+      endDate: string;
+      status: AvailabilityStatus;
+      reason: string;
+      notes: string;
+    }>
+  ): Promise<CrewAvailability> {
+    const dbUpdates: any = {};
+
+    if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate;
+    if (updates.endDate !== undefined) dbUpdates.end_date = updates.endDate;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.reason !== undefined) dbUpdates.reason = updates.reason;
+    if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+
+    const { data, error } = await supabase
+      .from('crew_availability')
+      .update(dbUpdates)
+      .eq('id', availabilityId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating crew availability:', error);
+      throw error;
+    }
+
+    return this.mapAvailability(data);
+  }
+
+  /**
+   * Delete crew availability
+   */
+  async deleteCrewAvailability(availabilityId: string): Promise<void> {
+    const { error } = await supabase
+      .from('crew_availability')
+      .delete()
+      .eq('id', availabilityId);
+
+    if (error) {
+      console.error('Error deleting crew availability:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check crew availability for a specific date
+   */
+  async checkCrewAvailabilityForDate(
+    crewMemberId: string,
+    date: string
+  ): Promise<AvailabilityStatus> {
+    const { data, error } = await supabase.rpc('check_crew_availability', {
+      p_crew_member_id: crewMemberId,
+      p_date: date,
+    });
+
+    if (error) {
+      console.error('Error checking crew availability:', error);
+      return 'available'; // Default to available on error
+    }
+
+    return data as AvailabilityStatus;
+  }
+
+  /**
+   * Get crew members with availability for a date
+   */
+  async getCrewWithAvailability(
+    sailorId: string,
+    classId: string,
+    date: string
+  ): Promise<CrewMemberWithAvailability[]> {
+    const crew = await this.getCrewForClass(sailorId, classId);
+
+    const crewWithAvailability = await Promise.all(
+      crew.map(async (member) => {
+        const currentAvailability = await this.checkCrewAvailabilityForDate(member.id, date);
+
+        // Get next unavailable period
+        const { data: nextUnavailable } = await supabase
+          .from('crew_availability')
+          .select('start_date, end_date, reason')
+          .eq('crew_member_id', member.id)
+          .eq('status', 'unavailable')
+          .gte('start_date', date)
+          .order('start_date', { ascending: true })
+          .limit(1)
+          .single();
+
+        return {
+          ...member,
+          currentAvailability,
+          nextUnavailable: nextUnavailable
+            ? {
+                startDate: nextUnavailable.start_date,
+                endDate: nextUnavailable.end_date,
+                reason: nextUnavailable.reason,
+              }
+            : undefined,
+        } as CrewMemberWithAvailability;
+      })
+    );
+
+    return crewWithAvailability;
+  }
+
+  /**
+   * Get availability summary for all crew
+   */
+  async getCrewAvailabilitySummary(
+    sailorId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<
+    Array<{
+      crewMemberId: string;
+      crewName: string;
+      crewRole: string;
+      availableDays: number;
+      unavailableDays: number;
+      tentativeDays: number;
+    }>
+  > {
+    const { data, error } = await supabase.rpc('get_crew_availability_summary', {
+      p_sailor_id: sailorId,
+      p_start_date: startDate,
+      p_end_date: endDate,
+    });
+
+    if (error) {
+      console.error('Error fetching crew availability summary:', error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      crewMemberId: row.crew_member_id,
+      crewName: row.crew_name,
+      crewRole: row.crew_role,
+      availableDays: row.available_days,
+      unavailableDays: row.unavailable_days,
+      tentativeDays: row.tentative_days,
+    }));
+  }
+
+  // Helper methods for availability
+  private mapAvailability(data: any): CrewAvailability {
+    return {
+      id: data.id,
+      crewMemberId: data.crew_member_id,
+      startDate: data.start_date,
+      endDate: data.end_date,
+      status: data.status,
+      reason: data.reason,
+      notes: data.notes,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  // Helper methods for race participation
+  private mapRaceParticipation(data: any): CrewRaceParticipation {
+    return {
+      id: data.id,
+      crewMemberId: data.crew_member_id,
+      regattaId: data.regatta_id,
+      raceNumber: data.race_number,
+      position: data.position,
+      performanceRating: data.performance_rating,
+      notes: data.notes,
+      finishPosition: data.finish_position,
+      pointsScored: data.points_scored,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 }
 

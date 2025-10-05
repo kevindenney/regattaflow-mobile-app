@@ -4,7 +4,7 @@
  * Supports multiple data sources and provides unified result data across platforms
  */
 
-import { supabase } from '@/src/lib/supabase';
+import { supabase } from '../supabase';
 import { SailingVenue } from '@/src/types/venues';
 
 export interface ExternalResultSource {

@@ -5,30 +5,21 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, SafeAreaView, Platform } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { router } from 'expo-router';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/src/lib/utils/userTypeRouting';
-import { HeroTabs } from '@/src/components/landing/HeroTabs';
+import { HeroPhones } from '@/src/components/landing/HeroPhones';
 import { ScrollFix } from '@/src/components/landing/ScrollFix';
-
-// Temporary import for debugging
-import SignupScreen from './(auth)/signup';
 
 export default function LandingPage() {
   const { signedIn, ready } = useAuth();
-  const pathname = usePathname();
 
-  // TEMPORARY DEBUG: If URL contains signup, show signup component
-  if (pathname && (pathname.includes('signup') || pathname.includes('auth'))) {
-    return <SignupScreen />;
-  }
-
-  // Show landing page for unauthenticated users (or if loading takes too long)
+  // Show landing page for unauthenticated users
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
   return (
     <Container style={styles.container}>
       <ScrollFix />
-      <HeroTabs />
+      <HeroPhones />
     </Container>
   );
 }

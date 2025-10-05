@@ -172,54 +172,79 @@ export function useSailorDashboardData(): SailorDashboardData {
   });
 
   const fetchSailorData = useCallback(async (overrideClassId?: string | null) => {
+    console.log('🔍 [SAILOR-DATA] fetchSailorData called', { userId: user?.id, hasUser: !!user });
+
     if (!user) {
+      console.log('❌ [SAILOR-DATA] No user, stopping');
       setData(prev => ({ ...prev, loading: false, error: 'No user authenticated' }));
       return;
     }
 
     try {
+      console.log('✅ [SAILOR-DATA] User authenticated, starting fetch', user.id);
       setData(prev => ({ ...prev, loading: true, error: null }));
 
 
       // Query regattas using only the existing created_by column
       
-      // Step 1: Fetch classes for this sailor (SIMPLIFIED - no nested joins)
+      // Step 1: Fetch classes for this sailor (WITHOUT foreign key join to avoid deadlock)
+      console.log('📊 [SAILOR-DATA] Fetching classes for user:', user.id);
       const { data: classRows, error: classError } = await supabase
         .from('sailor_classes')
-        .select(`
-          class_id,
-          is_primary,
-          boat_name,
-          sail_number,
-          boat_classes!sailor_classes_class_id_fkey(name, tuning_guide_url)
-        `)
+        .select('class_id, is_primary, boat_name, sail_number')
         .eq('sailor_id', user.id);
+
+      console.log('📊 [SAILOR-DATA] Classes result:', { count: classRows?.length, error: classError });
 
       if (classError) {
         console.error('❌ [SAILOR-DATA] Classes error:', classError);
         throw classError;
       }
 
-      // Step 2: Fetch class groups separately
+      // Step 2: Fetch boat class details and groups separately
       const classIds = classRows?.map(r => r.class_id) || [];
+      let boatClassesMap: Record<string, { name: string; tuning_guide_url: string | null }> = {};
       let classGroupsMap: Record<string, { id: string; name: string; rating_system: string | null }> = {};
-      
+
       if (classIds.length > 0) {
+        const { data: classesData, error: classesError } = await supabase
+          .from('boat_classes')
+          .select('id, name, tuning_guide_url')
+          .in('id', classIds);
+
+        if (classesData && !classesError) {
+          classesData.forEach((cls: any) => {
+            boatClassesMap[cls.id] = { name: cls.name, tuning_guide_url: cls.tuning_guide_url };
+          });
+        }
+
+        // Fetch class groups (without foreign key join)
         const { data: groupData, error: groupError } = await supabase
           .from('class_group_members')
-          .select(`
-            class_id,
-            class_groups!class_group_members_group_id_fkey(id, name, rating_system)
-          `)
+          .select('class_id, group_id')
           .in('class_id', classIds);
 
-        // Build a map of class_id -> group info
         if (groupData && !groupError) {
-          groupData.forEach((item: any) => {
-            if (item.class_groups) {
-              classGroupsMap[item.class_id] = item.class_groups;
-            }
-          });
+          const groupIds = groupData.map((g: any) => g.group_id).filter(Boolean);
+
+          if (groupIds.length > 0) {
+            const { data: groupsData } = await supabase
+              .from('class_groups')
+              .select('id, name, rating_system')
+              .in('id', groupIds);
+
+            // Build maps
+            const groupsById: Record<string, any> = {};
+            groupsData?.forEach((g: any) => {
+              groupsById[g.id] = g;
+            });
+
+            groupData.forEach((item: any) => {
+              if (item.group_id && groupsById[item.group_id]) {
+                classGroupsMap[item.class_id] = groupsById[item.group_id];
+              }
+            });
+          }
         }
       }
 
@@ -228,19 +253,15 @@ export function useSailorDashboardData(): SailorDashboardData {
         is_primary: boolean | null;
         boat_name: string | null;
         sail_number: string | null;
-        boat_classes: {
-          name: string | null;
-          tuning_guide_url: string | null;
-        } | null;
       };
 
       const processedClasses: SailorClass[] = (classRows as ClassRow[] | null | undefined)?.map(row => ({
         id: row.class_id,
-        name: row.boat_classes?.name ?? 'Unclassified',
+        name: boatClassesMap[row.class_id]?.name ?? 'Unclassified',
         isPrimary: !!row.is_primary,
         boatName: row.boat_name ?? undefined,
         sailNumber: row.sail_number ?? undefined,
-        tuningGuideUrl: row.boat_classes?.tuning_guide_url ?? null,
+        tuningGuideUrl: boatClassesMap[row.class_id]?.tuning_guide_url ?? null,
         group: classGroupsMap[row.class_id]
           ? {
               id: classGroupsMap[row.class_id].id,
@@ -573,8 +594,10 @@ export function useSailorDashboardData(): SailorDashboardData {
   }, [user]);
 
   useEffect(() => {
+    console.log('🔄 [SAILOR-DATA] useEffect triggered', { hasUser: !!user, userId: user?.id });
 
     if (user) {
+      console.log('👤 [SAILOR-DATA] User exists, starting fetch with timeout');
       // Add timeout fallback to prevent infinite loading
       const timeout = setTimeout(() => {
         console.error('⏰ [SAILOR-DATA] Fetch timeout after 10 seconds');
@@ -585,8 +608,12 @@ export function useSailorDashboardData(): SailorDashboardData {
         }));
       }, 10000);
 
-      fetchSailorData().finally(() => clearTimeout(timeout));
+      fetchSailorData().finally(() => {
+        console.log('✅ [SAILOR-DATA] Fetch completed, clearing timeout');
+        clearTimeout(timeout);
+      });
     } else {
+      console.log('❌ [SAILOR-DATA] No user in useEffect, stopping loading');
       // If no user, stop loading
       setData(prev => ({ ...prev, loading: false, error: null }));
     }

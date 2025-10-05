@@ -167,7 +167,7 @@ export type SkillLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Professiona
 
 export type CoachStatus = 'pending' | 'active' | 'suspended' | 'inactive';
 
-export type ServiceType = 'race_analysis' | 'live_coaching' | 'race_day_support' | 'training_program';
+export type ServiceType = 'race_analysis' | 'live_coaching' | 'race_day_support' | 'training_program' | 'on_water' | 'video_review' | 'strategy_session';
 
 export type SessionStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
 
@@ -186,12 +186,15 @@ export interface CoachSearchFilters {
   skill_levels?: SkillLevel[];
   price_range?: [number, number]; // [min, max] in cents
   location?: string;
+  time_zone?: string; // Filter by coach's time zone (e.g., "America/New_York")
   availability?: {
     date?: string;
     time_range?: [string, string]; // [start_time, end_time]
   };
   rating?: number; // minimum rating
   languages?: string[];
+  session_types?: ServiceType[]; // Filter by service types (on_water, video_review, strategy_session)
+  min_match_score?: number; // Minimum AI match score threshold (0-1)
 }
 
 export interface CoachSearchResult extends CoachProfile {
@@ -278,4 +281,38 @@ export interface StudentDashboardData {
   favorite_coaches: CoachProfile[];
   recommended_coaches: CoachSearchResult[];
   pending_reviews: SessionReview[];
+}
+
+// Sailor Profile for AI Matching
+export interface SailorProfile {
+  id: string;
+  user_id: string;
+  sailing_experience: number; // years
+  boat_classes: string[];
+  goals: string;
+  competitive_level: string;
+  learning_style?: string;
+  location?: string;
+  budget_range?: [number, number]; // [min, max] in cents per session
+}
+
+// AI Coach Matching Result
+export interface AICoachMatchResult {
+  coach: CoachSearchResult;
+  overallScore: number;
+  breakdown: {
+    experienceMatch: number;
+    teachingStyleMatch: number;
+    specialtyAlignment: number;
+    successRateRelevance: number;
+    availabilityMatch: number;
+    locationConvenience: number;
+    valueScore: number;
+  };
+  reasoning: string;
+  recommendations: string[];
+  sessionPlan?: string;
+  focusAreas?: string[];
+  expectedOutcomes?: string[];
+  preparationTips?: string[];
 }

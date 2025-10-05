@@ -1,17 +1,80 @@
-import { useMemo } from 'react';
-import { Link } from 'expo-router';
+import React, { useMemo, useState, useCallback } from 'react';
+import { Link, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { DashboardSection, QuickActionGrid, type QuickAction } from '@/src/components/dashboard/shared';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { useFleetActivity, useFleetOverview, useUserFleets } from '@/src/hooks/useFleetData';
+import { useFleetOverview, useUserFleets } from '@/src/hooks/useFleetData';
+import { useFleetPosts } from '@/src/hooks/useFleetSocial';
+import { FleetPost } from '@/src/services/FleetSocialService';
+import { PostComposer } from '@/src/components/fleets/PostComposer';
+import { AnnouncementComposer } from '@/src/components/fleets/AnnouncementComposer';
+import { ResourceUploadComposer } from '@/src/components/fleets/ResourceUploadComposer';
+import { fleetService } from '@/src/services/fleetService';
+import { RealtimeConnectionIndicator } from '@/src/components/ui/RealtimeConnectionIndicator';
 
 export default function FleetOverviewScreen() {
   const { user } = useAuth();
-  const { fleets, loading: fleetsLoading } = useUserFleets(user?.id);
+  const [showPostComposer, setShowPostComposer] = useState(false);
+  const [showAnnouncementComposer, setShowAnnouncementComposer] = useState(false);
+  const [showResourceUpload, setShowResourceUpload] = useState(false);
+
+  console.log('[FleetOverview] Component render - user:', user?.id);
+
+  const { fleets, loading: fleetsLoading, refresh: refreshFleets } = useUserFleets(user?.id);
+  console.log('[FleetOverview] After useUserFleets:', { fleetsCount: fleets.length, fleetsLoading });
+
+  // Refresh fleets when screen comes into focus (after returning from select screen)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('[FleetOverview] useFocusEffect triggered - refreshing fleets');
+      refreshFleets();
+    }, [refreshFleets])
+  );
+
   const activeFleet = fleets[0]?.fleet;
+  console.log('[FleetOverview] Active fleet:', activeFleet?.id, activeFleet?.name);
+
   const { overview, loading: overviewLoading } = useFleetOverview(activeFleet?.id);
-  const { activity, loading: activityLoading } = useFleetActivity(activeFleet?.id, { limit: 6 });
+  const { posts, loading: postsLoading, likePost, unlikePost, createPost } = useFleetPosts(activeFleet?.id, { limit: 10 });
+
+  const handleCreatePost = async (params: { postType: any; content: string }) => {
+    await createPost(params);
+    setShowPostComposer(false);
+  };
+
+  const handleCreateAnnouncement = async (params: { content: string; isPinned: boolean }) => {
+    await createPost({
+      postType: 'announcement',
+      content: params.content,
+      metadata: { isPinned: params.isPinned },
+    });
+    setShowAnnouncementComposer(false);
+  };
+
+  const handleResourceUpload = async (params: { documentId: string; tags: string[]; notifyFollowers: boolean }) => {
+    if (!activeFleet?.id || !user?.id) return;
+
+    await fleetService.shareDocumentWithFleet({
+      fleetId: activeFleet.id,
+      documentId: params.documentId,
+      sharedBy: user.id,
+      tags: params.tags,
+      notifyFollowers: params.notifyFollowers,
+    });
+
+    setShowResourceUpload(false);
+  };
+
+  // Memoized handlers for posts
+  const handleLike = useCallback((postId: string, isLiked: boolean) => {
+    if (isLiked) {
+      unlikePost(postId);
+    } else {
+      likePost(postId);
+    }
+  }, [likePost, unlikePost]);
 
   const quickActions: QuickAction[] = useMemo(() => {
     if (!overview?.fleet) {
@@ -42,7 +105,7 @@ export default function FleetOverviewScreen() {
         iconSet: 'mci',
         gradientColors: ['#6366F1', '#8B5CF6'],
         onPress: () => {
-          // Navigate to fleet resources once implemented
+          setShowResourceUpload(true);
         },
       },
       {
@@ -52,29 +115,46 @@ export default function FleetOverviewScreen() {
         iconSet: 'mci',
         gradientColors: ['#0EA5E9', '#0284C7'],
         onPress: () => {
-          // Placeholder action until announcement composer is ready
+          setShowAnnouncementComposer(true);
         },
       },
     ];
   }, [overview?.fleet]);
 
-  if (!fleetsLoading && (!fleets.length || !activeFleet)) {
+  const shouldShowEmpty = !fleetsLoading && (!fleets.length || !activeFleet);
+  console.log('[FleetOverview] Empty state check:', {
+    fleetsLoading,
+    fleetsLength: fleets.length,
+    hasActiveFleet: !!activeFleet,
+    shouldShowEmpty
+  });
+
+  if (shouldShowEmpty) {
+    console.log('[FleetOverview] Rendering empty state');
     return (
       <ScrollView contentContainerStyle={[styles.container, styles.centerContent]}>
         <MaterialCommunityIcons name="sail-boat" size={52} color="#94A3B8" />
-        <Text style={styles.emptyTitle}>Join or create a fleet</Text>
+        <Text style={styles.emptyTitle}>Join your fleets</Text>
         <Text style={styles.emptySubtitle}>
-          Fleets bring sailors, coaches, and clubs together around a class. Once you join, your updates and resources will appear here.
+          Fleets are groups of sailors in the same class (e.g., "Hong Kong Dragon Fleet").
+          This is separate from your individual boats. Join fleets to see updates, documents, and connect with other sailors.
         </Text>
-        <Link href="/(tabs)/dashboard" style={styles.link}>
-          Browse fleets on your dashboard
+        <Link href="/(tabs)/fleet/select" style={styles.link}>
+          Join Fleets
         </Link>
       </ScrollView>
     );
   }
 
+  console.log('[FleetOverview] Rendering fleet content');
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      {/* Real-time Connection Status */}
+      <View style={styles.connectionStatusContainer}>
+        <RealtimeConnectionIndicator variant="full" />
+      </View>
+
       <DashboardSection
         title={overview?.fleet.name ?? 'Fleet overview'}
         subtitle={overview?.fleet.region ?? 'Fleet status and key metrics'}
@@ -111,26 +191,18 @@ export default function FleetOverviewScreen() {
 
       <DashboardSection
         title="Recent Activity"
-        subtitle="Tuning uploads, announcements, and fleet updates"
+        subtitle="Posts, announcements, and fleet updates"
       >
-        {activityLoading && <Text style={styles.placeholderText}>Loading activity…</Text>}
-        {!activityLoading && !activity.length && (
-          <Text style={styles.placeholderText}>No activity yet. Share a resource to get started.</Text>
+        {postsLoading && <Text style={styles.placeholderText}>Loading activity…</Text>}
+        {!postsLoading && !posts.length && (
+          <Text style={styles.placeholderText}>No activity yet. Share a post to get started.</Text>
         )}
-        {!activityLoading && activity.map(item => (
-          <View key={item.id} style={styles.activityCard}>
-            <View style={styles.activityIcon}>
-              <MaterialCommunityIcons
-                name={getActivityIcon(item.activityType)}
-                size={22}
-                color="#2563EB"
-              />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>{renderActivityTitle(item)}</Text>
-              <Text style={styles.activityMeta}>{new Date(item.createdAt).toLocaleString()}</Text>
-            </View>
-          </View>
+        {!postsLoading && posts.map(post => (
+          <PostCard
+            key={post.id}
+            post={post}
+            onLike={() => handleLike(post.id, post.isLikedByUser)}
+          />
         ))}
       </DashboardSection>
 
@@ -140,9 +212,32 @@ export default function FleetOverviewScreen() {
         footerAction={{ label: 'View members', href: '/(tabs)/fleet/members' }}
       >
         <Text style={styles.placeholderText}>
-          Member list coming soon. You’ll be able to follow sailors, invite crew, and connect with coaches.
+          Member list coming soon. You'll be able to follow sailors, invite crew, and connect with coaches.
         </Text>
       </DashboardSection>
+
+      {/* Post Composers */}
+      <PostComposer
+        visible={showPostComposer}
+        onClose={() => setShowPostComposer(false)}
+        onSubmit={handleCreatePost}
+        fleetName={overview?.fleet.name}
+      />
+      <AnnouncementComposer
+        visible={showAnnouncementComposer}
+        onClose={() => setShowAnnouncementComposer(false)}
+        onSubmit={handleCreateAnnouncement}
+        fleetName={overview?.fleet.name}
+      />
+      {user && (
+        <ResourceUploadComposer
+          visible={showResourceUpload}
+          onClose={() => setShowResourceUpload(false)}
+          onSubmit={handleResourceUpload}
+          fleetName={overview?.fleet.name}
+          userId={user.id}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -165,44 +260,94 @@ const InfoPill = ({ icon, text, highlight }: { icon: string; text: string; highl
   </View>
 );
 
-const getActivityIcon = (type: string): string => {
-  switch (type) {
-    case 'document_uploaded':
-      return 'file-arrow-up-down';
-    case 'announcement':
-      return 'bullhorn';
-    case 'event_created':
-      return 'calendar-star';
-    case 'member_joined':
-      return 'account-plus';
-    case 'member_left':
-      return 'account-minus';
-    case 'resource_shared':
-      return 'bookshelf';
-    default:
-      return 'information-outline';
-  }
-};
+const PostCard = React.memo(({ post, onLike }: { post: FleetPost; onLike: () => void }) => {
+  const getPostIcon = (postType: FleetPost['postType']): string => {
+    switch (postType) {
+      case 'announcement':
+        return 'bullhorn';
+      case 'tuning_guide':
+        return 'file-document-outline';
+      case 'race_result':
+        return 'trophy-outline';
+      case 'event':
+        return 'calendar-star';
+      case 'check_in':
+        return 'map-marker-check';
+      case 'discussion':
+        return 'message-text-outline';
+      default:
+        return 'information-outline';
+    }
+  };
 
-const renderActivityTitle = (activity: ReturnType<typeof useFleetActivity>['activity'][number]): string => {
-  const payload = activity.payload ?? {};
-  if (payload.title) {
-    return String(payload.title);
-  }
+  const getPostTypeColor = (postType: FleetPost['postType']): string => {
+    switch (postType) {
+      case 'announcement':
+        return '#DC2626';
+      case 'tuning_guide':
+        return '#2563EB';
+      case 'race_result':
+        return '#059669';
+      case 'event':
+        return '#7C3AED';
+      case 'check_in':
+        return '#0891B2';
+      default:
+        return '#64748B';
+    }
+  };
 
-  switch (activity.activityType) {
-    case 'document_uploaded':
-      return 'New fleet document uploaded';
-    case 'announcement':
-      return 'New fleet announcement';
-    case 'event_created':
-      return 'New fleet event created';
-    case 'member_joined':
-      return 'A new sailor joined the fleet';
-    default:
-      return 'Fleet update';
-  }
-};
+  const renderPostContent = () => {
+    if (post.postType === 'announcement') {
+      return (
+        <View style={styles.announcementBadge}>
+          <MaterialCommunityIcons name="bullhorn" size={14} color="#DC2626" />
+          <Text style={styles.announcementText}>ANNOUNCEMENT</Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <View style={styles.postCard}>
+      <View style={styles.postHeader}>
+        <View style={[styles.postIcon, { backgroundColor: `${getPostTypeColor(post.postType)}15` }]}>
+          <MaterialCommunityIcons
+            name={getPostIcon(post.postType) as any}
+            size={22}
+            color={getPostTypeColor(post.postType)}
+          />
+        </View>
+        <View style={styles.postHeaderContent}>
+          <Text style={styles.postAuthor}>{post.author?.name || 'Unknown'}</Text>
+          <Text style={styles.postMeta}>
+            {new Date(post.createdAt).toLocaleDateString()} • {post.postType.replace('_', ' ')}
+          </Text>
+        </View>
+      </View>
+
+      {renderPostContent()}
+
+      {post.content && <Text style={styles.postContent}>{post.content}</Text>}
+
+      <View style={styles.postActions}>
+        <TouchableOpacity style={styles.postAction} onPress={onLike}>
+          <MaterialCommunityIcons
+            name={post.isLikedByUser ? 'heart' : 'heart-outline'}
+            size={20}
+            color={post.isLikedByUser ? '#DC2626' : '#64748B'}
+          />
+          <Text style={styles.postActionText}>{post.likesCount || 0}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.postAction}>
+          <MaterialCommunityIcons name="comment-outline" size={20} color="#64748B" />
+          <Text style={styles.postActionText}>{post.commentsCount || 0}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -213,6 +358,9 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
     gap: 16,
+  },
+  connectionStatusContainer: {
+    marginBottom: 12,
   },
   centerContent: {
     flexGrow: 1,
@@ -312,33 +460,79 @@ const styles = StyleSheet.create({
     color: '#64748B',
     lineHeight: 20,
   },
-  activityCard: {
+  postCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
+    marginBottom: 12,
   },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E0E7FF',
+  postIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activityContent: {
+  postHeaderContent: {
     flex: 1,
   },
-  activityTitle: {
-    fontSize: 14,
+  postAuthor: {
+    fontSize: 15,
     fontWeight: '600',
     color: '#1E293B',
   },
-  activityMeta: {
-    fontSize: 12,
+  postMeta: {
+    fontSize: 13,
     color: '#94A3B8',
-    marginTop: 4,
+    marginTop: 2,
+  },
+  announcementBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  announcementText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+    letterSpacing: 0.5,
+  },
+  postContent: {
+    fontSize: 15,
+    color: '#334155',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  postActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
+  },
+  postAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  postActionText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });

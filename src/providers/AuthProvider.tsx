@@ -1,19 +1,18 @@
 import { signOutEverywhere } from '@/src/lib/auth-actions'
-import { getDashboardRoute, shouldCompleteOnboarding } from '@/src/lib/utils/userTypeRouting'
-import { supabase } from '@/src/services/supabase'
+import { supabase, UserType } from '@/src/services/supabase'
 import { bindAuthDiagnostics } from '@/src/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/src/utils/errToText'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { Platform } from 'react-native'
 
+// Re-export UserType for backward compatibility
+export type { UserType } from '@/src/services/supabase'
+
 // Bind diagnostics once at app boot
 bindAuthDiagnostics(supabase)
 
-export type UserType = 'sailor' | 'coach' | 'club' | null
-
-const AUTH_DEBUG_ENABLED = false
+const AUTH_DEBUG_ENABLED = true
 const authDebugLog = (...args: Parameters<typeof console.log>) => {
   if (!AUTH_DEBUG_ENABLED) {
     return
@@ -21,23 +20,29 @@ const authDebugLog = (...args: Parameters<typeof console.log>) => {
   console.log(...args)
 }
 
+type AuthState = 'checking' | 'signed_out' | 'needs_role' | 'ready'
+
 type AuthCtx = {
+  state: AuthState
   ready: boolean
   signedIn: boolean
   user: any | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, fullName?: string) => Promise<void>
+  signUp: (email: string, password: string, fullName?: string) => Promise<any>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
+  biometricAvailable: boolean
+  biometricEnabled: boolean
   userProfile?: any
   userType?: UserType
   updateUserProfile: (updates: any) => Promise<void>
-  fetchUserProfile: () => Promise<any>
+  fetchUserProfile: (userId?: string) => Promise<any>
 }
 
 const Ctx = createContext<AuthCtx>({
+  state: 'checking',
   ready: false,
   signedIn: false,
   user: null,
@@ -47,8 +52,10 @@ const Ctx = createContext<AuthCtx>({
   signOut: async () => {},
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
+  biometricAvailable: false,
+  biometricEnabled: false,
   updateUserProfile: async () => {},
-  fetchUserProfile: async () => null,
+  fetchUserProfile: async (_userId?: string) => null,
   userType: null,
   userProfile: null,
 })
@@ -60,31 +67,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [loading, setLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [userType, setUserType] = useState<UserType>(null)
-
-  const cacheKey = (uid: string) => `regattaflow.userType.${uid}`
-
-  const hydrateUserTypeFromCache = async (uid: string | undefined | null) => {
-    if (!uid) return null
-    try {
-      const cached = await AsyncStorage.getItem(cacheKey(uid))
-      if (cached) {
-        setUserType(cached as UserType)
-        return cached
-      }
-    } catch (error) {
-      // Silent fail on cache read
-    }
-    return null
-  }
-
-  const storeUserTypeCache = async (uid: string | undefined | null, type: UserType) => {
-    if (!uid || !type) return
-    try {
-      await AsyncStorage.setItem(cacheKey(uid), type)
-    } catch (error) {
-      // Silent fail on cache write
-    }
-  }
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
@@ -106,7 +88,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       setUserProfile(data)
       setUserType(data?.user_type as UserType)
-      storeUserTypeCache(uid, data?.user_type as UserType)
       return data
     } catch (error) {
       console.error('fetchUserProfile error:', error)
@@ -216,35 +197,18 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setUser(authUser || null)
 
         if (authUser?.id) {
-          // Hydrate userType quickly from metadata or cache while profile loads
-          const metadataType = authUser.user_metadata?.user_type as UserType | undefined
-          if (metadataType) {
-            authDebugLog('[AUTH] Hydrating userType from user metadata:', metadataType)
-            setUserType(metadataType)
-            storeUserTypeCache(authUser.id, metadataType)
-          } else {
-            hydrateUserTypeFromCache(authUser.id)
-          }
-        }
-
-        if (authUser?.id) {
           authDebugLog('[AUTH] Fetching user profile for:', authUser.id)
           try {
             const profile = await fetchUserProfile(authUser.id)
             if (profile?.user_type) {
               setUserType(profile.user_type as UserType)
-              storeUserTypeCache(authUser.id, profile.user_type as UserType)
             } else {
-              const cachedType = await hydrateUserTypeFromCache(authUser.id)
-              setUserType((cachedType as UserType) ?? null)
-              if (!cachedType) {
-                console.warn('[AUTH] No user_type on profile; consider forcing onboarding for user', authUser.email)
-              }
+              setUserType(null)
+              console.warn('[AUTH] No user_type on profile; consider forcing onboarding for user', authUser.email)
             }
           } catch (e) {
             console.warn('[AUTH] User profile fetch failed:', e)
-            const cachedType = await hydrateUserTypeFromCache(authUser.id)
-            setUserType((cachedType as UserType) ?? null)
+            setUserType(null)
           }
         } else {
           setUserType(null)
@@ -336,48 +300,27 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           console.warn('🚪 [AUTH] History replace error:', historyError)
         }
 
-        authDebugLog('🚪 [AUTH] Navigating to login page...')
-        router.replace('/(auth)/login')
+        authDebugLog('🚪 [AUTH] Navigating to landing page...')
+        router.replace('/')
         authDebugLog('🚪 [AUTH] ===== SIGNED_OUT HANDLER COMPLETE =====')
       }
 
       if (evt === 'SIGNED_IN' && session?.user?.id) {
-        authDebugLog('🔔 [AUTH] SIGNED_IN event - starting profile fetch and routing...')
-
-        const metadataType = session.user.user_metadata?.user_type as UserType | undefined
-        if (metadataType) {
-          setUserType(metadataType)
-          storeUserTypeCache(session.user.id, metadataType)
-        } else {
-          hydrateUserTypeFromCache(session.user.id)
-        }
+        authDebugLog('🔔 [AUTH] SIGNED_IN event - fetching profile...')
 
         try {
-          // Fetch profile and wait for it to be fully loaded
-          authDebugLog('🔔 [AUTH] Fetching profile data for routing decision...')
+          // Fetch profile and update state - let gates handle routing
+          authDebugLog('🔔 [AUTH] Fetching profile data...')
           const profileData = await fetchUserProfile(session.user.id)
           authDebugLog('🔔 [AUTH] Profile data received:', profileData)
           if (profileData?.user_type) {
             setUserType(profileData.user_type as UserType)
           }
-
-          const needsOnboarding = shouldCompleteOnboarding(profileData)
-          authDebugLog('🔔 [AUTH] shouldCompleteOnboarding result:', needsOnboarding)
-
-          if (needsOnboarding) {
-            authDebugLog('🔔 [AUTH] Routing to onboarding...')
-            router.replace('/(auth)/onboarding')
-          } else {
-            const dest = getDashboardRoute(profileData?.user_type)
-            authDebugLog('🔔 [AUTH] Routing to dashboard:', dest)
-            router.replace(dest)
-          }
+          authDebugLog('🔔 [AUTH] State updated - gates will handle routing')
         } catch (e) {
-          console.warn('[ROUTE] post-auth error:', e)
-          authDebugLog('🔔 [AUTH] Error occurred, routing to onboarding as fallback...')
-          router.replace('/(auth)/onboarding')
+          console.warn('[AUTH] Profile fetch error:', e)
+          setUserType(null)
         } finally {
-          // Clear loading after auth processing completes
           setLoading(false)
         }
       }
@@ -385,16 +328,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
     return ()=>{ alive=false; sub.subscription.unsubscribe() }
   }, [router])
-
-  const getProfileQuick = async (userId: string) => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle()
-    return data
-  }
-
 
   const signIn = async (email: string, password: string) => {
     setLoading(true)
@@ -438,12 +371,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setLoading(false)
         if (typeof window !== 'undefined') {
           try {
-            window.history.replaceState(null, '', '/(auth)/login')
+            window.history.replaceState(null, '', '/')
           } catch (historyError) {
             console.warn('🚪 [AUTH] History replace failed in fallback:', historyError)
           }
         }
-        router.replace('/(auth)/login')
+        router.replace('/')
       }
     }, 4000)
 
@@ -463,12 +396,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setLoading(false)
       if (typeof window !== 'undefined') {
         try {
-          window.history.replaceState(null, '', '/(auth)/login')
+          window.history.replaceState(null, '', '/')
         } catch (historyError) {
           console.warn('🚪 [AUTH] History replace failed after error:', historyError)
         }
       }
-      router.replace('/(auth)/login')
+      router.replace('/')
       clearTimeout(fallbackTimer)
       throw error
     } finally {
@@ -574,7 +507,21 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  const value = useMemo(() => ({
+  const value = useMemo<AuthCtx>(() => {
+    // Compute state from ready, signedIn, and userType
+    let state: AuthState = 'checking'
+    if (!ready) {
+      state = 'checking'
+    } else if (!signedIn) {
+      state = 'signed_out'
+    } else if (!userType) {
+      state = 'needs_role'
+    } else {
+      state = 'ready'
+    }
+
+    return {
+      state,
       ready,
       signedIn,
       user,
@@ -590,7 +537,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       userType,
       updateUserProfile,
       fetchUserProfile
-    }), [ready, signedIn, user, loading, userProfile, userType])
+    }
+  }, [ready, signedIn, user, loading, userProfile, userType])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
