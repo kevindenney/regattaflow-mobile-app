@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { ChevronLeft, Plus, Check } from 'lucide-react-native';
 
 const BoatSetupScreen = () => {

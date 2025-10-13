@@ -2,10 +2,18 @@
  * Base Agent Service
  * Foundation for autonomous AI agents using Anthropic's SDK
  * Provides tool execution framework, error handling, and configuration
+ *
+ * IMPORTANT: This service should ONLY be used server-side (Edge Functions, Node.js).
+ * For browser usage, create Supabase Edge Functions that call these agents.
+ *
+ * Example:
+ * - ❌ Browser → Agent.run() (exposes API keys)
+ * - ✅ Browser → Supabase Edge Function → Agent.run() (secure)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
+import { Platform } from 'react-native';
 
 // Tool definition using Zod schemas for type safety
 export interface AgentTool {
@@ -33,25 +41,60 @@ export interface AgentRunResult {
   result: any;
   iterations: number;
   toolsUsed: string[];
+  toolResults?: Record<string, any>; // Map of tool name to its last result
   error?: string;
 }
 
+/**
+ * Detect if code is running in a browser environment
+ */
+function isBrowserEnvironment(): boolean {
+  // Check for web platform
+  if (Platform.OS === 'web') {
+    return true;
+  }
+
+  // Additional browser detection
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    return true;
+  }
+
+  return false;
+}
+
 export class BaseAgentService {
-  protected client: Anthropic;
+  protected client: Anthropic | null = null;
   protected tools: Map<string, AgentTool> = new Map();
   protected config: Required<AgentConfig>;
+  private isServerSide: boolean;
 
   constructor(config: AgentConfig = {}) {
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
+    // Detect environment
+    this.isServerSide = !isBrowserEnvironment();
+
+    if (!this.isServerSide) {
+      console.warn('⚠️ BaseAgentService instantiated in browser. Agent.run() will fail. Use Supabase Edge Functions instead.');
+
+      // Don't throw immediately - allow imports and instantiation
+      // Only fail when run() is actually called
+      this.config = {
+        model: config.model || 'claude-sonnet-4-5-20250929',
+        maxTokens: config.maxTokens || 4096,
+        temperature: config.temperature || 0.7,
+        systemPrompt: config.systemPrompt || 'You are a helpful AI assistant for RegattaFlow, a sailing race strategy platform.',
+      };
+      return; // Skip Anthropic client creation
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
 
     if (!apiKey) {
       console.warn('⚠️ Anthropic API key not found. Agent functionality will be limited.');
-      // Create client anyway for development - will fail at runtime if used
     }
 
+    // Server-side only - no dangerouslyAllowBrowser needed
     this.client = new Anthropic({
       apiKey: apiKey || 'dummy-key-for-development',
-      dangerouslyAllowBrowser: true,
     });
 
     this.config = {
@@ -179,6 +222,39 @@ export class BaseAgentService {
    * Agent will autonomously decide which tools to call and in what order
    */
   async run(options: AgentRunOptions): Promise<AgentRunResult> {
+    // Check if running in browser
+    if (!this.isServerSide || !this.client) {
+      const errorMessage = `
+🚨 SECURITY ERROR: Cannot run agent in the browser!
+
+This would expose your Anthropic API key to attackers.
+
+SOLUTION:
+1. Create a Supabase Edge Function for this agent
+2. Call the Edge Function from your browser code instead
+
+Example:
+  // ❌ DON'T DO THIS (browser)
+  const agent = new MyAgent();
+  await agent.run({ userMessage: "..." });
+
+  // ✅ DO THIS INSTEAD (browser → Edge Function)
+  const { data } = await supabase.functions.invoke('my-agent-function', {
+    body: { message: "..." }
+  });
+
+See: supabase/functions/extract-race-details/index.ts for an example
+`;
+      console.error(errorMessage);
+      return {
+        success: false,
+        result: null,
+        iterations: 0,
+        toolsUsed: [],
+        error: 'BaseAgentService cannot run in the browser. Use Supabase Edge Functions instead.',
+      };
+    }
+
     const { userMessage, context = {}, maxIterations = 10 } = options;
 
     console.log('🤖 Agent starting with message:', userMessage);
@@ -192,6 +268,7 @@ export class BaseAgentService {
 
     let iterations = 0;
     const toolsUsed: string[] = [];
+    const toolResults: Record<string, any> = {}; // Track tool results
 
     try {
       while (iterations < maxIterations) {
@@ -228,7 +305,7 @@ export class BaseAgentService {
           }
 
           // Execute all requested tools
-          const toolResults: Anthropic.MessageParam[] = [];
+          const toolResultMessages: Anthropic.MessageParam[] = [];
 
           for (const toolUse of toolUseBlocks) {
             toolsUsed.push(toolUse.name);
@@ -236,7 +313,10 @@ export class BaseAgentService {
             try {
               const result = await this.executeTool(toolUse.name, toolUse.input);
 
-              toolResults.push({
+              // Store the tool result for later access
+              toolResults[toolUse.name] = result;
+
+              toolResultMessages.push({
                 role: 'user',
                 content: [
                   {
@@ -248,7 +328,7 @@ export class BaseAgentService {
               });
             } catch (error: any) {
               // Return error to agent so it can decide how to proceed
-              toolResults.push({
+              toolResultMessages.push({
                 role: 'user',
                 content: [
                   {
@@ -270,7 +350,7 @@ export class BaseAgentService {
             role: 'assistant',
             content: response.content,
           });
-          messages.push(...toolResults);
+          messages.push(...toolResultMessages);
 
           // Continue the loop - agent will decide what to do next
           continue;
@@ -287,6 +367,7 @@ export class BaseAgentService {
             result: textContent?.text || 'Agent completed without text response',
             iterations,
             toolsUsed,
+            toolResults, // Include tool results
           };
         }
 
@@ -300,6 +381,7 @@ export class BaseAgentService {
         result: null,
         iterations,
         toolsUsed,
+        toolResults, // Include tool results even on failure
         error: 'Maximum iterations reached without completion',
       };
     } catch (error: any) {
@@ -309,6 +391,7 @@ export class BaseAgentService {
         result: null,
         iterations,
         toolsUsed,
+        toolResults, // Include tool results even on error
         error: error.message,
       };
     }

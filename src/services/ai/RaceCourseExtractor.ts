@@ -230,6 +230,19 @@ Extract comprehensive race course information and format as valid JSON with the 
     "visibility": number (meters/miles),
     "thunderstorm": boolean,
     "confidence": 0.0-1.0
+  },
+  "communication": {
+    "vhfChannel": "VHF channel number (e.g., '72')",
+    "callSign": "Radio call sign if specified",
+    "emergencyContact": "Emergency contact information",
+    "raceCommittee": "Race committee contact information",
+    "confidence": 0.0-1.0
+  },
+  "regulations": {
+    "specialFlags": ["List of special flags mentioned (e.g., 'P Flag', 'I Flag', 'Z Flag')"],
+    "penalties": ["Penalty information"],
+    "protests": ["Protest procedures"],
+    "confidence": 0.0-1.0
   }
 }
 
@@ -434,6 +447,12 @@ Return ONLY the JSON object, no additional text or explanation.
         confidence: 0.1
       },
       weatherLimits: {
+        confidence: 0.1
+      },
+      communication: {
+        confidence: 0.1
+      },
+      regulations: {
         confidence: 0.1
       },
       extractionMetadata: {

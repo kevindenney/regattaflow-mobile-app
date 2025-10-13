@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Alert } from 'react-native';
+import { Image } from '@/src/components/ui';
 import {
   Wind,
   Thermometer,
@@ -27,6 +28,8 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { DocumentProcessingAgent } from '@/src/services/agents/DocumentProcessingAgent';
+import { PDFExtractionService } from '@/src/services/PDFExtractionService';
+import { PDFExtractionProgress, PDFTextPreview } from '@/src/components/documents';
 
 const RaceStrategyScreen = () => {
   const [activeTab, setActiveTab] = useState('strategy');
@@ -35,6 +38,15 @@ const RaceStrategyScreen = () => {
   const [isProcessingDocument, setIsProcessingDocument] = useState(false);
   const [documentResults, setDocumentResults] = useState<any>(null);
   const [showResultsModal, setShowResultsModal] = useState(false);
+
+  // PDF Extraction State
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState(0);
+  const [extractionPage, setExtractionPage] = useState(0);
+  const [extractionTotalPages, setExtractionTotalPages] = useState(0);
+  const [extractedText, setExtractedText] = useState<string | null>(null);
+  const [extractedFileName, setExtractedFileName] = useState<string>('');
+  const [showTextPreview, setShowTextPreview] = useState(false);
   
   // Mock data for weather conditions
   const weatherData = {
@@ -77,35 +89,70 @@ const RaceStrategyScreen = () => {
       }
 
       const file = result.assets[0];
+      setExtractedFileName(file.name);
 
-      setIsProcessingDocument(true);
-
-      // Read file content (for PDF extraction, you'd use a PDF library)
-      // For now, we'll use a mock text or actual text file
+      // Extract text based on file type
       let documentText = '';
 
       if (file.mimeType === 'text/plain') {
+        // Plain text - direct read
         documentText = await FileSystem.readAsStringAsync(file.uri);
+        setExtractedText(documentText);
+        setShowTextPreview(true);
+      } else if (file.mimeType === 'application/pdf') {
+        // PDF - use extraction service
+        setIsExtracting(true);
+        setExtractionProgress(0);
+
+        const extractionResult = await PDFExtractionService.extractText(file.uri, {
+          onProgress: (progress, currentPage, totalPages) => {
+            setExtractionProgress(progress);
+            setExtractionPage(currentPage);
+            setExtractionTotalPages(totalPages);
+          },
+          maxPages: 50, // Limit to first 50 pages
+        });
+
+        setIsExtracting(false);
+
+        if (extractionResult.success && extractionResult.text) {
+          setExtractedText(extractionResult.text);
+          setShowTextPreview(true);
+        } else {
+          Alert.alert(
+            'Extraction Failed',
+            extractionResult.error || 'Could not extract text from PDF. Please try a different file or use the web version.'
+          );
+        }
+      } else if (file.mimeType?.startsWith('image/')) {
+        // Image - would need OCR (future enhancement)
+        Alert.alert(
+          'Image Processing',
+          'Image OCR is not yet implemented. Please upload a PDF or text file.'
+        );
       } else {
-        // For PDFs and images, you'd need to use appropriate libraries
-        // For demo, we'll use mock data
-        documentText = `SAILING INSTRUCTIONS
-
-Race Course: Windward-Leeward
-Marks:
-- Start/Finish: Committee Boat to Pin (22.2793°N, 114.1628°E)
-- Windward Mark: Orange inflatable (22.2850°N, 114.1650°E)
-- Leeward Gate: Yellow marks (22.2750°N, 114.1610°E)
-
-Course: Start - Windward - Leeward Gate - Windward - Finish
-Rounds: 2 laps`;
+        Alert.alert('Unsupported File Type', 'Please upload a PDF or text file.');
       }
+    } catch (error: any) {
+      setIsExtracting(false);
+      setIsProcessingDocument(false);
+      Alert.alert('Error', error.message || 'Failed to upload document');
+    }
+  };
+
+  // Process extracted text with AI
+  const handleProcessExtractedText = async () => {
+    if (!extractedText) return;
+
+    try {
+      setShowTextPreview(false);
+      setIsProcessingDocument(true);
 
       // Call DocumentProcessingAgent
       const agent = new DocumentProcessingAgent();
       const agentResult = await agent.processSailingInstructions(
-        documentText,
-        file.name,
+        extractedText,
+        extractedFileName,
         'Hong Kong Victoria Harbor' // venue hint
       );
 
@@ -121,8 +168,15 @@ Rounds: 2 laps`;
       }
     } catch (error: any) {
       setIsProcessingDocument(false);
-      Alert.alert('Error', error.message || 'Failed to upload document');
+      Alert.alert('Error', error.message || 'Failed to process document');
     }
+  };
+
+  // Cancel text preview
+  const handleCancelPreview = () => {
+    setShowTextPreview(false);
+    setExtractedText(null);
+    setExtractedFileName('');
   };
 
   // Handle manual adjustment of AI results
@@ -236,7 +290,7 @@ Rounds: 2 laps`;
               <TouchableOpacity
                 className="flex-row items-center justify-center bg-white p-3 rounded-lg"
                 onPress={handleDocumentUpload}
-                disabled={isProcessingDocument}
+                disabled={isProcessingDocument || isExtracting}
               >
                 {isProcessingDocument ? (
                   <ActivityIndicator color="#2563EB" />
@@ -248,6 +302,31 @@ Rounds: 2 laps`;
                 )}
               </TouchableOpacity>
             </View>
+
+            {/* PDF Extraction Progress */}
+            {isExtracting && (
+              <View className="mb-4">
+                <PDFExtractionProgress
+                  progress={extractionProgress}
+                  currentPage={extractionPage}
+                  totalPages={extractionTotalPages}
+                  fileName={extractedFileName}
+                />
+              </View>
+            )}
+
+            {/* Text Preview Modal */}
+            {showTextPreview && extractedText && (
+              <View className="mb-4">
+                <PDFTextPreview
+                  text={extractedText}
+                  fileName={extractedFileName}
+                  pages={extractionTotalPages}
+                  onApprove={handleProcessExtractedText}
+                  onCancel={handleCancelPreview}
+                />
+              </View>
+            )}
 
             {/* Strategy Overview */}
             <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">

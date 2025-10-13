@@ -70,27 +70,44 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
+    authDebugLog('[fetchUserProfile] Called with userId:', uid)
     if (!uid) {
+      authDebugLog('[fetchUserProfile] ❌ No userId provided')
       return null
     }
 
     try {
+      authDebugLog('[fetchUserProfile] Querying database for user:', uid)
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', uid)
         .maybeSingle()
 
+      authDebugLog('[fetchUserProfile] Database response:', {
+        hasData: !!data,
+        hasError: !!error,
+        user_type: data?.user_type,
+        onboarding_completed: data?.onboarding_completed,
+        error: error?.message
+      })
+
       if (error) {
-        console.error('Failed to fetch user profile:', error)
+        console.error('[fetchUserProfile] ❌ Database error:', error)
         return null
       }
 
+      if (!data) {
+        console.warn('[fetchUserProfile] ⚠️ No profile found for user:', uid)
+        return null
+      }
+
+      authDebugLog('[fetchUserProfile] ✅ Setting userProfile and userType')
       setUserProfile(data)
       setUserType(data?.user_type as UserType)
       return data
     } catch (error) {
-      console.error('fetchUserProfile error:', error)
+      console.error('[fetchUserProfile] ❌ Exception:', error)
       return null
     }
   }
@@ -200,18 +217,26 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           authDebugLog('[AUTH] Fetching user profile for:', authUser.id)
           try {
             const profile = await fetchUserProfile(authUser.id)
+            authDebugLog('[AUTH] Profile fetch result:', {
+              hasProfile: !!profile,
+              user_type: profile?.user_type,
+              onboarding_completed: profile?.onboarding_completed,
+              email: profile?.email
+            })
             if (profile?.user_type) {
               setUserType(profile.user_type as UserType)
+              authDebugLog('[AUTH] ✅ userType set to:', profile.user_type)
             } else {
               setUserType(null)
-              console.warn('[AUTH] No user_type on profile; consider forcing onboarding for user', authUser.email)
+              console.warn('[AUTH] ⚠️ No user_type on profile; consider forcing onboarding for user', authUser.email)
             }
           } catch (e) {
-            console.warn('[AUTH] User profile fetch failed:', e)
+            console.error('[AUTH] ❌ User profile fetch failed:', e)
             setUserType(null)
           }
         } else {
           setUserType(null)
+          authDebugLog('[AUTH] ❌ No authUser.id')
         }
 
         authDebugLog('[AUTH] Initialization complete, setting ready=true')
@@ -308,6 +333,10 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       if (evt === 'SIGNED_IN' && session?.user?.id) {
         authDebugLog('🔔 [AUTH] SIGNED_IN event - fetching profile...')
 
+        // Use loading state instead of toggling ready (prevents infinite loop)
+        setLoading(true)
+        authDebugLog('🔔 [AUTH] Set loading=true while fetching profile')
+
         try {
           // Fetch profile and update state - let gates handle routing
           authDebugLog('🔔 [AUTH] Fetching profile data...')
@@ -315,6 +344,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           authDebugLog('🔔 [AUTH] Profile data received:', profileData)
           if (profileData?.user_type) {
             setUserType(profileData.user_type as UserType)
+            authDebugLog('🔔 [AUTH] ✅ userType set')
+          } else {
+            authDebugLog('🔔 [AUTH] ⚠️ No user_type on profile')
           }
           authDebugLog('🔔 [AUTH] State updated - gates will handle routing')
         } catch (e) {
@@ -322,6 +354,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           setUserType(null)
         } finally {
           setLoading(false)
+          authDebugLog('🔔 [AUTH] Profile fetch complete, loading=false')
         }
       }
     })
@@ -330,19 +363,42 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }, [router])
 
   const signIn = async (email: string, password: string) => {
+    console.log('🔐 [AUTH] signIn called with email:', email)
+    console.log('🔐 [AUTH] Supabase instance:', !!supabase)
+    console.log('🔐 [AUTH] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL)
+
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('🔐 [AUTH] Calling supabase.auth.signInWithPassword...')
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
+      console.log('🔐 [AUTH] signInWithPassword response:', {
+        hasData: !!data,
+        hasError: !!error,
+        errorMessage: error?.message
+      })
+
       if (error) throw error
+
+      console.log('🔐 [AUTH] Sign in successful, profile will be fetched by auth state change listener')
+
+      // Set user and signedIn state - profile fetch will happen in onAuthStateChange
+      if (data.user?.id) {
+        console.log('🔐 [AUTH] User authenticated:', data.user.id)
+        setUser(data.user)
+        setSignedIn(true)
+        // Don't fetch profile here - let onAuthStateChange handle it to avoid duplication
+      }
+
       // Don't set loading(false) here - let onAuthStateChange handle it after user/profile are set
-    } catch (error) {
-      // Only clear loading on error, otherwise let auth state change handle it
+    } catch (error: any) {
+      console.error('🔐 [AUTH] signIn error:', error)
       setLoading(false)
       throw error
     }
+    // Note: Don't set loading(false) in finally - let onAuthStateChange handle it
   }
 
   const signOut = async () => {

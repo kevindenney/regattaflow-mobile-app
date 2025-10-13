@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Level Scraping Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #0284c7; }
+    button {
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px 5px;
+    }
+    button:hover { background: #0369a1; }
+    .output {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+      white-space: pre-wrap;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .success { color: #059669; }
+    .error { color: #dc2626; }
+    .info { color: #0284c7; }
+    .warning { color: #d97706; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌐 Multi-Level Web Scraping Demo</h1>
+    <p>This demonstrates the enhanced scraping that automatically follows calendar links and parses CSV/ICS files.</p>
+
+    <div>
+      <h3>Test Cases:</h3>
+      <button onclick="testDragonCalendar()">Test Dragon Calendar (RHKYC)</button>
+      <button onclick="testCSVParsing()">Test CSV Parsing</button>
+      <button onclick="testCalendarDiscovery()">Test Calendar Link Discovery</button>
+    </div>
+
+    <div class="output" id="output">Ready to test...</div>
+  </div>
+
+  <script>
+    function log(message, type = 'info') {
+      const output = document.getElementById('output');
+      const className = type;
+      output.innerHTML += `<span class="${className}">${message}</span>\n`;
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('output').innerHTML = '';
+    }
+
+    // CSV Parser (updated to match WebScrapingTools.ts)
+    function parseCSVCalendar(csvText) {
+      const events = [];
+      const lines = csvText.trim().split('\n').filter(line => line.trim());
+
+      if (lines.length < 2) return events;
+
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+      // Find column indices - support multiple naming conventions
+      const dateIdx = headers.findIndex(h => h.includes('date') || h.includes('start date'));
+      const nameIdx = headers.findIndex(h =>
+        h.includes('subject') || h.includes('event') || h.includes('race') ||
+        h.includes('name') || h.includes('title')
+      );
+      const timeIdx = headers.findIndex(h => h.includes('time') || h.includes('start time'));
+      const locationIdx = headers.findIndex(h =>
+        h.includes('location') || h.includes('venue') || h.includes('place')
+      );
+
+      log(`📊 CSV Columns: date=${dateIdx}, name=${nameIdx}, time=${timeIdx}, location=${locationIdx}`, 'info');
+      log(`   Headers: ${headers.join(', ')}`, 'info');
+
+      for (let i = 1; i < lines.length; i++) {
+        const cells = lines[i].split(',').map(c => c.trim());
+
+        if (cells.length > Math.max(dateIdx, nameIdx)) {
+          let rawDate = dateIdx >= 0 ? cells[dateIdx] : '';
+
+          // Convert DD/MM/YYYY to YYYY-MM-DD
+          if (rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            const [day, month, year] = rawDate.split('/');
+            rawDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          }
+
+          const event = {
+            name: nameIdx >= 0 ? cells[nameIdx] : `Race ${i}`,
+            date: rawDate,
+            type: 'club_race'
+          };
+
+          if (timeIdx >= 0 && cells[timeIdx]) event.startTime = cells[timeIdx];
+          if (locationIdx >= 0 && cells[locationIdx]) event.location = cells[locationIdx];
+
+          if (event.name && event.date) events.push(event);
+        }
+      }
+
+      return events;
+    }
+
+    async function fetchWithProxy(url) {
+      const corsProxy = 'https://api.allorigins.win/raw?url=';
+      const response = await fetch(corsProxy + encodeURIComponent(url));
+      return await response.text();
+    }
+
+    async function testDragonCalendar() {
+      clearLog();
+      log('🧪 Testing Dragon Calendar Discovery', 'info');
+      log('=====================================\n', 'info');
+
+      const url = 'https://www.rhkyc.org.hk/sailing/classes/classes/Dragon';
+      log(`📍 Starting URL: ${url}`, 'info');
+      log('🔍 Expected flow:', 'info');
+      log('   1. Scrape Dragon class page', 'info');
+      log('   2. Find "Sailing Calendar" link', 'info');
+      log('   3. Follow to /sailingcalendar page', 'info');
+      log('   4. Find Dragon2526.csv link', 'info');
+      log('   5. Download and parse CSV\n', 'info');
+
+      try {
+        log('⏳ Fetching Dragon class page...', 'info');
+        const html = await fetchWithProxy(url);
+
+        // Find calendar links
+        const linkRegex = /<a[^>]*href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi;
+        const links = [];
+        let match;
+        while ((match = linkRegex.exec(html)) !== null) {
+          links.push({ url: match[1], text: match[2].trim() });
+        }
+
+        const calendarLinks = links.filter(link =>
+          link.text.toLowerCase().includes('calendar') ||
+          link.url.toLowerCase().includes('calendar')
+        );
+
+        log(`✅ Found ${calendarLinks.length} calendar links:`, 'success');
+        calendarLinks.forEach(link => {
+          log(`   • ${link.text}: ${link.url}`, 'info');
+        });
+
+        if (calendarLinks.length > 0) {
+          const calLink = calendarLinks[0];
+          const calUrl = calLink.url.startsWith('http')
+            ? calLink.url
+            : `https://www.rhkyc.org.hk${calLink.url}`;
+
+          log(`\n⏳ Following calendar link: ${calUrl}`, 'info');
+          const calHtml = await fetchWithProxy(calUrl);
+
+          // Find CSV links
+          const csvLinks = [];
+          linkRegex.lastIndex = 0;
+          while ((match = linkRegex.exec(calHtml)) !== null) {
+            if (match[1].toLowerCase().endsWith('.csv')) {
+              csvLinks.push({ url: match[1], text: match[2].trim() });
+            }
+          }
+
+          log(`✅ Found ${csvLinks.length} CSV calendar files:`, 'success');
+          csvLinks.forEach(link => {
+            log(`   • ${link.text}: ${link.url}`, 'info');
+          });
+
+          if (csvLinks.length > 0) {
+            const csvLink = csvLinks[0];
+            const csvUrl = csvLink.url.startsWith('http')
+              ? csvLink.url
+              : `https://www.rhkyc.org.hk${csvLink.url}`;
+
+            log(`\n⏳ Downloading CSV: ${csvUrl}`, 'info');
+            const csvText = await fetchWithProxy(csvUrl);
+
+            log(`✅ CSV downloaded (${csvText.length} characters)`, 'success');
+            log(`\n📄 CSV Preview (first 300 chars):\n${csvText.substring(0, 300)}...`, 'info');
+
+            const events = parseCSVCalendar(csvText);
+            log(`\n🎯 Parsed ${events.length} race events!`, 'success');
+
+            events.slice(0, 5).forEach((event, i) => {
+              log(`   ${i + 1}. ${event.name} - ${event.date}`, 'success');
+            });
+
+            if (events.length > 5) {
+              log(`   ... and ${events.length - 5} more events`, 'success');
+            }
+
+            log(`\n✨ SUCCESS! Multi-level scraping works!`, 'success');
+            log(`\nUser provided: ${url}`, 'info');
+            log(`AI discovered: ${csvUrl}`, 'success');
+            log(`Result: ${events.length} calendar events automatically imported`, 'success');
+          }
+        }
+
+      } catch (error) {
+        log(`\n❌ Error: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    async function testCSVParsing() {
+      clearLog();
+      log('🧪 Testing CSV Parsing with Actual Dragon Calendar Format', 'info');
+      log('========================================================\n', 'info');
+
+      // Actual Dragon2526.csv format from RHKYC
+      const dragonCSV = `Subject,Start Date,Location,All Day Event,Private
+Champ of Champs,30/08/2025,Middle Island,TRUE,FALSE
+Passage Race 1,06/09/2025,Port Shelter to Harbour,TRUE,FALSE
+Autumn Regatta,13/09/2025,Harbour,TRUE,FALSE
+Croucher 1 & 2,27/09/2025,Port Shelter,TRUE,FALSE
+Race Management,04/10/2025,,TRUE,FALSE`;
+
+      log('📄 Actual Dragon CSV Format (Subject, Start Date, Location):\n', 'info');
+      log(dragonCSV + '\n', 'info');
+
+      const events = parseCSVCalendar(dragonCSV);
+      log(`✅ Parsed ${events.length} events:\n`, 'success');
+
+      events.forEach((event, i) => {
+        log(`   ${i + 1}. ${event.name}`, 'success');
+        log(`      Date: ${event.date} (converted from DD/MM/YYYY)`, 'info');
+        log(`      Location: ${event.location || 'N/A'}`, 'info');
+      });
+
+      log('\n📊 Comparison:', 'info');
+      log('   Input date format: DD/MM/YYYY (30/08/2025)', 'info');
+      log('   Output date format: YYYY-MM-DD (2025-08-30)', 'success');
+      log('   Column "Subject" → event.name', 'success');
+      log('   Column "Start Date" → event.date', 'success');
+      log('   Column "Location" → event.location', 'success');
+    }
+
+    async function testCalendarDiscovery() {
+      clearLog();
+      log('🧪 Testing Calendar Link Discovery', 'info');
+      log('===================================\n', 'info');
+
+      const sampleHTML = `
+        <html>
+          <body>
+            <a href="/racing-schedule">Racing Schedule</a>
+            <a href="/calendar">Event Calendar</a>
+            <a href="/downloads/races2025.csv">Download Racing Calendar</a>
+            <a href="/events.ics">Subscribe to Calendar</a>
+            <a href="/membership">Membership</a>
+          </body>
+        </html>
+      `;
+
+      log('Sample HTML with various links\n', 'info');
+
+      const linkRegex = /<a[^>]*href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi;
+      const links = [];
+      let match;
+      while ((match = linkRegex.exec(sampleHTML)) !== null) {
+        links.push({ url: match[1], text: match[2].trim() });
+      }
+
+      const calendarLinks = links.filter(link => {
+        const lowerText = link.text.toLowerCase();
+        const lowerUrl = link.url.toLowerCase();
+        return (
+          lowerText.includes('calendar') ||
+          lowerText.includes('racing') ||
+          lowerText.includes('events') ||
+          lowerText.includes('schedule') ||
+          lowerUrl.includes('calendar') ||
+          lowerUrl.includes('.csv') ||
+          lowerUrl.includes('.ics')
+        );
+      });
+
+      log(`✅ Found ${calendarLinks.length} calendar-related links:`, 'success');
+      calendarLinks.forEach(link => {
+        const type = link.url.endsWith('.csv') ? 'CSV' : link.url.endsWith('.ics') ? 'ICS' : 'HTML';
+        log(`   • [${type}] ${link.text}: ${link.url}`, 'success');
+      });
+
+      log('\n📋 What the scraper would do:', 'info');
+      log('   1. Follow each calendar link', 'info');
+      log('   2. Download CSV/ICS files directly', 'info');
+      log('   3. Parse calendar pages for more links', 'info');
+      log('   4. Return all discovered events', 'info');
+    }
+  </script>
+</body>
+</html>

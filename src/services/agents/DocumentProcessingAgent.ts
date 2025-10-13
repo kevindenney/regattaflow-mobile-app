@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import RaceCourseExtractor from '@/src/services/ai/RaceCourseExtractor';
 import type { RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
+import { supabase } from '@/src/services/supabase';
 
 export class DocumentProcessingAgent extends BaseAgentService {
   private gemini: GoogleGenerativeAI;
@@ -325,14 +326,88 @@ Returns confirmation with database IDs.`,
         console.log('🔧 Tool: save_to_knowledge_base', { filename: input.filename });
 
         try {
-          // In a real implementation, this would save to Supabase
-          // For now, return confirmation with mock IDs
-          const documentId = `doc_${Date.now()}`;
+          // Get current user
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            return {
+              success: false,
+              error: 'User not authenticated. Cannot save document analysis.',
+            };
+          }
+
+          // First, create or update the sailing document record
+          const { data: document, error: docError } = await supabase
+            .from('sailing_documents')
+            .insert({
+              user_id: user.id,
+              filename: input.filename,
+              title: input.filename.replace(/\.[^/.]+$/, ''), // Remove extension
+              category: 'sailing_instructions',
+              file_path: `documents/${user.id}/${input.filename}`, // Placeholder path
+              file_size: 0, // Not available in this context
+              mime_type: 'application/pdf', // Assume PDF
+              processing_status: 'completed',
+              course_data: input.courseData || {},
+              ai_analysis: {
+                visualization: input.visualization,
+                strategy: input.strategy,
+                processed_at: new Date().toISOString(),
+              },
+            })
+            .select('id')
+            .single();
+
+          if (docError) {
+            console.error('Failed to save document:', docError);
+            return {
+              success: false,
+              error: `Failed to save document: ${docError.message}`,
+            };
+          }
+
+          // Now save the AI analysis to ai_analyses table
+          const analysisData: any = {
+            course_marks: input.courseData?.marks || [],
+            course_layout: input.courseData?.courseLayout || {},
+            start_line: input.courseData?.startLine,
+            finish_line: input.courseData?.finishLine,
+            visualization: input.visualization,
+            strategy_analysis: input.strategy,
+            filename: input.filename,
+          };
+
+          // Calculate confidence score from course data
+          const confidenceScore = input.courseData?.confidence || 0.8;
+
+          const { data: analysis, error: analysisError } = await supabase
+            .from('ai_analyses')
+            .insert({
+              user_id: user.id,
+              document_id: document.id,
+              analysis_type: 'document_extraction',
+              analysis_data: analysisData,
+              input_data: {
+                filename: input.filename,
+                venue_id: input.venueId,
+              },
+              confidence_score: confidenceScore,
+            })
+            .select('id')
+            .single();
+
+          if (analysisError) {
+            console.error('Failed to save AI analysis:', analysisError);
+            return {
+              success: false,
+              error: `Failed to save AI analysis: ${analysisError.message}`,
+            };
+          }
 
           return {
             success: true,
             saved: {
-              documentId,
+              documentId: document.id,
+              analysisId: analysis.id,
               filename: input.filename,
               timestamp: new Date().toISOString(),
               dataTypes: {
@@ -341,7 +416,7 @@ Returns confirmation with database IDs.`,
                 strategy: !!input.strategy,
               },
             },
-            message: `Document ${input.filename} processed and saved. You can now use this race course for strategy planning.`,
+            message: `Document ${input.filename} processed and saved to knowledge base. Analysis ID: ${analysis.id}`,
           };
         } catch (error: any) {
           console.error('❌ Tool failed: save_to_knowledge_base', error);
@@ -432,6 +507,94 @@ Returns confirmation with database IDs.`,
     if (maxDiff > 0.1) return 13;
     if (maxDiff > 0.05) return 14;
     return 15;
+  }
+
+  /**
+   * Retrieve saved document extraction by ID
+   */
+  static async getExtraction(analysisId: string) {
+    const { data, error } = await supabase
+      .from('ai_analyses')
+      .select(`
+        id,
+        analysis_data,
+        input_data,
+        confidence_score,
+        created_at,
+        document_id,
+        sailing_documents (
+          id,
+          filename,
+          title,
+          file_path,
+          course_data,
+          ai_analysis
+        )
+      `)
+      .eq('id', analysisId)
+      .eq('analysis_type', 'document_extraction')
+      .single();
+
+    if (error) {
+      console.error('Failed to retrieve extraction:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  }
+
+  /**
+   * Retrieve all saved document extractions for current user
+   */
+  static async getAllExtractions(options?: { limit?: number; offset?: number }) {
+    const { limit = 50, offset = 0 } = options || {};
+
+    const { data, error, count } = await supabase
+      .from('ai_analyses')
+      .select(`
+        id,
+        analysis_data,
+        input_data,
+        confidence_score,
+        created_at,
+        document_id,
+        sailing_documents (
+          id,
+          filename,
+          title,
+          file_path,
+          course_data,
+          ai_analysis
+        )
+      `, { count: 'exact' })
+      .eq('analysis_type', 'document_extraction')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('Failed to retrieve extractions:', error);
+      return { data: null, error, count: 0 };
+    }
+
+    return { data, error: null, count: count || 0 };
+  }
+
+  /**
+   * Delete saved document extraction
+   */
+  static async deleteExtraction(analysisId: string) {
+    const { error } = await supabase
+      .from('ai_analyses')
+      .delete()
+      .eq('id', analysisId)
+      .eq('analysis_type', 'document_extraction');
+
+    if (error) {
+      console.error('Failed to delete extraction:', error);
+      return { success: false, error };
+    }
+
+    return { success: true, error: null };
   }
 }
 

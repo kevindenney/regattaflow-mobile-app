@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NavigationHeader } from '@/src/components/navigation/NavigationHeader';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { EmojiTabIcon } from '@/src/components/icons/EmojiTabIcon';
+import { useBoats } from '@/src/hooks/useData';
 
 type TabConfig = {
   name: string;
@@ -61,15 +62,19 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
 };
 
 export default function TabLayout() {
-  const { userType } = useAuth();
+  const { userType, user } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
   const tabs = getTabsForUserType(userType);
   const [menuVisible, setMenuVisible] = useState(false);
+  const { data: boats, loading: boatsLoading } = useBoats();
 
   const isTabVisible = (name: string) => tabs.some(t => t.name === name);
   const findTab = (name: string) => tabs.find(tab => tab.name === name);
   const showMenuTrigger = tabs.some(tab => tab.isMenuTrigger);
+
+  // Check if profile is incomplete (for sailors only)
+  const isProfileIncomplete = userType === 'sailor' && !boatsLoading && (!boats || boats.length === 0);
 
   // Swallow Android hardware back while in Tabs to avoid popping to Auth
   useFocusEffect(
@@ -93,16 +98,34 @@ export default function TabLayout() {
   console.log('[TabLayout] Visible tabs:', tabs.map(t => t.name));
 
   const menuItems = useMemo(
-    () => [
-      { key: 'fleet', label: 'Fleets', icon: 'people-outline', route: '/(tabs)/fleet' },
-      { key: 'club', label: 'Clubs', icon: 'people-circle-outline', route: '/(tabs)/clubs' },
-      { key: 'venue', label: 'Venue', icon: 'location-outline', route: '/(tabs)/venue' },
-      { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' },
-      { key: 'tuning-guides', label: 'Tuning Guides', icon: 'book-outline', route: '/(tabs)/tuning-guides' },
-      { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
-      { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' },
-    ],
-    []
+    () => {
+      const items = [];
+
+      // Add profile completion item at the top if incomplete
+      if (isProfileIncomplete) {
+        items.push({
+          key: 'complete-profile',
+          label: 'Complete Profile',
+          icon: 'warning-outline',
+          route: '/(auth)/sailor-onboarding-chat',
+          isWarning: true,
+        });
+      }
+
+      // Add regular menu items
+      items.push(
+        { key: 'fleet', label: 'Fleets', icon: 'people-outline', route: '/(tabs)/fleet' },
+        { key: 'club', label: 'Clubs', icon: 'people-circle-outline', route: '/(tabs)/clubs' },
+        { key: 'venue', label: 'Venue', icon: 'location-outline', route: '/(tabs)/venue' },
+        { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' },
+        { key: 'tuning-guides', label: 'Tuning Guides', icon: 'book-outline', route: '/(tabs)/tuning-guides' },
+        { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
+        { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' }
+      );
+
+      return items;
+    },
+    [isProfileIncomplete]
   );
 
   const handleMenuItemPress = (route: string) => {
@@ -163,7 +186,6 @@ export default function TabLayout() {
           headerShown: false,
           tabBarActiveTintColor: '#007AFF',
           tabBarStyle: {
-            display: 'flex',
             backgroundColor: '#FFFFFF',
             borderTopWidth: 1,
             borderTopColor: '#E5E7EB',
@@ -421,13 +443,97 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="race/register"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="race/register/[id]"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="boat/[id]"
           options={{
             href: null,
           }}
         />
         <Tabs.Screen
+          name="boat/add"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="boat/edit"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="boat/edit/[id]"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="venue-old"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="boats"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="clubs"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="sailor"
+          options={{
+            tabBarButton: () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="sailor/index"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="coach"
+          options={{
+            tabBarButton: () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="coach/index"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="club/index"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="fleets"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="boats.web"
           options={{
             href: null,
           }}
@@ -444,15 +550,32 @@ export default function TabLayout() {
           <View style={styles.menuOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
             <View style={styles.menuContainer}>
-              {menuItems.map(item => (
-                <Pressable
-                  key={item.key}
-                  style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
-                  onPress={() => handleMenuItemPress(item.route)}
-                >
-                  <Ionicons name={item.icon as any} size={20} color="#1F2937" />
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                </Pressable>
+              {menuItems.map((item, index) => (
+                <React.Fragment key={item.key}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.menuItem,
+                      (item as any).isWarning && styles.menuItemWarning,
+                      pressed && styles.menuItemPressed
+                    ]}
+                    onPress={() => handleMenuItemPress(item.route)}
+                  >
+                    <Ionicons
+                      name={item.icon as any}
+                      size={20}
+                      color={(item as any).isWarning ? '#EF4444' : '#1F2937'}
+                    />
+                    <Text style={[
+                      styles.menuLabel,
+                      (item as any).isWarning && styles.menuLabelWarning
+                    ]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                  {(item as any).isWarning && index < menuItems.length - 1 && (
+                    <View style={styles.menuDivider} />
+                  )}
+                </React.Fragment>
               ))}
             </View>
           </View>
@@ -519,6 +642,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
+  menuItemWarning: {
+    backgroundColor: '#FEF2F2',
+  },
   menuItemPressed: {
     backgroundColor: '#F3F4F6',
   },
@@ -526,5 +652,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1F2937',
     fontWeight: '500',
+  },
+  menuLabelWarning: {
+    color: '#EF4444',
+    fontWeight: '600',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
   },
 });

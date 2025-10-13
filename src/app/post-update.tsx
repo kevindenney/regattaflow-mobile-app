@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, ScrollView, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { Image } from '@/src/components/ui';
 import {
   Camera,
   MapPin,

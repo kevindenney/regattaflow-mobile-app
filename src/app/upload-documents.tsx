@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { Upload, File, Plus, Camera, FileText, Award, Calendar } from 'lucide-react-native';
 
 const UploadDocumentsScreen = () => {

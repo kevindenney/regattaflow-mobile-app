@@ -23,11 +23,18 @@ Analyze race performance across these areas:
 4. **Tactical Decisions**: Key moments that affected the race outcome
 5. **Boat Handling**: Speed consistency, maneuvers, crew coordination
 
+You will receive:
+- GPS track data with lat/lng, speed, heading, timestamps
+- User's race description with their subjective experience
+- Race conditions (wind, waves, current)
+- Pre-race strategy (if available)
+
 Your feedback should be:
 - Specific with data (e.g., "3 tacks vs fleet average of 5")
 - Constructive and encouraging
 - Actionable with clear recommendations
 - Balanced (highlight strengths AND areas for improvement)
+- Incorporate the sailor's subjective experience with objective GPS data
 
 Include a confidence score (0-100) based on GPS data quality and completeness.`,
     });
@@ -88,6 +95,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
             session,
             metrics,
             regatta: session.regattas,
+            user_race_description: session.user_race_description || 'No user description provided',
           };
         } catch (error: any) {
           return {
@@ -325,7 +333,18 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
     timerSessionId: string;
   }) {
     return this.run({
-      userMessage: 'Analyze this race performance and provide detailed coaching feedback. Focus on starts, tactics, and areas for improvement.',
+      userMessage: `Analyze this race performance and provide detailed coaching feedback.
+
+Steps to follow:
+1. First, use get_race_timer_session to load the race data, GPS track, and user's race description
+2. Analyze the start performance using GPS data and user's start description
+3. Identify tactical decisions from GPS (tacks, gybes, course choices)
+4. Compare actual performance to pre-race strategy (if available)
+5. Incorporate the user's subjective experience with objective GPS analysis
+6. Generate comprehensive analysis with specific recommendations
+7. Save the analysis to the database
+
+Focus on providing actionable coaching that combines the sailor's experience with GPS data insights.`,
       context: {
         timerSessionId: options.timerSessionId,
       },

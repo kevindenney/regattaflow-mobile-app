@@ -20,10 +20,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
+    // Ignore font loading timeout errors (non-critical)
+    if (error.message && error.message.includes('timeout exceeded')) {
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Ignore font loading timeout errors (non-critical)
+    if (error.message && error.message.includes('timeout exceeded')) {
+      return;
+    }
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 

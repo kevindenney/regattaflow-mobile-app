@@ -2,7 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { DollarSign, Film, MessageCircle, Play, TrendingUp, Trophy, Users } from 'lucide-react-native';
 import { cssInterop } from 'nativewind';
 import React from 'react';
-import { Dimensions, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from '@/src/components/ui';
 
 cssInterop(LinearGradient, {
 className: 'style',

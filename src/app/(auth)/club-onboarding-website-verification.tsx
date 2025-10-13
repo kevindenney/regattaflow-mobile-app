@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { ChevronLeft, Globe, Shield, Download, Zap, Check, X, Search, Copy } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/services/supabase';

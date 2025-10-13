@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import type { RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
 
 interface RaceMapViewProps {
@@ -33,19 +33,49 @@ export function RaceMapView({
     // Web-only MapLibre GL implementation
     const initializeMap = async () => {
       try {
+        console.log('🗺️ Starting MapLibre GL initialization...');
         const maplibregl = await import('maplibre-gl');
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        console.log('✅ MapLibre GL library loaded');
 
-        if (!mapContainerRef.current) return;
+        // Import CSS dynamically
+        await import('maplibre-gl/dist/maplibre-gl.css');
+        console.log('✅ MapLibre GL CSS loaded');
+
+        if (!mapContainerRef.current) {
+          console.error('❌ Map container ref is null');
+          return;
+        }
 
         // Extract coordinates from first mark for centering
         // Default to Hong Kong coordinates if no marks
         const defaultCenter: [number, number] = [114.1675, 22.2840]; // Hong Kong
+        console.log('🎯 Map center:', defaultCenter);
 
         // Initialize map with nautical style
+        // Using a simple style to avoid font loading issues
         const map = new maplibregl.Map({
           container: mapContainerRef.current,
-          style: 'https://demotiles.maplibre.org/style.json', // Using demo tiles
+          style: {
+            version: 8,
+            sources: {
+              'osm': {
+                type: 'raster',
+                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                tileSize: 256,
+                attribution: '&copy; OpenStreetMap Contributors',
+                maxzoom: 19
+              }
+            },
+            layers: [
+              {
+                id: 'osm',
+                type: 'raster',
+                source: 'osm',
+                minzoom: 0,
+                maxzoom: 22
+              }
+            ]
+          },
           center: defaultCenter,
           zoom: 13,
           pitch: 45, // 3D angle
@@ -54,6 +84,7 @@ export function RaceMapView({
         });
 
         mapRef.current = map;
+        console.log('✅ Map instance created');
 
         map.on('load', () => {
           console.log('🗺️ Map loaded successfully');
@@ -88,6 +119,10 @@ export function RaceMapView({
           addStartLine(map, courseExtraction);
         });
 
+        map.on('error', (e) => {
+          console.error('❌ Map error:', e);
+        });
+
         // Add navigation controls
         map.addControl(new maplibregl.NavigationControl({
           showCompass: true,
@@ -96,7 +131,9 @@ export function RaceMapView({
         }), 'top-right');
 
       } catch (error) {
-        console.error('Error initializing map:', error);
+        console.error('❌ Error initializing map:', error);
+        // Set loaded to true anyway to hide the placeholder and show error state
+        setMapLoaded(true);
       }
     };
 
@@ -165,8 +202,53 @@ export function RaceMapView({
           width: '100%',
           height: '100%',
           borderRadius: 12,
+          position: 'relative',
         }}
       />
+      {/* Temporary fallback while map loads */}
+      {!mapLoaded && (
+        <View style={styles.mapPlaceholder}>
+          <View style={styles.placeholderContent}>
+            <Text style={styles.placeholderTitle}>🗺️ 3D Race Course Map</Text>
+            <Text style={styles.placeholderSubtitle}>Royal Hong Kong Yacht Club</Text>
+            <View style={styles.markersContainer}>
+              <View style={styles.marker}>
+                <View style={[styles.markerDot, { backgroundColor: '#EF4444' }]} />
+                <Text style={styles.markerText}>Start Line</Text>
+              </View>
+              <View style={styles.courseLine} />
+              <View style={styles.marker}>
+                <View style={[styles.markerDot, { backgroundColor: '#3B82F6' }]} />
+                <Text style={styles.markerText}>Mark 1 (Windward)</Text>
+              </View>
+              <View style={styles.courseLine} />
+              <View style={styles.marker}>
+                <View style={[styles.markerDot, { backgroundColor: '#10B981' }]} />
+                <Text style={styles.markerText}>Mark 2 (Leeward/Gate)</Text>
+              </View>
+            </View>
+            {activeLayer === 'weather' && (
+              <View style={styles.weatherOverlay}>
+                <Text style={styles.overlayText}>💨 Wind: NE 15kts</Text>
+                <Text style={styles.overlayText}>🌊 Current: N 0.8kts</Text>
+              </View>
+            )}
+            {activeLayer === 'tide' && (
+              <View style={styles.weatherOverlay}>
+                <Text style={styles.overlayText}>🌊 Flooding Tide</Text>
+                <Text style={styles.overlayText}>📈 1.8m height</Text>
+              </View>
+            )}
+            {activeLayer === 'bathymetry' && (
+              <View style={styles.weatherOverlay}>
+                <Text style={styles.overlayText}>📊 Depth Contours</Text>
+                <Text style={styles.overlayText}>5m - 25m range</Text>
+              </View>
+            )}
+            <Text style={styles.placeholderNote}>Loading MapLibre GL...</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -333,5 +415,79 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+  },
+  mapPlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#E0F2FE',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  placeholderContent: {
+    alignItems: 'center',
+    maxWidth: 400,
+  },
+  placeholderTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  placeholderSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 24,
+  },
+  markersContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  marker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 8,
+  },
+  markerDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  markerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  courseLine: {
+    width: 2,
+    height: 20,
+    backgroundColor: '#CBD5E1',
+  },
+  weatherOverlay: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  overlayText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1E293B',
+    marginVertical: 4,
+  },
+  placeholderNote: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 16,
+    fontStyle: 'italic',
   },
 });

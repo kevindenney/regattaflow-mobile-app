@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, Dimensions, ProgressBarAndroid } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Dimensions, ProgressBarAndroid } from 'react-native';
+import { Image } from '@/src/components/ui';
 import {
   Calendar,
   MapPin,

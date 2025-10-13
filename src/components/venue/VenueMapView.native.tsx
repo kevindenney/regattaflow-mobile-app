@@ -1,12 +1,13 @@
 /**
- * VenueMapView Component
+ * VenueMapView Component - Native Implementation with Clustering
  * Enhanced map view with custom markers and venue interactions
- * Universal support: iOS (Apple Maps), Android (Google Maps), Web (Google Maps)
+ * Universal support: iOS (Apple Maps), Android (Google Maps)
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { StyleSheet, View, ActivityIndicator, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
+import ClusteredMapView from 'react-native-maps-super-cluster';
 import { ThemedText } from '@/src/components/themed-text';
 import { supabase } from '@/src/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,7 +68,7 @@ export function VenueMapView({
   savedVenueIds = new Set(),
   mapLayers = {},
 }: VenueMapViewProps) {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<ClusteredMapView>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [yachtClubs, setYachtClubs] = useState<YachtClub[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,9 +210,125 @@ export function VenueMapView({
     displayVenues = [];
   }
 
+  // Prepare clustered marker data
+  const clusterData = useMemo(() => {
+    const data: any[] = [];
+
+    // Add venues
+    displayVenues.forEach(venue => {
+      data.push({
+        id: `venue-${venue.id}`,
+        location: {
+          latitude: venue.coordinates_lat,
+          longitude: venue.coordinates_lng,
+        },
+        type: 'venue',
+        data: venue,
+      });
+    });
+
+    // Add yacht clubs if enabled
+    if (mapLayers.yachtClubs) {
+      yachtClubs.forEach(club => {
+        data.push({
+          id: `club-${club.id}`,
+          location: {
+            latitude: club.coordinates_lat,
+            longitude: club.coordinates_lng,
+          },
+          type: 'yachtClub',
+          data: club,
+        });
+      });
+    }
+
+    return data;
+  }, [displayVenues, yachtClubs, mapLayers.yachtClubs]);
+
+  // Custom cluster marker renderer
+  const renderCluster = (cluster: any, onPress: any) => {
+    const pointCount = cluster.pointCount;
+    const coordinate = cluster.coordinate;
+
+    return (
+      <Marker key={`cluster-${cluster.id}`} coordinate={coordinate} onPress={onPress}>
+        <View style={styles.clusterMarker}>
+          <ThemedText style={styles.clusterText}>{pointCount}</ThemedText>
+        </View>
+      </Marker>
+    );
+  };
+
+  // Custom individual marker renderer
+  const renderMarker = (data: any) => {
+    const { type, data: markerData, location } = data;
+
+    if (type === 'venue') {
+      const venue: Venue = markerData;
+      const isSelected = selectedVenue?.id === venue.id || currentVenue?.id === venue.id;
+      const markerScale = isSelected ? 1.3 : 1;
+
+      return (
+        <Marker
+          key={`venue-${venue.id}`}
+          coordinate={location}
+          title={venue.name}
+          description={`${venue.country} - ${venue.venue_type}`}
+          onPress={() => onMarkerPress?.(venue)}
+        >
+          <View
+            style={[
+              styles.customMarker,
+              {
+                backgroundColor: getMarkerColor(venue.venue_type),
+                transform: [{ scale: markerScale }],
+                borderWidth: isSelected ? 3 : 2,
+                borderColor: isSelected ? '#fff' : 'rgba(255, 255, 255, 0.8)',
+              },
+            ]}
+          >
+            <Ionicons
+              name={getMarkerIcon(venue.venue_type) as any}
+              size={isSelected ? 22 : 18}
+              color="#fff"
+            />
+          </View>
+        </Marker>
+      );
+    }
+
+    if (type === 'yachtClub') {
+      const club: YachtClub = markerData;
+
+      return (
+        <Marker
+          key={`club-${club.id}`}
+          coordinate={location}
+          title={club.short_name || club.name}
+          description={club.prestige_level ? `${club.prestige_level} yacht club` : 'Yacht Club'}
+        >
+          <View
+            style={[
+              styles.customMarker,
+              {
+                backgroundColor: '#34c759',
+                borderWidth: 2,
+                borderColor: 'rgba(255, 255, 255, 0.9)',
+              },
+            ]}
+          >
+            <Ionicons name="business" size={18} color="#fff" />
+          </View>
+        </Marker>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <View style={styles.container}>
-      <MapView
+      <ClusteredMapView
         ref={mapRef}
         style={styles.map}
         initialRegion={defaultRegion}
@@ -221,83 +338,18 @@ export function VenueMapView({
         showsCompass={true}
         showsScale={true}
         toolbarEnabled={false}
-      >
-        {/* Venue Markers */}
-        {displayVenues.map((venue) => {
-          const isSelected = selectedVenue?.id === venue.id || currentVenue?.id === venue.id;
-          const markerScale = isSelected ? 1.3 : 1;
-
-          return (
-            <Marker
-              key={`venue-${venue.id}`}
-              coordinate={{
-                latitude: venue.coordinates_lat,
-                longitude: venue.coordinates_lng,
-              }}
-              title={venue.name}
-              description={`${venue.country} - ${venue.venue_type}`}
-              pinColor={getMarkerColor(venue.venue_type)}
-              onPress={() => {
-                const venueData = venues.find(v => v.id === venue.id) || venue;
-                onMarkerPress?.(venueData);
-              }}
-            >
-              {/* Custom marker view - enhanced for Apple Maps style */}
-              {Platform.OS !== 'web' && (
-                <View
-                  style={[
-                    styles.customMarker,
-                    {
-                      backgroundColor: getMarkerColor(venue.venue_type),
-                      transform: [{ scale: markerScale }],
-                      borderWidth: isSelected ? 3 : 2,
-                      borderColor: isSelected ? '#fff' : 'rgba(255, 255, 255, 0.8)',
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={getMarkerIcon(venue.venue_type) as any}
-                    size={isSelected ? 22 : 18}
-                    color="#fff"
-                  />
-                </View>
-              )}
-            </Marker>
-          );
-        })}
-
-        {/* Yacht Club Markers */}
-        {mapLayers.yachtClubs && yachtClubs.map((club) => (
-            <Marker
-              key={`club-${club.id}`}
-              coordinate={{
-                latitude: club.coordinates_lat,
-                longitude: club.coordinates_lng,
-              }}
-              title={club.short_name || club.name}
-              description={club.prestige_level ? `${club.prestige_level} yacht club` : 'Yacht Club'}
-              pinColor="#34c759"
-            >
-              {/* Custom yacht club marker - render on all platforms */}
-              <View
-                style={[
-                  styles.customMarker,
-                  {
-                    backgroundColor: '#34c759',
-                    borderWidth: 2,
-                    borderColor: 'rgba(255, 255, 255, 0.9)',
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="business"
-                  size={18}
-                  color="#fff"
-                />
-              </View>
-            </Marker>
-        ))}
-      </MapView>
+        data={clusterData}
+        renderMarker={renderMarker}
+        renderCluster={renderCluster}
+        radius={100}
+        maxZoom={15}
+        minZoom={1}
+        extent={512}
+        nodeSize={64}
+        preserveClusterPressBehavior={false}
+        clusteringEnabled={clusterData.length > 50}
+        animationEnabled={true}
+      />
 
       {/* Venue counter overlay */}
       {showAllVenues && (
@@ -340,6 +392,24 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web'
       ? { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)' }
       : { elevation: 6 }),
+  },
+  clusterMarker: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(0, 122, 255, 0.4)' }
+      : { elevation: 8 }),
+  },
+  clusterText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   counterOverlay: {
     position: 'absolute',

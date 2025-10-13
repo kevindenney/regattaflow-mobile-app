@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useAuth } from '../../providers/AuthProvider';
 import { supabase } from '../../services/supabase';
 
 export default function SignUp() {
+  const { signUp } = useAuth();
+  const params = useLocalSearchParams<{ persona?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
 
   const onSignUp = async () => {
@@ -14,20 +18,63 @@ export default function SignUp() {
       return;
     }
 
-    setLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error.message);
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
-    const uid = data.user?.id as string | undefined;
-    if (uid) {
-      await supabase.from('users').upsert({ id: uid, email, user_type: null });
+    setLoading(true);
+    try {
+      console.log('📝 [SIGNUP] Attempting signup with:', { email, hasPassword: !!password, fullName, persona: params.persona });
+      const result = await signUp(email, password, fullName);
+      console.log('📝 [SIGNUP] Signup successful');
+
+      // Always go to the new unified onboarding with tabs
+      console.log('📝 [SIGNUP] Navigating to unified onboarding');
+      router.replace({
+        pathname: '/(auth)/onboarding-redesign',
+        params: { persona: params.persona || 'sailor' }
+      });
+    } catch (error: any) {
+      console.error('📝 [SIGNUP] Signup failed:', error);
+
+      // Better error messages
+      let errorMessage = error.message || 'Signup failed';
+      let isAlreadyRegistered = false;
+
+      // Check for various "already registered" error patterns
+      if (errorMessage.toLowerCase().includes('already registered') ||
+          errorMessage.toLowerCase().includes('already exists') ||
+          errorMessage.toLowerCase().includes('user already exists') ||
+          errorMessage.toLowerCase().includes('duplicate')) {
+        errorMessage = 'This email is already registered.';
+        isAlreadyRegistered = true;
+      } else if (errorMessage.includes('Password')) {
+        errorMessage = 'Password must be at least 6 characters';
+      }
+
+      // Show alert with appropriate action
+      if (isAlreadyRegistered) {
+        Alert.alert(
+          'Account Already Exists',
+          'This email is already registered. Would you like to sign in instead?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Sign In',
+              onPress: () => router.push('/(auth)/login')
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Signup Error', errorMessage);
+      }
+    } finally {
+      setLoading(false);
     }
-    router.replace('/(auth)/persona-selection');
   };
 
   return (
@@ -35,6 +82,15 @@ export default function SignUp() {
       <View style={styles.content}>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Sign up to get started</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Full Name (optional)"
+          value={fullName}
+          onChangeText={setFullName}
+          autoCapitalize="words"
+          editable={!loading}
+        />
 
         <TextInput
           style={styles.input}
@@ -48,7 +104,7 @@ export default function SignUp() {
 
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder="Password (min 6 characters)"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -62,6 +118,16 @@ export default function SignUp() {
         >
           <Text style={styles.buttonText}>
             {loading ? 'Creating Account...' : 'Sign Up'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.linkButton}
+          onPress={() => router.push('/(auth)/login')}
+          disabled={loading}
+        >
+          <Text style={styles.linkText}>
+            Already have an account? Sign In
           </Text>
         </TouchableOpacity>
       </View>
@@ -117,5 +183,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  linkButton: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  linkText: {
+    color: '#0066CC',
+    fontSize: 14,
   },
 });

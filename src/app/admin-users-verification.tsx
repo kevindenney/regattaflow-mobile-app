@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, FlatList, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, FlatList } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { Check, X, Edit3, User, Mail, Shield, Search, Filter, ChevronLeft } from 'lucide-react-native';
 
 type AdminUser = {

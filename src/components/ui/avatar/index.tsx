@@ -2,7 +2,8 @@
 import React from 'react';
 import { createAvatar } from '@gluestack-ui/avatar';
 
-import { View, Text, Image, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 
 import { tva } from '@gluestack-ui/nativewind-utils/tva';
 import {
@@ -16,7 +17,7 @@ const UIAvatar = createAvatar({
   Root: withStyleContext(View, SCOPE),
   Badge: View,
   Group: View,
-  Image: Image,
+  Image: ExpoImage,
   FallbackText: Text,
 });
 

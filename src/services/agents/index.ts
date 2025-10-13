@@ -10,5 +10,8 @@ export { CoachMatchingAgent } from './CoachMatchingAgent';
 export { OnboardingAgent } from './OnboardingAgent';
 export { CoursePredictionAgent } from './CoursePredictionAgent';
 export { RaceAnalysisAgent } from './RaceAnalysisAgent';
+export { ClubOnboardingAgent } from './ClubOnboardingAgent';
+export { RaceExtractionAgent } from './RaceExtractionAgent';
 
 export type { AgentTool, AgentConfig, AgentRunOptions, AgentRunResult } from './BaseAgentService';
+export type { ClubOnboardingContext } from './ClubOnboardingAgent';

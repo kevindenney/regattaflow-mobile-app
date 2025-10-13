@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { Search, Users, Bell, ChevronRight, Star, Zap, Globe } from 'lucide-react-native';
 
 export default function FleetsScreen() {

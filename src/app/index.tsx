@@ -12,7 +12,38 @@ import { HeroPhones } from '@/src/components/landing/HeroPhones';
 import { ScrollFix } from '@/src/components/landing/ScrollFix';
 
 export default function LandingPage() {
-  const { signedIn, ready } = useAuth();
+  const { signedIn, ready, userProfile, loading } = useAuth();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  useEffect(() => {
+    // Wait for auth to be ready AND not loading profile
+    if (!ready || loading || isRedirecting) return;
+
+    // Only redirect if signed in AND profile is loaded (or explicitly null after loading)
+    if (signedIn) {
+      // If profile is still being fetched, wait for it
+      // userProfile will be populated after signIn completes
+      if (userProfile || (!loading && ready)) {
+        setIsRedirecting(true);
+
+        // Check if onboarding is needed
+        if (shouldCompleteOnboarding(userProfile)) {
+          router.replace(getOnboardingRoute(userProfile));
+        } else {
+          router.replace(getDashboardRoute(userProfile?.user_type));
+        }
+      }
+    }
+  }, [signedIn, ready, userProfile, loading, isRedirecting]);
+
+  // Show loading while checking auth, loading profile, or redirecting
+  if (!ready || loading || isRedirecting) {
+    return (
+      <View style={styles.loadingContainer}>
+        {/* Simple loading state - you can enhance this */}
+      </View>
+    );
+  }
 
   // Show landing page for unauthenticated users
   const Container = Platform.OS === 'web' ? View : SafeAreaView;

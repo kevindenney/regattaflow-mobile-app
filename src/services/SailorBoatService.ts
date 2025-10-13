@@ -98,21 +98,25 @@ export class SailorBoatService {
    * Get all boats for a sailor
    */
   async listBoatsForSailor(sailorId: string): Promise<SailorBoat[]> {
+    console.log('🔍 [SailorBoatService] Fetching boats for sailor:', sailorId);
+
     const { data, error } = await supabase
       .from('sailor_boats')
       .select(`
         *,
-        boat_class:boat_classes(id, name, class_association),
-        home_club:yacht_clubs(id, name)
+        boat_class:boat_classes(id, name, class_association)
       `)
       .eq('sailor_id', sailorId)
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching sailor boats:', error);
+      console.error('❌ [SailorBoatService] Error fetching sailor boats:', error);
       throw error;
     }
+
+    console.log(`✅ [SailorBoatService] Successfully fetched ${data?.length || 0} boats`);
+    console.log('📊 [SailorBoatService] Boat data:', JSON.stringify(data, null, 2));
 
     return data || [];
   }
@@ -121,21 +125,24 @@ export class SailorBoatService {
    * Get boats for a sailor filtered by class
    */
   async listBoatsForSailorClass(sailorId: string, classId: string): Promise<SailorBoat[]> {
+    console.log('🔍 [SailorBoatService] Fetching boats for sailor/class:', { sailorId, classId });
+
     const { data, error } = await supabase
       .from('sailor_boats')
       .select(`
         *,
-        boat_class:boat_classes(id, name, class_association),
-        home_club:yacht_clubs(id, name)
+        boat_class:boat_classes(id, name, class_association)
       `)
       .eq('sailor_id', sailorId)
       .eq('class_id', classId)
       .order('is_primary', { ascending: false });
 
     if (error) {
-      console.error('Error fetching class boats:', error);
+      console.error('❌ [SailorBoatService] Error fetching class boats:', error);
       throw error;
     }
+
+    console.log(`✅ [SailorBoatService] Successfully fetched ${data?.length || 0} class boats`);
 
     return data || [];
   }
@@ -144,20 +151,23 @@ export class SailorBoatService {
    * Get a specific boat by ID
    */
   async getBoat(boatId: string): Promise<SailorBoat | null> {
+    console.log('🔍 [SailorBoatService] Fetching boat:', boatId);
+
     const { data, error } = await supabase
       .from('sailor_boats')
       .select(`
         *,
-        boat_class:boat_classes(id, name, class_association),
-        home_club:yacht_clubs(id, name)
+        boat_class:boat_classes(id, name, class_association)
       `)
       .eq('id', boatId)
       .single();
 
     if (error) {
-      console.error('Error fetching boat:', error);
+      console.error('❌ [SailorBoatService] Error fetching boat:', error);
       return null;
     }
+
+    console.log('✅ [SailorBoatService] Successfully fetched boat:', data);
 
     return data;
   }
@@ -166,12 +176,13 @@ export class SailorBoatService {
    * Get the primary boat for a sailor in a specific class
    */
   async getPrimaryBoat(sailorId: string, classId: string): Promise<SailorBoat | null> {
+    console.log('🔍 [SailorBoatService] Fetching primary boat:', { sailorId, classId });
+
     const { data, error } = await supabase
       .from('sailor_boats')
       .select(`
         *,
-        boat_class:boat_classes(id, name, class_association),
-        home_club:yacht_clubs(id, name)
+        boat_class:boat_classes(id, name, class_association)
       `)
       .eq('sailor_id', sailorId)
       .eq('class_id', classId)
@@ -179,8 +190,10 @@ export class SailorBoatService {
       .single();
 
     if (error && error.code !== 'PGRST116') { // Not found is OK
-      console.error('Error fetching primary boat:', error);
+      console.error('❌ [SailorBoatService] Error fetching primary boat:', error);
     }
+
+    console.log('✅ [SailorBoatService] Primary boat result:', data || 'none');
 
     return data || null;
   }
@@ -189,6 +202,8 @@ export class SailorBoatService {
    * Create a new boat
    */
   async createBoat(input: CreateBoatInput): Promise<SailorBoat> {
+    console.log('🔍 [SailorBoatService] Creating boat:', input);
+
     const { data, error } = await supabase
       .from('sailor_boats')
       .insert({
@@ -197,15 +212,16 @@ export class SailorBoatService {
       })
       .select(`
         *,
-        boat_class:boat_classes(id, name, class_association),
-        home_club:yacht_clubs(id, name)
+        boat_class:boat_classes(id, name, class_association)
       `)
       .single();
 
     if (error) {
-      console.error('Error creating boat:', error);
+      console.error('❌ [SailorBoatService] Error creating boat:', error);
       throw error;
     }
+
+    console.log('✅ [SailorBoatService] Successfully created boat:', data);
 
     return data;
   }
@@ -214,21 +230,24 @@ export class SailorBoatService {
    * Update a boat
    */
   async updateBoat(boatId: string, input: UpdateBoatInput): Promise<SailorBoat> {
+    console.log('🔍 [SailorBoatService] Updating boat:', { boatId, input });
+
     const { data, error } = await supabase
       .from('sailor_boats')
       .update(input)
       .eq('id', boatId)
       .select(`
         *,
-        boat_class:boat_classes(id, name, class_association),
-        home_club:yacht_clubs(id, name)
+        boat_class:boat_classes(id, name, class_association)
       `)
       .single();
 
     if (error) {
-      console.error('Error updating boat:', error);
+      console.error('❌ [SailorBoatService] Error updating boat:', error);
       throw error;
     }
+
+    console.log('✅ [SailorBoatService] Successfully updated boat:', data);
 
     return data;
   }

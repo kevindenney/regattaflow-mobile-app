@@ -1,0 +1,4452 @@
+{
+  "databaseTables": [
+    "ai_analyses",
+    "ai_coach_analysis",
+    "ai_insights_summary",
+    "ai_usage_logs",
+    "boat_classes",
+    "boat_crew_members",
+    "boat_equipment",
+    "boat_positions",
+    "boat_tuning_settings",
+    "class_associations",
+    "class_group_members",
+    "class_groups",
+    "club_ai_documents",
+    "club_class_fleets",
+    "club_classes",
+    "club_facilities",
+    "club_fleets",
+    "club_members",
+    "club_onboarding_sessions",
+    "club_profiles",
+    "club_race_calendar",
+    "club_services",
+    "club_staff",
+    "club_venues",
+    "clubs",
+    "coach_availability",
+    "coach_profiles",
+    "coach_race_analysis",
+    "coach_services",
+    "coach_specializations",
+    "coaching_sessions",
+    "crew_members",
+    "cultural_profiles",
+    "documents",
+    "equipment_alerts",
+    "equipment_maintenance_logs",
+    "equipment_manufacturers",
+    "equipment_products",
+    "equipment_race_usage",
+    "external_race_results",
+    "fleet_activity",
+    "fleet_documents",
+    "fleet_followers",
+    "fleet_members",
+    "fleets",
+    "global_racing_events",
+    "me",
+    "profiles",
+    "race_analytics",
+    "race_courses",
+    "race_events",
+    "race_predictions",
+    "race_registrations",
+    "race_timer_sessions",
+    "racing_series",
+    "regatta_results",
+    "regattas",
+    "sailing_documents",
+    "sailing_services",
+    "sailing_specialties",
+    "sailing_venues",
+    "sailor_boats",
+    "sailor_classes",
+    "sailor_clubs",
+    "sailor_coaches",
+    "sailor_connections",
+    "sailor_locations",
+    "sailor_profiles",
+    "sailor_racing_participation",
+    "sailor_tuning_guides",
+    "saved_venues",
+    "saved_venues_with_details",
+    "sensor_configurations",
+    "sensor_data_logs",
+    "session_bookings",
+    "session_reviews",
+    "subscriptions",
+    "tuning_guides",
+    "user_location_context",
+    "user_venue_profiles",
+    "users",
+    "venue_conditions",
+    "venue_detections",
+    "venue_intelligence_cache",
+    "venue_transitions",
+    "weather_conditions",
+    "weather_impact",
+    "weather_insights",
+    "weather_sources",
+    "yacht_clubs"
+  ],
+  "tablesUsedInCode": [
+    "users",
+    "club_profiles",
+    "coach_profiles",
+    "sailor_boats",
+    "regattas",
+    "sailor_profiles",
+    "sailor_race_calendar",
+    "boat_classes",
+    "coaching_sessions",
+    "fleets",
+    "fleet_members",
+    "club_race_calendar",
+    "race_entries",
+    "race_timer_sessions",
+    "ai_analyses",
+    "race_strategies",
+    "event_registrations",
+    "race_results",
+    "race_start_sequences",
+    "race_flags",
+    "race_protests",
+    "regatta_races",
+    "sailing_venues",
+    "coach_match_scores",
+    "sailor_locations",
+    "gps_tracks",
+    "boat_equipment",
+    "subscriptions",
+    "monte_carlo_simulations",
+    "race_courses",
+    "user_preferences",
+    "club_events",
+    "ai_coach_analysis",
+    "regatta_document_requirements",
+    "yacht_clubs",
+    "club_services",
+    "club_documents",
+    "venue_visits",
+    "clubs",
+    "club_subscriptions",
+    "coach_availability",
+    "coach_services",
+    "booking_requests",
+    "regatta_results",
+    "races",
+    "sailor_classes",
+    "class_group_members",
+    "class_groups",
+    "documents",
+    "sailor_crew_preferences",
+    "club_members",
+    "race_events",
+    "race_registrations",
+    "sailor_race_data",
+    "racing_circuits",
+    "class_associations",
+    "sailor_clubs",
+    "membership_requests",
+    "member_payment_history",
+    "member_activity_log",
+    "club_verification_attempts",
+    "session_reviews",
+    "sailing_specialties",
+    "coaching_clients",
+    "session_feedback",
+    "client_progress_metrics",
+    "session_bookings",
+    "email_logs",
+    "fleet_posts",
+    "fleet_post_likes",
+    "fleet_post_bookmarks",
+    "fleet_post_comments",
+    "fleet_post_shares",
+    "fleet_notifications",
+    "fleet_followers",
+    "sensor_configurations",
+    "sensor_alert_rules",
+    "sensor_data_logs",
+    "crew_members",
+    "entry_crew_assignments",
+    "scoring_configurations",
+    "series_standings",
+    "sailwave_imports",
+    "saved_venues_with_details",
+    "saved_venues",
+    "user_location_context",
+    "boat_tuning_settings",
+    "tuning_guides",
+    "venue_conditions",
+    "sailor_coaches",
+    "boat_crew_members",
+    "sailor_racing_areas",
+    "racing_series",
+    "sailor_racing_participation",
+    "sailor_connections",
+    "race_predictions",
+    "venue_intelligence_cache",
+    "external_race_results",
+    "maintenance_records",
+    "club_memberships",
+    "regional_intelligence",
+    "cultural_profiles",
+    "crew_race_participation",
+    "crew_availability",
+    "equipment_race_usage",
+    "equipment_alerts",
+    "event_documents",
+    "event-documents",
+    "club_event_earnings",
+    "fleet_activity",
+    "fleet_documents",
+    "race_tracks",
+    "sailing_documents",
+    "race_logs",
+    "race-photos",
+    "race_analytics",
+    "sailor_suggested_connections",
+    "race_distribution_logs",
+    "external_regattas",
+    "sailor_performance",
+    "polling_status",
+    "document_analysis",
+    "sailor_tuning_guides",
+    "tuning-guides",
+    "fleet_tuning_guides",
+    "user_venue_profiles",
+    "venue_transitions",
+    "global_racing_events",
+    "venue_detections"
+  ],
+  "mockDataFiles": [
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 77,
+      "context": "// For now, we'll use a mock payment method ID"
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 79,
+      "context": "const mockPaymentMethodId = 'pm_mock_' + Date.now();"
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 84,
+      "context": "paymentMethodId: mockPaymentMethodId,"
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 215,
+      "context": "placeholder=\"1234 5678 9012 3456\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 230,
+      "context": "placeholder=\"John Smith\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 244,
+      "context": "placeholder=\"MM/YY\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 259,
+      "context": "placeholder=\"123\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 280,
+      "context": "placeholder=\"123 Club Street\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 293,
+      "context": "placeholder=\"Hong Kong\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-payment.tsx",
+      "line": 303,
+      "context": "placeholder=\"00000\""
+    },
+    {
+      "file": "src/app/(auth)/club-onboarding-website-verification.tsx",
+      "line": 165,
+      "context": "placeholder=\"https://www.yourclub.com\""
+    },
+    {
+      "file": "src/app/(auth)/coach-onboarding-pricing.tsx",
+      "line": 178,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/app/(auth)/coach-onboarding-pricing.tsx",
+      "line": 241,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/app/(auth)/coach-onboarding-welcome.tsx",
+      "line": 140,
+      "context": "placeholder=\"Enter your full name\""
+    },
+    {
+      "file": "src/app/(auth)/coach-onboarding-welcome.tsx",
+      "line": 157,
+      "context": "placeholder=\"e.g., Head Coach, Tactical Coach, Olympic Coach\""
+    },
+    {
+      "file": "src/app/(auth)/coach-onboarding-welcome.tsx",
+      "line": 207,
+      "context": "placeholder=\"Your club, team, or organization\""
+    },
+    {
+      "file": "src/app/(auth)/coach-onboarding-welcome.tsx",
+      "line": 244,
+      "context": "placeholder=\"+1 (555) 123-4567\""
+    },
+    {
+      "file": "src/app/(auth)/login.tsx",
+      "line": 69,
+      "context": "placeholder=\"Email\""
+    },
+    {
+      "file": "src/app/(auth)/login.tsx",
+      "line": 81,
+      "context": "placeholder=\"Password\""
+    },
+    {
+      "file": "src/app/(auth)/onboarding.tsx",
+      "line": 367,
+      "context": "placeholder=\"e.g., I sail a Dragon D59 'Blue Lightning' at Royal Hong Kong Yacht"
+    },
+    {
+      "file": "src/app/(auth)/onboarding.tsx",
+      "line": 385,
+      "context": "placeholder=\"Paste CSV from Excel/Sheets, club website URL, or just type your ra"
+    },
+    {
+      "file": "src/app/(auth)/onboarding.tsx",
+      "line": 413,
+      "context": "placeholder=\"Paste SI/NOR text, course map URL, or type race information\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-chat.tsx",
+      "line": 245,
+      "context": "placeholder=\"Tell me about your boat, club, next race... or paste any links!\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-chat.tsx",
+      "line": 246,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 388,
+      "context": "placeholder=\"e.g., John Smith\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 437,
+      "context": "placeholder=\"e.g., 10\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 485,
+      "context": "placeholder=\"e.g., Dragon\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 495,
+      "context": "placeholder=\"e.g., D59\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 506,
+      "context": "placeholder=\"e.g., Phoenix\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 517,
+      "context": "placeholder=\"e.g., Petticrows\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 527,
+      "context": "placeholder=\"e.g., Selden\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 538,
+      "context": "placeholder=\"e.g., North Sails, Quantum\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 580,
+      "context": "placeholder=\"e.g., Royal Hong Kong Yacht Club\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 590,
+      "context": "placeholder=\"https://www.rhkyc.org.hk\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 603,
+      "context": "placeholder=\"e.g., Victoria Harbour, Hong Kong\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 661,
+      "context": "placeholder=\"https://example.com/document.pdf\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 866,
+      "context": "placeholder=\"Paste CSV or table data here...&#10;e.g., Croucher 3, 2025-03-15, 1"
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 884,
+      "context": "placeholder=\"Paste sailing instructions or NOR text here...&#10;AI will extract "
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 902,
+      "context": "placeholder=\"https://... (course map, race area, or aerial image)\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 914,
+      "context": "placeholder=\"e.g., Croucher Series - Race 3\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 925,
+      "context": "placeholder=\"2025-03-15\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 935,
+      "context": "placeholder=\"14:00\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 946,
+      "context": "placeholder=\"e.g., Victoria Harbour, Hong Kong\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 959,
+      "context": "placeholder=\"https://...\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 970,
+      "context": "placeholder=\"https://...\""
+    },
+    {
+      "file": "src/app/(auth)/sailor-onboarding-comprehensive.tsx",
+      "line": 981,
+      "context": "placeholder=\"https://...\""
+    },
+    {
+      "file": "src/app/(auth)/signup.tsx",
+      "line": 88,
+      "context": "placeholder=\"Full Name (optional)\""
+    },
+    {
+      "file": "src/app/(auth)/signup.tsx",
+      "line": 97,
+      "context": "placeholder=\"Email\""
+    },
+    {
+      "file": "src/app/(auth)/signup.tsx",
+      "line": 107,
+      "context": "placeholder=\"Password (min 6 characters)\""
+    },
+    {
+      "file": "src/app/(tabs)/add-next-race.tsx",
+      "line": 254,
+      "context": "placeholder=\"e.g., Croucher Series Race 3\""
+    },
+    {
+      "file": "src/app/(tabs)/add-next-race.tsx",
+      "line": 272,
+      "context": "placeholder=\"YYYY-MM-DD\""
+    },
+    {
+      "file": "src/app/(tabs)/add-next-race.tsx",
+      "line": 289,
+      "context": "placeholder=\"HH:MM\""
+    },
+    {
+      "file": "src/app/(tabs)/add-next-race.tsx",
+      "line": 308,
+      "context": "placeholder=\"e.g., Victoria Harbour, Hong Kong\""
+    },
+    {
+      "file": "src/app/(tabs)/add-next-race.tsx",
+      "line": 421,
+      "context": "placeholder=\"https://www.rhkyc.org.hk/.../DragonStandardNOR.pdf\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 76,
+      "context": "// For now, using mock data"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 80,
+      "context": "classId: '861d0d69-7f2e-41e8-9f97-0f410c1aa175', // Mock class ID (Dragon class)"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 290,
+      "context": "<View style={styles.placeholderContainer}>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 292,
+      "context": "<Text style={styles.placeholderText}>Equipment coming soon</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 297,
+      "context": "<View style={styles.placeholderContainer}>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 299,
+      "context": "<Text style={styles.placeholderText}>Performance analytics coming soon</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 458,
+      "context": "placeholderContainer: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/[id].tsx",
+      "line": 464,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 196,
+      "context": "<View style={styles.photoPlaceholder}>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 198,
+      "context": "<Text style={styles.photoPlaceholderText}>Add Photo</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 214,
+      "context": "placeholder=\"e.g., Dragonfly\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 215,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 225,
+      "context": "<Text style={selectedClass ? styles.pickerText : styles.pickerPlaceholder}>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 266,
+      "context": "placeholder=\"e.g., USA 123\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 267,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 277,
+      "context": "placeholder=\"e.g., ABC12345\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 278,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 293,
+      "context": "placeholder=\"e.g., North Sails\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 294,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 304,
+      "context": "placeholder=\"e.g., 2020\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 306,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 316,
+      "context": "placeholder=\"e.g., Carbon fiber\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 317,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 364,
+      "context": "placeholder=\"Any additional notes about this boat...\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 365,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 448,
+      "context": "photoPlaceholder: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 455,
+      "context": "photoPlaceholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/add.tsx",
+      "line": 494,
+      "context": "pickerPlaceholder: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 266,
+      "context": "<View style={styles.photoPlaceholder}>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 268,
+      "context": "<Text style={styles.photoPlaceholderText}>Add Photo</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 284,
+      "context": "placeholder=\"e.g., Dragonfly\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 285,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 306,
+      "context": "placeholder=\"e.g., USA 123\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 307,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 317,
+      "context": "placeholder=\"e.g., ABC12345\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 318,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 333,
+      "context": "placeholder=\"e.g., North Sails\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 334,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 344,
+      "context": "placeholder=\"e.g., 2020\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 346,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 356,
+      "context": "placeholder=\"e.g., Carbon fiber\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 357,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 445,
+      "context": "placeholder=\"Any additional notes about this boat...\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 446,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 537,
+      "context": "photoPlaceholder: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 544,
+      "context": "photoPlaceholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/boat/edit/[id].tsx",
+      "line": 603,
+      "context": "pickerPlaceholder: {"
+    },
+    {
+      "file": "src/app/(tabs)/calendar.tsx",
+      "line": 635,
+      "context": "placeholder=\"Search races or venues...\""
+    },
+    {
+      "file": "src/app/(tabs)/calendar.tsx",
+      "line": 636,
+      "context": "placeholderTextColor=\"#9CA3AF\""
+    },
+    {
+      "file": "src/app/(tabs)/courses.tsx",
+      "line": 18,
+      "context": "import { MOCK_COURSES, MockCourse } from '@/src/constants/mockData';"
+    },
+    {
+      "file": "src/app/(tabs)/courses.tsx",
+      "line": 23,
+      "context": "const [editingCourse, setEditingCourse] = useState<MockCourse | undefined>(undef"
+    },
+    {
+      "file": "src/app/(tabs)/courses.tsx",
+      "line": 24,
+      "context": "const [savedCourses, setSavedCourses] = useState<MockCourse[]>(MOCK_COURSES);"
+    },
+    {
+      "file": "src/app/(tabs)/courses.tsx",
+      "line": 26,
+      "context": "const handleSaveCourse = (course: MockCourse) => {"
+    },
+    {
+      "file": "src/app/(tabs)/courses.tsx",
+      "line": 41,
+      "context": "const handleEditCourse = (course: MockCourse) => {"
+    },
+    {
+      "file": "src/app/(tabs)/dashboard.tsx",
+      "line": 3,
+      "context": "import { MOCK_RACES } from '@/src/constants/mockData';"
+    },
+    {
+      "file": "src/app/(tabs)/dashboard.tsx",
+      "line": 369,
+      "context": "// User has no races - show mock race cards"
+    },
+    {
+      "file": "src/app/(tabs)/dashboard.tsx",
+      "line": 376,
+      "context": "{MOCK_RACES.map((race, index) => ("
+    },
+    {
+      "file": "src/app/(tabs)/dashboard.tsx",
+      "line": 389,
+      "context": "isMock={true}"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/index.tsx",
+      "line": 196,
+      "context": "{postsLoading && <Text style={styles.placeholderText}>Loading activity…</Text>}"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/index.tsx",
+      "line": 198,
+      "context": "<Text style={styles.placeholderText}>No activity yet. Share a post to get starte"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/index.tsx",
+      "line": 214,
+      "context": "<Text style={styles.placeholderText}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/index.tsx",
+      "line": 458,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/members.tsx",
+      "line": 11,
+      "context": "<View style={styles.placeholderCard}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/members.tsx",
+      "line": 12,
+      "context": "<Text style={styles.placeholderTitle}>Members directory coming soon</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/members.tsx",
+      "line": 13,
+      "context": "<Text style={styles.placeholderText}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/members.tsx",
+      "line": 31,
+      "context": "placeholderCard: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/members.tsx",
+      "line": 37,
+      "context": "placeholderTitle: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/members.tsx",
+      "line": 42,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/resources.tsx",
+      "line": 11,
+      "context": "<View style={styles.placeholderCard}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/resources.tsx",
+      "line": 12,
+      "context": "<Text style={styles.placeholderTitle}>Resource sharing is on the way</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/resources.tsx",
+      "line": 13,
+      "context": "<Text style={styles.placeholderText}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/resources.tsx",
+      "line": 31,
+      "context": "placeholderCard: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/resources.tsx",
+      "line": 37,
+      "context": "placeholderTitle: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/resources.tsx",
+      "line": 42,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/settings.tsx",
+      "line": 37,
+      "context": "<View style={styles.placeholderCard}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/settings.tsx",
+      "line": 38,
+      "context": "<Text style={styles.placeholderTitle}>Admin tools coming soon</Text>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/settings.tsx",
+      "line": 39,
+      "context": "<Text style={styles.placeholderText}>"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/settings.tsx",
+      "line": 89,
+      "context": "placeholderCard: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/settings.tsx",
+      "line": 95,
+      "context": "placeholderTitle: {"
+    },
+    {
+      "file": "src/app/(tabs)/fleet/settings.tsx",
+      "line": 100,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/members.tsx",
+      "line": 174,
+      "context": "placeholder=\"Search by name, email, sail number...\""
+    },
+    {
+      "file": "src/app/(tabs)/members.tsx",
+      "line": 178,
+      "context": "placeholderTextColor=\"#64748B\""
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 59,
+      "context": "// Mock document with extraction for demo"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 60,
+      "context": "const mockExtraction: RaceCourseExtraction = {"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 135,
+      "context": "extraction: mockExtraction"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 155,
+      "context": "// For now, using mock data"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 223,
+      "context": "// TODO: Read file content - for now using mock text"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 224,
+      "context": "const mockDocumentText = `"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 248,
+      "context": "const extraction = await extractor.extractRaceCourse(mockDocumentText, {"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 303,
+      "context": "// Mock current conditions - in production, fetch from weather API"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 304,
+      "context": "const mockConditions: RaceConditions = {"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 332,
+      "context": "mockConditions,"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 1687,
+      "context": "mapPlaceholder: {"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 1693,
+      "context": "mapPlaceholderText: {"
+    },
+    {
+      "file": "src/app/(tabs)/race/[id].tsx",
+      "line": 1698,
+      "context": "mapPlaceholderSubtext: {"
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 32,
+      "context": "// Mock classes - should come from user's boats"
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 111,
+      "context": "placeholder=\"e.g., Hong Kong Dragon Championship 2025\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 112,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 127,
+      "context": "placeholder=\"Search for venue...\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 128,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 148,
+      "context": "placeholder=\"MM/DD/YYYY\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 149,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 162,
+      "context": "placeholder=\"MM/DD/YYYY\""
+    },
+    {
+      "file": "src/app/(tabs)/race/add.tsx",
+      "line": 163,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/(tabs)/race/course.tsx",
+      "line": 135,
+      "context": "// Mock course data (would come from API)"
+    },
+    {
+      "file": "src/app/(tabs)/race/strategy.tsx",
+      "line": 39,
+      "context": "// Mock data for weather conditions"
+    },
+    {
+      "file": "src/app/(tabs)/race/strategy.tsx",
+      "line": 49,
+      "context": "// Mock data for crew assignments"
+    },
+    {
+      "file": "src/app/(tabs)/race/strategy.tsx",
+      "line": 57,
+      "context": "// Mock data for strategy points"
+    },
+    {
+      "file": "src/app/(tabs)/race/strategy.tsx",
+      "line": 84,
+      "context": "// For now, we'll use a mock text or actual text file"
+    },
+    {
+      "file": "src/app/(tabs)/race/strategy.tsx",
+      "line": 91,
+      "context": "// For demo, we'll use mock data"
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 113,
+      "context": "// Mock race data"
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 114,
+      "context": "const mockRaceData = {"
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 317,
+      "context": "position: performanceData.tacks > 0 ? 3 : null, // Mock position"
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 318,
+      "context": "fleet_size: 24, // Mock fleet size"
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 443,
+      "context": "setRaceData(mockRaceData);"
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 918,
+      "context": "placeholder=\"Ask your AI coach about the race...\""
+    },
+    {
+      "file": "src/app/(tabs)/race/timer.tsx",
+      "line": 984,
+      "context": "placeholder=\"Message crew...\""
+    },
+    {
+      "file": "src/app/(tabs)/races.tsx",
+      "line": 98,
+      "context": "// Placeholder: In production, this would parse AI analysis results"
+    },
+    {
+      "file": "src/app/(tabs)/races.tsx",
+      "line": 320,
+      "context": "// Mock race conditions (in production, get from weather service or user input)"
+    },
+    {
+      "file": "src/app/(tabs)/races.tsx",
+      "line": 321,
+      "context": "const mockConditions = {"
+    },
+    {
+      "file": "src/app/(tabs)/races.tsx",
+      "line": 346,
+      "context": "// Mock sailing instructions text (in production, get from document)"
+    },
+    {
+      "file": "src/app/(tabs)/races.tsx",
+      "line": 352,
+      "context": "mockConditions,"
+    },
+    {
+      "file": "src/app/(tabs)/tuning-guides.tsx",
+      "line": 286,
+      "context": "placeholder=\"Search guides, settings, conditions...\""
+    },
+    {
+      "file": "src/app/(tabs)/tuning-guides.tsx",
+      "line": 289,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 84,
+      "context": "placeholder=\"Search by name, sail number, email...\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 122,
+      "context": "placeholder=\"Enter full name\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 135,
+      "context": "placeholder=\"Enter email address\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 149,
+      "context": "placeholder=\"Enter phone number\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 193,
+      "context": "placeholder=\"Enter sail number\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 206,
+      "context": "placeholder=\"Enter boat name\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 262,
+      "context": "placeholder=\"Enter crew member name\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 273,
+      "context": "placeholder=\"Role\""
+    },
+    {
+      "file": "src/app/add-manual-entry.tsx",
+      "line": 333,
+      "context": "placeholder=\"Add any special notes or requirements...\""
+    },
+    {
+      "file": "src/app/admin-users-verification.tsx",
+      "line": 302,
+      "context": "placeholder=\"Search users...\""
+    },
+    {
+      "file": "src/app/boat-setup.tsx",
+      "line": 69,
+      "context": "placeholder=\"Enter your boat name\""
+    },
+    {
+      "file": "src/app/boat-setup.tsx",
+      "line": 80,
+      "context": "placeholder=\"Enter your sail number\""
+    },
+    {
+      "file": "src/app/boats.tsx",
+      "line": 42,
+      "context": "placeholder=\"Search boat classes...\""
+    },
+    {
+      "file": "src/app/boats.tsx",
+      "line": 46,
+      "context": "placeholderTextColor=\"#9CA3AF\""
+    },
+    {
+      "file": "src/app/calendar.tsx",
+      "line": 36,
+      "context": "// Mock data for events"
+    },
+    {
+      "file": "src/app/calendar.tsx",
+      "line": 37,
+      "context": "const mockEvents = ["
+    },
+    {
+      "file": "src/app/calendar.tsx",
+      "line": 170,
+      "context": "return mockEvents.filter(event => event.date === dateString);"
+    },
+    {
+      "file": "src/app/calendar.tsx",
+      "line": 248,
+      "context": "data={mockEvents}"
+    },
+    {
+      "file": "src/app/calendar.tsx",
+      "line": 648,
+      "context": "placeholder=\"Search events...\""
+    },
+    {
+      "file": "src/app/club/earnings.tsx",
+      "line": 102,
+      "context": "<View style={styles.placeholder} />"
+    },
+    {
+      "file": "src/app/club/earnings.tsx",
+      "line": 264,
+      "context": "placeholder: {"
+    },
+    {
+      "file": "src/app/club/event/[id]/documents.tsx",
+      "line": 217,
+      "context": "<View style={styles.placeholder} />"
+    },
+    {
+      "file": "src/app/club/event/[id]/documents.tsx",
+      "line": 392,
+      "context": "placeholder: {"
+    },
+    {
+      "file": "src/app/club/event/[id]/entries.tsx",
+      "line": 263,
+      "context": "<View style={styles.placeholder} />"
+    },
+    {
+      "file": "src/app/club/event/[id]/entries.tsx",
+      "line": 296,
+      "context": "placeholder=\"Search by name, boat...\""
+    },
+    {
+      "file": "src/app/club/event/[id]/entries.tsx",
+      "line": 297,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/[id]/entries.tsx",
+      "line": 496,
+      "context": "placeholder: {"
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 73,
+      "context": "formData.club_id = 'temp-club-id'; // Placeholder"
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 109,
+      "context": "placeholder=\"e.g., Spring Championship Regatta\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 110,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 145,
+      "context": "placeholder=\"Event description...\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 146,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 200,
+      "context": "placeholder=\"YYYY-MM-DD HH:MM\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 201,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 211,
+      "context": "placeholder=\"YYYY-MM-DD HH:MM\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 212,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 222,
+      "context": "placeholder=\"YYYY-MM-DD HH:MM (optional)\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 223,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 233,
+      "context": "placeholder=\"YYYY-MM-DD HH:MM (optional)\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 234,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 247,
+      "context": "placeholder=\"Optional\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 248,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 304,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 305,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 411,
+      "context": "placeholder=\"events@yacht-club.com\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 412,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 424,
+      "context": "placeholder=\"+1 234 567 8900\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 425,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 441,
+      "context": "placeholder=\"e.g., Dragon, J/70, Laser\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 442,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 457,
+      "context": "placeholder=\"e.g., Life jacket required, Boat insurance\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 458,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 473,
+      "context": "<View style={styles.placeholder} />"
+    },
+    {
+      "file": "src/app/club/event/create.tsx",
+      "line": 544,
+      "context": "placeholder: {"
+    },
+    {
+      "file": "src/app/club/race/control/[id].tsx",
+      "line": 462,
+      "context": "placeholder=\"5\""
+    },
+    {
+      "file": "src/app/club/race/control/[id].tsx",
+      "line": 470,
+      "context": "placeholder=\"4\""
+    },
+    {
+      "file": "src/app/club/race/control/[id].tsx",
+      "line": 478,
+      "context": "placeholder=\"1\""
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 330,
+      "context": "placeholder=\"Set start time\""
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 402,
+      "context": "<SelectInput placeholder=\"Select status\" />"
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 421,
+      "context": "placeholder=\"Finish time\""
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 442,
+      "context": "placeholder=\"Pos\""
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 458,
+      "context": "placeholder=\"Minutes\""
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 468,
+      "context": "placeholder=\"Points\""
+    },
+    {
+      "file": "src/app/club/results/[raceId].tsx",
+      "line": 480,
+      "context": "placeholder=\"Optional notes\""
+    },
+    {
+      "file": "src/app/club-dashboard.tsx",
+      "line": 22,
+      "context": "// Mock data for demonstration"
+    },
+    {
+      "file": "src/app/coach/[id].tsx",
+      "line": 137,
+      "context": "<View style={styles.avatarPlaceholder}>"
+    },
+    {
+      "file": "src/app/coach/[id].tsx",
+      "line": 327,
+      "context": "avatarPlaceholder: {"
+    },
+    {
+      "file": "src/app/coach/book.tsx",
+      "line": 229,
+      "context": "placeholder=\"Additional location details (dock, meeting point, etc.)\""
+    },
+    {
+      "file": "src/app/coach/book.tsx",
+      "line": 242,
+      "context": "placeholder=\"Tell the coach what you'd like to work on...\""
+    },
+    {
+      "file": "src/app/coach/client/[id].tsx",
+      "line": 248,
+      "context": "placeholder=\"Add private notes about this client...\""
+    },
+    {
+      "file": "src/app/coach/client/[id].tsx",
+      "line": 249,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/app/coach/client/[id].tsx",
+      "line": 307,
+      "context": "<View style={styles.avatarPlaceholder}>"
+    },
+    {
+      "file": "src/app/coach/client/[id].tsx",
+      "line": 514,
+      "context": "avatarPlaceholder: {"
+    },
+    {
+      "file": "src/app/coach/discover-enhanced.tsx",
+      "line": 254,
+      "context": "placeholder=\"Enter city or venue...\""
+    },
+    {
+      "file": "src/app/coach/discover.tsx",
+      "line": 342,
+      "context": "placeholder=\"Enter city or venue...\""
+    },
+    {
+      "file": "src/app/confirm-crew.tsx",
+      "line": 17,
+      "context": "// Mock data representing all verified information"
+    },
+    {
+      "file": "src/app/course-view.tsx",
+      "line": 55,
+      "context": "// Mock data for course visualization"
+    },
+    {
+      "file": "src/app/crew.tsx",
+      "line": 5,
+      "context": "// Mock data for crew roles"
+    },
+    {
+      "file": "src/app/crew.tsx",
+      "line": 55,
+      "context": "// Mock avatars from the tool"
+    },
+    {
+      "file": "src/app/crew.tsx",
+      "line": 201,
+      "context": "placeholder=\"Enter crew member name\""
+    },
+    {
+      "file": "src/app/crew.tsx",
+      "line": 215,
+      "context": "placeholder=\"Enter crew role\""
+    },
+    {
+      "file": "src/app/crew.tsx",
+      "line": 246,
+      "context": "placeholder=\"Email\""
+    },
+    {
+      "file": "src/app/crew.tsx",
+      "line": 253,
+      "context": "placeholder=\"Phone\""
+    },
+    {
+      "file": "src/app/entry-management.tsx",
+      "line": 35,
+      "context": "// Mock data for entries"
+    },
+    {
+      "file": "src/app/entry-management.tsx",
+      "line": 178,
+      "context": "placeholder=\"Search entries...\""
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 12,
+      "context": "// Mock data for fleet activity"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 13,
+      "context": "const mockFleetData = {"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 102,
+      "context": "<Text className=\"text-white text-3xl font-bold\">{mockFleetData.fleetName}</Text>"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 105,
+      "context": "<Text className=\"text-blue-100\">{mockFleetData.members} members</Text>"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 110,
+      "context": "<Text className=\"text-white font-bold\">{mockFleetData.activeToday} active today<"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 119,
+      "context": "<Text className=\"text-2xl font-bold text-gray-800\">{mockFleetData.fleetStats.rac"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 123,
+      "context": "<Text className=\"text-2xl font-bold text-gray-800\">{mockFleetData.fleetStats.ave"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 127,
+      "context": "<Text className=\"text-2xl font-bold text-gray-800\">{mockFleetData.fleetStats.top"
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 152,
+      "context": "{mockFleetData.upcomingEvents.map((event) => ("
+    },
+    {
+      "file": "src/app/fleet-activity.tsx",
+      "line": 191,
+      "context": "{mockFleetData.recentActivity.map((activity) => ("
+    },
+    {
+      "file": "src/app/fleet-verification.tsx",
+      "line": 5,
+      "context": "// Mock data for fleets extracted from website"
+    },
+    {
+      "file": "src/app/fleet-verification.tsx",
+      "line": 70,
+      "context": "placeholder=\"Fleet name\""
+    },
+    {
+      "file": "src/app/fleet-verification.tsx",
+      "line": 76,
+      "context": "placeholder=\"Description\""
+    },
+    {
+      "file": "src/app/fleet-verification.tsx",
+      "line": 208,
+      "context": "placeholder=\"Fleet name\""
+    },
+    {
+      "file": "src/app/fleet-verification.tsx",
+      "line": 214,
+      "context": "placeholder=\"Description (optional)\""
+    },
+    {
+      "file": "src/app/fleets.tsx",
+      "line": 102,
+      "context": "placeholder=\"Search fleets...\""
+    },
+    {
+      "file": "src/app/fleets.tsx",
+      "line": 106,
+      "context": "placeholderTextColor=\"#9CA3AF\""
+    },
+    {
+      "file": "src/app/location.tsx",
+      "line": 132,
+      "context": "placeholder=\"Search for sailing venues...\""
+    },
+    {
+      "file": "src/app/location.tsx",
+      "line": 136,
+      "context": "placeholderTextColor=\"#9CA3AF\""
+    },
+    {
+      "file": "src/app/map-fullscreen.tsx",
+      "line": 11,
+      "context": "{/* Map Placeholder */}"
+    },
+    {
+      "file": "src/app/members/requests.tsx",
+      "line": 178,
+      "context": "<View style={styles.placeholder} />"
+    },
+    {
+      "file": "src/app/members/requests.tsx",
+      "line": 322,
+      "context": "placeholder=\"Enter reason for rejection...\""
+    },
+    {
+      "file": "src/app/members/requests.tsx",
+      "line": 387,
+      "context": "placeholder: {"
+    },
+    {
+      "file": "src/app/post-update.tsx",
+      "line": 33,
+      "context": "// Mock data for recent posts"
+    },
+    {
+      "file": "src/app/post-update.tsx",
+      "line": 116,
+      "context": "placeholder=\"Share your sailing experience, thoughts, or updates...\""
+    },
+    {
+      "file": "src/app/race/analysis/[id].tsx",
+      "line": 160,
+      "context": "// Mock tactical decisions based on strategy recommendations"
+    },
+    {
+      "file": "src/app/race/analysis/[id].tsx",
+      "line": 333,
+      "context": "{/* Track visualization placeholder */}"
+    },
+    {
+      "file": "src/app/race-committee-dashboard.tsx",
+      "line": 32,
+      "context": "// Mock data for the dashboard"
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 5,
+      "context": "// Mock data for race series extracted from website"
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 116,
+      "context": "placeholder=\"Series name\""
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 122,
+      "context": "placeholder=\"Description\""
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 141,
+      "context": "placeholder=\"YYYY-MM-DD\""
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 151,
+      "context": "placeholder=\"YYYY-MM-DD\""
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 298,
+      "context": "placeholder=\"Series name\""
+    },
+    {
+      "file": "src/app/race-series-verification.tsx",
+      "line": 304,
+      "context": "placeholder=\"Description (optional)\""
+    },
+    {
+      "file": "src/app/race-strategy.tsx",
+      "line": 26,
+      "context": "// Mock data for weather conditions"
+    },
+    {
+      "file": "src/app/race-strategy.tsx",
+      "line": 36,
+      "context": "// Mock data for crew assignments"
+    },
+    {
+      "file": "src/app/race-strategy.tsx",
+      "line": 44,
+      "context": "// Mock data for strategy points"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 112,
+      "context": "// Mock race data"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 113,
+      "context": "const mockRaceData = {"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 183,
+      "context": "await logRaceEvent(mockRaceData.id, {"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 213,
+      "context": "await saveGPSTrack(mockRaceData.id, trackData);"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 236,
+      "context": "setRaceData(mockRaceData);"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 240,
+      "context": "await logRaceEvent(mockRaceData.id, {"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 244,
+      "context": "elapsedTime: mockRaceData.elapsedTime,"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 245,
+      "context": "position: mockRaceData.position"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 249,
+      "context": "// Generate mock performance data"
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 675,
+      "context": "placeholder=\"Ask your AI coach about the race...\""
+    },
+    {
+      "file": "src/app/race-timer-pro.tsx",
+      "line": 741,
+      "context": "placeholder=\"Message crew...\""
+    },
+    {
+      "file": "src/app/races.tsx",
+      "line": 8,
+      "context": "// Mock data for clubs and their races"
+    },
+    {
+      "file": "src/app/races.tsx",
+      "line": 9,
+      "context": "const mockClubs = ["
+    },
+    {
+      "file": "src/app/races.tsx",
+      "line": 36,
+      "context": "// Mock suggestions for free-form race entry"
+    },
+    {
+      "file": "src/app/races.tsx",
+      "line": 159,
+      "context": "placeholder=\"Search or add a race...\""
+    },
+    {
+      "file": "src/app/races.tsx",
+      "line": 240,
+      "context": "{mockClubs.map((club) => ("
+    },
+    {
+      "file": "src/app/record-finishes.tsx",
+      "line": 184,
+      "context": "placeholder=\"Enter sail number\""
+    },
+    {
+      "file": "src/app/record-finishes.tsx",
+      "line": 194,
+      "context": "placeholder=\"HH:MM:SS\""
+    },
+    {
+      "file": "src/app/results-scoring.tsx",
+      "line": 21,
+      "context": "// Mock data for pending scoring races"
+    },
+    {
+      "file": "src/app/results-scoring.tsx",
+      "line": 43,
+      "context": "// Mock data for series standings"
+    },
+    {
+      "file": "src/app/review.tsx",
+      "line": 10,
+      "context": "// Mock data from previous screens"
+    },
+    {
+      "file": "src/app/review.tsx",
+      "line": 54,
+      "context": "// Mock data for selected races"
+    },
+    {
+      "file": "src/app/score-races.tsx",
+      "line": 169,
+      "context": "placeholder=\"___\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 166,
+      "context": "placeholder=\"Enter event name\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 258,
+      "context": "placeholder=\"Add custom class\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 293,
+      "context": "placeholder=\"Number of laps\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 326,
+      "context": "placeholder=\"Enter time limit\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 356,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 368,
+      "context": "placeholder=\"Number of boats\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 381,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 455,
+      "context": "placeholder=\"Auto-filled from defaults\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 465,
+      "context": "placeholder=\"Select assistant PRO\""
+    },
+    {
+      "file": "src/app/series-race-config.tsx",
+      "line": 475,
+      "context": "placeholder=\"Select mark boat\""
+    },
+    {
+      "file": "src/app/series-standings.tsx",
+      "line": 19,
+      "context": "// Mock data for standings"
+    },
+    {
+      "file": "src/app/settings/change-password.tsx",
+      "line": 169,
+      "context": "placeholder=\"Enter current password\""
+    },
+    {
+      "file": "src/app/settings/change-password.tsx",
+      "line": 193,
+      "context": "placeholder=\"Enter new password\""
+    },
+    {
+      "file": "src/app/settings/change-password.tsx",
+      "line": 228,
+      "context": "placeholder=\"Confirm new password\""
+    },
+    {
+      "file": "src/app/settings/delete-account.tsx",
+      "line": 223,
+      "context": "placeholder=\"Type DELETE\""
+    },
+    {
+      "file": "src/app/settings/delete-account.tsx",
+      "line": 234,
+      "context": "placeholder=\"Enter your password\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 160,
+      "context": "placeholder=\"Enter your name\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 182,
+      "context": "placeholder=\"Enter your phone number\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 193,
+      "context": "placeholder=\"e.g., San Francisco, CA\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 203,
+      "context": "placeholder=\"Tell us about yourself\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 223,
+      "context": "placeholder=\"Enter your yacht club\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 233,
+      "context": "placeholder=\"Enter your sail number\""
+    },
+    {
+      "file": "src/app/settings/edit-profile.tsx",
+      "line": 243,
+      "context": "placeholder=\"e.g., J/70, Dragon, Swan 47\""
+    },
+    {
+      "file": "src/app/venue-intelligence.tsx",
+      "line": 12,
+      "context": "// Mock data for venue intelligence"
+    },
+    {
+      "file": "src/app/venue-verification-review.tsx",
+      "line": 13,
+      "context": "// Mock data for venue verification"
+    },
+    {
+      "file": "src/app/venue-verification.tsx",
+      "line": 256,
+      "context": "placeholder=\"Search venues...\""
+    },
+    {
+      "file": "src/app/venue-verification.tsx",
+      "line": 326,
+      "context": "placeholder=\"e.g. Main Harbor Marina\""
+    },
+    {
+      "file": "src/app/venue-verification.tsx",
+      "line": 336,
+      "context": "placeholder=\"Full address\""
+    },
+    {
+      "file": "src/app/venue-verification.tsx",
+      "line": 346,
+      "context": "placeholder=\"Dock, pier, or section details\""
+    },
+    {
+      "file": "src/app/venue-verification.tsx",
+      "line": 356,
+      "context": "placeholder=\"Additional information\""
+    },
+    {
+      "file": "src/components/admin/LocationGeocoder.tsx",
+      "line": 118,
+      "context": "placeholder=\"Enter location name or address\""
+    },
+    {
+      "file": "src/components/admin/LocationGeocoder.tsx",
+      "line": 119,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/admin/ResultsPollingDashboard.tsx",
+      "line": 366,
+      "context": "<View style={styles.placeholderContent}>"
+    },
+    {
+      "file": "src/components/admin/ResultsPollingDashboard.tsx",
+      "line": 368,
+      "context": "<Text style={styles.placeholderText}>"
+    },
+    {
+      "file": "src/components/admin/ResultsPollingDashboard.tsx",
+      "line": 371,
+      "context": "<Text style={styles.placeholderSubtext}>"
+    },
+    {
+      "file": "src/components/admin/ResultsPollingDashboard.tsx",
+      "line": 589,
+      "context": "placeholderContent: {"
+    },
+    {
+      "file": "src/components/admin/ResultsPollingDashboard.tsx",
+      "line": 595,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/components/admin/ResultsPollingDashboard.tsx",
+      "line": 602,
+      "context": "placeholderSubtext: {"
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 149,
+      "context": "// Mock document upload - in production use document picker"
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 150,
+      "context": "const mockUpload: DocumentUpload = {"
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 153,
+      "context": "data: new ArrayBuffer(1024), // Mock data"
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 162,
+      "context": "content: `📄 Uploading ${mockUpload.filename}...`"
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 165,
+      "context": "const analysis = await documentService.uploadDocument(mockUpload);"
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 350,
+      "context": "placeholder=\"Ask about sailing strategy, tactics, or rules...\""
+    },
+    {
+      "file": "src/components/ai/StrategyChatInterface.tsx",
+      "line": 351,
+      "context": "placeholderTextColor=\"#666\""
+    },
+    {
+      "file": "src/components/boats/Boat3DCard.tsx",
+      "line": 10,
+      "context": "import { MockBoat } from '@/src/constants/mockData';"
+    },
+    {
+      "file": "src/components/boats/Boat3DCard.tsx",
+      "line": 14,
+      "context": "boat: MockBoat;"
+    },
+    {
+      "file": "src/components/boats/Boat3DViewer.tsx",
+      "line": 25,
+      "context": "* Simple boat mesh - placeholder until GLTF models are loaded"
+    },
+    {
+      "file": "src/components/boats/BoatDetail.tsx",
+      "line": 28,
+      "context": "const MOCK_VENUE_CONFIGS: VenueConfig[] = ["
+    },
+    {
+      "file": "src/components/boats/BoatDetail.tsx",
+      "line": 166,
+      "context": "{MOCK_VENUE_CONFIGS.map((config, index) => ("
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 22,
+      "context": "// Mock data"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 23,
+      "context": "const MOCK_MAINTENANCE: MaintenanceItem[] = ["
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 108,
+      "context": "{ key: 'all', label: 'All', count: MOCK_MAINTENANCE.length },"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 109,
+      "context": "{ key: 'overdue', label: 'Overdue', count: MOCK_MAINTENANCE.filter(m => m.type ="
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 110,
+      "context": "{ key: 'due_soon', label: 'Due Soon', count: MOCK_MAINTENANCE.filter(m => m.type"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 111,
+      "context": "{ key: 'scheduled', label: 'Scheduled', count: MOCK_MAINTENANCE.filter(m => m.ty"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 112,
+      "context": "{ key: 'completed', label: 'Recent', count: MOCK_MAINTENANCE.filter(m => m.type "
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 116,
+      "context": "? MOCK_MAINTENANCE"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 117,
+      "context": ": MOCK_MAINTENANCE.filter(m => m.type === selectedFilter);"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 168,
+      "context": "{MOCK_MAINTENANCE.filter(m => m.type === 'overdue').length}"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 177,
+      "context": "{MOCK_MAINTENANCE.filter(m => m.type === 'due_soon').length}"
+    },
+    {
+      "file": "src/components/boats/MaintenanceSchedule.tsx",
+      "line": 186,
+      "context": "{MOCK_MAINTENANCE.filter(m => m.type === 'scheduled').length}"
+    },
+    {
+      "file": "src/components/boats/PerformanceAnalysis.tsx",
+      "line": 67,
+      "context": "// Mock data"
+    },
+    {
+      "file": "src/components/boats/PerformanceAnalysis.tsx",
+      "line": 1002,
+      "context": "chartPlaceholder: {"
+    },
+    {
+      "file": "src/components/boats/PerformanceAnalysis.tsx",
+      "line": 1013,
+      "context": "chartPlaceholderText: {"
+    },
+    {
+      "file": "src/components/boats/PerformanceAnalysis.tsx",
+      "line": 1019,
+      "context": "chartPlaceholderSubtext: {"
+    },
+    {
+      "file": "src/components/boats/RiggingConfig.tsx",
+      "line": 33,
+      "context": "// Mock data"
+    },
+    {
+      "file": "src/components/boats/RiggingConfig.tsx",
+      "line": 34,
+      "context": "const MOCK_PRESETS: RiggingPreset[] = ["
+    },
+    {
+      "file": "src/components/boats/RiggingConfig.tsx",
+      "line": 94,
+      "context": "const currentPreset = MOCK_PRESETS.find((p) => p.id === selectedPreset);"
+    },
+    {
+      "file": "src/components/boats/RiggingConfig.tsx",
+      "line": 154,
+      "context": "{MOCK_PRESETS.map((preset) => ("
+    },
+    {
+      "file": "src/components/boats/RiggingConfig.tsx",
+      "line": 214,
+      "context": "placeholder=\"Enter value\""
+    },
+    {
+      "file": "src/components/boats/SailInventory.tsx",
+      "line": 27,
+      "context": "// Mock data"
+    },
+    {
+      "file": "src/components/boats/SailInventory.tsx",
+      "line": 28,
+      "context": "const MOCK_SAILS: Sail[] = ["
+    },
+    {
+      "file": "src/components/boats/SailInventory.tsx",
+      "line": 97,
+      "context": "? MOCK_SAILS"
+    },
+    {
+      "file": "src/components/boats/SailInventory.tsx",
+      "line": 98,
+      "context": ": MOCK_SAILS.filter((sail) => sail.type === selectedType);"
+    },
+    {
+      "file": "src/components/boats/TuningGuideList.tsx",
+      "line": 37,
+      "context": "// Mock data for Dragon class guides (matches database)"
+    },
+    {
+      "file": "src/components/boats/TuningGuideList.tsx",
+      "line": 38,
+      "context": "const MOCK_DRAGON_GUIDES: TuningGuide[] = ["
+    },
+    {
+      "file": "src/components/boats/TuningGuideList.tsx",
+      "line": 101,
+      "context": "// Use mock data for now (TODO: Connect to Supabase)"
+    },
+    {
+      "file": "src/components/boats/TuningGuideList.tsx",
+      "line": 102,
+      "context": "const displayGuides = guides || (boatClass === 'Dragon' ? MOCK_DRAGON_GUIDES : ["
+    },
+    {
+      "file": "src/components/calendar/MapView.tsx",
+      "line": 234,
+      "context": "{/* Placeholder map view - shows message for web, full map on mobile */}"
+    },
+    {
+      "file": "src/components/coach/CoachDashboard.tsx",
+      "line": 113,
+      "context": "// Generate mock payout history (in production, this would come from the backend"
+    },
+    {
+      "file": "src/components/coach/CoachDashboard.tsx",
+      "line": 114,
+      "context": "setPayoutHistory(generateMockPayoutHistory(completedSessions));"
+    },
+    {
+      "file": "src/components/coach/CoachDashboard.tsx",
+      "line": 124,
+      "context": "const generateMockPayoutHistory = (completedSessions: CoachingSession[]): Payout"
+    },
+    {
+      "file": "src/components/coach/CoachDiscovery.tsx",
+      "line": 108,
+      "context": "placeholder=\"Search by location, boat class, or coach name...\""
+    },
+    {
+      "file": "src/components/coach/CoachFilters.tsx",
+      "line": 235,
+      "context": "placeholder=\"Min\""
+    },
+    {
+      "file": "src/components/coach/CoachFilters.tsx",
+      "line": 246,
+      "context": "placeholder=\"Max\""
+    },
+    {
+      "file": "src/components/coach/CoachFilters.tsx",
+      "line": 367,
+      "context": "placeholder=\"e.g., 0.7 for 70% match\""
+    },
+    {
+      "file": "src/components/coach/SessionReview.tsx",
+      "line": 234,
+      "context": "placeholder=\"Share details about your coaching session, what you learned, and ho"
+    },
+    {
+      "file": "src/components/coach/SessionReview.tsx",
+      "line": 252,
+      "context": "placeholder=\"What were the best parts of this session?\""
+    },
+    {
+      "file": "src/components/coach/SessionReview.tsx",
+      "line": 264,
+      "context": "placeholder=\"Any suggestions for the coach to improve future sessions?\""
+    },
+    {
+      "file": "src/components/coach/booking/BookingFlow.tsx",
+      "line": 201,
+      "context": "placeholder=\"E.g., Improve spinnaker handling, race starts, tactical decisions.."
+    },
+    {
+      "file": "src/components/coach/booking/BookingFlow.tsx",
+      "line": 214,
+      "context": "placeholder=\"E.g., 5 years racing Dragons, competed in 3 world championships...\""
+    },
+    {
+      "file": "src/components/coach/booking/BookingFlow.tsx",
+      "line": 227,
+      "context": "placeholder=\"Any specific questions you'd like to discuss?\""
+    },
+    {
+      "file": "src/components/coach/registration/CredentialsStep.tsx",
+      "line": 34,
+      "context": "placeholder=\"5\""
+    },
+    {
+      "file": "src/components/coach/registration/CredentialsStep.tsx",
+      "line": 45,
+      "context": "placeholder=\"50\""
+    },
+    {
+      "file": "src/components/coach/registration/MediaStep.tsx",
+      "line": 22,
+      "context": "<View style={styles.placeholder}>"
+    },
+    {
+      "file": "src/components/coach/registration/MediaStep.tsx",
+      "line": 23,
+      "context": "<Text style={styles.placeholderText}>"
+    },
+    {
+      "file": "src/components/coach/registration/MediaStep.tsx",
+      "line": 44,
+      "context": "placeholder: {"
+    },
+    {
+      "file": "src/components/coach/registration/MediaStep.tsx",
+      "line": 51,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/components/coach/registration/PersonalInfoStep.tsx",
+      "line": 113,
+      "context": "placeholder=\"John\""
+    },
+    {
+      "file": "src/components/coach/registration/PersonalInfoStep.tsx",
+      "line": 124,
+      "context": "placeholder=\"Smith\""
+    },
+    {
+      "file": "src/components/coach/registration/PersonalInfoStep.tsx",
+      "line": 137,
+      "context": "placeholder=\"john@example.com\""
+    },
+    {
+      "file": "src/components/coach/registration/PersonalInfoStep.tsx",
+      "line": 149,
+      "context": "placeholder=\"+1 (555) 123-4567\""
+    },
+    {
+      "file": "src/components/coach/registration/PersonalInfoStep.tsx",
+      "line": 161,
+      "context": "placeholder=\"San Francisco, CA\""
+    },
+    {
+      "file": "src/components/coach/registration/PersonalInfoStep.tsx",
+      "line": 234,
+      "context": "placeholder=\"Tell sailors about your sailing background, coaching philosophy, an"
+    },
+    {
+      "file": "src/components/coach/registration/ServicesStep.tsx",
+      "line": 59,
+      "context": "placeholder=\"120\""
+    },
+    {
+      "file": "src/components/courses/CourseBuilder.tsx",
+      "line": 15,
+      "context": "import { MockCourse } from '@/src/constants/mockData';"
+    },
+    {
+      "file": "src/components/courses/CourseBuilder.tsx",
+      "line": 27,
+      "context": "initialCourse?: MockCourse;"
+    },
+    {
+      "file": "src/components/courses/CourseBuilder.tsx",
+      "line": 28,
+      "context": "onSave?: (course: MockCourse) => void;"
+    },
+    {
+      "file": "src/components/courses/CourseBuilder.tsx",
+      "line": 42,
+      "context": "const [courseType, setCourseType] = useState<MockCourse['courseType']>("
+    },
+    {
+      "file": "src/components/courses/CourseBuilder.tsx",
+      "line": 97,
+      "context": "const course: MockCourse = {"
+    },
+    {
+      "file": "src/components/courses/CourseBuilder.tsx",
+      "line": 355,
+      "context": "// Placeholder for web map view"
+    },
+    {
+      "file": "src/components/dashboard/CoursePredictor.tsx",
+      "line": 56,
+      "context": "predictedCourse: 'Course A', // Placeholder - would be extracted from agent resp"
+    },
+    {
+      "file": "src/components/dashboard/RecentRaceAnalysis.tsx",
+      "line": 56,
+      "context": "// For now, show placeholder"
+    },
+    {
+      "file": "src/components/dashboard/WeatherIntelligence.tsx",
+      "line": 39,
+      "context": "// For now, return mock data"
+    },
+    {
+      "file": "src/components/dashboard/club/index.ts",
+      "line": 3,
+      "context": "// Placeholder exports for components that will be created"
+    },
+    {
+      "file": "src/components/dashboard/coach/ClientsTab.tsx",
+      "line": 107,
+      "context": "placeholder=\"Search clients...\""
+    },
+    {
+      "file": "src/components/dashboard/coach/ClientsTab.tsx",
+      "line": 110,
+      "context": "placeholderTextColor=\"#9CA3AF\""
+    },
+    {
+      "file": "src/components/dashboard/sailor/SailorOverviewEnhanced.tsx",
+      "line": 338,
+      "context": "<Text style={styles.placeholderText}>No fleet updates yet—share a tuning guide o"
+    },
+    {
+      "file": "src/components/dashboard/sailor/SailorOverviewEnhanced.tsx",
+      "line": 587,
+      "context": "<View style={styles.crewPlaceholder}>"
+    },
+    {
+      "file": "src/components/dashboard/sailor/SailorOverviewEnhanced.tsx",
+      "line": 589,
+      "context": "<Text style={styles.crewPlaceholderText}>"
+    },
+    {
+      "file": "src/components/dashboard/sailor/SailorOverviewEnhanced.tsx",
+      "line": 757,
+      "context": "crewPlaceholder: {"
+    },
+    {
+      "file": "src/components/dashboard/sailor/SailorOverviewEnhanced.tsx",
+      "line": 767,
+      "context": "crewPlaceholderText: {"
+    },
+    {
+      "file": "src/components/developer/DeveloperDocumentUploader.tsx",
+      "line": 102,
+      "context": "const mockFilePaths = ["
+    },
+    {
+      "file": "src/components/developer/DeveloperDocumentUploader.tsx",
+      "line": 110,
+      "context": "mockFilePaths,"
+    },
+    {
+      "file": "src/components/documents/DocumentViewer.tsx",
+      "line": 51,
+      "context": "// Debug mode - use dummy user ID if no user (for testing database connection)"
+    },
+    {
+      "file": "src/components/fleets/AnnouncementComposer.tsx",
+      "line": 110,
+      "context": "placeholder=\"Important update, race notice, or fleet communication...\""
+    },
+    {
+      "file": "src/components/fleets/AnnouncementComposer.tsx",
+      "line": 111,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/fleets/FleetActivityFeed.tsx",
+      "line": 392,
+      "context": "placeholder=\"Share with your fleet...\""
+    },
+    {
+      "file": "src/components/fleets/FleetActivityFeed.tsx",
+      "line": 481,
+      "context": "placeholder=\"Add a comment...\""
+    },
+    {
+      "file": "src/components/fleets/FleetFeed.tsx",
+      "line": 141,
+      "context": "placeholder=\"Share with your fleet...\""
+    },
+    {
+      "file": "src/components/fleets/PostComposer.tsx",
+      "line": 120,
+      "context": "placeholder={`Share with your fleet...`}"
+    },
+    {
+      "file": "src/components/fleets/PostComposer.tsx",
+      "line": 121,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/fleets/ResourceUploadComposer.tsx",
+      "line": 153,
+      "context": "placeholder=\"tuning, heavy air, setup (comma separated)\""
+    },
+    {
+      "file": "src/components/fleets/ResourceUploadComposer.tsx",
+      "line": 154,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/landing/HeroTabs.tsx",
+      "line": 525,
+      "context": "{/* iPhone Mockup */}"
+    },
+    {
+      "file": "src/components/landing/HeroTabs.tsx",
+      "line": 1173,
+      "context": "phoneMockup: {"
+    },
+    {
+      "file": "src/components/landing/maps/SailorRaceStrategyMap.tsx",
+      "line": 72,
+      "context": "{/* Placeholder for SVG content */}"
+    },
+    {
+      "file": "src/components/map/Map3DView.tsx",
+      "line": 274,
+      "context": "<View style={[styles.mapPlaceholder, {"
+    },
+    {
+      "file": "src/components/map/Map3DView.tsx",
+      "line": 1042,
+      "context": "mapPlaceholder: {"
+    },
+    {
+      "file": "src/components/map/ProfessionalMapScreen.tsx",
+      "line": 474,
+      "context": "mapPlaceholder: {"
+    },
+    {
+      "file": "src/components/map/ProfessionalMapScreen.tsx",
+      "line": 481,
+      "context": "placeholderText: {"
+    },
+    {
+      "file": "src/components/map/ProfessionalMapScreen.tsx",
+      "line": 488,
+      "context": "placeholderSubtext: {"
+    },
+    {
+      "file": "src/components/map/ProfessionalMapScreen.tsx",
+      "line": 494,
+      "context": "placeholderDetails: {"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 46,
+      "context": "// Temporary mock implementation for development"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 47,
+      "context": "this.map = this.createMockMap(container, config);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 52,
+      "context": "console.log('🗺️ Mock map initialized for development');"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 368,
+      "context": "private createMockMap(container: HTMLElement, config: AdvancedMapConfig): any {"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 369,
+      "context": "// Create a mock map object that provides the interface expected by the componen"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 370,
+      "context": "const mockMap = {"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 371,
+      "context": "// Mock event system"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 402,
+      "context": "// Mock camera methods"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 404,
+      "context": "console.log('📷 Mock setCamera:', options);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 408,
+      "context": "console.log('🎬 Mock easeTo:', options);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 412,
+      "context": "console.log('✈️ Mock flyTo:', options);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 415,
+      "context": "// Mock layer methods"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 417,
+      "context": "console.log('🗂️ Mock addLayer:', layer.id);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 421,
+      "context": "console.log('🗑️ Mock removeLayer:', layerId);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 425,
+      "context": "console.log('📡 Mock addSource:', sourceId);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 429,
+      "context": "console.log('📡 Mock removeSource:', sourceId);"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 432,
+      "context": "// Mock utility methods"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 438,
+      "context": "console.log('🎨 Mock setStyle');"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 442,
+      "context": "setBearing(bearing: number) { console.log('🧭 Mock setBearing:', bearing); },"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 445,
+      "context": "setPitch(pitch: number) { console.log('📐 Mock setPitch:', pitch); },"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 448,
+      "context": "setZoom(zoom: number) { console.log('🔍 Mock setZoom:', zoom); },"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 451,
+      "context": "setCenter(center: any) { console.log('🎯 Mock setCenter:', center); },"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 453,
+      "context": "// Mock performance methods"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 457,
+      "context": "// Mock container"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 461,
+      "context": "// Style the container to show it's a mock map"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 474,
+      "context": "<div style=\"font-size: 14px; opacity: 0.8; margin-top: 8px;\">Mock Map for Develo"
+    },
+    {
+      "file": "src/components/map/engines/MapLibreEngine.tsx",
+      "line": 479,
+      "context": "return mockMap;"
+    },
+    {
+      "file": "src/components/onboarding/ChatOnboardingInterface.tsx",
+      "line": 99,
+      "context": "placeholder=\"Type your message...\""
+    },
+    {
+      "file": "src/components/onboarding/ClubOnboardingChat.tsx",
+      "line": 230,
+      "context": "placeholder=\"Type your message...\""
+    },
+    {
+      "file": "src/components/onboarding/ClubOnboardingChat.tsx",
+      "line": 231,
+      "context": "placeholderTextColor=\"#9CA3AF\""
+    },
+    {
+      "file": "src/components/onboarding/FreeformInputField.tsx",
+      "line": 13,
+      "context": "placeholder: string;"
+    },
+    {
+      "file": "src/components/onboarding/FreeformInputField.tsx",
+      "line": 23,
+      "context": "placeholder,"
+    },
+    {
+      "file": "src/components/onboarding/FreeformInputField.tsx",
+      "line": 105,
+      "context": "placeholder={placeholder}"
+    },
+    {
+      "file": "src/components/onboarding/FreeformInputField.tsx",
+      "line": 111,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 78,
+      "context": "placeholder=\"e.g., Bram Van Olsen\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 80,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 155,
+      "context": "placeholder=\"e.g., Dragon\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 157,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 171,
+      "context": "placeholder=\"e.g., HKG 59 or D59\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 173,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 187,
+      "context": "placeholder=\"e.g., Blue Lightning\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 189,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 211,
+      "context": "placeholder=\"e.g., Petticrows, C&C Yachts\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 213,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 224,
+      "context": "placeholder=\"e.g., North Sails, Quantum, UK Sailmakers\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 226,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 237,
+      "context": "placeholder=\"e.g., Southern Spars, Hall Spars\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 239,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 250,
+      "context": "placeholder=\"e.g., Selden, Z-Spars\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 252,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 274,
+      "context": "placeholder=\"e.g., Royal Hong Kong Yacht Club\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 276,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 290,
+      "context": "placeholder=\"e.g., Victoria Harbour, Hong Kong\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingFormFields.tsx",
+      "line": 292,
+      "context": "placeholderTextColor=\"#94a3b8\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingSummary.tsx",
+      "line": 158,
+      "context": "placeholder=\"Boat class\""
+    },
+    {
+      "file": "src/components/onboarding/OnboardingSummary.tsx",
+      "line": 170,
+      "context": "placeholder=\"Sail number (optional)\""
+    },
+    {
+      "file": "src/components/onboarding/QuickPasteOptions.tsx",
+      "line": 89,
+      "context": "placeholder=\"Croucher 1 & 2    27/09/2025 Port Shelter TRUE   FALSE"
+    },
+    {
+      "file": "src/components/onboarding/QuickPasteOptions.tsx",
+      "line": 95,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/onboarding/QuickPasteOptions.tsx",
+      "line": 124,
+      "context": "placeholder=\"liability for material"
+    },
+    {
+      "file": "src/components/onboarding/QuickPasteOptions.tsx",
+      "line": 132,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/onboarding/QuickPasteOptions.tsx",
+      "line": 161,
+      "context": "placeholder=\"https://www.rhkyc.org.hk/storage/app/media/Sailing/race-management/"
+    },
+    {
+      "file": "src/components/onboarding/QuickPasteOptions.tsx",
+      "line": 163,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/race/CoachRaceInterface.tsx",
+      "line": 28,
+      "context": "// Mock coaching data"
+    },
+    {
+      "file": "src/components/race/CoachRaceInterface.tsx",
+      "line": 29,
+      "context": "const mockSessions: CoachingSession[] = ["
+    },
+    {
+      "file": "src/components/race/CoachRaceInterface.tsx",
+      "line": 56,
+      "context": "const mockStudents: StudentProgress[] = ["
+    },
+    {
+      "file": "src/components/race/CoachRaceInterface.tsx",
+      "line": 147,
+      "context": "{mockStudents.map((student) => ("
+    },
+    {
+      "file": "src/components/race/CoachRaceInterface.tsx",
+      "line": 205,
+      "context": "{mockSessions.map((session) => ("
+    },
+    {
+      "file": "src/components/race/CourseDesigner.tsx",
+      "line": 18,
+      "context": "const MOCK_BOUNDS = {"
+    },
+    {
+      "file": "src/components/race/SailorRaceInterface.tsx",
+      "line": 20,
+      "context": "// Mock race data for sailors"
+    },
+    {
+      "file": "src/components/race/SailorRaceInterface.tsx",
+      "line": 21,
+      "context": "const mockRaces: RaceEvent[] = ["
+    },
+    {
+      "file": "src/components/race/SailorRaceInterface.tsx",
+      "line": 115,
+      "context": "{mockRaces.filter(race => race.status === 'upcoming' || race.status === 'active'"
+    },
+    {
+      "file": "src/components/race/SailorRaceInterface.tsx",
+      "line": 209,
+      "context": "{mockRaces.filter(race => race.status === 'completed').map((race) => ("
+    },
+    {
+      "file": "src/components/race/UserTypeAwareRaces.tsx",
+      "line": 10,
+      "context": "// Mock user types - in a real app this would come from user profile/auth"
+    },
+    {
+      "file": "src/components/race/UserTypeAwareRaces.tsx",
+      "line": 21,
+      "context": "// Mock user type detection - in real app this would come from user profile"
+    },
+    {
+      "file": "src/components/race/UserTypeAwareRaces.tsx",
+      "line": 25,
+      "context": "const mockTypes: UserType[] = ['sailor', 'yacht_club', 'coach'];"
+    },
+    {
+      "file": "src/components/race/UserTypeAwareRaces.tsx",
+      "line": 27,
+      "context": "return mockTypes[hash % mockTypes.length] || 'sailor';"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 17,
+      "context": "// Mock weather data for demonstration"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 18,
+      "context": "const mockWeatherData: WeatherData = {"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 49,
+      "context": "// Add some randomness to the mock data"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 51,
+      "context": "...mockWeatherData,"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 52,
+      "context": "windDirection: mockWeatherData.windDirection + (Math.random() - 0.5) * 40,"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 53,
+      "context": "windSpeed: Math.max(5, mockWeatherData.windSpeed + (Math.random() - 0.5) * 8),"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 55,
+      "context": "...mockWeatherData.current!,"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 56,
+      "context": "direction: mockWeatherData.current!.direction + (Math.random() - 0.5) * 60,"
+    },
+    {
+      "file": "src/components/race/WeatherIntegration.tsx",
+      "line": 57,
+      "context": "speed: Math.max(0, mockWeatherData.current!.speed + (Math.random() - 0.5) * 0.5)"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 5,
+      "context": "// MapLibre GL JS for web, placeholder for native"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 58,
+      "context": "// Placeholder for nautical chart tiles"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 273,
+      "context": "// Placeholder for wind visualization"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 279,
+      "context": "// Placeholder for current visualization"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 284,
+      "context": "// Placeholder for depth contours"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 289,
+      "context": "// Placeholder for tactical zones (laylines, favored sides)"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 293,
+      "context": "// Native placeholder"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 296,
+      "context": "<View style={styles.nativePlaceholder}>"
+    },
+    {
+      "file": "src/components/race/shared/CourseMap.tsx",
+      "line": 314,
+      "context": "nativePlaceholder: {"
+    },
+    {
+      "file": "src/components/race/yacht-club/ProfessionalCourseDesigner.tsx",
+      "line": 297,
+      "context": "<ThemedText style={styles.canvasPlaceholder}>"
+    },
+    {
+      "file": "src/components/race/yacht-club/ProfessionalCourseDesigner.tsx",
+      "line": 485,
+      "context": "canvasPlaceholder: {"
+    },
+    {
+      "file": "src/components/race/yacht-club/YachtClubCourseDesigner.tsx",
+      "line": 449,
+      "context": "<View style={styles.mapPlaceholder}>"
+    },
+    {
+      "file": "src/components/race/yacht-club/YachtClubCourseDesigner.tsx",
+      "line": 450,
+      "context": "<ThemedText style={styles.mapPlaceholderText}>"
+    },
+    {
+      "file": "src/components/race/yacht-club/YachtClubCourseDesigner.tsx",
+      "line": 453,
+      "context": "<ThemedText style={styles.mapPlaceholderSubtext}>"
+    },
+    {
+      "file": "src/components/race/yacht-club/YachtClubCourseDesigner.tsx",
+      "line": 730,
+      "context": "mapPlaceholder: {"
+    },
+    {
+      "file": "src/components/race/yacht-club/YachtClubCourseDesigner.tsx",
+      "line": 736,
+      "context": "mapPlaceholderText: {"
+    },
+    {
+      "file": "src/components/race/yacht-club/YachtClubCourseDesigner.tsx",
+      "line": 742,
+      "context": "mapPlaceholderSubtext: {"
+    },
+    {
+      "file": "src/components/race-control/ProtestModal.tsx",
+      "line": 250,
+      "context": "placeholder=\"e.g., Mark 2 rounding, Start line\""
+    },
+    {
+      "file": "src/components/race-control/ProtestModal.tsx",
+      "line": 251,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/race-control/ProtestModal.tsx",
+      "line": 262,
+      "context": "placeholder=\"Describe what happened in detail...\""
+    },
+    {
+      "file": "src/components/race-control/ProtestModal.tsx",
+      "line": 263,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/race-control/ProtestModal.tsx",
+      "line": 301,
+      "context": "placeholder=\"Comma-separated names\""
+    },
+    {
+      "file": "src/components/race-control/ProtestModal.tsx",
+      "line": 302,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/race-strategy/OnXMapsInterface.tsx",
+      "line": 616,
+      "context": "<View style={styles.mapPlaceholder}>"
+    },
+    {
+      "file": "src/components/race-strategy/OnXMapsInterface.tsx",
+      "line": 618,
+      "context": "<Text variant=\"bodyMedium\" style={styles.mapPlaceholderText}>"
+    },
+    {
+      "file": "src/components/race-strategy/OnXMapsInterface.tsx",
+      "line": 761,
+      "context": "mapPlaceholder: {"
+    },
+    {
+      "file": "src/components/race-strategy/OnXMapsInterface.tsx",
+      "line": 766,
+      "context": "mapPlaceholderText: {"
+    },
+    {
+      "file": "src/components/races/AddRaceModal.tsx",
+      "line": 132,
+      "context": "// For now, show placeholder"
+    },
+    {
+      "file": "src/components/races/AddRaceModal.tsx",
+      "line": 226,
+      "context": "placeholder=\"Paste race details here... (e.g., Hong Kong Dragon Championship at "
+    },
+    {
+      "file": "src/components/races/AddRaceModal.tsx",
+      "line": 227,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 173,
+      "context": "placeholder=\"Describe your overall race experience...\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 174,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 224,
+      "context": "placeholder=\"Wind shifts, boat speed, tactics...\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 225,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 243,
+      "context": "placeholder=\"Angles, gybes, speed...\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 244,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 262,
+      "context": "placeholder=\"Describe any issues at marks...\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 263,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 281,
+      "context": "placeholder=\"Describe any incidents...\""
+    },
+    {
+      "file": "src/components/races/PostRaceInterview.tsx",
+      "line": 282,
+      "context": "placeholderTextColor=\"#9ca3af\""
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 11,
+      "context": "import { calculateCountdown } from '@/src/constants/mockData';"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 39,
+      "context": "isMock?: boolean; // True for mock data"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 54,
+      "context": "isMock = false,"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 70,
+      "context": "if (isMock) {"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 71,
+      "context": "// Show alert or toast that this is mock data"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 72,
+      "context": "console.log('Mock race card tapped - real implementation would navigate to race "
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 91,
+      "context": "isMock && styles.mockCard,"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 96,
+      "context": "{/* Mock Badge */}"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 97,
+      "context": "{isMock && ("
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 98,
+      "context": "<View style={styles.mockBadge}>"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 99,
+      "context": "<Text style={styles.mockBadgeText}>DEMO</Text>"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 115,
+      "context": "{!isMock && onRaceComplete ? ("
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 219,
+      "context": "mockCard: {"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 224,
+      "context": "mockBadge: {"
+    },
+    {
+      "file": "src/components/races/RaceCard.tsx",
+      "line": 234,
+      "context": "mockBadgeText: {"
+    },
+    {
+      "file": "src/components/racing/RaceDayInterface.tsx",
+      "line": 217,
+      "context": "// Mock calculation - in real implementation, this would use course marks and st"
+    },
+    {
+      "file": "src/components/racing/RaceDayInterface.tsx",
+      "line": 218,
+      "context": "const mockPosition: RacePosition = {"
+    },
+    {
+      "file": "src/components/racing/RaceDayInterface.tsx",
+      "line": 230,
+      "context": "setRacePosition(mockPosition);"
+    },
+    {
+      "file": "src/components/racing/RaceDayInterface.tsx",
+      "line": 233,
+      "context": "if (mockPosition.laylineInfo.onPortLayline && !alertSoundsRef.current['port_layl"
+    },
+    {
+      "file": "src/components/racing/RaceDayInterface.tsx",
+      "line": 244,
+      "context": "if (mockPosition.distanceToStartLine < 50 && !raceTimer.raceStarted && !alertSou"
+    },
+    {
+      "file": "src/components/registration/PaymentFlowComponent.tsx",
+      "line": 124,
+      "context": "placeholderText: '#9ca3af', // gray-400"
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 238,
+      "context": "placeholder=\"Choose your boat\""
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 270,
+      "context": "placeholder=\"e.g., Dragon, IRC A, One-Design\""
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 293,
+      "context": "placeholder=\"e.g., Pro, Corinthian, Youth\""
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 312,
+      "context": "placeholder=\"e.g., USA 123\""
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 397,
+      "context": "placeholder=\"Any special requests or requirements...\""
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 416,
+      "context": "placeholder=\"e.g., Vegetarian, Gluten-free, Allergies\""
+    },
+    {
+      "file": "src/components/registration/RaceRegistrationForm.tsx",
+      "line": 434,
+      "context": "placeholder=\"Any equipment-specific notes or requirements...\""
+    },
+    {
+      "file": "src/components/results/ResultsSearchInterface.tsx",
+      "line": 197,
+      "context": "placeholder={getSearchPlaceholder()}"
+    },
+    {
+      "file": "src/components/results/ResultsSearchInterface.tsx",
+      "line": 210,
+      "context": "const getSearchPlaceholder = (): string => {"
+    },
+    {
+      "file": "src/components/results/ResultsSearchInterface.tsx",
+      "line": 235,
+      "context": "placeholder=\"Optional\""
+    },
+    {
+      "file": "src/components/results/ResultsSearchInterface.tsx",
+      "line": 247,
+      "context": "placeholder=\"YYYY-MM-DD\""
+    },
+    {
+      "file": "src/components/results/ResultsSearchInterface.tsx",
+      "line": 257,
+      "context": "placeholder=\"YYYY-MM-DD\""
+    },
+    {
+      "file": "src/components/sailor/AddEquipmentForm.tsx",
+      "line": 136,
+      "context": "placeholder=\"e.g., Main #1 - All Purpose\""
+    },
+    {
+      "file": "src/components/sailor/AddEquipmentForm.tsx",
+      "line": 207,
+      "context": "placeholder=\"Optional\""
+    },
+    {
+      "file": "src/components/sailor/AddEquipmentForm.tsx",
+      "line": 218,
+      "context": "placeholder=\"MM/DD/YYYY\""
+    },
+    {
+      "file": "src/components/sailor/AddEquipmentForm.tsx",
+      "line": 231,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/components/sailor/AddEquipmentForm.tsx",
+      "line": 246,
+      "context": "placeholder=\"e.g., North Sails Hong Kong\""
+    },
+    {
+      "file": "src/components/sailor/AddEquipmentForm.tsx",
+      "line": 257,
+      "context": "placeholder=\"Any additional notes about this equipment...\""
+    },
+    {
+      "file": "src/components/sailor/AlertSubscriptionModal.tsx",
+      "line": 121,
+      "context": "placeholder=\"your@email.com\""
+    },
+    {
+      "file": "src/components/sailor/AlertSubscriptionModal.tsx",
+      "line": 155,
+      "context": "placeholder=\"+1 (555) 123-4567\""
+    },
+    {
+      "file": "src/components/sailor/BoatEquipmentInventory.tsx",
+      "line": 48,
+      "context": "// Mock data for now"
+    },
+    {
+      "file": "src/components/sailor/ClubsAssociationsSection.tsx",
+      "line": 33,
+      "context": "// Mock data - this would come from Supabase in a real implementation"
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 145,
+      "context": "placeholder=\"e.g., Heavy Air Setup or Light Wind Hong Kong\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 157,
+      "context": "placeholder=\"What conditions is this setup optimized for?\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 173,
+      "context": "placeholder=\"6\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 186,
+      "context": "placeholder=\"12\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 235,
+      "context": "placeholder=\"e.g., Royal Hong Kong Yacht Club\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 253,
+      "context": "placeholder=\"e.g., 28\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 268,
+      "context": "placeholder=\"e.g., 350 lbs\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 283,
+      "context": "placeholder=\"e.g., tight\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 298,
+      "context": "placeholder=\"e.g., max\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 323,
+      "context": "placeholder=\"e.g., maximum\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 338,
+      "context": "placeholder=\"e.g., heavy\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 353,
+      "context": "placeholder=\"e.g., tight\""
+    },
+    {
+      "file": "src/components/sailor/CreateTuningSetupForm.tsx",
+      "line": 368,
+      "context": "placeholder=\"e.g., down 6 inches\""
+    },
+    {
+      "file": "src/components/sailor/CrewAvailabilityCalendar.tsx",
+      "line": 415,
+      "context": "placeholder=\"e.g., Vacation, Work commitment\""
+    },
+    {
+      "file": "src/components/sailor/CrewAvailabilityCalendar.tsx",
+      "line": 416,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/sailor/CrewAvailabilityCalendar.tsx",
+      "line": 428,
+      "context": "placeholder=\"Additional details...\""
+    },
+    {
+      "file": "src/components/sailor/CrewAvailabilityCalendar.tsx",
+      "line": 429,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 505,
+      "context": "placeholder=\"Enter name\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 506,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 518,
+      "context": "placeholder=\"Enter email\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 519,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 598,
+      "context": "placeholder=\"Enter name\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 599,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 650,
+      "context": "placeholder=\"Add notes about this crew member...\""
+    },
+    {
+      "file": "src/components/sailor/CrewManagement.tsx",
+      "line": 651,
+      "context": "placeholderTextColor=\"#94A3B8\""
+    },
+    {
+      "file": "src/components/sailor/LogMaintenanceForm.tsx",
+      "line": 207,
+      "context": "placeholder=\"MM/DD/YYYY\""
+    },
+    {
+      "file": "src/components/sailor/LogMaintenanceForm.tsx",
+      "line": 223,
+      "context": "placeholder=\"What was done...\""
+    },
+    {
+      "file": "src/components/sailor/LogMaintenanceForm.tsx",
+      "line": 239,
+      "context": "placeholder=\"e.g., North Sails Hong Kong or Self\""
+    },
+    {
+      "file": "src/components/sailor/LogMaintenanceForm.tsx",
+      "line": 250,
+      "context": "placeholder=\"Where was the work done?\""
+    },
+    {
+      "file": "src/components/sailor/LogMaintenanceForm.tsx",
+      "line": 263,
+      "context": "placeholder=\"0.00\""
+    },
+    {
+      "file": "src/components/sailor/LogMaintenanceForm.tsx",
+      "line": 331,
+      "context": "placeholder=\"Any other details, recommendations, or observations...\""
+    },
+    {
+      "file": "src/components/sailor/UploadDocumentForm.tsx",
+      "line": 120,
+      "context": "placeholder=\"e.g., North Sails Mainsail Manual 2024\""
+    },
+    {
+      "file": "src/components/sailor/UploadDocumentForm.tsx",
+      "line": 167,
+      "context": "placeholder=\"e.g., Sails, Rigging, Electronics\""
+    },
+    {
+      "file": "src/components/sailor/UploadDocumentForm.tsx",
+      "line": 192,
+      "context": "placeholder=\"Additional information about this document...\""
+    },
+    {
+      "file": "src/components/ui/input/index.tsx",
+      "line": 79,
+      "context": "base: 'flex-1 text-typography-900 py-0 px-3 placeholder:text-typography-500 h-fu"
+    },
+    {
+      "file": "src/components/ui/select/index.tsx",
+      "line": 75,
+      "context": "base: 'py-auto px-3 placeholder:text-typography-500 web:w-full h-full text-typog"
+    },
+    {
+      "file": "src/components/ui/textarea/index.tsx",
+      "line": 36,
+      "context": "base: 'p-2 web:outline-0 web:outline-none flex-1 color-typography-900 align-text"
+    },
+    {
+      "file": "src/components/venue/DiscoverySection.tsx",
+      "line": 104,
+      "context": "placeholder=\"Search for places...\""
+    },
+    {
+      "file": "src/components/venue/DiscoverySection.tsx",
+      "line": 105,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/venue/GlobalVenueIntelligence.tsx",
+      "line": 382,
+      "context": "<Text style={styles.searchPlaceholder}>Search venues, cities, or clubs...</Text>"
+    },
+    {
+      "file": "src/components/venue/GlobalVenueIntelligence.tsx",
+      "line": 797,
+      "context": "searchPlaceholder: {"
+    },
+    {
+      "file": "src/components/venue/NetworkSidebar.tsx",
+      "line": 219,
+      "context": "placeholder=\"Search Hong Kong, RHKYC, North Sails...\""
+    },
+    {
+      "file": "src/components/venue/NetworkSidebar.tsx",
+      "line": 220,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/venue/VenueSelector.tsx",
+      "line": 260,
+      "context": "placeholder=\"Search venues...\""
+    },
+    {
+      "file": "src/components/venue/VenueSelector.tsx",
+      "line": 261,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/components/venue/VenueSidebar.tsx",
+      "line": 151,
+      "context": "placeholder=\"Search venues...\""
+    },
+    {
+      "file": "src/components/venue/VenueSidebar.tsx",
+      "line": 152,
+      "context": "placeholderTextColor=\"#999\""
+    },
+    {
+      "file": "src/constants/accessibleColors.ts",
+      "line": 191,
+      "context": "// This is a placeholder - implement actual contrast calculation"
+    },
+    {
+      "file": "src/constants/designSystem.ts",
+      "line": 119,
+      "context": "400: '#9ca3af',  // Placeholder text"
+    },
+    {
+      "file": "src/constants/designSystem.ts",
+      "line": 330,
+      "context": "placeholder: colors.neutral[400],"
+    },
+    {
+      "file": "src/constants/designSystem.ts",
+      "line": 429,
+      "context": "// This is a placeholder - in production, use a proper contrast checker library"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 2,
+      "context": "* Mock Data for RegattaFlow"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 6,
+      "context": "export interface MockRace {"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 35,
+      "context": "courseId?: string; // Links to MockCourse"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 36,
+      "context": "boatId?: string; // Links to MockBoat"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 39,
+      "context": "export interface MockBoat {"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 60,
+      "context": "export interface MockCourse {"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 82,
+      "context": "race: MockRace;"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 83,
+      "context": "course?: MockCourse;"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 84,
+      "context": "boat?: MockBoat;"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 88,
+      "context": "// MOCK RACES"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 91,
+      "context": "export const MOCK_RACES: MockRace[] = ["
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 93,
+      "context": "id: 'mock-race-1',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 121,
+      "context": "courseId: 'mock-course-1',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 122,
+      "context": "boatId: 'mock-boat-1',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 125,
+      "context": "id: 'mock-race-2',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 152,
+      "context": "courseId: 'mock-course-2',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 153,
+      "context": "boatId: 'mock-boat-2',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 158,
+      "context": "// MOCK BOATS"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 161,
+      "context": "export const MOCK_BOATS: MockBoat[] = ["
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 163,
+      "context": "id: 'mock-boat-1',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 183,
+      "context": "id: 'mock-boat-2',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 205,
+      "context": "// MOCK COURSES"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 208,
+      "context": "export const MOCK_COURSES: MockCourse[] = ["
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 210,
+      "context": "id: 'mock-course-1',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 231,
+      "context": "id: 'mock-course-2',"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 277,
+      "context": "* Get mock data based on user's empty state"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 279,
+      "context": "export function getMockDataForUser(userId: string) {"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 281,
+      "context": "races: MOCK_RACES,"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 282,
+      "context": "boats: MOCK_BOATS,"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 283,
+      "context": "courses: MOCK_COURSES,"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 291,
+      "context": "const race = MOCK_RACES.find((r) => r.id === raceId);"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 294,
+      "context": "const course = race.courseId ? MOCK_COURSES.find((c) => c.id === race.courseId) "
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 295,
+      "context": "const boat = race.boatId ? MOCK_BOATS.find((b) => b.id === race.boatId) : undefi"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 307,
+      "context": "export function getRacesForBoat(boatId: string): MockRace[] {"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 308,
+      "context": "return MOCK_RACES.filter((r) => r.boatId === boatId);"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 314,
+      "context": "export function getRacesForCourse(courseId: string): MockRace[] {"
+    },
+    {
+      "file": "src/constants/mockData.ts",
+      "line": 315,
+      "context": "return MOCK_RACES.filter((r) => r.courseId === courseId);"
+    },
+    {
+      "file": "src/hooks/useClubDashboardData.ts",
+      "line": 323,
+      "context": "revenueGrowth: 5, // Placeholder"
+    },
+    {
+      "file": "src/hooks/useStreamingChat.ts",
+      "line": 357,
+      "context": "// Create assistant message placeholder"
+    },
+    {
+      "file": "src/lib/auth/oauth.ts",
+      "line": 35,
+      "context": "icon: '🌊', // Marine-themed icon placeholder"
+    },
+    {
+      "file": "src/lib/auth/oauth.ts",
+      "line": 40,
+      "context": "icon: '🧭', // Navigation-themed icon placeholder"
+    },
+    {
+      "file": "src/lib/auth/useOAuth.tsx",
+      "line": 102,
+      "context": "if (!process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_UR"
+    },
+    {
+      "file": "src/lib/auth/useOAuth.tsx",
+      "line": 107,
+      "context": "if (!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABA"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 16,
+      "context": "// Mock sign in"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 18,
+      "context": "const mockUser: User = {"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 19,
+      "context": "id: 'mock-user-id',"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 28,
+      "context": "setState({ user: mockUser, loading: false, error: null })"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 35,
+      "context": "// Mock sign up"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 37,
+      "context": "const mockUser: User = {"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 38,
+      "context": "id: 'mock-new-user-id',"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 47,
+      "context": "setState({ user: mockUser, loading: false, error: null })"
+    },
+    {
+      "file": "src/lib/contexts/AuthContextMock.tsx",
+      "line": 56,
+      "context": "// Mock password reset"
+    },
+    {
+      "file": "src/mocks/stripe-react-native.web.ts",
+      "line": 1,
+      "context": "// Mock for @stripe/stripe-react-native on web platform"
+    },
+    {
+      "file": "src/services/ClubSubscriptionService.ts",
+      "line": 147,
+      "context": "// For now, we'll simulate it with a mock implementation"
+    },
+    {
+      "file": "src/services/ClubSubscriptionService.ts",
+      "line": 167,
+      "context": "// Mock Stripe subscription ID for development"
+    },
+    {
+      "file": "src/services/ClubSubscriptionService.ts",
+      "line": 168,
+      "context": "const subscriptionId = `sub_mock_${Date.now()}`;"
+    },
+    {
+      "file": "src/services/ClubSubscriptionService.ts",
+      "line": 169,
+      "context": "const customerId = `cus_mock_${Date.now()}`;"
+    },
+    {
+      "file": "src/services/ClubSubscriptionService.ts",
+      "line": 178,
+      "context": "stripe_price_id: plan.stripePriceId || `price_mock_${plan.id}`,"
+    },
+    {
+      "file": "src/services/ClubSubscriptionService.ts",
+      "line": 338,
+      "context": "stripe_price_id: plan.stripePriceId || `price_mock_${plan.id}`,"
+    },
+    {
+      "file": "src/services/ClubVerificationService.ts",
+      "line": 177,
+      "context": "// This is a placeholder - in production, you'd call a backend endpoint"
+    },
+    {
+      "file": "src/services/ClubVerificationService.ts",
+      "line": 232,
+      "context": "// For now, return mock data as placeholder"
+    },
+    {
+      "file": "src/services/RaceReminderService.ts",
+      "line": 135,
+      "context": "// Placeholder: In production, integrate with weather API"
+    },
+    {
+      "file": "src/services/RaceScrapingService.ts",
+      "line": 54,
+      "context": "// For now, return a placeholder response"
+    },
+    {
+      "file": "src/services/RaceScrapingService.ts",
+      "line": 307,
+      "context": "// For now, return placeholder"
+    },
+    {
+      "file": "src/services/ResultsService.ts",
+      "line": 305,
+      "context": "// For now, return a placeholder"
+    },
+    {
+      "file": "src/services/ResultsService.ts",
+      "line": 385,
+      "context": "// For now, this is a placeholder"
+    },
+    {
+      "file": "src/services/agents/BaseAgentService.ts",
+      "line": 54,
+      "context": "apiKey: apiKey || 'dummy-key-for-development',"
+    },
+    {
+      "file": "src/services/agents/ClubOnboardingAgent.ts",
+      "line": 624,
+      "context": "// Store venue relationships in database (placeholder - would need club_venues t"
+    },
+    {
+      "file": "src/services/agents/ClubOnboardingAgent.ts",
+      "line": 765,
+      "context": "// Validate configuration (placeholder - would check all required fields)"
+    },
+    {
+      "file": "src/services/agents/CoursePredictionAgent.ts",
+      "line": 106,
+      "context": "// For now, return mock forecast"
+    },
+    {
+      "file": "src/services/agents/CoursePredictionAgent.ts",
+      "line": 117,
+      "context": "source: 'Weather API (mock)',"
+    },
+    {
+      "file": "src/services/agents/DocumentProcessingAgent.ts",
+      "line": 43,
+      "context": "this.gemini = new GoogleGenerativeAI(apiKey || 'dummy-key');"
+    },
+    {
+      "file": "src/services/agents/DocumentProcessingAgent.ts",
+      "line": 329,
+      "context": "// For now, return confirmation with mock IDs"
+    },
+    {
+      "file": "src/services/agents/EnhancedOnboardingTools.ts",
+      "line": 146,
+      "context": "// For now, return placeholder structure"
+    },
+    {
+      "file": "src/services/agents/EnhancedOnboardingTools.ts",
+      "line": 485,
+      "context": "// Import from class associations (placeholder)"
+    },
+    {
+      "file": "src/services/agents/EnhancedOnboardingTools.ts",
+      "line": 488,
+      "context": "raceCount += 5; // Placeholder"
+    },
+    {
+      "file": "src/services/agents/OnboardingAgent.ts",
+      "line": 300,
+      "context": "// For now, return placeholder"
+    },
+    {
+      "file": "src/services/ai/DocumentProcessingService.ts",
+      "line": 27,
+      "context": "this.gemini = new GoogleGenerativeAI('dummy-key');"
+    },
+    {
+      "file": "src/services/ai/DocumentProcessingService.ts",
+      "line": 313,
+      "context": "// For now, return mock embeddings"
+    },
+    {
+      "file": "src/services/ai/DocumentProcessingService.ts",
+      "line": 543,
+      "context": "// Mock implementation - in production use pdf.js"
+    },
+    {
+      "file": "src/services/ai/DocumentProcessingService.ts",
+      "line": 551,
+      "context": "// Mock implementation - in production use Tesseract.js or cloud OCR"
+    },
+    {
+      "file": "src/services/ai/EnhancedAIIntegrationService.ts",
+      "line": 403,
+      "context": "data: new ArrayBuffer(1024), // Mock data"
+    },
+    {
+      "file": "src/services/ai/RaceCourseExtractor.ts",
+      "line": 22,
+      "context": "this.gemini = new GoogleGenerativeAI('dummy-key');"
+    },
+    {
+      "file": "src/services/ai/RaceStrategyEngine.ts",
+      "line": 113,
+      "context": "this.gemini = new GoogleGenerativeAI('dummy-key');"
+    },
+    {
+      "file": "src/services/ai/RaceStrategyEngine.ts",
+      "line": 215,
+      "context": "data: new ArrayBuffer(0), // Placeholder since we have text already"
+    },
+    {
+      "file": "src/services/ai/__tests__/EducationalIntegration.test.ts",
+      "line": 36,
+      "context": "const mockDocument: DocumentUpload = {"
+    },
+    {
+      "file": "src/services/ai/__tests__/EducationalIntegration.test.ts",
+      "line": 61,
+      "context": "mockDocument,"
+    },
+    {
+      "file": "src/services/ai/__tests__/EducationalIntegration.test.ts",
+      "line": 204,
+      "context": "const mockDocument: DocumentUpload = {"
+    },
+    {
+      "file": "src/services/ai/__tests__/EducationalIntegration.test.ts",
+      "line": 219,
+      "context": "mockDocument,"
+    },
+    {
+      "file": "src/services/crewManagementService.ts",
+      "line": 373,
+      "context": "* Send invite email (placeholder for future implementation)"
+    },
+    {
+      "file": "src/services/offlineService.ts",
+      "line": 269,
+      "context": "// For now, just a placeholder"
+    },
+    {
+      "file": "src/services/scoring/ScoringEngine.ts",
+      "line": 740,
+      "context": "// This is a placeholder - full implementation would parse the format"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 191,
+      "context": "// Create a mock sailing document for training"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 192,
+      "context": "const mockDocument: SailingDocument = {"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 201,
+      "context": "fileSize: 1024 * 50, // Mock size"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 206,
+      "context": "keyTopics: this.generateMockTopics(doc.category),"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 207,
+      "context": "extractedInsights: this.generateMockInsights(doc.category)"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 230,
+      "context": "await this.saveTrainingDocument(mockDocument);"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 291,
+      "context": "* Generate mock topics for training"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 293,
+      "context": "private generateMockTopics(category: SailingDocument['category']): string[] {"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 308,
+      "context": "* Generate mock insights for training"
+    },
+    {
+      "file": "src/services/storage/DeveloperDocumentService.ts",
+      "line": 310,
+      "context": "private generateMockInsights(category: SailingDocument['category']): any[] {"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 179,
+      "context": "const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 180,
+      "context": "const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co' || Pl"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 185,
+      "context": "// Create a mock document object"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 186,
+      "context": "const mockDocument: StoredDocument = {"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 206,
+      "context": "documents.push(mockDocument);"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 210,
+      "context": "console.log('📄 DocumentStorageService: Local document:', mockDocument);"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 214,
+      "context": "document: mockDocument,"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 323,
+      "context": "const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 326,
+      "context": "if (supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web') "
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 422,
+      "context": "const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder"
+    },
+    {
+      "file": "src/services/storage/DocumentStorageService.ts",
+      "line": 423,
+      "context": "if (supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web') "
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 585,
+      "context": "// Placeholder methods for complex calculations"
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 607,
+      "context": "return []; // Placeholder"
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 611,
+      "context": "return []; // Placeholder"
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 615,
+      "context": "return []; // Placeholder"
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 660,
+      "context": "return []; // Placeholder"
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 770,
+      "context": "// Additional placeholder methods"
+    },
+    {
+      "file": "src/services/tactical/AITacticalService.ts",
+      "line": 792,
+      "context": "return []; // Placeholder"
+    },
+    {
+      "file": "src/services/tuningGuideService.ts",
+      "line": 225,
+      "context": "// Create placeholder records for scraping"
+    },
+    {
+      "file": "src/services/venue/RegionalIntelligenceService.ts",
+      "line": 301,
+      "context": "// For now, return mock data for San Francisco Bay"
+    },
+    {
+      "file": "src/services/venue/RegionalIntelligenceService.ts",
+      "line": 1144,
+      "context": "// Mock cultural briefing for San Francisco Bay"
+    },
+    {
+      "file": "src/services/weather/ProfessionalWeatherService.ts",
+      "line": 382,
+      "context": "// For now, return placeholder"
+    }
+  ],
+  "envVariables": {
+    "required": [
+      "EXPO_PUBLIC_SUPABASE_URL",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID",
+      "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID",
+      "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID",
+      "ANTHROPIC_API_KEY",
+      "GOOGLE_AI_API_KEY",
+      "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+      "STRIPE_SECRET_KEY"
+    ],
+    "present": [
+      "EXPO_PUBLIC_SUPABASE_URL",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID",
+      "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID",
+      "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID",
+      "ANTHROPIC_API_KEY",
+      "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+      "STRIPE_SECRET_KEY"
+    ],
+    "missing": [
+      "GOOGLE_AI_API_KEY"
+    ]
+  },
+  "orphanedScreens": [],
+  "services": [
+    "src/services/AICoachMatchingService.ts",
+    "src/services/AICoachingAssistant.ts",
+    "src/services/AISessionPlanningService.ts",
+    "src/services/CalendarService.ts",
+    "src/services/CircuitPlanningService.ts",
+    "src/services/ClubDiscoveryService.ts",
+    "src/services/ClubMemberService.ts",
+    "src/services/ClubSubscriptionService.ts",
+    "src/services/ClubVerificationService.ts",
+    "src/services/CoachService.ts",
+    "src/services/CoachingService.ts",
+    "src/services/ComputerVisionService.ts",
+    "src/services/DocumentParsingService.ts",
+    "src/services/EmailService.ts",
+    "src/services/FleetDiscoveryService.ts",
+    "src/services/FleetSocialService.ts",
+    "src/services/GPSTracker.ts",
+    "src/services/GooglePlacesService.ts",
+    "src/services/IoTSensorService.ts",
+    "src/services/LocationDetectionService.ts",
+    "src/services/PaymentService.native.ts",
+    "src/services/PaymentService.web.ts",
+    "src/services/RaceAnalysisService.ts",
+    "src/services/RaceCourseVisualizationService.ts",
+    "src/services/RaceRegistrationService.ts",
+    "src/services/RaceReminderService.ts",
+    "src/services/RaceScrapingService.ts",
+    "src/services/RaceTimerService.ts",
+    "src/services/RealtimeService.ts",
+    "src/services/ResultsService.ts",
+    "src/services/SailingNetworkService.ts",
+    "src/services/SailorBoatService.ts",
+    "src/services/SavedVenueService.ts",
+    "src/services/StrategicPlanningService.ts",
+    "src/services/StripeConnectService.ts",
+    "src/services/TuningGuideExtractionService.ts",
+    "src/services/VenueIntelligenceService.ts",
+    "src/services/agents/BaseAgentService.ts",
+    "src/services/agents/ClubOnboardingAgent.ts",
+    "src/services/agents/CoachMatchingAgent.ts",
+    "src/services/agents/ComprehensiveOnboardingTools.ts",
+    "src/services/agents/ConversationalOnboardingAgent.ts",
+    "src/services/agents/ConversationalOnboardingTools.ts",
+    "src/services/agents/CoursePredictionAgent.ts",
+    "src/services/agents/DocumentProcessingAgent.ts",
+    "src/services/agents/EnhancedOnboardingTools.ts",
+    "src/services/agents/OnboardingAgent.ts",
+    "src/services/agents/OnboardingEntityExtractor.ts",
+    "src/services/agents/RaceAnalysisAgent.ts",
+    "src/services/agents/RaceExtractionAgent.ts",
+    "src/services/agents/SailNumberTools.ts",
+    "src/services/agents/VenueIntelligenceAgent.ts",
+    "src/services/agents/WebScrapingTools.ts",
+    "src/services/agents/WebSearchTools.ts",
+    "src/services/agents/index.ts",
+    "src/services/ai/DocumentProcessingService.ts",
+    "src/services/ai/EnhancedAIIntegrationService.ts",
+    "src/services/ai/RaceCourseExtractor.ts",
+    "src/services/ai/RaceStrategyEngine.ts",
+    "src/services/ai/SailingEducationService.ts",
+    "src/services/ai/VoiceNoteService.ts",
+    "src/services/ai/__tests__/EducationalIntegration.test.ts",
+    "src/services/aiService.ts",
+    "src/services/ais/AISStreamService.ts",
+    "src/services/ais/MarineTrafficAISService.ts",
+    "src/services/apiService.ts",
+    "src/services/bathymetry/NOAABathymetryService.ts",
+    "src/services/crewManagementService.ts",
+    "src/services/equipmentAIService.ts",
+    "src/services/eventService.ts",
+    "src/services/fleetService.ts",
+    "src/services/gpsService.ts",
+    "src/services/index.ts",
+    "src/services/location/GooglePlacesService.ts",
+    "src/services/location/NominatimService.ts",
+    "src/services/location/OverpassService.ts",
+    "src/services/location/VenueDetectionService.ts",
+    "src/services/mapping/MapLibreService.ts",
+    "src/services/monteCarloService.ts",
+    "src/services/offlineService.ts",
+    "src/services/onboarding/saveSailorProfile.ts",
+    "src/services/payments/StripeService.native.ts",
+    "src/services/payments/StripeService.web.ts",
+    "src/services/raceDataDistribution.ts",
+    "src/services/results/ExternalResultsService.ts",
+    "src/services/results/ResultsExportService.ts",
+    "src/services/scoring/ScoringEngine.ts",
+    "src/services/storage/DeveloperDocumentService.ts",
+    "src/services/storage/DocumentStorageService.ts",
+    "src/services/storage/SailingDocumentLibraryService.ts",
+    "src/services/supabase.ts",
+    "src/services/tactical/AITacticalService.ts",
+    "src/services/tides/WorldTidesProService.ts",
+    "src/services/tuningGuideService.ts",
+    "src/services/venue/GlobalVenueDatabase.ts",
+    "src/services/venue/RegionalIntelligenceService.ts",
+    "src/services/venue/SupabaseVenueService.ts",
+    "src/services/venue/VenueDetectionService.ts",
+    "src/services/venue/__tests__/VenueBasicIntegration.test.ts",
+    "src/services/venue/__tests__/VenueIntelligenceIntegration.test.ts",
+    "src/services/venueService.ts",
+    "src/services/venues/RaceCourseService.ts",
+    "src/services/venues/YachtClubService.ts",
+    "src/services/voiceCommandService.ts",
+    "src/services/weather/ProfessionalWeatherService.ts",
+    "src/services/weather/RegionalWeatherService.ts",
+    "src/services/weather/WeatherAPIProService.ts"
+  ],
+  "hooks": [
+    "src/hooks/index.ts",
+    "src/hooks/useApi.ts",
+    "src/hooks/useClubDashboardData.ts",
+    "src/hooks/useClubOnboardingState.ts",
+    "src/hooks/useCoachDashboardData.ts",
+    "src/hooks/useCoachOnboardingState.ts",
+    "src/hooks/useCoachingSessions.ts",
+    "src/hooks/useData.ts",
+    "src/hooks/useFeatureAccess.tsx",
+    "src/hooks/useFleetData.ts",
+    "src/hooks/useFleetNotifications.ts",
+    "src/hooks/useFleetSocial.ts",
+    "src/hooks/useGlobalVenueIntelligence.ts",
+    "src/hooks/useGlobalVenues.ts",
+    "src/hooks/useLocationContext.ts",
+    "src/hooks/useNetworkStatus.ts",
+    "src/hooks/useOffline.ts",
+    "src/hooks/useRaceResults.ts",
+    "src/hooks/useRaces.ts",
+    "src/hooks/useRealtimeConnection.ts",
+    "src/hooks/useRegionalWeather.ts",
+    "src/hooks/useSailingDocuments.ts",
+    "src/hooks/useSailingEducation.ts",
+    "src/hooks/useSailorDashboardData.ts",
+    "src/hooks/useSailorOnboardingState.ts",
+    "src/hooks/useSavedVenues.ts",
+    "src/hooks/useStreamingChat.ts",
+    "src/hooks/useThemeColor.ts",
+    "src/hooks/useVenueDetection.ts",
+    "src/hooks/useVenueIntelligence.ts"
+  ]
+}

@@ -385,6 +385,19 @@ export interface RaceCourseExtraction {
     thunderstorm?: boolean;
     confidence: number;
   };
+  communication: {
+    vhfChannel?: string;
+    callSign?: string;
+    emergencyContact?: string;
+    raceCommittee?: string;
+    confidence: number;
+  };
+  regulations: {
+    specialFlags?: string[];
+    penalties?: string[];
+    protests?: string[];
+    confidence: number;
+  };
   extractionMetadata: {
     documentType: 'sailing_instructions' | 'notice_of_race' | 'course_diagram';
     source: string;

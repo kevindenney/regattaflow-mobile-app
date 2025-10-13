@@ -4,12 +4,16 @@
  */
 
 import { useAuth } from '@/src/providers/AuthProvider';
+import { supabase } from '@/src/services/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -19,6 +23,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ComprehensiveRaceExtractionAgent } from '@/src/services/agents/ComprehensiveRaceExtractionAgent';
+import { PDFExtractionService } from '@/src/services/PDFExtractionService';
+
+type DocumentType = 'nor' | 'si' | 'other';
 
 export default function AddRaceScreen() {
   const { user } = useAuth();
@@ -29,8 +37,312 @@ export default function AddRaceScreen() {
   const [selectedClass, setSelectedClass] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // AI Quick Entry state
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [currentDocType, setCurrentDocType] = useState<DocumentType | null>(null);
+  const [pastedText, setPastedText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // Mock classes - should come from user's boats
   const classes = ['Dragon', 'Laser', 'J/70', 'Optimist', '420'];
+
+  const getDocTypeName = (type: DocumentType): string => {
+    switch (type) {
+      case 'nor':
+        return 'Notice of Race';
+      case 'si':
+        return 'Sailing Instructions';
+      case 'other':
+        return 'Other Documents';
+      default:
+        return 'Document';
+    }
+  };
+
+  const populateFormFromExtraction = (data: any) => {
+    console.log('[PopulateForm] Extracted data:', data);
+
+    // Populate race name
+    if (data.raceName) {
+      setRaceName(data.raceName);
+      console.log('[PopulateForm] Set race name:', data.raceName);
+    }
+
+    // Populate venue
+    if (data.venue) {
+      setVenue(data.venue);
+      console.log('[PopulateForm] Set venue:', data.venue);
+    }
+
+    // Populate start date
+    if (data.raceDate) {
+      try {
+        const date = new Date(data.raceDate);
+        const formatted = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
+        setStartDate(formatted);
+        console.log('[PopulateForm] Set start date:', formatted);
+      } catch (error) {
+        console.error('[PopulateForm] Error formatting date:', error);
+      }
+    }
+
+    // Try to extract class from divisions or description
+    if (data.classDivisions && data.classDivisions.length > 0) {
+      const firstClass = data.classDivisions[0].name;
+      // Check if it matches one of our predefined classes
+      const matchingClass = classes.find(c =>
+        firstClass.toLowerCase().includes(c.toLowerCase())
+      );
+      if (matchingClass) {
+        setSelectedClass(matchingClass);
+        console.log('[PopulateForm] Set class:', matchingClass);
+      }
+    }
+  };
+
+  const handleDocumentUpload = async (docType: DocumentType) => {
+    try {
+      // On web, we need to use a different approach
+      if (Platform.OS === 'web') {
+        // Create a file input element
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pdf,.txt,image/*';
+
+        input.onchange = async (e: any) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          console.log('[Upload] Selected file:', file.name, file.type);
+
+          // Show processing indicator
+          setIsProcessing(true);
+          setCurrentDocType(docType);
+
+          try {
+            let extractedText = '';
+
+            // Extract text based on file type
+            if (file.type === 'application/pdf') {
+              console.log('[Upload] Processing PDF...');
+              // Create a URL for the file
+              const fileUrl = URL.createObjectURL(file);
+
+              // Extract text from PDF
+              const pdfResult = await PDFExtractionService.extractText(fileUrl, {
+                onProgress: (progress, currentPage, totalPages) => {
+                  console.log(`[Upload] PDF extraction progress: ${progress.toFixed(0)}% (page ${currentPage}/${totalPages})`);
+                },
+              });
+
+              // Clean up the URL
+              URL.revokeObjectURL(fileUrl);
+
+              if (!pdfResult.success || !pdfResult.text) {
+                throw new Error(pdfResult.error || 'Failed to extract text from PDF');
+              }
+
+              extractedText = pdfResult.text;
+              console.log('[Upload] PDF text extracted, length:', extractedText.length);
+            } else if (file.type === 'text/plain') {
+              console.log('[Upload] Processing text file...');
+              // Read text file
+              extractedText = await file.text();
+              console.log('[Upload] Text file read, length:', extractedText.length);
+            } else {
+              throw new Error('Unsupported file type. Please upload a PDF or text file.');
+            }
+
+            // Use AI to extract race details
+            console.log('[Upload] Extracting race details with AI...');
+            const agent = new ComprehensiveRaceExtractionAgent();
+            const result = await agent.extractRaceDetails(extractedText);
+
+            console.log('[Upload] AI extraction result:', result);
+
+            if (!result.success || !result.data) {
+              throw new Error(result.error || 'Failed to extract race details from document');
+            }
+
+            // Populate form fields
+            populateFormFromExtraction(result.data);
+
+            setIsProcessing(false);
+            setCurrentDocType(null);
+
+            const fieldsPopulated = [];
+            if (result.data.raceName) fieldsPopulated.push('race name');
+            if (result.data.venue) fieldsPopulated.push('venue');
+            if (result.data.raceDate) fieldsPopulated.push('date');
+            if (result.data.classDivisions) fieldsPopulated.push('class');
+
+            alert(`${getDocTypeName(docType)} processed successfully!\n\n✓ AI extracted: ${fieldsPopulated.join(', ')}\n✓ Confidence: ${Math.round((result.confidence || 0) * 100)}%\n\nReview the fields below and make any necessary adjustments.`);
+          } catch (error: any) {
+            console.error('[Upload] Processing error:', error);
+            setIsProcessing(false);
+            setCurrentDocType(null);
+            alert(`Failed to process ${getDocTypeName(docType)}:\n\n${error.message}\n\nPlease try pasting the text directly instead.`);
+          }
+        };
+
+        input.click();
+      } else {
+        // Mobile platform - use DocumentPicker
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['application/pdf', 'text/plain', 'image/*'],
+          copyToCacheDirectory: true,
+        });
+
+        if (result.canceled) {
+          return;
+        }
+
+        const file = result.assets[0];
+        console.log('[Upload] Selected file:', file);
+
+        // Show processing indicator
+        setIsProcessing(true);
+        setCurrentDocType(docType);
+
+        try {
+          let extractedText = '';
+
+          // Extract text from file
+          if (file.mimeType === 'application/pdf') {
+            const pdfResult = await PDFExtractionService.extractText(file.uri);
+            if (!pdfResult.success || !pdfResult.text) {
+              throw new Error(pdfResult.error || 'Failed to extract text from PDF');
+            }
+            extractedText = pdfResult.text;
+          } else if (file.mimeType === 'text/plain') {
+            // Read text file (would need FileSystem)
+            throw new Error('Text file reading not yet implemented on mobile. Please use the paste option instead.');
+          } else {
+            throw new Error('Unsupported file type');
+          }
+
+          // Use AI to extract race details
+          const agent = new ComprehensiveRaceExtractionAgent();
+          const aiResult = await agent.extractRaceDetails(extractedText);
+
+          if (!aiResult.success || !aiResult.data) {
+            throw new Error(aiResult.error || 'Failed to extract race details');
+          }
+
+          // Populate form fields
+          populateFormFromExtraction(aiResult.data);
+
+          setIsProcessing(false);
+          setCurrentDocType(null);
+
+          Alert.alert(
+            'Success',
+            `${getDocTypeName(docType)} processed successfully! AI extracted race details. Review the fields below.`
+          );
+        } catch (error: any) {
+          console.error('[Upload] Mobile processing error:', error);
+          setIsProcessing(false);
+          setCurrentDocType(null);
+          Alert.alert('Error', `Failed to process document: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      if (Platform.OS === 'web') {
+        alert('Failed to upload document. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to upload document. Please try again.');
+      }
+      setIsProcessing(false);
+      setCurrentDocType(null);
+    }
+  };
+
+  const handlePasteText = (docType: DocumentType) => {
+    setCurrentDocType(docType);
+    setPastedText('');
+    setShowPasteModal(true);
+  };
+
+  const handlePasteSubmit = async () => {
+    if (!pastedText.trim()) {
+      if (Platform.OS === 'web') {
+        alert('Please paste some text to process.');
+      } else {
+        Alert.alert('Empty Text', 'Please paste some text to process.');
+      }
+      return;
+    }
+
+    setShowPasteModal(false);
+    setIsProcessing(true);
+
+    try {
+      console.log('[PasteText] Processing text, length:', pastedText.length);
+
+      // Use AI to extract race details
+      const agent = new ComprehensiveRaceExtractionAgent();
+      const result = await agent.extractRaceDetails(pastedText);
+
+      console.log('[PasteText] AI extraction result:', result);
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to extract race details from text');
+      }
+
+      // Populate form fields
+      populateFormFromExtraction(result.data);
+
+      setIsProcessing(false);
+      setCurrentDocType(null);
+
+      const fieldsPopulated = [];
+      if (result.data.raceName) fieldsPopulated.push('race name');
+      if (result.data.venue) fieldsPopulated.push('venue');
+      if (result.data.raceDate) fieldsPopulated.push('date');
+      if (result.data.classDivisions) fieldsPopulated.push('class');
+
+      const message = `${getDocTypeName(currentDocType!)} text processed successfully!\n\n✓ AI extracted: ${fieldsPopulated.join(', ')}\n✓ Confidence: ${Math.round((result.confidence || 0) * 100)}%\n\nReview the fields below and make any necessary adjustments.`;
+
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Text Processed', message);
+      }
+    } catch (error: any) {
+      console.error('[PasteText] Processing error:', error);
+      setIsProcessing(false);
+      setCurrentDocType(null);
+
+      const message = `Failed to process text:\n\n${error.message}\n\nPlease check the text format and try again.`;
+
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
+    }
+  };
+
+  const handleQuickEntryPress = (docType: DocumentType) => {
+    setCurrentDocType(docType);
+    setShowOptionsModal(true);
+  };
+
+  const handleUploadOption = () => {
+    setShowOptionsModal(false);
+    if (currentDocType) {
+      handleDocumentUpload(currentDocType);
+    }
+  };
+
+  const handlePasteOption = () => {
+    setShowOptionsModal(false);
+    if (currentDocType) {
+      handlePasteText(currentDocType);
+    }
+  };
 
   const handleSave = async () => {
     // Validation
@@ -53,25 +365,110 @@ export default function AddRaceScreen() {
 
     try {
       setSaving(true);
-      // TODO: Save to Supabase
-      console.log('Saving race:', { raceName, venue, startDate, endDate, selectedClass });
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Parse dates from MM/DD/YYYY to ISO format
+      const parseDate = (dateStr: string): string | null => {
+        if (!dateStr.trim()) return null;
+        try {
+          const [month, day, year] = dateStr.split('/');
+          return new Date(`${year}-${month}-${day}`).toISOString();
+        } catch {
+          return null;
+        }
+      };
 
-      Alert.alert(
-        'Success',
-        'Race added to your calendar',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
+      const parsedStartDate = parseDate(startDate);
+      if (!parsedStartDate) {
+        Alert.alert('Invalid Date', 'Please enter start date in MM/DD/YYYY format');
+        setSaving(false);
+        return;
+      }
+
+      const parsedEndDate = endDate.trim() ? parseDate(endDate) : null;
+      if (endDate.trim() && !parsedEndDate) {
+        Alert.alert('Invalid Date', 'Please enter end date in MM/DD/YYYY format');
+        setSaving(false);
+        return;
+      }
+
+      // Save to Supabase
+      // Note: location field is a PostGIS geometry type, so we store venue name in metadata
+      const { data, error } = await supabase
+        .from('regattas')
+        .insert({
+          name: raceName.trim(),
+          start_date: parsedStartDate,
+          end_date: parsedEndDate,
+          created_by: user?.id,
+          status: 'planned',
+          metadata: {
+            class: selectedClass,
+            venue_name: venue.trim(),
           },
-        ]
-      );
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        setSaving(false);
+
+        // Provide user-friendly error messages
+        if (error.code === '23505') {
+          Alert.alert('Duplicate Race', 'A race with this name already exists.');
+        } else if (error.code === '23503') {
+          Alert.alert('Invalid Data', 'Please check that all fields are valid.');
+        } else if (error.message.includes('permission')) {
+          Alert.alert('Permission Denied', 'You do not have permission to create races.');
+        } else {
+          Alert.alert('Error', `Failed to save race: ${error.message}`);
+        }
+        return;
+      }
+
+      if (!data) {
+        setSaving(false);
+        Alert.alert('Error', 'Race was saved but no ID was returned.');
+        return;
+      }
+
+      setSaving(false);
+
+      // Success - navigate to race detail
+      // Note: Alert.alert doesn't work on web, so we navigate directly
+      if (Platform.OS === 'web') {
+        // On web, navigate immediately
+        router.push(`/race/${data.id}`);
+      } else {
+        // On mobile, show native alert with options
+        Alert.alert(
+          'Success',
+          'Race added to your calendar',
+          [
+            {
+              text: 'View Race',
+              onPress: () => router.push(`/race/${data.id}`),
+            },
+            {
+              text: 'Add Another',
+              style: 'cancel',
+              onPress: () => {
+                // Clear form
+                setRaceName('');
+                setVenue('');
+                setStartDate('');
+                setEndDate('');
+                setSelectedClass('');
+              },
+            },
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error saving race:', error);
-      Alert.alert('Error', 'Failed to save race. Please try again.');
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -99,6 +496,77 @@ export default function AddRaceScreen() {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* AI Quick Entry Section */}
+          <View style={styles.aiQuickEntrySection}>
+            <View style={styles.aiQuickEntryHeader}>
+              <MaterialCommunityIcons name="star-shooting" size={24} color="#3B82F6" />
+              <Text style={styles.aiQuickEntryTitle}>AI Quick Entry</Text>
+            </View>
+            <Text style={styles.aiQuickEntrySubtitle}>
+              Upload PDF/document or paste text. AI will automatically extract and fill all fields below.
+            </Text>
+
+            <View style={styles.aiBoxContainer}>
+              {/* Notice of Race Box */}
+              <TouchableOpacity
+                style={styles.aiBox}
+                onPress={() => handleQuickEntryPress('nor')}
+                disabled={isProcessing}
+              >
+                {isProcessing && currentDocType === 'nor' ? (
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="file-document-outline" size={32} color="#3B82F6" />
+                    <Text style={styles.aiBoxTitle}>Notice of Race</Text>
+                    <Text style={styles.aiBoxSubtitle}>Upload or paste NOR</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Sailing Instructions Box */}
+              <TouchableOpacity
+                style={styles.aiBox}
+                onPress={() => handleQuickEntryPress('si')}
+                disabled={isProcessing}
+              >
+                {isProcessing && currentDocType === 'si' ? (
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="clipboard-text-outline" size={32} color="#3B82F6" />
+                    <Text style={styles.aiBoxTitle}>Sailing Instructions</Text>
+                    <Text style={styles.aiBoxSubtitle}>Upload or paste SIs</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Other Documents Box */}
+              <TouchableOpacity
+                style={styles.aiBox}
+                onPress={() => handleQuickEntryPress('other')}
+                disabled={isProcessing}
+              >
+                {isProcessing && currentDocType === 'other' ? (
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="folder-multiple-outline" size={32} color="#3B82F6" />
+                    <Text style={styles.aiBoxTitle}>Other Documents</Text>
+                    <Text style={styles.aiBoxSubtitle}>Courses, amendments, etc.</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR ENTER MANUALLY</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           {/* Race Name */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>
@@ -231,6 +699,93 @@ export default function AddRaceScreen() {
             </View>
           </View>
         </ScrollView>
+
+        {/* Options Modal */}
+        <Modal
+          visible={showOptionsModal}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setShowOptionsModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.optionsModalContent}>
+              <Text style={styles.optionsModalTitle}>
+                {currentDocType && getDocTypeName(currentDocType)}
+              </Text>
+              <Text style={styles.optionsModalSubtitle}>Choose an option:</Text>
+
+              <TouchableOpacity style={styles.optionButton} onPress={handleUploadOption}>
+                <MaterialCommunityIcons name="file-upload-outline" size={24} color="#3B82F6" />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Upload PDF/Document</Text>
+                  <Text style={styles.optionSubtitle}>Select a file from your device</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.optionButton} onPress={handlePasteOption}>
+                <MaterialCommunityIcons name="content-paste" size={24} color="#3B82F6" />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Paste Text</Text>
+                  <Text style={styles.optionSubtitle}>Paste text directly into a field</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.optionButtonCancel}
+                onPress={() => setShowOptionsModal(false)}
+              >
+                <Text style={styles.optionCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Paste Text Modal */}
+        <Modal
+          visible={showPasteModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowPasteModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  Paste {currentDocType && getDocTypeName(currentDocType)}
+                </Text>
+                <TouchableOpacity onPress={() => setShowPasteModal(false)}>
+                  <Ionicons name="close" size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={styles.pasteTextInput}
+                multiline
+                numberOfLines={10}
+                placeholder="Paste your text here..."
+                placeholderTextColor="#94A3B8"
+                value={pastedText}
+                onChangeText={setPastedText}
+                autoFocus
+              />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonCancel}
+                  onPress={() => setShowPasteModal(false)}
+                >
+                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalButtonSubmit}
+                  onPress={handlePasteSubmit}
+                >
+                  <Text style={styles.modalButtonSubmitText}>Process with AI</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -395,6 +950,199 @@ const styles = StyleSheet.create({
   },
   quickActionSubtitle: {
     fontSize: 12,
+    color: '#64748B',
+  },
+  aiQuickEntrySection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  aiQuickEntryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  aiQuickEntryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  aiQuickEntrySubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  aiBoxContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  aiBox: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    borderStyle: 'dashed',
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 140,
+  },
+  aiBoxTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  aiBoxSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    marginTop: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  dividerText: {
+    paddingHorizontal: 16,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  pasteTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    color: '#1E293B',
+    minHeight: 200,
+    textAlignVertical: 'top',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  modalButtonCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  modalButtonCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  modalButtonSubmit: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+  },
+  modalButtonSubmitText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  optionsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  optionsModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  optionsModalSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 24,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  optionSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  optionButtonCancel: {
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  optionCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#64748B',
   },
 });

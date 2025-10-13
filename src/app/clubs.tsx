@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, Image, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { Trophy, Users, Flag, Timer, ChartBar, Smartphone, Award } from 'lucide-react-native';
 
 export default function ClubsScreen() {

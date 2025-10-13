@@ -76,16 +76,88 @@ export default function VenueIntelligenceScreen() {
     tokensUsed?: number;
   } | null>(null);
 
-  // Handle AI venue detection
+  // Fallback GPS detection without AI (uses Supabase RPC)
+  const detectVenueWithoutAI = async (latitude: number, longitude: number) => {
+    try {
+      const { supabase } = await import('@/src/services/supabase');
+
+      // Try PostGIS function first
+      let { data: venues, error } = await supabase.rpc('venues_within_radius', {
+        lat: latitude,
+        lng: longitude,
+        radius_km: 50,
+      });
+
+      // Fallback to bounding box if RPC not available
+      if (error && (error as any)?.code?.startsWith?.('PGRST2')) {
+        const radiusKm = 50;
+        const latDelta = radiusKm / 111;
+        const lngDelta = radiusKm / (111 * Math.cos((latitude * Math.PI) / 180));
+
+        const fallback = await supabase.rpc('venues_within_bbox', {
+          min_lon: longitude - lngDelta,
+          min_lat: latitude - latDelta,
+          max_lon: longitude + lngDelta,
+          max_lat: latitude + latDelta,
+        });
+        venues = fallback.data as any[] | null;
+        error = fallback.error as any;
+      }
+
+      if (error) throw error;
+
+      if (!venues || venues.length === 0) {
+        return {
+          success: false,
+          message: `No sailing venues found within 50km of your location`,
+        };
+      }
+
+      // Get the closest venue
+      const closest = venues[0];
+      const distanceKm = closest.distance_km;
+      const confidence = Math.max(0.1, Math.min(1.0, 1 - (distanceKm / 50)));
+
+      return {
+        success: true,
+        venueId: closest.id,
+        venueName: closest.name,
+        distance: distanceKm,
+        confidence,
+        coordinates: {
+          lat: closest.coordinates.coordinates[1],
+          lng: closest.coordinates.coordinates[0],
+        },
+        alternatives: venues.slice(1, 4).map((v: any) => ({
+          venueId: v.id,
+          name: v.name,
+          distance: v.distance_km,
+        })),
+      };
+    } catch (error: any) {
+      console.error('❌ Fallback detection failed:', error);
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  };
+
+  // Handle AI venue detection with fallback
   const handleAIVenueDetection = async () => {
     try {
       setIsDetectingVenue(true);
+      setAiVenueResult(null); // Clear previous result
 
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required to detect your venue.');
         setIsDetectingVenue(false);
+        Alert.alert(
+          'Permission Required',
+          'Location access is needed to detect your sailing venue. Please enable location permissions in your device settings.',
+          [{ text: 'OK' }]
+        );
         return;
       }
 
@@ -96,36 +168,98 @@ export default function VenueIntelligenceScreen() {
 
       console.log('📍 GPS Location:', location.coords);
 
-      // Call VenueIntelligenceAgent
-      const agent = new VenueIntelligenceAgent();
-      const agentResult = await agent.switchVenueByGPS({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      // Try AI detection first
+      let venueData = null;
+      let usedFallback = false;
 
-      console.log('🤖 Venue Agent Result:', JSON.stringify(agentResult, null, 2));
+      try {
+        const agent = new VenueIntelligenceAgent();
+        const agentResult = await agent.switchVenueByGPS({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+
+        console.log('🤖 Venue Agent Result:', JSON.stringify(agentResult, null, 2));
+
+        if (agentResult.success && agentResult.toolResults?.detect_venue_from_gps) {
+          venueData = agentResult.toolResults.detect_venue_from_gps;
+        } else {
+          // AI failed, use fallback
+          console.log('⚠️ AI detection failed, using GPS fallback');
+          usedFallback = true;
+          venueData = await detectVenueWithoutAI(location.coords.latitude, location.coords.longitude);
+        }
+      } catch (aiError: any) {
+        // AI error, use fallback
+        console.log('⚠️ AI error, using GPS fallback:', aiError.message);
+        usedFallback = true;
+        venueData = await detectVenueWithoutAI(location.coords.latitude, location.coords.longitude);
+      }
 
       setIsDetectingVenue(false);
 
-      if (agentResult.success) {
-        setAiVenueResult(agentResult.result);
+      // Check if detection found a venue
+      if (venueData?.success && venueData.venueId) {
+        if (usedFallback) {
+          venueData.detectionMethod = 'GPS Fallback';
+        }
+        setAiVenueResult(venueData);
         setShowVenueConfirmModal(true);
       } else {
-        Alert.alert('Detection Failed', agentResult.error || 'Could not detect venue from GPS location');
+        // No venue found
+        Alert.alert(
+          'No Venue Found',
+          venueData?.message || 'No sailing venues found within 50km of your location. Try manual selection or move closer to a registered venue.',
+          [
+            { text: 'Manual Select', onPress: handleManualSelect },
+            { text: 'OK', style: 'cancel' }
+          ]
+        );
       }
     } catch (error: any) {
       setIsDetectingVenue(false);
-      Alert.alert('Error', error.message || 'Failed to detect venue');
+      console.error('❌ Venue detection error:', error);
+
+      Alert.alert(
+        'Detection Error',
+        error.message || 'An unexpected error occurred while detecting your venue.',
+        [
+          { text: 'Manual Select', onPress: handleManualSelect },
+          { text: 'OK', style: 'cancel' }
+        ]
+      );
     }
   };
 
   // Confirm AI detected venue
   const handleConfirmVenue = async () => {
-    if (!aiVenueResult?.venueId) return;
+    if (!aiVenueResult?.venueId) {
+      console.warn('⚠️ No venue ID to confirm');
+      return;
+    }
 
-    await setVenueManually(aiVenueResult.venueId);
-    setShowVenueConfirmModal(false);
-    Alert.alert('Success', `Venue switched to ${aiVenueResult.venueName}`);
+    try {
+      const success = await setVenueManually(aiVenueResult.venueId);
+      setShowVenueConfirmModal(false);
+
+      if (success) {
+        Alert.alert(
+          'Venue Confirmed',
+          `Successfully switched to ${aiVenueResult.venueName || 'selected venue'}`
+        );
+      } else {
+        Alert.alert(
+          'Switch Failed',
+          'Could not switch to the detected venue. Please try manual selection.'
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ Venue confirm error:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to confirm venue selection'
+      );
+    }
   };
 
   // Manual venue selection fallback
@@ -484,7 +618,9 @@ export default function VenueIntelligenceScreen() {
           <View style={styles.modalContent}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Venue Detected</ThemedText>
+              <ThemedText style={styles.modalTitle}>
+                {aiVenueResult?.venueId ? 'Venue Detected' : 'No Venue Found'}
+              </ThemedText>
               <TouchableOpacity onPress={() => setShowVenueConfirmModal(false)}>
                 <ThemedText style={styles.closeButton}>✕</ThemedText>
               </TouchableOpacity>
@@ -492,10 +628,12 @@ export default function VenueIntelligenceScreen() {
 
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               {/* Detected Venue Info */}
-              {aiVenueResult && (
+              {aiVenueResult ? (
                 <>
                   <View style={styles.venueInfoCard}>
-                    <ThemedText style={styles.venueName}>{aiVenueResult.venueName}</ThemedText>
+                    <ThemedText style={styles.venueName}>
+                      {aiVenueResult.venueName || 'Unknown Venue'}
+                    </ThemedText>
                     {aiVenueResult.distance !== undefined && (
                       <ThemedText style={styles.venueDistance}>
                         📍 {aiVenueResult.distance.toFixed(1)} km from your location
@@ -513,39 +651,6 @@ export default function VenueIntelligenceScreen() {
                     </View>
                   )}
 
-                  {/* Regional Adaptations */}
-                  {aiVenueResult.summary && (
-                    <View style={styles.adaptationsCard}>
-                      <ThemedText style={styles.adaptationsTitle}>Regional Adaptations</ThemedText>
-                      <View style={styles.adaptationItem}>
-                        <ThemedText style={styles.adaptationLabel}>Language:</ThemedText>
-                        <ThemedText style={styles.adaptationValue}>
-                          {aiVenueResult.summary.primaryLanguage || 'English'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.adaptationItem}>
-                        <ThemedText style={styles.adaptationLabel}>Currency:</ThemedText>
-                        <ThemedText style={styles.adaptationValue}>
-                          {aiVenueResult.summary.currency || 'USD'}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.adaptationItem}>
-                        <ThemedText style={styles.adaptationLabel}>Weather Provider:</ThemedText>
-                        <ThemedText style={styles.adaptationValue}>
-                          {aiVenueResult.summary.weatherProvider || 'Active'}
-                        </ThemedText>
-                      </View>
-                      {aiVenueResult.summary.tacticalInsights > 0 && (
-                        <View style={styles.adaptationItem}>
-                          <ThemedText style={styles.adaptationLabel}>Tactical Insights:</ThemedText>
-                          <ThemedText style={styles.adaptationValue}>
-                            {aiVenueResult.summary.tacticalInsights} available
-                          </ThemedText>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
                   {/* Alternative Venues */}
                   {aiVenueResult.alternatives && aiVenueResult.alternatives.length > 0 && (
                     <View style={styles.alternativesCard}>
@@ -560,23 +665,14 @@ export default function VenueIntelligenceScreen() {
                       ))}
                     </View>
                   )}
-
-                  {/* Agent Tools Used */}
-                  {aiVenueResult.toolsUsed && aiVenueResult.toolsUsed.length > 0 && (
-                    <View style={styles.toolsCard}>
-                      <ThemedText style={styles.toolsLabel}>
-                        AI Tools Used: {aiVenueResult.toolsUsed.length}
-                      </ThemedText>
-                      <View style={styles.toolsList}>
-                        {aiVenueResult.toolsUsed.map((tool: string, index: number) => (
-                          <View key={index} style={styles.toolBadge}>
-                            <ThemedText style={styles.toolText}>{tool}</ThemedText>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  )}
                 </>
+              ) : (
+                <View style={styles.venueInfoCard}>
+                  <ThemedText style={styles.venueName}>No venue detected</ThemedText>
+                  <ThemedText style={styles.venueDistance}>
+                    Unable to detect a venue at your current location
+                  </ThemedText>
+                </View>
               )}
             </ScrollView>
 
@@ -585,8 +681,20 @@ export default function VenueIntelligenceScreen() {
               <TouchableOpacity style={styles.manualButton} onPress={handleManualSelect}>
                 <ThemedText style={styles.manualButtonText}>Manual Select</ThemedText>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmVenue}>
-                <ThemedText style={styles.confirmButtonText}>Confirm</ThemedText>
+              <TouchableOpacity
+                style={[
+                  styles.confirmButton,
+                  (!aiVenueResult?.venueId) && styles.confirmButtonDisabled
+                ]}
+                onPress={handleConfirmVenue}
+                disabled={!aiVenueResult?.venueId}
+              >
+                <ThemedText style={[
+                  styles.confirmButtonText,
+                  (!aiVenueResult?.venueId) && styles.confirmButtonTextDisabled
+                ]}>
+                  Confirm
+                </ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -802,10 +910,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
+  confirmButtonDisabled: {
+    backgroundColor: '#CBD5E1',
+    opacity: 0.6,
+  },
   confirmButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: 'white',
+  },
+  confirmButtonTextDisabled: {
+    color: '#94A3B8',
   },
 
   // Cache Indicator Styles

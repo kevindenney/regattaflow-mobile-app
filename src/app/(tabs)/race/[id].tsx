@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -24,6 +25,7 @@ import { raceStrategyEngine, RaceStrategy, RaceConditions } from '@/src/services
 import type { RaceCourseExtraction } from '@/src/lib/types/ai-knowledge';
 import { RaceMapView } from '@/src/components/race-strategy/RaceMapView';
 import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryArea } from 'victory';
+import { RaceDetailsView } from '@/src/components/races';
 
 interface RaceDetails {
   id: string;
@@ -39,7 +41,7 @@ interface RaceDetails {
   daysUntil: number;
 }
 
-type TabType = 'overview' | 'strategy' | 'documents' | 'crew' | 'equipment' | 'tracks' | 'results';
+type TabType = 'overview' | 'details' | 'strategy' | 'documents' | 'crew' | 'equipment' | 'tracks' | 'results';
 
 interface UploadedDocument {
   id: string;
@@ -54,87 +56,10 @@ export default function RaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [race, setRace] = useState<RaceDetails | null>(null);
+  const [raceFullData, setRaceFullData] = useState<any>(null); // Full race data for details view
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  // Mock document with extraction for demo
-  const mockExtraction: RaceCourseExtraction = {
-    courseLayout: {
-      type: 'windward_leeward',
-      description: 'Standard windward-leeward course with offset marks',
-      confidence: 0.92
-    },
-    marks: [
-      {
-        name: 'Start Line - Committee Boat',
-        type: 'start',
-        position: { description: 'Committee boat at 22.2840°N, 114.1675°E', confidence: 0.95 }
-      },
-      {
-        name: 'Start Line - Pin',
-        type: 'start',
-        position: { description: 'Pin end at 22.2838°N, 114.1673°E', confidence: 0.95 }
-      },
-      {
-        name: 'Mark 1 - Windward',
-        type: 'windward',
-        position: { description: 'Windward mark at 22.2875°N, 114.1690°E', confidence: 0.88 }
-      },
-      {
-        name: 'Mark 2 - Leeward/Gate',
-        type: 'leeward',
-        position: { description: 'Leeward gate at 22.2815°N, 114.1665°E', confidence: 0.85 }
-      }
-    ],
-    boundaries: [],
-    schedule: {
-      firstWarning: '14:00',
-      startTime: '14:05',
-      confidence: 0.90
-    },
-    distances: {},
-    startLine: {
-      type: 'line',
-      description: 'Committee boat to pin, approximately 100m length',
-      length: { value: 100, unit: 'meters', confidence: 0.75 }
-    },
-    requirements: {
-      equipment: ['Life jackets', 'VHF radio'],
-      crew: [],
-      safety: ['Safety boat on station', 'Weather briefing mandatory'],
-      registration: ['Online registration closes 1 hour before start'],
-      confidence: 0.80
-    },
-    communication: {
-      vhfChannel: '72',
-      confidence: 0.95
-    },
-    regulations: {
-      specialFlags: ['P Flag', 'I Flag'],
-      penaltySystem: 'Rule 44.1 Two-Turns Penalty',
-      confidence: 0.85
-    },
-    weatherLimits: {
-      confidence: 0.70
-    },
-    extractionMetadata: {
-      documentType: 'sailing_instructions',
-      source: 'Hong_Kong_Dragon_Championship_2025_SI.pdf',
-      extractedAt: new Date(),
-      overallConfidence: 0.87,
-      processingNotes: ['Course extracted successfully', 'All critical information identified']
-    }
-  };
-
-  const [documents, setDocuments] = useState<UploadedDocument[]>([
-    {
-      id: 'demo-doc-1',
-      name: 'Hong_Kong_Dragon_Championship_2025_SI.pdf',
-      type: 'application/pdf',
-      uploadedAt: new Date(),
-      extractionStatus: 'completed',
-      extraction: mockExtraction
-    }
-  ]);
+  const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
 
@@ -143,6 +68,8 @@ export default function RaceDetailScreen() {
   const [generatingStrategy, setGeneratingStrategy] = useState(false);
   const [activeLayer, setActiveLayer] = useState<'course' | 'weather' | 'tide' | 'tactical' | 'bathymetry' | 'satellite'>('course');
   const [showLaylines, setShowLaylines] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadRaceDetails();
@@ -151,20 +78,180 @@ export default function RaceDetailScreen() {
   const loadRaceDetails = async () => {
     try {
       setLoading(true);
-      // TODO: Fetch race details from Supabase
-      // For now, using mock data
+      console.log('[RaceDetail] Loading race:', id);
+
+      // Check if this is a mock race
+      if (id.startsWith('mock-race-')) {
+        console.log('📋 Loading mock race data for:', id);
+
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Import timeout')), 5000)
+        );
+
+        const importPromise = import('@/src/constants/mockData');
+
+        const { MOCK_RACES, getRaceWithLinks } = await Promise.race([importPromise, timeoutPromise]) as any;
+        console.log('📋 Mock data imported successfully');
+
+        const linkedData = getRaceWithLinks(id);
+        console.log('📋 Linked data:', linkedData);
+
+        if (!linkedData) {
+          console.error('Mock race not found');
+          setLoading(false);
+          return;
+        }
+
+        const mockRace = linkedData.race;
+
+        // Convert mock race to race details format
+        const startDate = new Date(mockRace.date);
+        const today = new Date();
+        const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        setRace({
+          id: mockRace.id,
+          name: mockRace.name,
+          venue: mockRace.venue,
+          startDate: mockRace.date,
+          endDate: mockRace.date, // Same day for demo
+          classId: 'dragon',
+          className: 'Dragon',
+          hasStrategy: false,
+          hasDocuments: false,
+          hasCrew: false,
+          daysUntil,
+        });
+
+        // Set mock race data for details view
+        setRaceFullData({
+          id: mockRace.id,
+          name: mockRace.name,
+          start_date: mockRace.date,
+          end_date: mockRace.date,
+          metadata: {
+            venue_name: mockRace.venue,
+            class: 'Dragon',
+            class_name: 'Dragon',
+            wind: mockRace.wind,
+            tide: mockRace.tide,
+            strategy: mockRace.strategy,
+            critical_details: mockRace.critical_details,
+          },
+        });
+
+        setLoading(false);
+        return;
+      }
+
+      // Fetch race details from Supabase for real races
+      const { supabase } = await import('@/src/services/supabase');
+      const { data: regattaData, error } = await supabase
+        .from('regattas')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Error loading race:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (!regattaData) {
+        console.error('Race not found');
+        setLoading(false);
+        return;
+      }
+
+      // Store full race data for details view
+      setRaceFullData(regattaData);
+
+      // Calculate days until race
+      const startDate = new Date(regattaData.start_date);
+      const today = new Date();
+      const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Load race documents from database (sailing_documents table)
+      // Documents are linked to races through metadata or we can query all user documents
+      const { data: docsData } = await supabase
+        .from('sailing_documents')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (docsData && docsData.length > 0) {
+        const loadedDocs: UploadedDocument[] = docsData.map(doc => ({
+          id: doc.id,
+          name: doc.filename || 'Unknown Document',
+          type: doc.mime_type || 'application/pdf',
+          uploadedAt: new Date(doc.created_at),
+          extractionStatus: (doc.processing_status as any) || 'completed',
+          // TODO: Load extraction from ai_analyses table with document_id
+          extraction: doc.course_data ? doc.course_data : undefined,
+        }));
+        setDocuments(loadedDocs);
+      }
+
+      // Load race strategy if exists (race_strategies table with regatta_id)
+      const { data: strategyData } = await supabase
+        .from('race_strategies')
+        .select('*')
+        .eq('regatta_id', id)
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (strategyData) {
+        // race_strategies table stores strategy components in separate JSONB fields
+        const loadedStrategy: RaceStrategy = {
+          overallApproach: strategyData.overall_approach || '',
+          strategy: {
+            overallApproach: strategyData.overall_approach || '',
+            startStrategy: strategyData.start_strategy || {},
+            beatStrategy: strategyData.beat_strategy || [],
+            runStrategy: strategyData.run_strategy || [],
+            finishStrategy: strategyData.finish_strategy || {},
+            markRoundings: strategyData.mark_roundings || [],
+          },
+          contingencies: strategyData.contingencies || { windShift: [], windDrop: [], currentChange: [] },
+          conditions: {
+            wind: {
+              speed: strategyData.wind_speed || 0,
+              direction: strategyData.wind_direction || 0,
+              forecast: { nextHour: { speed: 0, direction: 0 }, nextThreeHours: { speed: 0, direction: 0 } },
+              confidence: 0.8
+            },
+            current: {
+              speed: strategyData.current_speed || 0,
+              direction: strategyData.current_direction || 0,
+              tidePhase: 'flood'
+            },
+            waves: { height: strategyData.wave_height || 0, period: 4, direction: 90 },
+            visibility: 10,
+            temperature: 24,
+            weatherRisk: 'low'
+          },
+          simulationResults: strategyData.simulation_results || {},
+          confidence: strategyData.confidence || 0.5,
+        };
+        setStrategy(loadedStrategy);
+      }
+
       setRace({
-        id: id || '',
-        name: 'Hong Kong Dragon Championship 2025',
-        venue: 'Royal Hong Kong Yacht Club',
-        startDate: '2025-03-15',
-        endDate: '2025-03-17',
-        classId: 'dragon-1',
-        className: 'Dragon',
-        hasStrategy: false,
-        hasDocuments: documents.length > 0,
-        hasCrew: false,
-        daysUntil: 42,
+        id: regattaData.id,
+        name: regattaData.name,
+        venue: regattaData.metadata?.venue_name || 'Venue TBD',
+        startDate: regattaData.start_date,
+        endDate: regattaData.end_date,
+        classId: regattaData.metadata?.class || 'unknown',
+        className: regattaData.metadata?.class_name || regattaData.metadata?.class || 'Class TBD',
+        hasStrategy: !!strategyData,
+        hasDocuments: (docsData && docsData.length > 0) || false,
+        hasCrew: !!regattaData.metadata?.crew,
+        daysUntil,
       });
     } catch (error) {
       console.error('Error loading race details:', error);
@@ -283,6 +370,70 @@ export default function RaceDetailScreen() {
     } finally {
       setExtracting(false);
     }
+  };
+
+  const handleDeleteRace = async () => {
+    if (Platform.OS === 'web') {
+      const confirmed = confirm('Are you sure you want to delete this race? This action cannot be undone.');
+      if (!confirmed) return;
+    } else {
+      Alert.alert(
+        'Delete Race',
+        'Are you sure you want to delete this race? This action cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: () => performDelete() }
+        ]
+      );
+      return;
+    }
+
+    await performDelete();
+  };
+
+  const performDelete = async () => {
+    try {
+      setDeleting(true);
+      setShowMenuModal(false);
+
+      // Delete race from database
+      const { supabase } = await import('@/src/services/supabase');
+      const { error } = await supabase
+        .from('regattas')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting race:', error);
+        if (Platform.OS === 'web') {
+          alert('Failed to delete race. Please try again.');
+        } else {
+          Alert.alert('Error', 'Failed to delete race. Please try again.');
+        }
+        setDeleting(false);
+        return;
+      }
+
+      // Navigate back to races list
+      if (Platform.OS === 'web') {
+        alert('Race deleted successfully');
+      }
+      router.back();
+    } catch (error) {
+      console.error('Error deleting race:', error);
+      if (Platform.OS === 'web') {
+        alert('An unexpected error occurred.');
+      } else {
+        Alert.alert('Error', 'An unexpected error occurred.');
+      }
+      setDeleting(false);
+    }
+  };
+
+  const handleEditRace = () => {
+    setShowMenuModal(false);
+    // Navigate to edit screen (we'll create this or reuse the add screen)
+    router.push(`/race/edit/${id}`);
   };
 
   const generateStrategy = async () => {
@@ -1034,37 +1185,37 @@ export default function RaceDetailScreen() {
     </View>
   );
 
-  const renderCrew = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.emptyState}>
-        <MaterialCommunityIcons name="account-group-outline" size={64} color="#CBD5E1" />
-        <Text style={styles.emptyTitle}>No Crew Assigned</Text>
-        <Text style={styles.emptyText}>
-          Assign crew members and positions for this race
-        </Text>
-        <TouchableOpacity style={styles.primaryButton}>
-          <MaterialCommunityIcons name="account-plus" size={20} color="#FFFFFF" />
-          <Text style={styles.primaryButtonText}>Assign Crew</Text>
-        </TouchableOpacity>
+  const renderCrew = () => {
+    // TODO: Load crew data from crew_members table
+    // For now showing empty state since no crew data has been set up
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="account-group-outline" size={64} color="#CBD5E1" />
+          <Text style={styles.emptyTitle}>No Crew Assigned</Text>
+          <Text style={styles.emptyText}>
+            Add crew members to track attendance and positions for this race
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
-  const renderEquipment = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.emptyState}>
-        <MaterialCommunityIcons name="wrench-outline" size={64} color="#CBD5E1" />
-        <Text style={styles.emptyTitle}>No Equipment Setup</Text>
-        <Text style={styles.emptyText}>
-          Configure boat setup and tuning settings for race conditions
-        </Text>
-        <TouchableOpacity style={styles.primaryButton}>
-          <MaterialCommunityIcons name="cog" size={20} color="#FFFFFF" />
-          <Text style={styles.primaryButtonText}>Setup Equipment</Text>
-        </TouchableOpacity>
+  const renderEquipment = () => {
+    // TODO: Load equipment/boat setup data from sailor_boats table
+    // For now showing empty state since no equipment data has been set up
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="wrench-outline" size={64} color="#CBD5E1" />
+          <Text style={styles.emptyTitle}>No Equipment Setup</Text>
+          <Text style={styles.emptyText}>
+            Configure your boat's equipment and rig settings for this race
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderTracks = () => (
     <View style={styles.tabContent}>
@@ -1093,9 +1244,25 @@ export default function RaceDetailScreen() {
     </View>
   );
 
+  const renderDetails = () => {
+    if (!raceFullData) {
+      return (
+        <View style={styles.tabContent}>
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color="#3B82F6" />
+            <Text style={styles.emptyTitle}>Loading race details...</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return <RaceDetailsView raceData={raceFullData} onUpdate={loadRaceDetails} />;
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview': return renderOverview();
+      case 'details': return renderDetails();
       case 'strategy': return renderStrategy();
       case 'documents': return renderDocuments();
       case 'crew': return renderCrew();
@@ -1117,10 +1284,58 @@ export default function RaceDetailScreen() {
           <Text style={styles.raceName} numberOfLines={1}>{race.name}</Text>
           <Text style={styles.raceClass}>{race.className}</Text>
         </View>
-        <TouchableOpacity style={styles.editButton}>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => setShowMenuModal(true)}
+          disabled={deleting}
+        >
           <Ionicons name="ellipsis-horizontal" size={24} color="#64748B" />
         </TouchableOpacity>
       </View>
+
+      {/* Menu Modal */}
+      <Modal
+        visible={showMenuModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowMenuModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenuModal(false)}
+        >
+          <View style={styles.menuModalContent}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleEditRace}
+            >
+              <Ionicons name="create-outline" size={20} color="#3B82F6" />
+              <Text style={styles.menuItemText}>Edit Race</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleDeleteRace}
+            >
+              <Ionicons name="trash-outline" size={20} color="#EF4444" />
+              <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>Delete Race</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setShowMenuModal(false)}
+            >
+              <Ionicons name="close-outline" size={20} color="#64748B" />
+              <Text style={styles.menuItemText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Tab Navigation */}
       <ScrollView
@@ -1135,6 +1350,14 @@ export default function RaceDetailScreen() {
         >
           <Ionicons name="home" size={18} color={activeTab === 'overview' ? '#3B82F6' : '#64748B'} />
           <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>Overview</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'details' && styles.tabActive]}
+          onPress={() => setActiveTab('details')}
+        >
+          <MaterialCommunityIcons name="format-list-bulleted" size={18} color={activeTab === 'details' ? '#3B82F6' : '#64748B'} />
+          <Text style={[styles.tabText, activeTab === 'details' && styles.tabTextActive]}>Details</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -2082,5 +2305,41 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94A3B8',
     marginLeft: 16,
+  },
+  // Menu Modal Styles
+  menuModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 16,
+  },
+  menuModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    minWidth: 200,
+    boxShadow: '0px 4px',
+    elevation: 5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1E293B',
+  },
+  menuItemTextDanger: {
+    color: '#EF4444',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 8,
   },
 });

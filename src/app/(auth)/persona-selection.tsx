@@ -10,16 +10,47 @@ export default function PersonaSelection() {
   const [loading, setLoading] = useState(false);
 
   const choose = async (role: 'sailor' | 'coach' | 'club') => {
-    setLoading(true);
-    const { data: me } = await supabase.auth.getUser();
-    const id = me.user?.id as string | undefined;
-    if (!id) {
+    try {
+      console.log('🎯 [PERSONA] Choose called with role:', role);
+      setLoading(true);
+
+      const { data: me } = await supabase.auth.getUser();
+      console.log('🎯 [PERSONA] Got user:', me.user?.id);
+
+      const id = me.user?.id as string | undefined;
+      if (!id) {
+        console.log('🎯 [PERSONA] No user ID, returning');
+        setLoading(false);
+        return;
+      }
+
+      // Update user type and onboarding status
+      console.log('🎯 [PERSONA] Updating user to', role, 'with onboarding_completed: false');
+      await supabase.from('users').update({
+        user_type: role,
+        onboarding_completed: false,
+        onboarding_step: 'user_type_selected'
+      }).eq('id', id);
+
+      // Fetch profile FIRST to update auth state
+      console.log('🎯 [PERSONA] Fetching profile');
+      await fetchUserProfile(id);
+      console.log('🎯 [PERSONA] Profile fetched');
+
+      // Navigate to role-specific onboarding
+      console.log('🎯 [PERSONA] Navigating to onboarding for role:', role);
+
+      if (role === 'sailor') {
+        router.replace('/(auth)/onboarding-redesign');
+      } else if (role === 'coach') {
+        router.replace('/(auth)/coach-onboarding-welcome');
+      } else if (role === 'club') {
+        router.replace('/(auth)/club-onboarding-chat');
+      }
+    } catch (error) {
+      console.error('🎯 [PERSONA] Error in choose:', error);
       setLoading(false);
-      return;
     }
-    await supabase.from('users').update({ user_type: role }).eq('id', id);
-    await fetchUserProfile(id);
-    router.replace(roleHome(role));
   };
 
   return (
@@ -31,7 +62,10 @@ export default function PersonaSelection() {
         <TouchableOpacity
           testID="choose-sailor"
           style={[styles.roleButton, loading && styles.disabled]}
-          onPress={() => choose('sailor')}
+          onPress={() => {
+            console.log('🎯 [PERSONA] Sailor button pressed');
+            choose('sailor');
+          }}
           disabled={loading}
         >
           <Text style={styles.roleTitle}>⛵ Sailor</Text>

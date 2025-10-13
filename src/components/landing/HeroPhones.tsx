@@ -11,21 +11,51 @@ import { Link, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/providers/AuthProvider';
+import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/src/lib/utils/userTypeRouting';
 import { MiniSailorDashboard } from './MiniSailorDashboard';
 import { MiniCoachDashboard } from './MiniCoachDashboard';
 import { MiniClubDashboard } from './MiniClubDashboard';
 import { PricingSection } from './PricingSection';
+import { supabase } from '@/src/services/supabase';
 
 export function HeroPhones() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
 
-  const handleGetStarted = () => {
-    if (user) {
-      router.push('/(tabs)/dashboard');
+  // DEV: Logout function for testing
+  const handleLogout = async () => {
+    console.log('🚪 [LOGOUT] Signing out...');
+    await supabase.auth.signOut();
+    // Force reload to clear all state
+    if (Platform.OS === 'web') {
+      window.location.href = '/';
     } else {
-      router.push('/(auth)/signup');
+      router.replace('/');
+    }
+  };
+
+  const handleGetStarted = () => {
+    console.log('🚀 [LANDING] Get Started clicked - User:', user?.id, 'Profile:', userProfile?.user_type, 'Onboarding:', userProfile?.onboarding_completed);
+
+    if (user && userProfile) {
+      console.log('🚀 [LANDING] User exists, checking onboarding status');
+      // Check if onboarding is needed
+      if (shouldCompleteOnboarding(userProfile)) {
+        const onboardingRoute = getOnboardingRoute(userProfile);
+        console.log('🚀 [LANDING] Onboarding needed, routing to:', onboardingRoute);
+        router.push(onboardingRoute);
+      } else {
+        console.log('🚀 [LANDING] Onboarding complete, routing to dashboard');
+        router.push(getDashboardRoute(userProfile.user_type));
+      }
+    } else {
+      console.log('🚀 [LANDING] No user, routing to signup with persona: sailor');
+      // For new users, default to sailor persona (can be changed later if we add tabs)
+      router.push({
+        pathname: '/(auth)/signup',
+        params: { persona: 'sailor' }
+      });
     }
   };
 
@@ -42,6 +72,16 @@ export function HeroPhones() {
         end={{ x: 1, y: 1 }}
         style={styles.heroSection}
       >
+        {/* DEV: Logout button (only show if logged in) */}
+        {user && (
+          <TouchableOpacity
+            onPress={handleLogout}
+            style={styles.logoutButton}
+          >
+            <Text style={styles.logoutText}>Logout (Dev)</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={[styles.heroContent, isDesktop && styles.heroContentDesktop]}>
           {/* Left Side - Text Content */}
           <View style={[styles.heroText, isDesktop && styles.heroTextDesktop]}>
@@ -62,18 +102,14 @@ export function HeroPhones() {
             </Text>
 
             <View style={[styles.ctaButtons, isDesktop && styles.ctaButtonsDesktop]}>
-              <Link href={user ? '/(tabs)/dashboard' : '/(auth)/signup'} asChild>
-                <TouchableOpacity style={styles.primaryButton}>
-                  <Text style={styles.primaryButtonText}>Get Started Free</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-                </TouchableOpacity>
-              </Link>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
+                <Text style={styles.primaryButtonText}>Get Started Free</Text>
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+              </TouchableOpacity>
 
-              <Link href="/(auth)/login" asChild>
-                <TouchableOpacity style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Sign In</Text>
-                </TouchableOpacity>
-              </Link>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleSignIn}>
+                <Text style={styles.secondaryButtonText}>Sign In</Text>
+              </TouchableOpacity>
             </View>
 
             {/* App Download Buttons */}
@@ -413,6 +449,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+
+  // DEV: Logout button
+  logoutButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    zIndex: 1000,
+  },
+  logoutText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Hero Section

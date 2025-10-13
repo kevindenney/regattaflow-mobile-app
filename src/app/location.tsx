@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { Image } from '@/src/components/ui';
 import { Search, MapPin, Navigation, Wifi, Navigation2, ChevronRight, RefreshCw } from 'lucide-react-native';
 
 const screenWidth = Dimensions.get("window").width;

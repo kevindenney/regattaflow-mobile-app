@@ -323,10 +323,21 @@ export const racePerformanceApi = {
 export const boatsApi = {
   async getBoats(userId: string) {
     try {
+      // First get the sailor_profile id from user_id
+      const { data: profile } = await supabase
+        .from('sailor_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      if (!profile) {
+        return { data: [], error: null, loading: false };
+      }
+
       const { data, error } = await supabase
         .from('sailor_boats')
         .select('*, boat_class:boat_classes(*)')
-        .eq('sailor_id', userId)
+        .eq('sailor_id', profile.id)
         .order('is_primary', { ascending: false });
 
       return { data, error, loading: false };

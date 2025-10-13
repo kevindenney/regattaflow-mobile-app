@@ -44,9 +44,9 @@ You should be proactive but always confirm critical decisions with the user. Whe
       name: 'detect_venue_from_gps',
       description: 'Detect the closest sailing venue from GPS coordinates. Use this when you have the user\'s location. Returns the venue with confidence score.',
       input_schema: z.object({
-        latitude: z.number().describe('GPS latitude'),
-        longitude: z.number().describe('GPS longitude'),
-        radius_km: z.number().optional().default(50).describe('Search radius in kilometers'),
+        latitude: z.coerce.number().describe('GPS latitude'),
+        longitude: z.coerce.number().describe('GPS longitude'),
+        radius_km: z.coerce.number().optional().default(50).describe('Search radius in kilometers'),
       }),
       execute: async (input) => {
         try {
@@ -94,7 +94,7 @@ You should be proactive but always confirm critical decisions with the user. Whe
       description: 'Search for sailing venues by name. Use this when the user types a location name like "Hong Kong" or "Chicago".',
       input_schema: z.object({
         query: z.string().describe('Search query (venue name or city)'),
-        limit: z.number().optional().default(10).describe('Max results to return'),
+        limit: z.coerce.number().optional().default(10).describe('Max results to return'),
       }),
       execute: async (input) => {
         try {
@@ -130,7 +130,7 @@ You should be proactive but always confirm critical decisions with the user. Whe
       description: 'Suggest boat classes that are popular at a specific venue. Use this to help sailors choose their boat class.',
       input_schema: z.object({
         venue_id: z.string().describe('The venue ID'),
-        limit: z.number().optional().default(10).describe('Max boat classes to suggest'),
+        limit: z.coerce.number().optional().default(10).describe('Max boat classes to suggest'),
       }),
       execute: async (input) => {
         try {
@@ -177,7 +177,7 @@ You should be proactive but always confirm critical decisions with the user. Whe
       input_schema: z.object({
         venue_id: z.string().optional().describe('The venue ID'),
         class_id: z.string().describe('The boat class ID'),
-        limit: z.number().optional().default(10).describe('Max fleets to return'),
+        limit: z.coerce.number().optional().default(10).describe('Max fleets to return'),
       }),
       execute: async (input) => {
         try {

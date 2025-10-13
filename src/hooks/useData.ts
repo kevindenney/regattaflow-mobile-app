@@ -1,8 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useAuth } from '@/src/providers/AuthProvider';
 import api from '@/src/services/apiService';
-import { useApi, useMutation, usePaginatedQuery, UsePullToRefreshReturn, usePullToRefresh } from './useApi';
+import { useApi, useMutation, usePaginatedQuery, usePullToRefreshReturn, usePullToRefresh } from './useApi';
 import { Tables, TablesInsert, TablesUpdate } from '@/src/services/supabase';
+import { useLiveRaces } from './useRaceResults';
 
 // ============================================================================
 // Sailor Profile Hooks
@@ -66,31 +67,94 @@ export function useSaveVenue() {
 
 export function useRaces() {
   const { user } = useAuth();
+  console.log('🏁🏁🏁 [useRaces] FUNCTION CALLED - User:', user?.id);
 
-  return useApi(
-    async () => {
-      // Query regattas table directly instead of non-existent regatta_races
-      const { data, error } = await api.supabase
-        .from('regattas')
-        .select('*')
-        .eq('created_by', user?.id)
-        .order('start_date', { ascending: true })
-        .limit(20);
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-      if (error) throw error;
+  useEffect(() => {
+    console.log('🏁 [useRaces] useEffect FIRED - user:', user?.id);
 
-      // Map to expected format for dashboard
-      return (data || []).map((regatta: any) => ({
-        id: regatta.id,
-        name: regatta.name,
-        venue: regatta.metadata?.venue || 'Venue TBD',
-        scheduled_start: regatta.start_date,
-        boatClass: regatta.metadata?.class_name || 'Class TBD',
-        status: regatta.status || 'upcoming'
-      }));
-    },
-    { enabled: !!user?.id }
-  );
+    if (!user?.id) {
+      console.log('🏁 [useRaces] No user ID - setting loading to false');
+      setLoading(false);
+      return;
+    }
+
+    console.log('🏁 [useRaces] Starting database query...');
+    setLoading(true);
+    setError(null);
+
+    // Execute query directly in useEffect
+    (async () => {
+      try {
+        console.log('🏁 [useRaces] Executing Supabase query for user:', user.id);
+        const { data: rawData, error: dbError } = await api.supabase
+          .from('regattas')
+          .select('*')
+          .eq('created_by', user.id)
+          .order('start_date', { ascending: true })
+          .limit(20);
+
+        console.log('🏁 [useRaces] Query complete - rawData:', rawData, 'error:', dbError);
+
+        if (dbError) {
+          console.error('🏁 [useRaces] Database error:', dbError);
+          setError(dbError as Error);
+          setData([]);
+          setLoading(false);
+          return;
+        }
+
+        console.log('🏁 [useRaces] Mapping', rawData?.length || 0, 'records...');
+
+        // Map to expected format
+        const mapped = (rawData || []).map((regatta: any) => ({
+          id: regatta.id,
+          name: regatta.name,
+          venue: regatta.metadata?.venue_name || 'Venue TBD',
+          date: regatta.start_date,
+          startTime: regatta.metadata?.startTime || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
+          status: regatta.status || 'upcoming',
+          wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
+          tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
+          strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
+          critical_details: regatta.metadata?.critical_details
+        }));
+
+        console.log('🏁 [useRaces] Setting data with', mapped.length, 'mapped races:', mapped);
+        setData(mapped);
+        setLoading(false);
+      } catch (err) {
+        console.error('🏁 [useRaces] Exception during query:', err);
+        setError(err as Error);
+        setData([]);
+        setLoading(false);
+      }
+    })();
+  }, [user?.id]);
+
+  const refetch = useCallback(async () => {
+    console.log('🏁 [useRaces] refetch called');
+    // Trigger re-fetch by updating a dependency
+    setLoading(true);
+  }, []);
+
+  const mutate = useCallback(async (optimisticData?: any[]) => {
+    if (optimisticData) {
+      setData(optimisticData);
+    }
+  }, []);
+
+  return {
+    data,
+    loading,
+    error,
+    refetch,
+    mutate
+  };
 }
 
 export function useRace(raceId: string) {
@@ -452,33 +516,63 @@ export function useRecentTimerSessions(limit: number = 5) {
 export function useDashboardData() {
   const { user } = useAuth();
 
+  console.log('🏠 [useDashboardData] Fetching dashboard for user:', user?.id);
+
   const profile = useSailorProfile();
-  const races = useRaces();
+  const { liveRaces, loading: racesLoading, refresh: racesRefresh } = useLiveRaces(user?.id);
   const performanceHistory = usePerformanceHistory(5);
   const boats = useBoats();
   const fleets = useFleets();
   const recentSessions = useRecentTimerSessions(5);
 
-  const loading = profile.loading || races.loading || performanceHistory.loading || boats.loading || fleets.loading || recentSessions.loading;
-  const error = profile.error || races.error || performanceHistory.error || boats.error || fleets.error || recentSessions.error;
+  // Map liveRaces to expected format (same format as useRaces)
+  const mappedRaces = (liveRaces || []).map((regatta: any) => ({
+    id: regatta.id,
+    name: regatta.name,
+    venue: regatta.metadata?.venue_name || 'Venue TBD',
+    date: regatta.start_date,
+    startTime: regatta.metadata?.startTime || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
+    status: regatta.status || 'upcoming',
+    wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
+    tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
+    strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
+    critical_details: regatta.metadata?.critical_details
+  }));
+
+  console.log('🏠 [useDashboardData] Data loaded:', {
+    profile: profile.data,
+    profileError: profile.error,
+    liveRacesCount: liveRaces?.length,
+    mappedRacesCount: mappedRaces.length,
+    boats: boats.data,
+    boatsCount: boats.data?.length,
+    boatsError: boats.error,
+    fleets: fleets.data,
+    fleetsCount: fleets.data?.length,
+    fleetsError: fleets.error,
+  });
+
+  const loading = profile.loading || racesLoading || performanceHistory.loading || boats.loading || fleets.loading || recentSessions.loading;
+  const error = profile.error || performanceHistory.error || boats.error || fleets.error || recentSessions.error;
 
   const refetch = useCallback(async () => {
     await Promise.all([
       profile.refetch(),
-      races.refetch(),
+      racesRefresh(),
       performanceHistory.refetch(),
       boats.refetch(),
       fleets.refetch(),
       recentSessions.refetch()
     ]);
-  }, [profile, races, performanceHistory, boats, fleets, recentSessions]);
+  }, [profile.refetch, racesRefresh, performanceHistory.refetch, boats.refetch, fleets.refetch, recentSessions.refetch]);
 
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   return {
     profile: profile.data,
-    nextRace: (races.data && races.data[0]) || null,
-    recentRaces: (races.data && races.data.slice(1, 6)) || [],
+    nextRace: (mappedRaces && mappedRaces[0]) || null,
+    recentRaces: (mappedRaces && mappedRaces.slice(1, 6)) || [],
     recentTimerSessions: recentSessions.data,
     performanceHistory: performanceHistory.data,
     boats: boats.data,

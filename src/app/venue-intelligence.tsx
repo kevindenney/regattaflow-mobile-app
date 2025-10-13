@@ -2,7 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { CloudRain, Droplets, Eye, MapPin, Navigation, Thermometer, Wind } from 'lucide-react-native';
 import { cssInterop } from 'nativewind';
 import React, { useEffect, useState } from 'react';
-import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from '@/src/components/ui';
 
 // Setup LinearGradient for NativeWind compatibility
 cssInterop(LinearGradient, {

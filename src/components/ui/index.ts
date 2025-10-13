@@ -10,3 +10,5 @@ export { NetworkStatusBanner, OfflineBadge } from './network';
 export { EmptyState } from './empty';
 export { AccessibleTouchTarget } from './AccessibleTouchTarget';
 export { VisuallyHidden, LiveRegion, Heading, LoadingAnnouncer } from './ScreenReaderComponents';
+export { Image } from './image';
+export { ImageBackground } from './image-background';

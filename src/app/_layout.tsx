@@ -8,6 +8,7 @@ import {ErrorBoundary} from '@/src/components/ui/error'
 import {NetworkStatusBanner} from '@/src/components/ui/network'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import Splash from '@/src/components/Splash'
+import {initializeImageCache} from '@/src/lib/imageConfig'
 import '@/global.css'
 
 // Configure React Query
@@ -22,9 +23,11 @@ const queryClient = new QueryClient({
   },
 })
 
-// Suppress React Native Web deprecation warnings (from third-party libraries)
+// Suppress React Native Web deprecation warnings and font loading errors
 if (typeof window !== 'undefined' && Platform.OS === 'web') {
   const originalWarn = console.warn;
+  const originalError = console.error;
+
   console.warn = (...args) => {
     if (
       typeof args[0] === 'string' &&
@@ -36,6 +39,25 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
     }
     originalWarn.apply(console, args);
   };
+
+  console.error = (...args) => {
+    // Suppress font loading timeout errors (non-critical)
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('timeout exceeded')
+    ) {
+      return;
+    }
+    originalError.apply(console, args);
+  };
+
+  // Catch unhandled promise rejections for font loading
+  window.addEventListener('unhandledrejection', (event) => {
+    if (event.reason?.message?.includes('timeout exceeded')) {
+      event.preventDefault();
+      return;
+    }
+  });
 }
 
 function StackWithSplash() {
@@ -54,8 +76,11 @@ function StackWithSplash() {
 }
 
 export default function RootLayout() {
-  // Inject global CSS for web
+  // Initialize image cache and inject global CSS for web
   useEffect(() => {
+    // Initialize expo-image cache for optimal performance
+    initializeImageCache();
+
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const style = document.createElement('style');
       style.textContent = `

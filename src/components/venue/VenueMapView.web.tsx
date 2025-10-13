@@ -8,6 +8,7 @@ import { StyleSheet, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/src/components/themed-text';
 import { supabase } from '@/src/services/supabase';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import Constants from 'expo-constants';
 import { GooglePlacesService, PlaceResult } from '@/src/services/GooglePlacesService';
 import type { ServiceType } from '@/src/services/SailingNetworkService';
@@ -103,7 +104,7 @@ const createMarkerIcon = (type: string, color: string, isSelected = false) => {
   };
 };
 
-// Google Maps Component
+// Google Maps Component with Clustering and Lazy Loading
 function GoogleMapComponent({
   venues,
   yachtClubs,
@@ -130,6 +131,139 @@ function GoogleMapComponent({
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const markerClustererRef = useRef<MarkerClusterer | null>(null);
+  const openInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+
+  // Helper: Create InfoWindow content lazily (only when marker is clicked)
+  const createVenueInfoWindowContent = useCallback((venue: Venue) => {
+    const ratingHtml = venue.rating
+      ? `<div style="margin: 8px 0 0 0; display: flex; align-items: center; gap: 4px;">
+           <span style="color: #ffc107;">⭐</span>
+           <span style="font-size: 13px; font-weight: 600; color: #1a1a1a;">${venue.rating.toFixed(1)}</span>
+           ${venue.user_ratings_total ? `<span style="font-size: 12px; color: #999;">(${venue.user_ratings_total} reviews)</span>` : ''}
+         </div>`
+      : '';
+
+    const establishedHtml = venue.established_year
+      ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #666;">⛵ Established ${venue.established_year}</p>`
+      : '';
+
+    return `<div style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 280px;">
+      <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: #1a1a1a;">${venue.name}</h3>
+      <p style="margin: 0; font-size: 13px; color: #666; text-transform: capitalize;">
+        📍 ${venue.country} • ${venue.region}
+      </p>
+      <div style="margin: 6px 0 0 0; padding: 4px 8px; background: #f0f0f0; border-radius: 4px; display: inline-block;">
+        <span style="font-size: 11px; font-weight: 600; color: #007AFF; text-transform: uppercase;">${venue.venue_type} Venue</span>
+      </div>
+      ${establishedHtml}
+      ${ratingHtml}
+      ${venue.formatted_address ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">📮 ${venue.formatted_address}</p>` : ''}
+    </div>`;
+  }, []);
+
+  const createYachtClubInfoWindowContent = useCallback((club: YachtClub) => {
+    const membershipHtml = club.membership_type
+      ? `<div style="margin: 6px 0 0 0; padding: 3px 8px; background: #e3f2fd; border-radius: 4px; display: inline-block;">
+           <span style="font-size: 11px; font-weight: 600; color: #1976d2; text-transform: capitalize;">👥 ${club.membership_type}</span>
+         </div>`
+      : '';
+
+    const clubRatingHtml = club.rating
+      ? `<div style="margin: 8px 0 0 0; display: flex; align-items: center; gap: 4px;">
+           <span style="color: #ffc107;">⭐</span>
+           <span style="font-size: 13px; font-weight: 600; color: #1a1a1a;">${club.rating.toFixed(1)}</span>
+           ${club.user_ratings_total ? `<span style="font-size: 12px; color: #999;">(${club.user_ratings_total} reviews)</span>` : ''}
+         </div>`
+      : '';
+
+    const clubEstablishedHtml = club.founded
+      ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #666;">⚓ Founded ${club.founded}</p>`
+      : '';
+
+    const clubContactHtml = club.phone_number || club.website
+      ? `<div style="margin: 8px 0 0 0; padding-top: 8px; border-top: 1px solid #e0e0e0;">
+           ${club.phone_number ? `<p style="margin: 0; font-size: 12px; color: #007AFF;">📞 ${club.phone_number}</p>` : ''}
+           ${club.website ? `<p style="margin: 4px 0 0 0; font-size: 12px;"><a href="${club.website}" target="_blank" style="color: #007AFF; text-decoration: none;">🌐 Visit Website →</a></p>` : ''}
+         </div>`
+      : '';
+
+    return `<div style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 300px;">
+      <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: #1a1a1a;">${club.short_name || club.name}</h3>
+      <p style="margin: 0; font-size: 13px; color: #666; text-transform: capitalize;">
+        ${club.prestige_level ? `🏆 ${club.prestige_level} Yacht Club` : '⛵ Yacht Club'}
+      </p>
+      ${membershipHtml}
+      ${clubEstablishedHtml}
+      ${clubRatingHtml}
+      ${club.formatted_address ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">📮 ${club.formatted_address}</p>` : ''}
+      ${clubContactHtml}
+    </div>`;
+  }, []);
+
+  const createServiceInfoWindowContent = useCallback((service: Service) => {
+    const specialtiesHtml = service.specialties && service.specialties.length > 0
+      ? `<div style="margin: 8px 0 0 0;">
+           <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase;">Specialties</p>
+           <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+             ${service.specialties.slice(0, 3).map(s => `<span style="padding: 2px 6px; background: #f0f0f0; border-radius: 3px; font-size: 11px; color: #666;">${s}</span>`).join('')}
+           </div>
+         </div>`
+      : '';
+
+    const classesHtml = service.classes_supported && service.classes_supported.length > 0
+      ? `<div style="margin: 8px 0 0 0;">
+           <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase;">⛵ Classes Supported</p>
+           <p style="margin: 0; font-size: 12px; color: #666;">${service.classes_supported.slice(0, 4).join(', ')}</p>
+         </div>`
+      : '';
+
+    const priceLevelHtml = service.price_level
+      ? `<div style="margin: 6px 0 0 0; padding: 3px 8px; background: #e8f5e9; border-radius: 4px; display: inline-block;">
+           <span style="font-size: 11px; font-weight: 600; color: #2e7d32; text-transform: uppercase;">💰 ${service.price_level}</span>
+         </div>`
+      : '';
+
+    const serviceContactHtml = service.phone || service.email || service.website
+      ? `<div style="margin: 8px 0 0 0; padding-top: 8px; border-top: 1px solid #e0e0e0;">
+           ${service.phone ? `<p style="margin: 0; font-size: 12px; color: #007AFF;">📞 ${service.phone}</p>` : ''}
+           ${service.email ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #007AFF;">✉️ ${service.email}</p>` : ''}
+           ${service.website ? `<p style="margin: 4px 0 0 0; font-size: 12px;"><a href="${service.website}" target="_blank" style="color: #007AFF; text-decoration: none;">🌐 Visit Website →</a></p>` : ''}
+         </div>`
+      : '';
+
+    const preferredBadgeHtml = service.preferred_by_club
+      ? `<span style="margin-left: 6px; padding: 2px 6px; background: #ffc107; border-radius: 3px; font-size: 10px; font-weight: 600; color: #000;">⭐ PREFERRED</span>`
+      : '';
+
+    return `<div style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 320px;">
+      <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: #1a1a1a; display: flex; align-items: center;">
+        ${service.business_name}
+        ${preferredBadgeHtml}
+      </h3>
+      <p style="margin: 0; font-size: 13px; color: #666; text-transform: capitalize;">
+        🔧 ${service.service_type.replace('-', ' ')}
+      </p>
+      ${priceLevelHtml}
+      ${specialtiesHtml}
+      ${classesHtml}
+      ${service.contact_name ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">👤 Contact: ${service.contact_name}</p>` : ''}
+      ${serviceContactHtml}
+    </div>`;
+  }, []);
+
+  // Helper: Show InfoWindow lazily when marker is clicked
+  const showInfoWindow = useCallback((marker: google.maps.Marker, content: string) => {
+    // Close any open InfoWindow
+    if (openInfoWindowRef.current) {
+      openInfoWindowRef.current.close();
+    }
+
+    // Create and open new InfoWindow
+    const infoWindow = new google.maps.InfoWindow({ content });
+    infoWindow.open(googleMapRef.current!, marker);
+    openInfoWindowRef.current = infoWindow;
+  }, []);
 
   // Initialize Google Map
   useEffect(() => {
@@ -149,11 +283,16 @@ function GoogleMapComponent({
     });
   }, []);
 
-  // Update markers when venues or yacht clubs change
+  // Update markers with clustering and lazy InfoWindows
   useEffect(() => {
     if (!googleMapRef.current) return;
 
-    // Clear existing markers
+    // Clear existing markers and clusterer
+    if (markerClustererRef.current) {
+      markerClustererRef.current.clearMarkers();
+      markerClustererRef.current.setMap(null);
+      markerClustererRef.current = null;
+    }
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
@@ -169,55 +308,33 @@ function GoogleMapComponent({
       displayVenues = [];
     }
 
-    // Add venue markers
+    // Create venue markers with lazy InfoWindows
     displayVenues.forEach(venue => {
       const isSelected = selectedVenue?.id === venue.id || currentVenue?.id === venue.id;
       const color = getMarkerColor(venue.venue_type);
 
       const marker = new google.maps.Marker({
         position: { lat: venue.coordinates_lat, lng: venue.coordinates_lng },
-        map: googleMapRef.current!,
+        map: null, // Don't add to map yet - clusterer will handle it
         title: venue.name,
         icon: createMarkerIcon('venue', color, isSelected),
-        optimized: false, // Required for SVG icons
+        optimized: false,
       });
 
-      const ratingHtml = venue.rating
-        ? `<div style="margin: 8px 0 0 0; display: flex; align-items: center; gap: 4px;">
-             <span style="color: #ffc107;">⭐</span>
-             <span style="font-size: 13px; font-weight: 600; color: #1a1a1a;">${venue.rating.toFixed(1)}</span>
-             ${venue.user_ratings_total ? `<span style="font-size: 12px; color: #999;">(${venue.user_ratings_total} reviews)</span>` : ''}
-           </div>`
-        : '';
+      // Attach venue data to marker for lazy loading
+      (marker as any).venueData = venue;
 
-      const establishedHtml = venue.established_year
-        ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #666;">⛵ Established ${venue.established_year}</p>`
-        : '';
-
-      const infoWindow = new google.maps.InfoWindow({
-        content: `<div style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 280px;">
-          <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: #1a1a1a;">${venue.name}</h3>
-          <p style="margin: 0; font-size: 13px; color: #666; text-transform: capitalize;">
-            📍 ${venue.country} • ${venue.region}
-          </p>
-          <div style="margin: 6px 0 0 0; padding: 4px 8px; background: #f0f0f0; border-radius: 4px; display: inline-block;">
-            <span style="font-size: 11px; font-weight: 600; color: #007AFF; text-transform: uppercase;">${venue.venue_type} Venue</span>
-          </div>
-          ${establishedHtml}
-          ${ratingHtml}
-          ${venue.formatted_address ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">📮 ${venue.formatted_address}</p>` : ''}
-        </div>`,
-      });
-
+      // Lazy InfoWindow: only create when clicked
       marker.addListener('click', () => {
-        infoWindow.open(googleMapRef.current!, marker);
+        const content = createVenueInfoWindowContent(venue);
+        showInfoWindow(marker, content);
         onMarkerPress?.(venue);
       });
 
       markersRef.current.push(marker);
     });
 
-    // Add yacht club markers if layer is enabled
+    // Add yacht club markers with lazy InfoWindows
     if (mapLayers?.yachtClubs) {
       yachtClubs.forEach(club => {
         if (!club.coordinates_lat || !club.coordinates_lng) return;
@@ -226,53 +343,16 @@ function GoogleMapComponent({
 
         const marker = new google.maps.Marker({
           position: { lat: club.coordinates_lat, lng: club.coordinates_lng },
-          map: googleMapRef.current!,
+          map: null, // Don't add to map yet - clusterer will handle it
           title: club.short_name || club.name,
           icon: createMarkerIcon('yachtClub', color),
           optimized: false,
         });
 
-        const membershipHtml = club.membership_type
-          ? `<div style="margin: 6px 0 0 0; padding: 3px 8px; background: #e3f2fd; border-radius: 4px; display: inline-block;">
-               <span style="font-size: 11px; font-weight: 600; color: #1976d2; text-transform: capitalize;">👥 ${club.membership_type}</span>
-             </div>`
-          : '';
-
-        const clubRatingHtml = club.rating
-          ? `<div style="margin: 8px 0 0 0; display: flex; align-items: center; gap: 4px;">
-               <span style="color: #ffc107;">⭐</span>
-               <span style="font-size: 13px; font-weight: 600; color: #1a1a1a;">${club.rating.toFixed(1)}</span>
-               ${club.user_ratings_total ? `<span style="font-size: 12px; color: #999;">(${club.user_ratings_total} reviews)</span>` : ''}
-             </div>`
-          : '';
-
-        const clubEstablishedHtml = club.founded
-          ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #666;">⚓ Founded ${club.founded}</p>`
-          : '';
-
-        const clubContactHtml = club.phone_number || club.website
-          ? `<div style="margin: 8px 0 0 0; padding-top: 8px; border-top: 1px solid #e0e0e0;">
-               ${club.phone_number ? `<p style="margin: 0; font-size: 12px; color: #007AFF;">📞 ${club.phone_number}</p>` : ''}
-               ${club.website ? `<p style="margin: 4px 0 0 0; font-size: 12px;"><a href="${club.website}" target="_blank" style="color: #007AFF; text-decoration: none;">🌐 Visit Website →</a></p>` : ''}
-             </div>`
-          : '';
-
-        const infoWindow = new google.maps.InfoWindow({
-          content: `<div style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 300px;">
-            <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: #1a1a1a;">${club.short_name || club.name}</h3>
-            <p style="margin: 0; font-size: 13px; color: #666; text-transform: capitalize;">
-              ${club.prestige_level ? `🏆 ${club.prestige_level} Yacht Club` : '⛵ Yacht Club'}
-            </p>
-            ${membershipHtml}
-            ${clubEstablishedHtml}
-            ${clubRatingHtml}
-            ${club.formatted_address ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">📮 ${club.formatted_address}</p>` : ''}
-            ${clubContactHtml}
-          </div>`,
-        });
-
+        // Lazy InfoWindow: only create when clicked
         marker.addListener('click', () => {
-          infoWindow.open(googleMapRef.current!, marker);
+          const content = createYachtClubInfoWindowContent(club);
+          showInfoWindow(marker, content);
         });
 
         markersRef.current.push(marker);
@@ -326,72 +406,32 @@ function GoogleMapComponent({
               lat: service.coordinates_lat + latOffset,
               lng: service.coordinates_lng + lngOffset
             },
-            map: googleMapRef.current!,
+            map: null, // Don't add to map yet - clusterer will handle it
             title: service.business_name,
             icon: createMarkerIcon(service.service_type, color),
             optimized: false,
           });
 
-          const specialtiesHtml = service.specialties && service.specialties.length > 0
-            ? `<div style="margin: 8px 0 0 0;">
-                 <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase;">Specialties</p>
-                 <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                   ${service.specialties.slice(0, 3).map(s => `<span style="padding: 2px 6px; background: #f0f0f0; border-radius: 3px; font-size: 11px; color: #666;">${s}</span>`).join('')}
-                 </div>
-               </div>`
-            : '';
-
-          const classesHtml = service.classes_supported && service.classes_supported.length > 0
-            ? `<div style="margin: 8px 0 0 0;">
-                 <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase;">⛵ Classes Supported</p>
-                 <p style="margin: 0; font-size: 12px; color: #666;">${service.classes_supported.slice(0, 4).join(', ')}</p>
-               </div>`
-            : '';
-
-          const priceLevelHtml = service.price_level
-            ? `<div style="margin: 6px 0 0 0; padding: 3px 8px; background: #e8f5e9; border-radius: 4px; display: inline-block;">
-                 <span style="font-size: 11px; font-weight: 600; color: #2e7d32; text-transform: uppercase;">💰 ${service.price_level}</span>
-               </div>`
-            : '';
-
-          const serviceContactHtml = service.phone || service.email || service.website
-            ? `<div style="margin: 8px 0 0 0; padding-top: 8px; border-top: 1px solid #e0e0e0;">
-                 ${service.phone ? `<p style="margin: 0; font-size: 12px; color: #007AFF;">📞 ${service.phone}</p>` : ''}
-                 ${service.email ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #007AFF;">✉️ ${service.email}</p>` : ''}
-                 ${service.website ? `<p style="margin: 4px 0 0 0; font-size: 12px;"><a href="${service.website}" target="_blank" style="color: #007AFF; text-decoration: none;">🌐 Visit Website →</a></p>` : ''}
-               </div>`
-            : '';
-
-          const preferredBadgeHtml = service.preferred_by_club
-            ? `<span style="margin-left: 6px; padding: 2px 6px; background: #ffc107; border-radius: 3px; font-size: 10px; font-weight: 600; color: #000;">⭐ PREFERRED</span>`
-            : '';
-
-          const infoWindow = new google.maps.InfoWindow({
-            content: `<div style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 320px;">
-              <h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: #1a1a1a; display: flex; align-items: center;">
-                ${service.business_name}
-                ${preferredBadgeHtml}
-              </h3>
-              <p style="margin: 0; font-size: 13px; color: #666; text-transform: capitalize;">
-                🔧 ${service.service_type.replace('-', ' ')}
-              </p>
-              ${priceLevelHtml}
-              ${specialtiesHtml}
-              ${classesHtml}
-              ${service.contact_name ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">👤 Contact: ${service.contact_name}</p>` : ''}
-              ${serviceContactHtml}
-            </div>`,
-          });
-
+          // Lazy InfoWindow: only create when clicked
           marker.addListener('click', () => {
-            infoWindow.open(googleMapRef.current!, marker);
+            const content = createServiceInfoWindowContent(service);
+            showInfoWindow(marker, content);
           });
 
           markersRef.current.push(marker);
         });
       });
     }
-  }, [venues, yachtClubs, services, selectedVenue, currentVenue, mapLayers?.yachtClubs, mapLayers?.services, onMarkerPress, showOnlySavedVenues, savedVenueIds, showAllVenues]);
+
+    // Initialize MarkerClusterer for ALL markers (automatic clustering)
+    if (markersRef.current.length > 0) {
+      markerClustererRef.current = new MarkerClusterer({
+        map: googleMapRef.current!,
+        markers: markersRef.current,
+        algorithm: new MarkerClusterer.SuperClusterAlgorithm({ radius: 100, maxZoom: 15 }),
+      });
+    }
+  }, [venues, yachtClubs, services, selectedVenue, currentVenue, mapLayers?.yachtClubs, mapLayers?.services, onMarkerPress, showOnlySavedVenues, savedVenueIds, showAllVenues, createVenueInfoWindowContent, createYachtClubInfoWindowContent, createServiceInfoWindowContent, showInfoWindow]);
 
   // Center map when selected venue changes
   useEffect(() => {

@@ -148,12 +148,11 @@ export function useLiveRaces(userId?: string) {
     setLoading(true);
 
     try {
-      // Get regattas that are in progress or starting soon
+      // Get all regattas for the user (don't filter by status to show all races)
       let { data, error } = await supabase
         .from('regattas')
         .select('*')
         .eq('created_by', userId)
-        .in('status', ['planned', 'active'])
         .order('start_date', { ascending: true })
         .limit(10);
 
@@ -175,25 +174,44 @@ export function useLiveRaces(userId?: string) {
 
     loadLiveRaces();
 
-    // Subscribe to regatta status changes for the user
+    // Subscribe to regatta changes for the user (INSERT, UPDATE, DELETE)
     const channelName = createChannelName('user-regattas', userId);
     realtimeService.subscribe(
       channelName,
       {
         table: 'regattas',
-        event: 'UPDATE',
+        // No event filter - listen to all events (INSERT, UPDATE, DELETE)
       },
       (payload) => {
-        const updatedRace = payload.new as Race;
-        setLiveRaces((prev) => {
-          const index = prev.findIndex((r) => r.id === updatedRace.id);
-          if (index >= 0) {
-            const updated = [...prev];
-            updated[index] = updatedRace;
-            return updated;
-          }
-          return prev;
-        });
+        if (payload.eventType === 'INSERT') {
+          // Add new race to the list
+          const newRace = payload.new as Race;
+          setLiveRaces((prev) => {
+            // Check if race already exists to avoid duplicates
+            if (prev.some((r) => r.id === newRace.id)) {
+              return prev;
+            }
+            // Add and sort by start_date
+            return [...prev, newRace].sort((a: any, b: any) =>
+              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+            );
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          // Update existing race
+          const updatedRace = payload.new as Race;
+          setLiveRaces((prev) => {
+            const index = prev.findIndex((r) => r.id === updatedRace.id);
+            if (index >= 0) {
+              const updated = [...prev];
+              updated[index] = updatedRace;
+              return updated;
+            }
+            return prev;
+          });
+        } else if (payload.eventType === 'DELETE') {
+          // Remove deleted race
+          setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
+        }
       }
     );
 
