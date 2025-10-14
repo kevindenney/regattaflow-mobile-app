@@ -91,7 +91,7 @@ export const useSailorOnboardingState = () => {
           .from('sailor_profiles')
           .select('*, sailor_boats(*), sailor_crew_preferences(*)')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();  // Use maybeSingle() to return null instead of throwing on 0 rows
 
         if (profile) {
           // Merge Supabase data with current state

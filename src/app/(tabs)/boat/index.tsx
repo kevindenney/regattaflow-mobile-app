@@ -30,9 +30,23 @@ export default function BoatListScreen() {
   const [filterBy, setFilterBy] = useState<'all' | 'primary'>('all');
 
   useEffect(() => {
+    console.log('🔄 [BoatListScreen] useEffect triggered', { hasUser: !!user, userId: user?.id });
+
+    // Set a timeout to stop loading if it takes too long
+    const timeout = setTimeout(() => {
+      console.log('⏱️ [BoatListScreen] Loading timeout - stopping loading state');
+      setLoading(false);
+    }, 5000);
+
     if (user) {
-      loadBoats();
+      loadBoats().finally(() => clearTimeout(timeout));
+    } else {
+      console.log('⚠️ [BoatListScreen] No user in useEffect');
+      // If no user after 2 seconds, stop loading
+      setTimeout(() => setLoading(false), 2000);
     }
+
+    return () => clearTimeout(timeout);
   }, [user]);
 
   const loadBoats = async () => {
@@ -63,6 +77,21 @@ export default function BoatListScreen() {
 
   const handleAddBoat = () => {
     router.push('/(tabs)/boat/add');
+  };
+
+  const handleSetDefault = async (boatId: string) => {
+    console.log('[BoatListScreen] handleSetDefault clicked', { boatId });
+    try {
+      console.log('[BoatListScreen] Calling setPrimaryBoat service...');
+      await sailorBoatService.setPrimaryBoat(boatId);
+      console.log('[BoatListScreen] setPrimaryBoat successful, reloading boats...');
+      // Reload boats to show updated default
+      await loadBoats();
+      console.log('[BoatListScreen] handleSetDefault complete');
+    } catch (error) {
+      console.error('[BoatListScreen] Error setting default boat:', error);
+      alert('Failed to set default boat');
+    }
   };
 
   if (loading) {
@@ -201,7 +230,7 @@ export default function BoatListScreen() {
                           {boat.is_primary && (
                             <View style={styles.primaryBadge}>
                               <Ionicons name="star" size={10} color="#1D4ED8" />
-                              <Text style={styles.primaryBadgeText}>Primary</Text>
+                              <Text style={styles.primaryBadgeText}>Default</Text>
                             </View>
                           )}
                         </View>
@@ -209,6 +238,23 @@ export default function BoatListScreen() {
                           {boat.boat_class?.class_association || boat.boat_class?.name}
                         </Text>
                       </View>
+                      <TouchableOpacity
+                        style={styles.starButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          console.log('[BoatListScreen] Star button pressed!', {
+                            boatId: boat.id,
+                            boatName: displayName
+                          });
+                          handleSetDefault(boat.id);
+                        }}
+                      >
+                        <Ionicons
+                          name={boat.is_primary ? 'star' : 'star-outline'}
+                          size={24}
+                          color={boat.is_primary ? '#F59E0B' : '#94A3B8'}
+                        />
+                      </TouchableOpacity>
                       <Ionicons name="chevron-forward" size={22} color="#CBD5E1" />
                     </View>
 
@@ -428,6 +474,10 @@ const styles = StyleSheet.create({
   },
   boatInfo: {
     flex: 1,
+  },
+  starButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   boatTitleRow: {
     flexDirection: 'row',
