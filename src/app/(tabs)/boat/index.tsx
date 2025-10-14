@@ -173,10 +173,11 @@ export default function BoatListScreen() {
 
             <View style={styles.boatList}>
               {filteredBoats.map((boat) => {
-                // Generate boat display name
-                const displayName = boat.sail_number
-                  ? `${boat.boat_class?.name || 'Boat'} #${boat.sail_number}`
-                  : boat.boat_class?.name || 'Unnamed Boat';
+                // Generate boat display name - use actual boat name if available
+                const displayName = boat.name ||
+                  (boat.sail_number
+                    ? `${boat.boat_class?.name || 'Boat'} #${boat.sail_number}`
+                    : boat.boat_class?.name || 'Unnamed Boat');
 
                 return (
                   <TouchableOpacity

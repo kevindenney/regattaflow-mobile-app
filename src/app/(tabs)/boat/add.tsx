@@ -94,21 +94,47 @@ export default function AddBoatScreen() {
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    console.log('🚀 [AddBoat] Save button pressed');
+    console.log('👤 [AddBoat] Current user:', user?.id);
+
+    if (!user) {
+      console.error('❌ [AddBoat] No user found');
+      if (Platform.OS === 'web') {
+        window.alert('Not authenticated. Please sign in.');
+      } else {
+        Alert.alert('Error', 'Not authenticated. Please sign in.');
+      }
+      return;
+    }
 
     // Validation
     if (!name.trim()) {
-      Alert.alert('Required Field', 'Please enter a boat name');
+      console.warn('⚠️ [AddBoat] Boat name is required');
+      if (Platform.OS === 'web') {
+        window.alert('Please enter a boat name');
+      } else {
+        Alert.alert('Required Field', 'Please enter a boat name');
+      }
       return;
     }
 
     if (!selectedClassId) {
-      Alert.alert('Required Field', 'Please select a boat class');
+      console.warn('⚠️ [AddBoat] Boat class is required');
+      if (Platform.OS === 'web') {
+        window.alert('Please select a boat class');
+      } else {
+        Alert.alert('Required Field', 'Please select a boat class');
+      }
       return;
     }
 
     try {
       setLoading(true);
+      console.log('📝 [AddBoat] Creating boat with data:', {
+        name: name.trim(),
+        class_id: selectedClassId,
+        sail_number: sailNumber.trim() || undefined,
+      });
 
       const boatInput: CreateBoatInput = {
         sailor_id: user.id,
@@ -124,20 +150,66 @@ export default function AddBoatScreen() {
         notes: notes.trim() || undefined,
       };
 
-      const boat = await sailorBoatService.createBoat(boatInput);
+      console.log('🔄 [AddBoat] Calling sailorBoatService.createBoat...');
+
+      // Add timeout to detect hanging requests
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
+      );
+
+      const boat = await Promise.race([
+        sailorBoatService.createBoat(boatInput),
+        timeoutPromise
+      ]) as any;
+
+      console.log('✅ [AddBoat] Boat created successfully:', boat.id);
 
       // TODO: Upload photo to Supabase storage if photoUri exists
       // For now, we'll skip photo upload as it requires storage bucket setup
 
-      Alert.alert('Success', 'Boat added successfully', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]);
+      if (Platform.OS === 'web') {
+        window.alert('Boat added successfully!');
+        router.push(`/boat/${boat.id}`);
+      } else {
+        Alert.alert('Success', 'Boat added successfully', [
+          {
+            text: 'OK',
+            onPress: () => router.push(`/boat/${boat.id}`),
+          },
+        ]);
+      }
     } catch (error) {
-      console.error('Error saving boat:', error);
-      Alert.alert('Error', 'Failed to save boat. Please try again.');
+      console.error('❌ [AddBoat] Error saving boat:', error);
+      console.error('❌ [AddBoat] Error type:', typeof error);
+      console.error('❌ [AddBoat] Error constructor:', error?.constructor?.name);
+      console.error('❌ [AddBoat] Error keys:', error ? Object.keys(error) : 'null');
+
+      // Try to extract Supabase error details
+      const supabaseError = error as any;
+      if (supabaseError?.message) {
+        console.error('❌ [AddBoat] Supabase error message:', supabaseError.message);
+      }
+      if (supabaseError?.details) {
+        console.error('❌ [AddBoat] Supabase error details:', supabaseError.details);
+      }
+      if (supabaseError?.hint) {
+        console.error('❌ [AddBoat] Supabase error hint:', supabaseError.hint);
+      }
+      if (supabaseError?.code) {
+        console.error('❌ [AddBoat] Supabase error code:', supabaseError.code);
+      }
+
+      console.error('❌ [AddBoat] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+
+      const errorMessage = error instanceof Error ? error.message :
+                          supabaseError?.message ||
+                          'Unknown error';
+
+      if (Platform.OS === 'web') {
+        window.alert(`Failed to save boat: ${errorMessage}`);
+      } else {
+        Alert.alert('Error', `Failed to save boat: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }

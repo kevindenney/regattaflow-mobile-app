@@ -332,11 +332,68 @@ export function ComprehensiveRaceEntry({
       return;
     }
 
+    let documentText = text;
+
+    // Check if input is a URL
+    const urlRegex = /^https?:\/\//i;
+    if (urlRegex.test(text.trim())) {
+      console.log('[extractFromText] Detected URL input:', text.trim());
+
+      try {
+        // Fetch PDF from URL
+        console.log('[extractFromText] Fetching PDF from URL...');
+        const response = await fetch(text.trim());
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+        }
+
+        const contentType = response.headers.get('content-type');
+        console.log('[extractFromText] Content-Type:', contentType);
+
+        if (!contentType?.includes('pdf')) {
+          Alert.alert('Invalid File Type', `Expected a PDF but received ${contentType}. Please provide a URL to a PDF document.`);
+          setExtracting(false);
+          return;
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        console.log('[extractFromText] PDF downloaded, extracting text...');
+
+        // Extract text from PDF
+        const extractionResult = await PDFExtractionService.extractText(blobUrl, {
+          maxPages: 50,
+        });
+
+        // Clean up blob URL
+        URL.revokeObjectURL(blobUrl);
+
+        if (!extractionResult.success || !extractionResult.text) {
+          throw new Error(extractionResult.error || 'Failed to extract text from PDF');
+        }
+
+        documentText = extractionResult.text;
+        console.log('[extractFromText] PDF text extracted successfully:', documentText.length, 'characters');
+
+        // Update the text area with extracted content
+        const urlFilename = text.trim().split('/').pop() || 'document.pdf';
+        setFreeformText(`=== PDF FROM URL (${urlFilename}) ===\n\n${documentText}`);
+
+      } catch (error: any) {
+        console.error('[extractFromText] URL fetch/extraction error:', error);
+        Alert.alert('PDF Fetch Failed', error.message || 'Could not fetch or extract PDF from URL. Please check the URL and try again.');
+        setExtracting(false);
+        return;
+      }
+    }
+
     try {
       console.log('[extractFromText] Creating agent...');
       const agent = new ComprehensiveRaceExtractionAgent();
       console.log('[extractFromText] Calling extractRaceDetails...');
-      const result = await agent.extractRaceDetails(text);
+      const result = await agent.extractRaceDetails(documentText);
       console.log('[extractFromText] Result:', result);
 
       if (!result.success || !result.data) {
@@ -788,7 +845,7 @@ export function ComprehensiveRaceEntry({
             </Text>
           </View>
           <Text className="text-sm text-purple-800 mb-3">
-            Upload PDF/document or paste text. AI will automatically extract and fill all fields below.
+            Upload PDF/document, paste a PDF URL, or paste text. AI will automatically extract and fill all fields below.
           </Text>
 
           {/* Three Upload Buttons */}
@@ -857,14 +914,14 @@ export function ComprehensiveRaceEntry({
           {/* Divider */}
           <View className="flex-row items-center gap-2 mb-3">
             <View className="flex-1 h-px bg-purple-300" />
-            <Text className="text-xs text-purple-700 font-semibold">OR PASTE TEXT</Text>
+            <Text className="text-xs text-purple-700 font-semibold">OR PASTE TEXT/URL</Text>
             <View className="flex-1 h-px bg-purple-300" />
           </View>
 
           <TextInput
             value={freeformText}
             onChangeText={setFreeformText}
-            placeholder="e.g., 'Croucher Series Race 3 at Victoria Harbour, Nov 17 2025, 2 starts (Dragon 10:00, J/70 10:05), VHF 72, PRO: John Smith, 720° penalty system...'"
+            placeholder="Paste a PDF URL (e.g., https://example.com/sailing-instructions.pdf) OR paste text: 'Croucher Series Race 3 at Victoria Harbour, Nov 17 2025, 2 starts (Dragon 10:00, J/70 10:05), VHF 72, PRO: John Smith, 720° penalty system...'"
             placeholderTextColor="#9CA3AF"
             multiline
             numberOfLines={6}

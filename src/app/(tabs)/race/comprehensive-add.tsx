@@ -12,8 +12,8 @@ export default function ComprehensiveRaceAddScreen() {
   const router = useRouter();
 
   const handleSubmit = (raceId: string) => {
-    // Navigate to race detail or dashboard
-    router.push(`/(tabs)/race/${raceId}`);
+    // Navigate to race detail page
+    router.push(`/race/${raceId}`);
   };
 
   const handleCancel = () => {
