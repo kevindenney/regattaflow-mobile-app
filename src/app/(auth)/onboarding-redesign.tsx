@@ -181,7 +181,7 @@ export default function OnboardingRedesign() {
 
       // Navigate to dashboard
       console.log('✅ Navigating to dashboard...');
-      router.replace('/(tabs)/dashboard');
+      router.replace('/(tabs)/races');
     } catch (error: any) {
       console.error('❌ Error saving sailor profile:', error);
       alert(error.message || 'Failed to save profile. Please try again.');

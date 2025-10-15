@@ -79,7 +79,7 @@ export const OnboardingCompletion: React.FC<OnboardingCompletionProps> = ({
         icon: 'boat' as const,
         title: 'Track Performance',
         description: 'Start logging your races and analyze results',
-        route: '/(tabs)/dashboard',
+        route: '/(tabs)/races',
       },
       {
         icon: 'people' as const,
@@ -187,7 +187,9 @@ export const OnboardingCompletion: React.FC<OnboardingCompletionProps> = ({
             if (onComplete) {
               onComplete();
             } else {
-              router.replace('/(tabs)/dashboard');
+              // Route based on user type
+              const defaultRoute = userType === 'sailor' ? '/(tabs)/races' : '/(tabs)/dashboard';
+              router.replace(defaultRoute as any);
             }
           }}
         >
@@ -201,7 +203,9 @@ export const OnboardingCompletion: React.FC<OnboardingCompletionProps> = ({
             if (steps[0]?.route) {
               router.replace(steps[0].route as any);
             } else {
-              router.replace('/(tabs)/dashboard');
+              // Route based on user type
+              const defaultRoute = userType === 'sailor' ? '/(tabs)/races' : '/(tabs)/dashboard';
+              router.replace(defaultRoute as any);
             }
           }}
         >

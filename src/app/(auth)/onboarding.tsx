@@ -316,7 +316,7 @@ export default function UnifiedOnboarding() {
 
       // Navigate to appropriate dashboard
       if (selectedPersona === 'sailor') {
-        router.replace('/(tabs)/dashboard');
+        router.replace('/(tabs)/races');
       } else if (selectedPersona === 'club') {
         router.replace('/(tabs)/club-dashboard');
       } else {

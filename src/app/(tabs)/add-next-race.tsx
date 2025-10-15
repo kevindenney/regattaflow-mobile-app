@@ -178,11 +178,11 @@ export default function AddNextRace() {
           });
 
         if (error) throw error;
-        Alert.alert('Success', 'Race added! Your dashboard will now show race strategy recommendations.');
+        Alert.alert('Success', 'Race added! Your Races tab will now show race strategy recommendations.');
       }
 
-      // Navigate back to dashboard
-      router.replace('/(tabs)/dashboard');
+      // Navigate back to races
+      router.replace('/(tabs)/races');
     } catch (error: any) {
       console.error('Error saving race:', error);
       Alert.alert('Save Error', error.message || 'Failed to save race. Please try again.');

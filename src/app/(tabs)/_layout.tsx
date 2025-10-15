@@ -22,8 +22,7 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
   switch (userType) {
     case 'sailor':
       return [
-        { name: 'dashboard', title: 'Dashboard', icon: 'home-outline', iconFocused: 'home' },
-        { name: 'calendar', title: 'Calendar', icon: 'calendar-outline', iconFocused: 'calendar' },
+        { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
         { name: 'courses', title: 'Courses', icon: 'map-outline', iconFocused: 'map' },
         { name: 'boat/index', title: 'Boats', icon: 'boat-outline', iconFocused: 'boat' },
         { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
@@ -31,7 +30,6 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
 
     case 'coach':
       return [
-        { name: 'dashboard', title: 'Dashboard', icon: 'home-outline', iconFocused: 'home' },
         { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
         { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
         { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
@@ -41,7 +39,6 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
 
     case 'club':
       return [
-        { name: 'dashboard', title: 'Dashboard', icon: 'home-outline', iconFocused: 'home' },
         { name: 'events', title: 'Events', icon: 'sailboat', iconFocused: 'sailboat' },
         { name: 'members', title: 'Members', icon: 'people-circle-outline', iconFocused: 'people-circle' },
         { name: 'race-management', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
@@ -50,11 +47,10 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
       ];
 
     default:
-      // Default to a minimal tab set when type is unknown
+      // Default to sailor tabs when type is unknown
       return [
-        { name: 'dashboard', title: 'Dashboard', icon: 'home-outline', iconFocused: 'home' },
-        { name: 'events', title: 'Calendar', icon: 'calendar-outline', iconFocused: 'calendar' },
-        { name: 'courses', title: 'Courses', icon: 'navigate-outline', iconFocused: 'navigate' },
+        { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
+        { name: 'courses', title: 'Courses', icon: 'map-outline', iconFocused: 'map' },
         { name: 'profile', title: 'Profile', icon: 'person-outline', iconFocused: 'person' },
         { name: 'settings', title: 'Settings', icon: 'settings-outline', iconFocused: 'settings' },
       ];
@@ -158,14 +154,14 @@ export default function TabLayout() {
     );
   };
 
-  const dashboardTab = findTab('dashboard');
+  const racesTab = findTab('races');
+  const dashboardTab = findTab('dashboard'); // Legacy for non-sailor user types
   const calendarTab = findTab('calendar');
   const fleetTab = findTab('fleet');
   const boatTab = findTab('boat/index');
   const profileTab = findTab('profile');
   const settingsTab = findTab('settings');
   const coursesTab = findTab('courses');
-  const racesTab = findTab('races'); // Legacy - keep for backward compatibility
   const venueTab = findTab('venue');
   const strategyTab = findTab('strategy');
   const mapTab = findTab('map');
@@ -195,19 +191,19 @@ export default function TabLayout() {
           gestureEnabled: false,
         }}
       >
-        {/* Tab 1: Dashboard */}
+        {/* Tab 1: Races (primary for sailors) */}
         <Tabs.Screen
-          name="dashboard"
+          name="races"
           options={{
-            title: dashboardTab?.title ?? 'Dashboard',
+            title: racesTab?.title ?? 'Races',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(dashboardTab, focused, dashboardTab?.iconFocused ?? 'home', dashboardTab?.icon ?? 'home-outline') as any}
+                name={getIconName(racesTab, focused, racesTab?.iconFocused ?? 'flag', racesTab?.icon ?? 'flag-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('dashboard') ? undefined : () => null,
+            tabBarButton: isTabVisible('races') ? undefined : () => null,
           }}
         />
         {/* Tab 2: Calendar */}
@@ -241,14 +237,6 @@ export default function TabLayout() {
                 />
               ),
             tabBarButton: isTabVisible('courses') ? undefined : () => null,
-          }}
-        />
-        {/* Legacy races tab - hidden but kept for backward compatibility */}
-        <Tabs.Screen
-          name="races"
-          options={{
-            title: 'Races (Legacy)',
-            href: null,
           }}
         />
         {/* Tab 4: Boats */}
@@ -479,12 +467,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="venue-old"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
           name="boats"
           options={{
             href: null,
@@ -503,37 +485,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="sailor/index"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="coach"
-          options={{
-            tabBarButton: () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="coach/index"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="club/index"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
           name="fleets"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="boats.web"
           options={{
             href: null,
           }}

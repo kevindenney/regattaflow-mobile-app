@@ -18,7 +18,7 @@ export const RoleGate = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const roleHome = (role: 'sailor' | 'coach' | 'club') => {
-  if (role === 'sailor') return '/(tabs)/dashboard';
+  if (role === 'sailor') return '/(tabs)/races';
   if (role === 'coach') return '/(tabs)/dashboard';
   return '/(tabs)/dashboard';
 };

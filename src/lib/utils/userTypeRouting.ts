@@ -14,11 +14,11 @@ export function getDashboardRoute(userType: UserType | null): string {
   // The tab layout will automatically show/hide relevant tabs based on user type
   switch (userType) {
     case 'sailor':
-      return '/(tabs)/dashboard';
+      return '/(tabs)/races'; // Sailors see "Races" tab instead of "Dashboard"
     case 'coach':
-      return '/(tabs)/dashboard';
+      return '/(tabs)/dashboard'; // TODO: Create coach-specific dashboard
     case 'club':
-      return '/(tabs)/dashboard';
+      return '/(tabs)/dashboard'; // TODO: Create club-specific dashboard
     default:
       return '/(auth)/persona-selection';
   }
