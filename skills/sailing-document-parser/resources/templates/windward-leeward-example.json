@@ -1,0 +1,244 @@
+{
+  "courseType": "windward-leeward",
+  "description": "Standard windward-leeward course with leeward gate",
+  "marks": [
+    {
+      "id": "start-pin",
+      "name": "Start Pin",
+      "latitude": 22.279300,
+      "longitude": 114.162800,
+      "type": "pin",
+      "description": "Port end of start line (pin end)",
+      "rounding": "either",
+      "order": 0
+    },
+    {
+      "id": "committee-boat",
+      "name": "Committee Boat",
+      "latitude": 22.279400,
+      "longitude": 114.163000,
+      "type": "committee-boat",
+      "description": "Starboard end of start line (RC boat)",
+      "rounding": "either",
+      "order": 1
+    },
+    {
+      "id": "windward-mark",
+      "name": "Windward Mark",
+      "latitude": 22.285000,
+      "longitude": 114.165000,
+      "type": "mark",
+      "description": "Top mark - round to port",
+      "rounding": "port",
+      "order": 2
+    },
+    {
+      "id": "leeward-gate-left",
+      "name": "Leeward Gate - Port",
+      "latitude": 22.278000,
+      "longitude": 114.161000,
+      "type": "gate",
+      "description": "Port gate mark - round either",
+      "rounding": "either",
+      "order": 3
+    },
+    {
+      "id": "leeward-gate-right",
+      "name": "Leeward Gate - Starboard",
+      "latitude": 22.278000,
+      "longitude": 114.163000,
+      "type": "gate",
+      "description": "Starboard gate mark - round either",
+      "rounding": "either",
+      "order": 4
+    },
+    {
+      "id": "finish-line",
+      "name": "Finish Line",
+      "latitude": 22.279200,
+      "longitude": 114.162900,
+      "type": "finish-line",
+      "description": "Finish between RC boat and pin (same as start)",
+      "rounding": "either",
+      "order": 5
+    }
+  ],
+  "legs": [
+    {
+      "from": "Start Pin",
+      "to": "Windward Mark",
+      "type": "upwind",
+      "distance": 1.2,
+      "unit": "nautical miles",
+      "bearing": 5,
+      "description": "Beat to windward - favoring right side due to current"
+    },
+    {
+      "from": "Windward Mark",
+      "to": "Leeward Gate - Port",
+      "type": "downwind",
+      "distance": 1.2,
+      "unit": "nautical miles",
+      "bearing": 185,
+      "description": "Downwind run to leeward gate - choose port or starboard mark"
+    },
+    {
+      "from": "Leeward Gate - Port",
+      "to": "Windward Mark",
+      "type": "upwind",
+      "distance": 1.2,
+      "unit": "nautical miles",
+      "bearing": 5,
+      "description": "Second upwind leg (lap 2)"
+    },
+    {
+      "from": "Windward Mark",
+      "to": "Finish Line",
+      "type": "downwind",
+      "distance": 1.2,
+      "unit": "nautical miles",
+      "bearing": 185,
+      "description": "Final downwind leg to finish"
+    }
+  ],
+  "raceConfig": {
+    "laps": 2,
+    "totalDistance": 4.8,
+    "unit": "nautical miles",
+    "estimatedDuration": 60,
+    "durationUnit": "minutes",
+    "startSequence": "5-4-1-0",
+    "timeLimit": 90,
+    "timeLimitUnit": "minutes"
+  },
+  "venue": {
+    "name": "Royal Hong Kong Yacht Club",
+    "location": "Hong Kong",
+    "coordinates": {
+      "latitude": 22.279300,
+      "longitude": 114.162800
+    },
+    "timezone": "Asia/Hong_Kong"
+  },
+  "geojson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.162800, 22.279300]
+        },
+        "properties": {
+          "id": "start-pin",
+          "name": "Start Pin",
+          "type": "pin",
+          "description": "Port end of start line (pin end)",
+          "rounding": "either",
+          "order": 0
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.163000, 22.279400]
+        },
+        "properties": {
+          "id": "committee-boat",
+          "name": "Committee Boat",
+          "type": "committee-boat",
+          "description": "Starboard end of start line (RC boat)",
+          "rounding": "either",
+          "order": 1
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.165000, 22.285000]
+        },
+        "properties": {
+          "id": "windward-mark",
+          "name": "Windward Mark",
+          "type": "mark",
+          "description": "Top mark - round to port",
+          "rounding": "port",
+          "order": 2
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.161000, 22.278000]
+        },
+        "properties": {
+          "id": "leeward-gate-left",
+          "name": "Leeward Gate - Port",
+          "type": "gate",
+          "description": "Port gate mark - round either",
+          "rounding": "either",
+          "order": 3
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.163000, 22.278000]
+        },
+        "properties": {
+          "id": "leeward-gate-right",
+          "name": "Leeward Gate - Starboard",
+          "type": "gate",
+          "description": "Starboard gate mark - round either",
+          "rounding": "either",
+          "order": 4
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.162900, 22.279200]
+        },
+        "properties": {
+          "id": "finish-line",
+          "name": "Finish Line",
+          "type": "finish-line",
+          "description": "Finish between RC boat and pin (same as start)",
+          "rounding": "either",
+          "order": 5
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [114.162800, 22.279300],
+            [114.165000, 22.285000],
+            [114.161000, 22.278000],
+            [114.165000, 22.285000],
+            [114.162900, 22.279200]
+          ]
+        },
+        "properties": {
+          "type": "course-line",
+          "name": "Race Course Path"
+        }
+      }
+    ]
+  },
+  "notes": [
+    "This template shows the standard structure for windward-leeward courses",
+    "Key features: leeward gate (two marks sailors can choose between), two laps",
+    "Coordinates use GeoJSON format: [longitude, latitude] (note the order!)",
+    "All marks include required fields: name, latitude, longitude, type",
+    "Optional fields enhance visualization: description, rounding, order",
+    "Course legs define tactical information for each segment",
+    "GeoJSON FeatureCollection format is MapLibre GL JS compatible"
+  ]
+}

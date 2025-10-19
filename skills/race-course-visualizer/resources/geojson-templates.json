@@ -1,0 +1,617 @@
+{
+  "$schema": "https://geojson.org/schema/FeatureCollection.json",
+  "version": "1.0.0",
+  "description": "MapLibre GeoJSON templates for race course visualization",
+  "updated": "2025-10-18",
+  "templates": {
+    "mark": {
+      "windward": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": "[longitude, latitude]"
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "windward",
+          "id": "A",
+          "name": "Windward Mark",
+          "rounding": "port",
+          "order": 1,
+          "color": "#FF4444",
+          "radius": 50,
+          "strokeColor": "#FFFFFF",
+          "strokeWidth": 3,
+          "icon": "circle",
+          "label": "A",
+          "labelSize": 14,
+          "labelColor": "#FFFFFF",
+          "tacticalImportance": "very-high",
+          "description": "Primary upwind mark"
+        }
+      },
+      "leeward": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": "[longitude, latitude]"
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "leeward",
+          "id": "C",
+          "name": "Leeward Mark",
+          "rounding": "port",
+          "order": 2,
+          "color": "#FF4444",
+          "radius": 50,
+          "strokeColor": "#FFFFFF",
+          "strokeWidth": 3,
+          "icon": "circle",
+          "label": "C",
+          "labelSize": 14,
+          "labelColor": "#FFFFFF",
+          "tacticalImportance": "very-high",
+          "description": "Primary downwind mark"
+        }
+      },
+      "wing": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": "[longitude, latitude]"
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "wing",
+          "id": "B",
+          "name": "Wing Mark",
+          "rounding": "port",
+          "order": 3,
+          "color": "#FF8844",
+          "radius": 40,
+          "strokeColor": "#FFFFFF",
+          "strokeWidth": 2,
+          "icon": "circle",
+          "label": "B",
+          "labelSize": 12,
+          "labelColor": "#FFFFFF",
+          "tacticalImportance": "high",
+          "description": "Wing/reaching mark"
+        }
+      },
+      "gate": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": "[longitude, latitude]"
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "gate",
+          "id": "C1",
+          "name": "Gate Mark (Left)",
+          "rounding": "either",
+          "order": 2,
+          "isGate": true,
+          "gatePair": "C2",
+          "color": "#FF4444",
+          "radius": 45,
+          "strokeColor": "#FFFF00",
+          "strokeWidth": 3,
+          "icon": "circle",
+          "label": "C1",
+          "labelSize": 12,
+          "labelColor": "#FFFFFF",
+          "tacticalImportance": "very-high",
+          "description": "Leeward gate mark (sailor's choice)"
+        }
+      },
+      "finish": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": "[longitude, latitude]"
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "finish",
+          "id": "Finish",
+          "name": "Finish Mark",
+          "rounding": "n/a",
+          "order": 99,
+          "color": "#FF00FF",
+          "radius": 50,
+          "strokeColor": "#FFFFFF",
+          "strokeWidth": 3,
+          "icon": "checkered",
+          "label": "F",
+          "labelSize": 16,
+          "labelColor": "#FFFFFF",
+          "tacticalImportance": "critical",
+          "description": "Finish line mark"
+        }
+      }
+    },
+    "line": {
+      "courseLeg": {
+        "beat": {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": "[[fromLng, fromLat], [toLng, toLat]]"
+          },
+          "properties": {
+            "type": "courseLeg",
+            "legType": "beat",
+            "from": "Start",
+            "to": "A",
+            "order": 1,
+            "distance": 1.2,
+            "bearing": 0,
+            "color": "#4444FF",
+            "width": 3,
+            "opacity": 0.8,
+            "dashArray": [8, 4],
+            "label": "1.2 nm",
+            "labelSize": 10,
+            "labelColor": "#4444FF"
+          }
+        },
+        "run": {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": "[[fromLng, fromLat], [toLng, toLat]]"
+          },
+          "properties": {
+            "type": "courseLeg",
+            "legType": "run",
+            "from": "A",
+            "to": "C",
+            "order": 2,
+            "distance": 1.2,
+            "bearing": 180,
+            "color": "#44FF44",
+            "width": 3,
+            "opacity": 0.8,
+            "dashArray": [8, 4],
+            "label": "1.2 nm",
+            "labelSize": 10,
+            "labelColor": "#44FF44"
+          }
+        },
+        "reach": {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": "[[fromLng, fromLat], [toLng, toLat]]"
+          },
+          "properties": {
+            "type": "courseLeg",
+            "legType": "reach",
+            "from": "A",
+            "to": "B",
+            "order": 2,
+            "distance": 0.9,
+            "bearing": 120,
+            "color": "#FF8800",
+            "width": 3,
+            "opacity": 0.8,
+            "dashArray": [8, 4],
+            "label": "0.9 nm",
+            "labelSize": 10,
+            "labelColor": "#FF8800"
+          }
+        }
+      },
+      "startLine": {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": "[[boatLng, boatLat], [pinLng, pinLat]]"
+        },
+        "properties": {
+          "type": "startLine",
+          "name": "Start Line",
+          "color": "#000000",
+          "width": 4,
+          "opacity": 1.0,
+          "dashArray": [1, 0],
+          "label": "START",
+          "labelSize": 14,
+          "labelColor": "#000000",
+          "lineLength": 300,
+          "orientation": 90
+        }
+      },
+      "finishLine": {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": "[[boatLng, boatLat], [markLng, markLat]]"
+        },
+        "properties": {
+          "type": "finishLine",
+          "name": "Finish Line",
+          "color": "#FF00FF",
+          "width": 4,
+          "opacity": 1.0,
+          "dashArray": [12, 6, 3, 6],
+          "label": "FINISH",
+          "labelSize": 16,
+          "labelColor": "#FF00FF",
+          "lineLength": 300,
+          "orientation": 90
+        }
+      }
+    },
+    "zone": {
+      "startArea": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": "[[[lng1, lat1], [lng2, lat2], [lng3, lat3], [lng4, lat4], [lng1, lat1]]]"
+        },
+        "properties": {
+          "type": "zone",
+          "zoneType": "startArea",
+          "name": "Starting Area",
+          "fillColor": "#4444FF",
+          "fillOpacity": 0.1,
+          "strokeColor": "#4444FF",
+          "strokeWidth": 2,
+          "strokeOpacity": 0.5,
+          "dashArray": [4, 4],
+          "description": "Pre-start maneuvering area"
+        }
+      },
+      "finishArea": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": "[[[lng1, lat1], [lng2, lat2], [lng3, lat3], [lng4, lat4], [lng1, lat1]]]"
+        },
+        "properties": {
+          "type": "zone",
+          "zoneType": "finishArea",
+          "name": "Finish Area",
+          "fillColor": "#44FF44",
+          "fillOpacity": 0.1,
+          "strokeColor": "#44FF44",
+          "strokeWidth": 2,
+          "strokeOpacity": 0.5,
+          "dashArray": [4, 4],
+          "description": "Finish line approach area"
+        }
+      },
+      "restrictedArea": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": "[[[lng1, lat1], [lng2, lat2], [lng3, lat3], [lng4, lat4], [lng1, lat1]]]"
+        },
+        "properties": {
+          "type": "zone",
+          "zoneType": "restrictedArea",
+          "name": "Restricted Area",
+          "fillColor": "#FF0000",
+          "fillOpacity": 0.2,
+          "strokeColor": "#FF0000",
+          "strokeWidth": 3,
+          "strokeOpacity": 0.8,
+          "dashArray": [1, 0],
+          "description": "No-go zone (e.g., shipping lane, shallow water)"
+        }
+      },
+      "layline": {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": "[[markLng, markLat], [endLng, endLat]]"
+        },
+        "properties": {
+          "type": "zone",
+          "zoneType": "layline",
+          "name": "Layline",
+          "tack": "starboard",
+          "color": "#FFFF00",
+          "width": 2,
+          "opacity": 0.6,
+          "dashArray": [6, 6],
+          "label": "STB Layline",
+          "labelSize": 10,
+          "labelColor": "#FFFF00",
+          "description": "Optimal tacking line to mark"
+        }
+      }
+    },
+    "helper": {
+      "windArrow": {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": "[[baseLng, baseLat], [tipLng, tipLat]]"
+        },
+        "properties": {
+          "type": "helper",
+          "helperType": "windArrow",
+          "name": "Wind Direction",
+          "direction": 0,
+          "speed": 12,
+          "color": "#666666",
+          "width": 3,
+          "opacity": 0.7,
+          "arrowHead": true,
+          "label": "Wind 12kt",
+          "labelSize": 12,
+          "labelColor": "#666666"
+        }
+      },
+      "currentArrow": {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": "[[baseLng, baseLat], [tipLng, tipLat]]"
+        },
+        "properties": {
+          "type": "helper",
+          "helperType": "currentArrow",
+          "name": "Current Direction",
+          "direction": 90,
+          "speed": 0.5,
+          "color": "#00AAAA",
+          "width": 2,
+          "opacity": 0.6,
+          "arrowHead": true,
+          "label": "Current 0.5kt",
+          "labelSize": 10,
+          "labelColor": "#00AAAA"
+        }
+      },
+      "distanceMarker": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": "[longitude, latitude]"
+        },
+        "properties": {
+          "type": "helper",
+          "helperType": "distanceMarker",
+          "distance": 0.5,
+          "unit": "nm",
+          "color": "#888888",
+          "radius": 10,
+          "label": "0.5 nm",
+          "labelSize": 10,
+          "labelColor": "#888888"
+        }
+      }
+    }
+  },
+  "styleGuide": {
+    "colors": {
+      "marks": {
+        "windward": "#FF4444",
+        "leeward": "#FF4444",
+        "wing": "#FF8844",
+        "gate": "#FF4444",
+        "finish": "#FF00FF",
+        "committee-boat": "#FFA500",
+        "pin": "#FFA500"
+      },
+      "legs": {
+        "beat": "#4444FF",
+        "run": "#44FF44",
+        "reach": "#FF8800",
+        "generic": "#888888"
+      },
+      "lines": {
+        "start": "#000000",
+        "finish": "#FF00FF"
+      },
+      "zones": {
+        "start-area": "#4444FF",
+        "finish-area": "#44FF44",
+        "restricted": "#FF0000",
+        "layline": "#FFFF00"
+      },
+      "helpers": {
+        "wind": "#666666",
+        "current": "#00AAAA",
+        "distance": "#888888"
+      }
+    },
+    "sizes": {
+      "marks": {
+        "large": 50,
+        "medium": 40,
+        "small": 30
+      },
+      "lines": {
+        "course-leg": 3,
+        "start-finish": 4,
+        "layline": 2,
+        "helper": 2
+      },
+      "labels": {
+        "mark": 14,
+        "leg": 10,
+        "line": 14,
+        "helper": 10
+      }
+    },
+    "opacity": {
+      "marks": 1.0,
+      "lines": 0.8,
+      "zones": 0.1,
+      "zone-borders": 0.5,
+      "helpers": 0.6
+    },
+    "dashPatterns": {
+      "course-leg": [8, 4],
+      "layline": [6, 6],
+      "restricted-zone": [1, 0],
+      "start-area": [4, 4],
+      "finish-line": [12, 6, 3, 6]
+    }
+  },
+  "calculations": {
+    "markPositions": {
+      "windward": {
+        "bearing": "windDirection + 0°",
+        "distance": "legLength (nm)"
+      },
+      "leeward": {
+        "bearing": "windDirection + 180°",
+        "distance": "legLength (nm)"
+      },
+      "wing": {
+        "bearing": "windDirection + 120°",
+        "distance": "legLength * 1.1 (nm)"
+      },
+      "gate-left": {
+        "bearing": "windDirection + 165°",
+        "distance": "legLength (nm)"
+      },
+      "gate-right": {
+        "bearing": "windDirection + 195°",
+        "distance": "legLength (nm)"
+      }
+    },
+    "lineOrientations": {
+      "startLine": {
+        "perpendicular": "windDirection + 90°",
+        "length": "function of fleet size and venue"
+      },
+      "finishLine": {
+        "perpendicular": "windDirection + 90°",
+        "length": "typically same as start line"
+      }
+    },
+    "zoneBuffers": {
+      "mark-zone": "3 hull lengths",
+      "start-area": "200m downwind from start line",
+      "restricted-area": "defined by sailing instructions"
+    }
+  },
+  "featureCollectionTemplate": {
+    "type": "FeatureCollection",
+    "metadata": {
+      "courseId": "RHKYC-3",
+      "courseName": "RHKYC Course 3",
+      "pattern": "windward-leeward",
+      "laps": 3,
+      "totalLegs": 7,
+      "estimatedDistance": 5.2,
+      "windDirection": 0,
+      "windSpeed": 12,
+      "currentDirection": 90,
+      "currentSpeed": 0.5,
+      "venueId": "rhkyc-victoria-harbour",
+      "venueName": "RHKYC Victoria Harbour",
+      "created": "2025-10-18T00:00:00Z",
+      "generator": "race-course-visualizer-skill"
+    },
+    "features": [
+      {
+        "$comment": "Insert mark, line, zone, and helper features here"
+      }
+    ]
+  },
+  "exampleCourse": {
+    "type": "FeatureCollection",
+    "metadata": {
+      "courseId": "RHKYC-3",
+      "courseName": "RHKYC Course 3",
+      "pattern": "windward-leeward",
+      "laps": 3,
+      "totalLegs": 7,
+      "estimatedDistance": 5.2,
+      "windDirection": 225,
+      "venueId": "rhkyc-victoria-harbour"
+    },
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.1628, 22.2893]
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "windward",
+          "id": "A",
+          "name": "Windward Mark",
+          "rounding": "port",
+          "order": 1,
+          "color": "#FF4444",
+          "radius": 50,
+          "label": "A"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.1628, 22.2793]
+        },
+        "properties": {
+          "type": "mark",
+          "markType": "leeward",
+          "id": "C",
+          "name": "Leeward Mark",
+          "rounding": "port",
+          "order": 2,
+          "color": "#FF4444",
+          "radius": 50,
+          "label": "C"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [114.1628, 22.2793],
+            [114.1628, 22.2893]
+          ]
+        },
+        "properties": {
+          "type": "courseLeg",
+          "legType": "beat",
+          "from": "Start",
+          "to": "A",
+          "order": 1,
+          "distance": 0.6,
+          "bearing": 0,
+          "color": "#4444FF",
+          "width": 3,
+          "dashArray": [8, 4]
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [114.1628, 22.2893],
+            [114.1628, 22.2793]
+          ]
+        },
+        "properties": {
+          "type": "courseLeg",
+          "legType": "run",
+          "from": "A",
+          "to": "C",
+          "order": 2,
+          "distance": 0.6,
+          "bearing": 180,
+          "color": "#44FF44",
+          "width": 3,
+          "dashArray": [8, 4]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,462 @@
+{
+  "keelboats": {
+    "dragon": {
+      "class_name": "International Dragon",
+      "aliases": ["Dragon", "Dragon Class"],
+      "type": "Three-person keelboat",
+      "typical_formats": {
+        "notice_of_race": {
+          "common_sections": [
+            "Rules",
+            "Notice to Competitors",
+            "Changes to Racing Rules",
+            "Advertising",
+            "Eligibility and Entry",
+            "Fees",
+            "Schedule",
+            "Sailing Instructions",
+            "Venue",
+            "Courses",
+            "Penalty System",
+            "Scoring",
+            "Support Boats",
+            "Berthing",
+            "Haul-Out Restrictions",
+            "Diving Equipment and Plastic Pools",
+            "Data Protection",
+            "Risk Statement",
+            "Insurance",
+            "Further Information"
+          ],
+          "typical_filename_patterns": [
+            "*NOR*.pdf",
+            "*Notice*of*Race*.pdf",
+            "*Dragon*NOR*.pdf"
+          ]
+        },
+        "sailing_instructions": {
+          "common_sections": [
+            "Rules",
+            "Notices to Competitors",
+            "Changes to Sailing Instructions",
+            "Signals Made Ashore",
+            "Schedule of Races",
+            "Class Flags",
+            "Racing Area",
+            "The Courses",
+            "Marks",
+            "The Start",
+            "Change of the Next Leg of the Course",
+            "The Finish",
+            "Penalty System",
+            "Time Limits and Target Times",
+            "Protests and Requests for Redress",
+            "Scoring",
+            "Safety Regulations",
+            "Replacement of Crew or Equipment",
+            "Equipment and Measurement Checks",
+            "Official Boats",
+            "Support Boats",
+            "Chartered or Loaned Boats",
+            "Radio Communication",
+            "Prizes",
+            "Disclaimer of Liability",
+            "Insurance"
+          ],
+          "appendices": [
+            "Appendix A - Course Diagrams",
+            "Appendix B - Sailing Instructions Addendum",
+            "Appendix C - List of Boats Entered"
+          ]
+        }
+      },
+      "course_preferences": {
+        "preferred": ["windward_leeward", "trapezoid"],
+        "typical_legs": {
+          "beat": "1.0 - 1.5 nm",
+          "run": "1.0 - 1.5 nm"
+        }
+      },
+      "document_specifics": {
+        "international_dragon_association": {
+          "website": "intdragon.net",
+          "standard_nor_template": true,
+          "common_supplements": [
+            "Dragon Standard Notice of Race (NOR)",
+            "International Dragon Association Appendix",
+            "National Class Association Appendix"
+          ]
+        },
+        "typical_fleet_size": "20 - 60 boats",
+        "typical_start_sequence": "5-4-1-0",
+        "common_penalties": "Two-Turns (720°)"
+      }
+    },
+
+    "j70": {
+      "class_name": "J/70",
+      "aliases": ["J70", "J-70"],
+      "type": "Three-person sportboat",
+      "typical_formats": {
+        "notice_of_race": {
+          "common_sections": [
+            "Rules",
+            "Advertising",
+            "Eligibility and Entry",
+            "Fees",
+            "Schedule",
+            "Equipment Inspection",
+            "Sailing Instructions",
+            "Venue",
+            "Courses",
+            "Scoring",
+            "Support Boats",
+            "Berthing",
+            "Risk Statement",
+            "Insurance",
+            "Further Information"
+          ]
+        }
+      },
+      "course_preferences": {
+        "preferred": ["windward_leeward"],
+        "typical_legs": {
+          "beat": "0.8 - 1.2 nm",
+          "run": "0.8 - 1.2 nm"
+        },
+        "gate_common": true
+      },
+      "document_specifics": {
+        "j70_class_association": {
+          "website": "j70.org",
+          "standard_nor_template": true
+        },
+        "typical_fleet_size": "30 - 80 boats",
+        "typical_start_sequence": "5-4-1-0",
+        "common_penalties": "One-Turn (360°) or Two-Turns (720°)"
+      }
+    },
+
+    "etchells": {
+      "class_name": "Etchells",
+      "aliases": ["Etchells 22", "E22"],
+      "type": "Three-person keelboat",
+      "course_preferences": {
+        "preferred": ["windward_leeward", "triangle"],
+        "typical_legs": {
+          "beat": "1.0 - 1.5 nm",
+          "run": "1.0 - 1.5 nm"
+        }
+      }
+    },
+
+    "melges24": {
+      "class_name": "Melges 24",
+      "aliases": ["M24", "Melges 24"],
+      "type": "High-performance sportboat",
+      "course_preferences": {
+        "preferred": ["windward_leeward"],
+        "typical_legs": {
+          "beat": "0.8 - 1.2 nm",
+          "run": "0.8 - 1.2 nm"
+        },
+        "gate_common": true
+      }
+    }
+  },
+
+  "dinghies": {
+    "470": {
+      "class_name": "470",
+      "aliases": ["International 470", "470 Class"],
+      "type": "Two-person Olympic dinghy",
+      "typical_formats": {
+        "olympic_format": {
+          "common_sections": [
+            "Rules",
+            "Sailing Instructions",
+            "Communications",
+            "Code of Conduct",
+            "Signals Made Ashore",
+            "Schedule",
+            "Class Flag",
+            "Courses",
+            "Marks",
+            "Areas That Are Obstructions",
+            "The Start",
+            "The Finish",
+            "Penalty System",
+            "Time Limits",
+            "Protests and Requests for Redress",
+            "Scoring",
+            "Safety Regulations",
+            "Replacement of Crew or Equipment",
+            "Equipment and Measurement Checks",
+            "Event Advertising",
+            "Official Boats",
+            "Support Boats",
+            "Chartered or Loaned Boats"
+          ]
+        }
+      },
+      "course_preferences": {
+        "preferred": ["windward_leeward", "trapezoid"],
+        "typical_legs": {
+          "beat": "0.8 - 1.2 nm",
+          "run": "0.8 - 1.2 nm"
+        },
+        "gate_common": true
+      },
+      "document_specifics": {
+        "olympic_class": true,
+        "typical_fleet_size": "15 - 40 boats",
+        "typical_start_sequence": "5-4-1-0",
+        "common_penalties": "Two-Turns (720°)"
+      }
+    },
+
+    "laser": {
+      "class_name": "Laser / ILCA",
+      "aliases": ["Laser", "ILCA", "ILCA 7", "ILCA 6", "ILCA 4", "Laser Standard", "Laser Radial", "Laser 4.7"],
+      "type": "Single-handed dinghy",
+      "subtypes": {
+        "ilca7": "Laser Standard (now ILCA 7)",
+        "ilca6": "Laser Radial (now ILCA 6)",
+        "ilca4": "Laser 4.7 (now ILCA 4)"
+      },
+      "course_preferences": {
+        "preferred": ["windward_leeward", "trapezoid"],
+        "typical_legs": {
+          "beat": "0.6 - 1.0 nm",
+          "run": "0.6 - 1.0 nm"
+        }
+      },
+      "document_specifics": {
+        "olympic_class": true,
+        "typical_fleet_size": "30 - 100+ boats",
+        "multiple_fleets": true,
+        "common_penalties": "Two-Turns (720°)"
+      }
+    },
+
+    "optimist": {
+      "class_name": "Optimist",
+      "aliases": ["Opti", "Optimist Dinghy"],
+      "type": "Single-handed junior dinghy",
+      "course_preferences": {
+        "preferred": ["windward_leeward", "triangle"],
+        "typical_legs": {
+          "beat": "0.3 - 0.6 nm",
+          "run": "0.3 - 0.6 nm"
+        },
+        "shorter_courses": true
+      },
+      "document_specifics": {
+        "junior_class": true,
+        "age_restrictions": "Under 15 years",
+        "typical_fleet_size": "50 - 200+ boats",
+        "multiple_fleets": true,
+        "common_penalties": "Two-Turns (720°)"
+      }
+    },
+
+    "49er": {
+      "class_name": "49er",
+      "aliases": ["49er", "International 49er"],
+      "type": "High-performance skiff",
+      "course_preferences": {
+        "preferred": ["windward_leeward"],
+        "typical_legs": {
+          "beat": "1.0 - 1.5 nm",
+          "run": "1.0 - 1.5 nm"
+        },
+        "gate_common": true
+      },
+      "document_specifics": {
+        "olympic_class": true,
+        "high_performance": true,
+        "typical_start_sequence": "3-2-1-0",
+        "common_penalties": "Two-Turns (720°)"
+      }
+    },
+
+    "49erfx": {
+      "class_name": "49er FX",
+      "aliases": ["49erFX", "49er FX"],
+      "type": "High-performance skiff (women's)",
+      "course_preferences": {
+        "preferred": ["windward_leeward"],
+        "typical_legs": {
+          "beat": "1.0 - 1.5 nm",
+          "run": "1.0 - 1.5 nm"
+        },
+        "gate_common": true
+      },
+      "document_specifics": {
+        "olympic_class": true,
+        "high_performance": true,
+        "typical_start_sequence": "3-2-1-0"
+      }
+    }
+  },
+
+  "multihulls": {
+    "nacra17": {
+      "class_name": "Nacra 17",
+      "aliases": ["Nacra 17"],
+      "type": "Olympic catamaran",
+      "course_preferences": {
+        "preferred": ["windward_leeward"],
+        "typical_legs": {
+          "beat": "1.0 - 1.5 nm",
+          "run": "1.0 - 1.5 nm"
+        },
+        "gate_common": true
+      },
+      "document_specifics": {
+        "olympic_class": true,
+        "high_performance": true,
+        "mixed_gender": true
+      }
+    }
+  },
+
+  "document_parsing_hints": {
+    "class_detection": {
+      "methods": [
+        "Look for class name in document title",
+        "Check 'Eligibility' or 'Class' sections",
+        "Examine boat specifications or requirements",
+        "Identify from typical course distances",
+        "Check organizing authority or event sponsor"
+      ]
+    },
+
+    "format_variations_by_organizer": {
+      "world_sailing": {
+        "description": "International governing body",
+        "typical_format": "Comprehensive, follows World Sailing templates",
+        "common_supplements": [
+          "Racing Rules of Sailing references",
+          "Championship conditions",
+          "Anti-doping policies"
+        ]
+      },
+
+      "national_authority": {
+        "description": "National sailing associations (US Sailing, RYA, etc.)",
+        "typical_format": "Standard template with national variations",
+        "common_supplements": [
+          "National prescriptions",
+          "National racing rules",
+          "Local safety regulations"
+        ]
+      },
+
+      "yacht_club": {
+        "description": "Local yacht club events",
+        "typical_format": "Simplified, often based on templates",
+        "common_variations": [
+          "Less formal structure",
+          "More local knowledge assumed",
+          "Abbreviated sections",
+          "Combined NOR/SIs document"
+        ]
+      },
+
+      "class_association": {
+        "description": "Boat class-specific events",
+        "typical_format": "Class-specific template with class rules",
+        "common_supplements": [
+          "Class rules and regulations",
+          "Class-specific penalties",
+          "Class measurement requirements"
+        ]
+      }
+    },
+
+    "regional_variations": {
+      "north_america": {
+        "date_format": "MM/DD/YYYY",
+        "time_format": "12-hour (AM/PM)",
+        "distance_units": "Nautical miles preferred, sometimes yards",
+        "wind_speed": "Knots",
+        "common_authorities": ["US Sailing", "Sail Canada"]
+      },
+
+      "europe": {
+        "date_format": "DD/MM/YYYY",
+        "time_format": "24-hour",
+        "distance_units": "Nautical miles or kilometers",
+        "wind_speed": "Knots or m/s",
+        "common_authorities": ["RYA", "FFV", "DSV", "FIV"]
+      },
+
+      "asia_pacific": {
+        "date_format": "DD/MM/YYYY or YYYY/MM/DD",
+        "time_format": "24-hour",
+        "distance_units": "Nautical miles or kilometers",
+        "wind_speed": "Knots or m/s",
+        "common_authorities": ["HKSF", "Yachting Australia", "JSAF"]
+      }
+    },
+
+    "common_abbreviations": {
+      "nor": "Notice of Race",
+      "sis": "Sailing Instructions",
+      "rc": "Race Committee",
+      "orc": "Offshore Racing Congress",
+      "phrf": "Performance Handicap Racing Fleet",
+      "py": "Portsmouth Yardstick",
+      "oa": "Organizing Authority",
+      "ap": "Answering Pennant (Postponement)",
+      "w/l": "Windward/Leeward",
+      "nm": "Nautical Miles",
+      "vhf": "Very High Frequency (radio)"
+    }
+  },
+
+  "extraction_priorities_by_class": {
+    "high_performance": {
+      "classes": ["J/70", "49er", "49er FX", "Nacra 17", "Melges 24"],
+      "priority_fields": [
+        "Start times (often tight schedules)",
+        "Wind limits (racing cancelled in very light or heavy conditions)",
+        "Course distances (shorter, faster races)",
+        "Gate configurations (leeward gates very common)"
+      ]
+    },
+
+    "keelboats": {
+      "classes": ["Dragon", "Etchells", "Soling"],
+      "priority_fields": [
+        "Detailed course descriptions",
+        "Traditional course layouts (triangles common)",
+        "Longer time limits",
+        "Radio communication requirements"
+      ]
+    },
+
+    "junior_development": {
+      "classes": ["Optimist", "420", "Laser 4.7"],
+      "priority_fields": [
+        "Age restrictions",
+        "Shorter courses",
+        "Additional safety requirements",
+        "Parent/guardian requirements",
+        "Coaching boat regulations"
+      ]
+    },
+
+    "olympic": {
+      "classes": ["470", "49er", "49er FX", "Nacra 17", "ILCA 7", "ILCA 6"],
+      "priority_fields": [
+        "Medal race formats",
+        "Qualification series structures",
+        "Anti-doping requirements",
+        "Equipment control procedures",
+        "Live tracking requirements"
+      ]
+    }
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "courseName": "Windward/Leeward Course - Hong Kong",
+    "courseType": "windward_leeward",
+    "venue": "Royal Hong Kong Yacht Club",
+    "venueId": "rhkyc-kellett-island",
+    "boatClass": "Dragon",
+    "raceDate": "2025-10-19",
+    "windDirection": 135,
+    "windSpeed": 12,
+    "currentDirection": 90,
+    "currentSpeed": 0.5
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1694, 22.2793, 0]
+      },
+      "properties": {
+        "id": "mark-start-pin",
+        "name": "Start Pin",
+        "type": "start",
+        "markType": "pin_end",
+        "description": "Port end of start line (pin end)",
+        "color": "#22c55e",
+        "sequence": 0,
+        "rounding": "port"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1704, 22.2793, 0]
+      },
+      "properties": {
+        "id": "mark-start-committee",
+        "name": "Start Committee Boat",
+        "type": "start",
+        "markType": "committee_boat",
+        "description": "Starboard end of start line (committee boat)",
+        "color": "#22c55e",
+        "sequence": 0,
+        "rounding": "starboard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1699, 22.2843, 0]
+      },
+      "properties": {
+        "id": "mark-windward",
+        "name": "Windward Mark",
+        "type": "windward",
+        "markType": "rounding",
+        "description": "Top mark - round to port",
+        "color": "#0ea5e9",
+        "sequence": 1,
+        "rounding": "port"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1689, 22.2753, 0]
+      },
+      "properties": {
+        "id": "mark-leeward-port",
+        "name": "Leeward Gate (Port)",
+        "type": "leeward",
+        "markType": "gate",
+        "description": "Port mark of leeward gate",
+        "color": "#f59e0b",
+        "sequence": 2,
+        "rounding": "port"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1709, 22.2753, 0]
+      },
+      "properties": {
+        "id": "mark-leeward-starboard",
+        "name": "Leeward Gate (Starboard)",
+        "type": "leeward",
+        "markType": "gate",
+        "description": "Starboard mark of leeward gate",
+        "color": "#f59e0b",
+        "sequence": 2,
+        "rounding": "starboard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1694, 22.2798, 0]
+      },
+      "properties": {
+        "id": "mark-finish-pin",
+        "name": "Finish Pin",
+        "type": "finish",
+        "markType": "pin_end",
+        "description": "Port end of finish line",
+        "color": "#ef4444",
+        "sequence": 3,
+        "rounding": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1704, 22.2798, 0]
+      },
+      "properties": {
+        "id": "mark-finish-committee",
+        "name": "Finish Committee Boat",
+        "type": "finish",
+        "markType": "committee_boat",
+        "description": "Starboard end of finish line",
+        "color": "#ef4444",
+        "sequence": 3,
+        "rounding": null
+      }
+    }
+  ],
+  "courseLegs": [
+    {
+      "legNumber": 1,
+      "from": "mark-start-pin",
+      "to": "mark-windward",
+      "type": "upwind",
+      "distance": 0.54,
+      "distanceUnit": "nautical miles",
+      "bearing": 0,
+      "optimalTack": "starboard",
+      "layline": {
+        "port": {
+          "angle": 45,
+          "coordinates": [[114.1669, 22.2793], [114.1669, 22.2843]]
+        },
+        "starboard": {
+          "angle": 315,
+          "coordinates": [[114.1729, 22.2793], [114.1729, 22.2843]]
+        }
+      }
+    },
+    {
+      "legNumber": 2,
+      "from": "mark-windward",
+      "to": "mark-leeward-port",
+      "type": "downwind",
+      "distance": 1.0,
+      "distanceUnit": "nautical miles",
+      "bearing": 180,
+      "optimalGybe": "port",
+      "runningAngles": {
+        "port": 150,
+        "starboard": 210
+      }
+    },
+    {
+      "legNumber": 3,
+      "from": "mark-leeward-port",
+      "to": "mark-windward",
+      "type": "upwind",
+      "distance": 1.0,
+      "distanceUnit": "nautical miles",
+      "bearing": 0,
+      "optimalTack": "starboard"
+    },
+    {
+      "legNumber": 4,
+      "from": "mark-windward",
+      "to": "mark-finish-committee",
+      "type": "downwind",
+      "distance": 0.5,
+      "distanceUnit": "nautical miles",
+      "bearing": 180,
+      "optimalGybe": "starboard"
+    }
+  ],
+  "mapView": {
+    "center": [114.1699, 22.2798],
+    "zoom": 13,
+    "pitch": 45,
+    "bearing": 0,
+    "bounds": {
+      "southwest": [114.1664, 22.2743],
+      "northeast": [114.1734, 22.2853]
+    },
+    "padding": 100
+  },
+  "tacticalInformation": {
+    "startStrategy": {
+      "favoredEnd": "pin",
+      "reason": "Wind shifts 5 degrees right, favoring port end",
+      "currentBias": "slight_port",
+      "recommendedApproach": "port_tack_approach"
+    },
+    "windShifts": [
+      {
+        "time": "00:00",
+        "direction": 130,
+        "confidence": 0.8
+      },
+      {
+        "time": "00:10",
+        "direction": 140,
+        "confidence": 0.7
+      }
+    ],
+    "currentFlow": {
+      "direction": 90,
+      "speed": 0.5,
+      "impact": "Push boats right on upwind leg"
+    }
+  }
+}

@@ -1,0 +1,340 @@
+{
+  "$schema": "https://regattaflow.com/schemas/geometric-patterns.json",
+  "version": "1.0.0",
+  "description": "Standard sailing course geometric patterns and visual recognition rules",
+  "updated": "2025-10-18",
+  "patterns": {
+    "windward-leeward": {
+      "name": "Windward/Leeward",
+      "abbreviation": "W/L",
+      "description": "Pure upwind/downwind course with two marks aligned with wind direction",
+      "aliases": ["sausage", "beat-run", "upwind-downwind"],
+      "geometry": {
+        "marks": 2,
+        "markTypes": ["windward", "leeward"],
+        "alignment": "vertical",
+        "windRelation": "parallel"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Two main marks vertically aligned",
+          "Wind arrow pointing upward",
+          "Straight line between marks",
+          "Start line near leeward mark",
+          "Finish may be at windward or leeward"
+        ],
+        "markLabels": ["A (windward)", "C (leeward)"],
+        "courseLines": "Straight up and down"
+      },
+      "typicalDistances": {
+        "small": {"windwardLeg": 0.3, "leewardLeg": 0.3},
+        "medium": {"windwardLeg": 0.8, "leewardLeg": 0.8},
+        "large": {"windwardLeg": 1.5, "leewardLeg": 1.5},
+        "championship": {"windwardLeg": 2.0, "leewardLeg": 2.0}
+      },
+      "angles": {
+        "windwardBearing": 0,
+        "leewardBearing": 180
+      },
+      "tactics": {
+        "emphasis": "Upwind boat speed and pointing ability",
+        "windShiftImpact": "Very high",
+        "passingOpportunities": "Limited to mark roundings",
+        "skillFocus": ["upwind speed", "downwind VMG", "mark rounding"]
+      }
+    },
+    "triangle": {
+      "name": "Triangle",
+      "description": "Three-sided course with beat, reach, reach legs forming a triangle",
+      "aliases": ["Olympic triangle", "reaching triangle"],
+      "geometry": {
+        "marks": 3,
+        "markTypes": ["windward", "wing", "leeward"],
+        "alignment": "triangular",
+        "windRelation": "one-leg-parallel"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Three marks forming triangle shape",
+          "Windward mark at top",
+          "Wing mark to side",
+          "Leeward mark at bottom near start",
+          "Triangle clearly visible"
+        ],
+        "markLabels": ["A (windward)", "B (wing)", "C (leeward)"],
+        "courseLines": "Three-sided polygon"
+      },
+      "typicalDistances": {
+        "small": {"windwardLeg": 0.3, "reachingLeg": 0.4, "finalLeg": 0.4},
+        "medium": {"windwardLeg": 0.8, "reachingLeg": 0.9, "finalLeg": 0.9},
+        "large": {"windwardLeg": 1.5, "reachingLeg": 1.7, "finalLeg": 1.7},
+        "championship": {"windwardLeg": 2.0, "reachingLeg": 2.2, "finalLeg": 2.2}
+      },
+      "angles": {
+        "windwardBearing": 0,
+        "wingBearing": 120,
+        "leewardBearing": 180,
+        "reachAngle": 120
+      },
+      "tactics": {
+        "emphasis": "All-around boat handling and speed",
+        "windShiftImpact": "Medium - affects legs differently",
+        "passingOpportunities": "High on reaching legs",
+        "skillFocus": ["upwind speed", "reaching speed", "boat handling", "tactical awareness"]
+      }
+    },
+    "trapezoid": {
+      "name": "Trapezoid",
+      "abbreviation": "Trap",
+      "description": "Four-sided course with varied angles for comprehensive racing",
+      "aliases": ["quadrilateral", "box"],
+      "geometry": {
+        "marks": 4,
+        "markTypes": ["windward", "offset", "wing", "leeward"],
+        "alignment": "quadrilateral",
+        "windRelation": "multi-angle"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Four marks forming trapezoid",
+          "Windward mark at top",
+          "Two intermediate marks at angles",
+          "Leeward mark at bottom",
+          "Complex geometry"
+        ],
+        "markLabels": ["A (windward)", "B (offset)", "C (wing)", "D (leeward)"],
+        "courseLines": "Four-sided polygon"
+      },
+      "typicalDistances": {
+        "medium": {"beat": 0.8, "reach1": 0.6, "reach2": 0.6, "run": 0.8},
+        "large": {"beat": 1.5, "reach1": 1.0, "reach2": 1.0, "run": 1.5},
+        "championship": {"beat": 2.0, "reach1": 1.5, "reach2": 1.5, "run": 2.0}
+      },
+      "angles": {
+        "windwardBearing": 0,
+        "offsetBearing": 45,
+        "wingBearing": 135,
+        "leewardBearing": 180
+      },
+      "tactics": {
+        "emphasis": "Comprehensive racing skills",
+        "windShiftImpact": "Complex - varies by leg",
+        "passingOpportunities": "Very high on varied angles",
+        "skillFocus": ["all-around speed", "tactical decision making", "boat handling mastery"]
+      }
+    },
+    "olympic": {
+      "name": "Olympic",
+      "description": "World Sailing standard Olympic course configuration",
+      "aliases": ["ISAF Olympic", "trapezoid-Olympic"],
+      "geometry": {
+        "marks": 5,
+        "markTypes": ["start/finish", "windward", "gate-1", "gate-2", "offset"],
+        "alignment": "Olympic-standard",
+        "windRelation": "ISAF-prescribed"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Five-mark configuration",
+          "Leeward gate (two marks)",
+          "Windward mark",
+          "Offset mark",
+          "Prescribed geometry"
+        ],
+        "markLabels": ["1 (windward)", "2 (offset)", "3 (gate)", "4 (gate)", "S/F"],
+        "courseLines": "ISAF standard pattern"
+      },
+      "typicalDistances": {
+        "olympic": {
+          "beat": 1.0,
+          "reach": 0.75,
+          "run": 1.0,
+          "offsetDistance": 0.15
+        }
+      },
+      "angles": {
+        "windwardBearing": 0,
+        "offsetBearing": 45,
+        "gate1Bearing": 165,
+        "gate2Bearing": 195
+      },
+      "tactics": {
+        "emphasis": "Championship-level racing",
+        "windShiftImpact": "Strategic complexity",
+        "passingOpportunities": "High with gate options",
+        "skillFocus": ["elite boat speed", "tactical mastery", "gate selection", "layline judgment"]
+      }
+    },
+    "gate-variation": {
+      "name": "Gate Variation",
+      "description": "Any course pattern with split leeward marks forming a gate",
+      "geometry": {
+        "gateConfiguration": true,
+        "gateMarks": 2,
+        "separation": "3-5 boat lengths",
+        "orientation": "perpendicular to wind"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Two marks close together at leeward position",
+          "Labeled C1/C2 or similar",
+          "Curved arrows showing either mark option",
+          "Text: 'pass between and round either'"
+        ],
+        "markLabels": ["C1 (gate left)", "C2 (gate right)"],
+        "courseLines": "Options shown to both gates"
+      },
+      "gateRules": {
+        "passing": "Must pass between the two gate marks",
+        "rounding": "Sailor chooses which gate mark to round",
+        "direction": "No specific rounding direction (either works)",
+        "replacement": "If replaced by single mark, follow standard rounding rule"
+      },
+      "tactics": {
+        "emphasis": "Real-time tactical decision making",
+        "windShiftImpact": "Gate choice critical based on trends",
+        "passingOpportunities": "Reduced congestion at leeward mark",
+        "skillFocus": ["wind trend analysis", "layline judgment", "gate selection strategy"]
+      }
+    },
+    "windward-finish": {
+      "name": "Windward Finish",
+      "description": "Course finishing at the windward mark instead of leeward",
+      "geometry": {
+        "finishLocation": "windward",
+        "lastLeg": "upwind"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Finish line or mark at top of course",
+          "Final leg is upwind",
+          "Often shows 'Finish at A' notation"
+        ],
+        "markLabels": ["A (finish)"],
+        "courseLines": "Ends at top mark"
+      },
+      "tactics": {
+        "emphasis": "Final beat strategy critical",
+        "windShiftImpact": "Very high on final leg",
+        "passingOpportunities": "Last-minute changes possible",
+        "skillFocus": ["final beat tactics", "finish line approach", "upwind speed under pressure"]
+      }
+    },
+    "leeward-finish": {
+      "name": "Leeward Finish",
+      "description": "Course finishing at or near the leeward mark",
+      "geometry": {
+        "finishLocation": "leeward",
+        "lastLeg": "downwind"
+      },
+      "visualRecognition": {
+        "diagramFeatures": [
+          "Finish line or mark at bottom of course",
+          "Final leg is downwind",
+          "Often shows 'Finish at C' notation"
+        ],
+        "markLabels": ["C (finish)"],
+        "courseLines": "Ends at bottom mark"
+      },
+      "tactics": {
+        "emphasis": "Final run strategy and VMG",
+        "windShiftImpact": "Medium on final leg",
+        "passingOpportunities": "Limited on final run",
+        "skillFocus": ["downwind speed", "finish line approach", "tactical positioning"]
+      }
+    }
+  },
+  "recognitionRules": {
+    "windDirection": {
+      "indicators": [
+        "Arrow pointing upward in diagram",
+        "Label 'Wind' with direction arrow",
+        "Implicit from mark arrangement (A at top = windward)"
+      ],
+      "defaultAssumption": "Wind from bottom to top of diagram (0° = North)"
+    },
+    "markRounding": {
+      "portRounding": {
+        "description": "Leave mark to port (left) side",
+        "visualization": "Curved arrow counterclockwise",
+        "percentage": "~90% of courses"
+      },
+      "starboardRounding": {
+        "description": "Leave mark to starboard (right) side",
+        "visualization": "Curved arrow clockwise",
+        "percentage": "~10% of courses"
+      },
+      "defaultRule": "Port rounding unless specified otherwise"
+    },
+    "startFinishLines": {
+      "startLine": {
+        "position": "Near leeward mark or separate",
+        "symbols": ["Committee boat flag", "Pin mark", "Orange line"],
+        "orientation": "Perpendicular to first leg"
+      },
+      "finishLine": {
+        "positions": ["At windward mark", "At leeward mark", "Separate line"],
+        "symbols": ["Checkered flag", "Finish mark", "Pink/magenta line"],
+        "notation": "'Finish at A/C' or 'Finish'"
+      }
+    },
+    "distanceEstimation": {
+      "method": "Based on boat class and venue size",
+      "factors": ["Boat class speed", "Target race duration", "Venue size"],
+      "typicalRaceDuration": "45-90 minutes for fleet racing",
+      "calculationFormula": "distance = (targetDuration * boatSpeed) / laps"
+    }
+  },
+  "boatClassVariations": {
+    "dinghies": {
+      "examples": ["Laser", "420", "29er", "49er"],
+      "typicalLegLength": "0.3-0.6",
+      "preferredPatterns": ["windward-leeward", "trapezoid"],
+      "notes": "Shorter courses, more laps, emphasis on boat handling"
+    },
+    "keelboats": {
+      "examples": ["J/70", "Etchells", "Dragon", "Star"],
+      "typicalLegLength": "0.8-1.5",
+      "preferredPatterns": ["windward-leeward", "triangle", "olympic"],
+      "notes": "Moderate length, tactical complexity, weight considerations"
+    },
+    "offshore": {
+      "examples": ["J/105", "Farr 40", "TP52"],
+      "typicalLegLength": "1.5-3.0",
+      "preferredPatterns": ["windward-leeward", "reaching courses"],
+      "notes": "Longer courses, fewer laps, endurance and strategy"
+    },
+    "multihulls": {
+      "examples": ["F18", "Nacra 17", "Flying Phantom"],
+      "typicalLegLength": "0.5-1.0",
+      "preferredPatterns": ["trapezoid", "reaching-heavy courses"],
+      "notes": "Fast boats, reaching emphasized, speed-focused courses"
+    }
+  },
+  "regionalVariations": {
+    "RHKYC": {
+      "region": "Hong Kong",
+      "standardPatterns": ["windward-leeward", "triangle", "gate-variation"],
+      "defaultRounding": "port",
+      "notes": "16 standardized geometric courses with consistent numbering"
+    },
+    "US-Sailing": {
+      "region": "United States",
+      "standardPatterns": ["Gold Cup W/L", "Olympic triangle", "Random leg"],
+      "defaultRounding": "port",
+      "notes": "Appendix S courses, emphasis on windward/leeward racing"
+    },
+    "World-Sailing": {
+      "region": "International",
+      "standardPatterns": ["Olympic trapezoid", "Championship courses"],
+      "defaultRounding": "port",
+      "notes": "ISAF-prescribed courses for international championships"
+    },
+    "European": {
+      "region": "Europe",
+      "standardPatterns": ["Triangle variations", "Coastal courses"],
+      "defaultRounding": "port",
+      "notes": "Mixed patterns, often longer coastal races"
+    }
+  }
+}

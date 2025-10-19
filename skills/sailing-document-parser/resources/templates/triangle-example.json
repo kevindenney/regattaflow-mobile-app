@@ -1,0 +1,217 @@
+{
+  "courseType": "triangle",
+  "description": "Classic triangle course with reaching legs",
+  "marks": [
+    {
+      "id": "start-finish",
+      "name": "Start/Finish",
+      "latitude": 22.279300,
+      "longitude": 114.162800,
+      "type": "start-finish",
+      "description": "Committee boat - serves as both start and finish",
+      "rounding": "port",
+      "order": 0
+    },
+    {
+      "id": "pin",
+      "name": "Start Pin",
+      "latitude": 22.279100,
+      "longitude": 114.162600,
+      "type": "pin",
+      "description": "Port end of start line",
+      "rounding": "either",
+      "order": 1
+    },
+    {
+      "id": "windward-mark",
+      "name": "Windward Mark",
+      "latitude": 22.285000,
+      "longitude": 114.165000,
+      "type": "mark",
+      "description": "Top of triangle - round to port",
+      "rounding": "port",
+      "order": 2
+    },
+    {
+      "id": "reaching-mark",
+      "name": "Reaching Mark",
+      "latitude": 22.282000,
+      "longitude": 114.170000,
+      "type": "mark",
+      "description": "Wing mark - round to port",
+      "rounding": "port",
+      "order": 3
+    }
+  ],
+  "legs": [
+    {
+      "from": "Start/Finish",
+      "to": "Windward Mark",
+      "type": "upwind",
+      "distance": 1.3,
+      "unit": "nautical miles",
+      "bearing": 15,
+      "description": "Beat to windward mark"
+    },
+    {
+      "from": "Windward Mark",
+      "to": "Reaching Mark",
+      "type": "reaching",
+      "distance": 1.1,
+      "unit": "nautical miles",
+      "bearing": 120,
+      "description": "Broad reach to wing mark"
+    },
+    {
+      "from": "Reaching Mark",
+      "to": "Start/Finish",
+      "type": "reaching",
+      "distance": 1.8,
+      "unit": "nautical miles",
+      "bearing": 235,
+      "description": "Reach back to finish at committee boat"
+    }
+  ],
+  "raceConfig": {
+    "laps": 1,
+    "totalDistance": 4.2,
+    "unit": "nautical miles",
+    "estimatedDuration": 50,
+    "durationUnit": "minutes",
+    "startSequence": "5-4-1-0",
+    "timeLimit": 75,
+    "timeLimitUnit": "minutes"
+  },
+  "venue": {
+    "name": "Royal Hong Kong Yacht Club",
+    "location": "Hong Kong",
+    "coordinates": {
+      "latitude": 22.279300,
+      "longitude": 114.162800
+    },
+    "timezone": "Asia/Hong_Kong"
+  },
+  "geojson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.162800, 22.279300]
+        },
+        "properties": {
+          "id": "start-finish",
+          "name": "Start/Finish",
+          "type": "start-finish",
+          "description": "Committee boat - serves as both start and finish",
+          "rounding": "port",
+          "order": 0
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.162600, 22.279100]
+        },
+        "properties": {
+          "id": "pin",
+          "name": "Start Pin",
+          "type": "pin",
+          "description": "Port end of start line",
+          "rounding": "either",
+          "order": 1
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.165000, 22.285000]
+        },
+        "properties": {
+          "id": "windward-mark",
+          "name": "Windward Mark",
+          "type": "mark",
+          "description": "Top of triangle - round to port",
+          "rounding": "port",
+          "order": 2
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [114.170000, 22.282000]
+        },
+        "properties": {
+          "id": "reaching-mark",
+          "name": "Reaching Mark",
+          "type": "mark",
+          "description": "Wing mark - round to port",
+          "rounding": "port",
+          "order": 3
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [114.162800, 22.279300],
+            [114.165000, 22.285000],
+            [114.170000, 22.282000],
+            [114.162800, 22.279300]
+          ]
+        },
+        "properties": {
+          "type": "course-line",
+          "name": "Triangle Course Path"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [114.162600, 22.279100],
+            [114.162800, 22.279300]
+          ]
+        },
+        "properties": {
+          "type": "start-line",
+          "name": "Start Line"
+        }
+      }
+    ]
+  },
+  "tacticalNotes": {
+    "startLine": {
+      "length": 0.02,
+      "unit": "nautical miles",
+      "favoredEnd": "Pin end typically favored in southerly winds",
+      "strategy": "Conservative start - course is one lap, no recovery from poor start"
+    },
+    "upwindLeg": {
+      "strategy": "Right side of course often favored due to current",
+      "laylines": "Approach windward mark on starboard tack for clean rounding"
+    },
+    "firstReach": {
+      "strategy": "Broad reach - stay high early to maintain speed",
+      "windShift": "Watch for wind bends around Hong Kong Island"
+    },
+    "secondReach": {
+      "strategy": "Close reach to finish - inside track can be faster despite longer distance",
+      "current": "Current sets toward finish - account for drift"
+    }
+  },
+  "notes": [
+    "Triangle courses feature one upwind leg and two reaching legs",
+    "Classic course shape for moderate wind conditions",
+    "Typically sailed as single lap (unlike windward-leeward which is often 2+ laps)",
+    "Reaching legs test crew work and spinnaker/gennaker handling",
+    "Start/finish at same location (committee boat)",
+    "All marks rounded to port in this example (standard convention)"
+  ]
+}

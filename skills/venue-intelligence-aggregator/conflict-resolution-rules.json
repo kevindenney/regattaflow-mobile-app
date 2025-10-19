@@ -1,0 +1,116 @@
+{
+  "priority_hierarchy": [
+    {
+      "rank": 1,
+      "document_type": "Amendment",
+      "reason": "Most recent official changes",
+      "action": "use_amendment_value",
+      "note_conflict": true
+    },
+    {
+      "rank": 2,
+      "document_type": "SI",
+      "reason": "Race-specific overrides general rules",
+      "action": "use_si_value",
+      "note_conflict": true
+    },
+    {
+      "rank": 3,
+      "document_type": "NOR",
+      "reason": "Event-level requirements",
+      "action": "use_nor_value",
+      "note_conflict": true
+    },
+    {
+      "rank": 4,
+      "document_type": "SSI",
+      "reason": "Club-wide defaults",
+      "action": "use_ssi_value",
+      "note_conflict": false
+    },
+    {
+      "rank": 5,
+      "document_type": "Appendix",
+      "reason": "Supplementary reference",
+      "action": "use_appendix_value",
+      "note_conflict": false
+    }
+  ],
+
+  "resolution_strategies": {
+    "time_conflict": {
+      "description": "Different start times in multiple documents",
+      "strategy": "Use most specific time, note conflict if difference > 5 minutes",
+      "example": {
+        "NOR": "11:30",
+        "SI": "11:36",
+        "resolution": "Use 11:36 from SI (more specific)",
+        "confidence_impact": -0.05
+      }
+    },
+
+    "course_type_conflict": {
+      "description": "Different course configurations",
+      "strategy": "Use SI/Appendix over NOR, flag for user review if major difference",
+      "example": {
+        "NOR": "Windward-Leeward",
+        "SI": "Windward-Leeward with Offset",
+        "resolution": "Use SI value (more specific)",
+        "confidence_impact": -0.02
+      }
+    },
+
+    "lap_count_conflict": {
+      "description": "Different number of laps specified",
+      "strategy": "Use most recent document, flag for user validation",
+      "example": {
+        "NOR": "2 laps",
+        "Amendment": "3 laps",
+        "resolution": "Use Amendment (most recent)",
+        "confidence_impact": -0.10,
+        "require_validation": true
+      }
+    },
+
+    "mark_description_conflict": {
+      "description": "Different mark colors or positions",
+      "strategy": "Use most detailed description, combine if complementary",
+      "example": {
+        "SI": "Mark 1 - Orange",
+        "Appendix": "Mark 1 - Orange Inflatable",
+        "resolution": "Combine: Orange Inflatable",
+        "confidence_impact": 0
+      }
+    },
+
+    "date_conflict": {
+      "description": "Different race dates",
+      "strategy": "Use most recent document, flag as critical conflict",
+      "require_validation": true,
+      "confidence_impact": -0.20
+    }
+  },
+
+  "merging_strategies": {
+    "complementary_information": {
+      "description": "Documents provide different non-conflicting pieces",
+      "action": "merge",
+      "confidence_bonus": 0.05,
+      "example": "NOR provides date, SI provides start time → merge both"
+    },
+
+    "refinement": {
+      "description": "One document refines or adds detail to another",
+      "action": "use_refined",
+      "confidence_bonus": 0.03,
+      "example": "NOR: 'Morning race', SI: '11:36 start' → use 11:36"
+    },
+
+    "contradiction": {
+      "description": "Direct contradiction requiring resolution",
+      "action": "apply_hierarchy",
+      "confidence_penalty": -0.10,
+      "require_note": true
+    }
+  }
+}

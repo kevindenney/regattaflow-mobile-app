@@ -1,0 +1,85 @@
+{
+  "reference_patterns": [
+    {
+      "pattern": "as per (SSI|SI|NOR) (Section|Part|Appendix) ([A-Z0-9.]+)",
+      "type": "section_reference",
+      "action": "cross_reference"
+    },
+    {
+      "pattern": "see (Appendix [A-Z]|Attachment [A-Z])",
+      "type": "appendix_reference",
+      "action": "load_appendix"
+    },
+    {
+      "pattern": "courses? (as )?defined in",
+      "type": "course_reference",
+      "action": "extract_course_definition"
+    },
+    {
+      "pattern": "amended by|superseded by|replaced by",
+      "type": "amendment_reference",
+      "action": "apply_amendment"
+    }
+  ],
+
+  "document_type_indicators": {
+    "NOR": [
+      "notice of race",
+      "entry form",
+      "eligibility",
+      "registration",
+      "fees payable"
+    ],
+    "SI": [
+      "sailing instructions",
+      "race instructions",
+      "changes the rules",
+      "adds to the rules"
+    ],
+    "SSI": [
+      "standard sailing instructions",
+      "club racing rules",
+      "general instructions"
+    ],
+    "Appendix": [
+      "appendix [a-z]",
+      "attachment [a-z]",
+      "course diagram",
+      "racing area"
+    ],
+    "Amendment": [
+      "amendment",
+      "change notice",
+      "correction",
+      "updated"
+    ],
+    "Calendar": [
+      "race schedule",
+      "season calendar",
+      "series dates"
+    ]
+  },
+
+  "typical_relationships": [
+    {
+      "primary": "NOR",
+      "references": ["SI", "SSI", "Entry_Form"],
+      "provides": ["series_info", "dates", "eligibility", "fees"]
+    },
+    {
+      "primary": "SI",
+      "references": ["NOR", "SSI", "Appendix_A", "Appendix_B"],
+      "provides": ["race_procedures", "course_details", "start_times", "marks"]
+    },
+    {
+      "primary": "SSI",
+      "references": ["Appendices"],
+      "provides": ["club_rules", "safety_procedures", "communications", "protests"]
+    },
+    {
+      "primary": "Appendix_B",
+      "references": ["SI", "SSI"],
+      "provides": ["course_diagrams", "mark_positions", "racing_area_boundaries"]
+    }
+  ]
+}

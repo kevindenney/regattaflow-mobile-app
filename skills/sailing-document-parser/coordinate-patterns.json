@@ -1,0 +1,373 @@
+{
+  "formats": {
+    "decimal_degrees": {
+      "description": "Decimal degrees format (most common in digital formats)",
+      "examples": [
+        "22.123456, 114.987654",
+        "22.123456N, 114.987654E",
+        "-22.123456, -114.987654",
+        "Lat: 22.123456, Lon: 114.987654"
+      ],
+      "patterns": [
+        "[-+]?\\d+\\.\\d+",
+        "\\d+\\.\\d+[NS]?",
+        "\\d+\\.\\d+[EW]?"
+      ],
+      "validation": {
+        "latitude": {
+          "min": -90,
+          "max": 90,
+          "precision": 6
+        },
+        "longitude": {
+          "min": -180,
+          "max": 180,
+          "precision": 6
+        }
+      },
+      "confidence": 0.95
+    },
+
+    "degrees_minutes_seconds": {
+      "description": "Degrees, minutes, and seconds format (DMS)",
+      "examples": [
+        "22°07'24.4\"N 114°59'15.5\"E",
+        "22° 07' 24.4\" N, 114° 59' 15.5\" E",
+        "22d 07m 24.4s N, 114d 59m 15.5s E",
+        "N 22°07'24.4\", E 114°59'15.5\""
+      ],
+      "patterns": [
+        "\\d+°\\s*\\d+'\\s*[\\d.]+\"\\s*[NSEW]",
+        "\\d+d\\s*\\d+m\\s*[\\d.]+s\\s*[NSEW]",
+        "[NSEW]\\s*\\d+°\\s*\\d+'\\s*[\\d.]+\""
+      ],
+      "conversion": {
+        "formula": "decimal = degrees + (minutes/60) + (seconds/3600)",
+        "steps": [
+          "Extract degrees, minutes, seconds",
+          "Convert to decimal: D + M/60 + S/3600",
+          "Apply hemisphere: N/E positive, S/W negative"
+        ]
+      },
+      "validation": {
+        "degrees_lat": {"min": 0, "max": 90},
+        "degrees_lon": {"min": 0, "max": 180},
+        "minutes": {"min": 0, "max": 59},
+        "seconds": {"min": 0, "max": 59.999}
+      },
+      "confidence": 0.9
+    },
+
+    "degrees_decimal_minutes": {
+      "description": "Degrees and decimal minutes format (DDM)",
+      "examples": [
+        "22°07.407'N 114°59.258'E",
+        "22° 07.407' N, 114° 59.258' E",
+        "N 22° 07.407', E 114° 59.258'",
+        "22-07.407N, 114-59.258E"
+      ],
+      "patterns": [
+        "\\d+°\\s*[\\d.]+['']\\s*[NSEW]",
+        "\\d+-[\\d.]+[NSEW]",
+        "[NSEW]\\s*\\d+°\\s*[\\d.]+[''']"
+      ],
+      "conversion": {
+        "formula": "decimal = degrees + (decimal_minutes/60)",
+        "steps": [
+          "Extract degrees and decimal minutes",
+          "Convert to decimal: D + DM/60",
+          "Apply hemisphere: N/E positive, S/W negative"
+        ]
+      },
+      "validation": {
+        "degrees_lat": {"min": 0, "max": 90},
+        "degrees_lon": {"min": 0, "max": 180},
+        "decimal_minutes": {"min": 0, "max": 59.999}
+      },
+      "confidence": 0.92
+    },
+
+    "degrees_minutes": {
+      "description": "Degrees and whole minutes format (DM)",
+      "examples": [
+        "22°07'N 114°59'E",
+        "22° 07' N, 114° 59' E",
+        "N 22° 07', E 114° 59'"
+      ],
+      "patterns": [
+        "\\d+°\\s*\\d+'\\s*[NSEW]",
+        "[NSEW]\\s*\\d+°\\s*\\d+'"
+      ],
+      "conversion": {
+        "formula": "decimal = degrees + (minutes/60)",
+        "steps": [
+          "Extract degrees and minutes",
+          "Convert to decimal: D + M/60",
+          "Apply hemisphere: N/E positive, S/W negative"
+        ]
+      },
+      "validation": {
+        "degrees_lat": {"min": 0, "max": 90},
+        "degrees_lon": {"min": 0, "max": 180},
+        "minutes": {"min": 0, "max": 59}
+      },
+      "confidence": 0.85
+    }
+  },
+
+  "commonErrors": {
+    "swapped_coordinates": {
+      "description": "Latitude and longitude in wrong order",
+      "detection": "Latitude > 90 or Longitude > 180 when in expected order",
+      "correction": "Swap latitude and longitude",
+      "examples": [
+        "114.987654, 22.123456 (should be 22.123456, 114.987654)"
+      ]
+    },
+
+    "missing_hemisphere": {
+      "description": "No N/S/E/W indicator",
+      "detection": "Positive values without hemisphere indicators",
+      "correction": "Infer from venue location or context",
+      "note": "Requires venue context to determine sign"
+    },
+
+    "dms_as_decimal": {
+      "description": "DMS format interpreted as single decimal number",
+      "examples": [
+        "220724.4 instead of 22°07'24.4\"",
+        "1145915.5 instead of 114°59'15.5\""
+      ],
+      "detection": "Large numbers outside valid decimal degree range",
+      "correction": "Split into DD MM SS.S components and convert"
+    },
+
+    "decimal_minutes_confusion": {
+      "description": "Decimal minutes confused with seconds",
+      "examples": [
+        "22°07.407\" (should be 22°07.407' or 22°07'24.4\")"
+      ],
+      "detection": "Decimal point with seconds indicator",
+      "correction": "Treat as decimal minutes, not seconds"
+    },
+
+    "wrong_precision": {
+      "description": "Too few or too many decimal places",
+      "note": "Standard precision: 5-6 decimal places (~1 meter accuracy)",
+      "recommendation": "Round to 6 decimal places for consistency"
+    }
+  },
+
+  "validationRules": {
+    "latitude": {
+      "range": {
+        "min": -90,
+        "max": 90,
+        "unit": "degrees"
+      },
+      "precision": {
+        "recommended": 6,
+        "minimum": 4,
+        "note": "6 decimal places ≈ 0.1 meter accuracy"
+      },
+      "hemisphere": {
+        "positive": "North (N)",
+        "negative": "South (S)"
+      }
+    },
+
+    "longitude": {
+      "range": {
+        "min": -180,
+        "max": 180,
+        "unit": "degrees"
+      },
+      "precision": {
+        "recommended": 6,
+        "minimum": 4,
+        "note": "6 decimal places ≈ 0.1 meter accuracy at equator"
+      },
+      "hemisphere": {
+        "positive": "East (E)",
+        "negative": "West (W)"
+      }
+    },
+
+    "mark_proximity": {
+      "description": "Racing marks should be reasonably close together",
+      "typical_distances": {
+        "windward_leeward": "0.5 - 2.0 nautical miles",
+        "triangle": "0.3 - 1.5 nautical miles per leg",
+        "olympic": "0.5 - 2.0 nautical miles total"
+      },
+      "validation": "Marks more than 10nm apart are likely errors"
+    }
+  },
+
+  "conversionFormulas": {
+    "dms_to_decimal": {
+      "description": "Convert Degrees/Minutes/Seconds to Decimal Degrees",
+      "formula": "decimal = degrees + (minutes / 60) + (seconds / 3600)",
+      "sign": "Apply negative sign for S (latitude) or W (longitude)",
+      "example": {
+        "input": "22°07'24.4\"N",
+        "steps": [
+          "degrees = 22",
+          "minutes = 7",
+          "seconds = 24.4",
+          "decimal = 22 + (7/60) + (24.4/3600)",
+          "decimal = 22 + 0.1167 + 0.0068",
+          "result = 22.1235° N"
+        ]
+      }
+    },
+
+    "ddm_to_decimal": {
+      "description": "Convert Degrees/Decimal Minutes to Decimal Degrees",
+      "formula": "decimal = degrees + (decimal_minutes / 60)",
+      "sign": "Apply negative sign for S (latitude) or W (longitude)",
+      "example": {
+        "input": "22°07.407'N",
+        "steps": [
+          "degrees = 22",
+          "decimal_minutes = 7.407",
+          "decimal = 22 + (7.407/60)",
+          "decimal = 22 + 0.12345",
+          "result = 22.12345° N"
+        ]
+      }
+    },
+
+    "decimal_to_dms": {
+      "description": "Convert Decimal Degrees to Degrees/Minutes/Seconds",
+      "steps": [
+        "degrees = floor(abs(decimal))",
+        "minutes_decimal = (abs(decimal) - degrees) * 60",
+        "minutes = floor(minutes_decimal)",
+        "seconds = (minutes_decimal - minutes) * 60",
+        "hemisphere = N/S for lat, E/W for lon based on sign"
+      ],
+      "example": {
+        "input": "22.123456°",
+        "steps": [
+          "degrees = 22",
+          "minutes_decimal = 0.123456 * 60 = 7.40736",
+          "minutes = 7",
+          "seconds = 0.40736 * 60 = 24.4416",
+          "result = 22°07'24.4\"N"
+        ]
+      }
+    }
+  },
+
+  "regionalPatterns": {
+    "hong_kong": {
+      "typical_latitude": {
+        "range": [22.15, 22.57],
+        "format": "22.XXX°N"
+      },
+      "typical_longitude": {
+        "range": [113.83, 114.41],
+        "format": "114.XXX°E"
+      },
+      "common_venues": {
+        "victoria_harbour": {"lat": 22.28, "lon": 114.18},
+        "sai_kung": {"lat": 22.38, "lon": 114.27},
+        "south_china_sea": {"lat": 22.25, "lon": 114.25}
+      }
+    },
+
+    "mediterranean": {
+      "typical_latitude": {
+        "range": [30, 46],
+        "format": "XX.XXX°N"
+      },
+      "typical_longitude": {
+        "range": [-6, 37],
+        "format": "XX.XXX°E or XX.XXX°W"
+      }
+    },
+
+    "north_america_east": {
+      "typical_latitude": {
+        "range": [25, 45],
+        "format": "XX.XXX°N"
+      },
+      "typical_longitude": {
+        "range": [-82, -65],
+        "format": "XX.XXX°W (negative in decimal)"
+      }
+    },
+
+    "north_america_west": {
+      "typical_latitude": {
+        "range": [32, 48],
+        "format": "XX.XXX°N"
+      },
+      "typical_longitude": {
+        "range": [-125, -117],
+        "format": "XXX.XXX°W (negative in decimal)"
+      }
+    }
+  },
+
+  "confidenceScoring": {
+    "high_confidence": {
+      "score": 0.9,
+      "criteria": [
+        "Exact coordinates provided in standard format",
+        "Coordinates include hemisphere indicators",
+        "Coordinates fall within expected venue range",
+        "Multiple marks have consistent coordinate format"
+      ]
+    },
+
+    "medium_confidence": {
+      "score": 0.6,
+      "criteria": [
+        "Coordinates provided but format ambiguous",
+        "Missing hemisphere indicators but inferable from context",
+        "Only partial coordinate information (e.g., 'approximately X nm from start')"
+      ]
+    },
+
+    "low_confidence": {
+      "score": 0.3,
+      "criteria": [
+        "Only descriptive position ('north of harbor entrance')",
+        "Coordinates seem inconsistent or outside typical ranges",
+        "Conflicting information in document"
+      ]
+    },
+
+    "no_data": {
+      "score": 0.1,
+      "criteria": [
+        "No coordinate information provided",
+        "Only mark names without positions",
+        "Course diagram without scale or reference"
+      ]
+    }
+  },
+
+  "extractionGuidelines": {
+    "steps": [
+      "1. Scan document for coordinate patterns (decimal, DMS, DDM)",
+      "2. Extract all potential coordinate pairs",
+      "3. Associate coordinates with mark names (look for nearby text)",
+      "4. Validate coordinates against regional patterns",
+      "5. Convert all coordinates to decimal degrees",
+      "6. Check for common errors (swapped lat/lon, wrong format)",
+      "7. Assign confidence scores based on clarity and consistency",
+      "8. Note any ambiguities or uncertainties in position.description"
+    ],
+
+    "best_practices": [
+      "Always convert to decimal degrees for consistency",
+      "Preserve original format in position.description for reference",
+      "Use venue context to validate coordinate reasonableness",
+      "Flag suspicious coordinates (>10nm from venue center)",
+      "Provide clear confidence scores to help users verify"
+    ]
+  }
+}

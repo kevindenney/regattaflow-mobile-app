@@ -1,0 +1,120 @@
+{
+  "common_gaps": [
+    {
+      "gap_type": "missing_gps_coordinates",
+      "severity": "low",
+      "common_in": ["club_racing", "mark_positions"],
+      "explanation": "Many clubs don't publish GPS coordinates - marks placed by RC on race day",
+      "user_action": "Manual mark placement via Quick Draw mode",
+      "confidence_impact": 0,
+      "note": "Normal for club racing - coordinates not typically published"
+    },
+    {
+      "gap_type": "missing_start_time",
+      "severity": "high",
+      "common_in": ["incomplete_si", "preliminary_nor"],
+      "explanation": "Start time not yet finalized or document incomplete",
+      "user_action": "Check for amendments or contact race committee",
+      "confidence_impact": -0.25,
+      "note": "Critical information missing - requires user input"
+    },
+    {
+      "gap_type": "missing_course_description",
+      "severity": "medium",
+      "common_in": ["preliminary_documents"],
+      "explanation": "Course details not yet determined (wind dependent)",
+      "user_action": "Check day-of briefing or SI amendments",
+      "confidence_impact": -0.15,
+      "note": "Course may be determined on race day based on conditions"
+    },
+    {
+      "gap_type": "missing_mark_details",
+      "severity": "medium",
+      "common_in": ["abbreviated_si", "standard_courses"],
+      "explanation": "Using standard club marks - details in SSI or local knowledge",
+      "user_action": "Check SSI Appendix or venue intelligence",
+      "confidence_impact": -0.08,
+      "note": "Standard marks may be documented in SSI"
+    },
+    {
+      "gap_type": "missing_racing_area",
+      "severity": "medium",
+      "common_in": ["multi_venue_clubs"],
+      "explanation": "Racing area may depend on conditions or be specified later",
+      "user_action": "Check calendar or weather-based selection",
+      "confidence_impact": -0.12,
+      "note": "Racing area may be announced closer to race day"
+    }
+  ],
+
+  "gap_filling_strategies": {
+    "infer_from_context": {
+      "description": "Use surrounding information to make educated guess",
+      "confidence_multiplier": 0.6,
+      "mark_as_inferred": true,
+      "examples": [
+        {
+          "gap": "missing VHF channel",
+          "context": "Same venue, same club",
+          "inference": "Use club's standard channel from SSI",
+          "confidence": 0.75
+        },
+        {
+          "gap": "missing time limit",
+          "context": "Similar race, same class",
+          "inference": "Use standard time limit for class",
+          "confidence": 0.65
+        }
+      ]
+    },
+
+    "defer_to_standards": {
+      "description": "Use club or class standards when specific info missing",
+      "confidence_multiplier": 0.7,
+      "mark_as_standard": true,
+      "examples": [
+        {
+          "gap": "missing protest procedure",
+          "standard": "SSI protest procedures apply",
+          "confidence": 0.80
+        }
+      ]
+    },
+
+    "mark_for_completion": {
+      "description": "Clearly identify field as requiring user input",
+      "confidence_multiplier": 0.0,
+      "require_user_input": true,
+      "examples": [
+        {
+          "gap": "missing registration deadline",
+          "action": "Leave null, request user input",
+          "confidence": 0.0
+        }
+      ]
+    }
+  },
+
+  "validation_prompts": {
+    "high_severity_gaps": {
+      "message": "Critical information missing - please review before proceeding",
+      "fields_to_review": ["start_time", "race_date", "course_type"],
+      "blocking": false,
+      "highlight_color": "red"
+    },
+
+    "medium_severity_gaps": {
+      "message": "Some information could not be extracted - please verify",
+      "fields_to_review": ["mark_details", "racing_area", "time_limits"],
+      "blocking": false,
+      "highlight_color": "yellow"
+    },
+
+    "low_severity_gaps": {
+      "message": "Optional information not found - can be added later",
+      "fields_to_review": ["gps_coordinates", "vhf_channel"],
+      "blocking": false,
+      "highlight_color": "blue"
+    }
+  }
+}

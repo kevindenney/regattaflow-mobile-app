@@ -1,0 +1,348 @@
+{
+  "$schema": "https://regattaflow.com/schemas/mark-types.json",
+  "version": "1.0.0",
+  "description": "Sailing race mark configurations, types, and rules",
+  "updated": "2025-10-18",
+  "markTypes": {
+    "windward": {
+      "id": "windward",
+      "name": "Windward Mark",
+      "aliases": ["weather mark", "top mark", "upwind mark"],
+      "description": "Primary upwind mark, typically the furthest mark upwind from the start",
+      "typicalLabels": ["A", "1", "W", "Top"],
+      "position": "upwind",
+      "color": "#FF4444",
+      "symbol": "circle",
+      "size": "large",
+      "roundingDirection": "port",
+      "tacticalImportance": "very-high",
+      "congestionRisk": "very-high",
+      "characteristics": {
+        "approachLeg": "beat",
+        "exitLeg": "run or reach",
+        "typicalTraffic": "High congestion at mark",
+        "roundingTechnique": "Wide entry, tight exit to protect inside",
+        "commonErrors": "Overstanding layline, mark room violations"
+      },
+      "visualIndicators": [
+        "Positioned at top of course diagram",
+        "Red or orange circle",
+        "Wind arrow pointing toward this mark",
+        "Labeled 'A' or similar"
+      ]
+    },
+    "leeward": {
+      "id": "leeward",
+      "name": "Leeward Mark",
+      "aliases": ["bottom mark", "downwind mark", "lee mark"],
+      "description": "Primary downwind mark, typically near the starting area",
+      "typicalLabels": ["C", "3", "L", "Bottom"],
+      "position": "downwind",
+      "color": "#FF4444",
+      "symbol": "circle",
+      "size": "large",
+      "roundingDirection": "port",
+      "tacticalImportance": "very-high",
+      "congestionRisk": "very-high",
+      "characteristics": {
+        "approachLeg": "run",
+        "exitLeg": "beat",
+        "typicalTraffic": "High congestion, fleet compression",
+        "roundingTechnique": "Set up for optimal upwind exit angle",
+        "commonErrors": "Poor setup for next beat, inside/outside confusion"
+      },
+      "visualIndicators": [
+        "Positioned at bottom of course diagram",
+        "Red or orange circle",
+        "Near start line area",
+        "Labeled 'C' or similar"
+      ]
+    },
+    "wing": {
+      "id": "wing",
+      "name": "Wing Mark",
+      "aliases": ["offset mark", "reaching mark", "jibe mark"],
+      "description": "Intermediate mark creating reaching legs in triangle courses",
+      "typicalLabels": ["B", "2", "O"],
+      "position": "side",
+      "color": "#FF4444",
+      "symbol": "circle",
+      "size": "medium",
+      "roundingDirection": "port",
+      "tacticalImportance": "high",
+      "congestionRisk": "medium",
+      "characteristics": {
+        "approachLeg": "reach",
+        "exitLeg": "reach or run",
+        "typicalTraffic": "Moderate, boats spread out",
+        "roundingTechnique": "Maintain speed through rounding",
+        "commonErrors": "Excessive rounding, losing boat speed"
+      },
+      "visualIndicators": [
+        "Positioned to side of main wind axis",
+        "Forms triangle with other marks",
+        "Red or orange circle",
+        "Labeled 'B' or similar"
+      ]
+    },
+    "gate": {
+      "id": "gate",
+      "name": "Gate Marks",
+      "aliases": ["leeward gate", "split mark", "choice mark"],
+      "description": "Two marks positioned close together, sailors choose which to round",
+      "typicalLabels": ["C1/C2", "3L/3R", "Gate"],
+      "position": "downwind",
+      "color": "#FF4444",
+      "symbol": "paired-circles",
+      "size": "large",
+      "roundingDirection": "either",
+      "tacticalImportance": "very-high",
+      "congestionRisk": "low",
+      "characteristics": {
+        "approachLeg": "run",
+        "exitLeg": "beat",
+        "separation": "3-5 boat lengths",
+        "orientation": "perpendicular to wind",
+        "typicalTraffic": "Low, fleet splits between gates",
+        "roundingTechnique": "Choose based on wind trends and next beat strategy",
+        "commonErrors": "Wrong gate choice, failing to pass between marks"
+      },
+      "rules": {
+        "passing": "Must pass between the two gate marks",
+        "rounding": "Sailor chooses which gate mark to round (C1 or C2)",
+        "replacement": "If replaced by single mark, follows standard rounding rule"
+      },
+      "visualIndicators": [
+        "Two circles close together",
+        "Labeled C1/C2 or similar",
+        "Curved arrows to both marks",
+        "Text notation about passing between"
+      ]
+    },
+    "offset": {
+      "id": "offset",
+      "name": "Offset Mark",
+      "aliases": ["spreader mark", "angle mark"],
+      "description": "Mark placed to create specific reaching angle, often close to windward mark",
+      "typicalLabels": ["B", "2", "Offset"],
+      "position": "near-windward",
+      "color": "#FF8844",
+      "symbol": "circle",
+      "size": "small",
+      "roundingDirection": "port",
+      "tacticalImportance": "medium",
+      "congestionRisk": "medium",
+      "characteristics": {
+        "approachLeg": "beat",
+        "exitLeg": "reach",
+        "distance": "2-4 boat lengths from windward mark",
+        "typicalTraffic": "Quick succession after windward",
+        "roundingTechnique": "Smooth transition from beat to reach",
+        "commonErrors": "Missing mark in close proximity to windward"
+      },
+      "visualIndicators": [
+        "Small circle near windward mark",
+        "Creates reaching angle",
+        "Orange or yellow circle",
+        "Close proximity to mark A"
+      ]
+    },
+    "start": {
+      "id": "start",
+      "name": "Start Line",
+      "aliases": ["starting line", "start", "line"],
+      "description": "Line between committee boat and pin mark where race begins",
+      "typicalLabels": ["Start", "S", "RC"],
+      "position": "bottom",
+      "color": "#4444FF",
+      "symbol": "line",
+      "size": "large",
+      "roundingDirection": "n/a",
+      "tacticalImportance": "critical",
+      "congestionRisk": "very-high",
+      "characteristics": {
+        "components": ["Committee boat (flag end)", "Pin mark (opposite end)"],
+        "orientation": "Perpendicular to first leg (typically beat)",
+        "length": "Function of fleet size, wind, and venue",
+        "typicalTraffic": "Entire fleet on line at start signal",
+        "startTechnique": "Timing, position, speed, clear air",
+        "commonErrors": "OCS (on course side), poor position, lack of speed"
+      },
+      "visualIndicators": [
+        "Thick line at bottom of diagram",
+        "Flag symbol at one end (committee boat)",
+        "Pin mark or orange circle at other end",
+        "Labeled 'Start'"
+      ]
+    },
+    "finish": {
+      "id": "finish",
+      "name": "Finish Line",
+      "aliases": ["finishing line", "finish"],
+      "description": "Line or mark where race concludes",
+      "typicalLabels": ["Finish", "F", "A", "C"],
+      "position": "variable",
+      "color": "#FF00FF",
+      "symbol": "checkered-line",
+      "size": "large",
+      "roundingDirection": "n/a",
+      "tacticalImportance": "critical",
+      "congestionRisk": "medium",
+      "characteristics": {
+        "locations": ["At windward mark", "At leeward mark", "Separate finish line"],
+        "notation": "'Finish at A/C' or separate line",
+        "approachLeg": "Variable based on finish location",
+        "typicalTraffic": "Fleet spread out over time",
+        "finishTechnique": "Optimal angle, boat speed, positioning",
+        "commonErrors": "Wrong end of line, slowing before crossing"
+      },
+      "visualIndicators": [
+        "Checkered flag symbol",
+        "Pink or magenta line/mark",
+        "Labeled 'Finish'",
+        "Notation 'Finish at [mark]'"
+      ]
+    },
+    "committee-boat": {
+      "id": "committee-boat",
+      "name": "Committee Boat",
+      "aliases": ["RC boat", "race committee", "signal boat"],
+      "description": "Official vessel marking one end of start/finish line",
+      "typicalLabels": ["RC", "Committee", "Flag"],
+      "position": "start-finish-line",
+      "color": "#FFA500",
+      "symbol": "boat-with-flag",
+      "size": "medium",
+      "roundingDirection": "n/a",
+      "tacticalImportance": "high",
+      "congestionRisk": "low",
+      "characteristics": {
+        "function": "Marks favored end of start line, displays signals",
+        "position": "Usually upwind end of start line",
+        "visualSignals": "Flags, shapes, sound signals",
+        "avoidance": "Keep clear, no anchored vessel right-of-way"
+      },
+      "visualIndicators": [
+        "Boat shape with flag",
+        "Orange or yellow symbol",
+        "At one end of start line",
+        "Flag icon"
+      ]
+    },
+    "pin": {
+      "id": "pin",
+      "name": "Pin Mark",
+      "aliases": ["pin end", "outer distance mark"],
+      "description": "Mark at opposite end of start line from committee boat",
+      "typicalLabels": ["Pin", "P", "ODM"],
+      "position": "start-line-end",
+      "color": "#FFA500",
+      "symbol": "circle",
+      "size": "small",
+      "roundingDirection": "n/a",
+      "tacticalImportance": "high",
+      "congestionRisk": "very-high",
+      "characteristics": {
+        "function": "Marks opposite end of start line",
+        "position": "Usually downwind end of start line",
+        "favoredEnd": "Often favored in port-biased start",
+        "congestion": "Very high at popular starting position"
+      },
+      "visualIndicators": [
+        "Orange or yellow circle",
+        "Small mark at line end",
+        "Opposite committee boat",
+        "Labeled 'Pin'"
+      ]
+    }
+  },
+  "roundingRules": {
+    "port": {
+      "direction": "left",
+      "description": "Leave mark to port (left) side when rounding",
+      "visualization": "Counterclockwise curved arrow",
+      "rightOfWay": "Starboard tack boats have right-of-way approaching",
+      "markRoom": "Inside boat entitled to mark room",
+      "percentage": "~90% of marks"
+    },
+    "starboard": {
+      "direction": "right",
+      "description": "Leave mark to starboard (right) side when rounding",
+      "visualization": "Clockwise curved arrow",
+      "rightOfWay": "Port tack boats have right-of-way approaching (unusual)",
+      "markRoom": "Inside boat entitled to mark room",
+      "percentage": "~10% of marks"
+    },
+    "either": {
+      "direction": "choice",
+      "description": "Sailor may round mark on either side (gates only)",
+      "visualization": "Arrows to both sides",
+      "rightOfWay": "Standard racing rules apply",
+      "markRoom": "Standard mark room rules",
+      "applicability": "Gates (C1/C2) only"
+    }
+  },
+  "markRoomRules": {
+    "definition": "Room for a boat to sail to the mark and then room to round as necessary to sail the course",
+    "entitlement": {
+      "inside": "Boat overlapped on the inside at the zone is entitled to mark room",
+      "outside": "Boat must give mark room to inside boat",
+      "clear-ahead": "Boat clear ahead at zone entitled to mark room"
+    },
+    "zone": "Area extending three hull lengths from the mark",
+    "exceptions": [
+      "No mark room if overlap established from clear astern within two lengths",
+      "Mark room ends when boat has rounded and is on proper course"
+    ]
+  },
+  "markVisualization": {
+    "colors": {
+      "racing-mark": "#FF4444",
+      "gate-mark": "#FF4444",
+      "offset-mark": "#FF8844",
+      "committee-boat": "#FFA500",
+      "pin-mark": "#FFA500",
+      "finish-mark": "#FF00FF",
+      "start-line": "#4444FF",
+      "finish-line": "#FF00FF"
+    },
+    "sizes": {
+      "large": 50,
+      "medium": 35,
+      "small": 20
+    },
+    "symbols": {
+      "circle": "Standard mark shape",
+      "paired-circles": "Gate configuration",
+      "boat-with-flag": "Committee boat",
+      "line": "Start/finish line",
+      "checkered-line": "Finish line"
+    }
+  },
+  "tacticalConsiderations": {
+    "windward-mark": {
+      "approach": "Starboard layline, inside position critical",
+      "rounding": "Wide entry, tight exit to protect downwind",
+      "nextLeg": "Set up for optimal downwind angle",
+      "wind": "Final shift before mark critical"
+    },
+    "leeward-mark": {
+      "approach": "Set up for optimal upwind exit",
+      "rounding": "Protect inside, gain clear air for beat",
+      "nextLeg": "Tack to favorable side if needed",
+      "wind": "Wind trend determines gate choice (if applicable)"
+    },
+    "wing-mark": {
+      "approach": "Maintain speed, inside track",
+      "rounding": "Smooth arc, preserve momentum",
+      "nextLeg": "Continue reaching or prepare for run",
+      "wind": "Less critical than windward/leeward"
+    },
+    "gate-marks": {
+      "choice": "Based on wind trends, next beat strategy, and fleet position",
+      "factors": ["Wind shifts", "Laylines to windward", "Current", "Fleet congestion"],
+      "timing": "Decide early, commit to choice",
+      "advantage": "Right choice = better position for next beat"
+    }
+  }
+}

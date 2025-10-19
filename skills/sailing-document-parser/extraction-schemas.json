@@ -1,0 +1,528 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Race Course Extraction Schema",
+  "description": "Structured schema for extracting sailing race course information from documents",
+
+  "definitions": {
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Confidence score for extracted data (0.0 = no confidence, 1.0 = complete confidence)"
+    },
+
+    "gpsCoordinate": {
+      "type": ["number", "null"],
+      "minimum": -180,
+      "maximum": 180,
+      "description": "GPS coordinate in decimal degrees format"
+    },
+
+    "latitude": {
+      "type": ["number", "null"],
+      "minimum": -90,
+      "maximum": 90,
+      "description": "Latitude in decimal degrees (-90 to +90)"
+    },
+
+    "longitude": {
+      "type": ["number", "null"],
+      "minimum": -180,
+      "maximum": 180,
+      "description": "Longitude in decimal degrees (-180 to +180)"
+    },
+
+    "isoDateTime": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 date-time string"
+    }
+  },
+
+  "type": "object",
+  "required": ["courseLayout", "marks", "schedule", "startLine", "requirements"],
+
+  "properties": {
+    "courseLayout": {
+      "type": "object",
+      "required": ["type", "description", "confidence"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["windward_leeward", "triangle", "trapezoid", "olympic", "reaching", "other"],
+          "description": "Primary course type"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the course layout"
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        },
+        "variations": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Course variations mentioned (e.g., 'W/L 2', 'W/L 3')"
+        },
+        "selection_criteria": {
+          "type": "string",
+          "description": "How course is selected (e.g., 'Based on wind direction')"
+        }
+      }
+    },
+
+    "marks": {
+      "type": "array",
+      "description": "List of racing marks",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "position"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Mark identifier (e.g., 'Start Pin', 'Windward Mark', 'Mark 1')"
+          },
+          "position": {
+            "type": "object",
+            "required": ["confidence"],
+            "properties": {
+              "latitude": {
+                "$ref": "#/definitions/latitude"
+              },
+              "longitude": {
+                "$ref": "#/definitions/longitude"
+              },
+              "description": {
+                "type": "string",
+                "description": "Textual description of position from document"
+              },
+              "confidence": {
+                "$ref": "#/definitions/confidence"
+              },
+              "original_format": {
+                "type": "string",
+                "description": "Original coordinate format from document (for reference)"
+              }
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["start", "windward", "leeward", "wing", "gate", "finish", "other"],
+            "description": "Functional type of mark in course"
+          },
+          "color": {
+            "type": ["string", "null"],
+            "description": "Mark color if specified (e.g., 'Yellow', 'Orange')"
+          },
+          "shape": {
+            "type": ["string", "null"],
+            "description": "Mark shape if specified (e.g., 'Sphere', 'Cylinder', 'Inflatable')"
+          },
+          "rounding": {
+            "type": ["string", "null"],
+            "enum": ["port", "starboard", "either", null],
+            "description": "Required rounding direction if specified"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional notes about this mark"
+          }
+        }
+      }
+    },
+
+    "boundaries": {
+      "type": "array",
+      "description": "Racing area boundaries and restricted zones",
+      "items": {
+        "type": "object",
+        "required": ["type", "description", "confidence"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["racing_area", "no_go", "restricted", "safety"],
+            "description": "Type of boundary"
+          },
+          "description": {
+            "type": "string",
+            "description": "Textual description of the boundary"
+          },
+          "coordinates": {
+            "type": "array",
+            "description": "Polygon vertices defining the boundary",
+            "items": {
+              "type": "object",
+              "required": ["latitude", "longitude"],
+              "properties": {
+                "latitude": {"$ref": "#/definitions/latitude"},
+                "longitude": {"$ref": "#/definitions/longitude"}
+              }
+            }
+          },
+          "confidence": {
+            "$ref": "#/definitions/confidence"
+          }
+        }
+      }
+    },
+
+    "schedule": {
+      "type": "object",
+      "required": ["confidence"],
+      "properties": {
+        "warningSignal": {
+          "$ref": "#/definitions/isoDateTime",
+          "description": "Time of warning signal (typically T-5 minutes)"
+        },
+        "preparatorySignal": {
+          "$ref": "#/definitions/isoDateTime",
+          "description": "Time of preparatory signal (typically T-4 minutes)"
+        },
+        "startingSignal": {
+          "$ref": "#/definitions/isoDateTime",
+          "description": "Time of starting signal (T-0)"
+        },
+        "timeLimit": {
+          "type": ["number", "null"],
+          "description": "Maximum race time in minutes"
+        },
+        "targetTime": {
+          "type": ["number", "null"],
+          "description": "Expected race duration in minutes"
+        },
+        "sequences": {
+          "type": "array",
+          "description": "Start sequences for multiple classes/fleets",
+          "items": {
+            "type": "object",
+            "required": ["class"],
+            "properties": {
+              "class": {
+                "type": "string",
+                "description": "Fleet or class name"
+              },
+              "startTime": {
+                "$ref": "#/definitions/isoDateTime",
+                "description": "Start time for this class"
+              },
+              "interval": {
+                "type": "number",
+                "description": "Interval from previous class in minutes"
+              }
+            }
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    },
+
+    "distances": {
+      "type": "object",
+      "description": "Course leg distances",
+      "properties": {
+        "beat": {
+          "type": "object",
+          "properties": {
+            "distance": {"type": "number"},
+            "unit": {
+              "type": "string",
+              "enum": ["nm", "km", "m", "mi", "yd"]
+            },
+            "confidence": {"$ref": "#/definitions/confidence"}
+          }
+        },
+        "run": {
+          "type": "object",
+          "properties": {
+            "distance": {"type": "number"},
+            "unit": {
+              "type": "string",
+              "enum": ["nm", "km", "m", "mi", "yd"]
+            },
+            "confidence": {"$ref": "#/definitions/confidence"}
+          }
+        },
+        "total": {
+          "type": "object",
+          "properties": {
+            "distance": {"type": "number"},
+            "unit": {
+              "type": "string",
+              "enum": ["nm", "km", "m", "mi", "yd"]
+            },
+            "confidence": {"$ref": "#/definitions/confidence"}
+          }
+        }
+      }
+    },
+
+    "startLine": {
+      "type": "object",
+      "required": ["type", "description", "confidence"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["line", "gate"],
+          "description": "Start line configuration"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed start line description"
+        },
+        "bias": {
+          "type": ["string", "null"],
+          "enum": ["port", "starboard", "neutral", null],
+          "description": "Start line bias if determinable"
+        },
+        "length": {
+          "type": ["number", "null"],
+          "description": "Start line length in meters if specified"
+        },
+        "orientation": {
+          "type": ["number", "null"],
+          "description": "Magnetic bearing of start line if specified"
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    },
+
+    "requirements": {
+      "type": "object",
+      "required": ["equipment", "crew", "safety", "registration", "confidence"],
+      "properties": {
+        "equipment": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Required equipment items"
+        },
+        "crew": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Crew requirements and restrictions"
+        },
+        "safety": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Safety requirements and procedures"
+        },
+        "registration": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Registration, check-in, and entry requirements"
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    },
+
+    "weatherLimits": {
+      "type": "object",
+      "required": ["confidence"],
+      "properties": {
+        "windMin": {
+          "type": ["number", "null"],
+          "description": "Minimum wind speed for racing (knots)"
+        },
+        "windMax": {
+          "type": ["number", "null"],
+          "description": "Maximum wind speed for racing (knots)"
+        },
+        "waveMax": {
+          "type": ["number", "null"],
+          "description": "Maximum wave height (meters)"
+        },
+        "visibility": {
+          "type": ["number", "null"],
+          "description": "Minimum visibility requirement (meters or nautical miles)"
+        },
+        "thunderstorm": {
+          "type": ["boolean", "null"],
+          "description": "Whether racing continues in thunderstorms"
+        },
+        "temperature": {
+          "type": "object",
+          "properties": {
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "unit": {"type": "string", "enum": ["C", "F"]}
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    },
+
+    "communication": {
+      "type": "object",
+      "required": ["confidence"],
+      "properties": {
+        "vhfChannel": {
+          "type": ["string", "null"],
+          "description": "Primary VHF radio channel (e.g., '72', 'Channel 72')"
+        },
+        "backupChannel": {
+          "type": ["string", "null"],
+          "description": "Backup/secondary VHF channel"
+        },
+        "callSign": {
+          "type": ["string", "null"],
+          "description": "Race committee call sign"
+        },
+        "emergencyContact": {
+          "type": ["string", "null"],
+          "description": "Emergency contact information"
+        },
+        "raceCommittee": {
+          "type": ["string", "null"],
+          "description": "Race committee contact details"
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    },
+
+    "regulations": {
+      "type": "object",
+      "required": ["confidence"],
+      "properties": {
+        "specialFlags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Special flags mentioned (P, I, Z, U, Black)"
+        },
+        "penalties": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Penalty system information"
+        },
+        "protests": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Protest procedures and time limits"
+        },
+        "scoringSystem": {
+          "type": "string",
+          "description": "Scoring system (Low Point, Bonus Point, etc.)"
+        },
+        "racingRules": {
+          "type": "string",
+          "description": "Governing racing rules (RRS 2021-2024, etc.)"
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    }
+  },
+
+  "validationRules": {
+    "courseLayout": {
+      "required_for_high_confidence": ["type", "description"],
+      "high_confidence_threshold": 0.8,
+      "notes": "Type must match standard patterns; description should be detailed"
+    },
+
+    "marks": {
+      "minimum_required": 0,
+      "typical_minimum": 2,
+      "maximum_reasonable": 10,
+      "position_validation": {
+        "require_both_coordinates": true,
+        "latitude_range": [-90, 90],
+        "longitude_range": [-180, 180],
+        "proximity_check": "Marks should typically be within 10nm of each other"
+      },
+      "notes": "At least start and finish marks should be present in most courses"
+    },
+
+    "schedule": {
+      "time_validation": {
+        "warning_before_start": "Should be 3-10 minutes before start",
+        "logical_sequence": "Warning → Preparatory → Start times must be in order"
+      },
+      "time_limit_validation": {
+        "typical_range": [30, 360],
+        "unit": "minutes",
+        "notes": "Most races have time limits between 30 minutes and 6 hours"
+      }
+    },
+
+    "distances": {
+      "unit_conversion": {
+        "nm_to_m": 1852,
+        "km_to_m": 1000,
+        "mi_to_m": 1609.34,
+        "yd_to_m": 0.9144
+      },
+      "typical_ranges": {
+        "beat": {"min": 0.3, "max": 3.0, "unit": "nm"},
+        "run": {"min": 0.3, "max": 3.0, "unit": "nm"},
+        "total": {"min": 0.5, "max": 10.0, "unit": "nm"}
+      }
+    },
+
+    "weatherLimits": {
+      "wind_speed_validation": {
+        "typical_min": 3,
+        "typical_max": 30,
+        "unit": "knots",
+        "notes": "Most racing has wind limits between 3 and 30 knots"
+      }
+    }
+  },
+
+  "confidenceCalculation": {
+    "weights": {
+      "courseLayout": 0.30,
+      "marks": 0.40,
+      "schedule": 0.10,
+      "requirements": 0.10,
+      "startLine": 0.10
+    },
+    "formula": "weighted_average = Σ(score × weight)",
+    "notes": "Course layout and marks are weighted higher as they are core to race strategy"
+  },
+
+  "exampleOutputs": {
+    "high_confidence_extraction": {
+      "description": "Example of high-quality extraction with explicit coordinates and clear course description",
+      "overallConfidence": 0.92,
+      "characteristics": [
+        "GPS coordinates provided for all marks",
+        "Course type explicitly stated",
+        "Complete schedule with times",
+        "Detailed requirements listed",
+        "Clear communication channels"
+      ]
+    },
+
+    "medium_confidence_extraction": {
+      "description": "Example of partial extraction with some missing data",
+      "overallConfidence": 0.65,
+      "characteristics": [
+        "Some mark positions missing or approximate",
+        "Course type inferable but not explicit",
+        "Partial schedule information",
+        "Some requirements listed"
+      ]
+    },
+
+    "low_confidence_extraction": {
+      "description": "Example of minimal extraction with mostly inferred data",
+      "overallConfidence": 0.35,
+      "characteristics": [
+        "No GPS coordinates, only descriptive positions",
+        "Course type inferred from mark names",
+        "Minimal schedule information",
+        "Few specific requirements"
+      ]
+    }
+  }
+}

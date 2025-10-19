@@ -1,0 +1,253 @@
+{
+  "marks": {
+    "start": {
+      "primary": ["Start Pin", "Pin End", "Pin Mark"],
+      "committee": ["Committee Boat", "RC Boat", "Race Committee Vessel", "Boat End"],
+      "aliases": ["Start Line Pin", "Starting Pin", "Committee End"]
+    },
+    "windward": {
+      "primary": ["Windward Mark", "Weather Mark", "Top Mark", "Beat Mark"],
+      "numbered": ["Mark 1", "Mark A", "W"],
+      "aliases": ["Upwind Mark", "Upper Mark"]
+    },
+    "leeward": {
+      "primary": ["Leeward Mark", "Bottom Mark", "Run Mark", "Downwind Mark"],
+      "gates": ["Leeward Gate", "Downwind Gate", "Port Gate Mark", "Starboard Gate Mark"],
+      "numbered": ["Mark 2", "Mark B", "L", "Gate A", "Gate B"],
+      "aliases": ["Lower Mark", "Lee Mark"]
+    },
+    "wing": {
+      "primary": ["Wing Mark", "Reaching Mark", "Offset Mark"],
+      "numbered": ["Mark 3", "Mark C", "W"],
+      "aliases": ["Jibe Mark", "Gybe Mark", "Spreader Mark"]
+    },
+    "finish": {
+      "primary": ["Finish Mark", "Finish Pin", "Finish Line"],
+      "committee": ["Finish Boat", "Finish RC Boat"],
+      "aliases": ["Finishing Mark", "Finish End"]
+    },
+    "gate": {
+      "primary": ["Gate", "Leeward Gate", "Windward Gate"],
+      "sides": ["Port Gate", "Starboard Gate", "Left Gate", "Right Gate"],
+      "aliases": ["Twin Marks", "Double Mark"]
+    }
+  },
+
+  "courseTypes": {
+    "windward_leeward": {
+      "names": ["Windward/Leeward", "W/L", "Upwind/Downwind", "Beat/Run", "Windward-Leeward"],
+      "pattern": "Start → Windward → Leeward → Finish",
+      "variations": ["W/L with Gate", "W/L 2", "W/L 3", "W/L 4"],
+      "minMarks": 2,
+      "description": "Start at leeward position, sail upwind to windward mark, then downwind to leeward mark or gate"
+    },
+    "triangle": {
+      "names": ["Triangle", "Gold Cup", "Triangular Course"],
+      "pattern": "Start → Mark 1 → Mark 2 → Mark 3 → Finish",
+      "variations": ["Isosceles Triangle", "Equilateral Triangle", "Modified Triangle"],
+      "minMarks": 3,
+      "description": "Three marks forming a triangular shape with reaching and windward/leeward legs"
+    },
+    "olympic": {
+      "names": ["Olympic", "Olympic Course", "Trapezoid"],
+      "pattern": "Start → Mark 1 → Mark 2 → Mark 3 → Mark 4 → Finish",
+      "variations": ["Olympic Triangle", "Trapezoid", "Modified Olympic"],
+      "minMarks": 4,
+      "description": "Complex course combining upwind, downwind, and reaching legs used in Olympic racing"
+    },
+    "trapezoid": {
+      "names": ["Trapezoid", "Trapezoidal Course"],
+      "pattern": "Start → Windward → Wing → Leeward → Wing → Finish",
+      "variations": ["Modified Trapezoid"],
+      "minMarks": 4,
+      "description": "Four marks in trapezoid shape with varied angles and distances"
+    },
+    "reaching": {
+      "names": ["Reaching Course", "Reaching Triangle"],
+      "pattern": "Start → Reach → Reach → Finish",
+      "minMarks": 2,
+      "description": "Course primarily consisting of beam-reach or broad-reach legs"
+    }
+  },
+
+  "markCharacteristics": {
+    "colors": {
+      "primary": ["Yellow", "Orange", "Red", "White", "Green", "Blue"],
+      "racing": ["Yellow", "Orange"],
+      "government": ["Red", "Green", "White"],
+      "special": ["Black", "Pink", "Purple"]
+    },
+    "shapes": {
+      "inflatable": ["Sphere", "Spherical", "Ball", "Inflatable Buoy", "Tetrahedron"],
+      "solid": ["Cylinder", "Cylindrical", "Can", "Cone", "Conical"],
+      "special": ["Flag Buoy", "Staff Buoy", "Dan Buoy"]
+    },
+    "materials": {
+      "inflatable": ["Inflatable", "Air-filled", "Soft"],
+      "solid": ["Hard", "Rigid", "Fixed"]
+    }
+  },
+
+  "signals": {
+    "warning": {
+      "names": ["Warning Signal", "Warning", "5 Minute Signal"],
+      "timing": ["T-5", "5 minutes before start", "Five minutes"],
+      "flags": ["Class Flag", "Fleet Flag"]
+    },
+    "preparatory": {
+      "names": ["Preparatory Signal", "Preparatory", "4 Minute Signal"],
+      "timing": ["T-4", "4 minutes before start", "Four minutes"],
+      "flags": ["P Flag", "I Flag", "Z Flag", "U Flag", "Black Flag"]
+    },
+    "oneminute": {
+      "names": ["One Minute Signal", "1 Minute"],
+      "timing": ["T-1", "1 minute before start", "One minute"],
+      "action": ["Preparatory flag removed"]
+    },
+    "starting": {
+      "names": ["Starting Signal", "Start Signal", "Go Signal"],
+      "timing": ["T-0", "Start time", "0:00"],
+      "action": ["Class flag removed", "Sound signal"]
+    },
+    "postponement": {
+      "names": ["Postponement", "AP", "Postponed"],
+      "flags": ["AP Flag", "Answering Pennant"],
+      "action": ["Races delayed"]
+    },
+    "abandonment": {
+      "names": ["Abandonment", "Abandoned", "N Flag"],
+      "flags": ["N Flag"],
+      "action": ["Race cancelled"]
+    }
+  },
+
+  "penalties": {
+    "turns": {
+      "names": ["Two-Turns Penalty", "720", "360", "One-Turn Penalty"],
+      "actions": ["Two tacks and two gybes", "One tack and one gybe"],
+      "codes": ["TT", "OT"]
+    },
+    "scoring": {
+      "names": ["Scoring Penalty", "Points Penalty"],
+      "codes": ["SCP"],
+      "description": ["20% penalty", "Percentage penalty"]
+    },
+    "flags": {
+      "p_flag": ["P Flag", "Preparatory", "Round-the-ends rule in effect"],
+      "i_flag": ["I Flag", "One-minute rule", "No sailing towards start line in final minute"],
+      "z_flag": ["Z Flag", "20% penalty", "OCS boats receive 20% penalty"],
+      "u_flag": ["U Flag", "Disqualification", "OCS boats disqualified"],
+      "black_flag": ["Black Flag", "BFD", "OCS boats disqualified, no redress"]
+    }
+  },
+
+  "disqualificationCodes": {
+    "dnf": ["DNF", "Did Not Finish", "Did not finish"],
+    "dns": ["DNS", "Did Not Start", "Did not start"],
+    "dsq": ["DSQ", "Disqualified", "Disqualification"],
+    "ocs": ["OCS", "On Course Side", "Premature start"],
+    "bfd": ["BFD", "Black Flag Disqualification"],
+    "dnc": ["DNC", "Did Not Come to Starting Area"],
+    "dne": ["DNE", "Disqualified Not Excludable"],
+    "rdg": ["RDG", "Redress Given"],
+    "dnp": ["DNP", "Did Not Participate"],
+    "ret": ["RET", "Retired"]
+  },
+
+  "scoringSystems": {
+    "low_point": {
+      "names": ["Low Point System", "Low Point", "Standard Scoring"],
+      "description": "1 point for 1st place, 2 for 2nd, etc."
+    },
+    "bonus_point": {
+      "names": ["Bonus Point System", "Bonus Points"],
+      "description": "Higher points for wins, with diminishing returns"
+    },
+    "portsmouth": {
+      "names": ["Portsmouth Yardstick", "Portsmouth", "PY", "Portsmouth Numbers"],
+      "description": "Handicap system for mixed fleets"
+    },
+    "phrf": {
+      "names": ["PHRF", "Performance Handicap Racing Fleet"],
+      "description": "Time-on-distance handicap system"
+    }
+  },
+
+  "equipment": {
+    "safety": {
+      "required": ["Life Jacket", "PFD", "Personal Flotation Device", "Flares", "VHF Radio", "Sound Signal", "Navigation Lights"],
+      "recommended": ["GPS", "Compass", "Charts", "First Aid Kit", "Knife", "Paddle", "Anchor"]
+    },
+    "racing": {
+      "required": ["Class Flag", "Sail Numbers", "Protest Flag", "Anchor"],
+      "recommended": ["Timing Device", "Course Map", "Wind Instruments"]
+    }
+  },
+
+  "communication": {
+    "channels": {
+      "racing": ["VHF Channel", "Race Channel", "Working Channel"],
+      "safety": ["Safety Channel", "Emergency Channel", "Channel 16"],
+      "common": ["Channel 72", "Channel 73", "Channel 74", "Channel 77", "Channel 78"]
+    },
+    "callSigns": {
+      "committee": ["RC", "Race Committee", "Committee Boat", "Signal Boat"],
+      "marks": ["Mark Boat", "Mark Set", "Support Vessel"]
+    }
+  },
+
+  "weatherTerms": {
+    "wind": {
+      "directions": ["North", "Northeast", "East", "Southeast", "South", "Southwest", "West", "Northwest", "N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+      "speeds": ["Knots", "Kts", "mph", "m/s", "Beaufort"],
+      "conditions": ["Light", "Moderate", "Fresh", "Strong", "Gale"]
+    },
+    "sea_state": {
+      "conditions": ["Calm", "Slight", "Moderate", "Rough", "Very Rough"],
+      "measurements": ["Wave Height", "Swell", "Chop"]
+    },
+    "visibility": {
+      "units": ["Nautical Miles", "NM", "Kilometers", "km", "Meters", "m"],
+      "conditions": ["Clear", "Hazy", "Fog", "Mist"]
+    }
+  },
+
+  "timingFormats": {
+    "sequences": {
+      "standard": ["5-4-1-0", "5-minute sequence"],
+      "short": ["3-2-1-0", "3-minute sequence"],
+      "long": ["10-5-4-1-0", "10-minute sequence"]
+    },
+    "intervals": {
+      "class": ["Class Interval", "Fleet Interval", "Starting Interval"],
+      "common": ["5 minutes", "4 minutes", "3 minutes", "2 minutes"]
+    }
+  },
+
+  "distanceUnits": {
+    "nautical": ["Nautical Miles", "NM", "nm", "M"],
+    "metric": ["Kilometers", "km", "Meters", "m"],
+    "imperial": ["Miles", "mi", "Yards", "yd", "Feet", "ft"]
+  },
+
+  "boatClasses": {
+    "keelboats": {
+      "dragon": ["Dragon", "Dragon Class", "International Dragon"],
+      "j70": ["J/70", "J70", "J-70"],
+      "melges24": ["Melges 24", "M24"],
+      "etchells": ["Etchells", "Etchells 22"],
+      "soling": ["Soling"]
+    },
+    "dinghies": {
+      "470": ["470", "International 470"],
+      "420": ["420", "Club 420"],
+      "laser": ["Laser", "ILCA", "ILCA 7", "ILCA 6", "ILCA 4"],
+      "optimist": ["Optimist", "Opti"],
+      "49er": ["49er", "49er FX"]
+    },
+    "multihulls": {
+      "nacra17": ["Nacra 17"],
+      "f18": ["Formula 18", "F18"]
+    }
+  }
+}

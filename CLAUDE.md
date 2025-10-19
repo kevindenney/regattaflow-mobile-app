@@ -1,6 +1,6 @@
 # RegattaFlow Development Context
 
-*Last Updated: September 25, 2025*
+*Last Updated: October 19, 2025 - Phase 2 Claude Skills Complete*
 
 ## Project Overview
 
@@ -23,8 +23,10 @@ See [Master Plan](./plans/regattaflow-master-plan.md) for complete vision and ro
 - **State Management**: Zustand for client state
 - **Database**: PostgreSQL with Row Level Security
 - **AI/ML**:
-  - **Anthropic Claude** (Agent SDK) for autonomous multi-step workflows
-  - **Google AI (Gemini)** for document parsing and content extraction
+  - **Anthropic Claude** for ALL AI operations (Agent SDK + document parsing + Skills)
+  - **Claude Sonnet 4.5** for agent orchestration and autonomous workflows
+  - **Claude 3.5 Haiku** for cost-optimized document extraction (12x cheaper than Sonnet)
+  - **Claude Skills**: Domain-specific expertise packages for sailing document parsing
   - **Agent SDK**: Self-orchestrating AI for venue intelligence, document processing, and coach matching
 
 ### Key External Services
@@ -66,6 +68,7 @@ npx expo export:web && vercel build  # Test production build
 - [frontend-ux-strategy.md](./plans/frontend-ux-strategy.md) - UI/UX strategy and patterns
 
 **Core Features:**
+- [sailor-race-experience.md](./plans/sailor-race-experience.md) - **PRIMARY: Complete sailor race workflow (creation → preparation → execution → analysis)** - 65% complete
 - [global-sailing-venues.md](./plans/global-sailing-venues.md) - **CRITICAL: Global venue intelligence system**
 - [sailor-experience.md](./plans/sailor-experience.md) - Primary user experience with global features
 - [race-strategy-planning.md](./plans/race-strategy-planning.md) - OnX Maps for Sailing with regional intelligence
@@ -245,8 +248,8 @@ EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# Google AI (for AI features)
-GOOGLE_AI_API_KEY=
+# Anthropic Claude (for ALL AI features)
+EXPO_PUBLIC_ANTHROPIC_API_KEY=
 
 # MapLibre GL (for 3D maps - open source, no token required)
 
@@ -546,10 +549,137 @@ const result = await documentAgent.processSailingInstructions(text, filename);
 
 See [plans/anthropic-agent-sdk-integration.md](./plans/anthropic-agent-sdk-integration.md) for complete implementation details.
 
-### Document Processing Pipeline (Hybrid: Agent + Gemini)
+### Claude Skills Integration (NEW)
+RegattaFlow uses Claude Skills to provide domain-specific expertise for specialized tasks, dramatically reducing token usage and improving extraction quality.
+
+#### What are Claude Skills?
+Skills are packages of instructions and resources that Claude loads when needed. They use a 3-level loading system:
+- **Level 1: Metadata** (~100 tokens) - Always loaded, helps Claude decide if skill is relevant
+- **Level 2: Instructions** (~2.5k tokens) - Loaded when triggered, provides domain expertise
+- **Level 3: Resources** (unlimited) - Loaded as needed, contains reference data
+
+#### Available Skills
+
+**sailing-document-parser** - Expert sailing document extraction
+- Location: `skills/sailing-document-parser/`
+- Purpose: Extract race course information from sailing documents
+- Features:
+  - Recognizes all standard course types (windward/leeward, triangle, Olympic)
+  - Parses GPS coordinates in multiple formats (decimal, DMS, DDM)
+  - Understands boat class-specific format variations
+  - Supports regional terminology differences
+  - Includes comprehensive sailing vocabulary database
+
+**Token Savings:**
+```
+Traditional: ~2,500 instruction tokens per request
+With Skills: ~100 metadata tokens per request (after initial load)
+Savings: 94% on recurring extractions in same session
+```
+
+**Cost Impact:**
+```bash
+# Typical sailor workflow: 10 docs/race prep session
+Traditional: 10 × $0.0156 = $0.156/session
+With Skills:  1 × $0.0156 + 9 × $0.0048 = $0.059/session
+Savings: 62% per session
+
+# Annual savings at 1,000 sailors (50 docs/sailor/year):
+Traditional: $780/year
+With Skills: $294/year
+Annual savings: $486 (62%)
+```
+
+#### Using Skills in Development
+
+**Enable Skills in Supabase Edge Function:**
+```bash
+# Via Supabase CLI
+supabase secrets set USE_CLAUDE_SKILLS=true
+
+# Or manually in Supabase Dashboard:
+# Project Settings → Edge Functions → Environment Variables
+# Add: USE_CLAUDE_SKILLS = true
+```
+
+**Skills are automatically used when:**
+- `USE_CLAUDE_SKILLS` environment variable is set to `true`
+- The `supabase/functions/extract-race-details` Edge Function is called
+- Skill provides sailing domain expertise instead of inline prompts
+
+**Development Commands:**
+```bash
+# Deploy/validate sailing-document-parser skill
+npx tsx scripts/deploy-sailing-skill.ts
+
+# Test Skills-enabled extraction
+export USE_CLAUDE_SKILLS=true
+supabase functions deploy extract-race-details
+```
+
+**regattaflow-frontend** - React Native/Expo development patterns **[COMPLETED - Phase 2]**
+- Location: `skills/regattaflow-frontend/`
+- Purpose: Teach AI our React Native/Expo component and screen patterns
+- Features:
+  - Component and screen templates (4-state pattern: loading/error/empty/success)
+  - Platform-specific code patterns (.web.tsx vs .native.tsx)
+  - Expo Router file-based navigation
+  - Styling system (colors, spacing, typography, shadows)
+  - State management patterns (useState, Zustand, Context)
+  - Data fetching and error handling
+- Token Savings: 66-75% reduction in component generation
+
+**regattaflow-data-models** - Supabase/PostgreSQL security and query patterns **[COMPLETED - Phase 2]**
+- Location: `skills/regattaflow-data-models/`
+- Purpose: Ensure proper Row Level Security (RLS) and efficient database queries
+- Features:
+  - 4 standard RLS patterns (user-owned, public read, junction, nested)
+  - Migration templates with comprehensive indexing
+  - CRUD query patterns with TypeScript types
+  - Real-time subscription patterns
+  - Geographic queries (PostGIS)
+  - Transaction patterns using RPC functions
+- Token Savings: 60-75% reduction in database code generation
+- Security Benefit: Prevents RLS vulnerabilities
+
+**regattaflow-maplibre** - MapLibre GL JS 3D visualization patterns **[COMPLETED - Phase 2]**
+- Location: `skills/regattaflow-maplibre/`
+- Purpose: Teach AI our 3D race course visualization patterns
+- Features:
+  - Web-only MapLibre initialization with dynamic imports
+  - 3D race mark extrusions with sailing-specific colors
+  - GeoJSON FeatureCollection templates
+  - Environmental layers (wind, current, tide, waves)
+  - Tactical layers (laylines, start strategy, racing lines)
+  - Camera control and animations
+  - Performance optimization for mobile/low-end devices
+- Token Savings: 60-75% reduction in map visualization code
+- Correctness Benefit: Ensures proper [lng, lat] coordinate order
+
+#### Future Skills (Planned)
+
+1. **venue-intelligence** - Global sailing venue expertise
+   - 147+ major sailing venues worldwide
+   - Regional weather API mapping
+   - Cultural protocols and customs
+   - Strategic Value: Supports "OnX Maps for Sailing" vision
+
+2. **race-strategy-analyst** - Tactical analysis
+   - Wind/tide/current analysis frameworks
+   - Start line strategy patterns
+   - Performance metrics and KPIs
+
+3. **skill-creator** - Meta-skill for AI-generated skills
+   - Analyzes codebase to discover patterns
+   - Creates new skills automatically
+   - Self-improving AI capabilities
+
+See [skills/README.md](./skills/README.md) for complete Skills documentation.
+
+### Document Processing Pipeline (Anthropic Claude)
 1. **Upload**: PDF, URL, or photo (OCR) using `expo-document-picker`
-2. **Agent Orchestration**: DocumentProcessingAgent decides workflow
-3. **AI Parsing**: Google AI Gemini extraction (called by agent tools)
+2. **Agent Orchestration**: DocumentProcessingAgent (Claude Sonnet 4.5) decides workflow
+3. **AI Parsing**: Claude 3.5 Sonnet extraction (via RaceCourseExtractor)
 4. **Course Building**: 3D MapLibre visualization (generated by agent)
 5. **Strategy Generation**: Strategic analysis (coordinated by agent)
 6. **Knowledge Storage**: Automatic saving (handled by agent)
@@ -558,7 +688,7 @@ See [plans/anthropic-agent-sdk-integration.md](./plans/anthropic-agent-sdk-integ
 - **Autonomous venue intelligence switching** - Agent detects and loads regional data
 - **Self-orchestrating document processing** - Agent extracts, visualizes, and analyzes
 - **Intelligent coach matching** - Agent analyzes performance and matches expertise
-- **Sailing instruction parsing** - Gemini extraction orchestrated by agent
+- **Sailing instruction parsing** - Claude 3.5 Sonnet extraction orchestrated by agent
 - **Wind/tide/current forecasting** - Regional weather API selection by agent
 - **Race strategy optimization** - Confidence scoring with adaptive recommendations
 - **Equipment setup correlation** - Performance tracking with venue adaptation

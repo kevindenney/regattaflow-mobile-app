@@ -1,0 +1,54 @@
+{
+  "name": "race-course-visualizer",
+  "version": "1.0.0",
+  "description": "Expert system for interpreting sailing race course diagrams and text descriptions, converting them into 3D visualizations. Understands geometric course patterns (windward/leeward, triangle, trapezoid), mark configurations, gate logic, and generates MapLibre GeoJSON for interactive course rendering.",
+  "triggers": [
+    "race course",
+    "sailing instructions",
+    "course diagram",
+    "mark rounding",
+    "RHKYC",
+    "geometric course",
+    "windward leeward",
+    "triangle course",
+    "gate marks",
+    "course visualization",
+    "sailing course pattern"
+  ],
+  "categories": [
+    "sailing",
+    "visualization",
+    "document-parsing",
+    "maritime"
+  ],
+  "skillType": "domain-expertise",
+  "capabilities": [
+    "Parse course sequence from text (e.g., 'Start – A – C – A – C – Finish')",
+    "Interpret geometric course diagrams from images",
+    "Recognize standardized course families (RHKYC, US Sailing, World Sailing)",
+    "Extract mark positions, types, and rounding rules",
+    "Handle gate configurations (C1/C2 alternatives)",
+    "Generate MapLibre GeoJSON for 3D visualization",
+    "Apply venue-specific wind orientation to courses",
+    "Provide tactical recommendations based on course geometry"
+  ],
+  "resources": [
+    "rhkyc-courses.json",
+    "geometric-patterns.json",
+    "mark-types.json",
+    "geojson-templates.json"
+  ],
+  "compatibility": {
+    "relatedSkills": ["sailing-document-parser"],
+    "conflictsWith": [],
+    "requiredBy": ["race-strategy-planning"]
+  },
+  "performance": {
+    "expectedTokenReduction": "96%",
+    "avgLoadTime": "50ms",
+    "avgExecutionTime": "2-5s"
+  },
+  "author": "RegattaFlow",
+  "license": "Proprietary",
+  "updated": "2025-10-18"
+}
