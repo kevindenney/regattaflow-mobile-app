@@ -9,6 +9,7 @@ import {
   type UpdateBoatInput,
 } from '@/src/services/SailorBoatService';
 import { supabase } from '@/src/services/supabase';
+import { DRAGON_HULL_MAKER_NAMES } from '@/src/constants/boatEquipment';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -59,6 +60,7 @@ export default function EditBoatScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showManufacturerPicker, setShowManufacturerPicker] = useState(false);
 
   useEffect(() => {
     loadBoatClasses();
@@ -325,14 +327,74 @@ export default function EditBoatScreen() {
             <Text style={styles.sectionTitle}>Boat Details</Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Manufacturer</Text>
-              <TextInput
-                style={styles.input}
-                value={manufacturer}
-                onChangeText={setManufacturer}
-                placeholder="e.g., North Sails"
-                placeholderTextColor="#94A3B8"
-              />
+              <Text style={styles.label}>Hull Manufacturer</Text>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowManufacturerPicker(!showManufacturerPicker)}
+              >
+                <Text style={manufacturer ? styles.pickerText : styles.pickerPlaceholder}>
+                  {manufacturer || 'Select hull manufacturer'}
+                </Text>
+                <Ionicons
+                  name={showManufacturerPicker ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color="#64748B"
+                />
+              </TouchableOpacity>
+
+              {showManufacturerPicker && (
+                <View style={styles.pickerOptions}>
+                  <ScrollView style={styles.pickerScroll}>
+                    {/* Option to clear selection */}
+                    <TouchableOpacity
+                      style={styles.pickerOption}
+                      onPress={() => {
+                        setManufacturer('');
+                        setShowManufacturerPicker(false);
+                      }}
+                    >
+                      <Text style={[styles.pickerOptionText, { color: '#94A3B8' }]}>
+                        None / Other
+                      </Text>
+                    </TouchableOpacity>
+                    {DRAGON_HULL_MAKER_NAMES.map((maker) => (
+                      <TouchableOpacity
+                        key={maker}
+                        style={styles.pickerOption}
+                        onPress={() => {
+                          setManufacturer(maker);
+                          setShowManufacturerPicker(false);
+                        }}
+                      >
+                        <Text style={styles.pickerOptionText}>{maker}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    {/* Option for custom entry */}
+                    <TouchableOpacity
+                      style={[styles.pickerOption, { backgroundColor: '#F8FAFC' }]}
+                      onPress={() => {
+                        setShowManufacturerPicker(false);
+                        // Keep manufacturer field editable for custom entry
+                      }}
+                    >
+                      <Text style={[styles.pickerOptionText, { fontStyle: 'italic', color: '#3B82F6' }]}>
+                        Enter custom manufacturer...
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Allow custom text entry when not using picker */}
+              {!showManufacturerPicker && (
+                <TextInput
+                  style={[styles.input, { marginTop: 8 }]}
+                  value={manufacturer}
+                  onChangeText={setManufacturer}
+                  placeholder="Or type custom manufacturer"
+                  placeholderTextColor="#94A3B8"
+                />
+              )}
             </View>
 
             <View style={styles.inputGroup}>
