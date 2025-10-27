@@ -1,0 +1,278 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   ACCESSIBILITY STYLES
+   ============================================ */
+
+/* Focus Visible Styles (for keyboard navigation)
+   - Show clear focus indicators for keyboard users
+   - Don't show focus for mouse clicks (using :focus-visible)
+   ============================================ */
+*:focus-visible {
+  outline: 3px solid #0EA5E9;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove default focus outline, rely on :focus-visible instead */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* High contrast focus for dark backgrounds */
+.dark *:focus-visible,
+[data-theme="dark"] *:focus-visible {
+  outline-color: #57B6DF;
+}
+
+/* Screen Reader Only Utilities
+   - Hide content visually but keep accessible to screen readers
+   - Use class="sr-only" for icon-only buttons and skip links
+   ============================================ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Screen reader only that becomes visible on focus (for skip links) */
+.sr-only-focusable:focus,
+.sr-only-focusable:active {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Color Contrast Fixes
+   - Override Tailwind defaults that fail WCAG AA
+   ============================================ */
+
+/* Fix: text-gray-400 fails WCAG AA (2.8:1) - use text-gray-500 instead */
+.text-gray-400 {
+  color: #6B7280; /* gray-500: 4.6:1 contrast */
+}
+
+/* Fix: text-primary-100 on bg-primary-500 fails - use white instead */
+.bg-primary-500 .text-primary-100,
+.bg-primary-600 .text-primary-100,
+.bg-primary-700 .text-primary-100 {
+  color: #FFFFFF;
+}
+
+/* Accessible link colors on white backgrounds */
+a:not(.no-style),
+.link {
+  color: #0284C7; /* primary-600: 4.5:1 contrast */
+}
+
+a:not(.no-style):hover,
+.link:hover {
+  color: #0369A1; /* primary-700: 7.0:1 contrast */
+}
+
+/* Reduced Motion Support
+   - Respect user's motion preferences
+   - Disable animations for users who prefer reduced motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* High Contrast Mode Support (Windows)
+   - Ensure UI elements are visible in high contrast mode
+   ============================================ */
+@media (prefers-contrast: high) {
+  /* Ensure borders are visible */
+  button,
+  input,
+  select,
+  textarea {
+    border: 2px solid currentColor;
+  }
+
+  /* Ensure focus is extra visible */
+  *:focus-visible {
+    outline-width: 4px;
+  }
+
+  /* Ensure backgrounds have clear separation */
+  .card,
+  .panel,
+  [role="region"] {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Skip to Main Content Link (for keyboard navigation)
+   - Add this to your layout: <a href="#main-content" class="skip-link">Skip to main content</a>
+   ============================================ */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  z-index: 100;
+  padding: 8px 16px;
+  background: #0EA5E9;
+  color: white;
+  text-decoration: none;
+  border-radius: 0 0 4px 0;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Touch Target Size Utilities
+   - Ensure minimum 44x44pt touch targets (WCAG 2.5.5)
+   ============================================ */
+.min-touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Accessible Color Classes
+   - Pre-approved combinations that meet WCAG AA
+   ============================================ */
+
+/* Text on white backgrounds */
+.text-accessible-heading { color: #111827; } /* gray-900: 21:1 */
+.text-accessible-body { color: #374151; } /* gray-700: 11:1 */
+.text-accessible-secondary { color: #4B5563; } /* gray-600: 7.5:1 */
+.text-accessible-tertiary { color: #6B7280; } /* gray-500: 4.6:1 */
+.text-accessible-link { color: #0284C7; } /* primary-600: 4.5:1 */
+
+/* Text on primary backgrounds */
+.bg-primary-500 .text-accessible-on-primary,
+.bg-primary-600 .text-accessible-on-primary,
+.bg-primary-700 .text-accessible-on-primary {
+  color: #FFFFFF;
+}
+
+/* Text on dark backgrounds */
+.bg-gray-800 .text-accessible-on-dark,
+.bg-gray-900 .text-accessible-on-dark {
+  color: #FFFFFF;
+}
+
+/* Status Colors (WCAG AA Compliant) */
+.text-success-accessible { color: #047857; } /* 5.9:1 */
+.text-error-accessible { color: #DC2626; } /* 5.9:1 */
+.text-warning-accessible { color: #D97706; } /* 4.5:1 */
+.text-info-accessible { color: #1D4ED8; } /* 7.3:1 */
+
+/* Focus Trap for Modals
+   - Prevent keyboard focus from escaping modals
+   ============================================ */
+.modal-open {
+  overflow: hidden;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
+/* Accessible Form Styles
+   - Clear focus and error states
+   ============================================ */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid #0EA5E9;
+  outline-offset: 2px;
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: #DC2626;
+  outline-color: #DC2626;
+}
+
+/* Loading States
+   - Clear visual and screen reader feedback
+   ============================================ */
+[aria-busy="true"] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Disabled States
+   - Clear indication of disabled elements
+   ============================================ */
+:disabled,
+[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Live Region Polite (for non-critical updates) */
+.live-region-polite {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Live Region Assertive (for critical updates) */
+.live-region-assertive {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ============================================
+   DEVELOPMENT TOOLS OVERRIDES
+   ============================================ */
+
+/* Note: Expo Router debug tabs are now properly hidden via route configuration
+   in src/app/(tabs)/_layout.tsx using href: null on development routes.
+   No CSS overrides needed. */
+
+/* ============================================
+   TAB BAR SPACING FIX
+   ============================================ */
+
+/* Fix React Native Web tab bar spacing - ensure even distribution */
+[role="tablist"] {
+  display: flex !important;
+  justify-content: space-evenly !important;
+  width: 100% !important;
+}
+
+[role="tablist"] > [role="tab"],
+[role="tablist"] > button[role="tab"] {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+}

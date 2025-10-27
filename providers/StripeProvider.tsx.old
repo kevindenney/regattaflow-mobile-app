@@ -1,0 +1,41 @@
+import React, { ReactNode } from 'react';
+import { Platform } from 'react-native';
+
+interface StripeProviderProps {
+  children: ReactNode;
+}
+
+export default function StripeProvider({ children }: StripeProviderProps) {
+  const publishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+  if (!publishableKey) {
+    console.warn('Stripe publishable key not found. Payment features will be disabled.');
+    return <>{children}</>;
+  }
+
+  // Stripe React Native provider only works on mobile platforms
+  if (Platform.OS === 'web') {
+    // On web, Stripe.js should be loaded via script tag in HTML
+    console.log('Stripe: Web platform detected, using Stripe.js');
+    return <>{children}</>;
+  }
+
+  // Dynamically import and render Stripe provider for mobile
+  // This prevents the native module from being bundled for web
+  try {
+    const StripeReactNativeProvider = require('@stripe/stripe-react-native').StripeProvider;
+
+    return (
+      <StripeReactNativeProvider
+        publishableKey={publishableKey}
+        merchantIdentifier="merchant.com.regattaflow" // For Apple Pay
+        urlScheme="regattaflow" // For redirects
+      >
+        {children}
+      </StripeReactNativeProvider>
+    );
+  } catch (error) {
+    console.warn('Failed to load Stripe native module:', error);
+    return <>{children}</>;
+  }
+}

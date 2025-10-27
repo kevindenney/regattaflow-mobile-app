@@ -1,0 +1,642 @@
+{
+  "clubs": {
+    "rhkyc": {
+      "id": "rhkyc",
+      "name": "Royal Hong Kong Yacht Club",
+      "founded": 1849,
+      "country": "Hong Kong SAR",
+      "region": "asia-pacific",
+      "website": "https://www.rhkyc.org.hk",
+      "status": "royal-charter",
+      "membership": {
+        "total": 2800,
+        "racing": 800,
+        "international": true,
+        "reciprocal": ["NYYC", "RYS", "CYC", "RNZYS"]
+      },
+      "multipleVenues": true,
+      "headquarters": {
+        "name": "Kellett Island Clubhouse",
+        "coordinates": [114.1794, 22.2950],
+        "address": "Kellett Island, Causeway Bay, Hong Kong",
+        "established": 1849
+      },
+      "venues": [
+        {
+          "id": "kellett-island",
+          "name": "Kellett Island Clubhouse",
+          "type": "headquarters",
+          "coordinates": [114.1794, 22.2950],
+          "location": "Victoria Harbor, Causeway Bay",
+          "facilities": {
+            "dining": {
+              "mainRestaurant": {
+                "name": "Dining Room",
+                "capacity": 120,
+                "cuisine": "International",
+                "dresscode": "Smart casual"
+              },
+              "deckBar": {
+                "name": "Deck",
+                "capacity": 80,
+                "type": "Outdoor bar",
+                "views": "Victoria Harbor"
+              },
+              "coffeeShop": {
+                "name": "Coffee Shop",
+                "capacity": 40,
+                "hours": "0700-1800",
+                "style": "Casual dining"
+              }
+            },
+            "recreation": {
+              "swimmingPool": {
+                "type": "Outdoor",
+                "length": "25m",
+                "hours": "0600-2200"
+              },
+              "gym": {
+                "equipment": "Full fitness center",
+                "hours": "0600-2200"
+              },
+              "billiards": {
+                "tables": 3,
+                "type": "English billiards and snooker"
+              }
+            },
+            "marine": {
+              "guestMoorings": {
+                "capacity": 8,
+                "maxLength": "15m",
+                "reservation": "Required"
+              },
+              "tenderService": {
+                "operation": "0800-2200",
+                "routes": ["Wan Chai", "TST", "Central"]
+              }
+            },
+            "events": {
+              "functionRooms": [
+                {
+                  "name": "Commodore's Room",
+                  "capacity": 60,
+                  "type": "Private dining"
+                },
+                {
+                  "name": "Committee Room",
+                  "capacity": 20,
+                  "type": "Meetings"
+                }
+              ],
+              "rooftopTerrace": {
+                "capacity": 200,
+                "type": "Cocktail parties",
+                "views": "360-degree harbor views"
+              }
+            }
+          },
+          "accessibility": {
+            "public": {
+              "mtr": {
+                "station": "Causeway Bay",
+                "walkTime": "10 minutes",
+                "exitGate": "E"
+              },
+              "taxi": {
+                "fromAirport": "45-60 minutes",
+                "cost": "HK$400-500"
+              },
+              "bus": {
+                "routes": ["2", "8", "19", "25"],
+                "nearestStop": "Kellett Island"
+              }
+            },
+            "marine": {
+              "clubLaunch": {
+                "pickup": "Wan Chai Pier",
+                "schedule": "Every 30 minutes",
+                "cost": "Free for members"
+              }
+            },
+            "parking": {
+              "availability": "Limited",
+              "type": "Valet service",
+              "cost": "HK$50/hour"
+            }
+          },
+          "services": {
+            "concierge": true,
+            "wifi": "Complimentary throughout",
+            "businessCenter": true,
+            "lockers": "Available"
+          }
+        },
+        {
+          "id": "middle-island",
+          "name": "Middle Island",
+          "type": "racing-station",
+          "coordinates": [114.2467, 22.2178],
+          "location": "Repulse Bay, Hong Kong Island South",
+          "established": 1960,
+          "facilities": {
+            "racing": {
+              "raceCommitteeDeck": {
+                "elevation": "15m above sea level",
+                "equipment": ["Start horn", "Flag mast", "Timing system"],
+                "capacity": 20
+              },
+              "startBoatBerths": {
+                "capacity": 6,
+                "maxLength": "12m",
+                "facilities": ["Power", "Water"]
+              },
+              "markStorage": {
+                "inflatable": 20,
+                "permanent": 8,
+                "specialtyMarks": "Dragon class specific"
+              }
+            },
+            "training": {
+              "dinghyPark": {
+                "capacity": 80,
+                "classes": ["Laser", "Optimist", "RS Feva"],
+                "launching": "Beach launch"
+              },
+              "juniorCenter": {
+                "classrooms": 2,
+                "capacity": 40,
+                "equipment": ["Whiteboards", "AV system"]
+              },
+              "safetyBoats": {
+                "fleet": 8,
+                "types": ["RIBs", "Support boats"],
+                "manning": "Qualified instructors"
+              }
+            },
+            "social": {
+              "bbqArea": {
+                "grills": 4,
+                "tables": 8,
+                "capacity": 60
+              },
+              "beachBar": {
+                "type": "Open-air",
+                "capacity": 40,
+                "hours": "Weekends and events"
+              },
+              "swimmingBeach": {
+                "type": "Sandy beach",
+                "length": "100m",
+                "facilities": ["Changing rooms", "Showers"]
+              }
+            }
+          },
+          "racingAreas": {
+            "primary": {
+              "name": "Southern Waters",
+              "description": "Main racing area south of Hong Kong Island",
+              "boundaries": {
+                "north": "Hong Kong Island shore",
+                "east": "Stanley Peninsula",
+                "south": "Lamma Island northern shore",
+                "west": "Aberdeen Channel"
+              },
+              "characteristics": [
+                "Open water conditions",
+                "Consistent wind patterns",
+                "Minimal commercial traffic"
+              ]
+            },
+            "courses": {
+              "windwardLeeward": {
+                "configurations": ["WL2", "WL3", "WL4"],
+                "length": "0.8-1.2nm legs",
+                "marks": "Inflatable racing marks"
+              },
+              "triangle": {
+                "configuration": "Olympic triangle",
+                "length": "1.0nm sides",
+                "angles": [60, 60, 60]
+              }
+            }
+          },
+          "accessibility": {
+            "road": {
+              "fromCentral": "25 minutes via Happy Valley",
+              "parking": "Ample free parking (200 spaces)"
+            },
+            "publicTransport": {
+              "bus": {
+                "routes": ["6", "61", "260"],
+                "stop": "Repulse Bay Beach"
+              },
+              "taxi": "20 minutes from Central"
+            }
+          },
+          "conditions": {
+            "wind": {
+              "prevailing": "Southeast monsoon (summer), Northeast monsoon (winter)",
+              "strength": "8-15 knots typical",
+              "patterns": "Sea breeze development afternoons"
+            },
+            "sea": {
+              "protection": "Sheltered from north and west",
+              "waves": "1-2m in strong conditions",
+              "currents": "Tidal influence minimal"
+            }
+          }
+        },
+        {
+          "id": "shelter-cove",
+          "name": "Shelter Cove Marina",
+          "type": "marina-facility",
+          "coordinates": [114.2897, 22.3583],
+          "location": "Port Shelter, Sai Kung",
+          "established": 1983,
+          "facilities": {
+            "marine": {
+              "wetBerths": {
+                "total": 250,
+                "sizes": {
+                  "small": "8-12m (150 berths)",
+                  "medium": "12-18m (80 berths)",
+                  "large": "18-25m (20 berths)"
+                },
+                "services": ["Water", "Electricity", "Cable TV", "WiFi"]
+              },
+              "hardstand": {
+                "capacity": 150,
+                "maxSize": "25m",
+                "surfaces": "Concrete hardstand",
+                "utilities": "Power available"
+              },
+              "fuelDock": {
+                "fuels": ["Diesel", "Gasoline"],
+                "hours": "0800-1800 daily",
+                "payment": "Cash, card, account"
+              }
+            },
+            "technical": {
+              "haulout": {
+                "travelift": "35-ton capacity",
+                "maxBeam": "6m",
+                "services": ["Pressure washing", "Bottom painting"]
+              },
+              "workshops": {
+                "mechanical": "Engine repairs and service",
+                "electrical": "Marine electronics",
+                "fiberglass": "Hull repairs"
+              },
+              "chandlery": {
+                "stock": "Basic marine supplies",
+                "hours": "0900-1800",
+                "services": "Special orders"
+              }
+            },
+            "amenities": {
+              "restaurant": {
+                "name": "Harbour Café",
+                "cuisine": "International and local",
+                "hours": "0800-2200",
+                "capacity": 120
+              },
+              "swimmingPool": {
+                "type": "Outdoor",
+                "hours": "0600-2200",
+                "access": "Members and berthing guests"
+              },
+              "clubhouse": {
+                "facilities": ["Showers", "Laundry", "Lounge"],
+                "hours": "24/7 for berthing guests"
+              }
+            }
+          },
+          "location_advantages": {
+            "protection": {
+              "typhoonShelter": true,
+              "certification": "Government certified Category 1",
+              "capacity": "500+ vessels in emergency"
+            },
+            "access": {
+              "eastern_waters": "Direct access without harbor transit",
+              "cruising": "Gateway to Sai Kung islands",
+              "racing": "Close to eastern racing areas"
+            }
+          },
+          "accessibility": {
+            "road": {
+              "fromCentral": "45 minutes via Tate's Cairn Tunnel",
+              "parking": "300 free spaces"
+            },
+            "publicTransport": {
+              "bus": {
+                "routes": ["96R", "792M"],
+                "terminus": "Sai Kung town center"
+              },
+              "taxi": "From airport 60 minutes (HK$350-400)"
+            }
+          }
+        }
+      ],
+      "racingProgram": {
+        "yearRound": {
+          "wednesdayNight": {
+            "name": "Wednesday Night Series",
+            "location": "Victoria Harbor",
+            "season": "March-November",
+            "classes": ["IRC", "HKPN", "J/80"],
+            "timing": "First gun 1900hrs"
+          },
+          "saturdayRacing": {
+            "name": "Saturday Club Racing",
+            "location": "Middle Island",
+            "season": "Year round",
+            "classes": ["Dragon", "Etchells", "Dinghies"],
+            "timing": "First gun 1400hrs"
+          }
+        },
+        "signature": {
+          "aroundIsland": {
+            "name": "Around the Island Race",
+            "distance": "30 nautical miles",
+            "course": "Circumnavigation of Hong Kong Island",
+            "participation": "300+ boats",
+            "timing": "October/November",
+            "records": {
+              "monohull": "2h 47m 3s (2019)",
+              "multihull": "2h 12m 45s (2018)"
+            }
+          }
+        },
+        "offshore": {
+          "chinaSeaRace": {
+            "name": "Rolex China Sea Race",
+            "destination": "Manila, Philippines",
+            "distance": "565 nautical miles",
+            "timing": "Good Friday (biennial)",
+            "route": "Via Pratas Reef",
+            "firstRace": 1962,
+            "records": {
+              "elapsed": "2d 19h 32m 28s (2014)",
+              "corrected": "Various by class"
+            }
+          },
+          "southChinaRegatta": {
+            "destinations": ["Nha Trang, Vietnam", "Sanya, Hainan"],
+            "format": "Rally with competitive divisions",
+            "timing": "Post Chinese New Year",
+            "duration": "10-14 days"
+          }
+        }
+      },
+      "classes": {
+        "keelboats": ["IRC", "HKPN", "J/80", "Etchells", "Dragon"],
+        "dinghies": ["Laser Standard", "Laser Radial", "Optimist", "RS Feva"],
+        "youth": ["29er", "420", "Laser 4.7"]
+      },
+      "contacts": {
+        "general": {
+          "phone": "+852 2832 2817",
+          "email": "office@rhkyc.org.hk",
+          "fax": "+852 2834 4805"
+        },
+        "racing": {
+          "phone": "+852 2832 2817 ext 25",
+          "email": "racing@rhkyc.org.hk"
+        },
+        "marina": {
+          "phone": "+852 2719 9682",
+          "email": "marina@rhkyc.org.hk"
+        }
+      },
+      "administration": {
+        "commodore": "Ms. Elsie Leung",
+        "viceComodore": "Mr. Peter Cremers",
+        "rearCommodore": "Mr. Nick Burns",
+        "honorarySecretary": "Ms. Christina Chai",
+        "sailingManager": "Sarah Liu",
+        "generalManager": "Simon Chau"
+      }
+    },
+
+    "sfyc": {
+      "id": "sfyc",
+      "name": "St. Francis Yacht Club",
+      "founded": 1927,
+      "country": "United States",
+      "region": "us-west-coast",
+      "website": "https://www.stfyc.org",
+      "headquarters": {
+        "name": "Main Clubhouse",
+        "coordinates": [-122.4342, 37.8048],
+        "address": "700 Marina Blvd, San Francisco, CA 94123"
+      },
+      "membership": {
+        "total": 1200,
+        "racing": 400,
+        "international": true,
+        "reciprocal": ["NYYC", "RHKYC", "RYS", "CYC"]
+      },
+      "facilities": {
+        "clubhouse": {
+          "dining": "Fine dining restaurant",
+          "bar": "Members' bar with harbor views",
+          "events": "Wedding and corporate venue"
+        },
+        "marine": {
+          "marina": "150 berths",
+          "guestDock": "Reciprocal club members",
+          "launchRamp": "Small boat access"
+        },
+        "racing": {
+          "committeeBoat": "RC platform",
+          "markBoats": "Fleet of support boats",
+          "dinghyPark": "Youth sailing program"
+        }
+      },
+      "racingProgram": {
+        "signature": {
+          "bigBoatSeries": {
+            "name": "Rolex Big Boat Series",
+            "timing": "September",
+            "participation": "200+ boats",
+            "classes": "All offshore classes",
+            "prestige": "Premier West Coast regatta"
+          }
+        },
+        "yearRound": {
+          "fridayNight": "Friday Night Racing Series",
+          "weekendSeries": "Saturday/Sunday racing"
+        }
+      },
+      "location": {
+        "city": "San Francisco",
+        "state": "California",
+        "racingWaters": "San Francisco Bay",
+        "conditions": "Challenging winds and currents"
+      }
+    },
+
+    "rys": {
+      "id": "rys",
+      "name": "Royal Yacht Squadron",
+      "founded": 1815,
+      "country": "United Kingdom",
+      "region": "uk-solent",
+      "website": "https://www.rys.org.uk",
+      "status": "royal-charter",
+      "headquarters": {
+        "name": "The Castle",
+        "coordinates": [-1.2982, 50.7612],
+        "address": "The Castle, Cowes, Isle of Wight PO31 7QT"
+      },
+      "membership": {
+        "total": 800,
+        "racing": 300,
+        "international": true,
+        "exclusive": true
+      },
+      "history": {
+        "founded": 1815,
+        "royal_patron": "His Majesty King Charles III",
+        "americas_cup": "Original challenger (1851)",
+        "significance": "Premier yacht club in the world"
+      },
+      "facilities": {
+        "castle": {
+          "dining": "Historic dining rooms",
+          "library": "Nautical library and archives",
+          "accommodation": "Guest rooms for members"
+        }
+      },
+      "racingProgram": {
+        "cowes_week": {
+          "role": "Principal organizing club",
+          "timing": "First week of August",
+          "significance": "World's largest sailing regatta"
+        }
+      },
+      "location": {
+        "town": "Cowes",
+        "county": "Isle of Wight",
+        "racing_waters": "The Solent",
+        "conditions": "Complex tidal currents"
+      }
+    },
+
+    "cyca": {
+      "id": "cyca",
+      "name": "Cruising Yacht Club of Australia",
+      "founded": 1944,
+      "country": "Australia",
+      "region": "australia-east-coast",
+      "website": "https://www.cyca.com.au",
+      "headquarters": {
+        "name": "Main Clubhouse",
+        "coordinates": [151.2250, -33.8567],
+        "address": "1 New Beach Road, Rushcutters Bay, NSW 2011"
+      },
+      "membership": {
+        "total": 3500,
+        "racing": 1200,
+        "international": true
+      },
+      "racingProgram": {
+        "signature": {
+          "sydneyHobart": {
+            "name": "Rolex Sydney Hobart Yacht Race",
+            "distance": "628 nautical miles",
+            "timing": "Boxing Day (December 26)",
+            "participation": "100+ boats",
+            "significance": "World's most famous offshore race",
+            "finish": "Hobart, Tasmania"
+          }
+        }
+      },
+      "facilities": {
+        "clubhouse": "Harbourside dining and events",
+        "marina": "Deep water berths",
+        "hardstand": "Boat storage and maintenance"
+      }
+    },
+
+    "nyyc": {
+      "id": "nyyc",
+      "name": "New York Yacht Club",
+      "founded": 1844,
+      "country": "United States",
+      "region": "us-east-coast",
+      "website": "https://www.nyyc.org",
+      "headquarters": {
+        "name": "44th Street Clubhouse",
+        "coordinates": [-73.9772, 40.7614],
+        "address": "37 West 44th Street, New York, NY 10036"
+      },
+      "stations": [
+        {
+          "name": "Harbour Court",
+          "location": "Newport, Rhode Island",
+          "coordinates": [-71.3128, 41.4901],
+          "purpose": "Summer station and racing headquarters"
+        }
+      ],
+      "history": {
+        "americas_cup": "Defended for 132 years (1851-1983)",
+        "significance": "America's premier yacht club"
+      },
+      "membership": {
+        "total": 3000,
+        "racing": 800,
+        "international": true,
+        "exclusive": true
+      },
+      "racingProgram": {
+        "signature": {
+          "annual_regatta": "New York Yacht Club Annual Regatta",
+          "invitational_cup": "Rolex New York Yacht Club Invitational Cup"
+        }
+      }
+    }
+  },
+
+  "metadata": {
+    "lastUpdated": "2025-01-24",
+    "totalClubs": 6,
+    "regions": ["asia-pacific", "us-west-coast", "uk-solent", "australia-east-coast", "us-east-coast"],
+    "dataVersion": "1.0",
+    "sources": [
+      "Official club websites",
+      "Sailing directories",
+      "Racing calendars",
+      "Member publications"
+    ]
+  },
+
+  "clubCategories": {
+    "royal": {
+      "description": "Clubs with Royal Charter or Patronage",
+      "clubs": ["rhkyc", "rys"]
+    },
+    "premiere": {
+      "description": "World's most prestigious sailing clubs",
+      "clubs": ["rhkyc", "rys", "nyyc", "cyca", "sfyc"]
+    },
+    "multiVenue": {
+      "description": "Clubs operating multiple facilities",
+      "clubs": ["rhkyc", "nyyc"]
+    },
+    "offshoreRacing": {
+      "description": "Clubs known for major offshore races",
+      "clubs": ["rhkyc", "cyca", "nyyc", "sfyc"]
+    }
+  },
+
+  "reciprocal_arrangements": {
+    "description": "Clubs with formal reciprocal visiting privileges",
+    "networks": {
+      "worldwide_premier": ["rhkyc", "rys", "nyyc", "cyca", "sfyc"],
+      "asia_pacific": ["rhkyc", "cyca"],
+      "anglo": ["rys", "rhkyc", "cyca", "nyyc"]
+    }
+  }
+}

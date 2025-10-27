@@ -1,0 +1,1611 @@
+{
+  "venues": {
+    "san-francisco-bay": {
+      "id": "san-francisco-bay",
+      "name": "San Francisco Bay",
+      "region": "us-west-coast",
+      "country": "United States",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 37.8, "longitude": -122.4 },
+        "bounds": {
+          "southwest": { "latitude": 37.7, "longitude": -122.55 },
+          "northeast": { "latitude": 37.9, "longitude": -122.25 }
+        }
+      },
+      "features": {
+        "microClimate": true,
+        "complexCurrents": true,
+        "bridgeEffects": true,
+        "thermalWinds": true
+      },
+      "dataSources": {
+        "bathymetry": ["noaa-ncei"],
+        "weather": ["noaa-gfs", "noaa-buoys"],
+        "tides": ["noaa-coops"],
+        "charts": ["noaa-enc", "openseamap"]
+      },
+      "weatherStations": [
+        { "id": "TIBC1", "name": "Tiburon", "location": { "latitude": 37.89, "longitude": -122.45 } },
+        { "id": "ALCATRAZ", "name": "Alcatraz Island", "location": { "latitude": 37.826, "longitude": -122.423 } },
+        { "id": "ANMN6", "name": "Angel Island", "location": { "latitude": 37.86, "longitude": -122.43 } }
+      ],
+      "tideStations": [
+        { "id": "9414290", "name": "San Francisco", "location": { "latitude": 37.807, "longitude": -122.465 } },
+        { "id": "9414863", "name": "Richmond", "location": { "latitude": 37.929, "longitude": -122.4 } }
+      ],
+      "racingFeatures": {
+        "bigBoatSeries": {
+          "courseArea": {
+            "southwest": { "latitude": 37.82, "longitude": -122.48 },
+            "northeast": { "latitude": 37.87, "longitude": -122.43 }
+          },
+          "startLine": {
+            "start": { "latitude": 37.831, "longitude": -122.453 },
+            "end": { "latitude": 37.829, "longitude": -122.451 }
+          }
+        },
+        "berkeleyCircle": {
+          "center": { "latitude": 37.87, "longitude": -122.31 },
+          "radius": 1000
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Alcatraz Shoal",
+          "location": { "latitude": 37.823, "longitude": -122.421 },
+          "type": "shallow-water",
+          "depth": 2.1
+        }
+      ],
+      "optimizations": {
+        "windPrediction": "golden-gate-venturi-effect",
+        "currentAnalysis": "ebb-flood-patterns",
+        "thermalModeling": true,
+        "fogForecasting": true
+      }
+    },
+
+    "newport-rhode-island": {
+      "id": "newport-rhode-island",
+      "name": "Newport, Rhode Island",
+      "region": "us-east-coast",
+      "country": "United States",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 41.49, "longitude": -71.31 },
+        "bounds": {
+          "southwest": { "latitude": 41.45, "longitude": -71.35 },
+          "northeast": { "latitude": 41.53, "longitude": -71.27 }
+        }
+      },
+      "features": {
+        "openOcean": true,
+        "complexShore": true,
+        "gulfStreamAccess": true,
+        "bermudaRaceStart": true
+      },
+      "dataSources": {
+        "bathymetry": ["noaa-ncei"],
+        "weather": ["noaa-gfs", "noaa-buoys"],
+        "tides": ["noaa-coops"],
+        "charts": ["noaa-enc"]
+      },
+      "weatherStations": [
+        { "id": "BUZM3", "name": "Buzzards Bay", "location": { "latitude": 41.4, "longitude": -71.03 } },
+        { "id": "NWPR1", "name": "Newport", "location": { "latitude": 41.49, "longitude": -71.33 } }
+      ],
+      "tideStations": [
+        { "id": "8452660", "name": "Newport", "location": { "latitude": 41.505, "longitude": -71.326 } }
+      ],
+      "racingFeatures": {
+        "bermudaRaceStart": {
+          "startLine": {
+            "start": { "latitude": 41.495, "longitude": -71.315 },
+            "end": { "latitude": 41.493, "longitude": -71.313 }
+          },
+          "courseArea": "open-atlantic"
+        },
+        "blockIslandRace": {
+          "courseArea": {
+            "southwest": { "latitude": 41.15, "longitude": -71.6 },
+            "northeast": { "latitude": 41.5, "longitude": -71.15 }
+          }
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Brenton Reef",
+          "location": { "latitude": 41.426, "longitude": -71.302 },
+          "type": "shallow-water",
+          "depth": 3.0
+        }
+      ],
+      "optimizations": {
+        "gulfStreamAnalysis": true,
+        "coastalEffects": true,
+        "offshoreWeatherRouting": true,
+        "bermudaHighPressure": true
+      }
+    },
+
+    "cowes-isle-of-wight": {
+      "id": "cowes-isle-of-wight",
+      "name": "Cowes, Isle of Wight",
+      "region": "uk-solent",
+      "country": "United Kingdom",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 50.76, "longitude": -1.3 },
+        "bounds": {
+          "southwest": { "latitude": 50.7, "longitude": -1.4 },
+          "northeast": { "latitude": 50.82, "longitude": -1.2 }
+        }
+      },
+      "features": {
+        "complexTides": true,
+        "doubleTide": true,
+        "shelteredWater": true,
+        "commercialTraffic": true
+      },
+      "dataSources": {
+        "bathymetry": ["ukho", "emodnet"],
+        "weather": ["met-office-uk"],
+        "tides": ["ukho-tides"],
+        "charts": ["ukho-enc", "openseamap"]
+      },
+      "tideStations": [
+        { "id": "0113", "name": "Cowes", "location": { "latitude": 50.76, "longitude": -1.297 } },
+        { "id": "0114", "name": "Portsmouth", "location": { "latitude": 50.802, "longitude": -1.109 } }
+      ],
+      "racingFeatures": {
+        "cowesWeek": {
+          "courseAreas": [
+            {
+              "name": "Committee Boat Alpha",
+              "bounds": {
+                "southwest": { "latitude": 50.745, "longitude": -1.35 },
+                "northeast": { "latitude": 50.775, "longitude": -1.25 }
+              }
+            }
+          ]
+        },
+        "roundTheIsland": {
+          "course": "circumnavigation",
+          "distance": "50nm"
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Bramble Bank",
+          "location": { "latitude": 50.792, "longitude": -1.318 },
+          "type": "drying-bank",
+          "depth": 0.0
+        },
+        {
+          "name": "Ryde Middle",
+          "location": { "latitude": 50.765, "longitude": -1.275 },
+          "type": "shallow-water",
+          "depth": 1.5
+        }
+      ],
+      "optimizations": {
+        "tidalStrategy": "solent-double-tide",
+        "commercialTraffic": true,
+        "channelCrossing": true,
+        "windShadowEffects": true
+      }
+    },
+
+    "sydney-harbour": {
+      "id": "sydney-harbour",
+      "name": "Sydney Harbour",
+      "region": "australia-east-coast",
+      "country": "Australia",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": -33.855, "longitude": 151.21 },
+        "bounds": {
+          "southwest": { "latitude": -33.88, "longitude": 151.18 },
+          "northeast": { "latitude": -33.83, "longitude": 151.24 }
+        }
+      },
+      "features": {
+        "southerlyBuster": true,
+        "harborRacing": true,
+        "sydneyHobartStart": true,
+        "complexTopography": true
+      },
+      "dataSources": {
+        "bathymetry": ["aho-australia", "gebco"],
+        "weather": ["bom-australia"],
+        "tides": ["aho-tides"],
+        "charts": ["aho-enc", "openseamap"]
+      },
+      "weatherStations": [
+        { "id": "066062", "name": "Sydney Observatory Hill", "location": { "latitude": -33.859, "longitude": 151.205 } },
+        { "id": "066037", "name": "Sydney Harbour", "location": { "latitude": -33.857, "longitude": 151.242 } }
+      ],
+      "tideStations": [
+        { "id": "Sydney", "name": "Fort Denison", "location": { "latitude": -33.857, "longitude": 151.224 } }
+      ],
+      "racingFeatures": {
+        "sydneyHobartStart": {
+          "startLine": {
+            "start": { "latitude": -33.869, "longitude": 151.223 },
+            "end": { "latitude": -33.867, "longitude": 151.221 }
+          }
+        },
+        "18FooterSailing": {
+          "courseArea": {
+            "southwest": { "latitude": -33.87, "longitude": 151.22 },
+            "northeast": { "latitude": -33.84, "longitude": 151.26 }
+          }
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Shark Island",
+          "location": { "latitude": -33.873, "longitude": 151.244 },
+          "type": "island",
+          "clearance": 10.0
+        }
+      ],
+      "optimizations": {
+        "southerlyBusterDetection": true,
+        "harborWindEffects": true,
+        "eastAustralianCurrent": true,
+        "bassStraitRouting": true
+      }
+    },
+
+    "hong-kong": {
+      "id": "hong-kong",
+      "name": "Hong Kong",
+      "region": "asia-pacific",
+      "country": "Hong Kong SAR",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 22.28, "longitude": 114.16 },
+        "bounds": {
+          "southwest": { "latitude": 22.15, "longitude": 113.9 },
+          "northeast": { "latitude": 22.41, "longitude": 114.42 }
+        }
+      },
+      "features": {
+        "monsoonWinds": true,
+        "complexTopography": true,
+        "internationalRacing": true,
+        "dragonClassRacing": true,
+        "typhoonSeason": true,
+        "multiVenueClubs": true,
+        "offshoreRacing": true
+      },
+      "dataSources": {
+        "bathymetry": ["hko-hong-kong", "gebco"],
+        "weather": ["hko-weather"],
+        "tides": ["hko-tides"],
+        "charts": ["hko-enc", "openseamap"]
+      },
+      "weatherStations": [
+        { "id": "45004", "name": "Hong Kong Observatory", "location": { "latitude": 22.302, "longitude": 114.174 } },
+        { "id": "45012", "name": "Waglan Island", "location": { "latitude": 22.183, "longitude": 114.303 } }
+      ],
+      "tideStations": [
+        { "id": "HKO_TM", "name": "Tsim Sha Tsui", "location": { "latitude": 22.294, "longitude": 114.172 } },
+        { "id": "HKO_QBC", "name": "Quarry Bay", "location": { "latitude": 22.289, "longitude": 114.219 } }
+      ],
+      "yachtClubs": [
+        {
+          "id": "rhkyc",
+          "name": "Royal Hong Kong Yacht Club",
+          "founded": 1849,
+          "website": "https://www.rhkyc.org.hk",
+          "multipleVenues": true,
+          "venues": {
+            "kellettIsland": {
+              "name": "Kellett Island Clubhouse",
+              "type": "headquarters",
+              "coordinates": { "latitude": 22.2950, "longitude": 114.1794 },
+              "location": "Victoria Harbor, Causeway Bay",
+              "facilities": {
+                "dining": ["Main restaurant", "Deck bar", "Coffee shop"],
+                "recreation": ["Swimming pool", "Gym", "Billiards room"],
+                "marine": ["Guest moorings (limited)", "Tender service"],
+                "events": ["Function rooms", "Rooftop terrace", "Wedding facilities"]
+              },
+              "accessibility": {
+                "public": ["MTR Causeway Bay (10min walk)", "Taxi", "Bus"],
+                "marine": "Club launch from Wan Chai",
+                "parking": "Limited valet parking available"
+              }
+            },
+            "middleIsland": {
+              "name": "Middle Island",
+              "type": "racing-station",
+              "coordinates": { "latitude": 22.2178, "longitude": 114.2467 },
+              "location": "Repulse Bay, Hong Kong Island South",
+              "facilities": {
+                "racing": ["Race committee deck", "Start boat berths", "Mark storage"],
+                "training": ["Dinghy park", "Junior sailing center", "Safety boats"],
+                "social": ["BBQ area", "Beach bar", "Swimming beach"],
+                "parking": "Ample free parking"
+              },
+              "racingAreas": {
+                "primary": "Southern waters of Hong Kong Island",
+                "boundaries": {
+                  "east": "Stanley Peninsula",
+                  "west": "Aberdeen Channel",
+                  "south": "Lamma Island"
+                }
+              }
+            },
+            "shelterCove": {
+              "name": "Shelter Cove Marina",
+              "type": "marina-facility",
+              "coordinates": { "latitude": 22.3583, "longitude": 114.2897 },
+              "location": "Port Shelter, Sai Kung",
+              "facilities": {
+                "marine": ["250 wet berths", "Hardstand storage (150 boats)", "Fuel dock"],
+                "technical": ["35-ton haulout", "Repairs", "Chandlery"],
+                "amenities": ["Restaurant", "Swimming pool", "Free WiFi", "Parking (300 spaces)"]
+              },
+              "advantages": {
+                "protection": "Certified typhoon shelter",
+                "access": "Gateway to eastern waters and outlying islands",
+                "cruising": "Base for Sai Kung and eastern territories"
+              }
+            }
+          },
+          "racingProgram": {
+            "yearRound": {
+              "wednesday": "Wednesday Night Series (Victoria Harbor)",
+              "saturday": "Saturday Club Racing (Middle Island)",
+              "training": "Junior and youth programs"
+            },
+            "signature": {
+              "aroundIsland": {
+                "name": "Around the Island Race",
+                "distance": "30 nautical miles",
+                "participation": "300+ boats",
+                "timing": "October/November"
+              }
+            },
+            "offshore": {
+              "chinaSeaRace": {
+                "destination": "Manila, Philippines",
+                "distance": "565 nautical miles",
+                "timing": "Good Friday",
+                "route": "Via Pratas Reef"
+              },
+              "southChinaRegatta": {
+                "destinations": ["Nha Trang, Vietnam", "Sanya, Hainan"],
+                "format": "Rally with competitive divisions",
+                "timing": "Post Chinese New Year"
+              }
+            }
+          },
+          "classes": ["IRC", "HKPN", "J/80", "Etchells", "Dragon", "Laser", "Optimist"]
+        },
+        {
+          "id": "hhyc",
+          "name": "Hebe Haven Yacht Club",
+          "founded": 1970,
+          "website": "https://www.hhyc.org.hk",
+          "coordinates": { "latitude": 22.3167, "longitude": 114.2667 },
+          "location": "Pak Sha Wan, Sai Kung",
+          "specialties": ["Cruising", "Family sailing", "Dinghy racing"]
+        },
+        {
+          "id": "abc",
+          "name": "Aberdeen Boat Club",
+          "founded": 1967,
+          "website": "https://www.abc.org.hk",
+          "coordinates": { "latitude": 22.2497, "longitude": 114.1556 },
+          "location": "Aberdeen Harbor, Hong Kong Island",
+          "specialties": ["Dragon racing", "Etchells", "Social sailing"]
+        }
+      ],
+      "racingFeatures": {
+        "dragonWorldChampionships": {
+          "courseArea": {
+            "southwest": { "latitude": 22.25, "longitude": 114.15 },
+            "northeast": { "latitude": 22.31, "longitude": 114.25 }
+          },
+          "startLine": {
+            "start": { "latitude": 22.282, "longitude": 114.185 },
+            "end": { "latitude": 22.284, "longitude": 114.187 }
+          }
+        },
+        "victoriaHarborSeries": {
+          "location": "Central Victoria Harbor",
+          "courseArea": {
+            "southwest": { "latitude": 22.26, "longitude": 114.16 },
+            "northeast": { "latitude": 22.32, "longitude": 114.22 }
+          },
+          "schedule": "Wednesday evenings, Saturday afternoons"
+        },
+        "chinaSeaRace": {
+          "startLine": {
+            "start": { "latitude": 22.285, "longitude": 114.18 },
+            "end": { "latitude": 22.287, "longitude": 114.182 }
+          },
+          "destination": "manila-philippines",
+          "checkpoints": ["Pratas Reef", "Luzon Strait"]
+        }
+      },
+      "racingAreas": {
+        "victoriaHarbor": {
+          "name": "Victoria Harbor",
+          "bounds": {
+            "southwest": { "latitude": 22.26, "longitude": 114.15 },
+            "northeast": { "latitude": 22.32, "longitude": 114.22 }
+          },
+          "characteristics": ["Urban sailing", "Commercial traffic", "Spectator friendly"],
+          "hazards": ["Ferries", "Commercial vessels", "Strong tides"]
+        },
+        "easternWaters": {
+          "name": "Eastern Waters",
+          "bounds": {
+            "southwest": { "latitude": 22.20, "longitude": 114.20 },
+            "northeast": { "latitude": 22.35, "longitude": 114.35 }
+          },
+          "characteristics": ["Open water", "Consistent winds", "Racing focus"],
+          "courses": ["Around the Island", "Coastal passage races"]
+        },
+        "lammaChannel": {
+          "name": "Lamma Channel",
+          "bounds": {
+            "southwest": { "latitude": 22.18, "longitude": 114.10 },
+            "northeast": { "latitude": 22.28, "longitude": 114.18 }
+          },
+          "characteristics": ["Wind shadows", "Current effects", "Tactical racing"]
+        }
+      },
+      "localHazards": [
+        {
+          "name": "Lamma Island",
+          "location": { "latitude": 22.225, "longitude": 114.133 },
+          "type": "island-complex",
+          "windShadow": true,
+          "description": "Creates significant wind shadows and current effects"
+        },
+        {
+          "name": "Stonecutters Island",
+          "location": { "latitude": 22.325, "longitude": 114.133 },
+          "type": "commercial-port",
+          "shipping": true,
+          "description": "Heavy commercial traffic and container ships"
+        },
+        {
+          "name": "High-speed ferries",
+          "type": "traffic-hazard",
+          "routes": ["Central-Macau", "TST-Central", "Inter-island services"],
+          "precautions": "Maintain constant watch, give way early"
+        }
+      ],
+      "logistics": {
+        "transportation": {
+          "airport": {
+            "distance": "45km to most sailing venues",
+            "transfer": ["Taxi (45-60min)", "Airport Express + MTR", "Private transfer"],
+            "customs": "Temporary import available for racing equipment"
+          },
+          "local": {
+            "mtr": "Excellent coverage to most venues",
+            "taxi": "24/7 availability, English-speaking drivers",
+            "bus": "Comprehensive network",
+            "parking": "Limited at harbor venues, ample at Sai Kung"
+          }
+        },
+        "accommodation": {
+          "central": ["Mandarin Oriental", "Conrad", "Island Shangri-La"],
+          "causewayBay": ["Park Lane", "Excelsior", "Times Square area"],
+          "saiKung": ["Seaside guesthouses", "Village houses", "Camping options"]
+        },
+        "provisioning": {
+          "chandleries": ["Simpson Marine", "Asia Marine", "Jeanneau HK"],
+          "supermarkets": ["PARKnSHOP", "Wellcome", "City'super"],
+          "dining": "World-class restaurants, dim sum, international cuisine"
+        }
+      },
+      "optimizations": {
+        "monsoonForecasting": true,
+        "typhoonTracking": true,
+        "cityWindEffects": true,
+        "commercialTrafficAvoidance": true,
+        "multilingualSupport": ["english", "cantonese", "mandarin"],
+        "multiVenueNavigation": true,
+        "crossHarborLogistics": true
+      },
+      "culturalContext": {
+        "primaryLanguages": ["English", "Cantonese"],
+        "sailingSeasons": {
+          "optimal": "October-April (cool, dry, steady winds)",
+          "typhoon": "May-November (hot, humid, storm risk)"
+        },
+        "localCustoms": {
+          "prizeGiving": "Formal ceremonies expected, speeches in English and Cantonese",
+          "networking": "Business relationships important, exchange of business cards",
+          "hospitality": "Reciprocal club arrangements common across Asia-Pacific",
+          "dining": "Post-race dining traditional, dim sum popular"
+        },
+        "businessCulture": {
+          "punctuality": "Critical for all events, 'Hong Kong time' is punctual",
+          "hierarchy": "Respect for senior sailors and commodores",
+          "socializing": "Post-race dinners and drinks expected",
+          "formality": "Business casual to formal depending on event"
+        },
+        "practicalTips": {
+          "currency": "Hong Kong Dollar (HKD), widely accepted cards",
+          "language": "English widely spoken in sailing community",
+          "tipping": "10% in restaurants, round up for taxis",
+          "weather": "Check typhoon warnings during season"
+        }
+      }
+    },
+
+    "auckland-hauraki-gulf": {
+      "id": "auckland-hauraki-gulf",
+      "name": "Auckland, Hauraki Gulf",
+      "region": "new-zealand",
+      "country": "New Zealand",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": -36.84, "longitude": 174.76 },
+        "bounds": {
+          "southwest": { "latitude": -36.95, "longitude": 174.65 },
+          "northeast": { "latitude": -36.73, "longitude": 174.87 }
+        }
+      },
+      "features": {
+        "variableWinds": true,
+        "islandEffects": true,
+        "americasCupVenue": true,
+        "harbourRacing": true
+      },
+      "racingFeatures": {
+        "americasCup2021": {
+          "courseArea": {
+            "southwest": { "latitude": -36.87, "longitude": 174.72 },
+            "northeast": { "latitude": -36.81, "longitude": 174.8 }
+          }
+        },
+        "aucklandRegatta": {
+          "courseArea": {
+            "southwest": { "latitude": -36.88, "longitude": 174.73 },
+            "northeast": { "latitude": -36.8, "longitude": 174.81 }
+          }
+        }
+      },
+      "optimizations": {
+        "islandWindShadows": true,
+        "thermalEffects": true,
+        "americasCupOptimization": true
+      }
+    },
+
+    "valencia-spain": {
+      "id": "valencia-spain",
+      "name": "Valencia",
+      "region": "mediterranean-east",
+      "country": "Spain",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 39.47, "longitude": -0.38 },
+        "bounds": {
+          "southwest": { "latitude": 39.4, "longitude": -0.45 },
+          "northeast": { "latitude": 39.54, "longitude": -0.31 }
+        }
+      },
+      "features": {
+        "americasCupVenue": true,
+        "consistentWinds": true,
+        "modernMarina": true,
+        "volvoCupPort": true
+      },
+      "racingFeatures": {
+        "americasCup2007": {
+          "courseArea": {
+            "southwest": { "latitude": 39.45, "longitude": -0.4 },
+            "northeast": { "latitude": 39.49, "longitude": -0.36 }
+          }
+        },
+        "volvoOceanRace": {
+          "stopoverPort": true,
+          "inPortRacing": true
+        }
+      }
+    },
+
+    "bermuda": {
+      "id": "bermuda",
+      "name": "Bermuda",
+      "region": "atlantic-mid",
+      "country": "Bermuda",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 32.3, "longitude": -64.78 },
+        "bounds": {
+          "southwest": { "latitude": 32.23, "longitude": -64.88 },
+          "northeast": { "latitude": 32.37, "longitude": -64.68 }
+        }
+      },
+      "features": {
+        "bermudaRaceFinish": true,
+        "gulfStreamProximity": true,
+        "reefsAndShoals": true,
+        "bermudaHigh": true
+      },
+      "racingFeatures": {
+        "newportBermudaRace": {
+          "finishLine": {
+            "start": { "latitude": 32.295, "longitude": -64.78 },
+            "end": { "latitude": 32.297, "longitude": -64.782 }
+          }
+        },
+        "bermudaGoldCup": {
+          "courseArea": {
+            "southwest": { "latitude": 32.27, "longitude": -64.8 },
+            "northeast": { "latitude": 32.33, "longitude": -64.74 }
+          }
+        }
+      }
+    },
+
+    "kiel-germany": {
+      "id": "kiel-germany",
+      "name": "Kiel",
+      "region": "baltic-sea",
+      "country": "Germany",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 54.32, "longitude": 10.13 },
+        "bounds": {
+          "southwest": { "latitude": 54.25, "longitude": 10.0 },
+          "northeast": { "latitude": 54.39, "longitude": 10.26 }
+        }
+      },
+      "features": {
+        "kielWeek": true,
+        "olympicVenue": true,
+        "balticSailing": true,
+        "strongTidalCurrents": false
+      },
+      "racingFeatures": {
+        "kielWeek": {
+          "courseAreas": [
+            {
+              "name": "Kiel Fjord Inner",
+              "bounds": {
+                "southwest": { "latitude": 54.32, "longitude": 10.11 },
+                "northeast": { "latitude": 54.36, "longitude": 10.15 }
+              }
+            },
+            {
+              "name": "Kiel Bay Outer",
+              "bounds": {
+                "southwest": { "latitude": 54.36, "longitude": 10.13 },
+                "northeast": { "latitude": 54.42, "longitude": 10.18 }
+              }
+            }
+          ]
+        },
+        "olympicSailing": {
+          "disciplines": ["470", "49er", "Nacra17", "LaserStandard", "LaserRadial"]
+        }
+      }
+    },
+
+    "rio-de-janeiro": {
+      "id": "rio-de-janeiro",
+      "name": "Rio de Janeiro",
+      "region": "south-america-east",
+      "country": "Brazil",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": -22.97, "longitude": -43.18 },
+        "bounds": {
+          "southwest": { "latitude": -23.1, "longitude": -43.3 },
+          "northeast": { "latitude": -22.84, "longitude": -43.06 }
+        }
+      },
+      "features": {
+        "olympics2016": true,
+        "guanabaraBay": true,
+        "sugarloafEffects": true,
+        "thermalWinds": true,
+        "waterQuality": "variable"
+      },
+      "racingFeatures": {
+        "olympics2016": {
+          "courseArea": {
+            "southwest": { "latitude": -22.95, "longitude": -43.17 },
+            "northeast": { "latitude": -22.91, "longitude": -43.13 }
+          }
+        },
+        "rioSailingWeek": {
+          "courseArea": {
+            "southwest": { "latitude": -22.98, "longitude": -43.19 },
+            "northeast": { "latitude": -22.94, "longitude": -43.15 }
+          }
+        }
+      }
+    },
+
+    "san-diego": {
+      "id": "san-diego",
+      "name": "San Diego",
+      "region": "us-west-coast",
+      "country": "United States",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 32.72, "longitude": -117.16 },
+        "bounds": {
+          "southwest": { "latitude": 32.6, "longitude": -117.3 },
+          "northeast": { "latitude": 32.84, "longitude": -117.02 }
+        }
+      },
+      "features": {
+        "consistentWinds": true,
+        "pointLomaEffects": true,
+        "americasCupHistory": true,
+        "yearRoundSailing": true
+      },
+      "racingFeatures": {
+        "americasCup1992": {
+          "historicalVenue": true
+        },
+        "sandiegoCup": {
+          "courseArea": {
+            "southwest": { "latitude": 32.68, "longitude": -117.2 },
+            "northeast": { "latitude": 32.76, "longitude": -117.12 }
+          }
+        }
+      }
+    },
+
+    "marseille-france": {
+      "id": "marseille-france",
+      "name": "Marseille",
+      "region": "mediterranean-west",
+      "country": "France",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 43.28, "longitude": 5.38 },
+        "bounds": {
+          "southwest": { "latitude": 43.2, "longitude": 5.28 },
+          "northeast": { "latitude": 43.36, "longitude": 5.48 }
+        }
+      },
+      "features": {
+        "mistralWinds": true,
+        "olympics2024": true,
+        "strongWinds": true,
+        "mediterraneanSailing": true
+      },
+      "racingFeatures": {
+        "olympics2024": {
+          "courseArea": {
+            "southwest": { "latitude": 43.25, "longitude": 5.32 },
+            "northeast": { "latitude": 43.31, "longitude": 5.44 }
+          }
+        },
+        "semaineFrancaise": {
+          "courseArea": {
+            "southwest": { "latitude": 43.26, "longitude": 5.34 },
+            "northeast": { "latitude": 43.32, "longitude": 5.42 }
+          }
+        }
+      }
+    },
+
+    "palma-mallorca": {
+      "id": "palma-mallorca",
+      "name": "Palma, Mallorca",
+      "region": "mediterranean-west",
+      "country": "Spain",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 39.57, "longitude": 2.65 },
+        "bounds": {
+          "southwest": { "latitude": 39.5, "longitude": 2.58 },
+          "northeast": { "latitude": 39.64, "longitude": 2.72 }
+        }
+      },
+      "features": {
+        "superyachtCup": true,
+        "consistentWinds": true,
+        "luxuryVenues": true,
+        "mediterraneanHub": true
+      },
+      "racingFeatures": {
+        "superyachtCup": {
+          "courseArea": {
+            "southwest": { "latitude": 39.54, "longitude": 2.62 },
+            "northeast": { "latitude": 39.6, "longitude": 2.68 }
+          }
+        },
+        "palmacup": {
+          "courseArea": {
+            "southwest": { "latitude": 39.55, "longitude": 2.63 },
+            "northeast": { "latitude": 39.61, "longitude": 2.69 }
+          }
+        }
+      }
+    },
+
+    "helsinki-finland": {
+      "id": "helsinki-finland",
+      "name": "Helsinki",
+      "region": "baltic-sea",
+      "country": "Finland",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 60.16, "longitude": 24.95 },
+        "bounds": {
+          "southwest": { "latitude": 60.1, "longitude": 24.88 },
+          "northeast": { "latitude": 60.22, "longitude": 25.02 }
+        }
+      },
+      "features": {
+        "archipelagoSailing": true,
+        "balticSea": true,
+        "iceFreeSummer": true,
+        "midnightSun": true
+      },
+      "racingFeatures": {
+        "hankoRegatta": {
+          "courseArea": {
+            "southwest": { "latitude": 60.12, "longitude": 24.9 },
+            "northeast": { "latitude": 60.2, "longitude": 24.98 }
+          }
+        }
+      }
+    },
+
+    "stockholm-sweden": {
+      "id": "stockholm-sweden",
+      "name": "Stockholm",
+      "region": "baltic-sea",
+      "country": "Sweden",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 59.33, "longitude": 18.07 },
+        "bounds": {
+          "southwest": { "latitude": 59.25, "longitude": 17.95 },
+          "northeast": { "latitude": 59.41, "longitude": 18.19 }
+        }
+      },
+      "features": {
+        "archipelagoSailing": true,
+        "balticSea": true,
+        "complexNavigation": true,
+        "sandhamn": true
+      },
+      "racingFeatures": {
+        "aroundGotland": {
+          "startFinish": {
+            "start": { "latitude": 59.32, "longitude": 18.06 },
+            "end": { "latitude": 59.324, "longitude": 18.062 }
+          },
+          "distance": "350nm"
+        }
+      }
+    },
+
+    "singapore": {
+      "id": "singapore",
+      "name": "Singapore",
+      "region": "asia-pacific",
+      "country": "Singapore",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 1.29, "longitude": 103.85 },
+        "bounds": {
+          "southwest": { "latitude": 1.2, "longitude": 103.75 },
+          "northeast": { "latitude": 1.38, "longitude": 103.95 }
+        }
+      },
+      "features": {
+        "tropicalSailing": true,
+        "monsoonWinds": true,
+        "commercialTraffic": true,
+        "asianSailingHub": true
+      },
+      "racingFeatures": {
+        "singaporeYachtShow": {
+          "venue": "Sentosa Cove",
+          "courseArea": {
+            "southwest": { "latitude": 1.25, "longitude": 103.82 },
+            "northeast": { "latitude": 1.33, "longitude": 103.88 }
+          }
+        }
+      }
+    },
+
+    "dubai-uae": {
+      "id": "dubai-uae",
+      "name": "Dubai",
+      "region": "middle-east",
+      "country": "United Arab Emirates",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 25.2, "longitude": 55.27 },
+        "bounds": {
+          "southwest": { "latitude": 25.1, "longitude": 55.15 },
+          "northeast": { "latitude": 25.3, "longitude": 55.39 }
+        }
+      },
+      "features": {
+        "luxurySailing": true,
+        "desertWinds": true,
+        "modernMarina": true,
+        "internationalEvents": true
+      },
+      "racingFeatures": {
+        "dubaiSailingWeek": {
+          "courseArea": {
+            "southwest": { "latitude": 25.18, "longitude": 55.24 },
+            "northeast": { "latitude": 25.22, "longitude": 55.3 }
+          }
+        }
+      }
+    },
+
+    "cape-town": {
+      "id": "cape-town",
+      "name": "Cape Town",
+      "region": "south-africa",
+      "country": "South Africa",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": -33.92, "longitude": 18.42 },
+        "bounds": {
+          "southwest": { "latitude": -34.05, "longitude": 18.3 },
+          "northeast": { "latitude": -33.79, "longitude": 18.54 }
+        }
+      },
+      "features": {
+        "capeTown2Rio": true,
+        "southEaster": true,
+        "tableMountainEffects": true,
+        "atlanticSailing": true
+      },
+      "racingFeatures": {
+        "capeTown2Rio": {
+          "startLine": {
+            "start": { "latitude": -33.9, "longitude": 18.4 },
+            "end": { "latitude": -33.902, "longitude": 18.402 }
+          }
+        },
+        "liptonChallenge": {
+          "courseArea": {
+            "southwest": { "latitude": -33.95, "longitude": 18.38 },
+            "northeast": { "latitude": -33.89, "longitude": 18.46 }
+          }
+        }
+      }
+    },
+
+    "istanbul-turkey": {
+      "id": "istanbul-turkey",
+      "name": "Istanbul",
+      "region": "mediterranean-east",
+      "country": "Turkey",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 41.01, "longitude": 28.98 },
+        "bounds": {
+          "southwest": { "latitude": 40.95, "longitude": 28.9 },
+          "northeast": { "latitude": 41.07, "longitude": 29.06 }
+        }
+      },
+      "features": {
+        "bosphorusEffects": true,
+        "intercontinentalRacing": true,
+        "historicVenue": true,
+        "strongCurrents": true
+      },
+      "racingFeatures": {
+        "istanbulSailingWeek": {
+          "courseArea": {
+            "southwest": { "latitude": 40.98, "longitude": 28.95 },
+            "northeast": { "latitude": 41.04, "longitude": 29.01 }
+          }
+        }
+      }
+    },
+
+    "tokyo-bay": {
+      "id": "tokyo-bay",
+      "name": "Tokyo Bay",
+      "region": "asia-pacific",
+      "country": "Japan",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 35.65, "longitude": 139.78 },
+        "bounds": {
+          "southwest": { "latitude": 35.5, "longitude": 139.7 },
+          "northeast": { "latitude": 35.8, "longitude": 139.86 }
+        }
+      },
+      "features": {
+        "olympics2021": true,
+        "urbanSailing": true,
+        "complexWinds": true,
+        "commercialTraffic": true
+      },
+      "racingFeatures": {
+        "olympics2021": {
+          "courseArea": {
+            "southwest": { "latitude": 35.62, "longitude": 139.75 },
+            "northeast": { "latitude": 35.68, "longitude": 139.81 }
+          }
+        }
+      }
+    },
+
+    "vancouver-canada": {
+      "id": "vancouver-canada",
+      "name": "Vancouver",
+      "region": "north-america-west",
+      "country": "Canada",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 49.29, "longitude": -123.14 },
+        "bounds": {
+          "southwest": { "latitude": 49.2, "longitude": -123.25 },
+          "northeast": { "latitude": 49.38, "longitude": -123.03 }
+        }
+      },
+      "features": {
+        "mountainEffects": true,
+        "georgiaStrait": true,
+        "pacificNorthwest": true,
+        "variableWinds": true
+      },
+      "racingFeatures": {
+        "swiftSure": {
+          "startLine": {
+            "start": { "latitude": 49.27, "longitude": -123.12 },
+            "end": { "latitude": 49.272, "longitude": -123.118 }
+          },
+          "distance": "150nm"
+        }
+      }
+    },
+
+    "solent-portsmouth": {
+      "id": "solent-portsmouth",
+      "name": "Portsmouth, Solent",
+      "region": "uk-solent",
+      "country": "United Kingdom",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 50.8, "longitude": -1.1 },
+        "bounds": {
+          "southwest": { "latitude": 50.75, "longitude": -1.2 },
+          "northeast": { "latitude": 50.85, "longitude": -1.0 }
+        }
+      },
+      "features": {
+        "portsmouthHarbour": true,
+        "solentAccess": true,
+        "historicDockyard": true,
+        "complexTides": true
+      },
+      "racingFeatures": {
+        "admiralsCup": {
+          "historicalVenue": true,
+          "courseArea": {
+            "southwest": { "latitude": 50.77, "longitude": -1.15 },
+            "northeast": { "latitude": 50.83, "longitude": -1.05 }
+          }
+        }
+      }
+    },
+
+    "barcelona-spain": {
+      "id": "barcelona-spain",
+      "name": "Barcelona",
+      "region": "mediterranean-west",
+      "country": "Spain",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 41.38, "longitude": 2.18 },
+        "bounds": {
+          "southwest": { "latitude": 41.32, "longitude": 2.1 },
+          "northeast": { "latitude": 41.44, "longitude": 2.26 }
+        }
+      },
+      "features": {
+        "olympics1992": true,
+        "portOlimpic": true,
+        "mediterraneanSailing": true,
+        "urbanSailing": true
+      },
+      "racingFeatures": {
+        "olympics1992": {
+          "historicalVenue": true,
+          "courseArea": {
+            "southwest": { "latitude": 41.35, "longitude": 2.15 },
+            "northeast": { "latitude": 41.41, "longitude": 2.21 }
+          }
+        }
+      }
+    },
+
+    "chicago-lake-michigan": {
+      "id": "chicago-lake-michigan",
+      "name": "Chicago, Lake Michigan",
+      "region": "great-lakes",
+      "country": "United States",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 41.88, "longitude": -87.62 },
+        "bounds": {
+          "southwest": { "latitude": 41.8, "longitude": -87.7 },
+          "northeast": { "latitude": 41.96, "longitude": -87.54 }
+        }
+      },
+      "features": {
+        "freshwaterSailing": true,
+        "chicagoRace": true,
+        "urbanSkyline": true,
+        "lakeMichigan": true
+      },
+      "racingFeatures": {
+        "chicagoMackinac": {
+          "startLine": {
+            "start": { "latitude": 41.86, "longitude": -87.6 },
+            "end": { "latitude": 41.862, "longitude": -87.598 }
+          },
+          "destination": "mackinac-island",
+          "distance": "333nm"
+        }
+      }
+    },
+
+    "porto-cervo-sardinia": {
+      "id": "porto-cervo-sardinia",
+      "name": "Porto Cervo, Sardinia",
+      "region": "mediterranean-west",
+      "country": "Italy",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 41.13, "longitude": 9.54 },
+        "bounds": {
+          "southwest": { "latitude": 41.08, "longitude": 9.48 },
+          "northeast": { "latitude": 41.18, "longitude": 9.6 }
+        }
+      },
+      "features": {
+        "luxurySailing": true,
+        "superyachtRacing": true,
+        "emeraldCoast": true,
+        "mistralWinds": true
+      },
+      "racingFeatures": {
+        "maxi72Worlds": {
+          "courseArea": {
+            "southwest": { "latitude": 41.1, "longitude": 9.51 },
+            "northeast": { "latitude": 41.16, "longitude": 9.57 }
+          }
+        },
+        "superyachtCup": {
+          "courseArea": {
+            "southwest": { "latitude": 41.11, "longitude": 9.52 },
+            "northeast": { "latitude": 41.15, "longitude": 9.56 }
+          }
+        }
+      }
+    },
+
+    "la-trinite-sur-mer": {
+      "id": "la-trinite-sur-mer",
+      "name": "La Trinité-sur-Mer",
+      "region": "atlantic-europe",
+      "country": "France",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": 47.59, "longitude": -3.03 },
+        "bounds": {
+          "southwest": { "latitude": 47.55, "longitude": -3.08 },
+          "northeast": { "latitude": 47.63, "longitude": -2.98 }
+        }
+      },
+      "features": {
+        "offshoreRacing": true,
+        "singlehandedRacing": true,
+        "routeDuRhum": true,
+        "atlanticAccess": true
+      },
+      "racingFeatures": {
+        "routeDuRhum": {
+          "startLine": {
+            "start": { "latitude": 47.58, "longitude": -3.02 },
+            "end": { "latitude": 47.582, "longitude": -3.018 }
+          },
+          "destination": "guadeloupe"
+        }
+      }
+    },
+
+    "queensland-australia": {
+      "id": "queensland-australia",
+      "name": "Queensland (Hamilton Island)",
+      "region": "australia-east-coast",
+      "country": "Australia",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": -20.35, "longitude": 148.96 },
+        "bounds": {
+          "southwest": { "latitude": -20.4, "longitude": 148.9 },
+          "northeast": { "latitude": -20.3, "longitude": 149.02 }
+        }
+      },
+      "features": {
+        "whitsundayIslands": true,
+        "barrierReef": true,
+        "tropicalSailing": true,
+        "hamiltonIslandRace": true
+      },
+      "racingFeatures": {
+        "hamiltonIslandRaceWeek": {
+          "courseArea": {
+            "southwest": { "latitude": -20.38, "longitude": 148.93 },
+            "northeast": { "latitude": -20.32, "longitude": 148.99 }
+          }
+        }
+      }
+    },
+
+    "perth-fremantle": {
+      "id": "perth-fremantle",
+      "name": "Perth/Fremantle",
+      "region": "australia-west-coast",
+      "country": "Australia",
+      "priority": 2,
+      "coordinates": {
+        "center": { "latitude": -32.06, "longitude": 115.75 },
+        "bounds": {
+          "southwest": { "latitude": -32.12, "longitude": 115.68 },
+          "northeast": { "latitude": -32.0, "longitude": 115.82 }
+        }
+      },
+      "features": {
+        "fremantleDoctor": true,
+        "americasCupHistory": true,
+        "indianOcean": true,
+        "consistentWinds": true
+      },
+      "racingFeatures": {
+        "americasCup1987": {
+          "historicalVenue": true,
+          "courseArea": {
+            "southwest": { "latitude": -32.09, "longitude": 115.72 },
+            "northeast": { "latitude": -32.03, "longitude": 115.78 }
+          }
+        }
+      }
+    },
+
+    "monaco-monte-carlo": {
+      "id": "monaco-monte-carlo",
+      "name": "Monaco/Monte Carlo",
+      "region": "mediterranean-west",
+      "country": "Monaco",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 43.74, "longitude": 7.42 },
+        "bounds": {
+          "southwest": { "latitude": 43.72, "longitude": 7.4 },
+          "northeast": { "latitude": 43.76, "longitude": 7.44 }
+        }
+      },
+      "features": {
+        "luxurySailing": true,
+        "monacoYachtShow": true,
+        "classicYachts": true,
+        "prestigeEvents": true
+      },
+      "racingFeatures": {
+        "monacoClassicWeek": {
+          "courseArea": {
+            "southwest": { "latitude": 43.72, "longitude": 7.4 },
+            "northeast": { "latitude": 43.76, "longitude": 7.44 }
+          }
+        }
+      }
+    },
+
+    "french-riviera": {
+      "id": "french-riviera",
+      "name": "French Riviera",
+      "region": "mediterranean-west",
+      "country": "France",
+      "priority": 1,
+      "coordinates": {
+        "center": { "latitude": 43.55, "longitude": 7.0 },
+        "bounds": {
+          "southwest": { "latitude": 43.2, "longitude": 6.5 },
+          "northeast": { "latitude": 43.8, "longitude": 7.5 }
+        }
+      },
+      "features": {
+        "mistralWinds": true,
+        "thermalPatterns": true,
+        "superyachtRacing": true,
+        "luxuryVenues": true
+      },
+      "dataSources": {
+        "bathymetry": ["shom-france", "emodnet"],
+        "weather": ["meteofrance"],
+        "tides": ["shom-tides"],
+        "charts": ["shom-enc", "openseamap"]
+      },
+      "racingFeatures": {
+        "lesVoilesDeCannes": {
+          "courseArea": {
+            "southwest": { "latitude": 43.52, "longitude": 6.9 },
+            "northeast": { "latitude": 43.58, "longitude": 7.1 }
+          }
+        },
+        "monacoClassicWeek": {
+          "courseArea": {
+            "southwest": { "latitude": 43.72, "longitude": 7.4 },
+            "northeast": { "latitude": 43.78, "longitude": 7.46 }
+          }
+        }
+      },
+      "optimizations": {
+        "mistralForecasting": true,
+        "thermalWindModeling": true,
+        "superyachtOptimization": true,
+        "marinaDocking": true
+      }
+    }
+  },
+
+  "regions": {
+    "us-east-coast": {
+      "name": "US East Coast",
+      "primaryDataSources": ["noaa"],
+      "weatherModel": "gfs-nam",
+      "tideSystem": "atlantic-coast",
+      "seasonalPatterns": {
+        "summer": "thermal-dominated",
+        "winter": "frontal-systems"
+      }
+    },
+    "us-west-coast": {
+      "name": "US West Coast",
+      "primaryDataSources": ["noaa"],
+      "weatherModel": "gfs-nam",
+      "tideSystem": "pacific-coast",
+      "seasonalPatterns": {
+        "summer": "marine-layer-thermals",
+        "winter": "pacific-storms"
+      }
+    },
+    "uk-solent": {
+      "name": "UK Solent",
+      "primaryDataSources": ["ukho", "met-office"],
+      "weatherModel": "uk-met-office",
+      "tideSystem": "complex-european",
+      "seasonalPatterns": {
+        "summer": "thermal-sea-breeze",
+        "winter": "atlantic-depressions"
+      }
+    },
+    "mediterranean-west": {
+      "name": "Western Mediterranean",
+      "primaryDataSources": ["emodnet", "shom"],
+      "weatherModel": "ecmwf-ifs",
+      "tideSystem": "minimal-tidal",
+      "seasonalPatterns": {
+        "summer": "thermal-mistral",
+        "winter": "frontal-tramontane"
+      }
+    },
+    "australia-east-coast": {
+      "name": "Australian East Coast",
+      "primaryDataSources": ["aho", "bom"],
+      "weatherModel": "access-global",
+      "tideSystem": "pacific-australian",
+      "seasonalPatterns": {
+        "summer": "southerly-busters",
+        "winter": "east-coast-lows"
+      }
+    },
+    "asia-pacific": {
+      "name": "Asia Pacific",
+      "primaryDataSources": ["jma", "hko", "bom"],
+      "weatherModel": "jma-gsm",
+      "tideSystem": "pacific-asian",
+      "seasonalPatterns": {
+        "summer": "monsoon-dominated",
+        "winter": "northeast-monsoon"
+      }
+    },
+    "new-zealand": {
+      "name": "New Zealand",
+      "primaryDataSources": ["niwa", "metservice"],
+      "weatherModel": "nzlam",
+      "tideSystem": "pacific-nz",
+      "seasonalPatterns": {
+        "summer": "variable-winds",
+        "winter": "westerly-flow"
+      }
+    },
+    "mediterranean-east": {
+      "name": "Eastern Mediterranean",
+      "primaryDataSources": ["emodnet", "poseidon"],
+      "weatherModel": "ecmwf-ifs",
+      "tideSystem": "minimal-tidal",
+      "seasonalPatterns": {
+        "summer": "etesian-winds",
+        "winter": "cyclonic-activity"
+      }
+    },
+    "atlantic-mid": {
+      "name": "Mid Atlantic",
+      "primaryDataSources": ["noaa", "ec-canada"],
+      "weatherModel": "gfs-nam",
+      "tideSystem": "atlantic-tidal",
+      "seasonalPatterns": {
+        "summer": "bermuda-high",
+        "winter": "atlantic-storms"
+      }
+    },
+    "baltic-sea": {
+      "name": "Baltic Sea",
+      "primaryDataSources": ["smhi", "fmi"],
+      "weatherModel": "ecmwf-hirlam",
+      "tideSystem": "minimal-tidal",
+      "seasonalPatterns": {
+        "summer": "stable-anticyclonic",
+        "winter": "atlantic-influence"
+      }
+    },
+    "south-america-east": {
+      "name": "South America East Coast",
+      "primaryDataSources": ["inmet-brazil", "smn-argentina"],
+      "weatherModel": "gfs-cptec",
+      "tideSystem": "atlantic-south",
+      "seasonalPatterns": {
+        "summer": "thermal-convection",
+        "winter": "frontal-systems"
+      }
+    },
+    "middle-east": {
+      "name": "Middle East",
+      "primaryDataSources": ["ncms-uae"],
+      "weatherModel": "ecmwf-ifs",
+      "tideSystem": "arabian-gulf",
+      "seasonalPatterns": {
+        "summer": "shamal-winds",
+        "winter": "moderate-northerly"
+      }
+    },
+    "south-africa": {
+      "name": "South Africa",
+      "primaryDataSources": ["saws"],
+      "weatherModel": "saws-model",
+      "tideSystem": "south-african",
+      "seasonalPatterns": {
+        "summer": "south-easter",
+        "winter": "northwest-systems"
+      }
+    },
+    "north-america-west": {
+      "name": "North America West Coast",
+      "primaryDataSources": ["ec-canada", "noaa"],
+      "weatherModel": "gfs-gefs",
+      "tideSystem": "pacific-coast",
+      "seasonalPatterns": {
+        "summer": "pacific-high",
+        "winter": "pacific-storms"
+      }
+    },
+    "atlantic-europe": {
+      "name": "Atlantic Europe",
+      "primaryDataSources": ["meteofrance", "met-office"],
+      "weatherModel": "arome-arpege",
+      "tideSystem": "atlantic-european",
+      "seasonalPatterns": {
+        "summer": "azores-high",
+        "winter": "atlantic-depressions"
+      }
+    },
+    "australia-west-coast": {
+      "name": "Australian West Coast",
+      "primaryDataSources": ["bom"],
+      "weatherModel": "access-regional",
+      "tideSystem": "indian-ocean",
+      "seasonalPatterns": {
+        "summer": "fremantle-doctor",
+        "winter": "indian-ocean-lows"
+      }
+    },
+    "great-lakes": {
+      "name": "Great Lakes",
+      "primaryDataSources": ["noaa-glerl"],
+      "weatherModel": "gfs-nam",
+      "tideSystem": "lake-levels",
+      "seasonalPatterns": {
+        "summer": "thermal-circulation",
+        "winter": "arctic-outbreaks"
+      }
+    }
+  },
+
+  "dataSourceEndpoints": {
+    "premium": {
+      "mapbox-professional": "https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12",
+      "weatherapi-pro": "https://api.weatherapi.com/v1",
+      "predictwind-pro": "https://api.predictwind.com/v1",
+      "worldtides-pro": "https://www.worldtides.info/api/v3",
+      "marinetraffic-ais": "https://services.marinetraffic.com/api",
+      "meteomatics": "https://api.meteomatics.com"
+    },
+    "standard": {
+      "noaa-gfs": "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl",
+      "noaa-ncei": "https://www.ncei.noaa.gov/wms/nos-hydro",
+      "noaa-coops": "https://tidesandcurrents.noaa.gov/api/",
+      "noaa-enc": "https://nauticalcharts.noaa.gov/",
+      "gebco": "https://www.gebco.net/data_and_products/gebco_web_services/",
+      "emodnet": "https://ows.emodnet-bathymetry.eu/wms",
+      "openseamap": "https://tiles.openseamap.org/seamark/",
+      "open-meteo": "https://api.open-meteo.com/v1/marine",
+      "worldtides": "https://www.worldtides.info/api/v2"
+    }
+  },
+
+  "phasedRollout": {
+    "phase1": {
+      "timeframe": "Month 1-2",
+      "venues": [
+        "san-francisco-bay",
+        "newport-rhode-island",
+        "cowes-isle-of-wight"
+      ],
+      "features": ["basic-navigation", "weather-overlay", "tide-predictions"]
+    },
+    "phase2": {
+      "timeframe": "Month 2-3",
+      "venues": [
+        "french-riviera",
+        "sydney-harbour"
+      ],
+      "features": ["racing-features", "advanced-weather", "offline-caching"]
+    },
+    "phase3": {
+      "timeframe": "Month 4-6",
+      "venues": ["all-remaining-global-venues"],
+      "features": ["ai-route-optimization", "real-time-tracking", "community-features"]
+    }
+  },
+
+  "featurePriorities": {
+    "critical": [
+      "accurate-bathymetry",
+      "real-time-weather",
+      "tide-predictions",
+      "navigation-safety"
+    ],
+    "important": [
+      "race-course-optimization",
+      "offline-capability",
+      "wind-routing",
+      "local-knowledge"
+    ],
+    "enhanced": [
+      "ai-recommendations",
+      "community-sharing",
+      "historical-analysis",
+      "performance-tracking"
+    ]
+  }
+}
