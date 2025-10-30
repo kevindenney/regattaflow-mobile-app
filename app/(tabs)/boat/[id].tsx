@@ -3,8 +3,8 @@
  * Physical boat tracking with equipment inventory, maintenance logs, and tuning
  */
 
-import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -25,6 +25,9 @@ import { MaintenanceSchedule } from '@/components/boats/MaintenanceSchedule';
 import { Boat3DViewer } from '@/components/boats/Boat3DViewer';
 import { RigTuningControls } from '@/components/boats/RigTuningControls';
 import { TuningGuideList } from '@/components/boats/TuningGuideList';
+import { createLogger } from '@/lib/utils/logger';
+import { supabase } from '@/services/supabase';
+import { useBoatPerformanceStats } from '@/hooks/useBoatPerformanceStats';
 // PerformanceAnalysis - Not imported to avoid victory-native dependency on web
 
 interface BoatDetails {
@@ -52,9 +55,26 @@ interface RigTuning {
 
 type TabType = 'overview' | 'crew' | 'sails' | 'rigging' | 'equipment' | 'maintenance' | 'performance' | 'tuning3d' | 'guides';
 
+const TAB_CONFIG: Array<{
+  key: TabType;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  description: string;
+  badge?: 'crew' | 'sails' | 'maintenance' | 'performance';
+}> = [
+  { key: 'overview', label: 'Overview', icon: 'information-circle', description: 'Fleet snapshot' },
+  { key: 'crew', label: 'Crew', icon: 'people', description: 'Assignments & availability', badge: 'crew' },
+  { key: 'sails', label: 'Sails', icon: 'flag', description: 'Inventory & tags', badge: 'sails' },
+  { key: 'rigging', label: 'Rigging', icon: 'git-network', description: 'Tune presets' },
+  { key: 'equipment', label: 'Equipment', icon: 'construct', description: 'Hardware log' },
+  { key: 'maintenance', label: 'Maintenance', icon: 'build', description: 'Tasks & service', badge: 'maintenance' },
+  { key: 'performance', label: 'Performance', icon: 'stats-chart', description: 'Race analytics', badge: 'performance' },
+  { key: 'tuning3d', label: '3D Tuning', icon: 'cube', description: 'Visual tuning' },
+  { key: 'guides', label: 'Tuning Guides', icon: 'book', description: 'Class playbook' },
+];
+
 export default function BoatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
   const [boat, setBoat] = useState<BoatDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -64,15 +84,79 @@ export default function BoatDetailScreen() {
     forestay: 10800,
     mastButtPosition: 50,
   });
+  const [tabCounts, setTabCounts] = useState<{
+    crew: number | null;
+    sails: number | null;
+    maintenance: number | null;
+  }>({
+    crew: null,
+    sails: null,
+    maintenance: null,
+  });
+  const [tabCountsLoading, setTabCountsLoading] = useState(false);
 
   useEffect(() => {
     loadBoatDetails();
   }, [id]);
 
+  useEffect(() => {
+    if (!boat?.id) {
+      setTabCountsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchCounts = async () => {
+      setTabCountsLoading(true);
+      try {
+        const [
+          crewResponse,
+          sailsResponse,
+          maintenanceResponse,
+        ] = await Promise.all([
+          supabase
+            .from('boat_crew_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('boat_id', boat.id),
+          supabase
+            .from('boat_equipment')
+            .select('*', { count: 'exact', head: true })
+            .eq('boat_id', boat.id)
+            .eq('category', 'sail'),
+          supabase
+            .from('maintenance_records')
+            .select('*', { count: 'exact', head: true })
+            .eq('boat_id', boat.id),
+        ]);
+
+        if (cancelled) return;
+
+        setTabCounts({
+          crew: crewResponse.count ?? 0,
+          sails: sailsResponse.count ?? 0,
+          maintenance: maintenanceResponse.count ?? 0,
+        });
+      } catch (err) {
+        if (!cancelled) {
+          logger.error('[BoatDetailScreen] Failed to load tab counts', err);
+        }
+      } finally {
+        if (!cancelled) {
+          setTabCountsLoading(false);
+        }
+      }
+    };
+
+    fetchCounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boat?.id]);
+
   const loadBoatDetails = async () => {
     try {
-      console.log('🚀 [BoatDetailScreen] Loading boat details for ID:', id);
-      console.log('👤 [BoatDetailScreen] Current user:', user?.id);
 
       setLoading(true);
 
@@ -80,10 +164,8 @@ export default function BoatDetailScreen() {
       const { sailorBoatService } = await import('@/services/SailorBoatService');
       const boatData = await sailorBoatService.getBoat(id || '');
 
-      console.log('📊 [BoatDetailScreen] Raw boat data from service:', JSON.stringify(boatData, null, 2));
-
       if (!boatData) {
-        console.error('❌ [BoatDetailScreen] No boat found for ID:', id);
+
         setBoat(null);
         return;
       }
@@ -93,8 +175,6 @@ export default function BoatDetailScreen() {
       const boatName = boatData.sail_number
         ? `${boatData.boat_class?.name || 'Boat'} #${boatData.sail_number}`
         : boatData.boat_class?.name || 'Unnamed Boat';
-
-      console.log('🏷️ [BoatDetailScreen] Generated boat name:', boatName);
 
       setBoat({
         id: boatData.id,
@@ -112,13 +192,16 @@ export default function BoatDetailScreen() {
         ownership: boatData.ownership_type,
       });
 
-      console.log('✅ [BoatDetailScreen] Successfully loaded boat:', boatName);
     } catch (error) {
-      console.error('❌ [BoatDetailScreen] Error loading boat details:', error);
-      console.error('❌ [BoatDetailScreen] Error details:', JSON.stringify(error, null, 2));
+
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatOwnership = (ownership?: string) => {
+    if (!ownership) return 'Not set';
+    return ownership.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   if (loading) {
@@ -146,162 +229,189 @@ export default function BoatDetailScreen() {
     );
   }
 
+  const { stats: performanceStats, loading: performanceLoading } = useBoatPerformanceStats({
+    sailorId: boat.sailorId,
+    sailNumber: boat.sailNumber,
+    className: boat.className,
+  });
+
+  const summaryCounts = {
+    crew: tabCounts.crew ?? undefined,
+    sails: tabCounts.sails ?? undefined,
+    maintenance: tabCounts.maintenance ?? undefined,
+  };
+
+  const heroQuickFacts = [
+    {
+      label: 'Class',
+      value: boat.className || 'Unclassified',
+      icon: 'sail-outline' as const,
+    },
+    {
+      label: 'Sail Number',
+      value: boat.sailNumber || 'Not set',
+      icon: 'flag-outline' as const,
+    },
+    {
+      label: 'Ownership',
+      value: formatOwnership(boat.ownership),
+      icon: 'person-outline' as const,
+    },
+    {
+      label: 'Status',
+      value: boat.isPrimary ? 'Primary campaign boat' : 'Fleet boat',
+      icon: boat.isPrimary ? 'ribbon' : 'boat-outline',
+      highlight: boat.isPrimary,
+    },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
-          <Ionicons name="arrow-back" size={24} color="#1E293B" />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.boatName}>{boat.name}</Text>
-          <Text style={styles.boatClass}>{boat.className} {boat.sailNumber && `#${boat.sailNumber}`}</Text>
+      <LinearGradient
+        colors={['#1D4ED8', '#2563EB', '#0EA5E9']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroSection}
+      >
+        <View style={styles.heroHeaderRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.heroIconButton}>
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.heroIconButton}
+            onPress={() => router.push(`/(tabs)/boat/edit/${id}`)}
+          >
+            <Ionicons name="create-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => router.push(`/(tabs)/boat/edit/${id}`)}
-        >
-          <Ionicons name="create-outline" size={24} color="#64748B" />
-        </TouchableOpacity>
-      </View>
+
+        <View style={styles.heroContent}>
+          <View style={styles.heroTitleBlock}>
+            <View style={styles.heroBadgeRow}>
+              <View style={[styles.heroBadge, boat.isPrimary ? styles.heroBadgePrimary : styles.heroBadgeMuted]}>
+                <Ionicons
+                  name={boat.isPrimary ? 'ribbon' : 'boat-outline'}
+                  size={12}
+                  color={boat.isPrimary ? '#1D4ED8' : '#334155'}
+                />
+                <Text style={[styles.heroBadgeText, boat.isPrimary ? styles.heroBadgeTextPrimary : styles.heroBadgeTextMuted]}>
+                  {boat.isPrimary ? 'Primary Boat' : 'Fleet Boat'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.heroTitle}>{boat.name}</Text>
+            <Text style={styles.heroSubtitle}>
+              {boat.className} {boat.sailNumber ? `• Sail #${boat.sailNumber}` : ''}
+            </Text>
+          </View>
+
+          <View style={styles.heroMetricsRow}>
+            {heroQuickFacts.map((fact) => (
+              <View
+                key={fact.label}
+                style={[
+                  styles.heroMetricCard,
+                  fact.highlight ? styles.heroMetricCardHighlight : undefined,
+                ]}
+              >
+                <View style={styles.heroMetricIcon}>
+                  <Ionicons
+                    name={fact.icon}
+                    size={16}
+                    color={fact.highlight ? '#F97316' : '#1D4ED8'}
+                  />
+                </View>
+                <Text style={[styles.heroMetricValue, fact.highlight ? styles.heroMetricValueHighlight : undefined]}>
+                  {fact.value}
+                </Text>
+                <Text style={styles.heroMetricLabel}>{fact.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </LinearGradient>
 
       {/* Tab Navigation */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabBar}
-        contentContainerStyle={styles.tabBarContent}
-      >
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
-          onPress={() => setActiveTab('overview')}
+      <View style={styles.tabBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBarContent}
         >
-          <Ionicons
-            name="information-circle"
-            size={18}
-            color={activeTab === 'overview' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
-            Overview
-          </Text>
-        </TouchableOpacity>
+          {TAB_CONFIG.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const badgeValue = (() => {
+              switch (tab.badge) {
+                case 'crew':
+                  return tabCounts.crew;
+                case 'sails':
+                  return tabCounts.sails;
+                case 'maintenance':
+                  return tabCounts.maintenance;
+                case 'performance':
+                  if (performanceLoading) return null;
+                  if (!performanceStats) return undefined;
+                  return performanceStats.totalRaces;
+                default:
+                  return undefined;
+              }
+            })();
+            const showBadge = badgeValue !== undefined && badgeValue !== null;
+            const showSpinner =
+              tab.badge &&
+              tab.badge !== 'performance' &&
+              tabCountsLoading &&
+              !showBadge;
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'crew' && styles.tabActive]}
-          onPress={() => setActiveTab('crew')}
-        >
-          <Ionicons
-            name="people"
-            size={18}
-            color={activeTab === 'crew' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'crew' && styles.tabTextActive]}>
-            Crew
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'sails' && styles.tabActive]}
-          onPress={() => setActiveTab('sails')}
-        >
-          <Ionicons
-            name="fish"
-            size={18}
-            color={activeTab === 'sails' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'sails' && styles.tabTextActive]}>
-            Sails
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'rigging' && styles.tabActive]}
-          onPress={() => setActiveTab('rigging')}
-        >
-          <Ionicons
-            name="git-network"
-            size={18}
-            color={activeTab === 'rigging' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'rigging' && styles.tabTextActive]}>
-            Rigging
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'equipment' && styles.tabActive]}
-          onPress={() => setActiveTab('equipment')}
-        >
-          <Ionicons
-            name="construct"
-            size={18}
-            color={activeTab === 'equipment' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'equipment' && styles.tabTextActive]}>
-            Equipment
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'maintenance' && styles.tabActive]}
-          onPress={() => setActiveTab('maintenance')}
-        >
-          <Ionicons
-            name="build"
-            size={18}
-            color={activeTab === 'maintenance' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'maintenance' && styles.tabTextActive]}>
-            Maintenance
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'performance' && styles.tabActive]}
-          onPress={() => setActiveTab('performance')}
-        >
-          <Ionicons
-            name="stats-chart"
-            size={18}
-            color={activeTab === 'performance' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'performance' && styles.tabTextActive]}>
-            Performance
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'tuning3d' && styles.tabActive]}
-          onPress={() => setActiveTab('tuning3d')}
-        >
-          <Ionicons
-            name="cube"
-            size={18}
-            color={activeTab === 'tuning3d' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'tuning3d' && styles.tabTextActive]}>
-            3D Tuning
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'guides' && styles.tabActive]}
-          onPress={() => setActiveTab('guides')}
-        >
-          <Ionicons
-            name="book"
-            size={18}
-            color={activeTab === 'guides' ? '#3B82F6' : '#64748B'}
-          />
-          <Text style={[styles.tabText, activeTab === 'guides' && styles.tabTextActive]}>
-            Tuning Guides
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tabChip, isActive && styles.tabChipActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <View style={styles.tabChipIcon}>
+                  <Ionicons
+                    name={tab.icon}
+                    size={16}
+                    color={isActive ? '#1D4ED8' : '#64748B'}
+                  />
+                </View>
+                <View style={styles.tabChipTextBlock}>
+                  <Text style={[styles.tabChipLabel, isActive && styles.tabChipLabelActive]}>
+                    {tab.label}
+                  </Text>
+                  <Text style={[styles.tabChipDescription, isActive && styles.tabChipDescriptionActive]}>
+                    {tab.description}
+                  </Text>
+                </View>
+                {showBadge && (
+                  <View style={[styles.tabBadge, isActive && styles.tabBadgeActive]}>
+                    <Text style={[styles.tabBadgeText, isActive && styles.tabBadgeTextActive]}>
+                      {badgeValue}
+                    </Text>
+                  </View>
+                )}
+                {!showBadge && showSpinner && (
+                  <View style={styles.tabBadgeSpinner}>
+                    <ActivityIndicator size="small" color={isActive ? '#1D4ED8' : '#94A3B8'} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {/* Content */}
       <View style={styles.content}>
-        {activeTab === 'overview' && <BoatDetail boat={boat} />}
+        {activeTab === 'overview' && (
+          <BoatDetail
+            boat={boat}
+            performanceStats={performanceStats}
+            performanceLoading={performanceLoading}
+            summaryCounts={summaryCounts}
+          />
+        )}
         {activeTab === 'crew' && (
           <BoatCrewList
             boatId={boat.id}
@@ -362,7 +472,7 @@ export default function BoatDetailScreen() {
         style={styles.fab}
         onPress={() => {
           // TODO: Add context-aware FAB actions
-          console.log('FAB pressed for tab:', activeTab);
+          logger.debug('FAB pressed for tab:', activeTab);
         }}
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
@@ -371,6 +481,7 @@ export default function BoatDetailScreen() {
   );
 }
 
+const logger = createLogger('[id]');
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -410,75 +521,90 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  backIconButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerContent: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  boatName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  boatClass: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  editButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   tabBar: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
   tabBarContent: {
-    paddingHorizontal: 8,
+    paddingRight: 8,
+    gap: 12,
   },
-  tab: {
+  tabChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minWidth: 180,
   },
-  tabActive: {
-    borderBottomColor: '#3B82F6',
+  tabChipActive: {
+    borderColor: '#BFDBFE',
+    shadowColor: '#1D4ED8',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 4,
   },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#64748B',
-    whiteSpace: 'nowrap',
+  tabChipIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabTextActive: {
-    color: '#3B82F6',
+  tabChipTextBlock: {
+    flex: 1,
+  },
+  tabChipLabel: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#475569',
+  },
+  tabChipLabelActive: {
+    color: '#1D4ED8',
+  },
+  tabChipDescription: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  tabChipDescriptionActive: {
+    color: '#2563EB',
+  },
+  tabBadge: {
+    marginLeft: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  tabBadgeActive: {
+    backgroundColor: '#1D4ED8',
+  },
+  tabBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  tabBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  tabBadgeSpinner: {
+    marginLeft: 12,
   },
   content: {
     flex: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 80,
   },
   placeholderContainer: {
     flex: 1,
@@ -491,6 +617,119 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#94A3B8',
     marginTop: 16,
+  },
+  heroSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: '#1D4ED8',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  heroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  heroContent: {
+    marginTop: 16,
+    gap: 18,
+  },
+  heroTitleBlock: {
+    gap: 8,
+  },
+  heroBadgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.82)',
+  },
+  heroBadgePrimary: {
+    backgroundColor: '#FDE68A',
+  },
+  heroBadgeMuted: {
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  heroBadgeTextPrimary: {
+    color: '#92400E',
+  },
+  heroBadgeTextMuted: {
+    color: '#1E293B',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: 'rgba(241,245,249,0.9)',
+    letterSpacing: 0.4,
+  },
+  heroMetricsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  heroMetricCard: {
+    flexGrow: 1,
+    minWidth: 140,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  heroMetricCardHighlight: {
+    backgroundColor: '#FFF7ED',
+  },
+  heroMetricIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroMetricValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  heroMetricValueHighlight: {
+    color: '#C2410C',
+  },
+  heroMetricLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
   fab: {
     position: 'absolute',

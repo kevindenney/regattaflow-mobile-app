@@ -43,13 +43,11 @@ export function useVenueDetection(): VenueDetectionResult {
       });
 
       const { latitude, longitude } = location.coords;
-      console.log(`📍 GPS coordinates: ${latitude}, ${longitude}`);
 
       // Call VenueIntelligenceAgent to detect and switch venue
       const result = await agent.switchVenueByGPS({ latitude, longitude });
 
       if (result.success) {
-        console.log('✅ Venue detected:', result.result);
 
         // Extract venue data from agent result
         // The agent's detect_venue_from_gps tool returns venue info
@@ -71,11 +69,11 @@ export function useVenueDetection(): VenueDetectionResult {
         }
       } else {
         setError(result.error || 'Failed to detect venue');
-        console.error('❌ Venue detection failed:', result.error);
+
       }
     } catch (err: any) {
       setError(err.message || 'Failed to detect venue');
-      console.error('❌ Venue detection error:', err);
+
     } finally {
       setIsDetecting(false);
     }

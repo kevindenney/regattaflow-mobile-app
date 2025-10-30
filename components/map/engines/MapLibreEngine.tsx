@@ -49,12 +49,10 @@ export class MapLibreEngine implements MapEngine {
     // Simulate map loading
     await new Promise<void>((resolve) => {
       setTimeout(() => {
-        console.log('🗺️ Mock map initialized for development');
+
         resolve();
       }, 100);
     });
-
-    console.log('🗺️ MapLibre GL initialized successfully');
 
     // Set up performance monitoring
     this.setupPerformanceMonitoring();
@@ -74,7 +72,7 @@ export class MapLibreEngine implements MapEngine {
       this.map = null;
     }
     this.performanceMonitor.stop();
-    console.log('🗺️ MapLibre GL engine destroyed');
+
   }
 
   setStyle(styleUrl: string): void {
@@ -118,12 +116,11 @@ export class MapLibreEngine implements MapEngine {
           }
         });
 
-        console.log(`🗺️ Basemap style changed with ${customLayers.length} layers preserved`);
       });
     } else {
       // Just set the style without preserving layers
       this.map.setStyle(style);
-      console.log('🗺️ Basemap style changed');
+
     }
   }
 
@@ -141,9 +138,7 @@ export class MapLibreEngine implements MapEngine {
 
       // Add the layer
       this.map.addLayer(maplibreLayer);
-      console.log(`✅ Added layer: ${layer.id}`);
     } catch (error) {
-      console.error(`❌ Failed to add layer ${layer.id}:`, error);
     }
   }
 
@@ -168,7 +163,6 @@ export class MapLibreEngine implements MapEngine {
       }
     });
 
-    console.log(`🌊 Added ${layers.length} bathymetric layers`);
   }
 
   /**
@@ -179,7 +173,6 @@ export class MapLibreEngine implements MapEngine {
 
     try {
       this.map.setTerrain(terrainConfig);
-      console.log('🏔️ 3D bathymetric terrain enabled');
     } catch (error) {
       console.error('Failed to enable 3D terrain:', error);
     }
@@ -193,7 +186,6 @@ export class MapLibreEngine implements MapEngine {
 
     try {
       this.map.setTerrain(null);
-      console.log('🏔️ 3D bathymetric terrain disabled');
     } catch (error) {
       console.error('Failed to disable 3D terrain:', error);
     }
@@ -292,7 +284,6 @@ export class MapLibreEngine implements MapEngine {
       exaggeration: this.config?.terrain.terrainExaggeration || 1.5
     });
 
-    console.log('🏔️ Terrain enabled');
   }
 
   disableTerrain(): void {
@@ -379,7 +370,6 @@ export class MapLibreEngine implements MapEngine {
     const isLowEndDevice = this.detectLowEndDevice();
 
     if (isLowEndDevice) {
-      console.log('📱 Optimizing for low-end device');
 
       // Reduce quality settings
       this.config.rendering.quality = 'medium';
@@ -474,7 +464,7 @@ export class MapLibreEngine implements MapEngine {
         };
         break;
       default:
-        console.warn('⚠️ Unknown bathymetry source, skipping terrain initialization');
+
         return;
     }
 
@@ -541,32 +531,27 @@ export class MapLibreEngine implements MapEngine {
 
       // Mock camera methods
       setCamera(options: any) {
-        console.log('📷 Mock setCamera:', options);
       },
 
       easeTo(options: any) {
-        console.log('🎬 Mock easeTo:', options);
+
       },
 
       flyTo(options: any) {
-        console.log('✈️ Mock flyTo:', options);
       },
 
       // Mock layer methods
       addLayer(layer: any) {
-        console.log('🗂️ Mock addLayer:', layer.id);
       },
 
       removeLayer(layerId: string) {
-        console.log('🗑️ Mock removeLayer:', layerId);
+
       },
 
       addSource(sourceId: string, source: any) {
-        console.log('📡 Mock addSource:', sourceId);
       },
 
       removeSource(sourceId: string) {
-        console.log('📡 Mock removeSource:', sourceId);
       },
 
       // Mock utility methods
@@ -575,20 +560,14 @@ export class MapLibreEngine implements MapEngine {
       },
 
       setStyle(style: any) {
-        console.log('🎨 Mock setStyle');
+
       },
 
       getBearing() { return 0; },
-      setBearing(bearing: number) { console.log('🧭 Mock setBearing:', bearing); },
-
-      getPitch() { return config.camera.pitch || 0; },
-      setPitch(pitch: number) { console.log('📐 Mock setPitch:', pitch); },
-
-      getZoom() { return config.camera.zoom || 10; },
-      setZoom(zoom: number) { console.log('🔍 Mock setZoom:', zoom); },
+      setZoom(zoom: number) {},
 
       getCenter() { return { lng: -122.4, lat: 37.8 }; },
-      setCenter(center: any) { console.log('🎯 Mock setCenter:', center); },
+      setCenter(center: any) {},
 
       // Mock performance methods
       setRenderWorldCopies() {},
@@ -633,7 +612,6 @@ export class MapLibreEngine implements MapEngine {
 
     // Camera change events
     this.map.on('moveend', () => {
-      console.log('🎥 Camera moved:', this.getCamera());
     });
 
     // Performance monitoring
@@ -643,13 +621,12 @@ export class MapLibreEngine implements MapEngine {
 
     // Error handling
     this.map.on('error', (e) => {
-      console.error('🗺️ MapLibre error:', e.error);
+
     });
 
     // Source events
     this.map.on('sourcedata', (e) => {
       if (e.sourceId === 'terrain' && e.isSourceLoaded) {
-        console.log('🏔️ Terrain data loaded');
       }
     });
   }
@@ -716,8 +693,6 @@ export class MapLibreEngine implements MapEngine {
       exaggeration
     });
 
-    console.log(`🌊 Bathymetry layer added with ${exaggeration}x exaggeration`);
-
     // Add optional hillshade for better depth visualization
     if (options?.colorScheme === 'hillshade') {
       this.map.addLayer({
@@ -749,7 +724,6 @@ export class MapLibreEngine implements MapEngine {
       this.map.removeSource('bathymetry');
     }
 
-    console.log('🌊 Bathymetry layer removed');
   }
 
   /**
@@ -798,7 +772,6 @@ export class MapLibreEngine implements MapEngine {
       }
     });
 
-    console.log(`🏢 ${buildings.features.length} buildings added as 3D extrusions`);
   }
 
   /**
@@ -815,7 +788,6 @@ export class MapLibreEngine implements MapEngine {
       this.map.removeSource('buildings');
     }
 
-    console.log('🏢 Building extrusions removed');
   }
 
   /**
@@ -864,7 +836,6 @@ export class MapLibreEngine implements MapEngine {
       });
     }
 
-    console.log(`📍 Environmental overlay '${id}' added with ${polygons.features.length} features`);
   }
 
   /**
@@ -885,7 +856,6 @@ export class MapLibreEngine implements MapEngine {
       this.map.removeSource(id);
     }
 
-    console.log(`📍 Environmental overlay '${id}' removed`);
   }
 
   /**
@@ -939,7 +909,6 @@ export class MapLibreEngine implements MapEngine {
       });
     }
 
-    console.log(`📏 Depth contours added with ${contours.features.length} lines`);
   }
 
   /**
@@ -960,7 +929,6 @@ export class MapLibreEngine implements MapEngine {
       this.map.removeSource('depth-contours');
     }
 
-    console.log('📏 Depth contours removed');
   }
 
   /**
@@ -985,7 +953,6 @@ export class MapLibreEngine implements MapEngine {
         );
       }
 
-      console.log(`🌊 Bathymetry exaggeration set to ${exaggeration}x`);
     }
   }
 
@@ -1044,7 +1011,6 @@ export class MapLibreEngine implements MapEngine {
         }
       });
 
-      console.log(`🌊 Bathymetry WMS layer added for ${venue.name} (${venue.region})`);
     }
 
     // Add depth contour polygons
@@ -1087,7 +1053,6 @@ export class MapLibreEngine implements MapEngine {
         }
       });
 
-      console.log(`📏 Bathymetry depth contours added (${contourData.features.length} features)`);
     }
   }
 
@@ -1116,7 +1081,6 @@ export class MapLibreEngine implements MapEngine {
       this.map.removeSource('bathymetry-contours');
     }
 
-    console.log('🌊 Venue bathymetry removed');
   }
 
   /**

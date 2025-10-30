@@ -60,7 +60,6 @@ export class EnhancedAIIntegrationService {
 
   constructor() {
     this.documentProcessor = new DocumentProcessingService();
-    console.log('🚀 EnhancedAIIntegrationService initialized - leveraging yacht club educational content');
   }
 
   /**
@@ -71,8 +70,6 @@ export class EnhancedAIIntegrationService {
     upload: DocumentUpload,
     context: AIProcessingContext = {}
   ): Promise<EnhancedAIResponse> {
-    console.log('🧠 Processing document with educational enhancement:', upload.filename);
-    console.log('📍 Context:', context);
 
     try {
       // Step 1: Standard AI document analysis
@@ -144,17 +141,10 @@ export class EnhancedAIIntegrationService {
         recommendations,
       };
 
-      console.log('✅ Enhanced AI processing complete:', {
-        originalInsights: originalAnalysis.insights.length,
-        educationalEnhancements: Object.keys(enhancedResponse.educationalEnhancements).length,
-        confidenceBoost: confidenceBoost.toFixed(2),
-        venue: context.venueId || 'global',
-      });
-
       return enhancedResponse;
 
     } catch (error: any) {
-      console.error('❌ Enhanced AI integration failed:', error);
+
       throw new Error(`Enhanced AI processing failed: ${error.message}`);
     }
   }
@@ -316,7 +306,6 @@ export class EnhancedAIIntegrationService {
     applicableVenues: string[];
     educationalValue: string[];
   }> {
-    console.log(`📚 Simulating processing of ${clubName} educational content`);
 
     // Simulate content analysis (in production, this would fetch and process actual content)
     const simulatedContent = {
@@ -383,7 +372,6 @@ export class EnhancedAIIntegrationService {
     venueIntelligence: any;
     systemStatus: any;
   }> {
-    console.log('🚀 Demonstrating full AI integration with yacht club educational content');
 
     // 1. Process yacht club educational content
     const educationalProcessing = await this.processYachtClubEducationalContent(
@@ -444,8 +432,6 @@ export class EnhancedAIIntegrationService {
         supportedVenues: ['hong-kong', 'san-francisco-bay', 'newport-rhode-island'],
       },
     };
-
-    console.log('✅ Full integration demonstration complete');
 
     return {
       educationalProcessing,

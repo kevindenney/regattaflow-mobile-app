@@ -2,6 +2,7 @@
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { CoachingSession } from '../types/coach';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface PaymentIntent {
   client_secret: string;
@@ -16,6 +17,7 @@ export interface PaymentResult {
   error?: string;
 }
 
+const logger = createLogger('PaymentService.native');
 export class PaymentService {
   /**
    * Create payment intent for coaching session
@@ -458,7 +460,7 @@ export class PaymentService {
     //   payment_intent: paymentIntentId,
     //   amount: amount,
     // });
-    console.log(`Simulated refund of ${amount} cents for payment ${paymentIntentId}`);
+    logger.debug(`Simulated refund of ${amount} cents for payment ${paymentIntentId}`);
   }
 
   private static async simulateCoachPayout(coachId: string, amount: number): Promise<void> {
@@ -468,7 +470,7 @@ export class PaymentService {
     //   currency: 'usd',
     //   destination: coach.stripe_account_id,
     // });
-    console.log(`Simulated payout of ${amount} cents to coach ${coachId}`);
+    logger.debug(`Simulated payout of ${amount} cents to coach ${coachId}`);
   }
 
   private static calculateRefundAmount(session: CoachingSession): number {

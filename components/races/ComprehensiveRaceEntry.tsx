@@ -43,6 +43,7 @@ import { AIValidationScreen, type ExtractedData, type FieldConfidenceMap } from 
 import { VenueLocationPicker } from './VenueLocationPicker';
 import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
 import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
@@ -74,6 +75,7 @@ interface ClassDivision {
   fleet_size: number;
 }
 
+const logger = createLogger('ComprehensiveRaceEntry');
 export function ComprehensiveRaceEntry({
   onSubmit,
   onCancel,
@@ -213,7 +215,7 @@ export function ComprehensiveRaceEntry({
     const loadRaceData = async () => {
       try {
         setLoading(true);
-        console.log('[ComprehensiveRaceEntry] Loading race data for:', existingRaceId);
+        logger.debug('[ComprehensiveRaceEntry] Loading race data for:', existingRaceId);
 
         const { data: race, error} = await supabase
           .from('regattas')
@@ -233,7 +235,7 @@ export function ComprehensiveRaceEntry({
           return;
         }
 
-        console.log('[ComprehensiveRaceEntry] Loaded race:', race);
+        logger.debug('[ComprehensiveRaceEntry] Loaded race:', race);
 
         // Populate basic fields
         setRaceName(race.name || '');
@@ -323,13 +325,9 @@ export function ComprehensiveRaceEntry({
             weather_fetched_at: race.metadata.weather_fetched_at,
             weather_confidence: race.metadata.weather_confidence,
           });
-          console.log('[ComprehensiveRaceEntry] Preserved original weather data:', {
-            provider: race.metadata.weather_provider,
-            fetched_at: race.metadata.weather_fetched_at,
-          });
         }
 
-        console.log('[ComprehensiveRaceEntry] Race data loaded successfully');
+        logger.debug('[ComprehensiveRaceEntry] Race data loaded successfully');
       } catch (err: any) {
         console.error('[ComprehensiveRaceEntry] Error loading race:', err);
         Alert.alert('Error', 'Failed to load race data');
@@ -376,13 +374,13 @@ export function ComprehensiveRaceEntry({
 
   const handleFileUpload = async (docType: 'nor' | 'si' | 'other') => {
     try {
-      console.log('=== FILE UPLOAD STARTED ===');
-      console.log('[handleFileUpload] Document type:', docType);
-      console.log('[handleFileUpload] Current user:', user?.id ? 'Authenticated' : 'NOT AUTHENTICATED');
-      console.log('[handleFileUpload] User ID:', user?.id);
-      console.log('[handleFileUpload] User email:', user?.email);
-      console.log('[handleFileUpload] Platform:', Platform.OS);
-      console.log('[handleFileUpload] Opening document picker...');
+      logger.debug('=== FILE UPLOAD STARTED ===');
+      logger.debug('[handleFileUpload] Document type:', docType);
+      logger.debug('[handleFileUpload] Current user:', user?.id ? 'Authenticated' : 'NOT AUTHENTICATED');
+      logger.debug('[handleFileUpload] User ID:', user?.id);
+      logger.debug('[handleFileUpload] User email:', user?.email);
+      logger.debug('[handleFileUpload] Platform:', Platform.OS);
+      logger.debug('[handleFileUpload] Opening document picker...');
 
       if (!user) {
         console.error('[handleFileUpload] No user authenticated!');
@@ -399,10 +397,10 @@ export function ComprehensiveRaceEntry({
         multiple: true, // Enable multi-file selection
       });
 
-      console.log('[handleFileUpload] Document picker result:', JSON.stringify(result, null, 2));
+      logger.debug('[handleFileUpload] Document picker result:', JSON.stringify(result, null, 2));
 
       if (result.canceled) {
-        console.log('[handleFileUpload] User cancelled');
+        logger.debug('[handleFileUpload] User cancelled');
         return;
       }
 
@@ -412,11 +410,11 @@ export function ComprehensiveRaceEntry({
         return;
       }
 
-      console.log(`[handleFileUpload] Processing ${result.assets.length} file(s)...`);
+      logger.debug(`[handleFileUpload] Processing ${result.assets.length} file(s)...`);
 
       // Process each file
       for (const file of result.assets) {
-        console.log('[handleFileUpload] Processing file:', file.name);
+        logger.debug('[handleFileUpload] Processing file:', file.name);
 
         // Create document entry with pending status
         const docId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -434,18 +432,18 @@ export function ComprehensiveRaceEntry({
 
           // Extract text based on file type
           if (file.mimeType === 'text/plain') {
-            console.log('[handleFileUpload] Reading plain text file...');
+            logger.debug('[handleFileUpload] Reading plain text file...');
             documentText = await FileSystem.readAsStringAsync(file.uri);
-            console.log('[handleFileUpload] Plain text read successfully:', documentText.length, 'characters');
+            logger.debug('[handleFileUpload] Plain text read successfully:', documentText.length, 'characters');
           } else if (file.mimeType === 'application/pdf') {
-            console.log('[handleFileUpload] Extracting PDF text...');
+            logger.debug('[handleFileUpload] Extracting PDF text...');
             const extractionResult = await PDFExtractionService.extractText(file.uri, {
               maxPages: 50,
             });
 
             if (extractionResult.success && extractionResult.text) {
               documentText = extractionResult.text;
-              console.log('[handleFileUpload] PDF text extracted successfully:', documentText.length, 'characters');
+              logger.debug('[handleFileUpload] PDF text extracted successfully:', documentText.length, 'characters');
             } else {
               throw new Error(extractionResult.error || 'PDF extraction failed');
             }
@@ -457,7 +455,7 @@ export function ComprehensiveRaceEntry({
 
           // Detect document type
           const detectedType = detectDocumentType(file.name, documentText);
-          console.log('[handleFileUpload] Detected document type:', detectedType);
+          logger.debug('[handleFileUpload] Detected document type:', detectedType);
 
           // Update document status to complete
           setUploadedDocuments(prev => prev.map(doc =>
@@ -478,7 +476,7 @@ export function ComprehensiveRaceEntry({
             extractedText: documentText
           }]);
 
-          console.log('[handleFileUpload] Document processed successfully:', file.name);
+          logger.debug('[handleFileUpload] Document processed successfully:', file.name);
         } catch (fileError: any) {
           console.error('[handleFileUpload] Error processing file:', file.name, fileError);
 
@@ -492,8 +490,8 @@ export function ComprehensiveRaceEntry({
       }
 
       setCurrentDocType(null);
-      console.log('[handleFileUpload] All files processed');
-      console.log('=== FILE UPLOAD COMPLETED ===');
+      logger.debug('[handleFileUpload] All files processed');
+      logger.debug('=== FILE UPLOAD COMPLETED ===');
     } catch (error: any) {
       console.error('=== FILE UPLOAD ERROR ===');
       console.error('[handleFileUpload] Error type:', error.constructor.name);
@@ -507,11 +505,11 @@ export function ComprehensiveRaceEntry({
   };
 
   const extractFromText = async (text: string) => {
-    console.log('[extractFromText] Starting extraction...');
-    console.log('[extractFromText] Text length:', text.length);
+    logger.debug('[extractFromText] Starting extraction...');
+    logger.debug('[extractFromText] Text length:', text.length);
 
     if (!text.trim()) {
-      console.log('[extractFromText] No text provided');
+      logger.debug('[extractFromText] No text provided');
       Alert.alert('No Text', 'Please enter race information to extract');
       setExtracting(false);
       return;
@@ -522,11 +520,11 @@ export function ComprehensiveRaceEntry({
     // Check if input is a URL
     const urlRegex = /^https?:\/\//i;
     if (urlRegex.test(text.trim())) {
-      console.log('[extractFromText] Detected URL input:', text.trim());
+      logger.debug('[extractFromText] Detected URL input:', text.trim());
 
       try {
         // Fetch PDF from URL
-        console.log('[extractFromText] Fetching PDF from URL...');
+        logger.debug('[extractFromText] Fetching PDF from URL...');
         const response = await fetch(text.trim());
 
         if (!response.ok) {
@@ -534,7 +532,7 @@ export function ComprehensiveRaceEntry({
         }
 
         const contentType = response.headers.get('content-type');
-        console.log('[extractFromText] Content-Type:', contentType);
+        logger.debug('[extractFromText] Content-Type:', contentType);
 
         if (!contentType?.includes('pdf')) {
           Alert.alert('Invalid File Type', `Expected a PDF but received ${contentType}. Please provide a URL to a PDF document.`);
@@ -545,7 +543,7 @@ export function ComprehensiveRaceEntry({
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
 
-        console.log('[extractFromText] PDF downloaded, extracting text...');
+        logger.debug('[extractFromText] PDF downloaded, extracting text...');
 
         // Extract text from PDF
         const extractionResult = await PDFExtractionService.extractText(blobUrl, {
@@ -560,7 +558,7 @@ export function ComprehensiveRaceEntry({
         }
 
         documentText = extractionResult.text;
-        console.log('[extractFromText] PDF text extracted successfully:', documentText.length, 'characters');
+        logger.debug('[extractFromText] PDF text extracted successfully:', documentText.length, 'characters');
 
         // Update the text area with extracted content
         const urlFilename = text.trim().split('/').pop() || 'document.pdf';
@@ -575,13 +573,13 @@ export function ComprehensiveRaceEntry({
     }
 
     try {
-      console.log('[extractFromText] Creating agent...');
+      logger.debug('[extractFromText] Creating agent...');
       const agent = new ComprehensiveRaceExtractionAgent();
-      console.log('[extractFromText] Calling extractRaceDetails...');
-      console.log('[extractFromText] Document length:', documentText.length, 'characters');
+      logger.debug('[extractFromText] Calling extractRaceDetails...');
+      logger.debug('[extractFromText] Document length:', documentText.length, 'characters');
 
       const result = await agent.extractRaceDetails(documentText);
-      console.log('[extractFromText] Result:', result);
+      logger.debug('[extractFromText] Result:', result);
 
       if (!result.success || !result.data) {
         console.error('[extractFromText] Extraction failed:', result.error);
@@ -595,11 +593,11 @@ export function ComprehensiveRaceEntry({
       const missingFieldsMessage = (result as any).missingFields;
 
       if (isPartialExtraction) {
-        console.log('[extractFromText] Partial extraction - some fields missing:', missingFieldsMessage);
+        logger.debug('[extractFromText] Partial extraction - some fields missing:', missingFieldsMessage);
       }
 
       const data = result.data;
-      console.log('[extractFromText] Extracted', Object.keys(data).length, 'fields');
+      logger.debug('[extractFromText] Extracted', Object.keys(data).length, 'fields');
 
       // Phase 3: Show AI Validation Screen instead of auto-filling
       // Generate confidence scores for extracted fields
@@ -622,7 +620,7 @@ export function ComprehensiveRaceEntry({
         }
       });
 
-      console.log('[extractFromText] Showing validation screen with', Object.keys(data).length, 'fields');
+      logger.debug('[extractFromText] Showing validation screen with', Object.keys(data).length, 'fields');
 
       // Store extracted data and confidence scores
       setExtractedDataForValidation(data);
@@ -641,7 +639,7 @@ export function ComprehensiveRaceEntry({
   };
 
   const handleExtractFromText = async () => {
-    console.log('[handleExtractFromText] Button clicked!');
+    logger.debug('[handleExtractFromText] Button clicked!');
     setExtracting(true);
     await extractFromText(freeformText);
   };
@@ -650,7 +648,7 @@ export function ComprehensiveRaceEntry({
    * Process multiple uploaded documents using Edge Function multi-document mode
    */
   const processMultipleDocuments = async () => {
-    console.log('[processMultipleDocuments] Starting multi-document processing...');
+    logger.debug('[processMultipleDocuments] Starting multi-document processing...');
 
     const completedDocs = uploadedDocuments.filter(doc => doc.status === 'complete' && doc.content);
 
@@ -661,7 +659,7 @@ export function ComprehensiveRaceEntry({
 
     if (completedDocs.length === 1) {
       // Single document mode - use existing extraction
-      console.log('[processMultipleDocuments] Only one document, using single-document mode');
+      logger.debug('[processMultipleDocuments] Only one document, using single-document mode');
       setExtracting(true);
       await extractFromText(completedDocs[0].content!);
       return;
@@ -671,7 +669,7 @@ export function ComprehensiveRaceEntry({
       setExtracting(true);
       setAggregationStatus('processing');
 
-      console.log(`[processMultipleDocuments] Processing ${completedDocs.length} documents...`);
+      logger.debug(`[processMultipleDocuments] Processing ${completedDocs.length} documents...`);
 
       // Prepare documents for Edge Function
       const documents = completedDocs.map(doc => ({
@@ -705,13 +703,12 @@ export function ComprehensiveRaceEntry({
       }
 
       const result = await response.json();
-      console.log('[processMultipleDocuments] Edge Function result:', result);
+      logger.debug('[processMultipleDocuments] Edge Function result:', result);
 
       // Extract aggregation metadata
       if (result.aggregation_metadata) {
         setAggregationMetadata(result.aggregation_metadata);
         setAggregationStatus('complete');
-        console.log('[processMultipleDocuments] Aggregation metadata:', result.aggregation_metadata);
       }
 
       // Extract race data and confidence scores
@@ -745,11 +742,10 @@ export function ComprehensiveRaceEntry({
    * Populate all form fields with validated data
    */
   const handleValidationConfirm = (validatedData: ExtractedData) => {
-    console.log('=== VALIDATION CONFIRM CALLED ===');
-    console.log('[handleValidationConfirm] Validated data keys:', Object.keys(validatedData));
-    console.log('[handleValidationConfirm] Marks count:', validatedData.marks?.length || 0);
-    console.log('[handleValidationConfirm] Marks data:', validatedData.marks);
-    console.log('[handleValidationConfirm] Racing area:', validatedData.racingArea);
+    logger.debug('=== VALIDATION CONFIRM CALLED ===');
+    logger.debug('[handleValidationConfirm] Validated data keys:', Object.keys(validatedData));
+    logger.debug('[handleValidationConfirm] Marks count:', validatedData.marks?.length || 0);
+    logger.debug('[handleValidationConfirm] Racing area:', validatedData.racingArea);
 
     // Auto-fill all validated fields
     if (validatedData.raceName) setRaceName(validatedData.raceName);
@@ -824,8 +820,8 @@ export function ComprehensiveRaceEntry({
     setShowValidationScreen(false);
     // DON'T clear extractedDataForValidation - we need it to save marks!
     // setExtractedDataForValidation(null);
-    console.log('[handleValidationConfirm] extractedDataForValidation state after confirm:', extractedDataForValidation);
-    console.log('[handleValidationConfirm] Marks still in state:', extractedDataForValidation?.marks?.length || 0);
+    logger.debug('[handleValidationConfirm] extractedDataForValidation state after confirm:', extractedDataForValidation);
+    logger.debug('[handleValidationConfirm] Marks still in state:', extractedDataForValidation?.marks?.length || 0);
 
     // Show different message based on completeness
     const message = validatedData.raceDate
@@ -839,7 +835,7 @@ export function ComprehensiveRaceEntry({
    * Phase 3: Handle AI Validation Screen Cancellation
    */
   const handleValidationCancel = () => {
-    console.log('[handleValidationCancel] User cancelled validation');
+    logger.debug('[handleValidationCancel] User cancelled validation');
     setShowValidationScreen(false);
     setExtractedDataForValidation(null);
     setConfidenceScoresForValidation({});
@@ -850,7 +846,7 @@ export function ComprehensiveRaceEntry({
    */
   const handleRacingAreaSelected = (coordinates: [number, number][]) => {
     setRacingAreaPolygon(coordinates);
-    console.log('✅ Racing area polygon captured:', coordinates.length, 'points');
+
   };
 
   /**
@@ -858,15 +854,15 @@ export function ComprehensiveRaceEntry({
    */
   const uploadPendingDocuments = async (regattaId: string) => {
     if (pendingDocuments.length === 0) {
-      console.log('[uploadPendingDocuments] No documents to upload');
+      logger.debug('[uploadPendingDocuments] No documents to upload');
       return;
     }
 
-    console.log(`[uploadPendingDocuments] Uploading ${pendingDocuments.length} documents for regatta ${regattaId}`);
+    logger.debug(`[uploadPendingDocuments] Uploading ${pendingDocuments.length} documents for regatta ${regattaId}`);
 
     for (const doc of pendingDocuments) {
       try {
-        console.log('[uploadPendingDocuments] Processing:', doc.file.name);
+        logger.debug('[uploadPendingDocuments] Processing:', doc.file.name);
 
         // Read file content
         let fileData: string;
@@ -887,7 +883,7 @@ export function ComprehensiveRaceEntry({
         const fileName = `${regattaId}/${Date.now()}_${doc.file.name}`;
         const storagePath = `race-documents/${fileName}`;
 
-        console.log('[uploadPendingDocuments] Uploading to storage:', storagePath);
+        logger.debug('[uploadPendingDocuments] Uploading to storage:', storagePath);
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('documents')
@@ -901,7 +897,7 @@ export function ComprehensiveRaceEntry({
           throw uploadError;
         }
 
-        console.log('[uploadPendingDocuments] Upload successful:', uploadData);
+        logger.debug('[uploadPendingDocuments] Upload successful:', uploadData);
 
         // Get public URL (or signed URL if bucket is private)
         const { data: urlData } = supabase.storage
@@ -926,7 +922,7 @@ export function ComprehensiveRaceEntry({
           updated_at: new Date().toISOString(),
         };
 
-        console.log('[uploadPendingDocuments] Creating document record:', documentRecord.filename);
+        logger.debug('[uploadPendingDocuments] Creating document record:', documentRecord.filename);
 
         const { error: dbError } = await supabase
           .from('documents')
@@ -937,7 +933,7 @@ export function ComprehensiveRaceEntry({
           throw dbError;
         }
 
-        console.log('[uploadPendingDocuments] Document record created successfully');
+        logger.debug('[uploadPendingDocuments] Document record created successfully');
       } catch (error: any) {
         console.error('[uploadPendingDocuments] Error uploading document:', doc.file.name, error);
         // Continue with other documents even if one fails
@@ -948,41 +944,41 @@ export function ComprehensiveRaceEntry({
       }
     }
 
-    console.log('[uploadPendingDocuments] All documents processed');
+    logger.debug('[uploadPendingDocuments] All documents processed');
   };
 
   const handleSubmit = async () => {
-    console.log('=== HANDLESUBMIT CALLED ===');
-    console.log('[handleSubmit] raceName:', raceName);
-    console.log('[handleSubmit] raceDate:', raceDate);
-    console.log('[handleSubmit] venue:', venue);
-    console.log('[handleSubmit] saving state:', saving);
+    logger.debug('=== HANDLESUBMIT CALLED ===');
+    logger.debug('[handleSubmit] raceName:', raceName);
+    logger.debug('[handleSubmit] raceDate:', raceDate);
+    logger.debug('[handleSubmit] venue:', venue);
+    logger.debug('[handleSubmit] saving state:', saving);
 
     // Validation
     if (!raceName.trim()) {
-      console.log('[handleSubmit] VALIDATION FAILED: No race name');
+      logger.debug('[handleSubmit] VALIDATION FAILED: No race name');
       Alert.alert('Required', 'Please enter a race name');
       return;
     }
     if (!raceDate) {
-      console.log('[handleSubmit] VALIDATION FAILED: No race date');
+      logger.debug('[handleSubmit] VALIDATION FAILED: No race date');
       Alert.alert('Required', 'Please enter a race date');
       return;
     }
     if (!venue.trim()) {
-      console.log('[handleSubmit] VALIDATION FAILED: No venue');
+      logger.debug('[handleSubmit] VALIDATION FAILED: No venue');
       Alert.alert('Required', 'Please enter a venue');
       return;
     }
 
-    console.log('[handleSubmit] Validation passed, setting saving=true');
+    logger.debug('[handleSubmit] Validation passed, setting saving=true');
     setSaving(true);
 
     try {
-      console.log('[handleSubmit] Starting try block...');
+      logger.debug('[handleSubmit] Starting try block...');
 
       // Use user from AuthProvider hook (already authenticated)
-      console.log('[handleSubmit] Checking authenticated user...');
+      logger.debug('[handleSubmit] Checking authenticated user...');
 
       if (!user?.id) {
         console.error('[handleSubmit] No user found in AuthProvider');
@@ -991,8 +987,7 @@ export function ComprehensiveRaceEntry({
         return;
       }
 
-      console.log('[handleSubmit] ✅ Authenticated user ID:', user.id);
-      console.log('[handleSubmit] User email:', user.email);
+      logger.debug('[handleSubmit] User email:', user.email);
 
       // Weather data handling:
       // - Edit mode: Preserve original weather data (historical forecast)
@@ -1001,8 +996,8 @@ export function ComprehensiveRaceEntry({
 
       if (existingRaceId && originalWeatherData) {
         // Editing existing race - preserve original weather data
-        console.log('[handleSubmit] Edit mode: Preserving original weather data');
-        console.log('[handleSubmit] Original weather provider:', originalWeatherData.weather_provider);
+        logger.debug('[handleSubmit] Edit mode: Preserving original weather data');
+        logger.debug('[handleSubmit] Original weather provider:', originalWeatherData.weather_provider);
         weatherData = {
           wind: originalWeatherData.wind,
           tide: originalWeatherData.tide,
@@ -1012,7 +1007,7 @@ export function ComprehensiveRaceEntry({
         };
       } else {
         // Creating new race - fetch fresh weather data
-        console.log('[handleSubmit] Create mode: Fetching weather data for race...');
+        logger.debug('[handleSubmit] Create mode: Fetching weather data for race...');
         weatherData = venueCoordinates
           ? await RaceWeatherService.fetchWeatherByCoordinates(
               venueCoordinates.lat,
@@ -1024,7 +1019,6 @@ export function ComprehensiveRaceEntry({
               venue.trim(),
               raceDate
             );
-        console.log('[handleSubmit] Weather data:', weatherData);
       }
 
       const raceData = {
@@ -1073,6 +1067,11 @@ export function ComprehensiveRaceEntry({
         potential_courses: potentialCourses.length > 0 ? potentialCourses : null,
         course_selection_criteria: courseSelectionCriteria.trim() || null,
         course_diagram_url: courseDiagramUrl.trim() || null,
+        // Save racing area polygon as GeoJSON for display on race detail map
+        racing_area_polygon: racingAreaPolygon && racingAreaPolygon.length >= 3 ? {
+          type: 'Polygon',
+          coordinates: [[...racingAreaPolygon, racingAreaPolygon[0]]] // Close the polygon
+        } : null,
 
         // Rules & Penalties
         scoring_system: scoringSystem || 'Low Point',
@@ -1121,7 +1120,7 @@ export function ComprehensiveRaceEntry({
 
         // Upload any pending documents
         if (pendingDocuments.length > 0) {
-          console.log('[handleSubmit] Uploading pending documents for existing race...');
+          logger.debug('[handleSubmit] Uploading pending documents for existing race...');
           await uploadPendingDocuments(existingRaceId);
         }
 
@@ -1138,43 +1137,36 @@ export function ComprehensiveRaceEntry({
         onSubmit?.(existingRaceId, extractionMetadata);
       } else {
         // Create new race
-        console.log('[handleSubmit] ===== CREATING NEW RACE =====');
-        console.log('[handleSubmit] Authenticated user ID:', user.id);
-        console.log('[handleSubmit] Race data keys:', Object.keys(raceData));
-        console.log('[handleSubmit] Race data preview:', {
-          created_by: raceData.created_by,
-          name: raceData.name,
-          start_date: raceData.start_date,
-          status: raceData.status
-        });
+        logger.debug('[handleSubmit] ===== CREATING NEW RACE =====');
+        logger.debug('[handleSubmit] Authenticated user ID:', user.id);
+        logger.debug('[handleSubmit] Race data keys:', Object.keys(raceData));
 
-        console.log('[handleSubmit] Calling supabase.from("regattas").insert()...');
+        logger.debug('[handleSubmit] Calling supabase.from("regattas").insert()...');
         const { data, error } = await supabase
           .from('regattas')
           .insert(raceData)
           .select('id')
           .single();
 
-        console.log('[handleSubmit] ===== INSERT COMPLETE =====');
-        console.log('[handleSubmit] Insert returned data:', data);
-        console.log('[handleSubmit] Insert returned error:', error);
+        logger.debug('[handleSubmit] ===== INSERT COMPLETE =====');
+        logger.debug('[handleSubmit] Insert returned error:', error);
 
         if (error) {
           console.error('[handleSubmit] Race creation error:', error);
           throw error;
         }
 
-        console.log('[handleSubmit] ===== RACE CREATED SUCCESSFULLY =====');
-        console.log('[handleSubmit] Race ID:', data.id);
-        console.log('[handleSubmit] Race ID type:', typeof data?.id);
-        console.log('[handleSubmit] Race ID length:', data?.id?.length);
+        logger.debug('[handleSubmit] ===== RACE CREATED SUCCESSFULLY =====');
+        logger.debug('[handleSubmit] Race ID:', data.id);
+        logger.debug('[handleSubmit] Race ID type:', typeof data?.id);
+        logger.debug('[handleSubmit] Race ID length:', data?.id?.length);
 
         // Create a race_event for this regatta (needed for marks storage)
         // race_events are individual races within a regatta
         let raceEventId: string | null = null;
 
         if (extractedDataForValidation?.marks || extractedDataForValidation?.racingArea) {
-          console.log('[handleSubmit] Creating race_event for marks storage...');
+          logger.debug('[handleSubmit] Creating race_event for marks storage...');
 
           const raceEventData = {
             regatta_id: data.id,
@@ -1197,13 +1189,13 @@ export function ComprehensiveRaceEntry({
             Alert.alert('Warning', 'Race created but course marks could not be saved');
           } else {
             raceEventId = raceEventResult.id;
-            console.log('[handleSubmit] Race event created:', raceEventId);
+            logger.debug('[handleSubmit] Race event created:', raceEventId);
           }
         }
 
         // Save extracted marks to database (if any)
         if (raceEventId && extractedDataForValidation?.marks && extractedDataForValidation.marks.length > 0) {
-          console.log('[handleSubmit] Saving', extractedDataForValidation.marks.length, 'extracted marks to database...');
+          logger.debug('[handleSubmit] Saving', extractedDataForValidation.marks.length, 'extracted marks to database...');
 
           const marksToInsert = extractedDataForValidation.marks.map(mark => ({
             race_id: raceEventId,
@@ -1227,7 +1219,7 @@ export function ComprehensiveRaceEntry({
             // Don't throw - race was created successfully, just log the error
             Alert.alert('Warning', 'Race created but some marks could not be saved');
           } else {
-            console.log('[handleSubmit] Marks saved successfully');
+            logger.debug('[handleSubmit] Marks saved successfully');
           }
         }
 
@@ -1235,7 +1227,7 @@ export function ComprehensiveRaceEntry({
         // Priority 1: User-drawn polygon from map
         // Priority 2: Extracted racing area from AI
         if (raceEventId && (racingAreaPolygon || extractedDataForValidation?.racingArea)) {
-          console.log('[handleSubmit] Saving racing area to database...');
+          logger.debug('[handleSubmit] Saving racing area to database...');
 
           let racingAreaData: any = {
             race_id: raceEventId,
@@ -1247,7 +1239,7 @@ export function ComprehensiveRaceEntry({
 
           // Use user-drawn polygon if available
           if (racingAreaPolygon && racingAreaPolygon.length >= 3) {
-            console.log('[handleSubmit] Using user-drawn racing area polygon:', racingAreaPolygon.length, 'points');
+            logger.debug('[handleSubmit] Using user-drawn racing area polygon:', racingAreaPolygon.length, 'points');
 
             racingAreaData.polygon_coordinates = racingAreaPolygon;
 
@@ -1262,7 +1254,7 @@ export function ComprehensiveRaceEntry({
           }
           // Fall back to AI-extracted bounds if no user polygon
           else if (extractedDataForValidation?.racingArea) {
-            console.log('[handleSubmit] Using AI-extracted racing area bounds');
+            logger.debug('[handleSubmit] Using AI-extracted racing area bounds');
 
             racingAreaData.bounds_north = extractedDataForValidation.racingArea.bounds.north;
             racingAreaData.bounds_south = extractedDataForValidation.racingArea.bounds.south;
@@ -1279,18 +1271,18 @@ export function ComprehensiveRaceEntry({
             // Don't throw - race was created successfully, just log the error
             Alert.alert('Warning', 'Race created but racing area could not be saved');
           } else {
-            console.log('[handleSubmit] Racing area saved successfully');
+            logger.debug('[handleSubmit] Racing area saved successfully');
           }
         }
 
         // Upload any pending documents
         if (pendingDocuments.length > 0) {
-          console.log('[handleSubmit] Uploading', pendingDocuments.length, 'pending documents...');
+          logger.debug('[handleSubmit] Uploading', pendingDocuments.length, 'pending documents...');
           await uploadPendingDocuments(data.id);
-          console.log('[handleSubmit] Document upload complete');
+          logger.debug('[handleSubmit] Document upload complete');
         }
 
-        console.log('[handleSubmit] All operations complete, showing success alert...');
+        logger.debug('[handleSubmit] All operations complete, showing success alert...');
 
         if (Platform.OS === 'web') {
           // Web: Use window.alert for immediate feedback
@@ -1300,7 +1292,7 @@ export function ComprehensiveRaceEntry({
           Alert.alert('Success', 'Race created successfully!');
         }
 
-        console.log('[handleSubmit] Alert shown, preparing to navigate...');
+        logger.debug('[handleSubmit] Alert shown, preparing to navigate...');
 
         // Small delay to ensure database transaction is committed
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -1313,20 +1305,19 @@ export function ComprehensiveRaceEntry({
           venueId: undefined, // Will be populated from venue lookup if needed
         };
 
-        console.log('[handleSubmit] ===== CALLING ONSUBMIT CALLBACK =====');
-        console.log('[handleSubmit] Regatta ID:', data.id);
-        console.log('[handleSubmit] Race Event ID:', raceEventId);
-        console.log('[handleSubmit] Extraction metadata:', extractionMetadata);
+        logger.debug('[handleSubmit] ===== CALLING ONSUBMIT CALLBACK =====');
+        logger.debug('[handleSubmit] Regatta ID:', data.id);
+        logger.debug('[handleSubmit] Race Event ID:', raceEventId);
 
         try {
           if (onSubmit) {
             // Pass regatta ID (race detail screen expects this)
             // Race detail screen will look up associated race_event to load marks
-            console.log('[handleSubmit] Passing regatta ID:', data.id);
+            logger.debug('[handleSubmit] Passing regatta ID:', data.id);
             onSubmit(data.id, extractionMetadata);
-            console.log('[handleSubmit] onSubmit callback completed');
+            logger.debug('[handleSubmit] onSubmit callback completed');
           } else {
-            console.log('[handleSubmit] No onSubmit callback provided');
+            logger.debug('[handleSubmit] No onSubmit callback provided');
           }
         } catch (navError) {
           console.error('[handleSubmit] Navigation error:', navError);
@@ -1342,7 +1333,7 @@ export function ComprehensiveRaceEntry({
       console.error('[handleSubmit] Full error object:', error);
       Alert.alert('Error', error.message || 'Failed to save race');
     } finally {
-      console.log('[handleSubmit] Finally block - setting saving=false');
+      logger.debug('[handleSubmit] Finally block - setting saving=false');
       setSaving(false);
     }
   };
@@ -1639,7 +1630,7 @@ export function ComprehensiveRaceEntry({
           <TextInput
             value={freeformText}
             onChangeText={(text) => {
-              console.log('[ComprehensiveRaceEntry] Text changed, length:', text.length);
+              logger.debug('[ComprehensiveRaceEntry] Text changed, length:', text.length);
               setFreeformText(text);
             }}
             placeholder="Paste a PDF URL (e.g., https://example.com/sailing-instructions.pdf) OR paste text: 'Croucher Series Race 3 at Victoria Harbour, Nov 17 2025, 2 starts (Dragon 10:00, J/70 10:05), VHF 72, PRO: John Smith, 720° penalty system...'"
@@ -1652,8 +1643,8 @@ export function ComprehensiveRaceEntry({
           />
           <Pressable
             onPress={() => {
-              console.log('[ComprehensiveRaceEntry] Extract button clicked!');
-              console.log('[ComprehensiveRaceEntry] freeformText length:', freeformText.length);
+              logger.debug('[ComprehensiveRaceEntry] Extract button clicked!');
+              logger.debug('[ComprehensiveRaceEntry] freeformText length:', freeformText.length);
               handleExtractFromText();
             }}
             disabled={extracting || !freeformText.trim()}
@@ -2287,9 +2278,9 @@ export function ComprehensiveRaceEntry({
           )}
           <Pressable
             onPress={() => {
-              console.log('=== CREATE RACE BUTTON PRESSED ===');
-              console.log('[Button] disabled:', saving);
-              console.log('[Button] Calling handleSubmit...');
+              logger.debug('=== CREATE RACE BUTTON PRESSED ===');
+              logger.debug('[Button] disabled:', saving);
+              logger.debug('[Button] Calling handleSubmit...');
               handleSubmit();
             }}
             disabled={saving}

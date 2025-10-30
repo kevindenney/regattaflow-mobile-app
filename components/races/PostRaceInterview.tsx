@@ -91,13 +91,11 @@ Violations/Penalties: ${description.violations || 'None'}
 
       if (error) throw error;
 
-      console.log('✅ Race description saved');
-
       // Trigger AI analysis in background
       const analysisAgent = new RaceAnalysisAgent();
       analysisAgent.analyzeRace({ timerSessionId: sessionId })
         .then((result) => {
-          console.log('✅ AI analysis complete:', result.success ? 'Success' : 'Failed');
+
           if (!result.success) {
             console.error('AI analysis error:', result.error);
           }

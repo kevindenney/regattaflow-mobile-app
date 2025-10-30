@@ -19,7 +19,7 @@ import {
   Badge,
 } from '@/components/ui';
 import { supabase } from '@/services/supabase';
-import { raceRegistrationService, EntryFormData } from '@/services/RaceRegistrationService';
+import { raceRegistrationService, EntryFormData, RaceEntry } from '@/services/RaceRegistrationService';
 import { crewManagementService, CrewMemberWithAvailability } from '@/services/crewManagementService';
 
 interface RaceRegistrationFormProps {
@@ -27,6 +27,7 @@ interface RaceRegistrationFormProps {
   userId: string;
   onSuccess: (entryId: string) => void;
   onCancel?: () => void;
+  onQueued?: (entry: RaceEntry) => void;
 }
 
 interface Boat {
@@ -42,6 +43,7 @@ export function RaceRegistrationForm({
   userId,
   onSuccess,
   onCancel,
+  onQueued,
 }: RaceRegistrationFormProps) {
   const [loading, setLoading] = useState(false);
   const [boats, setBoats] = useState<Boat[]>([]);
@@ -180,14 +182,26 @@ export function RaceRegistrationForm({
       const result = await raceRegistrationService.createEntry(userId, data);
 
       if (result.success && result.entry) {
-        Alert.alert('Success', 'Race entry created successfully!');
-        onSuccess(result.entry.id);
+        if (result.queued) {
+          Alert.alert('Offline', 'Entry saved locally and will sync when you are back online.');
+          onQueued?.(result.entry);
+          onCancel?.();
+        } else {
+          Alert.alert('Success', 'Race entry created successfully!');
+          onSuccess(result.entry.id);
+        }
       } else {
         throw new Error(result.error || 'Failed to create entry');
       }
     } catch (error: any) {
       console.error('Registration error:', error);
-      Alert.alert('Error', error.message || 'Failed to create race entry');
+      if (error?.queuedForSync && error?.entity) {
+        Alert.alert('Offline', 'Entry will sync once you are online.');
+        onQueued?.(error.entity as RaceEntry);
+        onCancel?.();
+      } else {
+        Alert.alert('Error', error.message || 'Failed to create race entry');
+      }
     } finally {
       setLoading(false);
     }

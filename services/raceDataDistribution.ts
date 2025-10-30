@@ -73,7 +73,6 @@ export class RaceDataDistributionService {
     const startTime = Date.now();
 
     try {
-      console.log(`🌊 [RACE_DISTRIBUTION] Starting distribution for race ${raceId}`);
 
       // Get race event details with enhanced data
       const raceData = await this.buildRaceDataPackage(raceId);
@@ -84,7 +83,7 @@ export class RaceDataDistributionService {
       // Get registered sailors
       const sailors = await this.getRegisteredSailors(raceId);
       if (sailors.length === 0) {
-        console.log('🔴 [RACE_DISTRIBUTION] No registered sailors found');
+
         return {
           success: true,
           sailors_reached: 0,
@@ -108,9 +107,6 @@ export class RaceDataDistributionService {
           successCount++;
         } else {
           failedDeliveries.push(sailors[index].user_id);
-          console.error(`🔴 [RACE_DISTRIBUTION] Failed delivery to ${sailors[index].user_id}:`,
-            result.status === 'rejected' ? result.reason : 'Unknown error'
-          );
         }
       });
 
@@ -123,8 +119,6 @@ export class RaceDataDistributionService {
         distribution_time: Date.now() - startTime,
       });
 
-      console.log(`✅ [RACE_DISTRIBUTION] Completed: ${successCount}/${sailors.length} sailors reached`);
-
       return {
         success: failedDeliveries.length < sailors.length / 2, // Success if less than 50% failed
         sailors_reached: successCount,
@@ -134,7 +128,7 @@ export class RaceDataDistributionService {
       };
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Distribution failed:', error);
+
       return {
         success: false,
         sailors_reached: 0,
@@ -165,7 +159,7 @@ export class RaceDataDistributionService {
         .single();
 
       if (raceError || !raceEvent) {
-        console.error('🔴 [RACE_DISTRIBUTION] Failed to fetch race event:', raceError);
+
         return null;
       }
 
@@ -195,7 +189,7 @@ export class RaceDataDistributionService {
       return dataPackage;
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to build data package:', error);
+
       return null;
     }
   }
@@ -225,7 +219,7 @@ export class RaceDataDistributionService {
         ],
       };
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to get venue intelligence:', error);
+
       return undefined;
     }
   }
@@ -264,7 +258,7 @@ export class RaceDataDistributionService {
       return recommendations;
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to get equipment recommendations:', error);
+
       return undefined;
     }
   }
@@ -294,7 +288,7 @@ export class RaceDataDistributionService {
         .eq('status', 'confirmed');
 
       if (error) {
-        console.error('🔴 [RACE_DISTRIBUTION] Failed to fetch sailors:', error);
+
         return [];
       }
 
@@ -306,7 +300,7 @@ export class RaceDataDistributionService {
       }));
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Error fetching sailors:', error);
+
       return [];
     }
   }
@@ -333,11 +327,9 @@ export class RaceDataDistributionService {
       // 4. Send email backup (optional)
       // await this.sendEmailNotification(sailor, raceData);
 
-      console.log(`✅ [RACE_DISTRIBUTION] Delivered to ${sailor.full_name}`);
       return true;
 
     } catch (error) {
-      console.error(`🔴 [RACE_DISTRIBUTION] Delivery failed for ${sailor.full_name}:`, error);
       return false;
     }
   }
@@ -405,7 +397,7 @@ export class RaceDataDistributionService {
       });
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to send notification:', error);
+
     }
   }
 
@@ -422,7 +414,7 @@ export class RaceDataDistributionService {
           metrics: metrics,
         });
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to log distribution:', error);
+
     }
   }
 
@@ -456,7 +448,7 @@ export class RaceDataDistributionService {
       };
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to get distribution status:', error);
+
       return { is_distributed: false };
     }
   }
@@ -475,7 +467,6 @@ export class RaceDataDistributionService {
         .limit(1);
 
       if (!lastLog?.length || !lastLog[0].metrics?.failed_deliveries?.length) {
-        console.log('🔵 [RACE_DISTRIBUTION] No failed deliveries to retry');
         return {
           success: true,
           sailors_reached: 0,
@@ -490,7 +481,7 @@ export class RaceDataDistributionService {
       return await this.distributeRaceData(raceId);
 
     } catch (error) {
-      console.error('🔴 [RACE_DISTRIBUTION] Failed to retry distributions:', error);
+
       throw error;
     }
   }

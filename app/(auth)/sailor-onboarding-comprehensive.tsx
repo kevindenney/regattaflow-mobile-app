@@ -144,8 +144,6 @@ export default function SailorOnboardingComprehensive() {
   // Debug: Log race data on mount
   React.useEffect(() => {
     if (upcomingRaces.length > 0) {
-      console.log('📊 Upcoming races data:', upcomingRaces);
-      console.log('📊 First race sample:', upcomingRaces[0]);
     }
   }, []);
 
@@ -153,7 +151,6 @@ export default function SailorOnboardingComprehensive() {
 
   // Select race as "next race" and populate form
   const selectAsNextRace = (race: any, index: number) => {
-    console.log('📅 Selecting race as next:', race);
 
     setNextRace({
       name: race.name || '',
@@ -170,12 +167,6 @@ export default function SailorOnboardingComprehensive() {
       setSelectedRaces([...selectedRaces, index]);
     }
 
-    console.log('✅ Next race set:', {
-      name: race.name,
-      date: race.date,
-      startTime: race.startTime || race.time,
-      location: race.location
-    });
   };
 
   // Toggle race selection for keeping in calendar
@@ -290,7 +281,6 @@ export default function SailorOnboardingComprehensive() {
     setSubmitting(true);
 
     try {
-      console.log('🚀 Starting onboarding save for user:', user.id);
 
       // Update user profile with onboarding data
       const profileUpdates = {
@@ -313,27 +303,23 @@ export default function SailorOnboardingComprehensive() {
         }
       };
 
-      console.log('📝 Updating user profile with:', profileUpdates);
-
       const { error: userUpdateError } = await supabase
         .from('users')
         .update(profileUpdates)
         .eq('id', user.id);
 
       if (userUpdateError) {
-        console.error('❌ User update error:', userUpdateError);
+
         throw userUpdateError;
       }
 
-      console.log('✅ User profile updated successfully');
-
       // Only navigate if component is still mounted
       if (isMounted) {
-        console.log('🎯 Navigating to dashboard...');
+
         router.replace('/(tabs)/races');
       }
     } catch (error: any) {
-      console.error('❌ Error saving onboarding data:', error);
+
       // Only show alert if component is still mounted
       if (isMounted) {
         Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');

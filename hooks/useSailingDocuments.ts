@@ -63,7 +63,6 @@ export const useSailingDocuments = (userId?: string) => {
       }, 200);
 
       // Step 1: Upload phase
-      console.log(`📚 Starting upload: ${metadata.title} (${file.size} bytes)`);
 
       // Step 2: Processing phase
       setTimeout(() => {
@@ -97,8 +96,6 @@ export const useSailingDocuments = (userId?: string) => {
         message: `"${metadata.title}" successfully processed!`
       });
 
-      console.log(`✅ Document uploaded successfully: ${document.id}`);
-
       // Update documents list
       await loadDocuments();
 
@@ -112,7 +109,7 @@ export const useSailingDocuments = (userId?: string) => {
     } catch (err: any) {
       setError(err.message);
       setUploadProgress(null);
-      console.error('❌ Document upload failed:', err);
+
       throw err;
     } finally {
       setUploading(false);
@@ -138,7 +135,6 @@ export const useSailingDocuments = (userId?: string) => {
         userId
       );
       setDocuments(results);
-      console.log(`🔍 Found ${results.length} documents for: "${query}"`);
       return results;
     } catch (err: any) {
       setError(err.message);
@@ -165,7 +161,6 @@ export const useSailingDocuments = (userId?: string) => {
         context
       );
       setRecommendations(recs);
-      console.log(`💡 Generated ${recs.length} recommendations for user`);
     } catch (err: any) {
       setError(err.message);
     } finally {

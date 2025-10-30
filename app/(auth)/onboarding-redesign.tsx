@@ -27,10 +27,9 @@ export default function OnboardingRedesign() {
 
   const handleSailorSubmit = async (data: SailorFormData) => {
     try {
-      console.log('✅ Sailor data submitted:', data);
 
       if (!user?.id) {
-        console.error('❌ No user ID available');
+
         alert('Error: No user session found. Please try logging in again.');
         return;
       }
@@ -46,8 +45,6 @@ export default function OnboardingRedesign() {
         },
       });
 
-      console.log('✅ User profile updated with onboarding data');
-
       // Create a boat record if boat class is provided
       if (data.boatClass) {
         // First, find or create the boat class
@@ -62,7 +59,7 @@ export default function OnboardingRedesign() {
 
         if (existingClass) {
           classId = existingClass.id;
-          console.log('✅ Found existing boat class:', classId);
+
         } else {
           // Create new boat class if it doesn't exist
           const { data: newClass, error: classError } = await supabase
@@ -75,10 +72,10 @@ export default function OnboardingRedesign() {
             .single();
 
           if (classError) {
-            console.error('⚠️ Error creating boat class:', classError);
+
           } else {
             classId = newClass.id;
-            console.log('✅ Created new boat class:', classId);
+
           }
         }
 
@@ -95,11 +92,10 @@ export default function OnboardingRedesign() {
             });
 
           if (boatError) {
-            console.error('⚠️ Error creating boat:', boatError);
-            console.error('⚠️ Boat error details:', JSON.stringify(boatError));
+
             // Don't block onboarding if boat creation fails
           } else {
-            console.log('✅ Boat created successfully');
+
           }
         }
       }
@@ -144,13 +140,11 @@ export default function OnboardingRedesign() {
               .insert(regattasToInsert);
 
             if (calendarError) {
-              console.error('⚠️ Error creating calendar races:', calendarError);
-            } else {
-              console.log(`✅ Created ${regattasToInsert.length} races from calendar`);
+
             }
           }
         } catch (parseError) {
-          console.error('⚠️ Error parsing racing calendar:', parseError);
+
         }
       }
 
@@ -172,18 +166,18 @@ export default function OnboardingRedesign() {
           });
 
         if (regattaError) {
-          console.error('⚠️ Error creating regatta:', regattaError);
+
           // Don't block onboarding if regatta creation fails
         } else {
-          console.log('✅ Next race created successfully');
+
         }
       }
 
       // Navigate to dashboard
-      console.log('✅ Navigating to dashboard...');
+
       router.replace('/(tabs)/races');
     } catch (error: any) {
-      console.error('❌ Error saving sailor profile:', error);
+
       alert(error.message || 'Failed to save profile. Please try again.');
     }
   };

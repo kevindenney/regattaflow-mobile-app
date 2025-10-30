@@ -23,6 +23,8 @@ interface CourseSelectorProps {
   onCourseSelected: (marks: Mark[]) => void;
   currentWindDirection?: number;
   currentWindSpeed?: number;
+  autoSelectCourseId?: string;
+  onAutoSelectComplete?: () => void;
 }
 
 export function CourseSelector({
@@ -31,11 +33,21 @@ export function CourseSelector({
   onCourseSelected,
   currentWindDirection,
   currentWindSpeed,
+  autoSelectCourseId,
+  onAutoSelectComplete,
 }: CourseSelectorProps) {
   const [showModal, setShowModal] = useState(false);
   const [courses, setCourses] = useState<RaceCourse[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<RaceCourse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pendingAutoCourseId, setPendingAutoCourseId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (autoSelectCourseId) {
+      setPendingAutoCourseId(autoSelectCourseId);
+      setShowModal(true);
+    }
+  }, [autoSelectCourseId]);
 
   useEffect(() => {
     if (showModal && venueId) {
@@ -48,7 +60,6 @@ export function CourseSelector({
 
     try {
       setLoading(true);
-      console.log('📚 [CourseSelector] Loading courses for venue:', venueName);
 
       // Fetch courses for this venue
       const fetchedCourses = await CourseLibraryService.fetchCourses({
@@ -58,7 +69,14 @@ export function CourseSelector({
       });
 
       setCourses(fetchedCourses);
-      console.log(`✅ [CourseSelector] Loaded ${fetchedCourses.length} courses`);
+
+      if (pendingAutoCourseId) {
+        const match = fetchedCourses.find((course) => course.id === pendingAutoCourseId);
+        if (match) {
+          setPendingAutoCourseId(null);
+          await handleCourseSelect(match, { fromAuto: true });
+        }
+      }
     } catch (error) {
       console.error('[CourseSelector] Error loading courses:', error);
     } finally {
@@ -66,9 +84,12 @@ export function CourseSelector({
     }
   };
 
-  const handleCourseSelect = async (course: RaceCourse) => {
-    console.log('📍 [CourseSelector] Selected course:', course.name);
+  const handleCourseSelect = async (
+    course: RaceCourse,
+    options: { fromAuto?: boolean } = {}
+  ) => {
 
+    setPendingAutoCourseId(null);
     setSelectedCourse(course);
 
     // Convert course marks to the format expected by the map
@@ -81,6 +102,7 @@ export function CourseSelector({
     onCourseSelected(marks);
 
     setShowModal(false);
+    onAutoSelectComplete?.();
   };
 
   const formatWindRange = (course: RaceCourse) => {
@@ -109,7 +131,11 @@ export function CourseSelector({
         visible={showModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => {
+          setPendingAutoCourseId(null);
+          setShowModal(false);
+          onAutoSelectComplete?.();
+        }}
       >
         <View style={styles.modalContainer}>
           {/* Header */}

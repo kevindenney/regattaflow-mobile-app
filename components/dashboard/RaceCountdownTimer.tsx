@@ -43,7 +43,7 @@ export function RaceCountdownTimer({ regattaId, startTime }: RaceCountdownTimerP
   }, [startTime]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (isActive && countdown > 0) {
       interval = setInterval(() => {

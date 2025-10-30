@@ -93,10 +93,7 @@ export function TimeBasedEnvironmentalVisualization({
       setIsInitializing(true);
       setError(null);
 
-      console.log('🚀 Initializing time-based environmental visualization...');
-
       // Step 1: Generate forecast time series
-      console.log('📊 Generating forecast series...');
       const series = await forecastService.generateForecastSeries(
         venue,
         racingArea,
@@ -104,7 +101,6 @@ export function TimeBasedEnvironmentalVisualization({
         forecastDuration
       );
       setForecastSeries(series);
-      console.log(`✅ Generated ${series.points.length} forecast points`);
 
       // Step 2: Get initial forecast
       const initialForecast = forecastService.getForecastAtTime(series, startTime);
@@ -120,7 +116,6 @@ export function TimeBasedEnvironmentalVisualization({
       // Step 3: Pre-download bathymetry tiles for offline use
       // TEMPORARILY DISABLED - Tile caching has errors, will fix in Phase 4
       if (enableOfflineCache && false) {
-        console.log('📥 Pre-downloading bathymetry tiles...');
         setIsCaching(true);
 
         try {
@@ -133,8 +128,6 @@ export function TimeBasedEnvironmentalVisualization({
             }
           );
 
-          console.log('✅ Tile caching complete');
-
           // Get cache statistics
           const stats = await cacheService.getCacheStats();
           setCacheStats(stats);
@@ -146,9 +139,9 @@ export function TimeBasedEnvironmentalVisualization({
       }
 
       setIsInitializing(false);
-      console.log('✅ Visualization initialized');
+
     } catch (err) {
-      console.error('❌ Initialization failed:', err);
+
       setError(err instanceof Error ? err.message : 'Initialization failed');
       setIsInitializing(false);
     }

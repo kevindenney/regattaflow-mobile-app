@@ -3,7 +3,7 @@
  * Shows revenue, platform fees, and payouts from event registrations
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService from '@/services/eventService';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 interface EventEarnings {
   event_id: string;
@@ -36,18 +37,17 @@ interface EventEarnings {
 
 export default function ClubEarningsScreen() {
   const router = useRouter();
+  const { clubId, loading: personaLoading, refresh: refreshPersonaContext } = useClubWorkspace();
   const [earnings, setEarnings] = useState<EventEarnings[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState<'all' | 'upcoming' | 'past'>('all');
 
-  // TODO: Get club_id from user context
-  const clubId = 'temp-club-id';
+  const loadEarnings = useCallback(async () => {
+    if (!clubId) {
+      setEarnings([]);
+      return;
+    }
 
-  useEffect(() => {
-    loadEarnings();
-  }, []);
-
-  const loadEarnings = async () => {
     try {
       setLoading(true);
       const data = await EventService.getClubEarnings(clubId);
@@ -57,7 +57,18 @@ export default function ClubEarningsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!clubId) {
+      if (!personaLoading) {
+        setLoading(false);
+      }
+      return;
+    }
+
+    loadEarnings();
+  }, [clubId, personaLoading, loadEarnings]);
 
   const filteredEarnings = earnings.filter((event) => {
     const eventDate = new Date(event.start_date);
@@ -87,6 +98,29 @@ export default function ClubEarningsScreen() {
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="people-circle-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Club Profile</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            We could not find an active club workspace for this account. Finish club onboarding or refresh your connection to access earnings insights.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryLink}
+            onPress={() => router.push('/(auth)/club-onboarding-chat')}
+          >
+            <ThemedText style={styles.secondaryLinkText}>Open Club Onboarding</ThemedText>
+          </TouchableOpacity>
         </View>
       </ThemedView>
     );
@@ -350,6 +384,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#64748B',
     marginTop: 12,
+  },
+  missingContainer: {
+    flex: 1,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  missingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
   eventCard: {
     backgroundColor: '#FFFFFF',

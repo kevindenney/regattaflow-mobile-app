@@ -14,6 +14,7 @@ import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-nat
 import TacticalRaceMap from './TacticalRaceMap';
 import { WeatherAggregationService } from '@/services/WeatherAggregationService';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   RaceEventWithDetails,
   CourseMark,
@@ -110,11 +111,6 @@ export default function TacticalMapDemo({ raceEventId }: TacticalMapDemoProps) {
 
       setEnvironmental(envData);
 
-      console.log('✅ Environmental data loaded:', {
-        wind: `${envData.current.wind.speed}kt @ ${envData.current.wind.direction}°`,
-        tide: envData.current.tide.state,
-        forecast_points: envData.forecast.length,
-      });
     } catch (err) {
       console.error('Error loading environmental data:', err);
       // Non-fatal - map will still render without environmental overlays
@@ -122,7 +118,7 @@ export default function TacticalMapDemo({ raceEventId }: TacticalMapDemoProps) {
   };
 
   const handleMarkSelected = (mark: CourseMark) => {
-    console.log('Mark selected:', mark);
+    logger.debug('Mark selected:', mark);
     // You could show a modal with mark details here
   };
 
@@ -271,6 +267,7 @@ export default function TacticalMapDemo({ raceEventId }: TacticalMapDemoProps) {
 // STYLES
 // ============================================================================
 
+const logger = createLogger('TacticalMapDemo');
 const styles = StyleSheet.create({
   container: {
     flex: 1,

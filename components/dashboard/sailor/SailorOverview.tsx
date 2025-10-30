@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DashboardKPICard, DashboardSection, QuickAction, QuickActionGrid } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface UpcomingRace {
   id: string;
@@ -43,6 +44,7 @@ interface SailorOverviewProps {
   onViewVenues: () => void;
 }
 
+const logger = createLogger('SailorOverview');
 export function SailorOverview({
   upcomingRaces,
   stats,
@@ -136,7 +138,7 @@ export function SailorOverview({
         subtitle="Your racing pipeline with strategy status"
         headerAction={{
           label: 'View All',
-          onPress: () => console.log('View all races'),
+          onPress: () => logger.debug('View all races'),
           icon: 'calendar-outline'
         }}
       >

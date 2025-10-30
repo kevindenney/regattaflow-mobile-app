@@ -5,10 +5,11 @@ import { ThemedView } from '@/components/themed-view';
 import { Map3DView } from '@/components/map/Map3DView';
 import { ProfessionalMapScreen } from '@/components/map/ProfessionalMapScreen';
 import { RaceCourseVisualization } from '@/components/map/RaceCourseVisualization';
-import type { RaceMark, WeatherConditions, AdvancedWeatherConditions, NavigationResult } from '@/lib/types/map';
-import type { GeoLocation } from '@/lib/types/advanced-map';
+import type { RaceMark, WeatherConditions } from '@/lib/types/map';
 import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('map');
 const sampleMarks: RaceMark[] = [
   {
     id: '1',
@@ -56,7 +57,7 @@ export default function MapScreen() {
   const [selectedMark, setSelectedMark] = useState<RaceMark | null>(null);
   const [professionalMode, setProfessionalMode] = useState(true);
   const [currentVenue, setCurrentVenue] = useState('san-francisco-bay');
-  const [currentWeather, setCurrentWeather] = useState<AdvancedWeatherConditions | null>(null);
+  const [currentWeather, setCurrentWeather] = useState<any | null>(null);
   const [courseVisualizationMode, setCourseVisualizationMode] = useState(false);
   const [extractedCourse, setExtractedCourse] = useState<RaceCourseExtraction | null>(null);
 
@@ -80,21 +81,15 @@ export default function MapScreen() {
     );
   };
 
-  const handleMapPress = (coordinates: GeoLocation) => {
-    console.log('Map pressed at:', coordinates);
+  const handleMapPress = (coordinates: any) => {
+    logger.debug('Map pressed at:', coordinates);
   };
 
-  const handleWeatherUpdate = (weather: AdvancedWeatherConditions) => {
+  const handleWeatherUpdate = (weather: any) => {
     setCurrentWeather(weather);
-    console.log('🌤️ Weather updated:', {
-      wind: `${weather.wind.speed}kts @ ${weather.wind.direction}°`,
-      pressure: `${weather.pressure.sealevel}mb`,
-      confidence: `${Math.round(weather.forecast.confidence * 100)}%`
-    });
   };
 
-  const handleNavigationCalculated = (result: NavigationResult) => {
-    console.log('🧭 Navigation calculated:', result);
+  const handleNavigationCalculated = (result: any) => {
     Alert.alert(
       'Tactical Analysis',
       `Distance: ${result.distance.nauticalMiles} nm\n` +
@@ -219,6 +214,17 @@ export default function MapScreen() {
       waveMax: 2,
       visibility: 1000,
       thunderstorm: false,
+      confidence: 0.8
+    },
+    communication: {
+      vhfChannel: '72',
+      callSign: 'Race Committee',
+      confidence: 0.9
+    },
+    regulations: {
+      specialFlags: ['Code flag P - Preparatory'],
+      penalties: ['Two-turn penalty for infringements'],
+      protests: ['Must be filed within 2 hours of finish'],
       confidence: 0.8
     },
     extractionMetadata: {

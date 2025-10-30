@@ -1,5 +1,15 @@
 import { Map3DConfig, RaceMark, WeatherConditions, GeoLocation, BoundingBox } from './map';
 
+// Re-export base types for convenience
+export type { GeoLocation, BoundingBox };
+
+// Depth point for bathymetry data
+export interface DepthPoint {
+  latitude: number;
+  longitude: number;
+  depth: number;
+}
+
 // Enhanced map configuration extending the base Map3DConfig
 export interface AdvancedMapConfig extends Map3DConfig {
   rendering: {
@@ -64,15 +74,52 @@ export interface WeatherCapabilities {
 
 // Professional weather data
 export interface AdvancedWeatherConditions extends WeatherConditions {
+  wind: {
+    speed: number;
+    direction: number;
+    gusts: number;
+    variability?: number;
+    beaufortScale?: number;
+  };
+  tide: {
+    height: number;
+    direction: 'flood' | 'ebb' | 'slack' | 'unknown';
+    speed: number;
+    nextHigh?: Date;
+    nextLow?: Date;
+  };
   pressure: {
     sealevel: number; // mb
     trend: 'rising' | 'falling' | 'steady';
     gradient: number; // mb per degree
+    rate?: number;
+  };
+  temperatureProfile?: {
+    air: number;
+    water: number;
+    dewpoint: number;
+    feelslike: number;
+  };
+  humidityProfile?: {
+    relative: number;
+    absolute: number;
   };
   visibility: {
     horizontal: number; // nautical miles
     conditions: 'clear' | 'haze' | 'fog' | 'rain' | 'snow';
     restrictions?: string[];
+    vertical?: number;
+  };
+  precipitationProfile?: {
+    rate: number;
+    probability: number;
+    type: 'rain' | 'snow' | 'sleet' | 'none';
+  };
+  cloudLayerProfile?: {
+    total: number;
+    low: number;
+    medium: number;
+    high: number;
   };
   seaState: {
     waveHeight: number; // meters
@@ -88,8 +135,18 @@ export interface AdvancedWeatherConditions extends WeatherConditions {
     modelRun: Date;
     validTime: Date;
     resolution: string; // e.g., "1km", "4km"
+    model?: string;
+    lastUpdated?: Date;
+    nextUpdate?: Date;
   };
   alerts?: WeatherAlert[];
+  location?: {
+    latitude: number;
+    longitude: number;
+    name?: string;
+    region?: string;
+    country?: string;
+  };
 }
 
 export interface WeatherAlert {
@@ -504,6 +561,11 @@ export interface BathymetryData {
   height: number;
   noDataValue: number;
   units: 'meters' | 'feet';
+  minDepth?: number;
+  maxDepth?: number;
+  contours?: DepthContour[];
+  depths?: DepthPoint[];
+  gridSize?: number;
 }
 
 // Performance and caching

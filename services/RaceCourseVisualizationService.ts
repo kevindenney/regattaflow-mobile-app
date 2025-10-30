@@ -1,4 +1,5 @@
 import maplibregl from 'maplibre-gl';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceCourse3D {
   course_id: string;
@@ -175,6 +176,7 @@ interface InteractiveFeatures {
   real_time_tracking: boolean;
 }
 
+const logger = createLogger('RaceCourseVisualizationService');
 export class RaceCourseVisualizationService {
   private static mapInstances: Map<string, RaceCourse3D> = new Map();
 
@@ -722,7 +724,7 @@ export class RaceCourseVisualizationService {
       map.on('click', 'course-marks', (e) => {
         // Handle mark selection
         const properties = e.features?.[0]?.properties;
-        console.log('Mark selected:', properties);
+        logger.debug('Mark selected:', properties);
       });
     }
 

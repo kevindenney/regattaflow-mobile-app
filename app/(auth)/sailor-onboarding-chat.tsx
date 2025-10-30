@@ -77,14 +77,11 @@ export default function SailorOnboardingChat() {
     setInputText('');
     setIsProcessing(true);
 
-    console.log('📝 [CHAT DEBUG] Starting to process user input:', userInput);
-    console.log('📝 [CHAT DEBUG] Current extracted data:', extractedData);
 
     try {
       // Use AI agent to extract entities from user message
-      console.log('📝 [CHAT DEBUG] Calling agent.processUserMessage...');
+
       const result = await agent.processUserMessage(userInput, extractedData);
-      console.log('📝 [CHAT DEBUG] Agent result:', result);
 
       if (result.success && result.result) {
         // Update extracted data with AI-parsed entities

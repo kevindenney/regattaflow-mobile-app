@@ -3,8 +3,9 @@ import { supabase, UserType } from '@/services/supabase'
 import { bindAuthDiagnostics } from '@/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/utils/errToText'
 import { router } from 'expo-router'
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import { Platform } from 'react-native'
+import { createLogger } from '@/lib/utils/logger';
 
 // Re-export UserType for backward compatibility
 export type { UserType } from '@/services/supabase'
@@ -12,12 +13,13 @@ export type { UserType } from '@/services/supabase'
 // Bind diagnostics once at app boot
 bindAuthDiagnostics(supabase)
 
+const logger = createLogger('AuthProvider');
 const AUTH_DEBUG_ENABLED = true
-const authDebugLog = (...args: Parameters<typeof console.log>) => {
+const authDebugLog = (...args: Parameters<typeof logger.debug>) => {
   if (!AUTH_DEBUG_ENABLED) {
     return
   }
-  console.log(...args)
+  logger.debug(...args)
 }
 
 type AuthState = 'checking' | 'signed_out' | 'needs_role' | 'ready'
@@ -28,6 +30,7 @@ type AuthCtx = {
   signedIn: boolean
   user: any | null
   loading: boolean
+  personaLoading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName?: string) => Promise<any>
   signOut: () => Promise<void>
@@ -37,6 +40,9 @@ type AuthCtx = {
   biometricEnabled: boolean
   userProfile?: any
   userType?: UserType
+  clubProfile: any | null
+  coachProfile: any | null
+  refreshPersonaContext: () => Promise<void>
   updateUserProfile: (updates: any) => Promise<void>
   fetchUserProfile: (userId?: string) => Promise<any>
 }
@@ -47,6 +53,7 @@ const Ctx = createContext<AuthCtx>({
   signedIn: false,
   user: null,
   loading: false,
+  personaLoading: false,
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
@@ -54,6 +61,9 @@ const Ctx = createContext<AuthCtx>({
   signInWithApple: async () => {},
   biometricAvailable: false,
   biometricEnabled: false,
+  clubProfile: null,
+  coachProfile: null,
+  refreshPersonaContext: async () => {},
   updateUserProfile: async () => {},
   fetchUserProfile: async (_userId?: string) => null,
   userType: null,
@@ -65,8 +75,11 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [signedIn, setSignedIn] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [personaLoading, setPersonaLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [userType, setUserType] = useState<UserType>(null)
+  const [clubProfile, setClubProfile] = useState<any | null>(null)
+  const [coachProfile, setCoachProfile] = useState<any | null>(null)
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
@@ -93,21 +106,21 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       })
 
       if (error) {
-        console.error('[fetchUserProfile] ❌ Database error:', error)
+        console.error('[fetchUserProfile] Database error:', error)
         return null
       }
 
       if (!data) {
-        console.warn('[fetchUserProfile] ⚠️ No profile found for user:', uid)
+        console.warn('[fetchUserProfile] No profile found for user:', uid)
         return null
       }
 
-      authDebugLog('[fetchUserProfile] ✅ Setting userProfile and userType')
+      authDebugLog('[fetchUserProfile] Setting userProfile and userType')
       setUserProfile(data)
       setUserType(data?.user_type as UserType)
       return data
     } catch (error) {
-      console.error('[fetchUserProfile] ❌ Exception:', error)
+      console.error('[fetchUserProfile] Exception:', error)
       return null
     }
   }
@@ -184,6 +197,68 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
+  const loadPersonaContext = useCallback(async () => {
+    if (!user?.id) {
+      setClubProfile(null)
+      setCoachProfile(null)
+      setPersonaLoading(false)
+      return
+    }
+
+    if (!userType || userType === 'sailor') {
+      setClubProfile(null)
+      setCoachProfile(null)
+      setPersonaLoading(false)
+      return
+    }
+
+    setPersonaLoading(true)
+
+    try {
+      if (userType === 'club') {
+        const { data, error } = await supabase
+          .from('club_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (error && error.code !== 'PGRST116') {
+          throw error
+        }
+
+        setClubProfile(data ?? null)
+      } else {
+        setClubProfile(null)
+      }
+
+      if (userType === 'coach') {
+        const { data, error } = await supabase
+          .from('coach_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (error && error.code !== 'PGRST116') {
+          throw error
+        }
+
+        setCoachProfile(data ?? null)
+      } else {
+        setCoachProfile(null)
+      }
+    } catch (error) {
+      console.error('[AuthProvider] Failed to load persona context:', error)
+      if (userType === 'club') {
+        setClubProfile(null)
+      }
+      if (userType === 'coach') {
+        setCoachProfile(null)
+      }
+    } finally {
+      setPersonaLoading(false)
+    }
+  }, [user?.id, userType])
+
   // Initial auth state setup with proper session restoration
   useEffect(() => {
     authDebugLog('🔥 [AUTH] useEffect initialization starting...')
@@ -225,18 +300,18 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
             })
             if (profile?.user_type) {
               setUserType(profile.user_type as UserType)
-              authDebugLog('[AUTH] ✅ userType set to:', profile.user_type)
+              authDebugLog('[AUTH] userType set to:', profile.user_type)
             } else {
               setUserType(null)
-              console.warn('[AUTH] ⚠️ No user_type on profile; consider forcing onboarding for user', authUser.email)
+              console.warn('[AUTH] No user_type on profile; consider forcing onboarding for user', authUser.email)
             }
           } catch (e) {
-            console.error('[AUTH] ❌ User profile fetch failed:', e)
+            console.error('[AUTH] User profile fetch failed:', e)
             setUserType(null)
           }
         } else {
           setUserType(null)
-          authDebugLog('[AUTH] ❌ No authUser.id')
+          authDebugLog('[AUTH] No authUser.id')
         }
 
         authDebugLog('[AUTH] Initialization complete, setting ready=true')
@@ -261,6 +336,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       clearTimeout(watchdogTimer)
     }
   }, []) // Run once on mount
+
+  useEffect(() => {
+    if (!signedIn || !user?.id) {
+      setClubProfile(null)
+      setCoachProfile(null)
+      setPersonaLoading(false)
+      return
+    }
+
+    loadPersonaContext()
+  }, [loadPersonaContext, signedIn, user?.id, userType])
 
   // Auth state change listener - depends on router for navigation
   useEffect(()=>{
@@ -314,6 +400,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setUserType(null)
         authDebugLog('🚪 [AUTH] Clearing loading state...')
         setLoading(false)
+        setPersonaLoading(false)
+        setClubProfile(null)
+        setCoachProfile(null)
 
         authDebugLog('🚪 [AUTH] State cleanup complete. Starting navigation...')
         try {
@@ -363,30 +452,18 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }, [router])
 
   const signIn = async (email: string, password: string) => {
-    console.log('🔐 [AUTH] signIn called with email:', email)
-    console.log('🔐 [AUTH] Supabase instance:', !!supabase)
-    console.log('🔐 [AUTH] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL)
 
     setLoading(true)
     try {
-      console.log('🔐 [AUTH] Calling supabase.auth.signInWithPassword...')
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      console.log('🔐 [AUTH] signInWithPassword response:', {
-        hasData: !!data,
-        hasError: !!error,
-        errorMessage: error?.message
-      })
 
       if (error) throw error
 
-      console.log('🔐 [AUTH] Sign in successful, profile will be fetched by auth state change listener')
-
       // Set user and signedIn state - profile fetch will happen in onAuthStateChange
       if (data.user?.id) {
-        console.log('🔐 [AUTH] User authenticated:', data.user.id)
         setUser(data.user)
         setSignedIn(true)
         // Don't fetch profile here - let onAuthStateChange handle it to avoid duplication
@@ -425,6 +502,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setUserProfile(null)
         setUserType(null)
         setLoading(false)
+        setPersonaLoading(false)
+        setClubProfile(null)
+        setCoachProfile(null)
         if (typeof window !== 'undefined') {
           try {
             window.history.replaceState(null, '', '/')
@@ -450,6 +530,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setUserProfile(null)
       setUserType(null)
       setLoading(false)
+      setPersonaLoading(false)
+      setClubProfile(null)
+      setCoachProfile(null)
       if (typeof window !== 'undefined') {
         try {
           window.history.replaceState(null, '', '/')
@@ -484,7 +567,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       })
 
       if (error) {
-        console.error('❌ [AUTH] Supabase signUp error:', error)
         throw error
       }
 
@@ -497,20 +579,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           authDebugLog('🔍 [AUTH] Fetching automatically created profile...')
           await fetchUserProfile(data.user.id)
         } catch (profileError) {
-          console.warn('⚠️ [AUTH] Could not fetch profile immediately after signup:', profileError)
           // This is not critical - profile fetch can happen later
         }
       }
 
       return data
     } catch (error) {
-      console.error('❌ [AUTH] signUp failed:', error)
       throw error
     } finally {
       setLoading(false)
     }
   }
-
 
   const signInWithGoogle = async () => {
     setLoading(true)
@@ -582,6 +661,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       signedIn,
       user,
       loading,
+      personaLoading,
       signIn,
       signUp,
       signOut,
@@ -591,10 +671,13 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       biometricEnabled: false,
       userProfile,
       userType,
+      clubProfile,
+      coachProfile,
+      refreshPersonaContext: loadPersonaContext,
       updateUserProfile,
       fetchUserProfile
     }
-  }, [ready, signedIn, user, loading, userProfile, userType])
+  }, [ready, signedIn, user, loading, personaLoading, userProfile, userType, clubProfile, coachProfile, loadPersonaContext])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

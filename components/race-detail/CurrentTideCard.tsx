@@ -94,6 +94,7 @@ export function CurrentTideCard({
   }, [weatherError, loading, realWeather, venueCoordinates]);
 
   const loadMockTideData = () => {
+    setUseMockData(true);
     const placeholderData: TideData = {
       current: {
         speed: 0.8,
@@ -229,7 +230,7 @@ export function CurrentTideCard({
           <TouchableOpacity
             style={styles.loadButton}
             onPress={loadMockTideData}
-            disabled={loading || !venueCoordinates}
+            disabled={loading}
           >
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -263,6 +264,11 @@ export function CurrentTideCard({
             {useMockData ? "MOCK DATA" : "LIVE DATA"}
           </Text>
         </View>
+        {useMockData && (
+          <Text style={styles.mockDataNotice}>
+            Using mock data — add venue coordinates to fetch live tide forecasts.
+          </Text>
+        )}
         {/* Current Flow */}
         <View style={styles.currentSection}>
           <View style={styles.currentHeader}>
@@ -645,5 +651,10 @@ const styles = StyleSheet.create({
   },
   dataSourceTextMock: {
     color: '#D97706',
+  },
+  mockDataNotice: {
+    fontSize: 12,
+    color: '#B45309',
+    marginBottom: 16,
   },
 });

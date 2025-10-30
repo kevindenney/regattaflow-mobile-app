@@ -6,6 +6,7 @@
 import { supabase } from '@/services/supabase';
 import { CalendarRace } from './CalendarImportService';
 import { RaceWeatherService } from './RaceWeatherService';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface BulkCreationOptions {
   userId: string;
@@ -30,6 +31,7 @@ export interface BulkCreationResult {
   error?: string;
 }
 
+const logger = createLogger('BulkRaceCreationService');
 export class BulkRaceCreationService {
   /**
    * Create multiple races from calendar data
@@ -38,7 +40,7 @@ export class BulkRaceCreationService {
     calendarRaces: CalendarRace[],
     options: BulkCreationOptions
   ): Promise<BulkCreationResult> {
-    console.log(`[BulkRaceCreationService] Creating ${calendarRaces.length} races for user ${options.userId}`);
+    logger.debug(`[BulkRaceCreationService] Creating ${calendarRaces.length} races for user ${options.userId}`);
 
     if (!options.userId) {
       return {
@@ -69,7 +71,7 @@ export class BulkRaceCreationService {
           existingRaces = new Set(
             existing.map(r => `${r.name}|${r.start_date}`)
           );
-          console.log(`[BulkRaceCreationService] Found ${existingRaces.size} existing races to skip`);
+          logger.debug(`[BulkRaceCreationService] Found ${existingRaces.size} existing races to skip`);
         }
       } catch (error) {
         console.error('[BulkRaceCreationService] Error checking existing races:', error);
@@ -87,7 +89,7 @@ export class BulkRaceCreationService {
         // Check if race already exists
         const existenceKey = `${raceName}|${raceDate}`;
         if (existingRaces.has(existenceKey)) {
-          console.log(`[BulkRaceCreationService] Skipping existing race: ${raceName} on ${raceDate}`);
+          logger.debug(`[BulkRaceCreationService] Skipping existing race: ${raceName} on ${raceDate}`);
           results.push({
             name: raceName,
             date: raceDate,
@@ -99,7 +101,7 @@ export class BulkRaceCreationService {
         }
 
         // Fetch real-time weather data for the race
-        console.log(`[BulkRaceCreationService] Fetching weather for ${raceName} at ${venue}...`);
+        logger.debug(`[BulkRaceCreationService] Fetching weather for ${raceName} at ${venue}...`);
         const weatherData = await RaceWeatherService.fetchWeatherByVenueName(
           venue,
           raceDate
@@ -155,7 +157,7 @@ export class BulkRaceCreationService {
           continue;
         }
 
-        console.log(`[BulkRaceCreationService] Created race: ${raceName} (ID: ${data.id})`);
+        logger.debug(`[BulkRaceCreationService] Created race: ${raceName} (ID: ${data.id})`);
         results.push({
           id: data.id,
           name: raceName,
@@ -176,7 +178,7 @@ export class BulkRaceCreationService {
       }
     }
 
-    console.log(`[BulkRaceCreationService] Bulk creation complete: ${created} created, ${skipped} skipped, ${failed} failed`);
+    logger.debug(`[BulkRaceCreationService] Bulk creation complete: ${created} created, ${skipped} skipped, ${failed} failed`);
 
     return {
       success: failed === 0,

@@ -9,6 +9,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { raceStrategyEngine, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
+import { createLogger } from '@/lib/utils/logger';
 
 interface TacticalRecommendation {
   leg: string; // 'upwind-1', 'downwind-1', etc.
@@ -34,6 +36,7 @@ interface TacticalPlanCardProps {
   onGenerate?: () => void;
 }
 
+const logger = createLogger('TacticalPlanCard');
 export function TacticalPlanCard({
   raceId,
   raceName,
@@ -51,7 +54,7 @@ export function TacticalPlanCard({
   // Auto-generate plan if not exists
   useEffect(() => {
     if (!loading && !plan && !error && user) {
-      console.log('[TacticalPlanCard] Auto-generating tactical plan on mount');
+      logger.debug('[TacticalPlanCard] Auto-generating tactical plan on mount');
       generatePlan();
     }
   }, [loading, plan, error, user]);
@@ -94,60 +97,102 @@ export function TacticalPlanCard({
       setLoading(true);
       setError(null);
 
-      // TODO: Call RaceStrategyEngine for full tactical analysis
-      // For now, create a placeholder plan
-      const placeholderPlan: TacticalPlan = {
-        overallStrategy: 'Conservative start with aggressive upwind tactics. Focus on clear air and leverage current advantage on starboard tack.',
+      logger.debug('[TacticalPlanCard] Generating AI-powered tactical plan...');
+
+      // Fetch race data for context
+      const { data: raceData, error: raceError } = await supabase
+        .from('regattas')
+        .select('*')
+        .eq('id', raceId)
+        .single();
+
+      if (raceError) throw raceError;
+
+      // Build race conditions from available data
+      // In production, this would come from weather APIs
+      const currentConditions: RaceConditions = {
+        wind: {
+          speed: 12, // Default values - should come from weather service
+          direction: 45,
+          forecast: {
+            nextHour: { speed: 13, direction: 50 },
+            nextThreeHours: { speed: 14, direction: 55 }
+          },
+          confidence: 0.8
+        },
+        current: {
+          speed: 0.5,
+          direction: 180,
+          tidePhase: 'ebb'
+        },
+        waves: {
+          height: 0.5,
+          period: 4,
+          direction: 45
+        },
+        visibility: 10,
+        temperature: 18,
+        weatherRisk: 'low'
+      };
+
+      // Generate strategy using AI
+      const strategy = await raceStrategyEngine.generateVenueBasedStrategy(
+        raceData.venue_id || 'default',
+        currentConditions,
+        {
+          raceName: raceData.name || raceName,
+          raceDate: new Date(raceData.start_time),
+          raceTime: new Date(raceData.start_time).toLocaleTimeString(),
+          boatType: 'Keelboat',
+          fleetSize: 20,
+          importance: 'series'
+        }
+      );
+
+      // Convert AI strategy to TacticalPlan format
+      const aiPlan: TacticalPlan = {
+        overallStrategy: strategy.strategy.overallApproach,
         recommendations: [
-          {
-            leg: 'Upwind Leg 1',
-            favoredSide: 'right',
-            reasoning: 'Right side favored due to persistent right shift and favorable current',
+          // Map beat strategy
+          ...strategy.strategy.beatStrategy.map((beat, idx) => ({
+            leg: `Upwind Leg ${idx + 1}`,
+            favoredSide: inferFavoredSide(beat.action),
+            reasoning: beat.rationale || beat.action,
             keyPoints: [
-              'Tack on headers, extend on lifts',
-              'Stay in phase with wind shifts',
-              'Use current advantage on starboard tack'
-            ],
-            confidence: 82
-          },
-          {
-            leg: 'Downwind Leg 1',
-            favoredSide: 'left',
-            reasoning: 'Left gate provides better angle to next mark with current assistance',
+              beat.theory || '',
+              beat.execution || '',
+              ...(beat.conditions || [])
+            ].filter(Boolean),
+            confidence: (beat as any).confidence || 75
+          })),
+          // Map run strategy
+          ...strategy.strategy.runStrategy.map((run, idx) => ({
+            leg: `Downwind Leg ${idx + 1}`,
+            favoredSide: inferFavoredSide(run.action),
+            reasoning: run.rationale || run.action,
             keyPoints: [
-              'Round left mark if clear',
-              'Sail high and fast in strong wind',
-              'Watch for windward boats protecting position'
-            ],
-            confidence: 75
-          },
-          {
-            leg: 'Upwind Leg 2',
-            favoredSide: 'middle',
-            reasoning: 'Fleet will be spread - stay in clear air and play shifts',
-            keyPoints: [
-              'Avoid corners in oscillating conditions',
-              'Maintain speed and height',
-              'Cover if in top 3'
-            ],
-            confidence: 68
-          }
+              run.theory || '',
+              run.execution || '',
+              ...(run.conditions || [])
+            ].filter(Boolean),
+            confidence: (run as any).confidence || 70
+          }))
         ],
         contingencies: [
-          {
-            scenario: 'Wind shifts left 10°+',
-            action: 'Tack immediately and protect left side of course'
-          },
-          {
-            scenario: 'Current reverses',
-            action: 'Favor port tack and adjust laylines accordingly'
-          },
-          {
+          ...strategy.contingencies.windShift.map(c => ({
+            scenario: 'Wind shifts 10°+',
+            action: c.action
+          })),
+          ...strategy.contingencies.windDrop.map(c => ({
             scenario: 'Wind drops below 8 knots',
-            action: 'Prioritize clear air over position, sail more conservatively'
-          }
+            action: c.action
+          })),
+          ...strategy.contingencies.currentChange.map(c => ({
+            scenario: 'Current reverses',
+            action: c.action
+          }))
         ],
-        confidence: 75
+        confidence: Math.round(strategy.confidence * 100)
       };
 
       // Save to database
@@ -159,7 +204,8 @@ export function TacticalPlanCard({
         .maybeSingle();
 
       const strategyContent = existingData.data?.strategy_content || {};
-      (strategyContent as any).tacticalPlan = placeholderPlan;
+      (strategyContent as any).tacticalPlan = aiPlan;
+      (strategyContent as any).fullAIStrategy = strategy; // Save full AI strategy for reference
 
       const { error: upsertError } = await supabase
         .from('race_strategies')
@@ -168,7 +214,7 @@ export function TacticalPlanCard({
           user_id: user.id,
           strategy_type: 'pre_race',
           strategy_content: strategyContent,
-          confidence_score: placeholderPlan.confidence,
+          confidence_score: aiPlan.confidence,
           ai_generated: true,
         }, {
           onConflict: 'regatta_id,user_id'
@@ -176,14 +222,24 @@ export function TacticalPlanCard({
 
       if (upsertError) throw upsertError;
 
-      setPlan(placeholderPlan);
+      setPlan(aiPlan);
       onGenerate?.();
+
+      logger.debug('[TacticalPlanCard] Skill enabled:', raceStrategyEngine.isSkillReady());
     } catch (err) {
       console.error('[TacticalPlanCard] Generate error:', err);
       setError('Failed to generate tactical plan');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to infer favored side from action text
+  const inferFavoredSide = (action: string): 'left' | 'right' | 'middle' => {
+    const lowerAction = action.toLowerCase();
+    if (lowerAction.includes('right') || lowerAction.includes('starboard')) return 'right';
+    if (lowerAction.includes('left') || lowerAction.includes('port')) return 'left';
+    return 'middle';
   };
 
   const getCardStatus = () => {

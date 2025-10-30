@@ -281,7 +281,7 @@ Provide clear reasoning for your predictions and include confidence scores. If m
         toolsUsed: data.tools_used || [],
       };
     } catch (error: any) {
-      console.error('❌ Failed to get cached prediction:', error);
+
       return null;
     }
   }
@@ -313,9 +313,8 @@ Provide clear reasoning for your predictions and include confidence scores. If m
         generation_time_ms: metadata.generationTimeMs || null,
       });
 
-      console.log('✅ Course prediction cached for 12 hours');
     } catch (error: any) {
-      console.error('❌ Failed to cache prediction:', error);
+
     }
   }
 
@@ -353,7 +352,6 @@ Provide clear reasoning for your predictions and include confidence scores. If m
           // Calculate accuracy from historical predictions
           const accuracy = await this.calculatePredictionAccuracy(userId);
 
-          console.log(`✅ Using cached course prediction (${ageHours}h old)`);
           return {
             prediction: cached.prediction,
             cached: true,
@@ -389,7 +387,7 @@ Provide clear reasoning for your predictions and include confidence scores. If m
         toolsUsed: result.toolsUsed,
       };
     } catch (error: any) {
-      console.error('❌ Course prediction failed:', error);
+
       throw error;
     }
   }
@@ -432,7 +430,7 @@ Provide clear reasoning for your predictions and include confidence scores. If m
       const accuracy = (correctPredictions / predictions.length) * 100;
       return Math.round(accuracy * 10) / 10; // Round to 1 decimal
     } catch (error: any) {
-      console.error('❌ Failed to calculate prediction accuracy:', error);
+
       return 0;
     }
   }

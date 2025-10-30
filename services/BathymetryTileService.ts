@@ -5,7 +5,7 @@
  * Uses free tile services (GEBCO WMS, EMODnet) and Natural Earth vectors.
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Bathymetry raster source configuration

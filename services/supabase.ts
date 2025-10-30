@@ -591,21 +591,16 @@ export const queryWithRetry = async <T>(
 ): Promise<T> => {
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`🔄 [QUERY] Attempt ${i + 1}/${retries}`);
       const start = Date.now();
       const result = await queryFn();
       const duration = Date.now() - start;
-      console.log(`✅ [QUERY] Success in ${duration}ms on attempt ${i + 1}`);
       return result;
     } catch (err: any) {
-      console.warn(`⚠️ [QUERY] Attempt ${i + 1} failed:`, err.message);
 
       if (i < retries - 1) {
-        console.log(`🔄 [QUERY] Retrying in ${delay}ms...`);
         await new Promise(res => setTimeout(res, delay));
         delay *= 1.5; // Exponential backoff
       } else {
-        console.error(`🔴 [QUERY] All ${retries} attempts failed`);
         throw err;
       }
     }

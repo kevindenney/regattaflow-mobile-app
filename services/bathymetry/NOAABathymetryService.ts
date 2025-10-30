@@ -15,7 +15,6 @@ export class NOAABathymetryService {
    * Get bathymetry tiles for a given bounding box and zoom level
    */
   async getBathymetryTiles(bounds: BoundingBox, zoom: number): Promise<TerrainTile[]> {
-    console.log('🌊 Fetching NOAA bathymetry tiles', { bounds, zoom });
 
     const tiles: TerrainTile[] = [];
 
@@ -47,7 +46,7 @@ export class NOAABathymetryService {
       this.cache.set(cacheKey, contours);
       return contours;
     } catch (error) {
-      console.error('❌ Failed to fetch depth contours:', error);
+
       return this.generateFallbackContours(bounds);
     }
   }
@@ -67,7 +66,7 @@ export class NOAABathymetryService {
       this.cache.set(cacheKey, data);
       return data;
     } catch (error) {
-      console.error('❌ Failed to fetch bathymetry data:', error);
+
       return this.generateFallbackBathymetryData(bounds, resolution);
     }
   }
@@ -94,7 +93,7 @@ export class NOAABathymetryService {
 
       return null;
     } catch (error) {
-      console.error('❌ Failed to get depth at location:', error);
+
       return null;
     }
   }
@@ -171,7 +170,6 @@ export class NOAABathymetryService {
 
       return null;
     } catch (error) {
-      console.error(`❌ Failed to fetch terrain tile ${x}/${y}/${z}:`, error);
       return null;
     }
   }
@@ -234,7 +232,7 @@ export class NOAABathymetryService {
         });
       }
     } catch (error) {
-      console.warn('⚠️ NOAA contour service unavailable, using fallback');
+
     }
 
     return contours.length > 0 ? contours : this.generateFallbackContours(bounds);
@@ -391,7 +389,7 @@ export class NOAABathymetryService {
    */
   clearCache(): void {
     this.cache.clear();
-    console.log('🗑️ NOAA bathymetry cache cleared');
+
   }
 
   /**

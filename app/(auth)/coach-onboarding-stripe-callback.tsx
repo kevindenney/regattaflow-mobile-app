@@ -22,7 +22,7 @@ export default function CoachOnboardingStripeCallback() {
     if (!user) {
       setStatus('error');
       setMessage('User not authenticated');
-      setTimeout(() => router.replace('/(auth)/signin'), 2000);
+      setTimeout(() => router.replace('/(auth)/login'), 2000);
       return;
     }
 

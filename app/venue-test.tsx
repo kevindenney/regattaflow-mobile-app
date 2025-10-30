@@ -9,12 +9,11 @@ import { Stack } from 'expo-router';
 import { GlobalVenueIntelligence } from '@/components/venue/GlobalVenueIntelligence';
 
 export default function VenueTestScreen() {
-  console.log('🌍 VenueTest Route: Loading venue intelligence test');
 
   const [selectedVenue, setSelectedVenue] = React.useState<any>(null);
 
   const handleVenueSelected = (venue: any) => {
-    console.log('🌍 Venue selected:', venue.name);
+
     setSelectedVenue(venue);
   };
 
@@ -31,7 +30,7 @@ export default function VenueTestScreen() {
     };
 
     setTimeout(() => {
-      console.log('🌍 Auto-selecting test venue:', testVenue.name);
+
       setSelectedVenue(testVenue);
     }, 2000); // Wait 2 seconds to show the loading state
   }, []);

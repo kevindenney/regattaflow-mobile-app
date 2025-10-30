@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DashboardSection } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface VenueData {
   id: string;
@@ -50,6 +51,7 @@ interface VenueIntelTabProps {
   onViewVenueDetails: (venueId: string) => void;
 }
 
+const logger = createLogger('VenueIntelTab');
 export function VenueIntelTab({
   currentVenue,
   nearbyVenues,
@@ -139,7 +141,7 @@ export function VenueIntelTab({
         subtitle={`${currentVenue.name} • ${currentVenue.country}`}
         headerAction={{
           label: 'Change Venue',
-          onPress: () => console.log('Change venue'),
+          onPress: () => logger.debug('Change venue'),
           icon: 'swap-horizontal'
         }}
       >

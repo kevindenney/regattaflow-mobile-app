@@ -5,7 +5,7 @@
  * See: plans/race-strategy-data-gathering-ux.md
  */
 
-import { Database } from './supabase';
+import { Database } from '@/services/supabase';
 
 // =============================================================================
 // Database Types (from Supabase schema)

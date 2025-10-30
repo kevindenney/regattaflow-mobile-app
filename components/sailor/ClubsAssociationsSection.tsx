@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { CardMenu, CardMenuItem } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface Club {
   id: string;
@@ -29,6 +30,7 @@ interface ClubsAssociationsSectionProps {
   className?: string | null;
 }
 
+const logger = createLogger('ClubsAssociationsSection');
 export function ClubsAssociationsSection({ sailorId, classId, className }: ClubsAssociationsSectionProps) {
   // Mock data - this would come from Supabase in a real implementation
   // Base clubs that are always shown (yacht clubs)
@@ -195,17 +197,17 @@ export function ClubsAssociationsSection({ sailorId, classId, className }: Clubs
               {
                 label: 'View Details',
                 icon: 'information-circle-outline',
-                onPress: () => console.log('View club details:', club.id),
+                onPress: () => logger.debug('View club details:', club.id),
               },
               {
                 label: 'View Events',
                 icon: 'calendar-outline',
-                onPress: () => console.log('View club events:', club.id),
+                onPress: () => logger.debug('View club events:', club.id),
               },
               {
                 label: 'Member Benefits',
                 icon: 'gift-outline',
-                onPress: () => console.log('View benefits:', club.id),
+                onPress: () => logger.debug('View benefits:', club.id),
               },
               {
                 label: 'Remove Club',

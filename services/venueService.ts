@@ -6,8 +6,14 @@
 
 import * as Location from 'expo-location';
 import { supabaseVenueService } from '@/services/venue/SupabaseVenueService';
-import { OfflineService } from '@/services/offlineService';
-import type { SailingVenue, Coordinates } from '@/lib/types/global-venues';
+import { offlineService } from '@/services/offlineService';
+import type {
+  SailingVenue,
+  Coordinates,
+  CulturalBriefing,
+  AdaptationRequirement,
+  Language,
+} from '@/lib/types/global-venues';
 
 // ==================== Type Definitions ====================
 
@@ -33,19 +39,21 @@ export interface VenueSwitchResult {
   previous_venue: SailingVenue | null;
   new_venue: SailingVenue;
   adaptations: RegionalAdaptation;
-  cultural_briefing: string[];
+  cultural_briefing: CulturalBriefing;
   offline_data_cached: boolean;
 }
 
 // ==================== Weather Source Configuration ====================
 
-const REGIONAL_WEATHER_SOURCES = {
-  'north-america': ['NOAA', 'Environment_Canada', 'NWS'],
-  'europe': ['ECMWF', 'Met_Office', 'Meteo_France', 'DWD'],
-  'asia-pacific': ['JMA', 'Hong_Kong_Observatory', 'BOM', 'Korea_Met'],
-  'oceania': ['BOM', 'MetService_NZ'],
-  'south-america': ['INMET', 'SMN_Argentina'],
-  'africa': ['SAWS']
+const REGIONAL_WEATHER_SOURCES: Record<string, string[]> = {
+  'north-america': ['NOAA', 'Environment Canada', 'NWS'],
+  europe: ['ECMWF', 'Met Office', 'Météo-France', 'DWD'],
+  'asia-pacific': ['JMA', 'Hong Kong Observatory', 'BOM', 'Korea Meteorological Administration'],
+  oceania: ['BOM', 'MetService NZ'],
+  'south-america': ['INMET', 'SMN Argentina'],
+  africa: ['SAWS'],
+  'middle-east': ['ECMWF', 'Met Office'],
+  global: ['ECMWF', 'GFS'],
 };
 
 const CURRENCY_BY_COUNTRY: Record<string, string> = {
@@ -76,7 +84,6 @@ export class VenueService {
     radiusKm: number = 50
   ): Promise<VenueDetectionResult> {
     try {
-      console.log('📍 Detecting venue from GPS...');
 
       // Request location permission
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -115,7 +122,6 @@ export class VenueService {
         };
       }
 
-      console.log('ℹ️ No venue found within radius');
       return {
         venue: null,
         distance_km: 0,
@@ -123,7 +129,7 @@ export class VenueService {
         method: 'gps'
       };
     } catch (error) {
-      console.error('❌ GPS venue detection failed:', error);
+
       throw error;
     }
   }
@@ -140,7 +146,6 @@ export class VenueService {
     }
   ): Promise<VenueSwitchResult> {
     try {
-      console.log('🌍 Switching venue...', venueId);
 
       const previousVenue = this.currentVenue;
 
@@ -160,7 +165,7 @@ export class VenueService {
       // Cache for offline use
       let offline_data_cached = false;
       if (options?.cacheOffline !== false) {
-        await OfflineService.cacheVenue(
+        await offlineService.cacheVenue(
           venue,
           venue.sailingConditions,
           venue.weatherSources
@@ -170,10 +175,13 @@ export class VenueService {
 
       // Record venue transition
       if (previousVenue) {
+        const transitionType: 'first_visit' | 'returning' | 'traveling' | 'relocating' =
+          previousVenue.id === venue.id ? 'returning' : 'traveling';
+
         await supabaseVenueService.recordVenueTransition(userId, {
           fromVenue: previousVenue,
           toVenue: venue,
-          transitionType: 'manual',
+          transitionType,
           adaptationRequired: this.identifyAdaptations(previousVenue, venue),
           culturalBriefing: cultural_briefing
         });
@@ -181,8 +189,6 @@ export class VenueService {
 
       // Update current venue
       this.currentVenue = venue;
-
-      console.log('✅ Venue switched:', venue.name);
 
       return {
         previous_venue: previousVenue,
@@ -192,7 +198,7 @@ export class VenueService {
         offline_data_cached
       };
     } catch (error) {
-      console.error('❌ Venue switch failed:', error);
+
       throw error;
     }
   }
@@ -205,7 +211,6 @@ export class VenueService {
     onVenueDetected: (result: VenueDetectionResult) => void
   ): Promise<void> {
     try {
-      console.log('🔄 Starting automatic venue detection...');
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -245,9 +250,8 @@ export class VenueService {
         }
       );
 
-      console.log('✅ Auto-detection started');
     } catch (error) {
-      console.error('❌ Failed to start auto-detection:', error);
+
       throw error;
     }
   }
@@ -259,7 +263,7 @@ export class VenueService {
     if (this.locationSubscription) {
       this.locationSubscription.remove();
       this.locationSubscription = null;
-      console.log('✅ Auto-detection stopped');
+
     }
   }
 
@@ -332,72 +336,204 @@ export class VenueService {
   private static generateCulturalBriefing(
     newVenue: SailingVenue,
     previousVenue: SailingVenue | null
-  ): string[] {
-    const briefing: string[] = [];
+  ): CulturalBriefing {
+    const culturalContext = newVenue.culturalContext;
 
-    // Welcome message
-    briefing.push(`Welcome to ${newVenue.name} in ${newVenue.country}`);
+    const fallbackLanguage: Language = {
+      code: 'en',
+      name: 'English',
+      prevalence: 'common',
+      sailingTerminology: true,
+    };
 
-    // Language considerations
-    const primaryLang = newVenue.culturalContext?.primaryLanguages?.[0];
-    if (primaryLang && primaryLang.code !== 'en') {
-      briefing.push(`Primary language: ${primaryLang.name} - English prevalence: ${primaryLang.prevalence}`);
-    }
+    const primaryLanguage = culturalContext?.primaryLanguages?.[0] ?? fallbackLanguage;
 
-    // Racing culture
-    const culture = newVenue.culturalContext?.sailingCulture;
-    if (culture) {
-      briefing.push(`Sailing culture: ${culture.tradition} tradition, ${culture.formality} formality`);
-      briefing.push(`Competitiveness level: ${culture.competitiveness}`);
-    }
+    const languageInfo: CulturalBriefing['languageInfo'] = {
+      primaryLanguage,
+      commonPhrases: [],
+      sailingTerminology: [],
+      pronunciationGuide: undefined,
+    };
 
-    // Economic factors
-    const econ = newVenue.culturalContext?.economicFactors;
-    if (econ) {
-      briefing.push(`Local currency: ${econ.currency} (${econ.costLevel} cost level)`);
-      briefing.push(`Typical entry fee: ${econ.entryFees.typical} ${econ.currency}`);
-    }
+    const culturalProtocols: CulturalBriefing['culturalProtocols'] = (culturalContext?.socialProtocols ?? [])
+      .slice(0, 5)
+      .map(protocol => ({
+        situation: protocol.context,
+        expectedBehavior: protocol.protocol,
+        importance: protocol.importance,
+        consequences: protocol.consequences,
+      }));
 
-    // Racing customs
-    const customs = newVenue.culturalContext?.racingCustoms;
-    if (customs && customs.length > 0) {
-      briefing.push(`Key customs: ${customs.slice(0, 3).map(c => c.custom).join(', ')}`);
-    }
+    const tippingInfo = culturalContext?.economicFactors?.tipping;
+    const tippingCustoms: CulturalBriefing['economicInfo']['tippingCustoms'] = tippingInfo
+      ? tippingInfo.contexts.map(contextName => ({
+          service: contextName,
+          expected: tippingInfo.expected,
+          rate: tippingInfo.rate,
+          rateType: tippingInfo.rate ? 'percentage' : 'discretionary',
+          notes: tippingInfo.expected ? undefined : 'Tipping typically not expected',
+        }))
+      : [];
 
-    // Venue-specific notes
+    const economicFactors = culturalContext?.economicFactors;
+    const typicalCosts: CulturalBriefing['economicInfo']['typicalCosts'] = economicFactors
+      ? [
+          {
+            category: 'entry_fees',
+            description: 'Typical regatta entry fee',
+            cost: economicFactors.entryFees.typical,
+            currency: economicFactors.currency,
+            notes: `Range ${economicFactors.entryFees.range.min}-${economicFactors.entryFees.range.max}`,
+          },
+          {
+            category: 'accommodation',
+            description: 'Moderate accommodation per night',
+            cost: economicFactors.accommodation.moderate,
+            currency: economicFactors.currency,
+          },
+          {
+            category: 'dining',
+            description: 'Average dining cost',
+            cost: economicFactors.dining.moderate,
+            currency: economicFactors.currency,
+          },
+        ]
+      : [];
+
+    const paymentMethods: CulturalBriefing['economicInfo']['paymentMethods'] = [
+      {
+        type: 'card',
+        acceptance: 'common',
+        notes: `Credit cards are generally accepted in ${newVenue.country}`,
+      },
+      {
+        type: 'cash',
+        acceptance: 'common',
+        notes: `Carry local currency (${economicFactors?.currency ?? CURRENCY_BY_COUNTRY[newVenue.country] ?? 'USD'}) for smaller vendors.`,
+      },
+    ];
+
+    const economicInfo: CulturalBriefing['economicInfo'] = {
+      currency: economicFactors?.currency ?? CURRENCY_BY_COUNTRY[newVenue.country] ?? 'USD',
+      exchangeRate: undefined,
+      tippingCustoms,
+      typicalCosts,
+      paymentMethods,
+    };
+
+    const practicalTips: CulturalBriefing['practicalTips'] = [];
+
     if (previousVenue && previousVenue.region !== newVenue.region) {
-      briefing.push('⚠️ Regional change - review weather sources and local protocols');
+      practicalTips.push({
+        category: 'cultural',
+        tip: 'Regional change detected – review local race protocols and weather sources.',
+        importance: 'important',
+        source: 'estimated',
+      });
     }
 
-    return briefing;
+    if (culturalContext?.racingCustoms?.length) {
+      practicalTips.push({
+        category: 'cultural',
+        tip: `Key racing customs: ${culturalContext.racingCustoms.slice(0, 3).map(c => c.name).join(', ')}`,
+        importance: 'helpful',
+        source: 'verified',
+      });
+    }
+
+    return {
+      venueId: newVenue.id,
+      languageInfo,
+      culturalProtocols,
+      economicInfo,
+      practicalTips,
+      localContacts: undefined,
+    };
   }
 
   private static identifyAdaptations(
     fromVenue: SailingVenue,
     toVenue: SailingVenue
-  ): string[] {
-    const adaptations: string[] = [];
+  ): AdaptationRequirement[] {
+    const adaptations: AdaptationRequirement[] = [];
 
     // Region change
     if (fromVenue.region !== toVenue.region) {
-      adaptations.push('weather_sources');
-      adaptations.push('timezone');
+      adaptations.push(
+        this.createAdaptationRequirement(
+          'weather_source',
+          `Weather sources should be updated for ${toVenue.region}`,
+          'important',
+          'Enable region-specific weather feeds'
+        )
+      );
+      adaptations.push(
+        this.createAdaptationRequirement(
+          'cultural',
+          `Regional protocols differ between ${fromVenue.region} and ${toVenue.region}`,
+          'helpful',
+          'Review updated cultural briefing'
+        )
+      );
     }
 
     // Country change
     if (fromVenue.country !== toVenue.country) {
-      adaptations.push('currency');
-      adaptations.push('language');
-      adaptations.push('regulations');
+      adaptations.push(
+        this.createAdaptationRequirement(
+          'currency',
+          `Local currency changes from ${fromVenue.country} to ${toVenue.country}`,
+          'important',
+          'Update onboard pricing and budgeting settings'
+        )
+      );
+      adaptations.push(
+        this.createAdaptationRequirement(
+          'language',
+          `Primary language now ${toVenue.culturalContext?.primaryLanguages?.[0]?.name ?? 'English'}`,
+          'helpful',
+          'Share local language quick-reference with crew'
+        )
+      );
+      adaptations.push(
+        this.createAdaptationRequirement(
+          'regulatory',
+          `Racing regulations may differ in ${toVenue.country}`,
+          'critical',
+          'Confirm notice of race and local sailing instructions'
+        )
+      );
     }
 
     // Venue type change
     if (fromVenue.venueType !== toVenue.venueType) {
-      adaptations.push('racing_format');
-      adaptations.push('facility_access');
+      adaptations.push(
+        this.createAdaptationRequirement(
+          'equipment',
+          `Venue shifts from ${fromVenue.venueType} to ${toVenue.venueType}`,
+          'helpful',
+          'Review equipment lists and facility availability'
+        )
+      );
     }
 
     return adaptations;
+  }
+
+  private static createAdaptationRequirement(
+    category: AdaptationRequirement['category'],
+    description: string,
+    priority: AdaptationRequirement['priority'],
+    actionRequired: string,
+    userCanConfigure = true
+  ): AdaptationRequirement {
+    return {
+      category,
+      description,
+      priority,
+      actionRequired,
+      userCanConfigure,
+    };
   }
 
   // ==================== Utility Methods ====================

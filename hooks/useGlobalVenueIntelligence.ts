@@ -188,7 +188,7 @@ export function useGlobalVenueIntelligence() {
       }));
 
     } catch (error: any) {
-      console.error('🌍 Failed to load venue intelligence:', error);
+
       setState(prev => ({ ...prev, error: error.message }));
     }
   }, []);

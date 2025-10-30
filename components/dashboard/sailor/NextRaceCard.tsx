@@ -1,8 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Animated, Vibration, Platform, Alert } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Animated, Vibration, Platform, Alert, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
+import { createLogger } from '@/lib/utils/logger';
 
 interface NextRaceCardProps {
   raceId: string;
@@ -17,14 +18,16 @@ interface NextRaceCardProps {
   waveHeight: string;
   tideInfo: string;
   rigTuning?: {
-    shroudTension?: string;
-    forestayLength?: string;
-    mastRake?: string;
-    spreaderAngle?: string;
+    items: Array<{ label: string; value: string }>;
+    sourceTitle?: string;
+    windSummary?: string;
+    loading?: boolean;
+    message?: string;
   };
   onPress?: () => void;
 }
 
+const logger = createLogger('NextRaceCard');
 export function NextRaceCard({
   raceId,
   raceTitle,
@@ -48,7 +51,7 @@ export function NextRaceCard({
   const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     if (isCountdownActive && timeRemaining > 0) {
       interval = setInterval(() => {
@@ -97,7 +100,7 @@ export function NextRaceCard({
 
   const startGPSTracking = async () => {
     if (Platform.OS === 'web') {
-      console.log('GPS tracking not available on web');
+      logger.debug('GPS tracking not available on web');
       return;
     }
 
@@ -129,7 +132,6 @@ export function NextRaceCard({
 
       setLocationSubscription(subscription);
       setIsTracking(true);
-      console.log('🛰️ GPS tracking started');
     } catch (error) {
       console.error('Error starting GPS tracking:', error);
       Alert.alert('GPS Error', 'Failed to start GPS tracking');
@@ -141,7 +143,6 @@ export function NextRaceCard({
       locationSubscription.remove();
       setLocationSubscription(null);
       setIsTracking(false);
-      console.log(`🛰️ GPS tracking stopped. Recorded ${trackPoints.length} points`);
 
       // TODO: Save track to database with race ID
       if (trackPoints.length > 0) {
@@ -281,32 +282,42 @@ export function NextRaceCard({
               <MaterialCommunityIcons name="wrench-outline" size={18} color="#DBEAFE" />
               <Text style={styles.rigTuningTitle}>Critical Rig Settings</Text>
             </View>
-            <View style={styles.rigTuningGrid}>
-              {rigTuning.shroudTension && (
-                <View style={styles.rigTuningItem}>
-                  <Text style={styles.rigTuningLabel}>Shroud</Text>
-                  <Text style={styles.rigTuningValue}>{rigTuning.shroudTension}</Text>
+
+            {rigTuning.loading ? (
+              <View style={styles.rigTuningLoading}>
+                <ActivityIndicator size="small" color="#DBEAFE" />
+                <Text style={styles.rigTuningLoadingText}>Loading tuning checklist…</Text>
+              </View>
+            ) : rigTuning.items && rigTuning.items.length > 0 ? (
+              <>
+                {rigTuning.windSummary && (
+                  <Text style={styles.rigTuningWind}>{rigTuning.windSummary}</Text>
+                )}
+                <View style={styles.rigTuningGrid}>
+                  {rigTuning.items.map((item) => (
+                    <View key={`${item.label}-${item.value}`} style={styles.rigTuningItem}>
+                      <Text style={styles.rigTuningLabel}>{item.label}</Text>
+                      <Text style={styles.rigTuningValue}>{item.value}</Text>
+                    </View>
+                  ))}
                 </View>
-              )}
-              {rigTuning.forestayLength && (
-                <View style={styles.rigTuningItem}>
-                  <Text style={styles.rigTuningLabel}>Forestay</Text>
-                  <Text style={styles.rigTuningValue}>{rigTuning.forestayLength}</Text>
+                {rigTuning.sourceTitle && (
+                  <Text style={styles.rigTuningSource}>Source: {rigTuning.sourceTitle}</Text>
+                )}
+              </>
+            ) : (
+              <View style={styles.rigTuningMessage}>
+                <MaterialCommunityIcons name="book-cog-outline" size={16} color="#BFDBFE" />
+                <View style={styles.rigTuningMessageContent}>
+                  <Text style={styles.rigTuningMessageText}>
+                    {rigTuning.message || 'Add a tuning guide to unlock race-day rig presets.'}
+                  </Text>
+                  {rigTuning.sourceTitle && (
+                    <Text style={styles.rigTuningSource}>Source: {rigTuning.sourceTitle}</Text>
+                  )}
                 </View>
-              )}
-              {rigTuning.mastRake && (
-                <View style={styles.rigTuningItem}>
-                  <Text style={styles.rigTuningLabel}>Rake</Text>
-                  <Text style={styles.rigTuningValue}>{rigTuning.mastRake}</Text>
-                </View>
-              )}
-              {rigTuning.spreaderAngle && (
-                <View style={styles.rigTuningItem}>
-                  <Text style={styles.rigTuningLabel}>Spreader</Text>
-                  <Text style={styles.rigTuningValue}>{rigTuning.spreaderAngle}</Text>
-                </View>
-              )}
-            </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -500,6 +511,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  rigTuningWind: {
+    fontSize: 13,
+    color: '#BFDBFE',
+    marginBottom: 8,
+  },
   rigTuningGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -524,6 +540,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  rigTuningSource: {
+    fontSize: 12,
+    color: '#BFDBFE',
+    marginTop: 8,
+  },
+  rigTuningLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  rigTuningLoadingText: {
+    fontSize: 13,
+    color: '#BFDBFE',
+  },
+  rigTuningMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  rigTuningMessageContent: {
+    flex: 1,
+    gap: 4,
+  },
+  rigTuningMessageText: {
+    fontSize: 13,
+    color: '#BFDBFE',
+    flex: 1,
   },
   trackingIndicator: {
     position: 'absolute',

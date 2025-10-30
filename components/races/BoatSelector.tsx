@@ -19,6 +19,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/providers/AuthProvider';
 import { sailorBoatService, SailorBoat } from '@/services/SailorBoatService';
 import { QuickAddBoatForm } from '@/components/boats/QuickAddBoatForm';
+import { createLogger } from '@/lib/utils/logger';
 
 interface BoatSelectorProps {
   selectedBoatId?: string;
@@ -27,6 +28,7 @@ interface BoatSelectorProps {
   classId?: string; // Optional: Filter boats by class
 }
 
+const logger = createLogger('BoatSelector');
 export function BoatSelector({
   selectedBoatId,
   onSelect,
@@ -45,20 +47,20 @@ export function BoatSelector({
 
   const loadBoats = async () => {
     if (!user) {
-      console.warn('[BoatSelector] No user found - cannot load boats');
+      logger.warn('No user found - cannot load boats');
       setLoading(false);
       setError('Not authenticated');
       return;
     }
 
     if (!user.id) {
-      console.error('[BoatSelector] User object missing ID:', user);
+      logger.error('User object missing ID');
       setLoading(false);
       setError('User ID not found');
       return;
     }
 
-    console.log(`[BoatSelector] Starting boat load for user: ${user.id}`);
+    logger.debug(`Starting boat load for user: ${user.id}`);
     setLoading(true);
     setError(null);
 
@@ -67,18 +69,18 @@ export function BoatSelector({
 
       if (classId) {
         // Filter by class if provided
-        console.log(`[BoatSelector] Loading boats for class: ${classId}`);
+        logger.debug(`Loading boats for class: ${classId}`);
         loadedBoats = await sailorBoatService.listBoatsForSailorClass(
           user.id,
           classId
         );
       } else {
         // Get all boats
-        console.log('[BoatSelector] Loading all boats');
+        logger.debug('Loading all boats');
         loadedBoats = await sailorBoatService.listBoatsForSailor(user.id);
       }
 
-      console.log(`[BoatSelector] Successfully loaded ${loadedBoats.length} boats`);
+      logger.debug(`Successfully loaded ${loadedBoats.length} boats`);
       setBoats(loadedBoats);
       setError(null); // Clear any previous errors
 
@@ -86,19 +88,19 @@ export function BoatSelector({
       if (!selectedBoatId && loadedBoats.length > 0) {
         const defaultBoat = loadedBoats.find((b) => b.is_primary);
         if (defaultBoat) {
-          console.log(`[BoatSelector] Auto-selecting default boat: ${defaultBoat.id}`);
+          logger.debug(`Auto-selecting default boat: ${defaultBoat.id}`);
           onSelect(defaultBoat.id);
         }
       }
     } catch (err: any) {
-      console.error('[BoatSelector] Error loading boats:', err);
+      logger.error('Error loading boats', err);
       setError(err.message || 'Failed to load boats');
       // Don't show alert - just display error state
-      console.warn('[BoatSelector] User can still proceed without selecting a boat');
+      logger.warn('User can still proceed without selecting a boat');
       // Still allow proceeding with empty boats list
       setBoats([]);
     } finally {
-      console.log('[BoatSelector] Boat loading complete, setting loading=false');
+      logger.debug('Boat loading complete, setting loading=false');
       setLoading(false);
     }
   };

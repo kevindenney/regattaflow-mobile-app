@@ -6,8 +6,9 @@
  * bathymetric-tidal-analyst Skill to generate strategic recommendations.
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
-import * as turf from '@turf/turf';
+import Anthropic from '@anthropic-ai/sdk';
+import { feature } from '@turf/helpers';
+import centroid from '@turf/centroid';
 import {
   BathymetrySource,
   TidalDataSource,
@@ -22,20 +23,23 @@ import {
   type DepthContour,
   type CurrentVector
 } from '../types/bathymetry';
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Main service for bathymetric and tidal analysis
  */
+
+const logger = createLogger('BathymetricTidalService');
 export class BathymetricTidalService {
-    // private anthropic: Anthropic; // Disabled for web compatibility
+  private anthropic: Anthropic;
 
   constructor() {
     const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY not configured');
     }
-        // this.anthropic = new Anthropic({ apiKey });
+    this.anthropic = new Anthropic({ apiKey });
   }
 
   /**
@@ -59,7 +63,7 @@ export class BathymetricTidalService {
       const tidalEndTime = new Date(endTime.getTime() + 2 * 60 * 60 * 1000);
 
       // Fetch bathymetric data
-      console.log('Fetching bathymetric data...');
+      logger.debug('Fetching bathymetric data...');
       const bathymetry = await this.fetchBathymetry(
         request.racingArea,
         request.venue,
@@ -67,7 +71,7 @@ export class BathymetricTidalService {
       );
 
       // Fetch tidal predictions
-      console.log('Fetching tidal predictions...');
+      logger.debug('Fetching tidal predictions...');
       const centerPoint = this.calculateCenterPoint(request.racingArea);
       const tidal = await this.fetchTidalPredictions(
         centerPoint,
@@ -78,7 +82,7 @@ export class BathymetricTidalService {
       );
 
       // Identify strategic features from bathymetry and tidal data
-      console.log('Identifying strategic features...');
+      logger.debug('Identifying strategic features...');
       const strategicFeatures = this.identifyStrategicFeatures(
         bathymetry,
         tidal,
@@ -87,7 +91,7 @@ export class BathymetricTidalService {
       );
 
       // Call Claude API with bathymetric-tidal-analyst Skill
-      console.log('Generating AI analysis with bathymetric-tidal-analyst Skill...');
+      logger.debug('Generating AI analysis with bathymetric-tidal-analyst Skill...');
       const aiResult = await this.callClaudeWithSkill({
         bathymetry,
         tidal,
@@ -770,8 +774,8 @@ Format your response as JSON:
    * Calculate center point of a GeoJSON polygon
    */
   private calculateCenterPoint(polygon: GeoJSON.Polygon): { lat: number; lng: number } {
-    const feature = turf.feature(polygon);
-    const center = turf.centroid(feature);
+    const featureObj = feature(polygon);
+    const center = centroid(featureObj);
     return {
       lng: center.geometry.coordinates[0],
       lat: center.geometry.coordinates[1]

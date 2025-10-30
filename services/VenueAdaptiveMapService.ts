@@ -12,7 +12,7 @@
  * - Offline data prioritization
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Regional data source configuration

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 interface WebMapViewProps {
   venue: string;
@@ -10,25 +11,13 @@ interface WebMapViewProps {
   style?: React.CSSProperties;
 }
 
+const logger = createLogger('WebMapView');
 export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, onMapPress, style }: WebMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-
-  console.log('🗺️🔥🔥🔥🔥🔥🔥 WebMapView RENDER START =====');
-  console.log('🗺️🔥   venue:', venue, '(type:', typeof venue, ')');
-  console.log('🗺️🔥   marks:', marks?.length || 0, 'items');
-  console.log('🗺️🔥   clubMarkers:', clubMarkers?.length || 0, 'items');
-  console.log('🗺️🔥   style:', style);
-  console.log('🗺️🔥   style.width:', style?.width);
-  console.log('🗺️🔥   style.height:', style?.height);
-  console.log('🗺️🔥   style.position:', style?.position);
-  console.log('🗺️🔥   Platform.OS:', Platform.OS);
-  console.log('🗺️🔥   CRITICAL: This is the ACTUAL MAP COMPONENT!');
-  console.log('🗺️🔥   Stack trace:', new Error().stack?.split('\n').slice(0, 5));
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !mapContainerRef.current) return;
 
-    console.log('🗺️ Loading interactive nautical map fallback');
     showInteractiveFallbackMap();
   }, [venue, marks, clubMarkers]);
 
@@ -47,13 +36,12 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
       const x = ((lng - mapBounds.west) / (mapBounds.east - mapBounds.west)) * 100;
       const y = ((mapBounds.north - lat) / (mapBounds.north - mapBounds.south)) * 100;
 
-      console.log('🗺️ GPS CONVERSION DEBUG:');
-      console.log(`  Input GPS: lat=${lat}, lng=${lng}`);
-      console.log(`  Map bounds: west=${mapBounds.west}, east=${mapBounds.east}, north=${mapBounds.north}, south=${mapBounds.south}`);
-      console.log(`  Raw percentages: x=${x}%, y=${y}%`);
+      logger.debug(`  Input GPS: lat=${lat}, lng=${lng}`);
+      logger.debug(`  Map bounds: west=${mapBounds.west}, east=${mapBounds.east}, north=${mapBounds.north}, south=${mapBounds.south}`);
+      logger.debug(`  Raw percentages: x=${x}%, y=${y}%`);
 
       const clampedResult = { x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) };
-      console.log(`  Clamped result: x=${clampedResult.x}%, y=${clampedResult.y}%`);
+      logger.debug(`  Clamped result: x=${clampedResult.x}%, y=${clampedResult.y}%`);
 
       return clampedResult;
     };
@@ -63,22 +51,16 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
       const color = mark.color || '#FF6B35';
       let position;
 
-      console.log(`🏁 RACE MARK ${index + 1} DEBUG:`, {
-        name: mark.name,
-        lat: mark.lat,
-        lng: mark.lng,
-        hasGPS: !!(mark.lat && mark.lng)
-      });
-
       if (mark.lat && mark.lng) {
         // Use GPS coordinates if available
         position = convertGPSToPixelPercent(mark.lat, mark.lng);
-        console.log(`🏁 RACE MARK ${index + 1} using GPS positioning:`, position);
       } else {
         // Fallback to distributed positioning
         position = { x: 30 + (index * 15) % 40, y: 35 + (index * 10) % 30 };
-        console.log(`🏁 RACE MARK ${index + 1} using fallback positioning:`, position);
       }
+
+      const markName = mark.name || `Race Mark ${index + 1}`;
+      const markDescription = mark.description || 'Race course marking buoy';
 
       markersHTML += `
         <div style="
@@ -94,8 +76,8 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
           z-index: 10;
           box-shadow: 0 2px 4px rgba(0,0,0,0.3);
           transform: translate(-50%, -50%);
-        " title="${mark.name || `Race Mark ${index + 1}`}"
-           onclick="showMarkerDetails('${mark.name || `Race Mark ${index + 1}`}', 'race-mark', '${mark.lat || 'N/A'}', '${mark.lng || 'N/A'}', '${mark.description || 'Race course marking buoy'}')"
+        " title="${markName}"
+           onclick="showMarkerDetails('${markName}', 'race-mark', '${mark.lat || 'N/A'}', '${mark.lng || 'N/A'}', '${markDescription}')">
         </div>
       `;
     });
@@ -106,22 +88,12 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
                    club.type === 'racing-station' ? '#4444FF' : '#44FF44';
       let position;
 
-      console.log(`⛵ CLUB MARKER ${index + 1} DEBUG:`, {
-        name: club.name,
-        lat: club.lat,
-        lng: club.lng,
-        hasGPS: !!(club.lat && club.lng),
-        type: club.type
-      });
-
       if (club.lat && club.lng) {
         // Use GPS coordinates if available
         position = convertGPSToPixelPercent(club.lat, club.lng);
-        console.log(`⛵ CLUB MARKER ${index + 1} using GPS positioning:`, position);
       } else {
         // Fallback to distributed positioning
         position = { x: 25 + (index * 12) % 50, y: 50 + (index * 8) % 25 };
-        console.log(`⛵ CLUB MARKER ${index + 1} using fallback positioning:`, position);
       }
 
       markersHTML += `
@@ -148,32 +120,20 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
   };
 
   const showInteractiveFallbackMap = () => {
-    console.log('🗺️ WEBMAPVIEW DEBUG: showInteractiveFallbackMap called for venue:', venue);
 
     if (!mapContainerRef.current) {
-      console.log('🗺️ WEBMAPVIEW DEBUG: mapContainerRef.current is null, returning early');
+
       return;
     }
-
-    console.log('🗺️ WEBMAPVIEW DEBUG: About to inject HTML into mapContainerRef');
-    console.log('🗺️ WEBMAPVIEW DEBUG: mapContainerRef element:', mapContainerRef.current);
 
     const coords = getVenueCoordinates(venue);
     const raceMarks = getRaceMarksForVenue(venue); // Keep for backward compatibility
 
-    console.log('🗺️ WEBMAPVIEW DEBUG: About to generate marker overlays...');
-    console.log('🗺️ WEBMAPVIEW DEBUG: marks array length:', marks.length);
-    console.log('🗺️ WEBMAPVIEW DEBUG: clubMarkers array length:', clubMarkers.length);
-
     const markerOverlays = generateMarkerOverlays();
 
-    console.log('🗺️ DEBUG: Venue coordinate mapping:');
-    console.log('  venue ID:', venue);
-    console.log('  mapped coordinates:', coords);
-    console.log('  expected Hong Kong coords: [114.1694, 22.3193]');
-    console.log('🗺️ DEBUG: Generating map with', marks.length, 'race marks and', clubMarkers.length, 'club markers');
-    console.log('🗺️ DEBUG: Sample race mark data:', marks.slice(0, 2));
-    console.log('🗺️ DEBUG: Sample club marker data:', clubMarkers.slice(0, 2));
+    logger.debug('  venue ID:', venue);
+    logger.debug('  mapped coordinates:', coords);
+    logger.debug('  expected Hong Kong coords: [114.1694, 22.3193]');
 
     mapContainerRef.current.innerHTML = `
       <div style="
@@ -315,12 +275,10 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
       </div>
     `;
 
-    console.log('🗺️ WEBMAPVIEW DEBUG: HTML injected into mapContainerRef');
-
     // Define JavaScript functions directly (since innerHTML script tags don't execute)
-    console.log('🗺️ WEBMAPVIEW DEBUG: Defining showMarkerDetails function directly');
+
     (window as any).showMarkerDetails = function(name: string, type: string, lat: string, lng: string, description: string) {
-      console.log('🗺️ showMarkerDetails called:', name, type, lat, lng);
+
       const titleEl = document.getElementById('marker-title');
       const typeEl = document.getElementById('marker-type');
       const coordsEl = document.getElementById('marker-coords');
@@ -337,27 +295,22 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
     };
 
     (window as any).hideMarkerDetails = function() {
-      console.log('🗺️ hideMarkerDetails called');
+
       const modalEl = document.getElementById('marker-details-modal');
       const overlayEl = document.getElementById('marker-modal-overlay');
       if (modalEl) modalEl.style.display = 'none';
       if (overlayEl) overlayEl.style.display = 'none';
     };
 
-    console.log('🗺️ WEBMAPVIEW DEBUG: Functions defined. showMarkerDetails type:', typeof (window as any).showMarkerDetails);
-
-    console.log(`🗺️ Interactive fallback map loaded for ${venue}`);
-    console.log('🗺️ DEBUG: Added', marks.length + clubMarkers.length, 'total markers to map');
   };
 
   if (Platform.OS !== 'web') {
-    console.log('🗺️🔥🔥🔥 WebMapView: Platform.OS is NOT web, returning null');
-    console.log('  Platform.OS value:', Platform.OS);
+
+    logger.debug('  Platform.OS value:', Platform.OS);
     return null;
   }
 
-  console.log('🗺️🔥🔥🔥 WebMapView ABOUT TO RETURN DIV:');
-  console.log('  ref:', mapContainerRef);
+  logger.debug('  ref:', mapContainerRef);
 
   const mergedStyle = {
     width: '100%',
@@ -366,15 +319,6 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
     overflow: 'hidden',
     ...style
   };
-
-  console.log('🗺️🔥🔥🔥 WebMapView ABOUT TO RETURN <div>:');
-  console.log('🗺️🔥   mergedStyle:', mergedStyle);
-  console.log('🗺️🔥   mergedStyle.width:', mergedStyle.width);
-  console.log('🗺️🔥   mergedStyle.height:', mergedStyle.height);
-  console.log('🗺️🔥   mergedStyle.position:', mergedStyle.position);
-  console.log('🗺️🔥   mergedStyle.zIndex:', (mergedStyle as any).zIndex);
-  console.log('🗺️🔥   CRITICAL: This div should be visible with these styles!');
-  console.log('🗺️🔥   CRITICAL: If you see this log but no map, the div is rendering but invisible!');
 
   return (
     <div

@@ -5,8 +5,11 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // SendGrid configuration
+
+const logger = createLogger('EmailService');
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
 const SENDGRID_FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'noreply@regattaflow.com';
 const SENDGRID_FROM_NAME = 'RegattaFlow';
@@ -133,10 +136,7 @@ export class EmailService {
           throw new Error(`SendGrid error: ${JSON.stringify(errorData)}`);
         }
       } else {
-        console.log('SendGrid not configured. Email would be sent:', {
-          to: params.to,
-          subject: params.subject,
-        });
+        logger.debug('SendGrid not configured. Email would be sent:', params);
       }
 
       // Log email in database

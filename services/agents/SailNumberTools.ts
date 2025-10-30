@@ -36,7 +36,6 @@ Returns comprehensive boat and owner information to auto-populate profile.`,
         };
 
         // STEP 1: Search the internet for sail number information
-        console.log(`🔍 Searching internet for ${input.class_name} #${input.sail_number}...`);
 
         // Build targeted search queries
         const searchQueries = [
@@ -53,7 +52,6 @@ Returns comprehensive boat and owner information to auto-populate profile.`,
         // - Yacht club results pages
 
         // For now, we note the search in the response
-        console.log(`📡 Would search: ${searchQueries.join(' | ')}`);
 
         // STEP 2: Search our database for existing results
         const { data: externalResults, error } = await supabase

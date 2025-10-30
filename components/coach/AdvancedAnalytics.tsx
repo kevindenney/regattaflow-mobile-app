@@ -316,7 +316,7 @@ export default function AdvancedAnalytics() {
   const [sensorHealth, setSensorHealth] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
 
-  const updateInterval = useRef<NodeJS.Timeout>();
+  const updateInterval = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
     initializeServices();

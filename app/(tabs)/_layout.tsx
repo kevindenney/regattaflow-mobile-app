@@ -8,6 +8,7 @@ import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { useAuth } from '@/providers/AuthProvider';
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import { useBoats } from '@/hooks/useData';
+import { createLogger } from '@/lib/utils/logger';
 
 type TabConfig = {
   name: string;
@@ -15,17 +16,20 @@ type TabConfig = {
   icon: string;
   iconFocused?: string;
   isMenuTrigger?: boolean;
+  emoji?: string;
 };
 
 // Define tabs for each user type (5 visible tabs for sailors)
+
+const logger = createLogger('_layout');
 const getTabsForUserType = (userType: string | null): TabConfig[] => {
   switch (userType) {
     case 'sailor':
       return [
         { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
-        { name: 'venue', title: 'Venues', icon: 'location-outline', iconFocused: 'location' },
         { name: 'courses', title: 'Courses', icon: 'map-outline', iconFocused: 'map' },
         { name: 'boat/index', title: 'Boats', icon: 'boat-outline', iconFocused: 'boat' },
+        { name: 'venue', title: 'Venues', icon: 'location-outline', iconFocused: 'location' },
         { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
       ];
 
@@ -40,7 +44,7 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
 
     case 'club':
       return [
-        { name: 'events', title: 'Events', icon: 'sailboat', iconFocused: 'sailboat' },
+        { name: 'events', title: 'Events', icon: 'boat', iconFocused: 'boat' },
         { name: 'members', title: 'Members', icon: 'people-circle-outline', iconFocused: 'people-circle' },
         { name: 'race-management', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
         { name: 'profile', title: 'Profile', icon: 'person-outline', iconFocused: 'person' },
@@ -62,7 +66,7 @@ export default function TabLayout() {
   const { userType, user } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
-  const tabs = getTabsForUserType(userType);
+  const tabs = getTabsForUserType(userType ?? null);
   const [menuVisible, setMenuVisible] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
 
@@ -90,9 +94,9 @@ export default function TabLayout() {
   );
 
   // DEBUG LOGGING
-  console.log('[TabLayout] userType:', userType);
-  console.log('[TabLayout] tabs:', tabs);
-  console.log('[TabLayout] Visible tabs:', tabs.map(t => t.name));
+  logger.debug('[TabLayout] userType:', userType);
+  logger.debug('[TabLayout] tabs:', tabs);
+  logger.debug('[TabLayout] Visible tabs:', tabs.map(t => t.name));
 
   const menuItems = useMemo(
     () => {
@@ -186,11 +190,9 @@ export default function TabLayout() {
             borderTopColor: '#E5E7EB',
             height: 60,
           },
-          // Block swipe-back gesture on iOS to prevent navigating to Auth
-          gestureEnabled: false,
         }}
       >
-        {/* Tab 1: Races (primary for sailors) */}
+        {/* Tab 1: Races */}
         <Tabs.Screen
           name="races"
           options={{
@@ -205,22 +207,7 @@ export default function TabLayout() {
             tabBarButton: isTabVisible('races') ? undefined : () => null,
           }}
         />
-        {/* Tab 2: Calendar */}
-        <Tabs.Screen
-          name="calendar"
-          options={{
-            title: calendarTab?.title ?? 'Calendar',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={getIconName(calendarTab, focused, calendarTab?.iconFocused ?? 'calendar', calendarTab?.icon ?? 'calendar-outline') as any}
-                size={size}
-                color={color}
-              />
-            ),
-            tabBarButton: isTabVisible('calendar') ? undefined : () => null,
-          }}
-        />
-        {/* Tab 3: Courses (New Wizard Pattern) */}
+        {/* Tab 2: Courses */}
         <Tabs.Screen
           name="courses"
           options={{
@@ -238,11 +225,11 @@ export default function TabLayout() {
             tabBarButton: isTabVisible('courses') ? undefined : () => null,
           }}
         />
-        {/* Tab 4: Boats */}
+        {/* Tab 3: Boats */}
         <Tabs.Screen
           name="boat/index"
           options={{
-            title: boatTab?.title ?? 'Boat',
+            title: boatTab?.title ?? 'Boats',
             tabBarIcon: ({ color, size, focused }) =>
               boatTab?.emoji ? (
                 <EmojiTabIcon emoji={boatTab.emoji} focused={focused} size={size} />
@@ -256,22 +243,22 @@ export default function TabLayout() {
             tabBarButton: isTabVisible('boat/index') ? undefined : () => null,
           }}
         />
-        {/* Tab 5: Fleets */}
+        {/* Tab 4: Venues */}
         <Tabs.Screen
-          name="fleet"
+          name="venue"
           options={{
-            title: fleetTab?.title ?? 'Fleet',
+            title: venueTab?.title ?? 'Venues',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(fleetTab, focused, fleetTab?.iconFocused ?? 'people', fleetTab?.icon ?? 'people-outline') as any}
+                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'location', venueTab?.icon ?? 'location-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('fleet') ? undefined : () => null,
+            tabBarButton: isTabVisible('venue') ? undefined : () => null,
           }}
         />
-        {/* Tab 7: More - MUST BE LAST VISIBLE TAB */}
+        {/* Tab 5: More - MUST BE LAST VISIBLE TAB */}
         <Tabs.Screen
           name="more"
           options={{
@@ -291,6 +278,34 @@ export default function TabLayout() {
         />
         {/* Hidden tabs - Use tabBarButton to actually hide them on web */}
         <Tabs.Screen
+          name="calendar"
+          options={{
+            title: calendarTab?.title ?? 'Calendar',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(calendarTab, focused, calendarTab?.iconFocused ?? 'calendar', calendarTab?.icon ?? 'calendar-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('calendar') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="fleet"
+          options={{
+            title: fleetTab?.title ?? 'Fleet',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(fleetTab, focused, fleetTab?.iconFocused ?? 'people', fleetTab?.icon ?? 'people-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('fleet') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
             title: profileTab?.title ?? 'Profile',
@@ -302,13 +317,6 @@ export default function TabLayout() {
           options={{
             title: settingsTab?.title ?? 'Settings',
             tabBarButton: isTabVisible('settings') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="venue"
-          options={{
-            title: venueTab?.title ?? 'Venue',
-            tabBarButton: isTabVisible('venue') ? undefined : () => null,
           }}
         />
         <Tabs.Screen
@@ -449,6 +457,36 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="fleets"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="dashboard"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="race-session/[sessionId]"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="race/scrollable/[id]"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="add-next-race"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="race/comprehensive-add"
           options={{
             href: null,
           }}

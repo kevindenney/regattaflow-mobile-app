@@ -34,6 +34,10 @@ interface VenueSelectorProps {
   onSelectVenue: (venueId: string) => void;
 }
 
+type VenueVisitRow = {
+  sailing_venues: Venue | null;
+};
+
 export function VenueSelector({ currentVenue, onSelectVenue }: VenueSelectorProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -101,10 +105,12 @@ export function VenueSelector({ currentVenue, onSelectVenue }: VenueSelectorProp
         return;
       }
 
-      const recentVenueData = data
-        ?.map(v => v.sailing_venues)
-        .filter(Boolean) as Venue[];
-      setRecentVenues(recentVenueData || []);
+      const rows = (data as VenueVisitRow[] | null) ?? [];
+      const recentVenueData = rows
+        .map((v) => v.sailing_venues)
+        .filter((venue): venue is Venue => Boolean(venue));
+
+      setRecentVenues(recentVenueData);
     } catch (error) {
       // Don't fail the whole component if recent venues can't load
     }
@@ -201,9 +207,9 @@ export function VenueSelector({ currentVenue, onSelectVenue }: VenueSelectorProp
       >
         <View style={styles.selectorContent}>
           <Ionicons name="location" size={20} color="#007AFF" />
-          <View style={styles.venueInfo}>
-            <ThemedText style={styles.venueLabel}>Venue</ThemedText>
-            <ThemedText style={styles.venueName}>
+          <View style={styles.selectorVenueInfo}>
+            <ThemedText style={styles.selectorVenueLabel}>Venue</ThemedText>
+            <ThemedText style={styles.selectorVenueName}>
               {currentVenue ? `${getCountryFlag(currentVenue.country)} ${currentVenue.name}` : 'Select venue...'}
             </ThemedText>
           </View>
@@ -353,8 +359,8 @@ export function VenueSelector({ currentVenue, onSelectVenue }: VenueSelectorProp
               <View style={styles.mapViewContainer}>
                 <VenueMapView
                   currentVenue={currentVenue}
-                  onVenueSelect={handleSelectVenue}
-                  showAllVenues={true}
+                  onMarkerPress={venue => handleSelectVenue(venue.id)}
+                  showAllVenues
                 />
               </View>
             ) : (
@@ -477,16 +483,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  venueInfo: {
+  selectorVenueInfo: {
     gap: 2,
   },
-  venueLabel: {
+  selectorVenueLabel: {
     fontSize: 11,
     color: '#666',
     textTransform: 'uppercase',
     fontWeight: '600',
   },
-  venueName: {
+  selectorVenueName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
@@ -651,6 +657,10 @@ const styles = StyleSheet.create({
     boxShadow: '0px 2px',
     elevation: 2,
   },
+  venueItemActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#007AFF10',
+  },
   recentVenueContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -766,6 +776,16 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyState: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
   },

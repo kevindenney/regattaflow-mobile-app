@@ -67,7 +67,7 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
   const waveAnimation = useRef(new Animated.Value(0)).current;
 
   // Timer for recording duration
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
     return () => {
@@ -141,9 +141,8 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
         amplitude: 0
       });
 
-      console.log('🎤 Started recording for race analysis');
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
+
       Alert.alert(
         'Recording Error',
         'Failed to start voice recording. Please check microphone permissions.',
@@ -195,9 +194,8 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
         }, 100);
       }
 
-      console.log('🎤 Recording completed and processing started');
     } catch (error) {
-      console.error('❌ Failed to stop recording:', error);
+
       setIsProcessing(false);
       setRecordingState({
         isRecording: false,
@@ -217,9 +215,8 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
         recordingId: null,
         amplitude: 0
       });
-      console.log('🎤 Recording cancelled');
     } catch (error) {
-      console.error('❌ Failed to cancel recording:', error);
+
     }
   };
 

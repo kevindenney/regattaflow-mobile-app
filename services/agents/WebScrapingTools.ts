@@ -232,11 +232,8 @@ function parseCSVCalendar(csvText: string): Array<{
   const events: Array<any> = [];
   const lines = csvText.trim().split('\n').filter(line => line.trim());
 
-  console.log('📄 [CSV PARSE DEBUG] Starting CSV parse, total lines:', lines.length);
-  console.log('📄 [CSV PARSE DEBUG] First 3 lines:', lines.slice(0, 3));
-
   if (lines.length < 2) {
-    console.warn('⚠️ [CSV PARSE DEBUG] CSV too short, need at least header + 1 row');
+
     return events;
   }
 
@@ -257,16 +254,9 @@ function parseCSVCalendar(csvText: string): Array<{
     h.includes('location') || h.includes('venue') || h.includes('place')
   );
 
-  console.log('📊 [CSV PARSE DEBUG] CSV column mapping:', {
-    dateIdx, nameIdx, timeIdx, locationIdx,
-    headers: headers.slice(0, 5)
-  });
-
   // Parse data rows
   for (let i = 1; i < lines.length; i++) {
     const cells = lines[i].split(',').map(c => c.trim());
-
-    console.log(`📝 [CSV PARSE DEBUG] Row ${i}:`, cells.slice(0, 4));
 
     if (cells.length > Math.max(dateIdx, nameIdx)) {
       let rawDate = dateIdx >= 0 ? cells[dateIdx] : '';
@@ -275,7 +265,6 @@ function parseCSVCalendar(csvText: string): Array<{
       if (rawDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
         const [day, month, year] = rawDate.split('/');
         rawDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        console.log(`📅 [CSV PARSE DEBUG] Date converted: ${cells[dateIdx]} -> ${rawDate}`);
       }
 
       const event: any = {
@@ -293,16 +282,12 @@ function parseCSVCalendar(csvText: string): Array<{
       }
 
       if (event.name && event.date) {
-        console.log(`✅ [CSV PARSE DEBUG] Added event: ${event.name} on ${event.date}`);
         events.push(event);
       } else {
-        console.warn(`⚠️ [CSV PARSE DEBUG] Skipped row ${i}: missing name or date`, event);
       }
     }
   }
 
-  console.log(`📅 [CSV PARSE DEBUG] Total parsed ${events.length} events from CSV`);
-  console.log(`📋 [CSV PARSE DEBUG] Sample events:`, events.slice(0, 3));
   return events;
 }
 
@@ -346,7 +331,6 @@ function parseICSCalendar(icsText: string): Array<{
     }
   });
 
-  console.log(`📅 Parsed ${events.length} events from ICS`);
   return events;
 }
 
@@ -395,7 +379,6 @@ async function fetchAndParseWebsite(url: string, options: {
     const calendarData: Array<any> = [];
 
     if (followCalendarLinks && currentDepth < maxDepth) {
-      console.log(`🔍 Level ${currentDepth + 1}: Searching for calendar links...`);
 
       // Find calendar-related links
       const calendarLinks = links.filter(link => {
@@ -412,15 +395,11 @@ async function fetchAndParseWebsite(url: string, options: {
         );
       });
 
-      console.log(`📅 Found ${calendarLinks.length} potential calendar links`);
-
       // Follow calendar links (limit to 3 to avoid excessive requests)
       for (const calLink of calendarLinks.slice(0, 3)) {
         const fullUrl = calLink.url.startsWith('http')
           ? calLink.url
           : new URL(calLink.url, url).href;
-
-        console.log(`🔗 Following: ${fullUrl}`);
 
         try {
           // Check if it's a CSV or ICS file
@@ -458,7 +437,6 @@ async function fetchAndParseWebsite(url: string, options: {
             }
           }
         } catch (err) {
-          console.warn(`⚠️ Failed to fetch ${fullUrl}:`, err);
         }
       }
     }
@@ -527,7 +505,6 @@ export function createScrapeClubWebsiteTool(): AgentTool {
     }),
 
     execute: async (input) => {
-      console.log('🌐 Scraping club website:', input.url);
 
       try {
         const { textContent, links, calendarData } = await fetchAndParseWebsite(input.url, {
@@ -543,7 +520,6 @@ export function createScrapeClubWebsiteTool(): AgentTool {
 
         // NEW: Add events from discovered CSV/ICS calendars
         if (calendarData && calendarData.length > 0) {
-          console.log(`📅 Processing ${calendarData.length} discovered calendar files`);
 
           calendarData.forEach(cal => {
             raceCalendar.push(...cal.events.map((e: any) => ({
@@ -637,11 +613,10 @@ export function createScrapeClubWebsiteTool(): AgentTool {
           message,
         };
 
-        console.log('✅ Club scraping completed:', result.summary);
         return result;
 
       } catch (error: any) {
-        console.error('❌ Club scraping failed:', error);
+
         return {
           success: false,
           error: error.message,
@@ -679,14 +654,12 @@ export function createScrapeClassWebsiteTool(): AgentTool {
     }),
 
     execute: async (input) => {
-      console.log('🌐 Scraping class website:', input.url);
 
       try {
         const { textContent, links, html } = await fetchAndParseWebsite(input.url);
 
         // Extract fleet members from HTML tables
         const fleetMembers = extractFleetMembers(html, input.boat_class);
-        console.log(`🚢 Found ${fleetMembers.length} fleet members in tables`);
 
         // Simple pattern matching for class racing data
         const raceCalendar: any[] = [];
@@ -769,7 +742,6 @@ export function createScrapeClassWebsiteTool(): AgentTool {
         // Find owner name from fleet members if sail number provided
         if (input.sail_number && fleetMembers.length > 0) {
           const sailNum = input.sail_number.replace(/[^0-9]/g, ''); // Extract just numbers
-          console.log(`🔍 Looking for owner of ${input.boat_class} #${sailNum} in fleet list`);
 
           const matchingMember = fleetMembers.find(member =>
             member.sail_number === sailNum
@@ -777,7 +749,6 @@ export function createScrapeClassWebsiteTool(): AgentTool {
 
           if (matchingMember) {
             ownerName = matchingMember.owner_name;
-            console.log(`✅ Found owner in fleet table: ${ownerName}`);
           }
         }
 
@@ -820,11 +791,10 @@ export function createScrapeClassWebsiteTool(): AgentTool {
           message,
         };
 
-        console.log('✅ Class scraping completed:', result.summary);
         return result;
 
       } catch (error: any) {
-        console.error('❌ Class scraping failed:', error);
+
         return {
           success: false,
           error: error.message,
@@ -990,7 +960,6 @@ function categorizePDFDocument(title: string, url: string): {
  */
 
 export async function scrapeClubWebsite(url: string) {
-  console.log('🌐 Scraping club website:', url);
 
   try {
     const { textContent, links, html, calendarData } = await fetchAndParseWebsite(url, {
@@ -1047,8 +1016,6 @@ export async function scrapeClubWebsite(url: string) {
         }
       }
     });
-
-    console.log(`📊 Extracted ${upcoming_events.length} races from HTML tables`);
 
     // Add events from discovered calendars
     if (calendarData && calendarData.length > 0) {
@@ -1126,7 +1093,6 @@ export async function scrapeClubWebsite(url: string) {
 }
 
 export async function scrapeClassWebsite(url: string, boatClass: string) {
-  console.log('🌐 Scraping class website:', url, 'for', boatClass);
 
   try {
     const { textContent, links, html } = await fetchAndParseWebsite(url);
@@ -1150,7 +1116,6 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
       // Detect "Sailing Calendar" link to follow
       if (lowerText.includes('sailing calendar') && !lowerUrl.endsWith('.csv')) {
         calendarPageUrl = link.url.startsWith('http') ? link.url : `${url}${link.url}`;
-        console.log('📅 [CSV DEBUG] Found sailing calendar page link:', calendarPageUrl);
       }
 
       // Detect CSV calendar files
@@ -1162,11 +1127,6 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
           url: fullUrl,
           type: 'calendar',
         });
-        console.log('📅 [CSV DEBUG] Found CSV calendar:', {
-          linkText: link.text,
-          fullUrl,
-          isClassSpecific: lowerText.toLowerCase().includes(boatClass.toLowerCase())
-        });
       }
 
       // Detect PDF documents (enhanced categorization)
@@ -1174,7 +1134,6 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
         const fullUrl = link.url.startsWith('http') ? link.url : `${url}${link.url}`;
         const categorized = categorizePDFDocument(link.text, fullUrl);
         documents.push(categorized);
-        console.log(`📄 Found PDF (${categorized.type}):`, categorized.title);
       }
       // Detect race documents (non-PDF)
       else if (lowerText.includes('sailing instructions') || lowerUrl.includes('si_') || lowerUrl.includes('sailing')) {
@@ -1211,26 +1170,16 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
 
       // Detect races/regattas from links
       if (lowerText.includes('race') || lowerText.includes('regatta') || lowerText.includes('championship')) {
-        console.log('🔍 [SERIES DEBUG] Found race/series link:', {
-          linkText: link.text,
-          hasComma: link.text.includes(','),
-          hasAmpersand: link.text.includes('&'),
-          linkUrl: link.url
-        });
-
         // CRITICAL FIX: Split comma/ampersand-separated series names
         // "Croucher Series, Corinthian Series, Commodore Series, Moonraker Series & Phyloong Series"
         // Should become 5 separate races, not 1
         if (link.text.includes(',') || link.text.includes(' & ')) {
-          console.log('✂️ [SERIES DEBUG] Detected multi-series string, splitting...');
 
           // Split by comma and ampersand
           const seriesNames = link.text
             .split(/,| & /)
             .map(s => s.trim())
             .filter(s => s.length > 0);
-
-          console.log('📋 [SERIES DEBUG] Split into series:', seriesNames);
 
           seriesNames.forEach(seriesName => {
             upcoming_events.push({
@@ -1284,14 +1233,10 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
 
     // CRITICAL FIX: Follow "Sailing Calendar" page to find class-specific CSV files
     if (calendarPageUrl && csv_calendars.length === 0) {
-      console.log('🔗 [CSV DEBUG] Following calendar page to find CSV files:', calendarPageUrl);
-
-      try {
+      try{
         const corsProxy = 'https://api.allorigins.win/raw?url=';
         const calendarResponse = await fetch(corsProxy + encodeURIComponent(calendarPageUrl));
         const calendarHtml = await calendarResponse.text();
-
-        console.log('📄 [CSV DEBUG] Calendar page loaded, searching for CSV links...');
 
         // Extract all links from calendar page
         const calendarLinks = extractLinksFromHTML(calendarHtml);
@@ -1309,39 +1254,23 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
           const fullCsvUrl = classCSV.url.startsWith('http') ? classCSV.url :
                             calendarPageUrl.split('/').slice(0, 3).join('/') + classCSV.url;
           csv_calendars.push(fullCsvUrl);
-          console.log('✅ [CSV DEBUG] Found class-specific CSV on calendar page:', {
-            boatClass,
-            csvUrl: fullCsvUrl,
-            linkText: classCSV.text
-          });
-        } else {
-          console.log('⚠️ [CSV DEBUG] No class-specific CSV found on calendar page for:', boatClass);
-          console.log('📋 [CSV DEBUG] Available CSV links:', calendarLinks
-            .filter(l => l.url.toLowerCase().endsWith('.csv'))
-            .map(l => ({ text: l.text, url: l.url }))
-          );
         }
       } catch (err) {
-        console.error('❌ [CSV DEBUG] Failed to fetch calendar page:', err);
+
       }
     }
 
     // ENHANCEMENT: Auto-fetch and parse class-specific CSV calendars
     if (csv_calendars.length > 0) {
-      console.log(`🔄 [CSV DEBUG] Auto-fetching ${csv_calendars.length} CSV calendar(s)...`);
 
       const corsProxy = 'https://api.allorigins.win/raw?url=';
 
       for (const csvUrl of csv_calendars) {
         try {
-          console.log(`📥 [CSV DEBUG] Downloading: ${csvUrl}`);
           const response = await fetch(corsProxy + encodeURIComponent(csvUrl));
           const csvText = await response.text();
 
-          console.log(`📊 [CSV DEBUG] CSV size: ${csvText.length} bytes`);
-
           const parsedEvents = parseCSVCalendar(csvText);
-          console.log(`✅ [CSV DEBUG] Parsed ${parsedEvents.length} events from CSV`);
 
           // Add parsed events with source tracking
           parsedEvents.forEach(event => {
@@ -1352,25 +1281,12 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
             });
           });
         } catch (err) {
-          console.error(`❌ [CSV DEBUG] Failed to fetch ${csvUrl}:`, err);
         }
       }
     }
 
     // Smart race filtering by boat class
     const categorized = filterRacesByClass(upcoming_events, boatClass);
-    console.log(`📋 [FILTER DEBUG] Found ${upcoming_events.length} total events:`, {
-      class_specific: categorized.class_specific.length,
-      multi_class: categorized.multi_class.length,
-      other_races: categorized.other_races.length,
-      csv_calendars: csv_calendars.length,
-      total_sources: {
-        link: upcoming_events.filter(e => e.source === 'link').length,
-        link_split: upcoming_events.filter(e => e.source === 'link_split').length,
-        text_extraction: upcoming_events.filter(e => e.source === 'text_extraction').length,
-        csv_calendar: upcoming_events.filter(e => e.source === 'csv_calendar').length,
-      }
-    });
 
     return {
       url,

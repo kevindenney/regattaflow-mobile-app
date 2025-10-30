@@ -5,6 +5,7 @@
 
 import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface SubscriptionPlan {
   id: string;
@@ -22,6 +23,7 @@ export interface SubscriptionStatus {
   cancelAtPeriodEnd?: boolean;
 }
 
+const logger = createLogger('StripeService.native');
 export class StripeService {
   private readonly apiUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:3000';
 
@@ -290,7 +292,7 @@ export class StripeService {
   async initializeStripe(): Promise<void> {
     if (Platform.OS === 'web') {
       // Stripe.js is loaded via script tag for web
-      console.log('Stripe: Web platform detected, skipping mobile initialization');
+      logger.debug('Stripe: Web platform detected, skipping mobile initialization');
       return;
     }
 
@@ -305,7 +307,7 @@ export class StripeService {
           urlScheme: 'regattaflow'
         });
 
-        console.log('Stripe initialized for mobile');
+        logger.debug('Stripe initialized for mobile');
       }
     } catch (error) {
       console.error('Failed to initialize Stripe:', error);

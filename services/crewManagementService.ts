@@ -4,6 +4,8 @@
  */
 
 import { supabase } from './supabase';
+import MutationQueueService from './MutationQueueService';
+import { createLogger } from '@/lib/utils/logger';
 
 export type CrewRole = 'helmsman' | 'tactician' | 'trimmer' | 'bowman' | 'pit' | 'grinder' | 'other';
 export type CrewAccessLevel = 'view' | 'edit' | 'full';
@@ -38,6 +40,8 @@ export interface CrewMember {
   performanceNotes: Array<{ date: string; race: string; note: string }>;
   createdAt: string;
   updatedAt: string;
+  queuedForSync?: boolean;
+  offlineOperation?: string;
 }
 
 export interface CrewAvailability {
@@ -50,6 +54,8 @@ export interface CrewAvailability {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  queuedForSync?: boolean;
+  offlineOperation?: string;
 }
 
 export interface CrewMemberWithAvailability extends CrewMember {
@@ -88,6 +94,9 @@ export interface CrewRaceStats {
   totalPoints?: number;
 }
 
+const logger = createLogger('crewManagementService');
+const CREW_COLLECTION = 'crew_members';
+const CREW_AVAILABILITY_COLLECTION = 'crew_availability';
 class CrewManagementService {
   /**
    * Get all crew members for a sailor's class
@@ -127,9 +136,9 @@ class CrewManagementService {
   }
 
   /**
-   * Invite a new crew member
+   * Invite a new crew member (direct Supabase call without offline handling)
    */
-  async inviteCrewMember(
+  async inviteCrewMemberDirect(
     sailorId: string,
     classId: string,
     invite: CrewInvite
@@ -150,7 +159,6 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error inviting crew member:', error);
       throw error;
     }
 
@@ -161,9 +169,97 @@ class CrewManagementService {
   }
 
   /**
+   * Invite a new crew member with offline queue support
+   */
+  async inviteCrewMember(
+    sailorId: string,
+    classId: string,
+    invite: CrewInvite
+  ): Promise<CrewMember> {
+    try {
+      return await this.inviteCrewMemberDirect(sailorId, classId, invite);
+    } catch (error: any) {
+      logger.warn('Error inviting crew member, queueing for offline sync', error);
+
+      const tempId = `local_crew_${Date.now()}`;
+      const nowIso = new Date().toISOString();
+      const queuedMember: CrewMember = {
+        id: tempId,
+        sailorId,
+        classId,
+        email: invite.email.toLowerCase(),
+        name: invite.name,
+        role: invite.role,
+        accessLevel: invite.accessLevel || 'view',
+        status: 'pending',
+        isPrimary: false,
+        certifications: [],
+        inviteToken: undefined,
+        inviteSentAt: nowIso,
+        inviteAcceptedAt: undefined,
+        notes: invite.notes,
+        performanceNotes: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        queuedForSync: true,
+        offlineOperation: 'invite',
+      };
+
+      await MutationQueueService.enqueueMutation(CREW_COLLECTION, 'upsert', {
+        action: 'invite',
+        sailorId,
+        classId,
+        invite,
+      });
+
+      const offlineError: any = new Error('Crew invite queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = queuedMember;
+      offlineError.originalError = error;
+      offlineError.operation = 'inviteCrewMember';
+      throw offlineError;
+    }
+  }
+
+  /**
    * Update crew member details
    */
   async updateCrewMember(
+    crewMemberId: string,
+    updates: Partial<{
+      name: string;
+      role: CrewRole;
+      accessLevel: CrewAccessLevel;
+      status: CrewStatus;
+      notes: string;
+    }>
+  ): Promise<CrewMember> {
+    try {
+      return await this.updateCrewMemberDirect(crewMemberId, updates);
+    } catch (error: any) {
+      logger.warn('Error updating crew member, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(CREW_COLLECTION, 'upsert', {
+        action: 'update',
+        crewMemberId,
+        updates,
+      });
+
+      const offlineError: any = new Error('Crew update queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = {
+        id: crewMemberId,
+        updates,
+        queuedForSync: true,
+        offlineOperation: 'update',
+      };
+      offlineError.originalError = error;
+      offlineError.operation = 'updateCrewMember';
+      throw offlineError;
+    }
+  }
+
+  async updateCrewMemberDirect(
     crewMemberId: string,
     updates: Partial<{
       name: string;
@@ -200,6 +296,26 @@ class CrewManagementService {
    * Remove crew member
    */
   async removeCrewMember(crewMemberId: string): Promise<void> {
+    try {
+      await this.removeCrewMemberDirect(crewMemberId);
+    } catch (error: any) {
+      logger.warn('Error removing crew member, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(CREW_COLLECTION, 'delete', {
+        action: 'remove',
+        crewMemberId,
+      });
+
+      const offlineError: any = new Error('Crew removal queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = { id: crewMemberId };
+      offlineError.originalError = error;
+      offlineError.operation = 'removeCrewMember';
+      throw offlineError;
+    }
+  }
+
+  async removeCrewMemberDirect(crewMemberId: string): Promise<void> {
     const { error } = await supabase
       .from('crew_members')
       .delete()
@@ -374,7 +490,7 @@ class CrewManagementService {
    */
   private async sendInviteEmail(crewMember: any): Promise<void> {
     // TODO: Implement email sending via Supabase Edge Function or third-party service
-    console.log(`Would send invite email to ${crewMember.email} with token ${crewMember.invite_token}`);
+    logger.debug(`Would send invite email to ${crewMember.email} with token ${crewMember.invite_token}`);
   }
 
   // ==========================================
@@ -691,6 +807,51 @@ class CrewManagementService {
       notes?: string;
     }
   ): Promise<CrewAvailability> {
+    try {
+      return await this.setCrewAvailabilityDirect(crewMemberId, availability);
+    } catch (error: any) {
+      logger.warn('Error setting crew availability, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(CREW_AVAILABILITY_COLLECTION, 'upsert', {
+        action: 'create',
+        crewMemberId,
+        availability,
+      });
+
+      const nowIso = new Date().toISOString();
+      const fallback: CrewAvailability = {
+        id: `local_availability_${Date.now()}`,
+        crewMemberId,
+        startDate: availability.startDate,
+        endDate: availability.endDate,
+        status: availability.status,
+        reason: availability.reason,
+        notes: availability.notes,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        queuedForSync: true,
+        offlineOperation: 'create',
+      };
+
+      const offlineError: any = new Error('Crew availability queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = fallback;
+      offlineError.originalError = error;
+      offlineError.operation = 'setCrewAvailability';
+      throw offlineError;
+    }
+  }
+
+  async setCrewAvailabilityDirect(
+    crewMemberId: string,
+    availability: {
+      startDate: string;
+      endDate: string;
+      status: AvailabilityStatus;
+      reason?: string;
+      notes?: string;
+    }
+  ): Promise<CrewAvailability> {
     const { data, error } = await supabase
       .from('crew_availability')
       .insert({
@@ -716,6 +877,41 @@ class CrewManagementService {
    * Update crew availability
    */
   async updateCrewAvailability(
+    availabilityId: string,
+    updates: Partial<{
+      startDate: string;
+      endDate: string;
+      status: AvailabilityStatus;
+      reason: string;
+      notes: string;
+    }>
+  ): Promise<CrewAvailability> {
+    try {
+      return await this.updateCrewAvailabilityDirect(availabilityId, updates);
+    } catch (error: any) {
+      logger.warn('Error updating crew availability, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(CREW_AVAILABILITY_COLLECTION, 'upsert', {
+        action: 'update',
+        availabilityId,
+        updates,
+      });
+
+      const offlineError: any = new Error('Crew availability update queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = {
+        id: availabilityId,
+        updates,
+        queuedForSync: true,
+        offlineOperation: 'update',
+      };
+      offlineError.originalError = error;
+      offlineError.operation = 'updateCrewAvailability';
+      throw offlineError;
+    }
+  }
+
+  async updateCrewAvailabilityDirect(
     availabilityId: string,
     updates: Partial<{
       startDate: string;
@@ -752,6 +948,26 @@ class CrewManagementService {
    * Delete crew availability
    */
   async deleteCrewAvailability(availabilityId: string): Promise<void> {
+    try {
+      await this.deleteCrewAvailabilityDirect(availabilityId);
+    } catch (error: any) {
+      logger.warn('Error deleting crew availability, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(CREW_AVAILABILITY_COLLECTION, 'delete', {
+        action: 'delete',
+        availabilityId,
+      });
+
+      const offlineError: any = new Error('Crew availability deletion queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = { id: availabilityId };
+      offlineError.originalError = error;
+      offlineError.operation = 'deleteCrewAvailability';
+      throw offlineError;
+    }
+  }
+
+  async deleteCrewAvailabilityDirect(availabilityId: string): Promise<void> {
     const { error } = await supabase
       .from('crew_availability')
       .delete()
@@ -897,3 +1113,62 @@ class CrewManagementService {
 }
 
 export const crewManagementService = new CrewManagementService();
+
+export function initializeCrewMutationHandlers() {
+  MutationQueueService.registerHandler(CREW_COLLECTION, {
+    upsert: async (payload: any) => {
+      switch (payload?.action) {
+        case 'invite':
+          await crewManagementService.inviteCrewMemberDirect(
+            payload.sailorId,
+            payload.classId,
+            payload.invite
+          );
+          break;
+        case 'update':
+          await crewManagementService.updateCrewMemberDirect(
+            payload.crewMemberId,
+            payload.updates || {}
+          );
+          break;
+        default:
+          logger.warn('Unhandled crew upsert action', payload?.action);
+      }
+    },
+    delete: async (payload: any) => {
+      if (payload?.action === 'remove' && payload.crewMemberId) {
+        await crewManagementService.removeCrewMemberDirect(payload.crewMemberId);
+      } else {
+        logger.warn('Unhandled crew delete action', payload?.action);
+      }
+    },
+  });
+
+  MutationQueueService.registerHandler(CREW_AVAILABILITY_COLLECTION, {
+    upsert: async (payload: any) => {
+      switch (payload?.action) {
+        case 'create':
+          await crewManagementService.setCrewAvailabilityDirect(
+            payload.crewMemberId,
+            payload.availability
+          );
+          break;
+        case 'update':
+          await crewManagementService.updateCrewAvailabilityDirect(
+            payload.availabilityId,
+            payload.updates || {}
+          );
+          break;
+        default:
+          logger.warn('Unhandled crew availability upsert action', payload?.action);
+      }
+    },
+    delete: async (payload: any) => {
+      if (payload?.action === 'delete' && payload.availabilityId) {
+        await crewManagementService.deleteCrewAvailabilityDirect(payload.availabilityId);
+      } else {
+        logger.warn('Unhandled crew availability delete action', payload?.action);
+      }
+    },
+  });
+}

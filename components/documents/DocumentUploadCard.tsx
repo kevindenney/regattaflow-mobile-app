@@ -20,6 +20,9 @@ import { DocumentProcessingService } from '@/services/ai/DocumentProcessingServi
 import { useAuth } from '@/providers/AuthProvider';
 import type { StoredDocument } from '@/services/storage/DocumentStorageService';
 import type { DocumentAnalysis, RaceCourseExtraction } from '@/lib/types/ai-knowledge';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('DocumentUploadCard');
 
 interface DocumentUploadCardProps {
   onDocumentUploaded?: (document: StoredDocument) => void;
@@ -32,7 +35,6 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   onAnalysisComplete,
   onCourseExtracted
 }) => {
-  console.log('📄 DocumentUploadCard: Component initializing');
   const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -45,7 +47,6 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   // Load documents from localStorage on component mount (web only)
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      console.log('📤 DocumentUploadCard: useEffect - Loading documents from localStorage');
       const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
       const userIdToUse = user?.id || debugUserId;
 
@@ -53,36 +54,26 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
         const storedDocs = localStorage.getItem('regattaflow_documents');
         if (storedDocs) {
           const documents = JSON.parse(storedDocs);
-          // Filter by userId
           const userDocs = documents.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
-          console.log('📤 DocumentUploadCard: Loaded', userDocs.length, 'documents from localStorage');
           setUploadedDocuments(userDocs);
         } else {
-          console.log('📤 DocumentUploadCard: No documents found in localStorage');
           setUploadedDocuments([]);
         }
       } catch (error) {
-        console.error('📤 DocumentUploadCard: Error loading documents from localStorage:', error);
+        logger.error('Error loading documents from localStorage:', error);
         setUploadedDocuments([]);
       }
     } else {
-      // For mobile, we would use a different storage mechanism
       setUploadedDocuments([]);
     }
-  }, [user?.id]); // Only re-run when user ID changes, not when user object changes
+  }, [user?.id]);
 
   const handleUploadDocument = useCallback(async () => {
-    console.log('📤 DocumentUploadCard: handleUploadDocument called');
-    console.log('📤 DocumentUploadCard: user check:', { hasUser: !!user, userId: user?.id });
-
     // Debug mode - allow upload without authentication for testing
     const debugMode = true;
     const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
 
     if (!user?.id && !debugMode) {
-      console.log('📤 DocumentUploadCard: No user - showing sign in alert');
-      // Use console.warn instead of Alert.alert for web compatibility
-      console.warn('📤 DocumentUploadCard: Please sign in to upload documents');
       if (typeof window !== 'undefined') {
         window.alert('Please sign in to upload documents');
       }
@@ -90,10 +81,6 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
     }
 
     const userIdToUse = user?.id || debugUserId;
-    console.log('📤 DocumentUploadCard: Using user ID:', userIdToUse, user ? '(real user)' : '(debug mode)');
-
-    // For debug/web mode, use browser alert instead of React Native Alert
-    console.log('📤 DocumentUploadCard: Showing document type selection');
 
     if (typeof window !== 'undefined') {
       // Web-compatible alert for document type selection
@@ -112,11 +99,9 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       );
 
       const choiceNum = parseInt(choice || '1');
-      console.log('📤 DocumentUploadCard: User selected document type:', choiceNum);
 
       switch(choiceNum) {
         case 1:
-          console.log('📤 DocumentUploadCard: Uploading Tides/Current Strategy');
           uploadDocumentWithType('book', 'tides_currents', 'Tides and Current Strategy Guide');
           break;
         case 2:
@@ -129,7 +114,6 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
           uploadDocumentWithType('weather_guide', 'weather', 'Weather Strategy Guide');
           break;
         default:
-          console.log('📤 DocumentUploadCard: Default to Tides/Current Strategy (user\'s preferred type)');
           uploadDocumentWithType('book', 'tides_currents', 'Tides and Current Strategy Guide');
       }
     } else {
@@ -169,58 +153,40 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
     category: 'tides_currents' | 'tactics' | 'rules' | 'weather',
     defaultTitle: string
   ) => {
-    console.log('📤 DocumentUploadCard: uploadDocumentWithType called', { type, category, defaultTitle });
-
     // Use debug user ID if no real user
     const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
     const userIdToUse = user?.id || debugUserId;
-    console.log('📤 DocumentUploadCard: Using user ID for upload:', userIdToUse, user ? '(real user)' : '(debug mode)');
 
-    console.log('📤 DocumentUploadCard: Setting isUploading to true');
     setIsUploading(true);
     try {
-      console.log('📤 DocumentUploadCard: Calling documentStorageService.pickAndUploadDocument');
       const result = await documentStorageService.pickAndUploadDocument(userIdToUse);
-      console.log('📤 DocumentUploadCard: Upload result:', {
-        success: result.success,
-        hasDocument: !!result.document,
-        error: result.error
-      });
 
       if (result.success && result.document) {
-        console.log('📤 DocumentUploadCard: Upload successful, updating state');
-        console.log('📤 DocumentUploadCard: Current uploadedDocuments length:', uploadedDocuments.length);
-
         // Load fresh documents from localStorage to ensure consistency (web only)
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
           const freshStoredDocs = localStorage.getItem('regattaflow_documents');
           if (freshStoredDocs) {
             const freshDocuments = JSON.parse(freshStoredDocs);
             const userDocs = freshDocuments.filter((doc: StoredDocument) => doc.user_id === userIdToUse);
-            console.log('📤 DocumentUploadCard: Refreshed uploadedDocuments length:', userDocs.length);
             setUploadedDocuments(userDocs);
           }
         }
 
         if (onDocumentUploaded) {
-          console.log('📤 DocumentUploadCard: Calling onDocumentUploaded callback');
           onDocumentUploaded(result.document);
         }
 
         // Check if we're using local storage (skip processing for local files)
         const isLocalStorage = result.document.metadata?.locallyStored === true;
-        console.log('📤 DocumentUploadCard: Is local storage?', isLocalStorage);
 
         if (!isLocalStorage) {
-          console.log('📤 DocumentUploadCard: Processing document with AI (non-local storage)');
-
           // Use the new sailing document library for processing
           const { sailingDocumentLibrary } = await import('@/services/storage/SailingDocumentLibraryService');
 
           // Download the file for processing
           const blob = await documentStorageService.downloadDocument(result.document.id, userIdToUse);
           if (blob) {
-            const sailingDoc = await sailingDocumentLibrary.uploadSailingDocument(
+            await sailingDocumentLibrary.uploadSailingDocument(
               blob,
               {
                 title: result.document.filename || defaultTitle,
@@ -230,33 +196,24 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
               },
               userIdToUse
             );
-
-            console.log('📚 Sailing document processed:', sailingDoc);
           }
 
           // Also run the existing processing
           await processDocument(result.document);
-        } else {
-          console.log('📤 DocumentUploadCard: Skipping AI processing for local storage document');
         }
-
-        console.log('📤 DocumentUploadCard: Document upload completed successfully');
       } else if (result.error) {
-        console.error('📤 DocumentUploadCard: Upload failed with error:', result.error);
+        logger.error('Upload failed:', result.error);
         Alert.alert('Upload Failed', result.error);
       }
     } catch (error: any) {
-      console.error('📤 DocumentUploadCard: Exception during upload:', error);
+      logger.error('Exception during upload:', error);
       Alert.alert('Error', 'Failed to upload document');
     } finally {
-      console.log('📤 DocumentUploadCard: Setting isUploading to false');
       setIsUploading(false);
     }
   }, [user, onDocumentUploaded]);
 
   const processDocument = async (document: StoredDocument) => {
-    console.log('📄 DocumentUploadCard: processDocument called', document.id);
-
     // Use debug user ID if no real user
     const debugUserId = '51241049-02ed-4e31-b8c6-39af7c9d4d50';
     const userIdToUse = user?.id || debugUserId;
@@ -264,7 +221,6 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
     setIsProcessing(true);
     try {
       // Download document content
-      console.log('📄 DocumentUploadCard: Downloading document for processing');
       const blob = await documentStorageService.downloadDocument(document.id, userIdToUse);
       if (!blob) {
         throw new Error('Failed to download document');
@@ -293,15 +249,8 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
 
           setCurrentCourseExtraction(courseExtraction);
           onCourseExtracted?.(courseExtraction);
-
-          console.log('🏁 Race course extracted:', {
-            courseType: courseExtraction.courseLayout.type,
-            marksFound: courseExtraction.marks.length,
-            confidence: courseExtraction.extractionMetadata.overallConfidence
-          });
-
         } catch (courseError) {
-          console.warn('⚠️ Race course extraction failed:', courseError);
+          logger.warn('Race course extraction failed:', courseError);
           // Continue with document analysis even if course extraction fails
         }
       }
@@ -312,7 +261,7 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       onAnalysisComplete?.(analysis);
 
     } catch (error: any) {
-      console.error('Processing error:', error);
+      logger.error('Processing error:', error);
       Alert.alert('Processing Failed', 'Unable to analyze document');
     } finally {
       setIsProcessing(false);
@@ -453,7 +402,6 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       )}
 
       <ScrollView style={styles.documentsList}>
-        {console.log('📤 DocumentUploadCard: Rendering documents list, count:', uploadedDocuments.length)}
         {uploadedDocuments.map((doc) => (
           <View
             key={doc.id}

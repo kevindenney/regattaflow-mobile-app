@@ -17,6 +17,7 @@ import raceCoursesData from '@/data/race-courses.json';
 import sailingLocations from '@/data/sailing-locations.json';
 import type { GeoLocation, RaceMark } from '@/lib/types/advanced-map';
 import type { YachtClubData, RaceCourseLibrary } from '@/lib/types/venues';
+import { createLogger } from '@/lib/utils/logger';
 
 interface VenueIntelligenceMapViewProps {
   style?: any;
@@ -40,8 +41,8 @@ interface RaceCourseOverlay {
   clubId?: string;
 }
 
+const logger = createLogger('VenueIntelligenceMapView');
 export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProps) {
-  console.log('🗺️🔥 VenueIntelligenceMapView: ===== COMPONENT RENDERING =====');
 
   // Venue intelligence hook
   const hookResult = useVenueIntelligence();
@@ -52,24 +53,14 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
     isLoadingIntelligence,
   } = hookResult;
 
-  console.log('🗺️🔥 VenueIntelligenceMapView: Hook returned:', {
-    hasCurrentVenue: !!currentVenue,
-    currentVenueName: currentVenue?.name || 'null',
-    currentVenueId: currentVenue?.id || 'null',
-    isDetecting,
-    hasIntelligence: !!intelligence,
-    isLoadingIntelligence,
-    allHookKeys: Object.keys(hookResult),
-  });
-
   // Debug logging for hook state
   useEffect(() => {
-    console.log('🗺️🔥 VenueIntelligenceMapView: HOOK STATE CHANGED:');
-    console.log('  currentVenue:', currentVenue?.name || 'null');
-    console.log('  isDetecting:', isDetecting);
-    console.log('  intelligence:', intelligence ? 'loaded' : 'null');
-    console.log('  isLoadingIntelligence:', isLoadingIntelligence);
-    console.log('  Timestamp:', new Date().toISOString());
+
+    logger.debug('  currentVenue:', currentVenue?.name || 'null');
+    logger.debug('  isDetecting:', isDetecting);
+    logger.debug('  intelligence:', intelligence ? 'loaded' : 'null');
+    logger.debug('  isLoadingIntelligence:', isLoadingIntelligence);
+    logger.debug('  Timestamp:', new Date().toISOString());
   }, [currentVenue, isDetecting, intelligence, isLoadingIntelligence]);
 
   // Map and venue state
@@ -138,10 +129,8 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
         }
 
         setClubMarkers(markers);
-        console.log(`🏆 Loaded ${markers.length} club markers for ${currentVenue.name}`);
-        console.log('🏆 DEBUG: Club markers:', markers.slice(0, 3));
       } catch (error) {
-        console.error('❌ Failed to load club markers:', error);
+
       }
     };
 
@@ -195,13 +184,11 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
         const activeCourse = courseOverlays.find(c => c.active);
         if (activeCourse) {
           setMapMarks(activeCourse.marks);
-          console.log('🗺️ DEBUG: Initial race course marks set:', activeCourse.marks.length, 'marks');
-          console.log('🗺️ DEBUG: First few marks:', activeCourse.marks.slice(0, 3));
+
         }
 
-        console.log(`⛵ Loaded ${courseOverlays.length} race courses for ${currentVenue.name}`);
       } catch (error) {
-        console.error('❌ Failed to load race courses:', error);
+
       }
     };
 
@@ -210,12 +197,12 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
 
   // Handle map interactions
   const handleMapPress = (coordinates: GeoLocation) => {
-    console.log('🗺️ Map pressed at:', coordinates);
+
     // Could show contextual information about the location
   };
 
   const handleMarkPress = (mark: RaceMark) => {
-    console.log('🎯 Mark pressed:', mark.name);
+
     // Could show mark details or course information
   };
 
@@ -234,14 +221,13 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
       }
     });
     setMapMarks(allActiveMarks);
-    console.log('🗺️ DEBUG: Course toggle - Updated mapMarks with', allActiveMarks.length, 'marks');
+
   };
 
   // Handle yacht club marker selection
   const handleClubMarkerPress = (marker: YachtClubMarker) => {
     const clubData = yachtClubsData.clubs[marker.clubId as keyof typeof yachtClubsData.clubs];
     setSelectedClub(clubData as YachtClubData);
-    console.log('🏆 Selected club:', marker.name);
   };
 
   // Render venue selector
@@ -404,7 +390,7 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
 
         <TouchableOpacity
           style={styles.visitWebsiteButton}
-          onPress={() => console.log('Visit website:', selectedClub.website)}
+          onPress={() => logger.debug('Visit website:', selectedClub.website)}
         >
           <ThemedText style={styles.visitWebsiteText}>🌐 Visit Website</ThemedText>
         </TouchableOpacity>
@@ -413,26 +399,8 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
   };
 
   // DEBUG: Log the actual values causing the loading state
-  console.log('🗺️🔥🔥🔥 VenueIntelligenceMapView: ===== RENDERING DECISION =====');
-  console.log('🗺️🔥🔥🔥   isDetecting:', isDetecting, '(type:', typeof isDetecting, ')');
-  console.log('🗺️🔥🔥🔥   currentVenue:', currentVenue, '(type:', typeof currentVenue, ')');
-  console.log('🗺️🔥🔥🔥   currentVenue.name:', currentVenue?.name || 'null');
-  console.log('🗺️🔥🔥🔥   currentVenue.id:', currentVenue?.id || 'null');
-  console.log('🗺️🔥🔥🔥   currentVenue.coordinates:', currentVenue?.coordinates);
-  console.log('🗺️🔥🔥🔥   shouldShowLoading:', isDetecting || !currentVenue);
-  console.log('🗺️🔥🔥🔥   Condition breakdown:');
-  console.log('🗺️🔥🔥🔥     - isDetecting =', isDetecting, '→', isDetecting ? 'BLOCKING' : 'OK');
-  console.log('🗺️🔥🔥🔥     - !currentVenue =', !currentVenue, '→', !currentVenue ? 'BLOCKING' : 'OK');
-  console.log('🗺️🔥🔥🔥   CRITICAL: This component controls whether the map renders or shows loading!');
-  console.log('🗺️🔥🔥🔥   Stack trace for debugging:', new Error().stack);
 
   if (isDetecting || !currentVenue) {
-    console.log('🗺️🚨🚨🚨 VenueIntelligenceMapView: ⚠️⚠️⚠️ SHOWING LOADING STATE ⚠️⚠️⚠️');
-    console.log('🗺️🚨   isDetecting =', isDetecting);
-    console.log('🗺️🚨   !currentVenue =', !currentVenue);
-    console.log('🗺️🚨   currentVenue value:', currentVenue);
-    console.log('🗺️🚨   THIS IS WHY THE MAP IS NOT RENDERING!');
-    console.log('🗺️🚨   Fix: Need to ensure currentVenue is set properly');
 
     return (
       <View style={[styles.container, style]}>
@@ -445,19 +413,7 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
     );
   }
 
-  console.log('🗺️✅✅✅ VenueIntelligenceMapView: ===== RENDERING MAP =====');
-  console.log('🗺️✅   Venue:', currentVenue.name);
-  console.log('🗺️✅   Venue ID:', currentVenue.id);
-  console.log('🗺️✅   Venue Coordinates:', currentVenue.coordinates);
-
   // Debug logging before render
-  console.log('🗺️✅ DEBUG: Rendering map with:');
-  console.log('🗺️✅   venue:', currentVenue.id);
-  console.log('🗺️✅   mapMarks:', mapMarks.length, 'race course marks');
-  console.log('🗺️✅   clubMarkers:', clubMarkers.length, 'club markers');
-  console.log('🗺️✅   globalVenueMarkers:', globalVenueMarkers.length, 'global venues');
-  console.log('🗺️✅   showGlobalVenues:', showGlobalVenues);
-  console.log('🗺️✅   ProfessionalMap3DView component about to render...');
 
   return (
     <View style={[styles.container, style]}>

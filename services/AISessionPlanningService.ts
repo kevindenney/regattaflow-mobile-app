@@ -1,4 +1,4 @@
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from './supabase';
 import { CoachingSession, SailorProfile, CoachProfile } from '../types/coach';
 

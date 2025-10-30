@@ -74,7 +74,6 @@ export class SailingDocumentLibraryService {
     },
     userId: string
   ): Promise<SailingDocument> {
-    console.log(`📖 Uploading sailing document: ${metadata.title}`);
 
     try {
       // Step 1: Upload to Supabase Storage
@@ -91,8 +90,6 @@ export class SailingDocumentLibraryService {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      console.log(`✅ Document uploaded to storage: ${fileName}`);
-
       // Step 2: Process with AI for intelligence extraction
       const documentUpload: DocumentUpload = {
         filename: metadata.title,
@@ -105,7 +102,6 @@ export class SailingDocumentLibraryService {
       };
 
       const analysis = await this.documentProcessor.uploadDocument(documentUpload);
-      console.log(`🧠 AI analysis complete: ${analysis.insights.length} insights extracted`);
 
       // Step 3: Extract specialized knowledge based on category
       const specializedInsights = await this.extractSpecializedKnowledge(
@@ -159,7 +155,7 @@ export class SailingDocumentLibraryService {
         .single();
 
       if (dbError) {
-        console.error('❌ Database save failed:', dbError);
+
         // Don't throw - document is still in storage
       }
 
@@ -168,11 +164,10 @@ export class SailingDocumentLibraryService {
         await this.enhanceSailingEducation(document);
       }
 
-      console.log(`🎉 Document successfully processed and stored: ${document.id}`);
       return document;
 
     } catch (error: any) {
-      console.error('❌ Document upload failed:', error);
+
       throw new Error(`Failed to process sailing document: ${error.message}`);
     }
   }
@@ -266,7 +261,6 @@ export class SailingDocumentLibraryService {
    * Enhance the sailing education service with document insights
    */
   private async enhanceSailingEducation(document: SailingDocument): Promise<void> {
-    console.log(`🎓 Enhancing sailing education with: ${document.title}`);
 
     const educationalContent = {
       tacticalSeminars: document.content.keyTopics.filter(t =>
@@ -301,7 +295,6 @@ export class SailingDocumentLibraryService {
     },
     userId?: string
   ): Promise<SailingDocument[]> {
-    console.log(`🔍 Searching document library: "${query}"`);
 
     let queryBuilder = supabase
       .from('sailing_documents')
@@ -333,11 +326,10 @@ export class SailingDocumentLibraryService {
     const { data, error } = await queryBuilder;
 
     if (error) {
-      console.error('❌ Document search failed:', error);
+
       return [];
     }
 
-    console.log(`✅ Found ${data?.length || 0} documents`);
     return data || [];
   }
 
@@ -352,7 +344,6 @@ export class SailingDocumentLibraryService {
       skill?: 'novice' | 'intermediate' | 'expert';
     }
   ): Promise<SailingDocument[]> {
-    console.log(`💡 Getting document recommendations for user: ${userId}`);
 
     // Start with user's upcoming venue
     let recommendations: SailingDocument[] = [];

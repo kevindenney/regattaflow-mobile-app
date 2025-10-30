@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface ComprehensiveRaceData {
   // Basic Information
@@ -99,6 +100,7 @@ export interface ComprehensiveRaceData {
   };
 }
 
+const logger = createLogger('ComprehensiveRaceExtractionAgent');
 export class ComprehensiveRaceExtractionAgent {
   /**
    * Extract comprehensive race details from freeform text
@@ -110,28 +112,28 @@ export class ComprehensiveRaceExtractionAgent {
     confidence?: number;
   }> {
     try {
-      console.log('[ComprehensiveRaceExtractionAgent] Starting extraction...');
-      console.log('[ComprehensiveRaceExtractionAgent] Text length:', text.length);
-      console.log('[ComprehensiveRaceExtractionAgent] Text preview:', text.substring(0, 100));
+      logger.debug('[ComprehensiveRaceExtractionAgent] Starting extraction...');
+      logger.debug('[ComprehensiveRaceExtractionAgent] Text length:', text.length);
+      logger.debug('[ComprehensiveRaceExtractionAgent] Text preview:', text.substring(0, 100));
 
       // Call Supabase Edge Function with timeout
-      console.log('[ComprehensiveRaceExtractionAgent] Invoking edge function...');
-      console.log('[ComprehensiveRaceExtractionAgent] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+      logger.debug('[ComprehensiveRaceExtractionAgent] Invoking edge function...');
+      logger.debug('[ComprehensiveRaceExtractionAgent] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
 
       // Use anon key for edge function calls (edge functions handle their own auth)
       // Note: Edge functions have access to user context via the Authorization header
       // but for public operations like extraction, we use the anon key
       const authToken = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      console.log('[ComprehensiveRaceExtractionAgent] Using anon key for edge function auth');
-      console.log('[ComprehensiveRaceExtractionAgent] Auth token present:', !!authToken);
-      console.log('[ComprehensiveRaceExtractionAgent] Auth token length:', authToken?.length);
+      logger.debug('[ComprehensiveRaceExtractionAgent] Using anon key for edge function auth');
+      logger.debug('[ComprehensiveRaceExtractionAgent] Auth token present:', !!authToken);
+      logger.debug('[ComprehensiveRaceExtractionAgent] Auth token length:', authToken?.length);
       if (!authToken) {
         throw new Error('EXPO_PUBLIC_SUPABASE_ANON_KEY not found in environment variables');
       }
 
       // Use direct fetch instead of supabase.functions.invoke() due to timeout issues
       const functionUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/extract-race-details`;
-      console.log('[ComprehensiveRaceExtractionAgent] Function URL:', functionUrl);
+      logger.debug('[ComprehensiveRaceExtractionAgent] Function URL:', functionUrl);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -141,11 +143,11 @@ export class ComprehensiveRaceExtractionAgent {
 
       try {
         const requestStart = Date.now();
-        console.log('[ComprehensiveRaceExtractionAgent] Sending fetch request...');
-        console.log('[ComprehensiveRaceExtractionAgent] Text length:', text.length, 'characters');
+        logger.debug('[ComprehensiveRaceExtractionAgent] Sending fetch request...');
+        logger.debug('[ComprehensiveRaceExtractionAgent] Text length:', text.length, 'characters');
 
         const requestBody = JSON.stringify({ text });
-        console.log('[ComprehensiveRaceExtractionAgent] Request body length:', requestBody.length);
+        logger.debug('[ComprehensiveRaceExtractionAgent] Request body length:', requestBody.length);
 
         const response = await fetch(functionUrl, {
           method: 'POST',
@@ -157,18 +159,18 @@ export class ComprehensiveRaceExtractionAgent {
           signal: controller.signal,
         });
 
-        console.log('[ComprehensiveRaceExtractionAgent] Fetch completed without throwing');
+        logger.debug('[ComprehensiveRaceExtractionAgent] Fetch completed without throwing');
 
         clearTimeout(timeoutId);
         const requestDuration = Date.now() - requestStart;
-        console.log('[ComprehensiveRaceExtractionAgent] Response received in', requestDuration, 'ms');
-        console.log('[ComprehensiveRaceExtractionAgent] Response status:', response.status);
+        logger.debug('[ComprehensiveRaceExtractionAgent] Response received in', requestDuration, 'ms');
+        logger.debug('[ComprehensiveRaceExtractionAgent] Response status:', response.status);
 
         // Parse response body first (even for 400 errors, as they may contain partial data)
         let result;
         try {
           result = await response.json();
-          console.log('[ComprehensiveRaceExtractionAgent] Edge function response:', result);
+          logger.debug('[ComprehensiveRaceExtractionAgent] Edge function response:', result);
         } catch (jsonError: any) {
           console.error('[ComprehensiveRaceExtractionAgent] Failed to parse JSON response:', jsonError);
           throw new Error(`Failed to parse response: ${jsonError.message}`);
@@ -180,7 +182,7 @@ export class ComprehensiveRaceExtractionAgent {
 
           // If we have partial data despite the error, treat it as a partial success
           if (result.partialData && Object.keys(result.partialData).length > 0) {
-            console.log('[ComprehensiveRaceExtractionAgent] Found partial data in error response, treating as partial success');
+            logger.debug('[ComprehensiveRaceExtractionAgent] Found partial data in error response, treating as partial success');
             return {
               success: true,
               data: result.partialData as ComprehensiveRaceData,
@@ -199,7 +201,7 @@ export class ComprehensiveRaceExtractionAgent {
 
           // If we have partial data, return it as a success so user can fill in missing fields
           if (result.partialData && Object.keys(result.partialData).length > 0) {
-            console.log('[ComprehensiveRaceExtractionAgent] Returning partial data for user completion');
+            logger.debug('[ComprehensiveRaceExtractionAgent] Returning partial data for user completion');
             return {
               success: true,
               data: result.partialData as ComprehensiveRaceData,
@@ -215,8 +217,7 @@ export class ComprehensiveRaceExtractionAgent {
           };
         }
 
-        console.log('[ComprehensiveRaceExtractionAgent] Extraction successful:', {
-          fieldsExtracted: Object.keys(result.data).length,
+        logger.debug('[ComprehensiveRaceExtractionAgent] Extraction successful:', {
           confidence: result.confidence,
         });
 

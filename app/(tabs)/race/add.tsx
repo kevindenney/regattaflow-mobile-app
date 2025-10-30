@@ -7,7 +7,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -25,11 +25,21 @@ import {
 } from 'react-native';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
+import { createLogger } from '@/lib/utils/logger';
 
 type DocumentType = 'nor' | 'si' | 'other';
 
 export default function AddRaceScreen() {
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ courseId?: string; courseName?: string }>();
+  const initialCourseId =
+    typeof params?.courseId === 'string' && params.courseId.length > 0
+      ? params.courseId
+      : undefined;
+  const initialCourseName =
+    typeof params?.courseName === 'string' && params.courseName.length > 0
+      ? params.courseName
+      : undefined;
   const [raceName, setRaceName] = useState('');
   const [venue, setVenue] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -61,18 +71,17 @@ export default function AddRaceScreen() {
   };
 
   const populateFormFromExtraction = (data: any) => {
-    console.log('[PopulateForm] Extracted data:', data);
 
     // Populate race name
     if (data.raceName) {
       setRaceName(data.raceName);
-      console.log('[PopulateForm] Set race name:', data.raceName);
+      logger.debug('[PopulateForm] Set race name:', data.raceName);
     }
 
     // Populate venue
     if (data.venue) {
       setVenue(data.venue);
-      console.log('[PopulateForm] Set venue:', data.venue);
+      logger.debug('[PopulateForm] Set venue:', data.venue);
     }
 
     // Populate start date
@@ -81,7 +90,7 @@ export default function AddRaceScreen() {
         const date = new Date(data.raceDate);
         const formatted = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
         setStartDate(formatted);
-        console.log('[PopulateForm] Set start date:', formatted);
+        logger.debug('[PopulateForm] Set start date:', formatted);
       } catch (error) {
         console.error('[PopulateForm] Error formatting date:', error);
       }
@@ -96,7 +105,7 @@ export default function AddRaceScreen() {
       );
       if (matchingClass) {
         setSelectedClass(matchingClass);
-        console.log('[PopulateForm] Set class:', matchingClass);
+        logger.debug('[PopulateForm] Set class:', matchingClass);
       }
     }
   };
@@ -114,7 +123,7 @@ export default function AddRaceScreen() {
           const file = e.target.files[0];
           if (!file) return;
 
-          console.log('[Upload] Selected file:', file.name, file.type);
+          logger.debug('[Upload] Selected file:', file.name, file.type);
 
           // Show processing indicator
           setIsProcessing(true);
@@ -125,14 +134,14 @@ export default function AddRaceScreen() {
 
             // Extract text based on file type
             if (file.type === 'application/pdf') {
-              console.log('[Upload] Processing PDF...');
+              logger.debug('[Upload] Processing PDF...');
               // Create a URL for the file
               const fileUrl = URL.createObjectURL(file);
 
               // Extract text from PDF
               const pdfResult = await PDFExtractionService.extractText(fileUrl, {
                 onProgress: (progress, currentPage, totalPages) => {
-                  console.log(`[Upload] PDF extraction progress: ${progress.toFixed(0)}% (page ${currentPage}/${totalPages})`);
+                  logger.debug(`[Upload] PDF extraction progress: ${progress.toFixed(0)}% (page ${currentPage}/${totalPages})`);
                 },
               });
 
@@ -144,22 +153,22 @@ export default function AddRaceScreen() {
               }
 
               extractedText = pdfResult.text;
-              console.log('[Upload] PDF text extracted, length:', extractedText.length);
+              logger.debug('[Upload] PDF text extracted, length:', extractedText.length);
             } else if (file.type === 'text/plain') {
-              console.log('[Upload] Processing text file...');
+              logger.debug('[Upload] Processing text file...');
               // Read text file
               extractedText = await file.text();
-              console.log('[Upload] Text file read, length:', extractedText.length);
+              logger.debug('[Upload] Text file read, length:', extractedText.length);
             } else {
               throw new Error('Unsupported file type. Please upload a PDF or text file.');
             }
 
             // Use AI to extract race details
-            console.log('[Upload] Extracting race details with AI...');
+            logger.debug('[Upload] Extracting race details with AI...');
             const agent = new ComprehensiveRaceExtractionAgent();
             const result = await agent.extractRaceDetails(extractedText);
 
-            console.log('[Upload] AI extraction result:', result);
+            logger.debug('[Upload] AI extraction result:', result);
 
             if (!result.success || !result.data) {
               throw new Error(result.error || 'Failed to extract race details from document');
@@ -199,7 +208,7 @@ export default function AddRaceScreen() {
         }
 
         const file = result.assets[0];
-        console.log('[Upload] Selected file:', file);
+        logger.debug('[Upload] Selected file:', file);
 
         // Show processing indicator
         setIsProcessing(true);
@@ -279,13 +288,13 @@ export default function AddRaceScreen() {
     setIsProcessing(true);
 
     try {
-      console.log('[PasteText] Processing text, length:', pastedText.length);
+      logger.debug('[PasteText] Processing text, length:', pastedText.length);
 
       // Use AI to extract race details
       const agent = new ComprehensiveRaceExtractionAgent();
       const result = await agent.extractRaceDetails(pastedText);
 
-      console.log('[PasteText] AI extraction result:', result);
+      logger.debug('[PasteText] AI extraction result:', result);
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to extract race details from text');
@@ -438,9 +447,17 @@ export default function AddRaceScreen() {
 
       // Success - navigate to race detail
       // Note: Alert.alert doesn't work on web, so we navigate directly
+      const navigateToRace = () => {
+        const params: Record<string, string> = { id: data.id };
+        if (initialCourseId) {
+          params.courseId = initialCourseId;
+        }
+        router.push({ pathname: '/race/[id]', params } as any);
+      };
+
       if (Platform.OS === 'web') {
         // On web, navigate immediately
-        router.push(`/race/${data.id}`);
+        navigateToRace();
       } else {
         // On mobile, show native alert with options
         Alert.alert(
@@ -449,7 +466,7 @@ export default function AddRaceScreen() {
           [
             {
               text: 'View Race',
-              onPress: () => router.push(`/race/${data.id}`),
+              onPress: navigateToRace,
             },
             {
               text: 'Add Another',
@@ -494,8 +511,21 @@ export default function AddRaceScreen() {
             <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save'}</Text>
           </TouchableOpacity>
         </View>
-
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {initialCourseId && (
+            <View style={styles.courseBanner}>
+              <Ionicons name="map-outline" size={20} color="#0369A1" style={styles.courseBannerIcon} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.courseBannerTitle}>Course ready to apply</Text>
+                <Text style={styles.courseBannerText}>
+                  {initialCourseName
+                    ? `We'll open the course selector after saving so you can apply ${initialCourseName}.`
+                    : 'We will open the course selector after saving so you can apply this course layout.'}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* AI Quick Entry Section */}
           <View style={styles.aiQuickEntrySection}>
             <View style={styles.aiQuickEntryHeader}>
@@ -791,6 +821,7 @@ export default function AddRaceScreen() {
   );
 }
 
+const logger = createLogger('add');
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -837,6 +868,29 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  courseBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#E0F2FE',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  courseBannerIcon: {
+    marginTop: 2,
+  },
+  courseBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  courseBannerText: {
+    fontSize: 12,
+    color: '#1E3A8A',
+    marginTop: 4,
+    lineHeight: 16,
   },
   formGroup: {
     marginBottom: 24,

@@ -36,23 +36,20 @@ export function RaceMapView({
     // Web-only MapLibre GL implementation
     const initializeMap = async () => {
       try {
-        console.log('🗺️ Starting MapLibre GL initialization...');
+
         const maplibregl = await import('maplibre-gl');
-        console.log('✅ MapLibre GL library loaded');
 
         // Import CSS dynamically
         await import('maplibre-gl/dist/maplibre-gl.css');
-        console.log('✅ MapLibre GL CSS loaded');
 
         if (!mapContainerRef.current) {
-          console.error('❌ Map container ref is null');
+
           return;
         }
 
         // Extract coordinates from first mark for centering
         // Default to Hong Kong coordinates if no marks
         const defaultCenter: [number, number] = [114.1675, 22.2840]; // Hong Kong
-        console.log('🎯 Map center:', defaultCenter);
 
         // Initialize map with nautical style
         // Using a simple style to avoid font loading issues
@@ -87,10 +84,9 @@ export function RaceMapView({
         });
 
         mapRef.current = map;
-        console.log('✅ Map instance created');
 
         map.on('load', () => {
-          console.log('🗺️ Map loaded successfully');
+
           setMapLoaded(true);
           onMapLoad?.();
 
@@ -123,7 +119,7 @@ export function RaceMapView({
         });
 
         map.on('error', (e) => {
-          console.error('❌ Map error:', e);
+
         });
 
         // Add navigation controls
@@ -134,7 +130,7 @@ export function RaceMapView({
         }), 'top-right');
 
       } catch (error) {
-        console.error('❌ Error initializing map:', error);
+
         // Set loaded to true anyway to hide the placeholder and show error state
         setMapLoaded(true);
       }
@@ -167,7 +163,6 @@ export function RaceMapView({
     // Switch base map style for satellite
     if (activeLayer === 'satellite') {
       // Would switch to satellite imagery here
-      console.log('🛰️ Switching to satellite view');
     }
   }, [activeLayer, mapLoaded]);
 

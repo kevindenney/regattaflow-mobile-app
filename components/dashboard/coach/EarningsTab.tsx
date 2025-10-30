@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DashboardSection, DashboardKPICard } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface EarningsData {
   monthly: {
@@ -36,6 +37,7 @@ interface EarningsTabProps {
   onViewTaxInfo: () => void;
 }
 
+const logger = createLogger('EarningsTab');
 export function EarningsTab({
   earningsData,
   onViewTransaction,
@@ -130,7 +132,7 @@ export function EarningsTab({
 
           <View style={styles.breakdownItem}>
             <View style={styles.breakdownHeader}>
-              <Ionicons name="sailboat" size={20} color="#F59E0B" />
+              <Ionicons name="boat" size={20} color="#F59E0B" />
               <Text style={styles.breakdownLabel}>Race Day Support</Text>
             </View>
             <Text style={styles.breakdownValue}>${earningsData.breakdown.raceDaySupport.toLocaleString()}</Text>
@@ -163,7 +165,7 @@ export function EarningsTab({
         title="💳 Recent Transactions"
         headerAction={{
           label: 'View All',
-          onPress: () => console.log('View all transactions'),
+          onPress: () => logger.debug('View all transactions'),
           icon: 'list-outline'
         }}
       >

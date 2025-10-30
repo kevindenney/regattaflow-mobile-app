@@ -12,7 +12,7 @@
  * - Forecast grid visualization
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Wind data point
@@ -84,8 +84,8 @@ export class WindVisualizationService {
     config: WindVisualizationConfig
   ): GeoJSON.FeatureCollection<GeoJSON.Point> {
     const features: WindBarbFeature[] = dataPoints
-      .filter(point => point.speed >= config.minSpeed)
-      .map(point => ({
+      .filter((point: WindDataPoint) => point.speed >= config.minSpeed)
+      .map((point: WindDataPoint) => ({
         type: 'Feature' as const,
         geometry: {
           type: 'Point' as const,
@@ -114,8 +114,8 @@ export class WindVisualizationService {
     config: WindVisualizationConfig
   ): GeoJSON.FeatureCollection {
     const features = dataPoints
-      .filter(point => point.speed >= config.minSpeed)
-      .map(point => {
+      .filter((point: WindDataPoint) => point.speed >= config.minSpeed)
+      .map((point: WindDataPoint) => {
         // Calculate arrow length based on wind speed
         const arrowLength = this.calculateArrowLength(point.speed, config.symbolSize);
         const startPoint = point.coordinates;

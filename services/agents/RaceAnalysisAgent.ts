@@ -63,7 +63,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
             .from('race_timer_sessions')
             .select(`
               *,
-              regattas(name, venue_id, start_date)
+              regattas(name, start_date)
             `)
             .eq('id', input.session_id)
             .single();

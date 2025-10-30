@@ -124,7 +124,7 @@ export default function RaceManagementScreen() {
                       <ThemedText style={styles.raceInfoText}>{race.date} at {race.time}</ThemedText>
                     </View>
                     <View style={styles.raceInfoRow}>
-                      <Ionicons name="sailboat" size={16} color="#64748B" />
+                      <Ionicons name="boat" size={16} color="#64748B" />
                       <ThemedText style={styles.raceInfoText}>{race.fleet}</ThemedText>
                     </View>
                     <View style={styles.raceInfoRow}>

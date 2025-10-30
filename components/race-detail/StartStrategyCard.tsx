@@ -9,6 +9,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { raceStrategyEngine } from '@/services/ai/RaceStrategyEngine';
+import type { RaceConditions } from '@/services/ai/RaceStrategyEngine';
+import { createLogger } from '@/lib/utils/logger';
 
 interface StartStrategyData {
   favoredEnd: 'pin' | 'boat' | 'middle';
@@ -23,12 +26,34 @@ interface StartStrategyData {
 interface StartStrategyCardProps {
   raceId: string;
   raceName: string;
+  raceStartTime?: string;
+  venueId?: string;
+  venueName?: string;
+  venueCoordinates?: { lat: number; lng: number };
+  weather?: {
+    wind?: {
+      speed: number;
+      direction: string;
+      speedMin: number;
+      speedMax: number;
+    };
+    current?: {
+      speed: number;
+      direction: number;
+    };
+  };
   onGenerate?: () => void;
 }
 
+const logger = createLogger('StartStrategyCard');
 export function StartStrategyCard({
   raceId,
   raceName,
+  raceStartTime,
+  venueId,
+  venueName,
+  venueCoordinates,
+  weather,
   onGenerate
 }: StartStrategyCardProps) {
   const { user } = useAuth();
@@ -43,7 +68,7 @@ export function StartStrategyCard({
   // Auto-generate strategy if not exists
   useEffect(() => {
     if (!loading && !strategy && !error && user) {
-      console.log('[StartStrategyCard] Auto-generating strategy on mount');
+      logger.debug('[StartStrategyCard] Auto-generating strategy on mount');
       generateStrategy();
     }
   }, [loading, strategy, error, user]);
@@ -89,45 +114,133 @@ export function StartStrategyCard({
       setLoading(true);
       setError(null);
 
-      // TODO: Call RaceStrategyEngine to generate AI strategy
-      // For now, create a placeholder strategy
-      const placeholderStrategy: StartStrategyData = {
-        favoredEnd: 'pin',
-        lineBias: 5,
-        approach: 'Port tack approach to pin end with 2 boat lengths safety margin',
-        reasoning: 'Pin end favored by 5° due to SW wind at 12 knots. Current setting from the boat end provides lift on port tack.',
-        confidence: 78,
-        windDirection: 225,
-        currentDirection: 90,
+      // Prepare race conditions for AI
+      const windDirectionDegrees = convertWindDirectionToDegrees(weather?.wind?.direction || 'SW');
+      const conditions: RaceConditions = {
+        wind: {
+          speed: weather?.wind?.speed || ((weather?.wind?.speedMin || 0) + (weather?.wind?.speedMax || 0)) / 2 || 12,
+          direction: windDirectionDegrees,
+          forecast: {
+            nextHour: { speed: weather?.wind?.speed || 12, direction: windDirectionDegrees },
+            nextThreeHours: { speed: weather?.wind?.speed || 12, direction: windDirectionDegrees }
+          },
+          confidence: 0.8
+        },
+        current: {
+          speed: weather?.current?.speed || 0.5,
+          direction: weather?.current?.direction || 90,
+          tidePhase: 'flood' as const
+        },
+        waves: {
+          height: 0.8,
+          period: 5,
+          direction: windDirectionDegrees
+        },
+        visibility: 10,
+        temperature: 22,
+        weatherRisk: 'low' as const
+      };
+
+      // Generate venue-based strategy using AI
+      const aiStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
+        venueId || 'hong-kong', // Default to Hong Kong if no venue
+        conditions,
+        {
+          raceName,
+          raceDate: raceStartTime ? new Date(raceStartTime) : new Date(),
+          raceTime: raceStartTime ? new Date(raceStartTime).toTimeString().split(' ')[0] : '11:00:00',
+          boatType: 'Keelboat',
+          fleetSize: 20,
+          importance: 'series'
+        }
+      );
+
+      // Extract start strategy from full AI strategy
+      const startStrat = aiStrategy.strategy.startStrategy;
+      const extractedStrategy: StartStrategyData = {
+        favoredEnd: extractFavoredEnd(startStrat.action),
+        lineBias: extractLineBias(startStrat.action),
+        approach: startStrat.execution || startStrat.action,
+        reasoning: `${startStrat.theory || ''}\n\n${startStrat.rationale || ''}`.trim(),
+        confidence: startStrat.confidence || 75,
+        windDirection: conditions.wind.direction,
+        currentDirection: conditions.current.direction,
       };
 
       // Save to database
+      // First, get existing strategy_content to preserve other data
+      const { data: existingData } = await supabase
+        .from('race_strategies')
+        .select('strategy_content')
+        .eq('regatta_id', raceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      // Preserve existing strategy_content and add fullAIStrategy
+      const strategyContent = existingData?.strategy_content || {};
+      (strategyContent as any).fullAIStrategy = aiStrategy; // Save full AI strategy for other cards
+      (strategyContent as any).startStrategy = extractedStrategy; // Also save extracted start strategy
+
       const { error: upsertError } = await supabase
         .from('race_strategies')
         .upsert({
           regatta_id: raceId,
           user_id: user.id,
           strategy_type: 'pre_race',
-          favored_end: placeholderStrategy.favoredEnd,
-          start_line_bias: placeholderStrategy.lineBias.toString(),
-          layline_approach: placeholderStrategy.approach,
-          wind_strategy: placeholderStrategy.reasoning,
-          confidence_score: placeholderStrategy.confidence,
+          favored_end: extractedStrategy.favoredEnd,
+          start_line_bias: extractedStrategy.lineBias.toString(),
+          layline_approach: extractedStrategy.approach,
+          wind_strategy: extractedStrategy.reasoning,
+          confidence_score: extractedStrategy.confidence,
+          strategy_content: strategyContent, // Include full AI strategy
           ai_generated: true,
+          ai_model: raceStrategyEngine.isSkillReady() ? 'claude-skills' : 'claude-haiku',
+          generated_at: new Date().toISOString(),
         }, {
           onConflict: 'regatta_id,user_id'
         });
 
       if (upsertError) throw upsertError;
 
-      setStrategy(placeholderStrategy);
+      setStrategy(extractedStrategy);
       onGenerate?.();
+
     } catch (err) {
       console.error('[StartStrategyCard] Generate error:', err);
       setError('Failed to generate strategy');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to convert wind direction string to degrees
+  const convertWindDirectionToDegrees = (direction: string): number => {
+    const directions: { [key: string]: number } = {
+      'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
+      'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
+      'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
+      'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5
+    };
+    return directions[direction.toUpperCase()] || 225; // Default SW
+  };
+
+  // Helper to extract favored end from AI action text
+  const extractFavoredEnd = (action: string): 'pin' | 'boat' | 'middle' => {
+    const lowerAction = action.toLowerCase();
+    if (lowerAction.includes('pin')) return 'pin';
+    if (lowerAction.includes('boat') || lowerAction.includes('committee')) return 'boat';
+    return 'middle';
+  };
+
+  // Helper to extract line bias from AI action text
+  const extractLineBias = (action: string): number => {
+    const match = action.match(/(\d+)°/);
+    if (match) {
+      const degrees = parseInt(match[1]);
+      // If mentions pin, bias is positive; if boat, negative
+      return action.toLowerCase().includes('pin') ? degrees : -degrees;
+    }
+    return 0;
   };
 
   const getCardStatus = () => {

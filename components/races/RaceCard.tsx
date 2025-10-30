@@ -10,9 +10,12 @@ import { Clock, MapPin, Wind, Waves, Radio, RefreshCw } from 'lucide-react-nativ
 import { useRouter } from 'expo-router';
 import { calculateCountdown } from '@/constants/mockData';
 import { RaceTimer } from './RaceTimer';
+import { StartSequenceTimer } from './StartSequenceTimer';
 import { RaceWeatherService } from '@/services/RaceWeatherService';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('RaceCard');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export interface RaceCardProps {
@@ -83,7 +86,7 @@ export function RaceCard({
 
     setRefreshingWeather(true);
     try {
-      console.log(`[RaceCard] Refreshing weather for race ${id} at ${venue}`);
+      logger.debug(`[RaceCard] Refreshing weather for race ${id} at ${venue}`);
 
       // Fetch fresh weather data
       const weatherData = await RaceWeatherService.fetchWeatherByVenueName(venue, date);
@@ -120,7 +123,7 @@ export function RaceCard({
           console.error('[RaceCard] Error updating weather:', error);
           Alert.alert('Error', 'Failed to update weather data');
         } else {
-          console.log(`[RaceCard] Weather updated from ${weatherData.provider}`);
+          logger.debug(`[RaceCard] Weather updated from ${weatherData.provider}`);
           Alert.alert('Success', `Weather updated from ${weatherData.provider}`);
         }
       } else {
@@ -137,27 +140,27 @@ export function RaceCard({
   const handlePress = () => {
     // If onSelect callback provided, use inline selection instead of navigation
     if (onSelect) {
-      console.log('[RaceCard] Card selected for inline view!', { id, name });
+      logger.debug('[RaceCard] Card selected for inline view!', { id, name });
       onSelect();
       return;
     }
 
     // Otherwise, navigate to race detail page (for deep linking or standalone use)
-    console.log('[RaceCard] Card clicked!', { id, name, isMock });
-    console.log('[RaceCard] Router object:', router);
-    console.log('[RaceCard] Navigating to:', `/(tabs)/race/${id}`);
+    logger.debug('[RaceCard] Card clicked!', { id, name, isMock });
+    logger.debug('[RaceCard] Router object:', router);
+    logger.debug('[RaceCard] Navigating to:', `/(tabs)/race/scrollable/${id}`);
 
     try {
-      router.push(`/(tabs)/race/${id}`);
-      console.log('[RaceCard] Navigation initiated successfully');
+      router.push(`/(tabs)/race/scrollable/${id}`);
+      logger.debug('[RaceCard] Navigation initiated successfully');
     } catch (error) {
       console.error('[RaceCard] Navigation failed:', error);
     }
   };
 
-  // Card dimensions - consistent size for all cards
-  const cardWidth = Math.min(SCREEN_WIDTH - 32, 375);
-  const cardHeight = 580; // Consistent height for all cards
+  // Card dimensions - ultra-compact Apple Weather Mac style
+  const cardWidth = 170; // Ultra-compact for 6+ cards visible
+  const cardHeight = 340; // Ultra-condensed height
 
   return (
     <Pressable
@@ -207,13 +210,13 @@ export function RaceCard({
           {name}
         </Text>
         <View style={styles.venueRow}>
-          <MapPin size={16} color="#64748B" />
+          <MapPin size={12} color="#64748B" />
           <Text style={styles.venueText}>{venue}</Text>
         </View>
       </View>
 
-      {/* Race Timer (Countdown or Active Timer) */}
-      {!isMock && onRaceComplete ? (
+      {/* Race Timer (Countdown or Active Timer) - Only show on upcoming races */}
+      {!isMock && raceStatus !== 'past' && onRaceComplete ? (
         <View style={styles.timerContainer}>
           <RaceTimer
             raceId={id}
@@ -256,7 +259,7 @@ export function RaceCard({
         {/* Wind Conditions - Primary environmental data */}
         <View style={styles.environmentalCard}>
           <View style={styles.detailRowEnhanced}>
-            <Wind size={24} color="#3B82F6" />
+            <Wind size={14} color="#3B82F6" />
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>WIND</Text>
               <Text style={styles.detailValueLarge}>
@@ -269,7 +272,7 @@ export function RaceCard({
                 {refreshingWeather ? (
                   <ActivityIndicator size="small" color="#3B82F6" />
                 ) : (
-                  <RefreshCw size={20} color="#64748B" />
+                  <RefreshCw size={12} color="#64748B" />
                 )}
               </Pressable>
             )}
@@ -279,7 +282,7 @@ export function RaceCard({
         {/* Tide Conditions - Primary environmental data */}
         <View style={styles.environmentalCard}>
           <View style={styles.detailRowEnhanced}>
-            <Waves size={24} color="#0EA5E9" />
+            <Waves size={14} color="#0EA5E9" />
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>TIDE</Text>
               <Text style={styles.detailValueLarge}>
@@ -292,7 +295,7 @@ export function RaceCard({
         {/* VHF Channel - Secondary information */}
         {critical_details?.vhf_channel && (
           <View style={styles.detailRow}>
-            <Radio size={20} color="#8B5CF6" />
+            <Radio size={12} color="#8B5CF6" />
             <Text style={styles.detailText}>Ch {critical_details.vhf_channel}</Text>
           </View>
         )}
@@ -306,9 +309,16 @@ export function RaceCard({
         </Text>
       </View>
 
+      {/* Start Sequence Timer - Only for upcoming races WITHOUT GPS tracking */}
+      {!isMock && raceStatus !== 'past' && !onRaceComplete && (
+        <View style={styles.startSequenceSection}>
+          <StartSequenceTimer compact={!isPrimary} />
+        </View>
+      )}
+
       {/* Footer - Start Time */}
       <View style={styles.footer}>
-        <Clock size={16} color="#64748B" />
+        <Clock size={12} color="#64748B" />
         <Text style={styles.startTimeText}>
           {critical_details?.first_start || startTime} • {new Date(date).toLocaleDateString()}
         </Text>
@@ -316,7 +326,7 @@ export function RaceCard({
 
       {/* Tap to expand hint */}
       <View style={styles.tapHint}>
-        <Text style={styles.tapHintText}>Tap for full race strategy →</Text>
+        <Text style={styles.tapHintText}>Tap for details →</Text>
       </View>
     </Pressable>
   );
@@ -325,15 +335,15 @@ export function RaceCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    marginVertical: 8,
+    borderRadius: 10,
+    padding: 8,
+    marginVertical: 4,
     marginHorizontal: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
     // @ts-ignore - cursor is web-only
     cursor: 'pointer',
     // @ts-ignore - userSelect is web-only
@@ -341,9 +351,9 @@ const styles = StyleSheet.create({
     // @ts-ignore - pointerEvents handled by prop
   },
   primaryCard: {
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
     borderWidth: 2,
     borderColor: '#3B82F6',
   },
@@ -358,217 +368,224 @@ const styles = StyleSheet.create({
     borderColor: '#D1D5DB',
   },
   selectedCard: {
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#3B82F6',
     backgroundColor: '#EFF6FF',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 16,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   mockBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
     backgroundColor: '#F59E0B',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
     zIndex: 10,
   },
   mockBadgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
   },
   nextBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
     backgroundColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     zIndex: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   nextBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   pastBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
     backgroundColor: '#6B7280',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     zIndex: 10,
   },
   pastBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '700',
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 6,
   },
   raceName: {
-    fontSize: 22,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1E293B',
-    marginBottom: 8,
+    marginBottom: 4,
+    lineHeight: 18,
   },
   primaryRaceName: {
-    fontSize: 26,
+    fontSize: 15,
   },
   venueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
   },
   venueText: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#64748B',
   },
   countdownSection: {
     backgroundColor: '#F1F5F9',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 8,
+    padding: 6,
+    marginBottom: 6,
     alignItems: 'center',
   },
   primaryCountdownSection: {
     backgroundColor: '#EFF6FF',
-    padding: 20,
+    padding: 8,
   },
   countdownLabel: {
-    fontSize: 11,
+    fontSize: 8,
     fontWeight: '600',
     color: '#64748B',
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: 0.3,
+    marginBottom: 4,
   },
   countdownRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 3,
   },
   countdownBlock: {
     alignItems: 'center',
   },
   countdownNumber: {
-    fontSize: 32,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1E293B',
+    lineHeight: 22,
   },
   primaryCountdownNumber: {
-    fontSize: 40,
+    fontSize: 20,
     color: '#3B82F6',
   },
   countdownUnit: {
-    fontSize: 10,
+    fontSize: 7,
     fontWeight: '600',
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 1,
   },
   countdownSeparator: {
-    fontSize: 28,
+    fontSize: 16,
     fontWeight: '700',
     color: '#CBD5E1',
+    marginTop: -6,
   },
   primaryCountdownSeparator: {
     color: '#93C5FD',
   },
   detailsSection: {
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 6,
+    gap: 4,
   },
   environmentalCard: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 6,
+    padding: 6,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   detailRowEnhanced: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 4,
   },
   detailContent: {
     flex: 1,
   },
   detailLabel: {
-    fontSize: 10,
+    fontSize: 7,
     fontWeight: '700',
     color: '#64748B',
-    letterSpacing: 1,
-    marginBottom: 4,
+    letterSpacing: 0.3,
+    marginBottom: 2,
   },
   detailValueLarge: {
-    fontSize: 16,
+    fontSize: 11,
     color: '#1E293B',
     fontWeight: '700',
+    lineHeight: 14,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 4,
   },
   detailText: {
-    fontSize: 14,
+    fontSize: 10,
     color: '#1E293B',
     fontWeight: '500',
   },
   strategySection: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  strategyLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 1,
+    borderRadius: 6,
+    padding: 6,
     marginBottom: 6,
   },
+  strategyLabel: {
+    fontSize: 7,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.3,
+    marginBottom: 3,
+  },
   strategyText: {
-    fontSize: 13,
+    fontSize: 10,
     color: '#475569',
-    lineHeight: 18,
+    lineHeight: 13,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingTop: 12,
+    gap: 3,
+    paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
   },
   startTimeText: {
-    fontSize: 13,
+    fontSize: 9,
     color: '#64748B',
     fontWeight: '500',
   },
   tapHint: {
-    marginTop: 8,
+    marginTop: 4,
     alignItems: 'center',
   },
   tapHintText: {
-    fontSize: 11,
+    fontSize: 8,
     color: '#94A3B8',
     fontStyle: 'italic',
   },
   timerContainer: {
-    marginBottom: 16,
+    marginBottom: 6,
+  },
+  startSequenceSection: {
+    marginBottom: 6,
   },
 });

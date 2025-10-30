@@ -6,18 +6,20 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 import { ComprehensiveRaceEntry } from '@/components/races';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('EditRaceScreen');
 
 export default function EditRaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
   const handleSubmit = (raceId: string) => {
-    console.log('[EditRaceScreen] Race updated:', raceId);
-    // Navigate back to race detail
+    logger.debug('[EditRaceScreen] Race updated:', raceId);
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(`/(tabs)/race/${raceId}`);
+      router.replace('/(tabs)/races');
     }
   };
 

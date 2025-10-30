@@ -16,9 +16,6 @@ export default function SettingsScreen() {
   const { user, userProfile, signOut } = useAuth();
 
   const handleSignOut = async () => {
-    console.log('⚙️ [SETTINGS] ===== FALLBACK SIGN OUT BUTTON PRESSED =====');
-    console.log('⚙️ [SETTINGS] Current URL before alert:', typeof window !== 'undefined' ? window.location.href : 'N/A');
-
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
@@ -29,15 +26,10 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('⚙️ [SETTINGS] User confirmed sign out via Settings');
-              console.log('⚙️ [SETTINGS] About to call signOut() function');
-
               await signOut();
-
-              console.log('⚙️ [SETTINGS] signOut() completed successfully');
               // AuthProvider will handle navigation via auth state change - no need for manual redirect
             } catch (error) {
-              console.error('⚙️ [SETTINGS] Fallback sign out error:', error);
+              console.error('[SETTINGS] Fallback sign out error:', error);
               Alert.alert('Error', 'Failed to sign out. Please try again.');
             }
           },

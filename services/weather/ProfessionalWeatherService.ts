@@ -11,7 +11,7 @@ import { WorldTidesProService } from '../tides/WorldTidesProService';
 export class ProfessionalWeatherService {
   private apiKeys: { [key: string]: string };
   private cache: Map<string, any> = new Map();
-  private updateIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private updateIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private weatherAPIService: WeatherAPIProService;
   private worldTidesService: WorldTidesProService;
 
@@ -75,7 +75,7 @@ export class ProfessionalWeatherService {
 
       return combined;
     } catch (error) {
-      console.error('❌ Failed to get advanced weather:', error);
+
       return this.getFallbackWeather(location);
     }
   }
@@ -93,7 +93,7 @@ export class ProfessionalWeatherService {
 
       return this.processForecastEnsemble(forecasts);
     } catch (error) {
-      console.error('❌ Failed to get marine forecast:', error);
+
       return [];
     }
   }
@@ -114,7 +114,7 @@ export class ProfessionalWeatherService {
         return severityOrder[b.severity] - severityOrder[a.severity];
       });
     } catch (error) {
-      console.error('❌ Failed to get weather alerts:', error);
+
       return [];
     }
   }
@@ -137,7 +137,7 @@ export class ProfessionalWeatherService {
 
       return await response.arrayBuffer();
     } catch (error) {
-      console.error('❌ Failed to get GRIB data:', error);
+
       throw error;
     }
   }
@@ -153,7 +153,7 @@ export class ProfessionalWeatherService {
         const weather = await this.getAdvancedWeatherConditions(location);
         callback(weather);
       } catch (error) {
-        console.error('❌ Real-time update failed:', error);
+
       }
     };
 
@@ -546,7 +546,7 @@ export class ProfessionalWeatherService {
     }
 
     // Wind consistency check
-    if (weather.wind.variability < 10) {
+    if ((weather.wind.variability ?? 0) < 10) {
       confidence += 0.02; // Stable wind conditions
     }
 

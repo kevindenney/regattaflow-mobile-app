@@ -18,12 +18,14 @@ import { ResultsApprovalPanel } from '@/components/results/ResultsApprovalPanel'
 import { SeriesStandings } from '@/components/results/SeriesStandings';
 import ResultsService from '@/services/ResultsService';
 import ResultsExportService from '@/services/results/ResultsExportService';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 type TabType = 'approval' | 'standings' | 'export';
 
 export default function ResultsManagementScreen() {
   const router = useRouter();
   const { regattaId } = useLocalSearchParams<{ regattaId: string }>();
+  const { clubId, loading: personaLoading, refresh: refreshPersonaContext } = useClubWorkspace();
 
   const [activeTab, setActiveTab] = useState<TabType>('approval');
   const [regatta, setRegatta] = useState<any>(null);
@@ -33,12 +35,13 @@ export default function ResultsManagementScreen() {
   const [validation, setValidation] = useState<any>(null);
 
   useEffect(() => {
-    if (regattaId) {
+    if (regattaId && clubId) {
       loadData();
     }
-  }, [regattaId]);
+  }, [regattaId, clubId]);
 
   const loadData = async () => {
+    if (!regattaId || !clubId) return;
     try {
       setLoading(true);
       const [regattaData, summaryData] = await Promise.all([
@@ -92,6 +95,35 @@ export default function ResultsManagementScreen() {
       alert('Failed to publish results');
     }
   };
+
+  if (personaLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-gray-50">
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <View className="flex-1 items-center justify-center bg-gray-50 px-6">
+        <Text className="text-xl font-semibold text-gray-800 text-center mb-3">
+          Connect Your Club Workspace
+        </Text>
+        <Text className="text-center text-gray-600 mb-6">
+          Results management lives inside the club workspace. Finish onboarding or refresh your connection to continue.
+        </Text>
+        <VStack space="sm" className="w-full max-w-xs">
+          <Button onPress={refreshPersonaContext}>
+            <ButtonText>Retry Connection</ButtonText>
+          </Button>
+          <Button variant="outline" onPress={() => router.push('/(auth)/club-onboarding-chat')}>
+            <ButtonText>Open Club Onboarding</ButtonText>
+          </Button>
+        </VStack>
+      </View>
+    );
+  }
 
   if (loading) {
     return (

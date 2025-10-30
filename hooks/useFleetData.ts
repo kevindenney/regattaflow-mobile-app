@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createLogger } from '@/lib/utils/logger';
 import {
   FleetActivityEntry,
   FleetMembership,
@@ -12,6 +13,7 @@ interface AsyncState<T> {
   error: Error | null;
 }
 
+const logger = createLogger('useFleetData');
 export function useUserFleets(userId?: string | null) {
   const [state, setState] = useState<AsyncState<FleetMembership[]>>({
     data: null,
@@ -20,20 +22,20 @@ export function useUserFleets(userId?: string | null) {
   });
 
   const refresh = useCallback(async () => {
-    console.log('[useUserFleets] refresh called with userId:', userId);
+    logger.debug('[useUserFleets] refresh called with userId:', userId);
 
     if (!userId) {
-      console.log('[useUserFleets] No userId, setting loading to false');
+      logger.debug('[useUserFleets] No userId, setting loading to false');
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
-    console.log('[useUserFleets] Setting loading to true');
+    logger.debug('[useUserFleets] Setting loading to true');
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       const fleets = await fleetService.getFleetsForUser(userId);
-      console.log('[useUserFleets] Got fleets from service:', fleets.length, fleets);
+      logger.debug('[useUserFleets] Got fleets from service:', fleets.length, fleets);
       setState({ data: fleets, loading: false, error: null });
     } catch (error) {
       console.error('[useUserFleets] Error fetching fleets:', error);
@@ -42,7 +44,7 @@ export function useUserFleets(userId?: string | null) {
   }, [userId]);
 
   useEffect(() => {
-    console.log('[useUserFleets] useEffect triggered, calling refresh');
+    logger.debug('[useUserFleets] useEffect triggered, calling refresh');
     refresh();
   }, [refresh]);
 
@@ -53,11 +55,7 @@ export function useUserFleets(userId?: string | null) {
     refresh,
   }), [state, refresh]);
 
-  console.log('[useUserFleets] Returning result:', {
-    fleetsCount: result.fleets.length,
-    loading: result.loading,
-    error: result.error
-  });
+  logger.debug('[useUserFleets] Returning result:', result);
 
   return result;
 }

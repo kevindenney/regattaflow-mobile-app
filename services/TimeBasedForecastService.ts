@@ -73,8 +73,6 @@ export class TimeBasedForecastService {
       return cached;
     }
 
-    console.log(`📊 Generating ${durationHours}h forecast for ${venue.name}...`);
-
     const points: ForecastPoint[] = [];
     const numPoints = Math.ceil(durationHours / intervalHours) + 1;
 
@@ -237,7 +235,6 @@ export class TimeBasedForecastService {
         confidence
       });
 
-      console.log(`  ✓ +${i * intervalHours}h: ${forecastTime.toLocaleTimeString()}`);
     }
 
     const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
@@ -252,8 +249,6 @@ export class TimeBasedForecastService {
 
     // Cache the series
     this.forecastCache.set(cacheKey, series);
-
-    console.log(`✅ Generated ${points.length} forecast points`);
 
     return series;
   }
@@ -470,7 +465,6 @@ export class TimeBasedForecastService {
     toDelete.forEach((key) => this.forecastCache.delete(key));
 
     if (toDelete.length > 0) {
-      console.log(`🗑️  Cleared ${toDelete.length} expired forecasts`);
     }
   }
 
@@ -479,6 +473,6 @@ export class TimeBasedForecastService {
    */
   clearAllForecasts(): void {
     this.forecastCache.clear();
-    console.log('🗑️  Cleared all forecast cache');
+
   }
 }

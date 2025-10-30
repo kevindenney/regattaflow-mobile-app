@@ -24,6 +24,7 @@ import { PostRaceAnalysisForm, BillGladstoneCoaching } from '@/components/races'
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceAnalysis, CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
+import { createLogger } from '@/lib/utils/logger';
 
 interface PostRaceAnalysisCardProps {
   raceId: string;
@@ -31,6 +32,7 @@ interface PostRaceAnalysisCardProps {
   raceStartTime?: string;
 }
 
+const logger = createLogger('PostRaceAnalysisCard');
 export function PostRaceAnalysisCard({
   raceId,
   raceName,
@@ -80,7 +82,7 @@ export function PostRaceAnalysisCard({
       }
 
       if (!sailorProfile) {
-        console.log('[PostRaceAnalysisCard] No sailor profile found - user needs to complete onboarding');
+        logger.debug('[PostRaceAnalysisCard] No sailor profile found - user needs to complete onboarding');
         setLoading(false);
         return;
       }
@@ -175,7 +177,7 @@ export function PostRaceAnalysisCard({
       }
 
       // Generate coaching feedback using Bill Gladstone frameworks (via Edge Function)
-      console.log('[PostRaceAnalysisCard] Calling generate-race-coaching edge function...');
+      logger.debug('[PostRaceAnalysisCard] Calling generate-race-coaching edge function...');
 
       const { data: coaching, error: coachingError } = await supabase.functions.invoke(
         'generate-race-coaching',
@@ -199,11 +201,6 @@ export function PostRaceAnalysisCard({
         console.error('[PostRaceAnalysisCard] No coaching data returned');
         throw new Error('No coaching data returned from edge function');
       }
-
-      console.log('[PostRaceAnalysisCard] Coaching generated successfully:', {
-        feedbackCount: coaching.coaching_feedback?.length || 0,
-        overallScore: coaching.framework_scores?.overall_framework_adoption || 0,
-      });
 
       // Save coaching feedback back to database
       const { error: updateError } = await supabase

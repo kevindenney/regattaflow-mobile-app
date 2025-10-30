@@ -12,10 +12,13 @@
 
 import { Image } from 'expo-image';
 import { Platform } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Initialize expo-image with optimal cache settings
  */
+
+const logger = createLogger('imageConfig');
 export function initializeImageCache() {
   // Clear any old cache on app start (optional - remove if you want persistent cache)
   // Image.clearMemoryCache();
@@ -100,7 +103,7 @@ export async function clearImageCache() {
   try {
     await Image.clearMemoryCache();
     await Image.clearDiskCache();
-    console.log('Image cache cleared successfully');
+    logger.debug('Image cache cleared successfully');
   } catch (error) {
     console.error('Failed to clear image cache:', error);
   }

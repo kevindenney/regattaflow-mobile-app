@@ -12,3 +12,8 @@ export { AccessibleTouchTarget } from './AccessibleTouchTarget';
 export { VisuallyHidden, LiveRegion, Heading, LoadingAnnouncer } from './ScreenReaderComponents';
 export { Image } from './image';
 export { ImageBackground } from './image-background';
+export { Text } from './text';
+export { VStack } from './vstack';
+export { HStack } from './hstack';
+export { SafeAreaView } from './safe-area-view';
+export { StatusBar } from './status-bar';

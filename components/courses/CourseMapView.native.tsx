@@ -73,6 +73,7 @@ interface CourseMapViewProps {
   centerCoordinate?: { latitude: number; longitude: number };
   onMarkPress?: (mark: CourseMark) => void;
   prediction?: CoursePrediction | null;
+  selectedMarkId?: string;
 }
 
 const CourseMapView: React.FC<CourseMapViewProps> = ({
@@ -80,6 +81,7 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
   centerCoordinate = { latitude: 22.2793, longitude: 114.1628 }, // Default to HK
   onMarkPress,
   prediction = null,
+  selectedMarkId,
 }) => {
   const mapRef = useRef<MapView>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(false);

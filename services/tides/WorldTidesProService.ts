@@ -28,22 +28,22 @@ export interface TideStation {
 
 export interface WorldTidesConfig {
   apiKey: string;
-  baseUrl: string;
-  timeout: number;
-  retryAttempts: number;
+  baseUrl?: string;
+  timeout?: number;
+  retryAttempts?: number;
 }
 
 export class WorldTidesProService {
-  private config: WorldTidesConfig;
+  private config: Required<WorldTidesConfig>;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private cacheTimeout = 60 * 60 * 1000; // 1 hour for tide data
 
   constructor(config: WorldTidesConfig) {
     this.config = {
-      baseUrl: 'https://www.worldtides.info/api/v3',
-      timeout: 10000,
-      retryAttempts: 3,
-      ...config
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl ?? 'https://www.worldtides.info/api/v3',
+      timeout: config.timeout ?? 10000,
+      retryAttempts: config.retryAttempts ?? 3
     };
   }
 
@@ -52,7 +52,6 @@ export class WorldTidesProService {
     const cached = this.getCachedData(cacheKey);
 
     if (cached) {
-      console.log('📦 Using cached WorldTides Pro data');
       return this.transformTideData(cached);
     }
 
@@ -74,10 +73,9 @@ export class WorldTidesProService {
       const tideData = this.transformTideData(response.data);
       this.setCachedData(cacheKey, response.data);
 
-      console.log('🌊 WorldTides Pro current tide data fetched');
       return tideData;
     } catch (error) {
-      console.error('❌ WorldTides Pro error:', error);
+
       throw new Error(`WorldTides Pro service error: ${error}`);
     }
   }
@@ -99,10 +97,9 @@ export class WorldTidesProService {
 
       const extremes = this.transformTideExtremes(response.data);
 
-      console.log(`🌊 WorldTides Pro extremes fetched for ${days} days`);
       return extremes;
     } catch (error) {
-      console.error('❌ WorldTides Pro extremes error:', error);
+
       throw new Error(`WorldTides Pro extremes service error: ${error}`);
     }
   }
@@ -133,10 +130,9 @@ export class WorldTidesProService {
         timezone: station.timezone || 'UTC'
       };
 
-      console.log(`🏪 Nearest tide station: ${tideStation.name} (${tideStation.distance.toFixed(1)}km)`);
       return tideStation;
     } catch (error) {
-      console.error('❌ WorldTides Pro station error:', error);
+
       return null;
     }
   }
@@ -171,7 +167,7 @@ export class WorldTidesProService {
 
       return 0;
     } catch (error) {
-      console.error('❌ WorldTides Pro height at time error:', error);
+
       return 0;
     }
   }
@@ -197,7 +193,7 @@ export class WorldTidesProService {
 
       return { speed, direction };
     } catch (error) {
-      console.error('❌ Tide current estimation error:', error);
+
       return null;
     }
   }
@@ -219,7 +215,6 @@ export class WorldTidesProService {
       return response;
     } catch (error: any) {
       if (attempt < this.config.retryAttempts) {
-        console.log(`🔄 Retrying WorldTides Pro request (attempt ${attempt + 1})`);
         await this.delay(1000 * attempt);
         return this.makeRequest(endpoint, params, attempt + 1);
       }

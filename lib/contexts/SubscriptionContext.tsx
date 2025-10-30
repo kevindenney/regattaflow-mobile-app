@@ -110,9 +110,7 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
       // Load subscription status
       await refreshStatus();
 
-      console.log('✅ [SUBSCRIPTION_CONTEXT] Initialized successfully');
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION_CONTEXT] Failed to initialize:', error);
 
       // Set default state on error
       setStatus({
@@ -161,7 +159,7 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
 
       return result;
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION_CONTEXT] Purchase failed:', error);
+
       return {
         success: false,
         error: 'Purchase failed due to technical error',
@@ -197,7 +195,7 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
 
       return result;
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION_CONTEXT] Restore failed:', error);
+
       return {
         success: false,
         error: 'Failed to restore purchases',
@@ -219,7 +217,7 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
       }
       return result;
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION_CONTEXT] Cancel failed:', error);
+
       return false;
     }
   };
@@ -231,9 +229,9 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
     try {
       const newStatus = await subscriptionService.getSubscriptionStatus();
       setStatus(newStatus);
-      console.log('✅ [SUBSCRIPTION_CONTEXT] Status refreshed:', newStatus.tier);
+
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION_CONTEXT] Failed to refresh status:', error);
+
     }
   };
 

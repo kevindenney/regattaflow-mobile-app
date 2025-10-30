@@ -4,7 +4,7 @@
  * Implements the core document parsing and course extraction system from the master plan
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import type {
   RaceCourseExtraction,
   CoordinateValidation,
@@ -43,7 +43,6 @@ export class RaceCourseExtractor {
       documentType?: 'sailing_instructions' | 'notice_of_race' | 'course_diagram';
     }
   ): Promise<RaceCourseExtraction> {
-    console.log('🎯 Extracting race course from document:', metadata.filename);
 
     try {
       const prompt = this.buildCourseExtractionPrompt(documentText, metadata);
@@ -75,16 +74,9 @@ export class RaceCourseExtractor {
       // Calculate overall confidence score
       extraction.extractionMetadata.overallConfidence = this.calculateOverallConfidence(extraction);
 
-      console.log('✅ Race course extraction completed:', {
-        courseType: extraction.courseLayout.type,
-        marksFound: extraction.marks.length,
-        confidence: extraction.extractionMetadata.overallConfidence.toFixed(2)
-      });
-
       return extraction;
 
     } catch (error: any) {
-      console.error('❌ Race course extraction failed:', error);
 
       // Return fallback extraction with low confidence
       return this.createFallbackExtraction(metadata, error.message);

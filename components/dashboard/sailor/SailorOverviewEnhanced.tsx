@@ -8,6 +8,7 @@ import { ClassSelector, ClubsAssociationsSection, CrewManagement, TuningGuidesSe
 import { CardMenu, CardMenuItem } from '../../shared';
 import { DashboardKPICard, DashboardSection } from '../shared';
 import { NextRaceCard } from './NextRaceCard';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 
 interface UpcomingRace {
   id: string;
@@ -83,7 +84,6 @@ export function SailorOverviewEnhanced({
   onOpenFleet,
 }: SailorOverviewProps) {
   const [selectedClassId, setSelectedClassId] = useState(activeClassId || classes[0]?.id);
-  
   const handleClassChange = (classId: string) => {
     setSelectedClassId(classId);
     onClassChange?.(classId);
@@ -99,6 +99,87 @@ export function SailorOverviewEnhanced({
   const filteredRaces = selectedClassId
     ? upcomingRaces.filter(race => race.classId === selectedClassId || !race.classId)
     : upcomingRaces;
+  const nextRace = filteredRaces[0];
+
+  const nextRaceClassId = useMemo(() => {
+    if (!nextRace) return selectedClassId ?? null;
+    return (
+      (nextRace.classId as string | undefined) ||
+      (nextRace.class_id as string | undefined) ||
+      selectedClassId ||
+      null
+    );
+  }, [nextRace, selectedClassId]);
+
+  const nextRaceClassName = useMemo(() => {
+    if (nextRace?.classId) {
+      const match = classes.find(cls => cls.id === nextRace.classId);
+      if (match?.name) return match.name;
+    }
+    if (nextRace?.class_id) {
+      const match = classes.find(cls => cls.id === nextRace.class_id);
+      if (match?.name) return match.name;
+    }
+    return selectedClass?.name;
+  }, [classes, nextRace?.classId, nextRace?.class_id, selectedClass?.name]);
+
+  const nextRaceAverageWind = useMemo(() => {
+    const wind: any = nextRace?.wind;
+    if (!wind) return undefined;
+    if (typeof wind.speed === 'number') return wind.speed;
+    const speedMin = typeof wind.speedMin === 'number' ? wind.speedMin : undefined;
+    const speedMax = typeof wind.speedMax === 'number' ? wind.speedMax : undefined;
+    if (speedMin != null && speedMax != null) return (speedMin + speedMax) / 2;
+    return speedMin ?? speedMax ?? undefined;
+  }, [nextRace?.wind]);
+
+  const {
+    recommendation: nextRaceRecommendation,
+    settings: nextRaceSettings,
+    loading: nextRaceTuningLoading,
+  } = useRaceTuningRecommendation({
+    classId: nextRaceClassId,
+    averageWindSpeed: nextRaceAverageWind,
+    pointsOfSail: 'upwind',
+    enabled: !!nextRaceClassId,
+  });
+
+  const nextRaceTuning = useMemo(() => {
+    if (!nextRaceClassId) return null;
+    if (nextRaceTuningLoading) {
+      return { items: [], loading: true } as const;
+    }
+    const className = nextRaceClassName || 'this class';
+
+    if (!nextRaceRecommendation) {
+      return {
+        items: [],
+        message: `Add tuning guides for ${className} to unlock race-day rig presets.`,
+      } as const;
+    }
+
+    if (nextRaceSettings.length === 0) {
+      return {
+        items: [],
+        message: `Extract rig settings from your ${className} tuning guides to prepare this race.`,
+        sourceTitle: nextRaceRecommendation.guideTitle,
+      } as const;
+    }
+
+    return {
+      items: nextRaceSettings.map(setting => ({ label: setting.label, value: setting.value })),
+      sourceTitle: nextRaceRecommendation.guideTitle,
+      windSummary: nextRaceRecommendation.conditionSummary
+        ? `Wind window: ${nextRaceRecommendation.conditionSummary}`
+        : undefined,
+    } as const;
+  }, [
+    nextRaceClassId,
+    nextRaceTuningLoading,
+    nextRaceRecommendation,
+    nextRaceSettings,
+    nextRaceClassName,
+  ]);
 
   const handleOpenFleet = () => {
     if (onOpenFleet) {
@@ -351,7 +432,6 @@ export function SailorOverviewEnhanced({
       <DashboardSection
         title={selectedClass ? `📅 ${selectedClass.name} Calendar` : "📅 Race Calendar"}
         subtitle={selectedClass ? `Races for ${selectedClass.name}${selectedClass.sailNumber ? ` #${selectedClass.sailNumber}` : ''}` : undefined}
-        onTitlePress={() => console.log('Add/manage races')}
         backgroundColor="#F0F9FF"
         borderColor="#E0F2FE"
         shadowColor="#0EA5E9"
@@ -369,7 +449,7 @@ export function SailorOverviewEnhanced({
             </Text>
             <TouchableOpacity
               style={styles.emptyStateButton}
-              onPress={() => console.log('Add race')}
+              onPress={() => {}}
             >
               <MaterialCommunityIcons name="plus-circle" size={20} color="#FFFFFF" />
               <Text style={styles.emptyStateButtonText}>Add Race</Text>
@@ -382,11 +462,11 @@ export function SailorOverviewEnhanced({
             contentContainerStyle={styles.racesScroll}
           >
             {/* Next Race Card - Special double-width card for the next race */}
-            {filteredRaces.length > 0 && (
+            {nextRace && (
               <NextRaceCard
-                raceId={filteredRaces[0].id}
-                raceTitle={filteredRaces[0].title}
-                venue={filteredRaces[0].venue}
+                raceId={nextRace.id}
+                raceTitle={nextRace.title}
+                venue={nextRace.venue}
                 raceTime="14:00"
                 numberOfStarts={3}
                 startOrder={['Optimist', 'Laser', '420']}
@@ -395,13 +475,8 @@ export function SailorOverviewEnhanced({
                 windDirection="SW"
                 waveHeight="1-2 ft"
                 tideInfo="High 13:45"
-                rigTuning={{
-                  shroudTension: '320 lbs',
-                  forestayLength: '15.2m',
-                  mastRake: '3°',
-                  spreaderAngle: '18°',
-                }}
-                onPress={() => router.push(`/(tabs)/race/${filteredRaces[0].id}`)}
+                rigTuning={nextRaceTuning ?? undefined}
+                onPress={() => router.push(`/(tabs)/race/scrollable/${nextRace.id}`)}
               />
             )}
 
@@ -430,12 +505,12 @@ export function SailorOverviewEnhanced({
                 {
                   label: 'Edit Race',
                   icon: 'create-outline',
-                  onPress: () => console.log('Edit race:', race.id),
+                  onPress: () => {},
                 },
                 {
                   label: 'Remove Race',
                   icon: 'trash-outline',
-                  onPress: () => console.log('Remove race:', race.id),
+                  onPress: () => {},
                   variant: 'destructive' as const,
                 },
               ];
@@ -444,7 +519,7 @@ export function SailorOverviewEnhanced({
                 <TouchableOpacity
                   key={race.id}
                   style={styles.raceCard}
-                  onPress={() => router.push(`/(tabs)/race/${race.id}`)}
+                  onPress={() => router.push(`/(tabs)/race/scrollable/${race.id}`)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.cardHeader}>

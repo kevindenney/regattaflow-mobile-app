@@ -7,7 +7,7 @@
  * NOAA CO-OPS API: https://api.tidesandcurrents.noaa.gov/api/prod/
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * NOAA tide station information
@@ -299,8 +299,8 @@ export class TidalService {
       labels: relevantPredictions.map(p =>
         p.time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       ),
-      heights: relevantPredictions.map(p => p.height),
-      types: relevantPredictions.map(p => p.type)
+      heights: relevantPredictions.map((prediction: TidePrediction) => prediction.height),
+      types: relevantPredictions.map((prediction: TidePrediction) => prediction.type)
     };
   }
 
@@ -318,18 +318,22 @@ export class TidalService {
     dayEnd.setHours(23, 59, 59, 999);
 
     const dayPredictions = tidalData.predictions.filter(
-      p => p.time >= dayStart && p.time <= dayEnd
+      (prediction: TidePrediction) => prediction.time >= dayStart && prediction.time <= dayEnd
     );
 
-    const highTides = dayPredictions.filter(p => p.type === 'H');
-    const lowTides = dayPredictions.filter(p => p.type === 'L');
+    const highTides = dayPredictions.filter((prediction: TidePrediction) => prediction.type === 'H');
+    const lowTides = dayPredictions.filter((prediction: TidePrediction) => prediction.type === 'L');
 
     const highTide = highTides.length > 0
-      ? highTides.reduce((max, p) => p.height > max.height ? p : max)
+      ? highTides.reduce((max: TidePrediction, prediction: TidePrediction) =>
+          prediction.height > max.height ? prediction : max
+        )
       : null;
 
     const lowTide = lowTides.length > 0
-      ? lowTides.reduce((min, p) => p.height < min.height ? p : min)
+      ? lowTides.reduce((min: TidePrediction, prediction: TidePrediction) =>
+          prediction.height < min.height ? prediction : min
+        )
       : null;
 
     const range = highTide && lowTide ? highTide.height - lowTide.height : 0;
@@ -343,8 +347,8 @@ export class TidalService {
   getNextTide(tidalData: TidalData, type: 'H' | 'L'): TidePrediction | null {
     const now = new Date();
     const futurePredictions = tidalData.predictions
-      .filter(p => p.time > now && p.type === type)
-      .sort((a, b) => a.time.getTime() - b.time.getTime());
+      .filter((prediction: TidePrediction) => prediction.time > now && prediction.type === type)
+      .sort((a: TidePrediction, b: TidePrediction) => a.time.getTime() - b.time.getTime());
 
     return futurePredictions.length > 0 ? futurePredictions[0] : null;
   }
@@ -354,8 +358,8 @@ export class TidalService {
    */
   getTideDirection(tidalData: TidalData, time: Date = new Date()): 'rising' | 'falling' | 'slack' {
     const predictions = tidalData.predictions
-      .filter(p => Math.abs(p.time.getTime() - time.getTime()) <= 60 * 60 * 1000)
-      .sort((a, b) => a.time.getTime() - b.time.getTime());
+      .filter((prediction: TidePrediction) => Math.abs(prediction.time.getTime() - time.getTime()) <= 60 * 60 * 1000)
+      .sort((a: TidePrediction, b: TidePrediction) => a.time.getTime() - b.time.getTime());
 
     if (predictions.length < 2) return 'slack';
 

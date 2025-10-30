@@ -8,6 +8,140 @@
  */
 
 // =============================================================================
+// TYPOGRAPHY SYSTEM
+// =============================================================================
+
+/**
+ * Typography scales for consistent text styling
+ * Ultra-compact for Apple Weather Mac app density
+ */
+export const Typography = {
+  // Headings
+  h1: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    lineHeight: 28,
+  },
+  h2: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    lineHeight: 24,
+  },
+  h3: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    lineHeight: 18,
+  },
+
+  // Body
+  body: {
+    fontSize: 12,
+    fontWeight: '400' as const,
+    lineHeight: 16,
+  },
+  bodyBold: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    lineHeight: 16,
+  },
+
+  // Small
+  caption: {
+    fontSize: 9,
+    fontWeight: '400' as const,
+    lineHeight: 12,
+    letterSpacing: 0.2,
+  },
+  captionBold: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    lineHeight: 12,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase' as const,
+  },
+
+  // Large display
+  display: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    lineHeight: 34,
+  },
+};
+
+// =============================================================================
+// SPACING SYSTEM
+// =============================================================================
+
+/**
+ * Consistent spacing scale
+ * Use these instead of hardcoded pixel values
+ * Ultra-condensed for Apple Weather Mac app density
+ */
+export const Spacing = {
+  xs: 2,
+  sm: 4,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  xxl: 24,
+};
+
+// =============================================================================
+// SHADOW SYSTEM
+// =============================================================================
+
+/**
+ * Shadow elevations for depth and hierarchy
+ * Lighter shadows for cleaner, more subtle appearance
+ */
+export const Shadows = {
+  none: {
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  small: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  medium: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  large: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+};
+
+// =============================================================================
+// BORDER RADIUS SYSTEM
+// =============================================================================
+
+/**
+ * Border radius values for rounded corners
+ * Ultra-compact for Apple Weather Mac style
+ */
+export const BorderRadius = {
+  small: 4,
+  medium: 8,
+  large: 10,
+  xlarge: 14,
+  round: 999,
+};
+
+// =============================================================================
 // COLOR SYSTEM
 // =============================================================================
 
@@ -146,6 +280,14 @@ export const colors = {
     medium: '#d1d5db',       // Medium borders (neutral-300)
     dark: '#9ca3af',         // Dark borders (neutral-400)
   },
+
+  // MAP LAYER COLORS - For race map overlays
+  wind: '#3b82f6',           // Wind indicators (primary-500)
+  current: '#0ea5e9',        // Current indicators (info-500)
+  waves: '#06b6d4',          // Wave indicators (cyan-500)
+  depth: '#8b5cf6',          // Depth indicators (violet-500)
+  laylines: '#10b981',       // Layline indicators (emerald-500)
+  strategy: '#f59e0b',       // Strategy markers (warning-500)
 } as const;
 
 // =============================================================================
@@ -432,10 +574,37 @@ export function hasValidContrast(foreground: string, background: string): boolea
 }
 
 // =============================================================================
+// HELPER FUNCTIONS FOR CARDS
+// =============================================================================
+
+/**
+ * Create consistent card styles
+ */
+export const createCardStyle = (size: 'small' | 'medium' | 'large' = 'medium') => {
+  const paddingMap = {
+    small: Spacing.md,
+    medium: Spacing.lg,
+    large: Spacing.xl,
+  };
+
+  return {
+    backgroundColor: colors.background.primary,
+    borderRadius: BorderRadius.large,
+    padding: paddingMap[size],
+    marginBottom: Spacing.md,
+    ...Shadows.small,
+  };
+};
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
 export default {
+  Typography,
+  Spacing,
+  Shadows,
+  BorderRadius,
   colors,
   buttons,
   badges,
@@ -443,4 +612,5 @@ export default {
   getButtonStyles,
   getBadgeStyles,
   hasValidContrast,
+  createCardStyle,
 };

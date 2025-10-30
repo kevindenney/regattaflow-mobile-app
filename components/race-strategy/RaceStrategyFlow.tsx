@@ -11,9 +11,11 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import DocumentUploadScreen from './DocumentUploadScreen';
 import AIValidationScreen from './AIValidationScreen';
+import { createLogger } from '@/lib/utils/logger';
 
 type FlowStep = 'upload' | 'validation' | 'complete';
 
+const logger = createLogger('RaceStrategyFlow');
 export function RaceStrategyFlow() {
   const [currentStep, setCurrentStep] = useState<FlowStep>('upload');
   const [raceEventId, setRaceEventId] = useState<string>('');
@@ -26,17 +28,17 @@ export function RaceStrategyFlow() {
   const handleApprove = () => {
     setCurrentStep('complete');
     // TODO: Navigate to race intelligence dashboard
-    console.log('Race approved! Navigate to dashboard...');
+    logger.debug('Race approved! Navigate to dashboard...');
   };
 
   const handleEdit = () => {
     // TODO: Navigate to course editor
-    console.log('Edit course...');
+    logger.debug('Edit course...');
   };
 
   const handleManualMode = () => {
     // TODO: Navigate to manual course drawing
-    console.log('Manual mode...');
+    logger.debug('Manual mode...');
   };
 
   return (

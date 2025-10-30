@@ -4,7 +4,7 @@
  * Extends OnboardingAgent with real-time streaming responses
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { BaseAgentService, AgentTool } from './BaseAgentService';
 import { supabase } from '../supabase';
 import {
@@ -311,7 +311,6 @@ If user says NO or wants to continue:
     userMessage: string,
     context: ConversationalContext
   ): AsyncGenerator<string, void, unknown> {
-    console.log('🤖 Streaming conversational response for:', userMessage);
 
     // Add user message to conversation history
     this.conversationHistory.push({
@@ -369,19 +368,11 @@ If user says NO or wants to continue:
       if (finalMessage.stop_reason === 'tool_use') {
         const toolResults: Anthropic.MessageParam[] = [];
 
-        console.log('🔧 [ConversationalAgent] AI wants to use tools:',
-          finalMessage.content
-            .filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use')
-            .map(b => b.name)
-        );
-
         for (const toolUse of finalMessage.content.filter(
           (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
         )) {
           try {
-            console.log(`🔧 [ConversationalAgent] Executing tool: ${toolUse.name}`, toolUse.input);
             const result = await this.executeTool(toolUse.name, toolUse.input);
-            console.log(`✅ [ConversationalAgent] Tool ${toolUse.name} result:`, result);
 
             toolResults.push({
               role: 'user',
@@ -394,7 +385,6 @@ If user says NO or wants to continue:
               ],
             });
           } catch (error: any) {
-            console.error(`❌ [ConversationalAgent] Tool ${toolUse.name} ERROR:`, error);
             toolResults.push({
               role: 'user',
               content: [
@@ -420,7 +410,7 @@ If user says NO or wants to continue:
         yield* this.streamFollowUp();
       }
     } catch (error: any) {
-      console.error('❌ Streaming failed:', error);
+
       yield `\n\nI apologize, but I encountered an error: ${error.message}`;
     }
   }
@@ -507,7 +497,7 @@ If user says NO or wants to continue:
         yield* this.streamFollowUp();
       }
     } catch (error: any) {
-      console.error('❌ Follow-up streaming failed:', error);
+
       yield `\n\nI encountered an error: ${error.message}`;
     }
   }
@@ -558,7 +548,7 @@ If user says NO or wants to continue:
    */
   resetConversation() {
     this.conversationHistory = [];
-    console.log('🔄 Conversation history reset');
+
   }
 
   /**
@@ -598,15 +588,11 @@ If user says NO or wants to continue:
       throw new Error(`Tool not found: ${toolName}`);
     }
 
-    console.log(`🔧 Executing tool: ${toolName}`, input);
-
     try {
       const validatedInput = tool.input_schema.parse(input);
       const result = await tool.execute(validatedInput);
-      console.log(`✅ Tool ${toolName} completed successfully`);
       return result;
     } catch (error: any) {
-      console.error(`❌ Tool ${toolName} failed:`, error);
       throw new Error(`Tool execution failed: ${error.message}`);
     }
   }
@@ -640,7 +626,6 @@ If user says NO or wants to continue:
     error?: string;
   }> {
     try {
-      console.log('🤖 Processing user message for entity extraction:', userMessage);
 
       // Step 1: Basic entity extraction
       const extractionPrompt = `Extract sailing-related entities from this message. Return ONLY valid JSON, no other text.
@@ -690,9 +675,6 @@ Return format:
       for (const doc of extracted.documents || []) {
         if (doc.url && doc.url.startsWith('http')) {
           try {
-            console.log('🌐 [SCRAPE DEBUG] Starting to scrape URL:', doc.url);
-            console.log('🔍 [SCRAPE DEBUG] Document type:', doc.type);
-            console.log('🔍 [SCRAPE DEBUG] Extracted boats:', extracted.boats);
 
             // Determine if this is a club or class website
             const isClassWebsite = doc.url.includes('/class') ||
@@ -701,12 +683,6 @@ Return format:
                                   doc.url.includes('/etchells') ||
                                   doc.url.includes('/j80') ||
                                   (extracted.boats && extracted.boats.length > 0);
-
-            console.log('🎯 [SCRAPE DEBUG] URL classification:', {
-              isClassWebsite,
-              url: doc.url,
-              hasBoatClass: extracted.boats && extracted.boats.length > 0
-            });
 
             // Import scraping functions
             const { scrapeClubWebsite, scrapeClassWebsite } = await import('./WebScrapingTools');
@@ -722,32 +698,20 @@ Return format:
                 else if (doc.url.includes('/j70')) boatClass = 'J/70';
                 else if (doc.url.includes('/etchells')) boatClass = 'Etchells';
                 else if (doc.url.includes('/j80')) boatClass = 'J/80';
-                console.log('🔍 [SCRAPE DEBUG] Inferred boat class from URL:', boatClass);
               }
 
               if (boatClass) {
-                console.log('🚢 [SCRAPE DEBUG] Using scrapeClassWebsite for:', boatClass);
                 scraped = await scrapeClassWebsite(doc.url, boatClass);
               } else {
-                console.log('⚠️ [SCRAPE DEBUG] Class website but no boat class found, using scrapeClubWebsite');
+
                 scraped = await scrapeClubWebsite(doc.url);
               }
             } else {
-              console.log('🏛️ [SCRAPE DEBUG] Using scrapeClubWebsite');
               scraped = await scrapeClubWebsite(doc.url);
             }
 
-            console.log('✅ [SCRAPE DEBUG] Scraping completed:', {
-              upcoming_events: scraped.upcoming_events?.length || 0,
-              documents: scraped.documents?.length || 0,
-              csv_calendars: scraped.csv_calendars?.length || 0
-            });
-
             // Add discovered events
             if (scraped.upcoming_events && scraped.upcoming_events.length > 0) {
-              console.log(`📅 [SCRAPE DEBUG] Adding ${scraped.upcoming_events.length} events:`,
-                scraped.upcoming_events.slice(0, 5).map(e => ({ name: e.name, source: e.source, date: e.date }))
-              );
               upcomingRaces.push(...scraped.upcoming_events);
             }
 
@@ -756,7 +720,7 @@ Return format:
               allDocuments.push(...scraped.documents);
             }
           } catch (err) {
-            console.error('❌ [SCRAPE DEBUG] Failed to scrape URL:', err);
+
           }
         }
       }
@@ -764,34 +728,20 @@ Return format:
       // Step 3: Find next upcoming race
       let nextRace = extracted.nextRace || previousData.nextRace;
 
-      console.log('🏁 [NEXT RACE DEBUG] Starting next race selection:', {
-        hasExtractedNextRace: !!extracted.nextRace,
-        hasPreviousNextRace: !!previousData.nextRace,
-        totalUpcomingRaces: upcomingRaces.length
-      });
-
       if (!nextRace && upcomingRaces.length > 0) {
         const today = new Date();
-        console.log('📅 [NEXT RACE DEBUG] Today\'s date:', today.toISOString());
-        console.log('📋 [NEXT RACE DEBUG] All upcoming races:', upcomingRaces.map(r => ({
-          name: r.name,
-          date: r.date,
-          source: r.source
-        })));
-
         // Filter to future races only
         const futureRaces = upcomingRaces.filter(race => {
           if (!race.date) {
-            console.log('⚠️ [NEXT RACE DEBUG] Race has no date:', race.name);
+
             return false;
           }
           try {
             const raceDate = new Date(race.date);
             const isFuture = raceDate > today;
-            console.log(`📆 [NEXT RACE DEBUG] ${race.name}: ${race.date} -> ${isFuture ? 'FUTURE' : 'PAST'}`);
             return isFuture;
           } catch (err) {
-            console.error('❌ [NEXT RACE DEBUG] Invalid date format:', race.date, err);
+
             return false;
           }
         }).sort((a, b) => {
@@ -799,12 +749,6 @@ Return format:
           const dateB = new Date(b.date);
           return dateA.getTime() - dateB.getTime();
         });
-
-        console.log('🔮 [NEXT RACE DEBUG] Future races:', futureRaces.map(r => ({
-          name: r.name,
-          date: r.date,
-          source: r.source
-        })));
 
         if (futureRaces.length > 0) {
           // Auto-select the next upcoming race
@@ -815,9 +759,9 @@ Return format:
             startTime: next.startTime || '',
             location: next.location || ''
           };
-          console.log('✅ [NEXT RACE DEBUG] Auto-selected next race:', nextRace);
+
         } else {
-          console.log('⚠️ [NEXT RACE DEBUG] No future races found!');
+
         }
       }
 
@@ -834,15 +778,13 @@ Return format:
           : extracted.summary || "Got it! I've noted that information."
       };
 
-      console.log('✅ Extracted entities:', mergedData);
-
       return {
         success: true,
         result: mergedData
       };
 
     } catch (error: any) {
-      console.error('❌ Entity extraction failed:', error);
+
       return {
         success: false,
         error: error.message

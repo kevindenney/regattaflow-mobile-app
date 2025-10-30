@@ -1,4 +1,8 @@
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+import type { StoredDocument } from './storage/DocumentStorageService';
+
+const logger = createLogger('FleetService');
 
 export interface Fleet {
   id: string;
@@ -32,6 +36,42 @@ export interface FleetMetrics {
 export interface FleetOverview {
   fleet: Fleet;
   metrics: FleetMetrics;
+}
+
+export interface FleetResource {
+  id: string;
+  fleetId: string;
+  documentId: string;
+  tags: string[];
+  sharedBy?: string | null;
+  createdAt: string;
+  notifyFollowers?: boolean;
+  document?: StoredDocument;
+  ownerProfile?: {
+    id: string;
+    fullName?: string | null;
+    avatarUrl?: string | null;
+  };
+}
+
+export interface FleetCourseSummary {
+  id: string;
+  name: string;
+  courseType?: string | null;
+  lastUsedDate?: string | null;
+  description?: string | null;
+  venueId?: string | null;
+}
+
+export interface FleetRaceSummary {
+  id: string;
+  raceName: string;
+  startTime?: string | null;
+  boatClass?: string | null;
+  raceSeries?: string | null;
+  venueId?: string | null;
+  racingAreaName?: string | null;
+  venueName?: string | null;
 }
 
 export type FleetActivityType =
@@ -84,8 +124,6 @@ class FleetService {
   }
 
   async getFleetsForUser(userId: string): Promise<FleetMembership[]> {
-    console.log('[FleetService] getFleetsForUser called with userId:', userId);
-
     const { data, error } = await supabase
       .from('fleet_members')
       .select(
@@ -101,19 +139,12 @@ class FleetService {
       .eq('user_id', userId)
       .eq('status', 'active');
 
-    console.log('[FleetService] Raw query result:', { data, error, dataCount: data?.length });
-
     if (error) {
-      console.error('[FleetService] Error fetching fleets for user:', error);
+      logger.error('Error fetching fleets for user:', error);
       throw error;
     }
 
     const filtered = (data || []).filter(item => item.fleet);
-    console.log('[FleetService] After filtering null fleets:', {
-      original: data?.length,
-      filtered: filtered.length,
-      nullFleets: data?.filter(item => !item.fleet).length
-    });
 
     const mapped = filtered.map(item => ({
       fleet: this.mapFleet(item.fleet),
@@ -122,7 +153,6 @@ class FleetService {
       joinedAt: item.joined_at,
     }));
 
-    console.log('[FleetService] Returning mapped fleets:', mapped.length, mapped);
     return mapped;
   }
 
@@ -134,7 +164,7 @@ class FleetService {
       .single();
 
     if (error || !data) {
-      console.error('Error fetching fleet overview:', error);
+      logger.error('Error fetching fleet overview:', error);
       throw error;
     }
 
@@ -163,7 +193,7 @@ class FleetService {
       .limit(options?.limit ?? 25);
 
     if (error) {
-      console.error('Error fetching fleet activity:', error);
+      logger.error('Error fetching fleet activity:', error);
       throw error;
     }
 
@@ -186,7 +216,7 @@ class FleetService {
       .order('joined_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching fleet members:', error);
+      logger.error('Error fetching fleet members:', error);
       throw error;
     }
 
@@ -220,7 +250,7 @@ class FleetService {
       .upsert(payload, { onConflict: 'fleet_id,follower_id' });
 
     if (error) {
-      console.error('Error following fleet:', error);
+      logger.error('Error following fleet:', error);
       throw error;
     }
   }
@@ -233,8 +263,228 @@ class FleetService {
       .eq('follower_id', userId);
 
     if (error) {
-      console.error('Error unfollowing fleet:', error);
+      logger.error('Error unfollowing fleet:', error);
       throw error;
+    }
+  }
+
+  async joinFleet(userId: string, fleetId: string, role: FleetMembership['role'] = 'member'): Promise<void> {
+    const { error } = await supabase
+      .from('fleet_members')
+      .upsert(
+        {
+          fleet_id: fleetId,
+          user_id: userId,
+          role,
+          status: 'active',
+          joined_at: new Date().toISOString(),
+        },
+        { onConflict: 'fleet_id,user_id' }
+      );
+
+    if (error) {
+      logger.error('Error joining fleet:', error);
+      throw error;
+    }
+  }
+
+  async leaveFleet(userId: string, fleetId: string): Promise<void> {
+    const { error } = await supabase
+      .from('fleet_members')
+      .delete()
+      .eq('fleet_id', fleetId)
+      .eq('user_id', userId);
+
+    if (error) {
+      logger.error('Error leaving fleet:', error);
+      throw error;
+    }
+  }
+
+  async getFleetResources(
+    fleetId: string,
+    options?: { limit?: number }
+  ): Promise<FleetResource[]> {
+    const { data, error } = await supabase
+      .from('fleet_documents')
+      .select('*')
+      .eq('fleet_id', fleetId)
+      .order('created_at', { ascending: false })
+      .limit(options?.limit ?? 12);
+
+    if (error) {
+      logger.error('Error fetching fleet resources:', error);
+      throw error;
+    }
+
+    if (!data?.length) {
+      return [];
+    }
+
+    const documentIds = data
+      .map(entry => entry.document_id)
+      .filter((id): id is string => Boolean(id));
+
+    const ownerIds = data
+      .map(entry => entry.shared_by)
+      .filter((id): id is string => Boolean(id));
+
+    let documentsById: Record<string, StoredDocument> = {};
+    if (documentIds.length) {
+      const { data: documents, error: docError } = await supabase
+        .from('documents')
+        .select('*')
+        .in('id', documentIds);
+
+      if (docError) {
+        logger.warn('Unable to load documents for fleet resources:', docError);
+      } else {
+        documentsById = Object.fromEntries(
+          (documents || []).map(doc => [
+            doc.id,
+            {
+              id: doc.id,
+              user_id: doc.user_id,
+              filename: doc.filename,
+              file_type: doc.file_type,
+              file_size: doc.file_size,
+              storage_path: doc.storage_path,
+              public_url: doc.public_url,
+              metadata: doc.metadata,
+              created_at: doc.created_at,
+              updated_at: doc.updated_at,
+            } satisfies StoredDocument,
+          ])
+        );
+      }
+    }
+
+    let ownersById: Record<string, { id: string; full_name?: string | null; avatar_url?: string | null }> = {};
+    if (ownerIds.length) {
+      const { data: owners, error: ownerError } = await supabase
+        .from('users')
+        .select('id, full_name, avatar_url')
+        .in('id', ownerIds);
+
+      if (ownerError) {
+        logger.warn('Unable to load owners for fleet resources:', ownerError);
+      } else {
+        ownersById = Object.fromEntries((owners || []).map(owner => [owner.id, owner]));
+      }
+    }
+
+    return data.map(entry => ({
+      id: entry.id,
+      fleetId: entry.fleet_id,
+      documentId: entry.document_id,
+      tags: Array.isArray(entry.tags) ? entry.tags : [],
+      sharedBy: entry.shared_by,
+      notifyFollowers: entry.notify_followers ?? false,
+      createdAt: entry.created_at,
+      document: entry.document_id ? documentsById[entry.document_id] : undefined,
+      ownerProfile: entry.shared_by
+        ? {
+            id: entry.shared_by,
+            fullName: ownersById[entry.shared_by]?.full_name,
+            avatarUrl: ownersById[entry.shared_by]?.avatar_url,
+          }
+        : undefined,
+    }));
+  }
+
+  async getFleetCourses(params: { clubId?: string | null; limit?: number }): Promise<FleetCourseSummary[]> {
+    if (!params.clubId) {
+      return [];
+    }
+
+    try {
+      let query = supabase
+        .from('race_courses')
+        .select('id, name, course_type, last_used_date, description, venue_id')
+        .eq('club_id', params.clubId)
+        .order('last_used_date', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
+
+      if (params.limit) {
+        query = query.limit(params.limit);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        logger.error('Error fetching fleet courses:', error);
+        throw error;
+      }
+
+      return (data || []).map(course => ({
+        id: course.id,
+        name: course.name,
+        courseType: course.course_type,
+        lastUsedDate: course.last_used_date,
+        description: course.description,
+        venueId: course.venue_id,
+      }));
+    } catch (error) {
+      logger.warn('Unable to load fleet courses - returning empty set', error);
+      return [];
+    }
+  }
+
+  async getFleetUpcomingRaces(params: { classId?: string | null; limit?: number }): Promise<FleetRaceSummary[]> {
+    if (!params.classId) {
+      return [];
+    }
+
+    try {
+      let query = supabase
+        .from('race_events')
+        .select('id, race_name, start_time, boat_class, race_series, venue_id, racing_area_name')
+        .eq('boat_class', params.classId)
+        .gte('start_time', new Date().toISOString())
+        .order('start_time', { ascending: true });
+
+      if (params.limit) {
+        query = query.limit(params.limit);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        logger.error('Error fetching fleet upcoming races:', error);
+        throw error;
+      }
+
+      const venueIds = (data || [])
+        .map(event => event.venue_id)
+        .filter((id): id is string => Boolean(id));
+
+      let venuesById: Record<string, string> = {};
+      if (venueIds.length) {
+        const { data: venues, error: venuesError } = await supabase
+          .from('sailing_venues')
+          .select('id, name')
+          .in('id', venueIds);
+
+        if (venuesError) {
+          logger.warn('Unable to load venue names for upcoming races:', venuesError);
+        } else {
+          venuesById = Object.fromEntries((venues || []).map(venue => [venue.id, venue.name]));
+        }
+      }
+
+      return (data || []).map(event => ({
+        id: event.id,
+        raceName: event.race_name,
+        startTime: event.start_time,
+        boatClass: event.boat_class,
+        raceSeries: event.race_series,
+        venueId: event.venue_id,
+        racingAreaName: event.racing_area_name,
+        venueName: event.venue_id ? venuesById[event.venue_id] ?? null : null,
+      }));
+    } catch (error) {
+      logger.warn('Unable to load upcoming fleet races - returning empty list', error);
+      return [];
     }
   }
 
@@ -246,7 +496,7 @@ class FleetService {
       .eq('status', 'active');
 
     if (error) {
-      console.error('Error counting fleet members:', error);
+      logger.error('Error counting fleet members:', error);
       return 0;
     }
 
@@ -260,7 +510,7 @@ class FleetService {
       .eq('fleet_id', fleetId);
 
     if (error) {
-      console.error('Error counting fleet followers:', error);
+      logger.error('Error counting fleet followers:', error);
       return 0;
     }
 
@@ -274,7 +524,7 @@ class FleetService {
       .eq('fleet_id', fleetId);
 
     if (error) {
-      console.error('Error counting fleet documents:', error);
+      logger.error('Error counting fleet documents:', error);
       return 0;
     }
 
@@ -302,7 +552,7 @@ class FleetService {
       });
 
     if (error) {
-      console.error('Error sharing document with fleet:', error);
+      logger.error('Error sharing document with fleet:', error);
       throw error;
     }
 

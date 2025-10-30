@@ -232,43 +232,29 @@ const SAMPLE_CLUBS: YachtClubData[] = [
 ];
 
 export async function seedVenueDatabase(): Promise<void> {
-  console.log('🌍 [SEED DEBUG] Starting venue database seeding...');
 
   try {
     // Check if venues already exist
-    console.log('🔍 [SEED DEBUG] Checking existing venue count...');
     const { count, error: countError } = await supabase
       .from('sailing_venues')
       .select('*', { count: 'exact', head: true });
 
     if (countError) {
-      console.log('ℹ️ [SEED DEBUG] sailing_venues table does not exist yet:', countError.message);
-      console.log('🔍 [SEED DEBUG] Error details:', {
-        code: countError.code,
-        message: countError.message,
-        hint: countError.hint
-      });
     } else {
-      console.log(`✅ [SEED DEBUG] Database query successful, found ${count || 0} existing venues`);
       if (count && count > 0) {
-        console.log(`ℹ️ [SEED DEBUG] Database already contains ${count} venues, will still attempt upsert to ensure data is current`);
         // Continue with upsert instead of returning early
       }
     }
 
     // Create the basic tables first (simplified version for immediate use)
-    console.log('🏗️ [SEED DEBUG] Creating sailing_venues table...');
 
     // First, try to create table using Supabase's SQL editor approach
-    console.log('🔧 [SEED DEBUG] Attempting to create table directly via INSERT (Supabase will auto-create)...');
 
     // Instead of trying to CREATE TABLE, we'll let Supabase auto-create the table
     // by doing an INSERT with proper data types. If the table doesn't exist,
     // Supabase will create it with inferred schema.
 
     // Insert venues
-    console.log('🌍 [SEED DEBUG] Preparing venue data for insertion...');
-    console.log(`🔍 [SEED DEBUG] Will attempt to insert ${SAMPLE_VENUES.length} venues`);
 
     const venuesForInsert = SAMPLE_VENUES.map(venue => ({
       id: venue.id,
@@ -283,29 +269,17 @@ export async function seedVenueDatabase(): Promise<void> {
       data_quality: venue.data_quality
     }));
 
-    console.log('🔍 [SEED DEBUG] Sample venue data:', venuesForInsert[0]); // Log first venue as example
-
-    console.log('📤 [SEED DEBUG] Executing Supabase insert (will create table if needed)...');
     const { data: venuesData, error: venuesError } = await supabase
       .from('sailing_venues')
       .insert(venuesForInsert)
       .select();
 
     if (venuesError) {
-      console.error('❌ [SEED DEBUG] Failed to insert venues:', {
-        message: venuesError.message,
-        code: venuesError.code,
-        details: venuesError.details,
-        hint: venuesError.hint
-      });
+
       throw venuesError;
     }
 
-    console.log(`✅ [SEED DEBUG] Successfully inserted ${venuesData?.length || 0} venues`);
-    console.log('🔍 [SEED DEBUG] Inserted venue IDs:', venuesData?.map(v => v.id) || []);
-
     // Create yacht_clubs table
-    console.log('🏗️ Creating yacht_clubs table...');
 
     const createClubsTable = `
       CREATE TABLE IF NOT EXISTS yacht_clubs (
@@ -324,7 +298,6 @@ export async function seedVenueDatabase(): Promise<void> {
     await supabase.rpc('exec_sql', { sql: createClubsTable });
 
     // Insert yacht clubs
-    console.log('⛵ [SEED DEBUG] Inserting yacht clubs...');
 
     const { data: clubsData, error: clubsError } = await supabase
       .from('yacht_clubs')
@@ -332,21 +305,17 @@ export async function seedVenueDatabase(): Promise<void> {
       .select();
 
     if (clubsError) {
-      console.error('❌ Failed to insert clubs:', clubsError);
+
       throw clubsError;
     }
-
-    console.log(`✅ Successfully inserted ${clubsData?.length || 0} yacht clubs`);
 
     // Verify the data
     const { count: finalCount } = await supabase
       .from('sailing_venues')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`🎉 Venue database seeding completed! Total venues: ${finalCount}`);
-
   } catch (error: any) {
-    console.error('❌ Venue seeding failed:', error);
+
     throw new Error(`Seeding failed: ${error.message}`);
   }
 }

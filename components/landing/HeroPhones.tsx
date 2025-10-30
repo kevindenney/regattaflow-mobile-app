@@ -25,7 +25,6 @@ export function HeroPhones() {
 
   // DEV: Logout function for testing
   const handleLogout = async () => {
-    console.log('🚪 [LOGOUT] Signing out...');
     await supabase.auth.signOut();
     // Force reload to clear all state
     if (Platform.OS === 'web') {
@@ -36,21 +35,16 @@ export function HeroPhones() {
   };
 
   const handleGetStarted = () => {
-    console.log('🚀 [LANDING] Get Started clicked - User:', user?.id, 'Profile:', userProfile?.user_type, 'Onboarding:', userProfile?.onboarding_completed);
 
     if (user && userProfile) {
-      console.log('🚀 [LANDING] User exists, checking onboarding status');
       // Check if onboarding is needed
       if (shouldCompleteOnboarding(userProfile)) {
         const onboardingRoute = getOnboardingRoute(userProfile);
-        console.log('🚀 [LANDING] Onboarding needed, routing to:', onboardingRoute);
         router.push(onboardingRoute);
       } else {
-        console.log('🚀 [LANDING] Onboarding complete, routing to dashboard');
         router.push(getDashboardRoute(userProfile.user_type));
       }
     } else {
-      console.log('🚀 [LANDING] No user, routing to signup with persona: sailor');
       // For new users, default to sailor persona (can be changed later if we add tabs)
       router.push({
         pathname: '/(auth)/signup',

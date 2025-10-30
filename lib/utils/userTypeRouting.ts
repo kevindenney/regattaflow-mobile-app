@@ -1,9 +1,12 @@
 import { UserType } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Get the correct dashboard route based on user type
  * All user types now use the unified tab system with role-based tab filtering
  */
+
+const logger = createLogger('userTypeRouting');
 export function getDashboardRoute(userType: UserType | null): string {
   // Sailor-first launch: Default to sailor experience if no user type
   if (!userType) {
@@ -43,14 +46,7 @@ export function shouldCompleteOnboarding(userProfile: any): boolean {
   // User needs onboarding if they don't have both a user_type AND completed onboarding
   const needsOnboarding = !hasUserType || !onboardingCompleted;
 
-  console.log('[shouldCompleteOnboarding]', {
-    hasProfile: !!userProfile,
-    hasUserType,
-    onboardingCompleted,
-    needsOnboarding,
-    user_type: userProfile?.user_type,
-    onboarding_completed_value: userProfile?.onboarding_completed
-  });
+  logger.debug('[shouldCompleteOnboarding]', { hasUserType, onboardingCompleted, needsOnboarding });
 
   return needsOnboarding;
 }

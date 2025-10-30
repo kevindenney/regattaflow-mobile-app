@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DashboardKPICard, DashboardSection, QuickAction, QuickActionGrid } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface ClubStats {
   totalMembers: number;
@@ -41,6 +42,7 @@ interface ClubOverviewProps {
   onCheckFacilities: () => void;
 }
 
+const logger = createLogger('ClubOverview');
 export function ClubOverview({
   stats,
   upcomingEvents = [],
@@ -77,7 +79,7 @@ export function ClubOverview({
 
   const getEventTypeIcon = (type: string) => {
     switch (type) {
-      case 'regatta': return 'sailboat';
+      case 'regatta': return 'boat';
       case 'social': return 'people';
       case 'training': return 'school';
       case 'meeting': return 'chatbubbles';
@@ -156,7 +158,7 @@ export function ClubOverview({
         subtitle="Events scheduled for the next 30 days"
         headerAction={{
           label: 'View All',
-          onPress: () => console.log('View all events'),
+          onPress: () => logger.debug('View all events'),
           icon: 'calendar-outline'
         }}
       >

@@ -26,6 +26,7 @@ interface CourseSelectorProps {
   onCreateNew: () => void;
   venueId?: string;
   clubId?: string;
+  initialCourseId?: string;
 }
 
 type TabValue = 'personal' | 'club' | 'venue' | 'recent';
@@ -37,6 +38,7 @@ export function CourseSelector({
   onCreateNew,
   venueId,
   clubId,
+  initialCourseId,
 }: CourseSelectorProps) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabValue>('recent');
@@ -44,13 +46,22 @@ export function CourseSelector({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<CourseType | 'all'>('all');
+  const [pendingAutoSelectId, setPendingAutoSelectId] = useState<string | null>(null);
 
-  // Load courses when tab changes or modal opens
   useEffect(() => {
-    if (visible) {
-      loadCourses();
+    if (visible && initialCourseId) {
+      setPendingAutoSelectId(initialCourseId);
     }
-  }, [visible, activeTab, searchQuery]);
+  }, [initialCourseId, visible]);
+
+  const handleCourseSelect = async (course: RaceCourse) => {
+    // Record usage
+    await CourseLibraryService.recordCourseUsage(course.id);
+
+    // Notify parent
+    onCourseSelected(course);
+    onClose();
+  };
 
   const loadCourses = async () => {
     if (!user) return;
@@ -81,6 +92,15 @@ export function CourseSelector({
       }
 
       setCourses(loadedCourses);
+
+      if (pendingAutoSelectId) {
+        const match = loadedCourses.find((course) => course.id === pendingAutoSelectId);
+        if (match) {
+          setPendingAutoSelectId(null);
+          await handleCourseSelect(match);
+          return;
+        }
+      }
     } catch (error) {
       console.error('[CourseSelector] Error loading courses:', error);
     } finally {
@@ -88,14 +108,13 @@ export function CourseSelector({
     }
   };
 
-  const handleCourseSelect = async (course: RaceCourse) => {
-    // Record usage
-    await CourseLibraryService.recordCourseUsage(course.id);
-
-    // Notify parent
-    onCourseSelected(course);
-    onClose();
-  };
+  // Load courses when tab changes or modal opens
+  useEffect(() => {
+    if (visible) {
+      loadCourses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, activeTab, searchQuery, filterType, pendingAutoSelectId]);
 
   const getCourseTypeLabel = (type: CourseType): string => {
     const labels: Record<CourseType, string> = {

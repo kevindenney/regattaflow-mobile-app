@@ -58,7 +58,7 @@ export class GooglePlacesService {
     this.apiKey = apiKey || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
     if (!this.apiKey) {
-      console.warn('⚠️  Google Maps API key not configured. Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY');
+
     }
   }
 
@@ -134,7 +134,7 @@ export class GooglePlacesService {
         businessStatus: place.businessStatus,
       }));
     } catch (error: any) {
-      console.error('❌ Google Places searchText failed:', error);
+
       throw error;
     }
   }
@@ -187,7 +187,7 @@ export class GooglePlacesService {
         googleMapsUri: place.googleMapsUri,
       };
     } catch (error: any) {
-      console.error('❌ Google Places getPlaceDetails failed:', error);
+
       return null;
     }
   }
@@ -235,7 +235,7 @@ export class GooglePlacesService {
         types: result.types,
       };
     } catch (error: any) {
-      console.error('❌ Google Geocoding failed:', error);
+
       return null;
     }
   }
@@ -283,7 +283,7 @@ export class GooglePlacesService {
         types: result.types,
       };
     } catch (error: any) {
-      console.error('❌ Google Reverse Geocoding failed:', error);
+
       return null;
     }
   }
@@ -343,7 +343,6 @@ export class GooglePlacesService {
     const results: Array<{ query: string; results: PlaceSearchResult[] }> = [];
 
     for (const query of queries) {
-      console.log(`🔍 Searching: ${query.name}`);
 
       try {
         const searchResults = await this.searchYachtClub(query.name, query.location);
@@ -352,7 +351,6 @@ export class GooglePlacesService {
           results: searchResults,
         });
       } catch (error) {
-        console.error(`❌ Failed to search ${query.name}:`, error);
         results.push({
           query: query.name,
           results: [],

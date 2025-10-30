@@ -121,7 +121,6 @@ export function GlobalVenuesMapLayer({
     );
   }
 
-  console.log(`🗺️ GlobalVenuesMapLayer: Rendering ${venueMarkers.length} venue markers`);
 
   // Return venue markers data that can be consumed by the map component
   // The actual rendering of markers on the map will be done by the parent map component

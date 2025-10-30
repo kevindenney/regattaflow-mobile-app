@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Check, Star, Shield, Clock, Smartphone } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('subscription');
 const SubscriptionScreen = () => {
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'standard' | 'pro'>('standard');
 
@@ -61,7 +63,7 @@ const SubscriptionScreen = () => {
   };
 
   const handleContinue = () => {
-    console.log(`Selected plan: ${selectedPlan}`);
+    logger.debug(`Selected plan: ${selectedPlan}`);
     // In a real app, this would navigate to payment screen
   };
 

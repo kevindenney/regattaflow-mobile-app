@@ -227,10 +227,9 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
       }));
 
       onStrategyGenerated?.(strategy);
-      console.log('✅ Race strategy generated successfully');
 
     } catch (error) {
-      console.error('❌ Failed to generate race strategy:', error);
+
       Alert.alert('Strategy Error', 'Failed to generate race strategy. Please try again.');
     } finally {
       setState(prev => ({ ...prev, isGeneratingStrategy: false }));

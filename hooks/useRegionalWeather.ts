@@ -74,7 +74,6 @@ export function useRegionalWeather() {
     hoursAhead: number = 72,
     force: boolean = false
   ) => {
-    console.log(`🌤️ Loading weather for venue: ${venue.name}`);
 
     if (!force && state.isLoading) return;
 
@@ -122,10 +121,8 @@ export function useRegionalWeather() {
         isOffline: false
       }));
 
-      console.log(`✅ Weather loaded for ${venue.name}: ${weatherData.forecast[0].weatherCondition}`);
 
     } catch (error: any) {
-      console.error(`❌ Failed to load weather for ${venue.name}:`, error);
 
       setState(prev => ({
         ...prev,
@@ -141,7 +138,6 @@ export function useRegionalWeather() {
    * Load weather comparison for multiple venues
    */
   const loadNearbyWeather = useCallback(async (venues: SailingVenue[]) => {
-    console.log(`🌤️ Loading weather comparison for ${venues.length} venues`);
 
     try {
       setState(prev => ({ ...prev, error: null }));
@@ -154,10 +150,9 @@ export function useRegionalWeather() {
         lastUpdated: new Date()
       }));
 
-      console.log(`✅ Weather comparison loaded for ${venues.length} venues`);
 
     } catch (error: any) {
-      console.error('❌ Failed to load nearby weather:', error);
+
       setState(prev => ({ ...prev, error: error.message }));
     }
   }, []);
@@ -322,7 +317,6 @@ export function useRegionalWeather() {
       nearbyWeather: new Map(),
       lastUpdated: null
     }));
-    console.log('🌤️ Weather cache cleared');
   }, []);
 
   return {

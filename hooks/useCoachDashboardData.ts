@@ -118,27 +118,27 @@ export function useCoachDashboardData(): CoachDashboardData {
       setData(prev => ({ ...prev, loading: true, error: null }));
 
       // Skip coach clients query since table doesn't exist
-      const clientsData = null;
+      const clientsData: any[] | null = null;
       const clientsError = null;
 
       // Skip coaching sessions query since table doesn't exist
-      const sessionsData = null;
+      const sessionsData: any[] | null = null;
       const sessionsError = null;
 
       // Skip marketplace leads query since table doesn't exist
-      const leadsData = null;
+      const leadsData: any[] | null = null;
       const leadsError = null;
 
       // Skip coach earnings query since table doesn't exist
-      const earningsData = null;
+      const earningsData: any[] | null = null;
       const earningsError = null;
 
       // Skip coaching resources query since table doesn't exist
-      const resourcesData = null;
+      const resourcesData: any[] | null = null;
       const resourcesError = null;
 
       // Process clients data
-      const processedClients: CoachClient[] = clientsData?.map(client => ({
+      const processedClients: CoachClient[] = clientsData?.map((client: any) => ({
         id: client.id,
         name: client.user?.name || 'Unknown Client',
         email: client.user?.email || '',
@@ -157,7 +157,7 @@ export function useCoachDashboardData(): CoachDashboardData {
       })) || [];
 
       // Process sessions data
-      const processedSessions: CoachSession[] = sessionsData?.map(session => ({
+      const processedSessions: CoachSession[] = sessionsData?.map((session: any) => ({
         id: session.id,
         client_id: session.client_id,
         client_name: session.client?.name || 'Unknown Client',
@@ -174,7 +174,7 @@ export function useCoachDashboardData(): CoachDashboardData {
       })) || [];
 
       // Process leads data
-      const processedLeads: MarketplaceLead[] = leadsData?.map(lead => ({
+      const processedLeads: MarketplaceLead[] = leadsData?.map((lead: any) => ({
         id: lead.id,
         client_name: lead.client_name,
         client_email: lead.client_email,
@@ -191,33 +191,33 @@ export function useCoachDashboardData(): CoachDashboardData {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
 
-      const monthlyEarnings = earningsData?.filter(earning => {
+      const monthlyEarnings = earningsData?.filter((earning: any) => {
         const earningDate = new Date(earning.date);
         return earningDate.getMonth() === currentMonth && earningDate.getFullYear() === currentYear;
-      }).reduce((sum, earning) => sum + earning.amount, 0) || 0;
+      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
 
-      const previousMonthEarnings = earningsData?.filter(earning => {
+      const previousMonthEarnings = earningsData?.filter((earning: any) => {
         const earningDate = new Date(earning.date);
         const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
         return earningDate.getMonth() === prevMonth && earningDate.getFullYear() === prevYear;
-      }).reduce((sum, earning) => sum + earning.amount, 0) || 0;
+      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
 
-      const weeklyEarnings = earningsData?.filter(earning => {
+      const weeklyEarnings = earningsData?.filter((earning: any) => {
         const earningDate = new Date(earning.date);
         const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         return earningDate >= weekAgo;
-      }).reduce((sum, earning) => sum + earning.amount, 0) || 0;
+      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
 
-      const previousWeekEarnings = earningsData?.filter(earning => {
+      const previousWeekEarnings = earningsData?.filter((earning: any) => {
         const earningDate = new Date(earning.date);
         const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
         const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         return earningDate >= twoWeeksAgo && earningDate < weekAgo;
-      }).reduce((sum, earning) => sum + earning.amount, 0) || 0;
+      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
 
       // Calculate breakdown by service type
-      const breakdown = earningsData?.reduce((acc, earning) => {
+      const breakdown = earningsData?.reduce((acc: any, earning: any) => {
         switch (earning.service_type) {
           case 'live_session':
             acc.sessions += earning.amount;
@@ -235,7 +235,7 @@ export function useCoachDashboardData(): CoachDashboardData {
       }, { sessions: 0, programs: 0, raceDaySupport: 0, other: 0 }) ||
       { sessions: 0, programs: 0, raceDaySupport: 0, other: 0 };
 
-      const transactions = earningsData?.slice(0, 10).map(earning => ({
+      const transactions = earningsData?.slice(0, 10).map((earning: any) => ({
         id: earning.id,
         client: earning.client_name || 'Unknown Client',
         service: earning.service_type || 'Session',
@@ -245,7 +245,7 @@ export function useCoachDashboardData(): CoachDashboardData {
       })) || [];
 
       // Process resources data
-      const processedResources: Resource[] = resourcesData?.map(resource => ({
+      const processedResources: Resource[] = resourcesData?.map((resource: any) => ({
         id: resource.id,
         title: resource.title,
         type: resource.type,

@@ -70,6 +70,8 @@ export interface MockBoat {
   sailNumber: string;
   isPrimary: boolean;
   model3D?: string; // Path to 3D model file
+  hullMaker?: string;
+  sailMaker?: string;
   tuning: {
     shrouds: number; // tension units
     backstay: number;
@@ -314,8 +316,21 @@ export const MOCK_COURSES: MockCourse[] = [
  * Calculate countdown from current time to race date
  */
 export function calculateCountdown(raceDate: string): { days: number; hours: number; minutes: number } {
+  // Validate input
+  if (!raceDate) {
+    console.warn('[calculateCountdown] Invalid race date: null/undefined');
+    return { days: 0, hours: 0, minutes: 0 };
+  }
+
   const now = new Date();
   const race = new Date(raceDate);
+
+  // Check if date is valid
+  if (isNaN(race.getTime())) {
+    console.warn('[calculateCountdown] Invalid race date:', raceDate);
+    return { days: 0, hours: 0, minutes: 0 };
+  }
+
   const diff = race.getTime() - now.getTime();
 
   if (diff <= 0) {

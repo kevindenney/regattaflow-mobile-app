@@ -70,7 +70,7 @@ export interface TrackAnalysis {
 // ==================== GPS Service ====================
 
 export class GPSTrackingService {
-  private static trackingInterval: NodeJS.Timeout | null = null;
+  private static trackingInterval: ReturnType<typeof setInterval> | null = null;
   private static currentTrack: RaceTrack | null = null;
   private static locationSubscription: Location.LocationSubscription | null = null;
   private static windDirection: number = 0; // True wind direction
@@ -80,7 +80,6 @@ export class GPSTrackingService {
    */
   static async startTracking(userId: string, raceId?: string): Promise<void> {
     try {
-      console.log('📍 Starting GPS tracking at 1Hz...');
 
       // Request permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -91,7 +90,7 @@ export class GPSTrackingService {
       // Request background permissions for continuous tracking
       const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
       if (backgroundStatus !== 'granted') {
-        console.warn('⚠️ Background GPS permission denied - tracking may stop when app backgrounds');
+
       }
 
       // Initialize track
@@ -119,9 +118,8 @@ export class GPSTrackingService {
         }
       );
 
-      console.log('✅ GPS tracking started');
     } catch (error) {
-      console.error('❌ Failed to start GPS tracking:', error);
+
       throw error;
     }
   }
@@ -131,7 +129,6 @@ export class GPSTrackingService {
    */
   static async stopTracking(): Promise<RaceTrack | null> {
     try {
-      console.log('📍 Stopping GPS tracking...');
 
       if (!this.currentTrack) {
         throw new Error('No active track to stop');
@@ -162,14 +159,12 @@ export class GPSTrackingService {
       // Upload to Supabase
       await this.uploadTrack(savedTrack);
 
-      console.log('✅ GPS tracking stopped and saved');
-
       const result = savedTrack;
       this.currentTrack = null;
 
       return result;
     } catch (error) {
-      console.error('❌ Failed to stop GPS tracking:', error);
+
       return null;
     }
   }
@@ -281,7 +276,6 @@ export class GPSTrackingService {
    */
   static async analyzeTrack(track: RaceTrack): Promise<TrackAnalysis> {
     try {
-      console.log('📊 Analyzing track...', track.id);
 
       const points = track.points;
 
@@ -318,10 +312,9 @@ export class GPSTrackingService {
         speed_by_point_of_sail: speedByPOS
       };
 
-      console.log('✅ Track analysis complete');
       return analysis;
     } catch (error) {
-      console.error('❌ Track analysis failed:', error);
+
       throw error;
     }
   }
@@ -353,9 +346,8 @@ export class GPSTrackingService {
       track.id = data.id;
       track.status = 'uploaded';
 
-      console.log('✅ Track uploaded:', track.id);
     } catch (error) {
-      console.error('❌ Track upload failed:', error);
+
       // Keep local track even if upload fails
     }
   }
@@ -365,7 +357,7 @@ export class GPSTrackingService {
    */
   static setWindDirection(direction: number): void {
     this.windDirection = direction;
-    console.log('🌊 Wind direction set:', direction);
+
   }
 
   /**

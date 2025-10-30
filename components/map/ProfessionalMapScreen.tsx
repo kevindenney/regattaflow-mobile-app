@@ -359,8 +359,8 @@ function RaceMark3D({
   onPress: () => void;
 }) {
   // Convert lat/lng to 3D coordinates
-  const x = ((mark.position.longitude - bounds.west) / (bounds.east - bounds.west)) * 100 - 50;
-  const z = ((bounds.north - mark.position.latitude) / (bounds.north - bounds.south)) * 100 - 50;
+  const x = ((mark.position.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
+  const z = ((bounds.northeast.latitude - mark.position.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
 
   const markColor = {
     start: '#00FF88',

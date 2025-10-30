@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Image } from '@/components/ui';
-import { 
-  MapPin, 
-  CheckCircle2, 
-  Edit3, 
-  ChevronRight, 
+import { createLogger } from '@/lib/utils/logger';
+import {
+  MapPin,
+  CheckCircle2,
+  Edit3,
+  ChevronRight,
   AlertCircle,
   Clock
 } from 'lucide-react-native';
+
+const logger = createLogger('VenueVerification');
 
 export default function VenueVerificationReview() {
   // Mock data for venue verification
@@ -39,12 +42,12 @@ export default function VenueVerificationReview() {
 
   const handleEditVenue = (venueId: number) => {
     // In a real app, this would navigate to the venue editing screen
-    console.log(`Editing venue ${venueId}`);
+    logger.debug(`Editing venue ${venueId}`);
   };
 
   const handleCompleteSetup = () => {
     // In a real app, this would navigate to the dashboard
-    console.log("Completing setup");
+    logger.debug("Completing setup");
   };
 
   const getStatusColor = (status: string) => {

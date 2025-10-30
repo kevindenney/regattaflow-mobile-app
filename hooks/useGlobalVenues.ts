@@ -52,14 +52,13 @@ export function useGlobalVenues(): UseGlobalVenuesState & UseGlobalVenuesActions
    * Fetch all venues from Supabase
    */
   const fetchVenues = async () => {
-    console.log('🌍 useGlobalVenues: Fetching all global venues...');
+
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
       // Fetch all venues (no limit to get all 126)
       const allVenues = await venueService.listVenuesForClient(200);
 
-      console.log(`🌍 useGlobalVenues: Fetched ${allVenues.length} venues`);
 
       // Group venues by region
       const byRegion: Record<string, GlobalVenue[]> = {};
@@ -83,14 +82,8 @@ export function useGlobalVenues(): UseGlobalVenuesState & UseGlobalVenuesActions
         premierVenues: premier as GlobalVenue[],
       });
 
-      console.log('🌍 useGlobalVenues: Venue breakdown:', {
-        total: allVenues.length,
-        championship: championship.length,
-        premier: premier.length,
-        regions: Object.keys(byRegion),
-      });
     } catch (error: any) {
-      console.error('❌ useGlobalVenues: Failed to fetch venues:', error);
+
       setState(prev => ({
         ...prev,
         isLoading: false,

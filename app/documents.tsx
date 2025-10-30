@@ -20,7 +20,6 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useSailingDocuments } from '@/hooks/useSailingDocuments';
 
 export default function DocumentsScreen() {
-  console.log('📄 Documents: AI Document Processing Interface Loading (from src/app)');
 
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'documents' | 'library' | 'developer' | 'subscription'>('documents');
@@ -134,17 +133,12 @@ export default function DocumentsScreen() {
             <View style={styles.section}>
               <DocumentUploadCard
                 onDocumentUploaded={(doc) => {
-                  console.log('✅ Document uploaded:', doc);
+
                 }}
                 onAnalysisComplete={(analysis) => {
-                  console.log('🧠 AI Analysis complete:', analysis);
                 }}
                 onCourseExtracted={(course) => {
-                  console.log('🏁 Race course extracted:', {
-                    courseType: course.courseLayout.type,
-                    marksFound: course.marks.length,
-                    confidence: course.extractionMetadata.overallConfidence
-                  });
+
                 }}
               />
             </View>
@@ -169,7 +163,7 @@ export default function DocumentsScreen() {
             <View style={styles.section}>
               <DocumentViewer
                 onInsightSelect={(insight) => {
-                  console.log('💡 Insight selected:', insight);
+
                 }}
               />
             </View>

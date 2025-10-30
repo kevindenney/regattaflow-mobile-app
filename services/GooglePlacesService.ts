@@ -100,26 +100,19 @@ export class GooglePlacesService {
               placeId: place.place_id,
             }));
 
-            console.log(`✅ Found ${places.length} ${serviceType} places within ${radiusMeters/1000}km of ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
 
             // Log first few results for debugging
             if (places.length > 0) {
-              console.log(`📍 Sample results for ${serviceType}:`, places.slice(0, 3).map(p => ({
-                name: p.name,
-                address: p.address,
-                coords: `${p.coordinates.lat.toFixed(4)}, ${p.coordinates.lng.toFixed(4)}`
-              })));
             }
 
             resolve(places);
           } else {
-            console.log(`⚠️  Places nearbySearch failed for ${serviceType}:`, status);
             resolve([]);
           }
         });
       });
     } catch (error) {
-      console.error('❌ Google Places search error:', error);
+
       return [];
     }
   }

@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceCourseContextValue {
   currentCourse: RaceCourseExtraction | null;
@@ -16,6 +17,7 @@ interface RaceCourseContextValue {
   clearCourse: () => void;
 }
 
+const logger = createLogger('RaceCourseContext');
 const RaceCourseContext = createContext<RaceCourseContextValue | undefined>(undefined);
 
 interface RaceCourseProviderProps {
@@ -28,24 +30,23 @@ export const RaceCourseProvider: React.FC<RaceCourseProviderProps> = ({ children
   const [error, setError] = useState<string | null>(null);
 
   const setCourse = useCallback((course: RaceCourseExtraction | null) => {
-    console.log('🏁 RaceCourseContext: Setting course:', course ? `${course.courseLayout.type} (${course.marks.length} marks)` : 'null');
     setCurrentCourse(course);
     setError(null); // Clear error when setting new course
   }, []);
 
   const setLoadingState = useCallback((loading: boolean) => {
-    console.log('⏳ RaceCourseContext: Setting loading:', loading);
+    logger.debug('⏳ RaceCourseContext: Setting loading:', loading);
     setIsLoading(loading);
   }, []);
 
   const setErrorState = useCallback((errorMessage: string | null) => {
-    console.log('❌ RaceCourseContext: Setting error:', errorMessage);
+
     setError(errorMessage);
     setIsLoading(false); // Clear loading when error occurs
   }, []);
 
   const clearCourse = useCallback(() => {
-    console.log('🧹 RaceCourseContext: Clearing course data');
+
     setCurrentCourse(null);
     setError(null);
     setIsLoading(false);

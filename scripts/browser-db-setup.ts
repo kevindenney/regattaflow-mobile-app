@@ -7,7 +7,6 @@ import { supabase } from '@/services/supabase';
 
 // Make this available globally for browser console
 (window as any).setupSupabaseVenues = async function() {
-  console.log('🚀 Starting Supabase venue database setup...');
 
   // First, let's try to create tables using individual INSERT operations
   // This will cause Supabase to auto-create the table with inferred schema
@@ -157,18 +156,15 @@ import { supabase } from '@/services/supabase';
   ];
 
   try {
-    console.log('📊 Inserting venue data...');
     const { data: insertedVenues, error: venuesError } = await supabase
       .from('sailing_venues')
       .insert(venueData)
       .select();
 
     if (venuesError) {
-      console.error('❌ Failed to insert venues:', venuesError);
+
       return;
     }
-
-    console.log(`✅ Successfully inserted ${insertedVenues?.length || 0} venues!`);
 
     // Now insert yacht clubs
     const clubData = [
@@ -242,18 +238,15 @@ import { supabase } from '@/services/supabase';
       }
     ];
 
-    console.log('⛵ Inserting yacht clubs...');
     const { data: insertedClubs, error: clubsError } = await supabase
       .from('yacht_clubs')
       .insert(clubData)
       .select();
 
     if (clubsError) {
-      console.error('❌ Failed to insert clubs:', clubsError);
+
       return;
     }
-
-    console.log(`✅ Successfully inserted ${insertedClubs?.length || 0} yacht clubs!`);
 
     // Verify the data
     const { count: venueCount } = await supabase
@@ -264,12 +257,7 @@ import { supabase } from '@/services/supabase';
       .from('yacht_clubs')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`🎉 Database setup complete! ${venueCount} venues, ${clubCount} clubs`);
-    console.log('💡 Now refresh the page to see the venues load from Supabase!');
-
   } catch (error) {
-    console.error('❌ Setup failed:', error);
+
   }
 };
-
-console.log('🚀 Database setup function ready! Run: setupSupabaseVenues()');

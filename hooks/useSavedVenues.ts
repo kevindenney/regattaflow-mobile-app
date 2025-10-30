@@ -51,7 +51,6 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
       return;
     }
 
-    console.log('📍 useSavedVenues: Fetching saved venues for user...');
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
@@ -60,7 +59,7 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
         SavedVenueService.getHomeVenue(),
       ]);
 
-      const venueIds = new Set(venues.map(v => v.id));
+      const venueIds = new Set(venues.map((v: SavedVenue) => v.id));
 
       setState({
         savedVenues: venues,
@@ -70,12 +69,8 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
         error: null,
       });
 
-      console.log('📍 useSavedVenues: Loaded saved venues:', {
-        count: venues.length,
-        hasHomeVenue: !!homeVenue,
-      });
     } catch (error: any) {
-      console.error('❌ useSavedVenues: Failed to fetch saved venues:', error);
+
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -93,14 +88,13 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
   ) => {
     if (!user) throw new Error('User not authenticated');
 
-    console.log('📍 useSavedVenues: Saving venue:', venueId);
     try {
       const result = await SavedVenueService.saveVenue(venueId, options);
-      console.log('📍 useSavedVenues: Save result:', result);
+
       await fetchSavedVenues(); // Refresh list
-      console.log('📍 useSavedVenues: Refreshed after save');
+
     } catch (error: any) {
-      console.error('❌ useSavedVenues: Failed to save venue:', error);
+
       throw error;
     }
   }, [user, fetchSavedVenues]);
@@ -111,12 +105,11 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
   const unsaveVenue = useCallback(async (venueId: string) => {
     if (!user) throw new Error('User not authenticated');
 
-    console.log('📍 useSavedVenues: Unsaving venue:', venueId);
     try {
       await SavedVenueService.unsaveVenue(venueId);
       await fetchSavedVenues(); // Refresh list
     } catch (error: any) {
-      console.error('❌ useSavedVenues: Failed to unsave venue:', error);
+
       throw error;
     }
   }, [user, fetchSavedVenues]);
@@ -130,12 +123,11 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
   ) => {
     if (!user) throw new Error('User not authenticated');
 
-    console.log('📍 useSavedVenues: Updating saved venue:', venueId);
     try {
       await SavedVenueService.updateSavedVenue(venueId, updates);
       await fetchSavedVenues(); // Refresh list
     } catch (error: any) {
-      console.error('❌ useSavedVenues: Failed to update saved venue:', error);
+
       throw error;
     }
   }, [user, fetchSavedVenues]);

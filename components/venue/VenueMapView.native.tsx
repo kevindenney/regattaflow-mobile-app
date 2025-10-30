@@ -32,9 +32,8 @@ interface YachtClub {
   venue_id?: string;
 }
 
-interface VenueMapViewProps {
+export interface VenueMapViewProps {
   currentVenue?: Venue | null;
-  onVenueSelect?: (venue: Venue) => void;
   onMarkerPress?: (venue: Venue) => void;
   showAllVenues?: boolean;
   selectedVenue?: Venue | null;
@@ -60,7 +59,6 @@ interface VenueMapViewProps {
 
 export function VenueMapView({
   currentVenue,
-  onVenueSelect,
   onMarkerPress,
   showAllVenues = false,
   selectedVenue,

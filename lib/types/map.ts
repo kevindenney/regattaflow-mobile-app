@@ -53,7 +53,7 @@ export interface WeatherConditions {
   }
   tide: {
     height: number
-    direction: 'flood' | 'ebb'
+    direction: 'flood' | 'ebb' | 'slack' | 'unknown'
     speed: number
   }
   waves: {
@@ -61,6 +61,10 @@ export interface WeatherConditions {
     period: number
     direction: number
   }
+  temperature?: number
+  humidity?: number
+  precipitation?: number
+  cloudCover?: number
   timestamp: Date
 }
 

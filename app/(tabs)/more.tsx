@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import {
   Sailboat,
   Users,
@@ -132,7 +132,7 @@ export default function MoreScreen() {
             icon={Building2}
             title="Your Club"
             subtitle="Club events and membership"
-            onPress={() => router.push('/(tabs)/club')}
+            onPress={() => router.push('/(tabs)/club' as Href)}
           />
         </MenuSection>
 

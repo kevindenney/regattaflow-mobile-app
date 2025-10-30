@@ -53,7 +53,6 @@ export const useSailingEducation = (venueId?: string): SailingEducationHook => {
 
     try {
       const venueToQuery = targetVenueId || venueId;
-      console.log(`📚 Getting educational strategy for query: "${query}", venue: ${venueToQuery}`);
 
       const educationalResponse = await sailingEducationService.getEducationallyEnhancedStrategy(
         query,
@@ -93,7 +92,6 @@ export const useSailingEducation = (venueId?: string): SailingEducationHook => {
       };
 
       setEnhancedStrategy(strategy);
-      console.log(`📚 Educational strategy generated with ${strategy.insights.length} insights`);
 
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get educational strategy';
@@ -111,7 +109,6 @@ export const useSailingEducation = (venueId?: string): SailingEducationHook => {
     try {
       const stats = sailingEducationService.getKnowledgeBaseStats();
       setKnowledgeBaseStats(stats);
-      console.log('📚 Knowledge base refreshed:', stats);
     } catch (err) {
       console.error('📚 Failed to refresh knowledge base stats:', err);
     }
@@ -157,7 +154,6 @@ export const useVenueSailingEducation = (venueId: string) => {
     try {
       const insights = await sailingEducationService.getVenueEducationalInsights(venueId);
       setVenueInsights(insights);
-      console.log(`📚 Loaded educational insights for venue: ${venueId}`);
     } catch (err) {
       console.error(`📚 Failed to load venue insights for ${venueId}:`, err);
     }
@@ -189,7 +185,6 @@ export const useEducationalDocumentProcessing = () => {
   ) => {
     setProcessing(true);
     try {
-      console.log(`📚 Processing educational document from ${organizationName}`);
 
       const resource = await sailingEducationService.processYachtClubEducation(
         organizationName,
@@ -197,7 +192,6 @@ export const useEducationalDocumentProcessing = () => {
         applicableVenues
       );
 
-      console.log(`📚 Successfully processed educational resource: ${resource.id}`);
       return resource;
     } catch (err) {
       console.error('📚 Educational document processing failed:', err);

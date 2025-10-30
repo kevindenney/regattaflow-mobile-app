@@ -20,6 +20,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/providers/AuthProvider';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 interface QuickAddBoatFormProps {
   visible: boolean;
@@ -33,6 +34,7 @@ interface BoatClass {
   class_association: string | null;
 }
 
+const logger = createLogger('QuickAddBoatForm');
 export function QuickAddBoatForm({
   visible,
   onClose,
@@ -78,7 +80,7 @@ export function QuickAddBoatForm({
   };
 
   const handleSubmit = async () => {
-    console.log('[QuickAddBoatForm] Submit clicked');
+    logger.debug('[QuickAddBoatForm] Submit clicked');
 
     // Validation
     if (!boatName.trim()) {
@@ -98,10 +100,7 @@ export function QuickAddBoatForm({
       return;
     }
 
-    console.log('[QuickAddBoatForm] Creating boat:', {
-      sailor_id: user.id,
-      class_id: classId,
-      name: boatName.trim(),
+    logger.debug('[QuickAddBoatForm] Creating boat:', {
       sail_number: sailNumber.trim() || undefined,
       ownership_type: ownershipType,
     });
@@ -118,7 +117,7 @@ export function QuickAddBoatForm({
         is_primary: false, // Don't set as primary for quick add
       });
 
-      console.log('[QuickAddBoatForm] Successfully created boat:', newBoat.id);
+      logger.debug('[QuickAddBoatForm] Successfully created boat:', newBoat.id);
 
       Alert.alert(
         'Success!',
@@ -137,17 +136,29 @@ export function QuickAddBoatForm({
       // Close modal
       onClose();
     } catch (err: any) {
-      console.error('[QuickAddBoatForm] Error creating boat:', err);
-      console.error('[QuickAddBoatForm] Error details:', JSON.stringify(err, null, 2));
+      if (err?.queuedForSync && err?.entity) {
+        Alert.alert(
+          'Offline',
+          `${boatName} will be saved once you're back online. We'll sync this boat automatically.`
+        );
+        setBoatName('');
+        setSailNumber('');
+        setClassId('');
+        setOwnershipType('owned');
+        onClose();
+      } else {
+        console.error('[QuickAddBoatForm] Error creating boat:', err);
+        console.error('[QuickAddBoatForm] Error details:', JSON.stringify(err, null, 2));
 
-      // Handle specific error cases
-      let errorMessage = err.message || 'Failed to add boat';
+        // Handle specific error cases
+        let errorMessage = err?.message || 'Failed to add boat';
 
-      if (err.code === '23505' || errorMessage.includes('duplicate') || errorMessage.includes('unique')) {
-        errorMessage = `You already have a ${boatName} with sail number ${sailNumber} in this class. Please use a different sail number or edit your existing boat.`;
+        if (err?.code === '23505' || errorMessage.includes('duplicate') || errorMessage.includes('unique')) {
+          errorMessage = `You already have a ${boatName} with sail number ${sailNumber} in this class. Please use a different sail number or edit your existing boat.`;
+        }
+
+        Alert.alert('Error', errorMessage);
       }
-
-      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }

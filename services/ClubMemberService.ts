@@ -12,6 +12,7 @@
 import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system';
 import { Share } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface ClubMember {
   id: string;
@@ -131,6 +132,7 @@ export interface MemberFilters {
   search?: string; // Search by name, email, sail number
 }
 
+const logger = createLogger('ClubMemberService');
 class ClubMemberService {
   /**
    * Get all members for a club with optional filters
@@ -365,7 +367,7 @@ class ClubMemberService {
    */
   private async sendWelcomeEmail(memberId: string): Promise<void> {
     // TODO: Implement email service integration
-    console.log('Sending welcome email to member:', memberId);
+    logger.debug('Sending welcome email to member:', memberId);
     // This would integrate with SendGrid, EmailJS, or similar service
   }
 
@@ -616,9 +618,9 @@ class ClubMemberService {
     );
 
     // TODO: Integrate with email service (SendGrid, etc.)
-    console.log('Sending email to', emailableMembers.length, 'members');
-    console.log('Subject:', subject);
-    console.log('Message:', message);
+    logger.debug('Sending email to', emailableMembers.length, 'members');
+    logger.debug('Subject:', subject);
+    logger.debug('Message:', message);
 
     // For now, simulate sending
     return {

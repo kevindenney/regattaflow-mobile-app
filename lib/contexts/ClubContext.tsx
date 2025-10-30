@@ -118,9 +118,8 @@ export function ClubProvider({ children }: ClubProviderProps) {
         selectClub(clubs[0]);
       }
 
-      console.log('✅ [CLUB_CONTEXT] Initialized with', clubs.length, 'clubs');
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to initialize:', error);
+
     } finally {
       setLoading(false);
     }
@@ -162,9 +161,8 @@ export function ClubProvider({ children }: ClubProviderProps) {
       // Load race events
       await refreshClubEvents();
 
-      console.log('✅ [CLUB_CONTEXT] Refreshed data for', selectedClub.name);
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to refresh club data:', error);
+
     }
   };
 
@@ -173,7 +171,6 @@ export function ClubProvider({ children }: ClubProviderProps) {
    */
   const selectClub = (club: Club) => {
     setSelectedClub(club);
-    console.log('🔍 [CLUB_CONTEXT] Selected club:', club.name);
   };
 
   /**
@@ -195,7 +192,7 @@ export function ClubProvider({ children }: ClubProviderProps) {
         }
       }
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to refresh club data:', error);
+
     } finally {
       setLoading(false);
     }
@@ -230,9 +227,8 @@ export function ClubProvider({ children }: ClubProviderProps) {
         setActiveEvent(null);
       }
 
-      console.log('✅ [CLUB_CONTEXT] Loaded', events.length, 'race events');
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to refresh events:', error);
+
     } finally {
       setEventsLoading(false);
     }
@@ -265,7 +261,7 @@ export function ClubProvider({ children }: ClubProviderProps) {
 
       return newEvent;
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to create race event:', error);
+
       return null;
     }
   };
@@ -296,7 +292,7 @@ export function ClubProvider({ children }: ClubProviderProps) {
 
       return updatedEvent;
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to update race event:', error);
+
       return null;
     }
   };
@@ -312,12 +308,11 @@ export function ClubProvider({ children }: ClubProviderProps) {
         // Refresh events to get updated status
         await refreshClubEvents();
 
-        console.log('✅ [CLUB_CONTEXT] Race event published and distributed');
       }
 
       return success;
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to publish race event:', error);
+
       return false;
     }
   };
@@ -329,7 +324,7 @@ export function ClubProvider({ children }: ClubProviderProps) {
     try {
       return await clubService.getRaceDistributionStatus(raceId);
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to get distribution status:', error);
+
       return { is_distributed: false };
     }
   };
@@ -341,7 +336,7 @@ export function ClubProvider({ children }: ClubProviderProps) {
     try {
       return await clubService.retryRaceDataDistribution(raceId);
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to retry distribution:', error);
+
       return false;
     }
   };
@@ -353,7 +348,7 @@ export function ClubProvider({ children }: ClubProviderProps) {
     try {
       return await clubService.getRaceRegistrations(raceId);
     } catch (error) {
-      console.error('🔴 [CLUB_CONTEXT] Failed to get registrations:', error);
+
       return [];
     }
   };

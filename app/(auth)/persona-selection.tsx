@@ -11,21 +11,20 @@ export default function PersonaSelection() {
 
   const choose = async (role: 'sailor' | 'coach' | 'club') => {
     try {
-      console.log('🎯 [PERSONA] Choose called with role:', role);
+
       setLoading(true);
 
       const { data: me } = await supabase.auth.getUser();
-      console.log('🎯 [PERSONA] Got user:', me.user?.id);
 
       const id = me.user?.id as string | undefined;
       if (!id) {
-        console.log('🎯 [PERSONA] No user ID, returning');
+
         setLoading(false);
         return;
       }
 
       // Update user type and onboarding status
-      console.log('🎯 [PERSONA] Updating user to', role, 'with onboarding_completed: false');
+
       await supabase.from('users').update({
         user_type: role,
         onboarding_completed: false,
@@ -33,12 +32,10 @@ export default function PersonaSelection() {
       }).eq('id', id);
 
       // Fetch profile FIRST to update auth state
-      console.log('🎯 [PERSONA] Fetching profile');
+
       await fetchUserProfile(id);
-      console.log('🎯 [PERSONA] Profile fetched');
 
       // Navigate to role-specific onboarding
-      console.log('🎯 [PERSONA] Navigating to onboarding for role:', role);
 
       if (role === 'sailor') {
         router.replace('/(auth)/onboarding-redesign');
@@ -48,7 +45,7 @@ export default function PersonaSelection() {
         router.replace('/(auth)/club-onboarding-chat');
       }
     } catch (error) {
-      console.error('🎯 [PERSONA] Error in choose:', error);
+
       setLoading(false);
     }
   };
@@ -63,7 +60,7 @@ export default function PersonaSelection() {
           testID="choose-sailor"
           style={[styles.roleButton, loading && styles.disabled]}
           onPress={() => {
-            console.log('🎯 [PERSONA] Sailor button pressed');
+
             choose('sailor');
           }}
           disabled={loading}

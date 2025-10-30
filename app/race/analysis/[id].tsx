@@ -22,6 +22,9 @@ import {
 } from 'lucide-react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('PostRaceAnalysis');
 
 interface RaceResult {
   id: string;
@@ -238,17 +241,17 @@ export default function PostRaceAnalysisScreen() {
 
   const shareAnalysis = async () => {
     // TODO: Implement share functionality
-    console.log('Share analysis');
+    logger.debug('Share analysis');
   };
 
   const saveToNotes = async () => {
     // TODO: Implement save to notes
-    console.log('Save to notes');
+    logger.debug('Save to notes');
   };
 
   const compareToFleet = () => {
     // TODO: Navigate to fleet comparison
-    console.log('Compare to fleet');
+    logger.debug('Compare to fleet');
   };
 
   if (loading) {

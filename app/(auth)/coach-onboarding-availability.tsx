@@ -9,7 +9,16 @@ const CoachOnboardingAvailability = () => {
   const router = useRouter();
   const { state, updateAvailability, loading } = useCoachOnboardingState();
 
-  const [availability, setAvailability] = useState({
+  const [availability, setAvailability] = useState<{
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+    [key: string]: boolean;
+  }>({
     monday: true,
     tuesday: true,
     wednesday: true,
@@ -19,7 +28,12 @@ const CoachOnboardingAvailability = () => {
     sunday: false
   });
 
-  const [selectedHours, setSelectedHours] = useState({
+  const [selectedHours, setSelectedHours] = useState<{
+    morning: boolean;
+    afternoon: boolean;
+    evening: boolean;
+    [key: string]: boolean;
+  }>({
     morning: true,
     afternoon: true,
     evening: false
@@ -28,7 +42,12 @@ const CoachOnboardingAvailability = () => {
   const [locationPreference, setLocationPreference] = useState<'in-person' | 'remote'>('in-person');
   const [remoteCoaching, setRemoteCoaching] = useState(true);
   const [maxDistance, setMaxDistance] = useState(50);
-  const [groupSizes, setGroupSizes] = useState({
+  const [groupSizes, setGroupSizes] = useState<{
+    individual: boolean;
+    smallGroup: boolean;
+    largeGroup: boolean;
+    [key: string]: boolean;
+  }>({
     individual: true,
     smallGroup: true,
     largeGroup: false

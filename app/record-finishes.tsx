@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, FlatList } from 'react-native';
 import { Check, Edit, Trash2, Clock, Flag } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 type MethodType = 'manual' | 'finishlynx' | 'mobile';
 type ScoringCode = 'DNS' | 'DNF' | 'DSQ' | 'OCS' | 'RAF' | null;
@@ -14,6 +15,7 @@ interface FinishRecord {
   scoringCode: ScoringCode;
 }
 
+const logger = createLogger('record-finishes');
 const RecordFinishesScreen = () => {
   const [selectedMethod, setSelectedMethod] = useState<MethodType>('manual');
   const [sailNumber, setSailNumber] = useState('');
@@ -55,7 +57,7 @@ const RecordFinishesScreen = () => {
 
   const handleEditFinish = (id: string) => {
     // In a real app, this would open an edit modal
-    console.log('Edit finish with id:', id);
+    logger.debug('Edit finish with id:', id);
   };
 
   const handleRemoveFinish = (id: string) => {

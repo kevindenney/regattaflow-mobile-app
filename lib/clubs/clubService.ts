@@ -167,13 +167,13 @@ export class ClubService {
         .single();
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to fetch club:', error);
+
         return null;
       }
 
       return data as Club;
     } catch (error) {
-      console.error('🔴 [CLUB] Error fetching club:', error);
+
       return null;
     }
   }
@@ -194,13 +194,13 @@ export class ClubService {
         .eq('is_active', true);
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to fetch user clubs:', error);
+
         return [];
       }
 
       return data.map(item => item.clubs).filter(Boolean) as Club[];
     } catch (error) {
-      console.error('🔴 [CLUB] Error fetching user clubs:', error);
+
       return [];
     }
   }
@@ -225,13 +225,13 @@ export class ClubService {
         .order('role', { ascending: true });
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to fetch club members:', error);
+
         return [];
       }
 
       return data as ClubMember[];
     } catch (error) {
-      console.error('🔴 [CLUB] Error fetching club members:', error);
+
       return [];
     }
   }
@@ -254,14 +254,13 @@ export class ClubService {
         .single();
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to create race event:', error);
+
         return null;
       }
 
-      console.log('✅ [CLUB] Race event created:', data.name);
       return data as RaceEvent;
     } catch (error) {
-      console.error('🔴 [CLUB] Error creating race event:', error);
+
       return null;
     }
   }
@@ -305,13 +304,13 @@ export class ClubService {
       const { data, error } = await query;
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to fetch race events:', error);
+
         return [];
       }
 
       return data as RaceEvent[];
     } catch (error) {
-      console.error('🔴 [CLUB] Error fetching race events:', error);
+
       return [];
     }
   }
@@ -335,14 +334,13 @@ export class ClubService {
         .single();
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to update race event:', error);
+
         return null;
       }
 
-      console.log('✅ [CLUB] Race event updated:', data.name);
       return data as RaceEvent;
     } catch (error) {
-      console.error('🔴 [CLUB] Error updating race event:', error);
+
       return null;
     }
   }
@@ -364,7 +362,7 @@ export class ClubService {
 
       return false;
     } catch (error) {
-      console.error('🔴 [CLUB] Error publishing race event:', error);
+
       return false;
     }
   }
@@ -375,20 +373,17 @@ export class ClubService {
    */
   private async distributeRaceData(raceId: string): Promise<boolean> {
     try {
-      console.log(`🌊 [CLUB] Initiating race data distribution for race ${raceId}`);
 
       // Use the dedicated race data distribution service
       const result = await raceDataDistribution.distributeRaceData(raceId);
 
       if (result.success) {
-        console.log(`✅ [CLUB] Race data distributed to ${result.sailors_reached} sailors`);
         return true;
       } else {
-        console.error(`🔴 [CLUB] Distribution partially failed: ${result.failed_deliveries.length} failures`);
         return result.sailors_reached > 0; // Success if at least some sailors received data
       }
     } catch (error) {
-      console.error('🔴 [CLUB] Error in race data distribution:', error);
+
       return false;
     }
   }
@@ -413,7 +408,7 @@ export class ClubService {
       const result = await raceDataDistribution.retryFailedDistributions(raceId);
       return result.success;
     } catch (error) {
-      console.error('🔴 [CLUB] Failed to retry race data distribution:', error);
+
       return false;
     }
   }
@@ -431,7 +426,7 @@ export class ClubService {
         .single();
 
       if (raceError || !raceEvent) {
-        console.error('🔴 [CLUB] Failed to fetch race event for distribution:', raceError);
+
         return false;
       }
 
@@ -451,7 +446,7 @@ export class ClubService {
         .eq('status', 'confirmed');
 
       if (regError) {
-        console.error('🔴 [CLUB] Failed to fetch registrations:', regError);
+
         return false;
       }
 
@@ -480,17 +475,16 @@ export class ClubService {
         .insert(dataInserts);
 
       if (insertError) {
-        console.error('🔴 [CLUB] Failed to store race data:', insertError);
+
         return false;
       }
 
       // Send push notifications to sailors
       await this.sendRaceDataNotifications(registrations, raceEvent);
 
-      console.log(`✅ [CLUB] Race data distributed to ${registrations.length} sailors`);
       return true;
     } catch (error) {
-      console.error('🔴 [CLUB] Error distributing race data:', error);
+
       return false;
     }
   }
@@ -518,9 +512,8 @@ export class ClubService {
         }));
 
       // Send notifications (implementation depends on your push service)
-      console.log(`✅ [CLUB] Sent ${notifications.length} race data notifications`);
     } catch (error) {
-      console.error('🔴 [CLUB] Error sending notifications:', error);
+
     }
   }
 
@@ -543,13 +536,13 @@ export class ClubService {
         .order('registration_date', { ascending: true });
 
       if (error) {
-        console.error('🔴 [CLUB] Failed to fetch registrations:', error);
+
         return [];
       }
 
       return data as RaceRegistration[];
     } catch (error) {
-      console.error('🔴 [CLUB] Error fetching registrations:', error);
+
       return [];
     }
   }
@@ -573,7 +566,7 @@ export class ClubService {
 
       return ['admin', 'sailing_manager', 'race_officer'].includes(data.role);
     } catch (error) {
-      console.error('🔴 [CLUB] Error checking admin access:', error);
+
       return false;
     }
   }
@@ -621,7 +614,7 @@ export class ClubService {
         total_registrations: registrationsResult.count || 0,
       };
     } catch (error) {
-      console.error('🔴 [CLUB] Error fetching dashboard stats:', error);
+
       return {
         total_members: 0,
         active_events: 0,

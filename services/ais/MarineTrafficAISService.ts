@@ -79,7 +79,7 @@ export class MarineTrafficAISService {
   private config: MarineTrafficConfig;
   private cache: Map<string, { data: VesselData[]; timestamp: number }> = new Map();
   private cacheTimeout = 30 * 1000; // 30 seconds for real-time AIS
-  private trackingIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private trackingIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
 
   constructor(config: MarineTrafficConfig) {
     this.config = {
@@ -105,7 +105,6 @@ export class MarineTrafficAISService {
     const cached = this.getCachedData(cacheKey);
 
     if (cached) {
-      console.log('📦 Using cached AIS vessel data');
       return cached;
     }
 
@@ -122,10 +121,9 @@ export class MarineTrafficAISService {
       const vessels = this.transformAISData(response.data, defaultOptions);
       this.setCachedData(cacheKey, vessels);
 
-      console.log(`🚢 Retrieved ${vessels.length} vessels from MarineTraffic AIS`);
       return vessels;
     } catch (error) {
-      console.error('❌ MarineTraffic AIS error:', error);
+
       return this.getFallbackVessels(bounds);
     }
   }
@@ -142,10 +140,8 @@ export class MarineTrafficAISService {
       }
 
       const vessel = this.transformSingleVessel(response.data[0]);
-      console.log(`🎯 Retrieved vessel ${vessel.name} (${vessel.mmsi})`);
       return vessel;
     } catch (error) {
-      console.error(`❌ Failed to get vessel ${mmsi}:`, error);
       return null;
     }
   }
@@ -166,8 +162,6 @@ export class MarineTrafficAISService {
       ...options
     };
 
-    console.log(`🔄 Starting fleet tracking (ID: ${trackingId})`);
-
     const updateFleet = async () => {
       try {
         const vessels = await this.getVesselsInArea(bounds, finalOptions);
@@ -177,7 +171,7 @@ export class MarineTrafficAISService {
 
         callback(enhancedVessels);
       } catch (error) {
-        console.error('❌ Fleet tracking update failed:', error);
+
       }
     };
 
@@ -196,7 +190,6 @@ export class MarineTrafficAISService {
     if (interval) {
       clearInterval(interval);
       this.trackingIntervals.delete(trackingId);
-      console.log(`⏹️ Stopped fleet tracking (ID: ${trackingId})`);
     }
   }
 
@@ -230,7 +223,6 @@ export class MarineTrafficAISService {
       return response;
     } catch (error: any) {
       if (attempt < this.config.retryAttempts) {
-        console.log(`🔄 Retrying MarineTraffic request (attempt ${attempt + 1})`);
         await this.delay(1000 * attempt);
         return this.makeRequest(endpoint, params, attempt + 1);
       }
@@ -282,7 +274,7 @@ export class MarineTrafficAISService {
 
       return vessel;
     } catch (error) {
-      console.error('❌ Failed to transform vessel data:', error);
+
       return null;
     }
   }
@@ -422,7 +414,6 @@ export class MarineTrafficAISService {
 
   private getFallbackVessels(bounds: BoundingBox): VesselData[] {
     // Return demo vessels for development/fallback
-    console.log('🔄 Using fallback vessel data');
 
     const centerLat = (bounds.northeast.latitude + bounds.southwest.latitude) / 2;
     const centerLon = (bounds.northeast.longitude + bounds.southwest.longitude) / 2;
@@ -482,6 +473,5 @@ export class MarineTrafficAISService {
     }
     this.trackingIntervals.clear();
     this.cache.clear();
-    console.log('🚢 MarineTraffic AIS service destroyed');
   }
 }

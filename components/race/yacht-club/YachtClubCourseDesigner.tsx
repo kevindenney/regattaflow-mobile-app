@@ -5,6 +5,7 @@ import { ThemedView } from '../../../../components/themed-view';
 import { Button } from '../../ui/button';
 import { CourseMap } from '../shared/CourseMap';
 import { RaceCourse, Mark, WeatherData } from '../RaceBuilder';
+import { createLogger } from '@/lib/utils/logger';
 
 interface YachtClubCourseDesignerProps {
   course: RaceCourse | null;
@@ -12,6 +13,7 @@ interface YachtClubCourseDesignerProps {
   venueCoordinates?: [number, number];
 }
 
+const logger = createLogger('YachtClubCourseDesigner');
 export function YachtClubCourseDesigner({
   course,
   onCourseUpdate,
@@ -244,10 +246,10 @@ export function YachtClubCourseDesigner({
     ];
 
     // TODO: Store document in Supabase
-    console.log('Storing RHKYC sailing instructions in Supabase...');
+    logger.debug('Storing RHKYC sailing instructions in Supabase...');
 
     // TODO: Store all courses in Supabase course catalog
-    console.log('Saving RHKYC course catalog to database...');
+    logger.debug('Saving RHKYC course catalog to database...');
 
     // Load first extracted course
     const extractedCourse: RaceCourse = {
@@ -310,7 +312,7 @@ export function YachtClubCourseDesigner({
     }
 
     // TODO: Implement actual publishing to Supabase
-    console.log('Publishing course:', course);
+    logger.debug('Publishing course:', course);
     alert('Course published successfully to sailor apps!');
   };
 

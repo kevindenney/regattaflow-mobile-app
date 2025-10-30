@@ -29,7 +29,6 @@ export const RaceCourseVisualization: React.FC<RaceCourseVisualizationProps> = (
   onMarkPress,
   initialConfig
 }) => {
-  console.log('🏁 RaceCourseVisualization: Rendering with course extraction:', !!courseExtraction);
 
   const [marks, setMarks] = useState<ExtractedRaceMark[]>([]);
   const [mapConfig, setMapConfig] = useState<Partial<Map3DConfig>>({});
@@ -40,7 +39,6 @@ export const RaceCourseVisualization: React.FC<RaceCourseVisualizationProps> = (
   // Process course extraction when it changes
   useEffect(() => {
     if (courseExtraction) {
-      console.log('🔄 Processing course extraction for visualization');
 
       // Convert extracted course to map marks
       const convertedMarks = convertCourseToMarks(courseExtraction);
@@ -65,36 +63,28 @@ export const RaceCourseVisualization: React.FC<RaceCourseVisualizationProps> = (
           }
         });
 
-        console.log(`🎯 Course centered at: ${center.latitude.toFixed(6)}, ${center.longitude.toFixed(6)} with zoom ${optimalZoom}`);
       }
 
       // Extract course summary
       const summary = extractCourseSummary(courseExtraction);
       setCourseSummary(summary);
 
-      console.log('✅ Course visualization setup complete:', {
-        marks: convertedMarks.length,
-        hasCenter: !!center,
-        courseType: summary.courseType,
-        confidence: summary.confidence
-      });
-
     } else {
       // Clear course data when no extraction available
       setMarks([]);
       setCourseCenter(null);
       setCourseSummary(null);
-      console.log('🧹 Course extraction cleared - using default map view');
+
     }
   }, [courseExtraction, initialConfig]);
 
   const handleMarkPress = (mark: RaceMark) => {
-    console.log('📍 Race mark pressed:', mark.name, mark.type);
+
     onMarkPress?.(mark);
   };
 
   const handleMapPress = (coordinates: { latitude: number; longitude: number }) => {
-    console.log('🗺️ Map pressed at:', coordinates);
+
   };
 
   return (

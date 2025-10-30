@@ -8,6 +8,7 @@ import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { createLogger } from '@/lib/utils/logger';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -48,18 +49,18 @@ export default function BoatsScreen() {
   };
 
   const handleAddBoat = () => {
-    console.log('Add boat');
+    logger.debug('Add boat');
   };
 
   const handleSetDefault = async (boatId: string) => {
-    console.log('[BoatsScreen] handleSetDefault clicked', { boatId });
+    logger.debug('[BoatsScreen] handleSetDefault clicked', { boatId });
     try {
-      console.log('[BoatsScreen] Calling setPrimaryBoat service...');
+      logger.debug('[BoatsScreen] Calling setPrimaryBoat service...');
       await sailorBoatService.setPrimaryBoat(boatId);
-      console.log('[BoatsScreen] setPrimaryBoat successful, reloading boats...');
+      logger.debug('[BoatsScreen] setPrimaryBoat successful, reloading boats...');
       // Reload boats to show updated default
       await loadBoats();
-      console.log('[BoatsScreen] handleSetDefault complete');
+      logger.debug('[BoatsScreen] handleSetDefault complete');
     } catch (error) {
       console.error('[BoatsScreen] Error setting default boat:', error);
       alert('Failed to set default boat');
@@ -130,10 +131,7 @@ export default function BoatsScreen() {
                     style={styles.starButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      console.log('[BoatsScreen] Star button pressed!', {
-                        boatId: boat.id,
-                        boatName: boat.name
-                      });
+                      logger.debug('[BoatsScreen] Star button pressed!', { boatId: boat.id });
                       handleSetDefault(boat.id);
                     }}
                   >
@@ -160,6 +158,7 @@ export default function BoatsScreen() {
   );
 }
 
+const logger = createLogger('boats');
 const styles = StyleSheet.create({
   container: {
     flex: 1,

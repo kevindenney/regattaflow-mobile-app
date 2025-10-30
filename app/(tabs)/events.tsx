@@ -112,7 +112,7 @@ export default function EventsScreen() {
             style={styles.actionButton}
             onPress={() => router.push('/club/event/create?type=regatta')}
           >
-            <Ionicons name="sailboat" size={24} color="#007AFF" />
+            <Ionicons name="boat" size={24} color="#007AFF" />
             <ThemedText style={styles.actionText}>New Regatta</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity

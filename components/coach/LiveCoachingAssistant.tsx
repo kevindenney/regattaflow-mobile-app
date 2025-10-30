@@ -248,9 +248,9 @@ export default function LiveCoachingAssistant() {
   });
 
   useEffect(() => {
-    let adviceInterval: NodeJS.Timeout;
-    let metricsInterval: NodeJS.Timeout;
-    let durationInterval: NodeJS.Timeout;
+    let adviceInterval: ReturnType<typeof setInterval>;
+    let metricsInterval: ReturnType<typeof setInterval>;
+    let durationInterval: ReturnType<typeof setInterval>;
 
     if (isActive) {
       // Generate advice every 30-60 seconds

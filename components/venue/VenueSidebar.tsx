@@ -94,7 +94,6 @@ export function VenueSidebar({
     // Filter by saved venues first if that mode is active
     if (showOnlySavedVenues && savedVenueIds.size > 0) {
       filtered = filtered.filter((venue) => savedVenueIds.has(venue.id));
-      console.log('🔍 VenueSidebar: Filtering to saved venues only:', filtered.length, 'of', venues.length);
     }
 
     if (searchQuery) {
@@ -362,7 +361,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#333',
-    outlineStyle: 'none',
   },
 
   // Region Filter

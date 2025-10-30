@@ -195,7 +195,6 @@ export class CourseLibraryService {
         throw error;
       }
 
-      console.log(`✅ Course saved: ${data.name} (${scope})`);
       return data as RaceCourse;
     } catch (error) {
       console.error('[CourseLibraryService] Error in saveCourse:', error);
@@ -226,7 +225,6 @@ export class CourseLibraryService {
         throw error;
       }
 
-      console.log(`✅ Course updated: ${data.name}`);
       return data as RaceCourse;
     } catch (error) {
       console.error('[CourseLibraryService] Error in updateCourse:', error);
@@ -262,7 +260,6 @@ export class CourseLibraryService {
         }
       }
 
-      console.log(`✅ Course usage recorded: ${courseId}`);
     } catch (error) {
       console.error('[CourseLibraryService] Error recording usage:', error);
     }
@@ -283,7 +280,6 @@ export class CourseLibraryService {
         return false;
       }
 
-      console.log(`✅ Course deleted: ${courseId}`);
       return true;
     } catch (error) {
       console.error('[CourseLibraryService] Error in deleteCourse:', error);

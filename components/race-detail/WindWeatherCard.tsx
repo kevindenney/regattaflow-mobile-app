@@ -89,6 +89,7 @@ export function WindWeatherCard({
   }, [weatherError, loading, realWeather, venueCoordinates]);
 
   const loadMockWeather = () => {
+    setUseMockData(true);
     const placeholderWeather: WeatherData = {
       current: {
         windSpeed: 12,
@@ -196,7 +197,7 @@ export function WindWeatherCard({
           <TouchableOpacity
             style={styles.loadButton}
             onPress={loadMockWeather}
-            disabled={loading || !venueCoordinates}
+            disabled={loading}
           >
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -232,6 +233,11 @@ export function WindWeatherCard({
             {useMockData ? "MOCK DATA" : "LIVE DATA"}
           </Text>
         </View>
+        {useMockData && (
+          <Text style={styles.mockDataNotice}>
+            Using mock data — add venue coordinates to fetch live conditions.
+          </Text>
+        )}
         {/* Current Conditions */}
         <View style={styles.currentSection}>
           <View style={styles.currentHeader}>
@@ -577,5 +583,10 @@ const styles = StyleSheet.create({
   },
   dataSourceTextMock: {
     color: '#D97706',
+  },
+  mockDataNotice: {
+    fontSize: 12,
+    color: '#B45309',
+    marginBottom: 16,
   },
 });

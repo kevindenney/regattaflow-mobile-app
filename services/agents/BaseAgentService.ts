@@ -11,7 +11,7 @@
  * - ✅ Browser → Supabase Edge Function → Agent.run() (secure)
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { Platform } from 'react-native';
 
@@ -73,7 +73,6 @@ export class BaseAgentService {
     this.isServerSide = !isBrowserEnvironment();
 
     if (!this.isServerSide) {
-      console.warn('⚠️ BaseAgentService instantiated in browser. Agent.run() will fail. Use Supabase Edge Functions instead.');
 
       // Don't throw immediately - allow imports and instantiation
       // Only fail when run() is actually called
@@ -89,7 +88,7 @@ export class BaseAgentService {
     const apiKey = process.env.ANTHROPIC_API_KEY || process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
 
     if (!apiKey) {
-      console.warn('⚠️ Anthropic API key not found. Agent functionality will be limited.');
+
     }
 
     // Server-side only - no dangerouslyAllowBrowser needed
@@ -104,7 +103,6 @@ export class BaseAgentService {
       systemPrompt: config.systemPrompt || 'You are a helpful AI assistant for RegattaFlow, a sailing race strategy platform.',
     };
 
-    console.log('🤖 BaseAgentService initialized with model:', this.config.model);
   }
 
   /**
@@ -112,7 +110,6 @@ export class BaseAgentService {
    */
   protected registerTool(tool: AgentTool): void {
     this.tools.set(tool.name, tool);
-    console.log(`🔧 Registered tool: ${tool.name}`);
   }
 
   /**
@@ -200,8 +197,6 @@ export class BaseAgentService {
       throw new Error(`Tool not found: ${toolName}`);
     }
 
-    console.log(`🔧 Executing tool: ${toolName}`, input);
-
     try {
       // Validate input against schema
       const validatedInput = tool.input_schema.parse(input);
@@ -209,10 +204,8 @@ export class BaseAgentService {
       // Execute the tool
       const result = await tool.execute(validatedInput);
 
-      console.log(`✅ Tool ${toolName} completed successfully`);
       return result;
     } catch (error: any) {
-      console.error(`❌ Tool ${toolName} failed:`, error);
       throw new Error(`Tool execution failed: ${error.message}`);
     }
   }
@@ -257,8 +250,6 @@ See: supabase/functions/extract-race-details/index.ts for an example
 
     const { userMessage, context = {}, maxIterations = 10 } = options;
 
-    console.log('🤖 Agent starting with message:', userMessage);
-
     const messages: Anthropic.MessageParam[] = [
       {
         role: 'user',
@@ -273,7 +264,6 @@ See: supabase/functions/extract-race-details/index.ts for an example
     try {
       while (iterations < maxIterations) {
         iterations++;
-        console.log(`🤖 Agent iteration ${iterations}/${maxIterations}`);
 
         // Convert tools to Anthropic format
         const anthropicTools = Array.from(this.tools.values()).map(tool => ({
@@ -291,8 +281,6 @@ See: supabase/functions/extract-race-details/index.ts for an example
           messages,
           tools: anthropicTools,
         });
-
-        console.log('🤖 Agent response:', response.stop_reason);
 
         // Check if agent wants to use a tool
         if (response.stop_reason === 'tool_use') {
@@ -385,7 +373,7 @@ See: supabase/functions/extract-race-details/index.ts for an example
         error: 'Maximum iterations reached without completion',
       };
     } catch (error: any) {
-      console.error('❌ Agent run failed:', error);
+
       return {
         success: false,
         result: null,

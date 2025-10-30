@@ -181,9 +181,18 @@ export default function EditBoatScreen() {
           onPress: () => router.back(),
         },
       ]);
-    } catch (error) {
-      console.error('Error updating boat:', error);
-      Alert.alert('Error', 'Failed to update boat. Please try again.');
+    } catch (error: any) {
+      if (error?.queuedForSync && error?.entity?.updates) {
+        Alert.alert('Offline', 'Updates saved locally and will sync when you are back online.', [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]);
+      } else {
+        console.error('Error updating boat:', error);
+        Alert.alert('Error', 'Failed to update boat. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -209,9 +218,15 @@ export default function EditBoatScreen() {
               Alert.alert('Success', 'Boat deleted successfully', [
                 { text: 'OK', onPress: () => router.replace('/(tabs)/boat') },
               ]);
-            } catch (error) {
-              console.error('Error deleting boat:', error);
-              Alert.alert('Error', 'Failed to delete boat');
+            } catch (error: any) {
+              if (error?.queuedForSync) {
+                Alert.alert('Offline', 'Boat deletion will complete once you are back online.', [
+                  { text: 'OK', onPress: () => router.replace('/(tabs)/boat') },
+                ]);
+              } else {
+                console.error('Error deleting boat:', error);
+                Alert.alert('Error', 'Failed to delete boat');
+              }
             }
           },
         },

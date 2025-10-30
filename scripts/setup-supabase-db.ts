@@ -6,11 +6,9 @@
 import { supabase } from '@/services/supabase';
 
 export async function setupSupabaseDatabase(): Promise<void> {
-  console.log('🚀 [SETUP] Starting Supabase database setup...');
 
   try {
     // Step 1: Create sailing_venues table using raw SQL
-    console.log('🏗️ [SETUP] Creating sailing_venues table...');
 
     const createVenuesTableSQL = `
       CREATE TABLE IF NOT EXISTS sailing_venues (
@@ -34,7 +32,6 @@ export async function setupSupabaseDatabase(): Promise<void> {
     });
 
     if (createVenuesError && !createVenuesError.message.includes('already exists')) {
-      console.log('⚠️ [SETUP] RPC exec_sql not available, trying direct query...');
 
       // Try using the REST API directly
       const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
@@ -48,14 +45,12 @@ export async function setupSupabaseDatabase(): Promise<void> {
       });
 
       if (!response.ok) {
-        console.log('ℹ️ [SETUP] Direct SQL execution not available, will use insert-based table creation');
       }
     } else {
-      console.log('✅ [SETUP] sailing_venues table created successfully');
+
     }
 
     // Step 2: Create yacht_clubs table
-    console.log('🏗️ [SETUP] Creating yacht_clubs table...');
 
     const createClubsTableSQL = `
       CREATE TABLE IF NOT EXISTS yacht_clubs (
@@ -74,7 +69,6 @@ export async function setupSupabaseDatabase(): Promise<void> {
     await supabase.rpc('exec_sql', { query: createClubsTableSQL });
 
     // Step 3: Insert venue data
-    console.log('📊 [SETUP] Inserting venue data...');
 
     const venueData = [
       {
@@ -226,14 +220,11 @@ export async function setupSupabaseDatabase(): Promise<void> {
       .select();
 
     if (venuesInsertError) {
-      console.error('❌ [SETUP] Failed to insert venues:', venuesInsertError);
+
       throw venuesInsertError;
     }
 
-    console.log(`✅ [SETUP] Inserted ${insertedVenues?.length || 0} venues successfully`);
-
     // Step 4: Insert yacht club data
-    console.log('⛵ [SETUP] Inserting yacht club data...');
 
     const clubData = [
       {
@@ -312,14 +303,11 @@ export async function setupSupabaseDatabase(): Promise<void> {
       .select();
 
     if (clubsInsertError) {
-      console.error('❌ [SETUP] Failed to insert clubs:', clubsInsertError);
+
       throw clubsInsertError;
     }
 
-    console.log(`✅ [SETUP] Inserted ${insertedClubs?.length || 0} yacht clubs successfully`);
-
     // Step 5: Verify the setup
-    console.log('🔍 [SETUP] Verifying database setup...');
 
     const { count: venueCount } = await supabase
       .from('sailing_venues')
@@ -329,11 +317,8 @@ export async function setupSupabaseDatabase(): Promise<void> {
       .from('yacht_clubs')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`✅ [SETUP] Database setup complete!`);
-    console.log(`📊 [SETUP] Final counts: ${venueCount} venues, ${clubCount} yacht clubs`);
-
   } catch (error: any) {
-    console.error('❌ [SETUP] Database setup failed:', error);
+
     throw error;
   }
 }

@@ -11,7 +11,7 @@
  * - Active area highlighting
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Racing area location

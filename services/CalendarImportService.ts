@@ -1,3 +1,5 @@
+import { createLogger } from '@/lib/utils/logger';
+
 /**
  * Calendar Import Service
  * Parse and import sailing calendars from CSV files
@@ -22,6 +24,7 @@ export interface CalendarImportResult {
   error?: string;
 }
 
+const logger = createLogger('CalendarImportService');
 export class CalendarImportService {
   /**
    * Parse a CSV calendar file
@@ -42,7 +45,7 @@ export class CalendarImportService {
 
       // Parse header
       const header = lines[0].split(',').map(h => h.trim());
-      console.log('[CalendarImportService] CSV header:', header);
+      logger.debug('[CalendarImportService] CSV header:', header);
 
       // Expected columns
       const subjectIdx = header.findIndex(h => h.toLowerCase().includes('subject'));
@@ -116,7 +119,7 @@ export class CalendarImportService {
         });
       }
 
-      console.log(`[CalendarImportService] Parsed ${races.length} races, skipped ${skipped.length} entries`);
+      logger.debug(`[CalendarImportService] Parsed ${races.length} races, skipped ${skipped.length} entries`);
 
       return {
         success: true,

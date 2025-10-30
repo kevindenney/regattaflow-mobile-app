@@ -1,3 +1,5 @@
+import { createLogger } from '@/lib/utils/logger';
+
 /**
  * Auto Course Generator Service
  * Automatically generates standard racing course marks when user draws a racing area
@@ -35,6 +37,7 @@ interface CourseMark {
   description?: string;
 }
 
+const logger = createLogger('AutoCourseGeneratorService');
 class AutoCourseGeneratorService {
   /**
    * Generate standard racing course marks based on racing area and conditions
@@ -45,10 +48,10 @@ class AutoCourseGeneratorService {
     windSpeed: number, // knots
     boatClass?: string
   ): CourseMark[] {
-    console.log('🏁 [AutoCourseGenerator] Generating standard course');
-    console.log('   Wind:', windDirection, '@', windSpeed, 'kt');
-    console.log('   Boat class:', boatClass || 'default');
-    console.log('   Racing area center:', racingArea.center);
+
+    logger.debug('   Wind:', windDirection, '@', windSpeed, 'kt');
+    logger.debug('   Boat class:', boatClass || 'default');
+    logger.debug('   Racing area center:', racingArea.center);
 
     // Convert wind direction to degrees if needed
     const windDegrees = typeof windDirection === 'string'
@@ -65,20 +68,24 @@ class AutoCourseGeneratorService {
     // Generate marks
     const center = racingArea.center;
 
-    // 1. Committee Boat & Pin (start line)
+    // 1. Committee Boat & Pin (start line, perpendicular to wind)
     const committeeBoat = this.calculatePoint(center, startLineBearing, startLineLength / 2);
     const pinBuoy = this.calculatePoint(center, startLineBearing + 180, startLineLength / 2);
 
     // 2. Windward Mark (upwind from center)
     const windwardMark = this.calculatePoint(center, windDegrees, windwardDistance);
 
-    // 3. Leeward Gate (downwind, near start line)
-    const leewardCenter = this.calculatePoint(center, windDegrees + 180, 0.1); // 100m downwind
-    const gateA = this.calculatePoint(leewardCenter, startLineBearing, 0.025); // 25m left
-    const gateB = this.calculatePoint(leewardCenter, startLineBearing + 180, 0.025); // 25m right
+    // 3. Leeward Gate (slightly upwind of start line, offset toward pin side)
+    // Position gate 90m upwind of center (not downwind like traditional leeward marks)
+    const gateCenter = this.calculatePoint(center, windDegrees, 0.05); // 0.05nm ≈ 90m upwind
+    // Offset gate toward pin side (opposite from where finish mark will be)
+    const gateA = this.calculatePoint(gateCenter, startLineBearing + 180, 0.025); // 25m toward pin
+    const gateB = this.calculatePoint(gateCenter, startLineBearing + 180, 0.045); // 45m toward pin (wider spacing)
 
-    // 4. Finish Mark (offset from committee boat for finish line)
-    const finishMark = this.calculatePoint(committeeBoat, startLineBearing + 180, startLineLength * 0.8);
+    // 4. Finish Mark (opposite side of committee boat from pin)
+    // This creates finish line: Committee Boat <---> Finish Mark
+    // With pin on opposite side from finish mark
+    const finishMark = this.calculatePoint(committeeBoat, startLineBearing, startLineLength * 0.8);
 
     const marks: CourseMark[] = [
       {
@@ -143,9 +150,8 @@ class AutoCourseGeneratorService {
       },
     ];
 
-    console.log('✅ [AutoCourseGenerator] Generated', marks.length, 'marks');
     marks.forEach(mark => {
-      console.log(`   - ${mark.name} (${mark.mark_type}): ${mark.latitude.toFixed(6)}, ${mark.longitude.toFixed(6)}`);
+      logger.debug(`   - ${mark.name} (${mark.mark_type}): ${mark.latitude.toFixed(6)}, ${mark.longitude.toFixed(6)}`);
     });
 
     return marks;

@@ -26,11 +26,13 @@ import EventService, {
   PaymentStatus,
 } from '@/services/eventService';
 import { supabase } from '@/services/supabase';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 export default function EventEntriesScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const eventId = id as string;
+  const { clubId, loading: personaLoading, refresh: refreshPersonaContext } = useClubWorkspace();
 
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [stats, setStats] = useState<EventRegistrationStats | null>(null);
@@ -40,10 +42,12 @@ export default function EventEntriesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
+    if (!clubId) return;
     loadRegistrations();
-  }, [eventId]);
+  }, [eventId, clubId]);
 
   const loadRegistrations = async () => {
+    if (!clubId) return;
     try {
       setLoading(true);
       const [eventData, regs, statistics] = await Promise.all([
@@ -224,6 +228,39 @@ export default function EventEntriesScreen() {
         return 'help-outline';
     }
   };
+
+  if (personaLoading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0EA5E9" />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="people-circle-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Club Workspace</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            You need an active club connection to manage event registrations. Finish onboarding or refresh your workspace.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryLink}
+            onPress={() => router.push('/(auth)/club-onboarding-chat')}
+          >
+            <ThemedText style={styles.secondaryLinkText}>Open Club Onboarding</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
 
   const filteredRegistrations = registrations.filter((reg) => {
     // Filter by status
@@ -500,6 +537,45 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  missingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    backgroundColor: '#F8FAFC',
+  },
+  missingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
   statsContainer: {
     flexDirection: 'row',

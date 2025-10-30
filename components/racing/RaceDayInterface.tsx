@@ -95,7 +95,7 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
   const [racePosition, setRacePosition] = useState<RacePosition | null>(null);
   const [gpsPermission, setGpsPermission] = useState<'granted' | 'denied' | 'pending'>('pending');
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alertSoundsRef = useRef<{ [key: string]: boolean }>({});
 
   useEffect(() => {

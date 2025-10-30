@@ -20,7 +20,7 @@ export function MiniSailorDashboard() {
       {/* Next Race Card */}
       <View style={styles.raceCard}>
         <View style={styles.raceHeader}>
-          <Ionicons name="sailboat" size={16} color="#3E92CC" />
+          <Ionicons name="boat" size={16} color="#3E92CC" />
           <Text style={styles.raceTitle}>Next Race</Text>
         </View>
         <Text style={styles.raceName}>Spring Championship</Text>

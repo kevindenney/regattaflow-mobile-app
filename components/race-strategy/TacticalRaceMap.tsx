@@ -15,6 +15,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   CourseMark,
   RaceEventWithDetails,
@@ -25,6 +26,7 @@ import type {
 } from '@/types/raceEvents';
 
 const isWeb = Platform.OS === 'web';
+const logger = createLogger('TacticalRaceMap');
 
 // ============================================================================
 // TYPES
@@ -44,6 +46,25 @@ interface TacticalRaceMapProps {
   onUndoPoint?: () => void; // Callback to undo last point
   onClearPoints?: () => void; // Callback to clear all points
   toggle2D3D?: number; // Trigger value that changes to toggle 2D/3D mode
+  orientToWind?: number; // Trigger value that changes to orient map to wind direction
+  // External layer control
+  externalLayers?: {
+    wind?: boolean;
+    current?: boolean;
+    waves?: boolean;
+    depth?: boolean;
+    laylines?: boolean;
+    strategy?: boolean;
+  };
+  onLayersChange?: (layers: { [key: string]: boolean }) => void;
+  // Mark placement and editing
+  isAddingMark?: boolean; // True when user is in mark placement mode
+  selectedMarkType?: string; // Type of mark to place (e.g., 'windward', 'leeward')
+  isEditMode?: boolean; // True when marks can be dragged
+  onMarkAdded?: (mark: Omit<CourseMark, 'id'>) => void; // Callback when new mark is placed
+  onMarkUpdated?: (mark: CourseMark) => void; // Callback when mark position changes
+  onMarkDeleted?: (markId: string) => void; // Callback when mark is deleted
+  racingAreaPolygon?: Array<{ lat: number; lng: number }>; // Current racing area for auto-regeneration
 }
 
 interface MapLayer {
@@ -70,32 +91,94 @@ export default function TacticalRaceMap({
   allowAreaSelection = false,
   isDrawing = false,
   initialRacingArea,
-  toggle2D3D: toggle2D3DTrigger
+  toggle2D3D: toggle2D3DTrigger,
+  orientToWind: orientToWindTrigger,
+  externalLayers,
+  onLayersChange,
+  isAddingMark = false,
+  selectedMarkType,
+  isEditMode = false,
+  onMarkAdded,
+  onMarkUpdated,
+  onMarkDeleted,
+  racingAreaPolygon
 }: TacticalRaceMapProps) {
-  console.log('🎬 [COMPONENT] TacticalRaceMap render - marks:', marks?.length || 0);
-
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
-  const [is3D, setIs3D] = useState(true);
+  const [is3D, setIs3D] = useState(false); // Default to 2D
+
+  const raceStartDate = useMemo(() => {
+    if (!raceEvent?.start_time) return null;
+    const date = new Date(raceEvent.start_time);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }, [raceEvent?.start_time]);
+
+  const displayConditions = useMemo(() => {
+    if (!environmental) return null;
+    const now = new Date();
+
+    if (
+      raceStartDate &&
+      environmental.forecast &&
+      environmental.forecast.length > 0 &&
+      raceStartDate.getTime() > now.getTime()
+    ) {
+      const target = environmental.forecast.reduce((closest, entry) => {
+        const entryTime = new Date(entry.time);
+        const diff = Math.abs(entryTime.getTime() - raceStartDate.getTime());
+
+        if (!closest) {
+          return { entry, diff };
+        }
+
+        return diff < closest.diff ? { entry, diff } : closest;
+      }, null as { entry: any; diff: number } | null);
+
+      return {
+        snapshot: (target?.entry ?? environmental.forecast[0]) as any,
+        isForecast: true,
+      };
+    }
+
+    return {
+      snapshot: environmental.current as any,
+      isForecast: false,
+    };
+  }, [environmental, raceStartDate]);
 
   // Component mount/unmount tracking
   useEffect(() => {
-    console.log('🎬 [COMPONENT] TacticalRaceMap MOUNTED');
     return () => {
-      console.log('🎬 [COMPONENT] TacticalRaceMap UNMOUNTING');
     };
   }, []);
+
+  // Track previous marks to prevent unnecessary re-renders
+  const prevMarksRef = useRef<string>('');
+  const marksSignature = useMemo(() => {
+    return JSON.stringify(marks.map(m => ({
+      id: m.id,
+      lat: (m as any).coordinates_lat || (m as any).latitude,
+      lng: (m as any).coordinates_lng || (m as any).longitude,
+      name: (m as any).mark_name || (m as any).name,
+      type: (m as any).mark_type || (m as any).type,
+    })));
+  }, [marks]);
 
   // Racing area selection state
   const [isDrawingArea, setIsDrawingArea] = useState(false);
   // INTERNAL state management - this is what makes it work!
   const [racingAreaPoints, setRacingAreaPoints] = useState<[number, number][]>([]);
 
-  // Draggable points state
+  // Draggable points state (for racing area)
   const [isDraggingPoint, setIsDraggingPoint] = useState(false);
   const [draggedPointIndex, setDraggedPointIndex] = useState<number | null>(null);
+
+  // Draggable marks state
+  const [isDraggingMark, setIsDraggingMark] = useState(false);
+  const [draggedMarkId, setDraggedMarkId] = useState<string | null>(null);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
 
   // Sync external isDrawing prop with internal isDrawingArea state
   useEffect(() => {
@@ -111,6 +194,23 @@ export default function TacticalRaceMap({
     }
   }, [toggle2D3DTrigger]);
 
+  // Handle wind orientation trigger
+  useEffect(() => {
+    if (!orientToWindTrigger || orientToWindTrigger === 0) return;
+    if (!mapRef.current || !environmental?.current?.wind) return;
+
+    const map = mapRef.current;
+    const windDirection = environmental.current.wind.direction;
+
+    // Rotate map bearing to align with wind direction
+    // Wind comes FROM the direction specified, so we rotate to face downwind
+    map.easeTo({
+      bearing: windDirection, // Set bearing to wind direction
+      duration: 1000,
+      pitch: is3D ? 45 : 0, // Maintain current pitch
+    });
+  }, [orientToWindTrigger, environmental, is3D]);
+
   // Initialize racing area from prop on mount or when prop changes
   useEffect(() => {
     if (initialRacingArea && initialRacingArea.length > 0) {
@@ -121,32 +221,39 @@ export default function TacticalRaceMap({
 
       if (isDifferent) {
         setRacingAreaPoints(points);
-        console.log('📍 Initialized racing area from props:', points.length, 'points');
       }
     } else if ((!initialRacingArea || initialRacingArea.length === 0) && racingAreaPoints.length > 0) {
       // Clear racing area if prop is undefined/null OR empty array (e.g., after "Clear All")
       setRacingAreaPoints([]);
-      console.log('🧹 Cleared racing area (empty or no initial area provided)');
     }
   }, [initialRacingArea]);
 
   // Notify parent of point count changes
   useEffect(() => {
-    console.log('[TacticalRaceMap] Point count changed:', racingAreaPoints.length, 'points:', racingAreaPoints);
     onPointsChanged?.(racingAreaPoints.length);
   }, [racingAreaPoints.length, racingAreaPoints]);
   // Note: Intentionally omitting onPointsChanged from deps to avoid infinite loops
   // The callback reference may change on every render, but we only care about point changes
 
-  // Layer state
-  const [layers, setLayers] = useState<MapLayer[]>([
-    { id: 'wind', name: 'Wind', icon: 'flag-outline', enabled: true, category: 'environmental', description: 'Wind direction and speed' },
-    { id: 'current', name: 'Current', icon: 'water-outline', enabled: true, category: 'environmental', description: 'Tidal current flow' },
-    { id: 'waves', name: 'Waves', icon: 'trending-up-outline', enabled: false, category: 'environmental', description: 'Wave height gradient' },
-    { id: 'depth', name: 'Depth', icon: 'layers-outline', enabled: false, category: 'environmental', description: 'Bathymetry contours' },
-    { id: 'laylines', name: 'Laylines', icon: 'git-branch-outline', enabled: false, category: 'tactical', description: 'Upwind laylines' },
-    { id: 'strategy', name: 'Strategy', icon: 'analytics-outline', enabled: false, category: 'tactical', description: 'Tactical analysis' },
+  // Layer state - initialize from externalLayers if provided
+  const [layers, setLayers] = useState<MapLayer[]>(() => [
+    { id: 'wind', name: 'Wind', icon: 'flag-outline', enabled: externalLayers?.wind ?? true, category: 'environmental', description: 'Wind direction and speed' },
+    { id: 'current', name: 'Current', icon: 'water-outline', enabled: externalLayers?.current ?? true, category: 'environmental', description: 'Tidal current flow' },
+    { id: 'waves', name: 'Waves', icon: 'trending-up-outline', enabled: externalLayers?.waves ?? false, category: 'environmental', description: 'Wave height gradient' },
+    { id: 'depth', name: 'Depth', icon: 'layers-outline', enabled: externalLayers?.depth ?? false, category: 'environmental', description: 'Bathymetry contours' },
+    { id: 'laylines', name: 'Laylines', icon: 'git-branch-outline', enabled: externalLayers?.laylines ?? false, category: 'tactical', description: 'Upwind laylines' },
+    { id: 'strategy', name: 'Strategy', icon: 'analytics-outline', enabled: externalLayers?.strategy ?? false, category: 'tactical', description: 'Tactical analysis' },
   ]);
+
+  // Sync with external layer changes
+  useEffect(() => {
+    if (externalLayers) {
+      setLayers(prev => prev.map(layer => ({
+        ...layer,
+        enabled: externalLayers[layer.id as keyof typeof externalLayers] ?? layer.enabled
+      })));
+    }
+  }, [externalLayers]);
 
   // ============================================================================
   // MAP INITIALIZATION
@@ -154,26 +261,17 @@ export default function TacticalRaceMap({
 
   useEffect(() => {
     if (!isWeb) {
-      console.log('⚠️ Not web platform, skipping map initialization');
       return;
     }
 
     const initializeMap = async () => {
       try {
-        console.log('🗺️ [MAP INIT] Starting TacticalRaceMap initialization...');
-        console.log('🗺️ [MAP INIT] Container ref exists:', !!mapContainerRef.current);
-        console.log('🗺️ [MAP INIT] Current mapRef:', !!mapRef.current);
-        console.log('🗺️ [MAP INIT] Map loaded state:', mapLoaded);
-
         // Prevent duplicate initialization
         if (mapRef.current) {
-          console.log('⚠️ [MAP INIT] Map already exists, skipping initialization');
           return;
         }
 
         const maplibregl = await import('maplibre-gl');
-        console.log('✅ [MAP INIT] MapLibre GL library loaded successfully');
-        console.log('✅ [MAP INIT] MapLibre GL version:', maplibregl.version || 'unknown');
 
         // Load CSS dynamically for web
         if (typeof document !== 'undefined' && !document.getElementById('maplibre-gl-css')) {
@@ -185,16 +283,14 @@ export default function TacticalRaceMap({
         }
 
         if (!mapContainerRef.current) {
-          console.error('❌ [MAP INIT] Map container ref is null - cannot create map');
           return;
         }
-
-        console.log('✅ [MAP INIT] Container ref is valid, proceeding with map creation');
-
         // Clean up any existing MapLibre elements in the container (from HMR)
         const container = mapContainerRef.current;
+
+        // Log container dimensions before cleanup
+        const rect = container.getBoundingClientRect();
         if (container.children.length > 0) {
-          console.log('🧹 [MAP INIT] Cleaning existing map elements from container (HMR cleanup)');
           while (container.firstChild) {
             container.removeChild(container.firstChild);
           }
@@ -202,38 +298,28 @@ export default function TacticalRaceMap({
 
         // Calculate course center from marks
         const center = getMapCenter(marks, raceEvent.venue);
-        console.log('🗺️ [MAP INIT] Calculated center:', center);
-        console.log('🗺️ [MAP INIT] Number of marks:', marks?.length || 0);
 
         // Initialize map
-        console.log('🗺️ [MAP INIT] Creating MapLibre Map instance...');
         const map = new maplibregl.Map({
           container: mapContainerRef.current,
           style: createNauticalStyle(),
           center,
           zoom: 14,
-          pitch: 45, // 3D perspective
+          pitch: 0, // Start in 2D (0 pitch)
           bearing: 0,
           antialias: true,
         });
 
-        console.log('✅ [MAP INIT] Map instance created successfully');
         mapRef.current = map;
-        console.log('✅ [MAP INIT] Map ref assigned');
-
         // Verify canvas was created
         setTimeout(() => {
           const canvas = container.querySelector('.maplibregl-canvas');
           if (canvas) {
-            console.log('✅ [MAP INIT] MapLibre canvas verified in DOM');
           } else {
-            console.error('❌ [MAP INIT] MapLibre canvas NOT found in DOM after 100ms');
-            console.error('❌ [MAP INIT] Container children:', container.children.length);
           }
         }, 100);
 
         // Add controls
-        console.log('🗺️ [MAP INIT] Adding navigation controls...');
         map.addControl(
           new maplibregl.NavigationControl({
             showCompass: true,
@@ -252,10 +338,7 @@ export default function TacticalRaceMap({
         );
 
         // Map load handler
-        console.log('🗺️ [MAP INIT] Registering load event handler...');
         map.on('load', async () => {
-          console.log('✅ [MAP LOAD] Map load event fired!');
-          console.log('✅ [MAP LOAD] Setting mapLoaded to true');
           setMapLoaded(true);
 
           // Create arrow icon for course direction indicators
@@ -271,13 +354,11 @@ export default function TacticalRaceMap({
           arrowImage.onload = () => {
             if (!map.hasImage('arrow')) {
               map.addImage('arrow', arrowImage);
-              console.log('✅ [MAP LOAD] Arrow icon added to map');
             }
           };
           arrowImage.src = 'data:image/svg+xml;base64,' + btoa(arrowSVG);
 
           // Add all layers
-          console.log('🗺️ [MAP LOAD] Adding race course with', marks?.length, 'marks');
           await addRaceCourse(map, marks);
 
           if (environmental) {
@@ -289,35 +370,22 @@ export default function TacticalRaceMap({
           fitMapToCourse(map, marks);
         });
 
-        console.log('🗺️ [MAP INIT] Registering error event handler...');
         map.on('error', (e: any) => {
-          console.error('❌ [MAP ERROR] Map error event fired:', e?.error || e?.message || e);
           if (e?.error) {
-            console.error('❌ [MAP ERROR] Error details:', e.error.message, e.error.stack);
           }
         });
-
-        console.log('✅ [MAP INIT] Map initialization complete, waiting for load event...');
-
       } catch (error) {
-        console.error('❌ [MAP INIT] Failed to initialize map:', error);
-        console.error('❌ [MAP INIT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
         setMapLoaded(true); // Show error state
       }
     };
 
-    console.log('🗺️ [MAP INIT] Calling initializeMap()...');
     initializeMap();
 
     return () => {
-      console.log('🧹 [MAP CLEANUP] Cleanup function called');
       if (mapRef.current) {
-        console.log('🧹 [MAP CLEANUP] Removing map instance...');
         mapRef.current.remove();
         mapRef.current = null;
-        console.log('✅ [MAP CLEANUP] Map removed and ref set to null');
       } else {
-        console.log('⚠️ [MAP CLEANUP] Map ref was already null, nothing to clean up');
       }
     };
   }, []);
@@ -327,31 +395,64 @@ export default function TacticalRaceMap({
   // ============================================================================
 
   useEffect(() => {
-    console.log('🔄 [MARKS UPDATE] useEffect triggered');
-    console.log('🔄 [MARKS UPDATE] mapRef.current exists:', !!mapRef.current);
-    console.log('🔄 [MARKS UPDATE] mapLoaded:', mapLoaded);
-    console.log('🔄 [MARKS UPDATE] marks length:', marks?.length || 0);
-
     if (!mapRef.current || !mapLoaded) {
-      console.log('⚠️ [MARKS UPDATE] Skipping - map not ready (mapRef:', !!mapRef.current, ', mapLoaded:', mapLoaded, ')');
       return;
     }
 
-    const map = mapRef.current;
-    console.log('🔄 [MARKS UPDATE] Marks prop changed, updating map with', marks?.length, 'marks');
+    // Check if marks have actually changed (deep comparison)
+    if (prevMarksRef.current === marksSignature) {
+      return;
+    }
 
+    prevMarksRef.current = marksSignature;
+
+    const map = mapRef.current;
     // Re-add race course with updated marks
     addRaceCourse(map, marks).then(() => {
-      console.log('✅ [MARKS UPDATE] Marks updated on map successfully');
       // Re-fit map to new course
       fitMapToCourse(map, marks);
     }).catch((error) => {
-      console.error('❌ [MARKS UPDATE] Error updating marks:', error);
     });
-  }, [marks, mapLoaded]);
+  }, [marksSignature, mapLoaded, marks]);
 
   // ============================================================================
-  // LAYER UPDATES
+  // ENVIRONMENTAL DATA UPDATES - Add environmental layers when data arrives
+  // ============================================================================
+
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !environmental) return;
+
+    const map = mapRef.current;
+    // Add environmental layers if they don't exist yet
+    const ensureEnvironmentalLayers = async () => {
+      const windLayer = layers.find(l => l.id === 'wind');
+      const currentLayer = layers.find(l => l.id === 'current');
+      const waveLayer = layers.find(l => l.id === 'waves');
+
+      try {
+        // Add wind layer if it doesn't exist and is enabled
+        if (windLayer?.enabled && !map.getLayer('wind')) {
+          await addWindLayer(map, marks, environmental);
+        }
+
+        // Add current layer if it doesn't exist and is enabled
+        if (currentLayer?.enabled && !map.getLayer('current')) {
+          await addCurrentLayer(map, marks, environmental);
+        }
+
+        // Add wave layer if it doesn't exist and is enabled
+        if (waveLayer?.enabled && !map.getLayer('waves')) {
+          await addWaveLayer(map, marks, environmental);
+        }
+      } catch (error) {
+      }
+    };
+
+    ensureEnvironmentalLayers();
+  }, [environmental, mapLoaded, layers]);
+
+  // ============================================================================
+  // LAYER UPDATES - Toggle layer visibility
   // ============================================================================
 
   useEffect(() => {
@@ -363,12 +464,44 @@ export default function TacticalRaceMap({
       const visibility = layer.enabled ? 'visible' : 'none';
 
       try {
-        // Toggle existing layers
+        // For environmental layers, recreate them when toggling on to use current map bounds
+        const isEnvironmentalLayer = ['wind', 'current', 'waves'].includes(layer.id);
+
         if (map.getLayer(layer.id)) {
-          map.setLayoutProperty(layer.id, 'visibility', visibility);
+          if (layer.enabled && isEnvironmentalLayer) {
+            // Remove and recreate environmental layers to use current map bounds
+
+            // Remove existing layer and source
+            map.removeLayer(layer.id);
+            if (map.getSource(layer.id)) {
+              map.removeSource(layer.id);
+            }
+
+            // Recreate with current bounds
+            switch (layer.id) {
+              case 'wind':
+                await addWindLayer(map, marks, environmental);
+                break;
+              case 'current':
+                await addCurrentLayer(map, marks, environmental);
+                break;
+              case 'waves':
+                await addWaveLayer(map, marks, environmental);
+                break;
+            }
+          } else {
+            // Just toggle visibility for non-environmental layers or when turning off
+            map.setLayoutProperty(layer.id, 'visibility', visibility);
+          }
         } else if (layer.enabled) {
           // Create layer if it doesn't exist but should be visible
           switch (layer.id) {
+            case 'wind':
+              await addWindLayer(map, marks, environmental);
+              break;
+            case 'current':
+              await addCurrentLayer(map, marks, environmental);
+              break;
             case 'waves':
               await addWaveLayer(map, marks, environmental);
               break;
@@ -384,7 +517,6 @@ export default function TacticalRaceMap({
           }
         }
       } catch (error) {
-        console.log(`Layer ${layer.id} not ready:`, error);
       }
     });
   }, [layers, mapLoaded]);
@@ -399,6 +531,30 @@ export default function TacticalRaceMap({
     const map = mapRef.current;
 
     const handleMapClick = (e: any) => {
+      // Handle mark placement mode
+      if (isAddingMark && selectedMarkType) {
+        const { lng, lat } = e.lngLat;
+
+        // Create new mark object (without id - parent will assign)
+        const newMark: Omit<CourseMark, 'id'> = {
+          name: getMarkName(selectedMarkType),
+          mark_type: selectedMarkType,
+          latitude: lat,
+          longitude: lng,
+          color: getMarkColor(selectedMarkType),
+          shape: getMarkShape(selectedMarkType),
+          description: `${getMarkName(selectedMarkType)} - placed by user`
+        };
+
+        // Notify parent to add the mark
+        onMarkAdded?.(newMark);
+
+        // Exit mark placement mode after placing one mark
+        // (parent component should handle this via prop change)
+        return;
+      }
+
+      // Handle racing area drawing mode
       if (!isDrawingArea) return;
 
       // Check if clicking on an existing point - if so, don't add a new point
@@ -408,7 +564,6 @@ export default function TacticalRaceMap({
 
       if (features.length > 0) {
         // Clicking on existing point - let the drag handler deal with it
-        console.log('🚫 Clicked on existing point - not adding new point');
         return;
       }
 
@@ -418,8 +573,6 @@ export default function TacticalRaceMap({
       // Update INTERNAL state - this is the key!
       setRacingAreaPoints(prev => {
         const updated = [...prev, newPoint];
-        console.log('📍 [TacticalRaceMap] Added point:', newPoint, 'Total points:', updated.length);
-
         // Notify parent with updated array
         if (onRacingAreaSelected) {
           onRacingAreaSelected(updated);
@@ -429,7 +582,8 @@ export default function TacticalRaceMap({
       });
     };
 
-    if (isDrawingArea) {
+    // Update cursor and click handler based on mode
+    if (isDrawingArea || isAddingMark) {
       map.getCanvas().style.cursor = 'crosshair';
       map.on('click', handleMapClick);
     } else {
@@ -440,7 +594,7 @@ export default function TacticalRaceMap({
     return () => {
       map.off('click', handleMapClick);
     };
-  }, [isDrawingArea, mapLoaded]);
+  }, [isDrawingArea, isAddingMark, selectedMarkType, mapLoaded, onMarkAdded]);
 
   // Update racing area visualization when points change
   useEffect(() => {
@@ -467,39 +621,40 @@ export default function TacticalRaceMap({
 
     // If no points, just cleanup and return
     if (racingAreaPoints.length === 0) {
-      console.log('🗑️ Cleared racing area visualization');
       return;
     }
 
-    // Add points markers
-    map.addSource('user-racing-area-points', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: racingAreaPoints.map((point, idx) => ({
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: point,
-          },
-          properties: {
-            index: idx,
-          },
-        })),
-      },
-    });
+    // Add points markers (only in drawing mode for editing)
+    if (isDrawingArea) {
+      map.addSource('user-racing-area-points', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: racingAreaPoints.map((point, idx) => ({
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: point,
+            },
+            properties: {
+              index: idx,
+            },
+          })),
+        },
+      });
 
-    map.addLayer({
-      id: 'user-racing-area-points',
-      type: 'circle',
-      source: 'user-racing-area-points',
-      paint: {
-        'circle-radius': 6,
-        'circle-color': '#3b82f6',
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#ffffff',
-      },
-    });
+      map.addLayer({
+        id: 'user-racing-area-points',
+        type: 'circle',
+        source: 'user-racing-area-points',
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#3b82f6',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+        },
+      });
+    }
 
     // If we have at least 3 points, draw the polygon
     if (racingAreaPoints.length >= 3) {
@@ -553,13 +708,9 @@ export default function TacticalRaceMap({
           duration: 1000,
           maxZoom: 15
         });
-        console.log('🎯 Centered map on racing area bounds:', bounds);
-
         // Regenerate environmental layers after map moves to new bounds
         // Wait for moveend event to ensure map has finished animating
         map.once('moveend', async () => {
-          console.log('🌊 Regenerating environmental layers for racing area...');
-
           // Remove old wind layer
           if (map.getLayer('wind')) {
             map.removeLayer('wind');
@@ -580,7 +731,6 @@ export default function TacticalRaceMap({
           if (environmental) {
             await addWindLayer(map, marks, environmental);
             await addCurrentLayer(map, marks, environmental);
-            console.log('✅ Environmental layers regenerated');
           }
         });
       }
@@ -610,8 +760,7 @@ export default function TacticalRaceMap({
       });
     }
 
-    console.log('✅ Racing area visualization updated:', racingAreaPoints.length, 'points');
-  }, [racingAreaPoints, mapLoaded]);
+  }, [racingAreaPoints, mapLoaded, isDrawingArea]);
 
   // ============================================================================
   // DRAGGABLE RACING AREA POINTS
@@ -628,12 +777,8 @@ export default function TacticalRaceMap({
 
     // Check if layer exists
     if (!map.getLayer('user-racing-area-points')) {
-      console.warn('⚠️ user-racing-area-points layer not found, skipping drag setup');
       return;
     }
-
-    console.log('🎯 Setting up draggable points for', racingAreaPoints.length, 'points');
-
     let draggedPointIdx: number | null = null;
 
     // Mouse down on a point (left-click only - right-click handled by onContextMenu)
@@ -641,9 +786,6 @@ export default function TacticalRaceMap({
       const features = map.queryRenderedFeatures(e.point, {
         layers: ['user-racing-area-points']
       });
-
-      console.log('🖱️ Mouse down, features found:', features.length);
-
       if (features.length === 0) return;
 
       // Ignore right-clicks (handled by contextmenu event)
@@ -659,8 +801,6 @@ export default function TacticalRaceMap({
 
       // Disable map dragging
       map.dragPan.disable();
-
-      console.log('🖱️ Started dragging point:', draggedPointIdx);
     };
 
     // Mouse move while dragging
@@ -690,9 +830,6 @@ export default function TacticalRaceMap({
     // Mouse up - finish dragging
     const onMouseUp = () => {
       if (draggedPointIdx === null) return;
-
-      console.log('✅ Finished dragging point:', draggedPointIdx);
-
       draggedPointIdx = null;
       setIsDraggingPoint(false);
       setDraggedPointIndex(null);
@@ -718,8 +855,6 @@ export default function TacticalRaceMap({
       e.preventDefault(); // Prevent browser context menu
 
       const pointIndex = features[0].properties.index;
-      console.log('🗑️ Deleting point:', pointIndex);
-
       // Remove the point
       setRacingAreaPoints(prev => {
         const updated = prev.filter((_, idx) => idx !== pointIndex);
@@ -751,23 +886,220 @@ export default function TacticalRaceMap({
   }, [mapLoaded, isDrawingArea, racingAreaPoints, onRacingAreaSelected]);
 
   // ============================================================================
+  // DRAGGABLE MARKS
+  // ============================================================================
+
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) return;
+
+    // Only enable dragging in edit mode AND when we have marks
+    if (!isEditMode || !marks || marks.length === 0) return;
+
+    const map = mapRef.current;
+    const canvas = map.getCanvas();
+
+    // Check if mark layer exists
+    if (!map.getLayer('race-marks-circle')) {
+      return;
+    }
+    let draggedMark: CourseMark | null = null;
+
+    // Mouse down on a mark (left-click only - right-click handled by onContextMenu)
+    const onMouseDown = (e: any) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ['race-marks-circle']
+      });
+      if (features.length === 0) return;
+
+      // Ignore right-clicks (handled by contextmenu event)
+      if (e.originalEvent.button === 2) return;
+
+      // Prevent map panning while dragging mark
+      e.preventDefault();
+
+      const markId = features[0].properties.id;
+      draggedMark = marks.find(m => m.id === markId) || null;
+
+      if (draggedMark) {
+        setIsDraggingMark(true);
+        setDraggedMarkId(markId);
+        canvas.style.cursor = 'grab';
+
+        // Disable map dragging
+        map.dragPan.disable();
+      }
+    };
+
+    // Mouse move while dragging
+    const onMouseMove = (e: any) => {
+      if (!draggedMark) {
+        // Change cursor when hovering over marks in edit mode
+        const features = map.queryRenderedFeatures(e.point, {
+          layers: ['race-marks-circle']
+        });
+        canvas.style.cursor = features.length > 0 ? 'pointer' : '';
+        return;
+      }
+
+      // Update the mark position in real-time by updating the source
+      const { lng, lat } = e.lngLat;
+
+      // Update mark position
+      const updatedMark: CourseMark = {
+        ...draggedMark,
+        latitude: lat,
+        longitude: lng,
+        // Support both database schemas
+        coordinates_lat: lat,
+        coordinates_lng: lng,
+      } as any;
+
+      // Notify parent immediately for real-time update
+      onMarkUpdated?.(updatedMark);
+
+      canvas.style.cursor = 'grabbing';
+    };
+
+    // Mouse up - finish dragging
+    const onMouseUp = () => {
+      if (!draggedMark) return;
+      draggedMark = null;
+      setIsDraggingMark(false);
+      setDraggedMarkId(null);
+      canvas.style.cursor = '';
+
+      // Re-enable map dragging
+      map.dragPan.enable();
+    };
+
+    // Right-click to delete a mark
+    const onContextMenu = (e: any) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ['race-marks-circle']
+      });
+
+      if (features.length === 0) return;
+
+      e.preventDefault(); // Prevent browser context menu
+
+      const markId = features[0].properties.id;
+      const mark = marks.find(m => m.id === markId);
+
+      if (mark) {
+        // Confirm deletion
+        if (typeof window !== 'undefined' && window.confirm(`Delete "${mark.name}"?`)) {
+          onMarkDeleted?.(markId);
+        }
+      }
+    };
+
+    // Add event listeners
+    map.on('mousedown', 'race-marks-circle', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', onMouseUp);
+    map.on('mouseleave', 'race-marks-circle', onMouseUp);
+    map.on('contextmenu', 'race-marks-circle', onContextMenu);
+
+    // Cleanup
+    return () => {
+      map.off('mousedown', 'race-marks-circle', onMouseDown);
+      map.off('mousemove', onMouseMove);
+      map.off('mouseup', onMouseUp);
+      map.off('mouseleave', 'race-marks-circle', onMouseUp);
+      map.off('contextmenu', 'race-marks-circle', onContextMenu);
+
+      // Re-enable map dragging if it was disabled
+      if (draggedMark) {
+        map.dragPan.enable();
+      }
+    };
+  }, [mapLoaded, isEditMode, marks, onMarkUpdated, onMarkDeleted]);
+
+  // ============================================================================
+  // AUTO-REGENERATION WHEN RACING AREA CHANGES
+  // ============================================================================
+
+  useEffect(() => {
+    // Only auto-regenerate if we have a racing area and environmental data
+    if (!racingAreaPolygon || racingAreaPolygon.length < 3) return;
+    if (!environmental?.current?.wind) return;
+    // Calculate racing area center
+    const center = {
+      lat: racingAreaPolygon.reduce((sum, p) => sum + p.lat, 0) / racingAreaPolygon.length,
+      lng: racingAreaPolygon.reduce((sum, p) => sum + p.lng, 0) / racingAreaPolygon.length,
+    };
+
+    // Calculate bounds
+    const lats = racingAreaPolygon.map(p => p.lat);
+    const lngs = racingAreaPolygon.map(p => p.lng);
+    const bounds = {
+      north: Math.max(...lats),
+      south: Math.min(...lats),
+      east: Math.max(...lngs),
+      west: Math.min(...lngs),
+    };
+
+    // Import and use AutoCourseGeneratorService
+    import('@/services/AutoCourseGeneratorService').then(({ autoCourseGenerator }) => {
+      if (__DEV__) {
+        logger.debug('Auto-generation triggered', {
+          wind: environmental.current.wind,
+          polygonPoints: racingAreaPolygon.length,
+          existingMarks: marks.length,
+        });
+      }
+      const racingArea = {
+        polygon: racingAreaPolygon,
+        center,
+        bounds,
+      };
+
+      // Generate standard course based on wind and racing area
+      const generatedMarks = autoCourseGenerator.generateStandardCourse(
+        racingArea,
+        environmental.current.wind.direction,
+        environmental.current.wind.speed,
+        raceEvent.boat_class || undefined
+      );
+      // Check if we should replace existing marks or merge
+      // For now, we'll only auto-generate if there are no marks yet
+      if (marks.length === 0) {
+        if (__DEV__) {
+          logger.debug('Adding auto-generated marks', generatedMarks.length);
+        }
+        generatedMarks.forEach(mark => {
+          onMarkAdded?.(mark);
+        });
+      } else {
+        if (__DEV__) {
+          logger.debug('Skipping auto-generation because marks exist', marks.length);
+        }
+      }
+    });
+  }, [racingAreaPolygon, environmental?.current?.wind, raceEvent.boat_class]);
+  // Intentionally NOT including marks to avoid infinite loops
+
+  // ============================================================================
   // MAP STYLE
   // ============================================================================
 
   const createNauticalStyle = () => {
-    console.log('🗺️ [STYLE] Creating nautical map style with Stamen Terrain tiles');
     return {
       version: 8,
       name: 'Nautical Racing Chart',
+      // Use MapLibre demo fonts to prevent timeout errors
+      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       sources: {
-        'stamen-terrain': {
+        'osm-tiles': {
           type: 'raster',
           tiles: [
-            'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png',
+            'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
           ],
           tileSize: 256,
-          attribution: '© Stamen Design, © OpenStreetMap contributors',
-          maxzoom: 18,
+          attribution: '© OpenStreetMap contributors',
+          maxzoom: 19,
         },
       },
       layers: [
@@ -775,13 +1107,13 @@ export default function TacticalRaceMap({
           id: 'background',
           type: 'background',
           paint: {
-            'background-color': '#FF00FF', // Bright magenta to diagnose if tiles are loading
+            'background-color': '#aad3df', // Light blue ocean color
           },
         },
         {
           id: 'terrain-base',
           type: 'raster',
-          source: 'stamen-terrain',
+          source: 'osm-tiles',
           paint: {
             'raster-opacity': 1.0,
           },
@@ -795,10 +1127,7 @@ export default function TacticalRaceMap({
   // ============================================================================
 
   const addRaceCourse = async (map: any, marks: CourseMark[]) => {
-    console.log('🎯 addRaceCourse called with', marks?.length, 'marks');
-
     if (!marks || marks.length === 0) {
-      console.error('❌ No marks to render!');
       return;
     }
 
@@ -809,14 +1138,12 @@ export default function TacticalRaceMap({
     layersToRemove.forEach(layerId => {
       if (map.getLayer(layerId)) {
         map.removeLayer(layerId);
-        console.log('🧹 Removed layer:', layerId);
       }
     });
 
     sourcesToRemove.forEach(sourceId => {
       if (map.getSource(sourceId)) {
         map.removeSource(sourceId);
-        console.log('🧹 Removed source:', sourceId);
       }
     });
 
@@ -824,7 +1151,6 @@ export default function TacticalRaceMap({
     const existingLabels = document.querySelectorAll('.mark-label');
     existingLabels.forEach(label => label.parentElement?.remove());
     if (existingLabels.length > 0) {
-      console.log('🧹 Removed', existingLabels.length, 'existing mark labels');
     }
 
     // Create GeoJSON for marks
@@ -834,8 +1160,6 @@ export default function TacticalRaceMap({
       const lng = (mark as any).coordinates_lng || (mark as any).longitude || 0;
       const name = (mark as any).mark_name || (mark as any).name || 'Unknown';
       const type = (mark as any).mark_type || (mark as any).type || 'unknown';
-
-      console.log(`🗺️ [TacticalRaceMap] Rendering mark "${name}":`, { lat, lng, coordinates: [lng, lat] });
 
       return {
         type: 'Feature',
@@ -906,13 +1230,129 @@ export default function TacticalRaceMap({
     //   },
     // });
 
+    // Helper function to generate proper racing course path
+    const generateRacingCoursePath = (marks: CourseMark[]): [number, number][] => {
+      const path: [number, number][] = [];
+
+      // Extract mark data
+      const marksWithCoords = marks.map(m => ({
+        id: m.id,
+        name: (m as any).mark_name || (m as any).name || '',
+        type: (m as any).mark_type || (m as any).type || '',
+        lat: (m as any).coordinates_lat || (m as any).latitude || 0,
+        lng: (m as any).coordinates_lng || (m as any).longitude || 0,
+        sequence: (m as any).sequence_number || 0,
+      })).sort((a, b) => a.sequence - b.sequence);
+
+      // Identify mark types
+      const committeeBoat = marksWithCoords.find(m =>
+        m.type === 'committee_boat' || m.name.toLowerCase().includes('committee')
+      );
+      const pin = marksWithCoords.find(m =>
+        m.type === 'pin' || m.name.toLowerCase().includes('pin')
+      );
+      const finishMark = marksWithCoords.find(m =>
+        m.type === 'finish' || m.name.toLowerCase().includes('finish')
+      );
+
+      // Get racing marks (non-start/finish marks)
+      const racingMarks = marksWithCoords.filter(m =>
+        m.type !== 'committee_boat' &&
+        m.type !== 'pin' &&
+        m.type !== 'finish' &&
+        !m.name.toLowerCase().includes('committee') &&
+        !m.name.toLowerCase().includes('pin') &&
+        !m.name.toLowerCase().includes('finish')
+      );
+
+      // 1. Start from middle of start line
+      if (committeeBoat && pin) {
+        const startMidpoint: [number, number] = [
+          (committeeBoat.lng + pin.lng) / 2,
+          (committeeBoat.lat + pin.lat) / 2,
+        ];
+        path.push(startMidpoint);
+      } else if (racingMarks.length > 0) {
+        // Fallback if no start line found
+        path.push([racingMarks[0].lng, racingMarks[0].lat]);
+      }
+
+      // 2. Navigate through racing marks
+      // For now, we'll go to each mark in sequence
+      // TODO: Add logic to go "around" marks with proper rounding distance
+      racingMarks.forEach((mark) => {
+        // Check if this is a gate mark (Gate A, Gate B, etc.)
+        const isGate = mark.name.toLowerCase().includes('gate');
+
+        if (isGate) {
+          // For gates, go through the middle (find the other gate mark)
+          const gatePartner = racingMarks.find(m =>
+            m.id !== mark.id &&
+            m.name.toLowerCase().includes('gate') &&
+            Math.abs(m.sequence - mark.sequence) <= 1
+          );
+
+          if (gatePartner) {
+            const gateMidpoint: [number, number] = [
+              (mark.lng + gatePartner.lng) / 2,
+              (mark.lat + gatePartner.lat) / 2,
+            ];
+            // Only add if not already added
+            if (path.length === 0 || path[path.length - 1][0] !== gateMidpoint[0]) {
+              path.push(gateMidpoint);
+            }
+          } else {
+            path.push([mark.lng, mark.lat]);
+          }
+        } else {
+          // For regular marks, add a point that goes "around" the mark
+          // Calculate offset based on previous point to create rounding path
+          if (path.length > 0) {
+            const prevPoint = path[path.length - 1];
+            const dx = mark.lng - prevPoint[0];
+            const dy = mark.lat - prevPoint[1];
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Offset distance (about 0.0001 degrees ~= 11 meters)
+            const offsetDist = 0.0001;
+
+            // Point before mark (approaching)
+            const beforePoint: [number, number] = [
+              mark.lng - (dx / distance) * offsetDist,
+              mark.lat - (dy / distance) * offsetDist,
+            ];
+            path.push(beforePoint);
+
+            // Point around mark (perpendicular offset for port rounding)
+            const roundingPoint: [number, number] = [
+              mark.lng + (dy / distance) * offsetDist,
+              mark.lat - (dx / distance) * offsetDist,
+            ];
+            path.push(roundingPoint);
+          } else {
+            path.push([mark.lng, mark.lat]);
+          }
+        }
+      });
+
+      // 3. Finish in middle of finish line
+      if (committeeBoat && finishMark) {
+        const finishMidpoint: [number, number] = [
+          (committeeBoat.lng + finishMark.lng) / 2,
+          (committeeBoat.lat + finishMark.lat) / 2,
+        ];
+        path.push(finishMidpoint);
+      } else if (finishMark) {
+        path.push([finishMark.lng, finishMark.lat]);
+      }
+
+      return path;
+    };
+
     // Course lines
     if (marks.length >= 2) {
-      const lineCoords = marks.map((m) => {
-        const lat = (m as any).coordinates_lat || (m as any).latitude || 0;
-        const lng = (m as any).coordinates_lng || (m as any).longitude || 0;
-        return [lng, lat];
-      });
+      // Generate proper racing course path
+      const lineCoords = generateRacingCoursePath(marks);
 
       map.addSource('course-lines', {
         type: 'geojson',
@@ -1025,8 +1465,6 @@ export default function TacticalRaceMap({
     map.on('mouseleave', 'race-marks-circle', () => {
       map.getCanvas().style.cursor = '';
     });
-
-    console.log('✅ Race course rendered:', marks.length, 'marks');
   };
 
   const addRacingAreaBoundary = (map: any, bounds: any) => {
@@ -1085,9 +1523,9 @@ export default function TacticalRaceMap({
     const sw = bounds.getSouthWest();
     const ne = bounds.getNorthEast();
 
-    // Create grid of wind arrows across entire visible map
-    const gridRows = 8; // Vertical arrows
-    const gridCols = 12; // Horizontal arrows
+    // Create dense grid of wind arrows across entire visible map and beyond
+    const gridRows = 20; // Vertical arrows (increased from 8)
+    const gridCols = 30; // Horizontal arrows (increased from 12)
     const lngStep = (ne.lng - sw.lng) / (gridCols + 1);
     const latStep = (ne.lat - sw.lat) / (gridRows + 1);
     const arrowLength = Math.min(lngStep, latStep) * 0.6; // Arrow length relative to grid spacing
@@ -1179,8 +1617,6 @@ export default function TacticalRaceMap({
         'line-opacity': 0.7,
       },
     });
-
-    console.log(`✅ Wind layer: ${wind.speed}kt @ ${wind.direction}°`);
   };
 
   // ============================================================================
@@ -1196,8 +1632,8 @@ export default function TacticalRaceMap({
     const ne = bounds.getNorthEast();
 
     // Create current flow arrows across entire visible map
-    const gridRows = 6; // Fewer than wind arrows for less clutter
-    const gridCols = 9;
+    const gridRows = 15; // Increased density (was 6)
+    const gridCols = 22; // Increased density (was 9)
     const lngStep = (ne.lng - sw.lng) / (gridCols + 1);
     const latStep = (ne.lat - sw.lat) / (gridRows + 1);
     const arrowLength = Math.min(lngStep, latStep) * 0.7; // Slightly longer than wind arrows
@@ -1285,8 +1721,6 @@ export default function TacticalRaceMap({
         'line-opacity': 0.6,
       },
     });
-
-    console.log(`✅ Current layer: ${tide.current_speed}kt @ ${tide.current_direction}°`);
   };
 
   // ============================================================================
@@ -1297,56 +1731,104 @@ export default function TacticalRaceMap({
     if (!env || !env.current.wave) return;
 
     const wave = env.current.wave;
-    const center = getMapCenter(marks);
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
 
-    // Create wave height gradient
-    const radius = 0.01; // ~1km
-    const waveZones = [
-      {
-        center,
-        radius: radius * 0.3,
-        height: wave.height,
-      },
-      {
-        center,
-        radius: radius * 0.6,
-        height: wave.height * 0.8,
-      },
-      {
-        center,
-        radius: radius,
-        height: wave.height * 0.6,
-      },
-    ];
+    // Create grid of wave arrows to show direction and height
+    const gridRows = 6; // Fewer than wind to avoid clutter
+    const gridCols = 9;
+    const lngStep = (ne.lng - sw.lng) / (gridCols + 1);
+    const latStep = (ne.lat - sw.lat) / (gridRows + 1);
+    const arrowLength = Math.min(lngStep, latStep) * 0.5; // Slightly smaller than wind arrows
+    const arrows = [];
 
-    waveZones.forEach((zone, idx) => {
-      map.addSource(`waves-${idx}`, {
-        type: 'geojson',
-        data: {
+    for (let i = 1; i <= gridRows; i++) {
+      for (let j = 1; j <= gridCols; j++) {
+        const startLat = sw.lat + i * latStep;
+        const startLng = sw.lng + j * lngStep;
+
+        // Wave direction (direction waves are traveling)
+        const waveDirection = wave.direction;
+        const radians = (waveDirection * Math.PI) / 180;
+
+        const endLng = startLng + arrowLength * Math.sin(radians);
+        const endLat = startLat + arrowLength * Math.cos(radians);
+
+        // Main arrow shaft
+        arrows.push({
           type: 'Feature',
           geometry: {
-            type: 'Point',
-            coordinates: zone.center,
+            type: 'LineString',
+            coordinates: [[startLng, startLat], [endLng, endLat]],
           },
           properties: {
-            height: zone.height,
+            height: wave.height,
+            color: getWaveColor(wave.height),
+            type: 'shaft',
           },
-        },
-      });
+        });
 
-      map.addLayer({
-        id: `waves-${idx}`,
-        type: 'circle',
-        source: `waves-${idx}`,
-        paint: {
-          'circle-radius': zone.radius * 111000, // degrees to meters
-          'circle-color': getWaveColor(zone.height),
-          'circle-opacity': 0.2,
-        },
-      });
+        // Arrow head (two lines forming a V)
+        const headLength = arrowLength * 0.3;
+        const headAngle = 25; // degrees
+
+        const leftRadians = ((waveDirection + 180 - headAngle) * Math.PI) / 180;
+        const rightRadians = ((waveDirection + 180 + headAngle) * Math.PI) / 180;
+
+        const leftLng = endLng + headLength * Math.sin(leftRadians);
+        const leftLat = endLat + headLength * Math.cos(leftRadians);
+        const rightLng = endLng + headLength * Math.sin(rightRadians);
+        const rightLat = endLat + headLength * Math.cos(rightRadians);
+
+        arrows.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [[endLng, endLat], [leftLng, leftLat]],
+          },
+          properties: {
+            height: wave.height,
+            color: getWaveColor(wave.height),
+            type: 'head',
+          },
+        });
+
+        arrows.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [[endLng, endLat], [rightLng, rightLat]],
+          },
+          properties: {
+            height: wave.height,
+            color: getWaveColor(wave.height),
+            type: 'head',
+          },
+        });
+      }
+    }
+
+    // Add wave arrow source
+    map.addSource('waves', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: arrows,
+      },
     });
 
-    console.log(`✅ Wave layer: ${wave.height}m`);
+    // Add wave arrow layer
+    map.addLayer({
+      id: 'waves',
+      type: 'line',
+      source: 'waves',
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 2.5,
+        'line-opacity': 0.8,
+      },
+    });
   };
 
   // ============================================================================
@@ -1356,8 +1838,6 @@ export default function TacticalRaceMap({
   const addDepthLayer = async (map: any, marks: CourseMark[]) => {
     // Placeholder for depth contours
     // In production, this would load bathymetry data from NOAA, UK Hydrographic Office, etc.
-    console.log('📊 Depth layer would display bathymetry contours here');
-
     // Example: Add depth zones
     const center = getMapCenter(marks);
     const depthZones = [
@@ -1459,8 +1939,6 @@ export default function TacticalRaceMap({
         'line-opacity': 0.85,
       },
     });
-
-    console.log(`✅ Laylines: Port=${portTackBearing.toFixed(0)}° Stbd=${starboardTackBearing.toFixed(0)}° (Wind from ${windDirection}°)`);
   };
 
   const addStrategyLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
@@ -1468,7 +1946,6 @@ export default function TacticalRaceMap({
     // - Favored side highlighting
     // - Start line bias
     // - Optimal approach zones
-    console.log('🎯 Strategic analysis layer (placeholder)');
   };
 
   // ============================================================================
@@ -1511,7 +1988,7 @@ export default function TacticalRaceMap({
     map.fitBounds(lngLatBounds, {
       padding: 80,
       duration: 1000,
-      pitch: 45,
+      pitch: 0, // Keep 2D when fitting bounds
     });
   };
 
@@ -1543,6 +2020,34 @@ export default function TacticalRaceMap({
     return colors[type] || '#64748b';
   };
 
+  const getMarkName = (type: string): string => {
+    const names: Record<string, string> = {
+      committee_boat: 'Committee Boat',
+      pin: 'Pin',
+      windward: 'Windward Mark',
+      leeward: 'Leeward Mark',
+      gate_left: 'Gate A (Left)',
+      gate_right: 'Gate B (Right)',
+      offset: 'Offset Mark',
+      finish: 'Finish Mark',
+    };
+    return names[type] || 'Mark';
+  };
+
+  const getMarkShape = (type: string): string => {
+    const shapes: Record<string, string> = {
+      committee_boat: 'boat',
+      pin: 'inflatable',
+      windward: 'inflatable',
+      leeward: 'inflatable',
+      gate_left: 'inflatable',
+      gate_right: 'inflatable',
+      offset: 'inflatable',
+      finish: 'inflatable',
+    };
+    return shapes[type] || 'inflatable';
+  };
+
   const getWindColor = (speed: number): string => {
     if (speed < 8) return '#22d3ee'; // Light breeze
     if (speed < 12) return '#3b82f6'; // Moderate
@@ -1562,11 +2067,22 @@ export default function TacticalRaceMap({
   // ============================================================================
 
   const toggleLayer = (layerId: string) => {
-    setLayers((prev) =>
-      prev.map((layer) =>
+    setLayers((prev) => {
+      const updated = prev.map((layer) =>
         layer.id === layerId ? { ...layer, enabled: !layer.enabled } : layer
-      )
-    );
+      );
+
+      // Notify parent of layer changes
+      if (onLayersChange) {
+        const layerState = updated.reduce((acc, layer) => {
+          acc[layer.id] = layer.enabled;
+          return acc;
+        }, {} as { [key: string]: boolean });
+        onLayersChange(layerState);
+      }
+
+      return updated;
+    });
   };
 
   const toggle2D3D = () => {
@@ -1584,17 +2100,14 @@ export default function TacticalRaceMap({
   const startDrawingArea = () => {
     setIsDrawingArea(true);
     setRacingAreaPoints([]);
-    console.log('🎨 Started drawing racing area');
   };
 
   const clearRacingArea = () => {
     setRacingAreaPoints([]);
-    console.log('🧹 Cleared racing area');
   };
 
   const completeRacingArea = () => {
     if (racingAreaPoints.length < 3) {
-      console.warn('⚠️ Need at least 3 points to complete racing area');
       return;
     }
 
@@ -1602,22 +2115,18 @@ export default function TacticalRaceMap({
 
     if (onRacingAreaSelected) {
       onRacingAreaSelected(racingAreaPoints);
-      console.log('✅ Racing area completed:', racingAreaPoints.length, 'points');
     }
   };
 
   const cancelDrawingArea = () => {
     setIsDrawingArea(false);
     setRacingAreaPoints([]);
-    console.log('❌ Cancelled racing area drawing');
   };
 
   const undoLastPoint = () => {
     setRacingAreaPoints(prev => {
       if (prev.length === 0) return prev;
       const updated = prev.slice(0, -1);
-      console.log('↩️ Undid last point. Remaining:', updated.length);
-
       if (onRacingAreaSelected) {
         onRacingAreaSelected(updated);
       }
@@ -1628,8 +2137,6 @@ export default function TacticalRaceMap({
 
   const clearAllPoints = () => {
     setRacingAreaPoints([]);
-    console.log('🧹 Cleared all points');
-
     if (onRacingAreaSelected) {
       onRacingAreaSelected([]);
     }
@@ -1805,29 +2312,45 @@ export default function TacticalRaceMap({
       )}
 
       {/* Environmental Summary */}
-      {environmental && mapLoaded && (
+      {environmental && mapLoaded && displayConditions && (
         <View style={styles.environmentalSummary}>
-          <Text style={styles.summaryTitle}>Conditions</Text>
+          <Text style={styles.summaryTitle}>
+            {displayConditions.isForecast ? 'Forecast Conditions' : 'Current Conditions'}
+            {displayConditions.isForecast && raceStartDate
+              ? ` · ${raceStartDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+              : ''}
+          </Text>
           <View style={styles.conditionsGrid}>
-            <View style={styles.conditionItem}>
-              <Ionicons name="flag-outline" size={16} color="#3b82f6" />
-              <Text style={styles.conditionText}>
-                {environmental.current.wind.speed}kt @ {environmental.current.wind.direction}°
-              </Text>
-            </View>
-            {environmental.current.tide.current_speed && (
+            {displayConditions.isForecast && 'time' in displayConditions.snapshot && (
               <View style={styles.conditionItem}>
-                <Ionicons name="water-outline" size={16} color="#06b6d4" />
+                <Ionicons name="calendar-outline" size={16} color="#10b981" />
                 <Text style={styles.conditionText}>
-                  {environmental.current.tide.current_speed}kt {environmental.current.tide.state}
+                  {new Date(displayConditions.snapshot.time).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                 </Text>
               </View>
             )}
-            {environmental.current.wave && (
+            <View style={styles.conditionItem}>
+              <Ionicons name="flag-outline" size={16} color="#3b82f6" />
+              <Text style={styles.conditionText}>
+                {Math.round(displayConditions.snapshot.wind.speed)}kt @ {Math.round(displayConditions.snapshot.wind.direction)}°
+              </Text>
+            </View>
+            {displayConditions.snapshot.tide?.current_speed && (
+              <View style={styles.conditionItem}>
+                <Ionicons name="water-outline" size={16} color="#06b6d4" />
+                <Text style={styles.conditionText}>
+                  {displayConditions.snapshot.tide.current_speed.toFixed(1)}kt {displayConditions.snapshot.tide.state}
+                </Text>
+              </View>
+            )}
+            {displayConditions.snapshot.wave && (
               <View style={styles.conditionItem}>
                 <Ionicons name="trending-up-outline" size={16} color="#f59e0b" />
                 <Text style={styles.conditionText}>
-                  {environmental.current.wave.height}m waves
+                  {displayConditions.snapshot.wave.height.toFixed(1)}m waves
                 </Text>
               </View>
             )}

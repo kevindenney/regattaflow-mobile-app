@@ -1,5 +1,8 @@
 import { supabase } from './supabase';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RealtimeService');
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
 
@@ -17,12 +20,12 @@ class RealtimeService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000; // Start with 1 second
-  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     // TEMPORARILY DISABLED for diagnostics - investigating memory crash
     // this.initializeConnectionMonitoring();
-    console.log('[Realtime] Service initialized (connection monitoring disabled for diagnostics)');
+    logger.debug('Service initialized (connection monitoring disabled for diagnostics)');
   }
 
   /**
@@ -32,7 +35,7 @@ class RealtimeService {
   private initializeConnectionMonitoring() {
     // In Supabase v2+, connection status is monitored per-channel
     // The subscribe() method handles status updates via channel callbacks
-    console.log('[Realtime] Connection monitoring initialized');
+    logger.debug('Connection monitoring initialized');
   }
 
   /**
@@ -40,7 +43,7 @@ class RealtimeService {
    */
   private attemptReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[Realtime] Max reconnection attempts reached');
+      logger.error('Max reconnection attempts reached');
       this.setConnectionStatus('disconnected');
       return;
     }
@@ -53,10 +56,10 @@ class RealtimeService {
     this.reconnectAttempts++;
 
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
-    console.log(`[Realtime] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    logger.debug(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
-      console.log('[Realtime] Attempting to reconnect...');
+      logger.debug('Attempting to reconnect...');
       // Resubscribe all channels
       this.resubscribeAll();
     }, delay);
@@ -67,7 +70,7 @@ class RealtimeService {
    */
   private async resubscribeAll() {
     const channelIds = Array.from(this.channels.keys());
-    console.log(`[Realtime] Resubscribing ${channelIds.length} channels`);
+    logger.debug(`Resubscribing ${channelIds.length} channels`);
 
     for (const channelId of channelIds) {
       const channel = this.channels.get(channelId);
@@ -75,7 +78,7 @@ class RealtimeService {
         try {
           await channel.subscribe();
         } catch (error) {
-          console.error(`[Realtime] Failed to resubscribe channel ${channelId}:`, error);
+          logger.error(`Failed to resubscribe channel ${channelId}:`, error);
         }
       }
     }
@@ -88,13 +91,13 @@ class RealtimeService {
     if (this.connectionStatus === status) return;
 
     this.connectionStatus = status;
-    console.log(`[Realtime] Connection status changed to: ${status}`);
+    logger.debug(`Connection status changed to: ${status}`);
 
     this.statusListeners.forEach(listener => {
       try {
         listener(status);
       } catch (error) {
-        console.error('[Realtime] Error notifying status listener:', error);
+        logger.error('Error notifying status listener:', error);
       }
     });
   }
@@ -127,13 +130,20 @@ class RealtimeService {
     config: RealtimeSubscriptionConfig,
     callback: (payload: RealtimePostgresChangesPayload<T>) => void
   ): RealtimeChannel {
-    // Check if channel already exists
+    // Check if channel already exists in our map
     if (this.channels.has(channelName)) {
-      console.warn(`[Realtime] Channel ${channelName} already exists`);
+      logger.debug(`Reusing existing channel: ${channelName}`);
       return this.channels.get(channelName)!;
     }
 
-    console.log(`[Realtime] Creating subscription: ${channelName}`, config);
+    // Check if Supabase already has this channel and remove it
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === channelName);
+    if (existingChannel) {
+      logger.debug(`Removing stale Supabase channel: ${channelName}`);
+      supabase.removeChannel(existingChannel);
+    }
+
+    logger.debug(`Creating subscription: ${channelName}`);
 
     const channel = supabase
       .channel(channelName)
@@ -146,12 +156,12 @@ class RealtimeService {
           filter: config.filter,
         },
         (payload) => {
-          console.log(`[Realtime] ${channelName} event:`, payload);
+          logger.debug(`${channelName} event received`);
           callback(payload as RealtimePostgresChangesPayload<T>);
         }
       )
       .subscribe((status) => {
-        console.log(`[Realtime] ${channelName} subscription status:`, status);
+        logger.debug(`${channelName} subscription status: ${status}`);
         if (status === 'SUBSCRIBED') {
           this.setConnectionStatus('connected');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -169,11 +179,11 @@ class RealtimeService {
   async unsubscribe(channelName: string): Promise<void> {
     const channel = this.channels.get(channelName);
     if (!channel) {
-      console.warn(`[Realtime] Channel ${channelName} not found`);
+      logger.warn(`Channel ${channelName} not found`);
       return;
     }
 
-    console.log(`[Realtime] Unsubscribing from: ${channelName}`);
+    logger.debug(`Unsubscribing from: ${channelName}`);
     await supabase.removeChannel(channel);
     this.channels.delete(channelName);
   }
@@ -182,7 +192,7 @@ class RealtimeService {
    * Unsubscribe from all channels
    */
   async unsubscribeAll(): Promise<void> {
-    console.log(`[Realtime] Unsubscribing from all ${this.channels.size} channels`);
+    logger.debug(`Unsubscribing from all ${this.channels.size} channels`);
 
     const unsubscribePromises = Array.from(this.channels.keys()).map(
       channelName => this.unsubscribe(channelName)
@@ -195,7 +205,7 @@ class RealtimeService {
    * Manually trigger reconnection
    */
   forceReconnect(): void {
-    console.log('[Realtime] Forcing reconnection');
+    logger.debug('Forcing reconnection');
     this.reconnectAttempts = 0;
     this.attemptReconnect();
   }
@@ -204,7 +214,7 @@ class RealtimeService {
    * Clean up all subscriptions and timers
    */
   async cleanup(): Promise<void> {
-    console.log('[Realtime] Cleaning up service');
+    logger.debug('Cleaning up service');
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);

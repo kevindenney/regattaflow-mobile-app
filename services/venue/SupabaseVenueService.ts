@@ -53,12 +53,7 @@ export class SupabaseVenueService {
       const { data, error } = await query;
 
       if (error) {
-        console.error('❌ [CLIENT VENUES] Failed to fetch venues for client:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-        });
+
         throw error;
       }
 
@@ -72,11 +67,6 @@ export class SupabaseVenueService {
         updatedAt: venue.updated_at,
       }));
     } catch (error: any) {
-      console.error('💥 [CLIENT VENUES] Unexpected error while listing client venues:', {
-        message: error?.message,
-        stack: error?.stack?.substring(0, 400),
-      });
-
       return [];
     }
   }
@@ -94,13 +84,11 @@ export class SupabaseVenueService {
     const now = Date.now();
     if (this.initializationFailed && (now - this.lastFailureTime) < this.FAILURE_COOLDOWN_MS) {
       const remainingTime = Math.round((this.FAILURE_COOLDOWN_MS - (now - this.lastFailureTime)) / 1000);
-      console.log(`🔴 [CIRCUIT_BREAKER] Initialization blocked due to recent failures. Retry in ${remainingTime}s`);
       throw new Error(`Circuit breaker: Retrying in ${remainingTime} seconds`);
     }
 
     // Circuit breaker: Check if we've exceeded max retry attempts
     if (this.failureCount >= this.MAX_RETRY_ATTEMPTS) {
-      console.log(`🔴 [CIRCUIT_BREAKER] Max retry attempts (${this.MAX_RETRY_ATTEMPTS}) exceeded. Service disabled.`);
       throw new Error(`Circuit breaker: Max retry attempts exceeded`);
     }
 
@@ -117,13 +105,12 @@ export class SupabaseVenueService {
       this.isInitialized = true;
       this.initializationFailed = false;
       this.failureCount = 0; // Reset failure count on success
-      console.log('✅ Supabase venue schema initialized successfully');
+
     } catch (error) {
       this.initializationPromise = null; // Reset on failure to allow retry
       this.initializationFailed = true;
       this.lastFailureTime = Date.now();
       this.failureCount++;
-      console.log(`🔴 [CIRCUIT_BREAKER] Initialization failed (attempt ${this.failureCount}/${this.MAX_RETRY_ATTEMPTS})`);
       throw error;
     }
   }
@@ -155,13 +142,6 @@ export class SupabaseVenueService {
       await this.seedGlobalVenues();
 
     } catch (error: any) {
-      console.error('❌ [DEBUG] Failed to initialize venue schema:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        stack: error.stack?.substring(0, 500)
-      });
       throw new Error(`Schema initialization failed: ${error.message}`);
     }
   }
@@ -176,7 +156,6 @@ export class SupabaseVenueService {
   ): Promise<SailingVenue | null> {
     const [longitude, latitude] = coordinates;
 
-    console.log(`🌍 Finding venue near [${latitude}, ${longitude}] within ${radiusKm}km`);
 
     try {
       // Use PostGIS for geographic queries
@@ -190,7 +169,6 @@ export class SupabaseVenueService {
 
       if (data && data.length > 0) {
         const venue = data[0] as SailingVenue;
-        console.log(`✅ Found venue: ${venue.name} (${data[0].distance_km?.toFixed(1)}km away)`);
 
         // Track venue detection if user provided
         if (userId) {
@@ -200,11 +178,10 @@ export class SupabaseVenueService {
         return venue;
       }
 
-      console.log(`ℹ️ No venue found within ${radiusKm}km`);
       return null;
 
     } catch (error: any) {
-      console.error('❌ Failed to find venue by location:', error);
+
       throw new Error(`Location-based venue search failed: ${error.message}`);
     }
   }
@@ -313,11 +290,10 @@ export class SupabaseVenueService {
         return venues;
       }
 
-      console.log('ℹ️ No venues found in database');
       return [];
 
     } catch (error: any) {
-      console.error('❌ Failed to load all venues:', error);
+
       throw new Error(`Failed to load venues from database: ${error.message}`);
     }
   }
@@ -326,7 +302,6 @@ export class SupabaseVenueService {
    * Get venue with full intelligence data
    */
   async getVenueWithIntelligence(venueId: string, userId?: string): Promise<SailingVenue | null> {
-    console.log(`🌍 Getting venue intelligence for: ${venueId}`);
 
     try {
       const { data, error } = await supabase
@@ -352,7 +327,6 @@ export class SupabaseVenueService {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        console.log(`✅ Retrieved venue intelligence: ${data.name}`);
         return data as SailingVenue;
       }
 
@@ -371,11 +345,10 @@ export class SupabaseVenueService {
 
       if (venueError) throw venueError;
 
-      console.log(`✅ Retrieved venue (no user profile): ${venueData.name}`);
       return venueData as SailingVenue;
 
     } catch (error: any) {
-      console.error('❌ Failed to get venue intelligence:', error);
+
       return null;
     }
   }
@@ -392,7 +365,6 @@ export class SupabaseVenueService {
       limit?: number;
     }
   ): Promise<SailingVenue[]> {
-    console.log(`🌍 Searching venues: "${query}"`);
 
     try {
       let queryBuilder = supabase
@@ -428,11 +400,10 @@ export class SupabaseVenueService {
 
       if (error) throw error;
 
-      console.log(`✅ Found ${data?.length || 0} venues matching "${query}"`);
       return (data || []) as SailingVenue[];
 
     } catch (error: any) {
-      console.error('❌ Venue search failed:', error);
+
       return [];
     }
   }
@@ -447,7 +418,6 @@ export class SupabaseVenueService {
   ): Promise<Array<SailingVenue & { distance_km: number }>> {
     const [longitude, latitude] = coordinates;
 
-    console.log(`🌍 Getting venues within ${maxDistanceKm}km of [${latitude}, ${longitude}]`);
 
     try {
       const { data, error } = await supabase.rpc('get_nearby_venues', {
@@ -459,11 +429,10 @@ export class SupabaseVenueService {
 
       if (error) throw error;
 
-      console.log(`✅ Found ${data?.length || 0} nearby venues`);
       return data || [];
 
     } catch (error: any) {
-      console.error('❌ Failed to get nearby venues:', error);
+
       return [];
     }
   }
@@ -476,7 +445,6 @@ export class SupabaseVenueService {
     venueId: string,
     updates: Partial<UserVenueProfile>
   ): Promise<UserVenueProfile | null> {
-    console.log(`🌍 Updating user venue profile: ${userId} @ ${venueId}`);
 
     try {
       const { data, error } = await supabase
@@ -492,11 +460,10 @@ export class SupabaseVenueService {
 
       if (error) throw error;
 
-      console.log('✅ User venue profile updated');
       return data as UserVenueProfile;
 
     } catch (error: any) {
-      console.error('❌ Failed to update user venue profile:', error);
+
       return null;
     }
   }
@@ -508,7 +475,6 @@ export class SupabaseVenueService {
     userId: string,
     transition: Omit<VenueTransition, 'transitionDate'>
   ): Promise<void> {
-    console.log(`🌍 Recording venue transition: ${transition.fromVenue?.name || 'Unknown'} → ${transition.toVenue.name}`);
 
     try {
       const { error } = await supabase
@@ -528,8 +494,6 @@ export class SupabaseVenueService {
 
       if (error) throw error;
 
-      console.log('✅ Venue transition recorded');
-
       // Update visit count and last visit
       await this.upsertUserVenueProfile(userId, transition.toVenue.id, {
         visitCount: 1, // This will be incremented by DB function
@@ -537,7 +501,7 @@ export class SupabaseVenueService {
       });
 
     } catch (error: any) {
-      console.error('❌ Failed to record venue transition:', error);
+
     }
   }
 
@@ -550,7 +514,6 @@ export class SupabaseVenueService {
     favoriteVenues: SailingVenue[];
     recentTransitions: Array<VenueTransition & { recorded_at: Date }>;
   }> {
-    console.log(`🌍 Getting venue history for user: ${userId}`);
 
     try {
       // Get user profiles with venue data
@@ -590,7 +553,6 @@ export class SupabaseVenueService {
       const homeVenue = visitedVenues.find(v => v.home_venue) || null;
       const favoriteVenues = visitedVenues.filter(v => v.favorited) || [];
 
-      console.log(`✅ Retrieved venue history: ${visitedVenues.length} visited, ${favoriteVenues.length} favorites`);
 
       return {
         homeVenue,
@@ -600,7 +562,7 @@ export class SupabaseVenueService {
       };
 
     } catch (error: any) {
-      console.error('❌ Failed to get user venue history:', error);
+
       return {
         homeVenue: null,
         visitedVenues: [],
@@ -618,7 +580,6 @@ export class SupabaseVenueService {
     startDate?: Date,
     endDate?: Date
   ): Promise<GlobalRacingEvent[]> {
-    console.log(`🌍 Getting racing events for venue: ${venueId}`);
 
     try {
       let query = supabase
@@ -638,11 +599,10 @@ export class SupabaseVenueService {
 
       if (error) throw error;
 
-      console.log(`✅ Found ${data?.length || 0} racing events`);
       return (data || []) as GlobalRacingEvent[];
 
     } catch (error: any) {
-      console.error('❌ Failed to get racing events:', error);
+
       return [];
     }
   }
@@ -657,18 +617,16 @@ export class SupabaseVenueService {
     topVenuesByVisits: Array<{ venue: SailingVenue; visit_count: number }>;
     recentTransitions: number;
   }> {
-    console.log('🌍 Getting global venue analytics...');
 
     try {
       const { data, error } = await supabase.rpc('get_venue_analytics');
 
       if (error) throw error;
 
-      console.log('✅ Retrieved venue analytics');
       return data;
 
     } catch (error: any) {
-      console.error('❌ Failed to get venue analytics:', error);
+
       return {
         totalVenues: 0,
         venuesByType: { championship: 0, premier: 0, regional: 0, local: 0, club: 0 },
@@ -700,11 +658,11 @@ export class SupabaseVenueService {
         });
 
       if (error && error.code !== '23505') { // Ignore duplicate key errors
-        console.warn('⚠️ Failed to track venue detection:', error);
+
       }
     } catch (error) {
       // Silent fail for tracking
-      console.warn('⚠️ Venue detection tracking failed:', error);
+
     }
   }
 
@@ -744,14 +702,10 @@ export class SupabaseVenueService {
       await seedVenueDatabase();
 
     } catch (error: any) {
-      console.error('❌ [SEED DEBUG] Failed to seed venues:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack?.substring(0, 300)
-      });
+      console.error('[SEED DEBUG] Failed to seed venues:', error.message);
 
       // Don't throw - allow app to continue with empty venues
-      console.warn('⚠️ [SEED DEBUG] Continuing without venue data...');
+
     }
   }
 }

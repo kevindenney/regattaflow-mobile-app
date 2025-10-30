@@ -5,7 +5,8 @@
  * used for strategic racing recommendations.
  */
 
-import type { SailingVenue } from './venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
+import type { UnderwaterAnalysis } from './bathymetry';
 
 /**
  * Terrain elevation data for a racing area
@@ -295,6 +296,15 @@ export interface WindAnalysis {
   /** Gradient wind forecast */
   gradientWind: WindForecast;
 
+  /** Average wind speed (knots) across race area */
+  averageWindSpeed?: number;
+
+  /** Average wind direction (degrees true) */
+  averageWindDirection?: number;
+
+  /** Wind variability factor (0-1) */
+  variability?: number;
+
   /** Wind shadow zones */
   windShadowZones: WindShadowZone[];
 
@@ -463,14 +473,10 @@ export interface WindArrow {
  */
 export interface EnvironmentalAnalysis {
   /** Water environment analysis */
-  water?: {
-    bathymetry: any; // Import from bathymetry.ts
-    tidal: any;
-    strategicFeatures: any;
-  };
+  water?: UnderwaterAnalysis | null;
 
   /** Air environment analysis */
-  air?: WindAnalysis;
+  air?: WindAnalysis | null;
 
   /** Combined strategic recommendations */
   combinedRecommendations: {

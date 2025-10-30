@@ -220,9 +220,8 @@ class OfflineService {
       // Note: weather caching would need venue coordinates from separate query
       // For now, skip to avoid foreign key errors
 
-      console.log('✅ Race data cached for offline use');
     } catch (error) {
-      console.error('❌ Failed to cache race data:', error);
+
       throw error;
     }
   }
@@ -502,7 +501,6 @@ class OfflineService {
       await AsyncStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify(updatedQueue));
       await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, Date.now().toString());
 
-      console.log(`✅ Sync complete: ${queue.length - updatedQueue.length}/${queue.length} items synced`);
     } catch (error) {
       console.error('Sync queue processing failed:', error);
     } finally {

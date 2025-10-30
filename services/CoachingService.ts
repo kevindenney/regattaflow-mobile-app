@@ -306,12 +306,14 @@ class CoachingService {
     }
 
     const sessions = sessionsResult.data || [];
-    const completedSessions = sessions.filter(s => s.status === 'completed');
-    const upcomingSessions = sessions.filter(s => s.status === 'scheduled' && new Date(s.scheduled_at || '') > new Date());
+    const completedSessions = sessions.filter((session: CoachingSession & { completed_at?: string }) => session.status === 'completed');
+    const upcomingSessions = sessions.filter((session: CoachingSession & { scheduled_at?: string }) => session.status === 'scheduled' && new Date(session.scheduled_at || '') > new Date());
 
-    const feedbacks = sessions.map(s => s.feedback).filter(Boolean);
+    const feedbacks = sessions
+      .map((session: CoachingSession & { feedback?: { rating?: number } }) => session.feedback)
+      .filter((feedback): feedback is { rating?: number } => Boolean(feedback));
     const averageRating = feedbacks.length > 0
-      ? feedbacks.reduce((sum, f) => sum + (f?.rating || 0), 0) / feedbacks.length
+      ? feedbacks.reduce((sum: number, feedback) => sum + (feedback.rating || 0), 0) / feedbacks.length
       : undefined;
 
     const lastSession = completedSessions.find(s => s.completed_at);
@@ -1085,13 +1087,13 @@ class CoachingService {
 
       // For each coach, check if they have availability in the time window
       const coachesWithAvailability = await Promise.all(
-        coaches.map(async (coach) => {
+        coaches.map(async (coach: CoachProfile) => {
           const slots = await this.getAvailabilitySlots(coach.id, now, endDate, true);
           return slots.length > 0 ? coach : null;
         })
       );
 
-      coaches = coachesWithAvailability.filter((c) => c !== null) as CoachProfile[];
+      coaches = coachesWithAvailability.filter((coach): coach is CoachProfile => coach !== null);
     }
 
     return coaches;
@@ -1403,11 +1405,6 @@ class CoachingService {
     if (!session) return;
 
     // In production, integrate with EmailService
-    console.log('📧 Send confirmation emails:', {
-      coach: session.coach?.email,
-      sailor: session.sailor?.email,
-      sessionDate: session.scheduled_at,
-    });
   }
 
   /**
@@ -1427,11 +1424,6 @@ class CoachingService {
     if (!session) return;
 
     // In production, integrate with EmailService
-    console.log('📧 Send cancellation emails:', {
-      coach: session.coach?.email,
-      sailor: session.sailor?.email,
-      refundAmount,
-    });
   }
 
   // ============================================================================

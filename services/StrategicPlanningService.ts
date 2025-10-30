@@ -1,4 +1,4 @@
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 
 interface RaceStrategy {
   strategy_id: string;
@@ -920,11 +920,11 @@ Respond with a comprehensive JSON strategy structure.
       }
 
       // Calculate statistical summary
-      const finishPositions = simulations.map(s => s.finish_position);
-      const finishTimes = simulations.map(s => s.finish_time);
+      const finishPositions = simulations.map((simulation: any) => simulation.finish_position);
+      const finishTimes = simulations.map((simulation: any) => simulation.finish_time);
 
       const statisticalSummary: StatisticalSummary = {
-        mean_finish_position: finishPositions.reduce((a, b) => a + b, 0) / finishPositions.length,
+        mean_finish_position: finishPositions.reduce((a: number, b: number) => a + b, 0) / finishPositions.length,
         median_finish_position: this.calculateMedian(finishPositions),
         position_distribution: this.calculatePositionDistribution(finishPositions),
         success_probability: this.calculateSuccessProbabilities(finishPositions),
@@ -1280,8 +1280,8 @@ Respond in JSON format with detailed analysis and recommendations.
       distribution[position] = (distribution[position] || 0) + 1;
     });
 
-    return Object.entries(distribution).map(([position, count]) => ({
-      position: parseInt(position),
+    return Object.entries(distribution).map(([position, count]: [string, number]) => ({
+      position: parseInt(position, 10),
       probability: count / positions.length,
     }));
   }
@@ -1307,11 +1307,11 @@ Respond in JSON format with detailed analysis and recommendations.
 
   private static analyzeRisks(simulations: ScenarioOutcome[]): RiskAnalysis {
     const worstCases = simulations
-      .filter(s => s.finish_position > 15)
-      .map(s => ({
-        scenario_description: `Poor conditions with position ${s.finish_position}`,
+      .filter((simulation: ScenarioOutcome) => simulation.finish_position > 15)
+      .map((simulation: ScenarioOutcome) => ({
+        scenario_description: `Poor conditions with position ${simulation.finish_position}`,
         probability: 1 / simulations.length,
-        impact_severity: s.finish_position / 20,
+        impact_severity: simulation.finish_position / 20,
         mitigation_options: ['Conservative strategy', 'Focus on clean execution'],
       }));
 

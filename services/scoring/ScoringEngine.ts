@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '../supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -128,6 +129,7 @@ export type TieBreakerRule =
 // DEFAULT CONFIGURATIONS
 // ============================================================================
 
+const logger = createLogger('ScoringEngine');
 export const DEFAULT_LOW_POINT_CONFIG: ScoringConfiguration = {
   system: 'low_point',
   discards: [
@@ -743,7 +745,7 @@ export class ScoringEngine {
     // Extract competitors and results
     // TODO: Implement full BLW parser
 
-    console.log('Sailwave import not yet implemented');
+    logger.debug('Sailwave import not yet implemented');
   }
 
   private async getPublishedStandings(regattaId: string): Promise<SeriesStanding[]> {

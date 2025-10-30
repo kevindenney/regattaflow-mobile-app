@@ -11,7 +11,8 @@ import { BathymetricTidalService } from './BathymetricTidalService';
 import { TopographicWindService } from './TopographicWindService';
 import type { UnderwaterAnalysis, UnderwaterAnalysisRequest } from '../types/bathymetry';
 import type { WindAnalysis, WindAnalysisRequest } from '../types/wind';
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Complete environmental analysis result
@@ -95,6 +96,8 @@ export interface EnvironmentalAnalysisRequest {
 /**
  * Main environmental analysis service
  */
+
+const logger = createLogger('EnvironmentalAnalysisService');
 export class EnvironmentalAnalysisService {
   private bathymetricService: BathymetricTidalService;
   private windService: TopographicWindService;
@@ -112,10 +115,10 @@ export class EnvironmentalAnalysisService {
   async analyzeEnvironment(
     request: EnvironmentalAnalysisRequest
   ): Promise<EnvironmentalAnalysis> {
-    console.log('='.repeat(80));
-    console.log('ENVIRONMENTAL ANALYSIS - WATER + AIR');
-    console.log('='.repeat(80));
-    console.log();
+    logger.debug('='.repeat(80));
+    logger.debug('ENVIRONMENTAL ANALYSIS - WATER + AIR');
+    logger.debug('='.repeat(80));
+    logger.debug();
 
     const startTime = Date.now();
 
@@ -138,8 +141,8 @@ export class EnvironmentalAnalysisService {
       }
 
       const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`\nBoth analyses completed in ${elapsedTime}s`);
-      console.log();
+      logger.debug(`\nBoth analyses completed in ${elapsedTime}s`);
+      logger.debug();
 
       // Combine analyses and generate unified recommendations
       const combinedRecommendations = this.combineRecommendations(
@@ -184,7 +187,7 @@ export class EnvironmentalAnalysisService {
   private async analyzeWater(
     request: EnvironmentalAnalysisRequest
   ): Promise<UnderwaterAnalysis> {
-    console.log('1/2: Analyzing WATER environment (bathymetry + tides)...');
+    logger.debug('1/2: Analyzing WATER environment (bathymetry + tides)...');
 
     const waterRequest: UnderwaterAnalysisRequest = {
       racingArea: request.racingArea,
@@ -194,7 +197,6 @@ export class EnvironmentalAnalysisService {
     };
 
     const result = await this.bathymetricService.analyzeRacingArea(waterRequest);
-    console.log('✓ Water analysis complete');
     return result;
   }
 
@@ -204,7 +206,7 @@ export class EnvironmentalAnalysisService {
   private async analyzeAir(
     request: EnvironmentalAnalysisRequest
   ): Promise<WindAnalysis> {
-    console.log('2/2: Analyzing AIR environment (terrain + wind)...');
+    logger.debug('2/2: Analyzing AIR environment (terrain + wind)...');
 
     const airRequest: WindAnalysisRequest = {
       racingArea: request.racingArea,
@@ -214,7 +216,6 @@ export class EnvironmentalAnalysisService {
     };
 
     const result = await this.windService.analyzeWindTerrain(airRequest);
-    console.log('✓ Air analysis complete');
     return result;
   }
 

@@ -8,6 +8,7 @@ import { CourseTemplateLibrary } from './CourseTemplateLibrary';
 import { WeatherIntegration } from './WeatherIntegration';
 import { CourseValidation } from './CourseValidation';
 import { CourseMap } from './shared/CourseMap';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface RaceCourse {
   id: string;
@@ -38,6 +39,7 @@ export interface WeatherData {
   forecast?: any;
 }
 
+const logger = createLogger('RaceBuilder');
 const { width, height } = Dimensions.get('window');
 
 export function RaceBuilder() {
@@ -68,7 +70,7 @@ export function RaceBuilder() {
     if (!currentCourse) return;
 
     // TODO: Implement course publishing to Supabase
-    console.log('Publishing course:', currentCourse);
+    logger.debug('Publishing course:', currentCourse);
   };
 
   const TabButton = ({

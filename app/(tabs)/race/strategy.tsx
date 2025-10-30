@@ -157,7 +157,6 @@ const RaceStrategyScreen = () => {
         'Hong Kong Victoria Harbor' // venue hint
       );
 
-      console.log('🤖 Agent Result:', JSON.stringify(agentResult, null, 2));
 
       setIsProcessingDocument(false);
 
@@ -546,10 +545,7 @@ const RaceStrategyScreen = () => {
               enableOfflineCache={true}
               cacheZoomLevels={[8, 9, 10, 11, 12]}
               onLayersUpdate={(layers) => {
-                console.log('🌊 Environmental layers updated:', {
-                  windParticles: layers.windParticles.length,
-                  currentParticles: layers.currentParticles.length
-                });
+
               }}
             />
           </View>

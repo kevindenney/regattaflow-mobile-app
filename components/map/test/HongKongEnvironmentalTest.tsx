@@ -17,6 +17,7 @@ import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-nativ
 import { EnvironmentalAnalysisService, type EnvironmentalAnalysis } from '../../../services/EnvironmentalAnalysisService';
 import { EnvironmentalVisualizationService } from '../../../services/visualization/EnvironmentalVisualizationService';
 import type { SailingVenue } from '../../../types/venues';
+import { createLogger } from '@/lib/utils/logger';
 
 // MapLibre imports (web only)
 let MapLibreEngine: any;
@@ -32,6 +33,7 @@ interface TestMetrics {
   memoryUsage?: number;
 }
 
+const logger = createLogger('HongKongEnvironmentalTest');
 export function HongKongEnvironmentalTest() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function HongKongEnvironmentalTest() {
 
   const mapRef = useRef<any>(null);
   const frameCountRef = useRef(0);
-  const fpsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const fpsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Hong Kong Victoria Harbour test data
   const testVenue: SailingVenue = {
@@ -94,10 +96,8 @@ export function HongKongEnvironmentalTest() {
   const runEnvironmentalTest = async () => {
     try {
       setLoading(true);
-      console.log('🏁 Starting Hong Kong Environmental Visualization Test');
 
       // Step 1: Run environmental analysis
-      console.log('📊 Step 1: Running environmental analysis...');
       const analysisService = new EnvironmentalAnalysisService();
       const startTime = performance.now();
 
@@ -109,30 +109,27 @@ export function HongKongEnvironmentalTest() {
       });
 
       const analysisTime = performance.now() - startTime;
-      console.log(`✅ Analysis complete in ${analysisTime.toFixed(0)}ms`);
       setAnalysis(result);
 
       // Step 2: Generate visualization layers
-      console.log('🎨 Step 2: Generating visualization layers...');
+
       const vizService = new EnvironmentalVisualizationService();
       const vizStartTime = performance.now();
 
       const layers = vizService.generateLayers(result);
 
       const vizTime = performance.now() - vizStartTime;
-      console.log(`✅ Visualization layers generated in ${vizTime.toFixed(0)}ms`);
-      console.log(`   - Wind particles: ${layers.windParticles.length}`);
-      console.log(`   - Current particles: ${layers.currentParticles.length}`);
-      console.log(`   - Wind shadows: ${layers.windShadowZones.length}`);
-      console.log(`   - Current zones: ${layers.currentAccelerationZones.length}`);
-      console.log(`   - Buildings: ${layers.buildings.features.length}`);
+      logger.debug(`   - Wind particles: ${layers.windParticles.length}`);
+      logger.debug(`   - Current particles: ${layers.currentParticles.length}`);
+      logger.debug(`   - Wind shadows: ${layers.windShadowZones.length}`);
+      logger.debug(`   - Current zones: ${layers.currentAccelerationZones.length}`);
+      logger.debug(`   - Buildings: ${layers.buildings.features.length}`);
 
       // Step 3: Render on map (web only for now)
       if (Platform.OS === 'web' && MapLibreEngine) {
-        console.log('🗺️  Step 3: Rendering on MapLibre...');
+
         await renderLayers(layers);
       } else {
-        console.log('📱 Mobile rendering pending - testing analysis only');
       }
 
       setMetrics({
@@ -143,10 +140,9 @@ export function HongKongEnvironmentalTest() {
       });
 
       setLoading(false);
-      console.log('🎉 Test complete!');
 
     } catch (err) {
-      console.error('❌ Test failed:', err);
+
       setError(err instanceof Error ? err.message : 'Unknown error');
       setLoading(false);
     }
@@ -155,7 +151,7 @@ export function HongKongEnvironmentalTest() {
   const renderLayers = async (layers: any) => {
     // This would integrate with MapLibreEngine
     // For now, we validate the layer structure
-    console.log('Validating layer structures...');
+    logger.debug('Validating layer structures...');
 
     // Validate wind particles
     if (layers.windParticles.length > 0) {
@@ -163,7 +159,7 @@ export function HongKongEnvironmentalTest() {
       if (!('lat' in sample && 'lng' in sample && 'direction' in sample && 'speed' in sample)) {
         throw new Error('Invalid wind particle structure');
       }
-      console.log('✅ Wind particles valid');
+
     }
 
     // Validate current particles
@@ -172,7 +168,7 @@ export function HongKongEnvironmentalTest() {
       if (!('lat' in sample && 'lng' in sample && 'direction' in sample && 'speed' in sample)) {
         throw new Error('Invalid current particle structure');
       }
-      console.log('✅ Current particles valid');
+
     }
 
     // Validate GeoJSON features
@@ -181,7 +177,7 @@ export function HongKongEnvironmentalTest() {
       if (sample.type !== 'Feature' || !sample.geometry || !sample.properties) {
         throw new Error('Invalid wind shadow GeoJSON structure');
       }
-      console.log('✅ Wind shadow zones valid');
+
     }
 
     if (layers.buildings.features.length > 0) {
@@ -189,10 +185,9 @@ export function HongKongEnvironmentalTest() {
       if (sample.type !== 'Feature' || !sample.geometry || !sample.properties) {
         throw new Error('Invalid building GeoJSON structure');
       }
-      console.log('✅ Building features valid');
+
     }
 
-    console.log('✅ All layer structures validated');
   };
 
   const startFPSMonitoring = () => {
@@ -209,11 +204,8 @@ export function HongKongEnvironmentalTest() {
 
       // Check performance targets
       if (fps < 30) {
-        console.warn(`⚠️  FPS below target: ${fps}fps (target: 30-60fps)`);
       } else if (fps >= 30 && fps < 60) {
-        console.log(`📊 FPS acceptable: ${fps}fps`);
       } else {
-        console.log(`✅ FPS excellent: ${fps}fps`);
       }
     }, 1000);
 

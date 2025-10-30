@@ -24,6 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 interface BoatClass {
   id: string;
@@ -31,6 +32,8 @@ interface BoatClass {
   class_association?: string;
   type?: string;
 }
+
+const logger = createLogger('AddBoatScreen');
 
 export default function AddBoatScreen() {
   const { user } = useAuth();
@@ -57,21 +60,73 @@ export default function AddBoatScreen() {
     loadBoatClasses();
   }, []);
 
+  // Fallback mock data for common boat classes
+  const FALLBACK_BOAT_CLASSES: BoatClass[] = [
+    { id: 'mock-laser', name: 'Laser', class_association: 'ILCA' },
+    { id: 'mock-420', name: '420', class_association: 'International 420 Class' },
+    { id: 'mock-optimist', name: 'Optimist', class_association: 'IODA' },
+    { id: 'mock-470', name: '470', class_association: 'International 470 Class' },
+    { id: 'mock-49er', name: '49er', class_association: 'International 49er Class' },
+    { id: 'mock-finn', name: 'Finn', class_association: 'International Finn Association' },
+    { id: 'mock-nacra-17', name: 'Nacra 17', class_association: 'International Catamaran Federation' },
+    { id: 'mock-j70', name: 'J/70', class_association: 'J/70 Class Association' },
+    { id: 'mock-melges-24', name: 'Melges 24', class_association: 'International Melges 24 Class' },
+    { id: 'mock-star', name: 'Star', class_association: 'International Star Class' },
+    { id: 'mock-snipe', name: 'Snipe', class_association: 'SCIRA' },
+    { id: 'mock-other', name: 'Other / Custom', class_association: undefined },
+  ];
+
   const loadBoatClasses = async () => {
+    logger.debug('Loading boat classes...');
     try {
       setLoadingClasses(true);
-      const { data, error } = await supabase
+
+      // Create a timeout promise (5 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 5 seconds')), 5000)
+      );
+
+      // Race the Supabase query against the timeout
+      const supabasePromise = supabase
         .from('boat_classes')
         .select('*')
         .order('name');
 
-      if (error) throw error;
-      setBoatClasses(data || []);
+      const { data, error } = await Promise.race([
+        supabasePromise,
+        timeoutPromise
+      ]) as any;
+
+      if (error) {
+        console.error('[AddBoatScreen] Supabase error loading classes:', error);
+        throw error;
+      }
+
+      logger.debug('Loaded boat classes from Supabase:', data?.length ?? 0);
+      setBoatClasses(data || FALLBACK_BOAT_CLASSES);
     } catch (error) {
-      console.error('Error loading boat classes:', error);
-      Alert.alert('Error', 'Failed to load boat classes');
+      console.error('[AddBoatScreen] Error loading boat classes, using fallback data:', error);
+
+      // Use fallback data instead of blocking the UI
+      setBoatClasses(FALLBACK_BOAT_CLASSES);
+
+      // Show a non-blocking alert on native, or a simple message on web
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (Platform.OS === 'web') {
+        console.warn('Using offline boat class data:', errorMessage);
+      } else {
+        // Use a timeout to allow the UI to render first
+        setTimeout(() => {
+          Alert.alert(
+            'Using Offline Data',
+            'Could not connect to server. Using a default list of boat classes.',
+            [{ text: 'OK' }]
+          );
+        }, 100);
+      }
     } finally {
       setLoadingClasses(false);
+      logger.debug('loadBoatClasses finished, loadingClasses set to false');
     }
   };
 
@@ -96,11 +151,9 @@ export default function AddBoatScreen() {
   };
 
   const handleSave = async () => {
-    console.log('🚀 [AddBoat] Save button pressed');
-    console.log('👤 [AddBoat] Current user:', user?.id);
 
     if (!user) {
-      console.error('❌ [AddBoat] No user found');
+
       if (Platform.OS === 'web') {
         window.alert('Not authenticated. Please sign in.');
       } else {
@@ -111,7 +164,7 @@ export default function AddBoatScreen() {
 
     // Validation
     if (!name.trim()) {
-      console.warn('⚠️ [AddBoat] Boat name is required');
+
       if (Platform.OS === 'web') {
         window.alert('Please enter a boat name');
       } else {
@@ -121,7 +174,7 @@ export default function AddBoatScreen() {
     }
 
     if (!selectedClassId) {
-      console.warn('⚠️ [AddBoat] Boat class is required');
+
       if (Platform.OS === 'web') {
         window.alert('Please select a boat class');
       } else {
@@ -132,11 +185,6 @@ export default function AddBoatScreen() {
 
     try {
       setLoading(true);
-      console.log('📝 [AddBoat] Creating boat with data:', {
-        name: name.trim(),
-        class_id: selectedClassId,
-        sail_number: sailNumber.trim() || undefined,
-      });
 
       const boatInput: CreateBoatInput = {
         sailor_id: user.id,
@@ -152,8 +200,6 @@ export default function AddBoatScreen() {
         notes: notes.trim() || undefined,
       };
 
-      console.log('🔄 [AddBoat] Calling sailorBoatService.createBoat...');
-
       // Add timeout to detect hanging requests
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
@@ -163,8 +209,6 @@ export default function AddBoatScreen() {
         sailorBoatService.createBoat(boatInput),
         timeoutPromise
       ]) as any;
-
-      console.log('✅ [AddBoat] Boat created successfully:', boat.id);
 
       // TODO: Upload photo to Supabase storage if photoUri exists
       // For now, we'll skip photo upload as it requires storage bucket setup
@@ -181,27 +225,25 @@ export default function AddBoatScreen() {
         ]);
       }
     } catch (error) {
-      console.error('❌ [AddBoat] Error saving boat:', error);
-      console.error('❌ [AddBoat] Error type:', typeof error);
-      console.error('❌ [AddBoat] Error constructor:', error?.constructor?.name);
-      console.error('❌ [AddBoat] Error keys:', error ? Object.keys(error) : 'null');
+
+
+
 
       // Try to extract Supabase error details
       const supabaseError = error as any;
       if (supabaseError?.message) {
-        console.error('❌ [AddBoat] Supabase error message:', supabaseError.message);
+
       }
       if (supabaseError?.details) {
-        console.error('❌ [AddBoat] Supabase error details:', supabaseError.details);
+
       }
       if (supabaseError?.hint) {
-        console.error('❌ [AddBoat] Supabase error hint:', supabaseError.hint);
+
       }
       if (supabaseError?.code) {
-        console.error('❌ [AddBoat] Supabase error code:', supabaseError.code);
+
       }
 
-      console.error('❌ [AddBoat] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
 
       const errorMessage = error instanceof Error ? error.message :
                           supabaseError?.message ||

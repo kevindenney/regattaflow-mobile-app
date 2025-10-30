@@ -52,21 +52,12 @@ export function Bathymetry3DViewer({
       setLoading(true);
       setError(null);
 
-      console.log('🌊 Loading bathymetry data for:', venue);
-
       // Fetch bathymetry data from NOAA
       const data = await bathymetryService.current.getBathymetryData(bounds);
       setBathymetryData(data);
 
-      console.log('✅ Bathymetry data loaded:', {
-        gridSize: data.gridSize,
-        pointCount: data.depths.length,
-        contours: data.contours.length,
-        depthRange: [data.minDepth, data.maxDepth]
-      });
-
     } catch (err: any) {
-      console.error('❌ Failed to load bathymetry data:', err);
+
       setError(`Failed to load depth data: ${err.message}`);
     } finally {
       setLoading(false);
@@ -108,8 +99,8 @@ export function Bathymetry3DViewer({
   const handleDepthClick = (depth: number, position: THREE.Vector3) => {
     // Convert 3D position back to lat/lng
     const location: GeoLocation = {
-      latitude: bounds.north - (position.z / 100) * (bounds.north - bounds.south),
-      longitude: bounds.west + (position.x / 100) * (bounds.east - bounds.west)
+      latitude: bounds.northeast.latitude - (position.z / 100) * (bounds.northeast.latitude - bounds.southwest.latitude),
+      longitude: bounds.southwest.longitude + (position.x / 100) * (bounds.northeast.longitude - bounds.southwest.longitude)
     };
 
     onDepthQuery?.(depth, location);
@@ -383,8 +374,8 @@ function ContourLine({
 }) {
   const points = contour.points.map(point => {
     // Convert lat/lng to local coordinates
-    const x = ((point.longitude - bounds.west) / (bounds.east - bounds.west)) * 100 - 50;
-    const z = ((bounds.north - point.latitude) / (bounds.north - bounds.south)) * 100 - 50;
+    const x = ((point.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
+    const z = ((bounds.northeast.latitude - point.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
     const y = contour.depth * exaggeration;
 
     return new THREE.Vector3(x, y, z);
@@ -419,8 +410,8 @@ function DepthSoundings({
       {depths
         .filter((_, index) => index % 10 === 0) // Show every 10th sounding
         .map((depth, index) => {
-          const x = ((depth.location.longitude - bounds.west) / (bounds.east - bounds.west)) * 100 - 50;
-          const z = ((bounds.north - depth.location.latitude) / (bounds.north - bounds.south)) * 100 - 50;
+          const x = ((depth.location.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
+          const z = ((bounds.northeast.latitude - depth.location.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
           const y = depth.depth * exaggeration + 2;
 
           return (

@@ -41,17 +41,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const isLoggedIn = !!user;
 
   // Debug logging
-  console.log('🎯 [HEADER] AppHeader render:', {
-    isLoggedIn,
-    user: user?.email || 'null',
-    userType,
-    loading,
-    width,
-    isDesktop,
-    transparent,
-    showLogo,
-    title
-  });
 
   const handleDashboardAccess = () => {
     if (!isLoggedIn) {
@@ -61,7 +50,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
     // Use unified routing for all user types
     const dashboardRoute = getDashboardRoute(userType);
-    console.log('🎯 [HEADER] Navigating to dashboard:', dashboardRoute);
+
     router.push(dashboardRoute);
     setShowMobileMenu(false);
   };

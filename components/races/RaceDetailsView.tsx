@@ -19,6 +19,7 @@ import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 import { CourseSelector } from './CourseSelector';
 import type { RaceCourse } from '@/types/courses';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceDetailsViewProps {
   raceData: any;
@@ -42,6 +43,7 @@ interface ClassDivision {
   fleet_size: number;
 }
 
+const logger = createLogger('RaceDetailsView');
 export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -411,7 +413,7 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
   };
 
   const handleCourseSelected = (course: RaceCourse) => {
-    console.log('[RaceDetails] Course selected:', course.name);
+    logger.debug('[RaceDetails] Course selected:', course.name);
 
     // Store the selected course
     setSelectedCourse(course);

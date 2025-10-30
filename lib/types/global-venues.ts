@@ -260,7 +260,7 @@ export interface LocalWeatherSource {
   coordinates: Coordinates;
   parameters: WeatherParameter[];
   realTime: boolean;
-  reliability: 'high' | 'moderate' | 'variable';
+  reliability: 'high' | 'moderate' | 'low';
 }
 
 export type WeatherParameter =

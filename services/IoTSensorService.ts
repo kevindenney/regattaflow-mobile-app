@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 interface SensorData {
   timestamp: number;
@@ -112,6 +113,7 @@ interface AlertRule {
   enabled: boolean;
 }
 
+const logger = createLogger('IoTSensorService');
 export class IoTSensorService {
   private static connectedSensors: Map<string, SensorConfiguration> = new Map();
   private static sensorData: Map<string, SensorData[]> = new Map();
@@ -152,7 +154,7 @@ export class IoTSensorService {
       // Start sensor polling
       this.startSensorPolling();
 
-      console.log(`Initialized ${this.connectedSensors.size} sensors for boat ${boatId}`);
+      logger.debug(`Initialized ${this.connectedSensors.size} sensors for boat ${boatId}`);
     } catch (error) {
       console.error('Error initializing sensors:', error);
       throw error;
@@ -165,7 +167,7 @@ export class IoTSensorService {
   static startRecording(sessionId: string): void {
     this.isRecording = true;
     this.currentSessionId = sessionId;
-    console.log(`Started recording sensor data for session ${sessionId}`);
+    logger.debug(`Started recording sensor data for session ${sessionId}`);
   }
 
   /**
@@ -207,7 +209,7 @@ export class IoTSensorService {
       this.isRecording = false;
       this.currentSessionId = null;
 
-      console.log(`Saved ${allData.length} sensor data points`);
+      logger.debug(`Saved ${allData.length} sensor data points`);
     } catch (error) {
       console.error('Error saving sensor data:', error);
       throw error;
@@ -362,7 +364,7 @@ export class IoTSensorService {
       this.connectedSensors.set(config.sensor_id, config);
       this.sensorData.set(config.sensor_id, []);
 
-      console.log(`Configured sensor: ${config.name}`);
+      logger.debug(`Configured sensor: ${config.name}`);
     } catch (error) {
       console.error('Error configuring sensor:', error);
       throw error;
@@ -393,7 +395,7 @@ export class IoTSensorService {
 
       await this.configureSensor(config);
 
-      console.log(`Calibrated sensor ${sensorId}: offset=${offset}, multiplier=${multiplier}`);
+      logger.debug(`Calibrated sensor ${sensorId}: offset=${offset}, multiplier=${multiplier}`);
     } catch (error) {
       console.error('Error calibrating sensor:', error);
       throw error;
@@ -566,7 +568,7 @@ export class IoTSensorService {
   }
 
   private static triggerAlert(rule: AlertRule, telemetry: BoatTelemetry): void {
-    console.log(`ALERT [${rule.severity}]: ${rule.message}`);
+    logger.debug(`ALERT [${rule.severity}]: ${rule.message}`);
 
     // In production, would send notifications, log to database, etc.
     if (rule.actions.includes('coaching_alert')) {

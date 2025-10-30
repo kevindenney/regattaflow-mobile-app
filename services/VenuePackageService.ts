@@ -13,7 +13,7 @@
  * - Download progress tracking
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 import { OfflineTileCacheService, type TileLayerType, type DownloadProgress } from './OfflineTileCacheService';
 
 /**

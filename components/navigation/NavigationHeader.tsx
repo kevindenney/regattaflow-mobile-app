@@ -65,7 +65,6 @@ export function NavigationHeader({
       await signOut()
       // AuthProvider handles navigation; no extra fallback needed here
     } catch (e) {
-      console.error('💥 [NAV] signOut error', e)
       alert('Sign out failed. See console.')
     } finally {
       setSigningOut(false)
@@ -277,7 +276,6 @@ export function NavigationHeader({
                   try {
                     await signOut()
                   } catch (error) {
-                    console.error('🛎️ [NAV] signOut() failed:', error)
                   }
                 }}
                 style={({ pressed }) => ({

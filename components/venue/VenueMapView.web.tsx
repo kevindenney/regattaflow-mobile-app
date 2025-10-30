@@ -3,9 +3,8 @@
  * Uses Google Maps JavaScript API for superior web rendering
  */
 
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, type ReactElement } from 'react';
 import { StyleSheet, ActivityIndicator } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/services/supabase';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
@@ -21,6 +20,10 @@ interface Venue {
   venue_type: string;
   coordinates_lat: number;
   coordinates_lng: number;
+  established_year?: number | null;
+  rating?: number | null;
+  user_ratings_total?: number | null;
+  formatted_address?: string | null;
 }
 
 interface MapLayers {
@@ -35,13 +38,23 @@ interface MapLayers {
   engines: boolean;
 }
 
-interface VenueMapViewProps {
+const DEFAULT_MAP_LAYERS: MapLayers = {
+  yachtClubs: true,
+  sailmakers: false,
+  riggers: false,
+  coaches: false,
+  chandlery: false,
+  clothing: false,
+  marinas: false,
+  repair: false,
+  engines: false,
+};
+
+export interface VenueMapViewProps {
   currentVenue?: Venue | null;
-  onVenueSelect?: (venue: Venue) => void;
   onMarkerPress?: (venue: Venue) => void;
   showAllVenues?: boolean;
   selectedVenue?: Venue | null;
-  is3DEnabled?: boolean;
   mapLayers?: MapLayers;
   showOnlySavedVenues?: boolean;
   savedVenueIds?: Set<string>;
@@ -56,12 +69,18 @@ interface YachtClub {
   membership_type: string;
   coordinates_lat: number;
   coordinates_lng: number;
+  founded?: number | null;
+  website?: string | null;
+  phone_number?: string | null;
+  formatted_address?: string | null;
+  rating?: number | null;
+  user_ratings_total?: number | null;
 }
 
 interface Service {
   id: string;
   club_id?: string;
-  venue_id: string;
+  venue_id?: string;
   service_type: string;
   business_name: string;
   contact_name?: string;
@@ -72,6 +91,8 @@ interface Service {
   price_level?: string;
   coordinates_lat: number;
   coordinates_lng: number;
+  classes_supported?: string[];
+  preferred_by_club?: boolean | string;
 }
 
 // Professional SVG Icons
@@ -133,6 +154,7 @@ function GoogleMapComponent({
   const markersRef = useRef<google.maps.Marker[]>([]);
   const markerClustererRef = useRef<MarkerClusterer | null>(null);
   const openInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  const layers = mapLayers ?? DEFAULT_MAP_LAYERS;
 
   // Helper: Create InfoWindow content lazily (only when marker is clicked)
   const createVenueInfoWindowContent = useCallback((venue: Venue) => {
@@ -285,21 +307,6 @@ function GoogleMapComponent({
   }, []); // Only initialize once
 
   // Toggle 3D view when is3DEnabled prop changes
-  useEffect(() => {
-    if (!googleMapRef.current) return;
-
-    if (is3DEnabled) {
-      // Enable 3D view with satellite imagery and tilt
-      googleMapRef.current.setMapTypeId('satellite');
-      googleMapRef.current.setTilt(45);
-      googleMapRef.current.setHeading(0);
-    } else {
-      // Disable 3D view - return to flat roadmap
-      googleMapRef.current.setMapTypeId('roadmap');
-      googleMapRef.current.setTilt(0);
-    }
-  }, [is3DEnabled]);
-
   // Update markers with clustering and lazy InfoWindows
   useEffect(() => {
     if (!googleMapRef.current) return;
@@ -352,7 +359,7 @@ function GoogleMapComponent({
     });
 
     // Add yacht club markers with lazy InfoWindows
-    if (mapLayers?.yachtClubs) {
+    if (layers.yachtClubs) {
       yachtClubs.forEach(club => {
         if (!club.coordinates_lat || !club.coordinates_lng) return;
 
@@ -377,22 +384,28 @@ function GoogleMapComponent({
     }
 
     // Add service markers if any service layer is enabled
-    const anyServiceLayerEnabled = mapLayers?.sailmakers || mapLayers?.riggers || mapLayers?.coaches ||
-                                    mapLayers?.chandlery || mapLayers?.clothing || mapLayers?.marinas ||
-                                    mapLayers?.repair || mapLayers?.engines;
+    const anyServiceLayerEnabled =
+      layers.sailmakers ||
+      layers.riggers ||
+      layers.coaches ||
+      layers.chandlery ||
+      layers.clothing ||
+      layers.marinas ||
+      layers.repair ||
+      layers.engines;
 
     if (anyServiceLayerEnabled) {
       // Filter services based on enabled layers
       const filteredServices = services.filter(service => {
         const type = service.service_type;
-        if (type === 'sailmaker' && mapLayers?.sailmakers) return true;
-        if (type === 'rigger' && mapLayers?.riggers) return true;
-        if (type === 'coach' && mapLayers?.coaches) return true;
-        if (type === 'chandlery' && mapLayers?.chandlery) return true;
-        if (type === 'clothing' && mapLayers?.clothing) return true;
-        if (type === 'marina' && mapLayers?.marinas) return true;
-        if (type === 'repair' && mapLayers?.repair) return true;
-        if (type === 'engine' && mapLayers?.engines) return true;
+        if (type === 'sailmaker' && layers.sailmakers) return true;
+        if (type === 'rigger' && layers.riggers) return true;
+        if (type === 'coach' && layers.coaches) return true;
+        if (type === 'chandlery' && layers.chandlery) return true;
+        if (type === 'clothing' && layers.clothing) return true;
+        if (type === 'marina' && layers.marinas) return true;
+        if (type === 'repair' && layers.repair) return true;
+        if (type === 'engine' && layers.engines) return true;
         return false;
       });
 
@@ -448,7 +461,31 @@ function GoogleMapComponent({
         algorithm: new SuperClusterAlgorithm({ radius: 100, maxZoom: 15 }),
       });
     }
-  }, [venues, yachtClubs, services, selectedVenue, currentVenue, mapLayers?.yachtClubs, mapLayers?.services, onMarkerPress, showOnlySavedVenues, savedVenueIds, showAllVenues, createVenueInfoWindowContent, createYachtClubInfoWindowContent, createServiceInfoWindowContent, showInfoWindow]);
+  }, [
+    venues,
+    yachtClubs,
+    services,
+    selectedVenue,
+    currentVenue,
+    layers.yachtClubs,
+    layers.sailmakers,
+    layers.riggers,
+    layers.coaches,
+    layers.chandlery,
+    layers.clothing,
+    layers.marinas,
+    layers.repair,
+    layers.engines,
+    onMarkerPress,
+    showOnlySavedVenues,
+    savedVenueIds,
+    showAllVenues,
+    createVenueInfoWindowContent,
+    createYachtClubInfoWindowContent,
+    createServiceInfoWindowContent,
+    showInfoWindow,
+    mapLayers,
+  ]);
 
   // Center map when selected venue changes
   useEffect(() => {
@@ -512,7 +549,7 @@ function GoogleMapComponent({
 }
 
 // Wrapper render function for loading states
-function render(status: Status) {
+function render(status: Status): ReactElement {
   if (status === Status.LOADING) {
     return (
       <div style={{
@@ -553,17 +590,15 @@ function render(status: Status) {
     );
   }
 
-  return null;
+  return <div style={{ width: '100%', height: '100%' }} />;
 }
 
 export function VenueMapView({
   currentVenue,
-  onVenueSelect,
   onMarkerPress,
   showAllVenues = false,
   selectedVenue,
-  is3DEnabled = false,
-  mapLayers = {},
+  mapLayers = DEFAULT_MAP_LAYERS,
   showOnlySavedVenues = false,
   savedVenueIds = new Set(),
 }: VenueMapViewProps) {
@@ -571,80 +606,18 @@ export function VenueMapView({
   const [yachtClubs, setYachtClubs] = useState<YachtClub[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const mergedMapLayers = useMemo<MapLayers>(
+    () => ({ ...DEFAULT_MAP_LAYERS, ...mapLayers }),
+    [mapLayers]
+  );
 
   // Get Google Maps API key
   const apiKey = Constants.expoConfig?.extra?.googleMapsApiKey ||
                  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  // Fetch venues from database
-  useEffect(() => {
-    fetchVenues();
-    fetchYachtClubs();
-  }, []);
-
-  // Fetch services when any service layer is enabled
-  useEffect(() => {
-    const anyServiceLayerEnabled = mapLayers.sailmakers || mapLayers.riggers || mapLayers.coaches ||
-                                    mapLayers.chandlery || mapLayers.clothing || mapLayers.marinas ||
-                                    mapLayers.repair || mapLayers.engines;
-    if (anyServiceLayerEnabled) {
-      fetchServices();
-    }
-  }, [mapLayers.sailmakers, mapLayers.riggers, mapLayers.coaches, mapLayers.chandlery,
-      mapLayers.clothing, mapLayers.marinas, mapLayers.repair, mapLayers.engines]);
-
-  const fetchVenues = useCallback(async () => {
-    try {
-      console.log('🔍 Fetching venues from Supabase...');
-
-      // Add timeout to prevent infinite loading
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout after 10s')), 10000)
-      );
-
-      const fetchPromise = supabase
-        .from('sailing_venues')
-        .select('id, name, country, region, venue_type, coordinates_lat, coordinates_lng, established_year, rating, user_ratings_total, formatted_address')
-        .order('name', { ascending: true });
-
-      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
-
-      if (error) {
-        console.error('❌ Supabase error fetching venues:', error);
-        throw error;
-      }
-
-      console.log(`✅ Fetched ${data?.length || 0} venues`);
-      setVenues(data || []);
-    } catch (error: any) {
-      console.error('❌ Error fetching venues:', error);
-      // Set empty venues array on error so loading stops
-      setVenues([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchYachtClubs = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('yacht_clubs')
-        .select('id, venue_id, name, short_name, prestige_level, membership_type, coordinates_lat, coordinates_lng, founded, website, phone_number, formatted_address, rating, user_ratings_total')
-        .not('coordinates_lat', 'is', null)
-        .not('coordinates_lng', 'is', null)
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-
-      setYachtClubs(data || []);
-    } catch (error) {
-      console.error('Error fetching yacht clubs:', error);
-    }
-  }, []);
-
   const fetchServices = useCallback(async () => {
     try {
-      console.log('🔍 Fetching services via Google Places API...');
+      const layers = mergedMapLayers;
 
       // Get map center (use current venue or Hong Kong default)
       const center = currentVenue && currentVenue.coordinates_lat && currentVenue.coordinates_lng
@@ -652,7 +625,7 @@ export function VenueMapView({
         : { lat: 22.2793, lng: 114.1628 }; // Hong Kong default
 
       // Map layer keys to ServiceType
-      const layerToServiceType: Record<string, ServiceType> = {
+      const layerToServiceType: Partial<Record<keyof MapLayers, ServiceType>> = {
         sailmakers: 'sailmaker',
         riggers: 'rigger',
         coaches: 'coach',
@@ -665,19 +638,18 @@ export function VenueMapView({
 
       // Determine which service types to fetch based on enabled layers
       const enabledServiceTypes: ServiceType[] = [];
-      Object.entries(mapLayers).forEach(([layerKey, isEnabled]) => {
-        if (isEnabled && layerToServiceType[layerKey]) {
-          enabledServiceTypes.push(layerToServiceType[layerKey]);
+      Object.entries(layers).forEach(([layerKey, isEnabled]) => {
+        const typedKey = layerKey as keyof MapLayers;
+        const mappedType = layerToServiceType[typedKey];
+        if (isEnabled && mappedType) {
+          enabledServiceTypes.push(mappedType);
         }
       });
 
       if (enabledServiceTypes.length === 0) {
-        console.log('📍 No service layers enabled, skipping fetch');
         setServices([]);
         return;
       }
-
-      console.log('📍 Fetching service types:', enabledServiceTypes);
 
       // Fetch all enabled service types in parallel
       const placeResults = await Promise.all(
@@ -689,14 +661,13 @@ export function VenueMapView({
       // Flatten and convert PlaceResult[] to Service[]
       const googlePlaces: Service[] = placeResults.flat().map((place: PlaceResult) => ({
         id: place.placeId,
+        venue_id: currentVenue?.id ?? undefined,
         service_type: place.type,
         business_name: place.name,
         coordinates_lat: place.coordinates.lat,
         coordinates_lng: place.coordinates.lng,
         specialties: [],
       }));
-
-      console.log(`✅ Fetched ${googlePlaces.length} places from Google Places API`);
 
       // Optional: Also fetch from database and merge
       const { data: dbServices } = await supabase
@@ -718,12 +689,10 @@ export function VenueMapView({
         .order('business_name', { ascending: true });
 
       // Process DB services with coordinates
-      // PREFER club coordinates over venue coordinates since services are at clubs, not racing venues
       const dbServicesWithCoords = await Promise.all((dbServices || []).map(async (service: any) => {
         let lat = null;
         let lng = null;
 
-        // Try club coordinates first (more accurate for businesses)
         if (service.club_id) {
           const { data: clubData } = await supabase
             .from('yacht_clubs')
@@ -737,7 +706,6 @@ export function VenueMapView({
           }
         }
 
-        // Fall back to venue coordinates only if club coordinates not found
         if (!lat || !lng) {
           lat = service.sailing_venues?.coordinates_lat;
           lng = service.sailing_venues?.coordinates_lng;
@@ -762,24 +730,98 @@ export function VenueMapView({
 
       const validDbServices = dbServicesWithCoords.filter(s => s.coordinates_lat && s.coordinates_lng);
 
-      // Merge Google Places and DB services (deduplicate by name+coordinates)
-      const allServices = [...googlePlaces, ...validDbServices];
-      const uniqueServices = Array.from(
-        new Map(
-          allServices.map(s => [
-            `${s.business_name}_${s.coordinates_lat.toFixed(4)}_${s.coordinates_lng.toFixed(4)}`,
-            s
-          ])
-        ).values()
-      );
-
-      console.log(`📊 Total unique services: ${uniqueServices.length} (${googlePlaces.length} from Google, ${validDbServices.length} from DB)`);
-      setServices(uniqueServices);
+      // Combine Google places and DB services (deduplicate by id)
+      const combinedServices = [...googlePlaces, ...validDbServices];
+      setServices(combinedServices);
     } catch (error) {
-      console.error('❌ Error fetching services:', error);
+      console.error('Error fetching services:', error);
+    }
+  }, [mergedMapLayers, currentVenue?.id, currentVenue?.coordinates_lat, currentVenue?.coordinates_lng]);
+
+  // Fetch venues from database
+  useEffect(() => {
+    fetchVenues();
+    fetchYachtClubs();
+  }, []);
+
+  // Fetch services when any service layer is enabled
+  useEffect(() => {
+    const anyServiceLayerEnabled =
+      mergedMapLayers.sailmakers ||
+      mergedMapLayers.riggers ||
+      mergedMapLayers.coaches ||
+      mergedMapLayers.chandlery ||
+      mergedMapLayers.clothing ||
+      mergedMapLayers.marinas ||
+      mergedMapLayers.repair ||
+      mergedMapLayers.engines;
+
+    if (anyServiceLayerEnabled) {
+      fetchServices();
+    } else {
       setServices([]);
     }
-  }, [currentVenue, mapLayers]);
+  }, [
+    mergedMapLayers.sailmakers,
+    mergedMapLayers.riggers,
+    mergedMapLayers.coaches,
+    mergedMapLayers.chandlery,
+    mergedMapLayers.clothing,
+    mergedMapLayers.marinas,
+    mergedMapLayers.repair,
+    mergedMapLayers.engines,
+    currentVenue?.id,
+    currentVenue?.coordinates_lat,
+    currentVenue?.coordinates_lng,
+    fetchServices,
+  ]);
+
+  const fetchVenues = useCallback(async () => {
+    try {
+
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timeout after 10s')), 10000)
+      );
+
+      const fetchPromise = supabase
+        .from('sailing_venues')
+        .select('id, name, country, region, venue_type, coordinates_lat, coordinates_lng, established_year, rating, user_ratings_total, formatted_address')
+        .order('name', { ascending: true });
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+      if (error) {
+
+        throw error;
+      }
+
+      setVenues(data || []);
+    } catch (error: any) {
+
+      // Set empty venues array on error so loading stops
+      setVenues([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchYachtClubs = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('yacht_clubs')
+        .select('id, venue_id, name, short_name, prestige_level, membership_type, coordinates_lat, coordinates_lng, founded, website, phone_number, formatted_address, rating, user_ratings_total')
+        .not('coordinates_lat', 'is', null)
+        .not('coordinates_lng', 'is', null)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+
+      setYachtClubs(data || []);
+    } catch (error) {
+      console.error('Error fetching yacht clubs:', error);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -831,7 +873,7 @@ export function VenueMapView({
           currentVenue={currentVenue}
           selectedVenue={selectedVenue}
           onMarkerPress={onMarkerPress}
-          mapLayers={mapLayers}
+          mapLayers={mergedMapLayers}
           showOnlySavedVenues={showOnlySavedVenues}
           savedVenueIds={savedVenueIds}
           showAllVenues={showAllVenues}
@@ -855,13 +897,13 @@ export function VenueMapView({
           {showOnlySavedVenues && savedVenueIds.size > 0
             ? `${savedVenueIds.size} saved venue${savedVenueIds.size !== 1 ? 's' : ''}`
             : `${venues.length} venues worldwide`}
-          {mapLayers.yachtClubs && yachtClubs.length > 0 && (
+          {mergedMapLayers.yachtClubs && yachtClubs.length > 0 && (
             <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
               {yachtClubs.length} yacht clubs
             </div>
           )}
-          {(mapLayers.sailmakers || mapLayers.riggers || mapLayers.coaches || mapLayers.chandlery ||
-            mapLayers.clothing || mapLayers.marinas || mapLayers.repair || mapLayers.engines) &&
+          {(mergedMapLayers.sailmakers || mergedMapLayers.riggers || mergedMapLayers.coaches || mergedMapLayers.chandlery ||
+            mergedMapLayers.clothing || mergedMapLayers.marinas || mergedMapLayers.repair || mergedMapLayers.engines) &&
             services.length > 0 && (
             <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
               {services.length} services

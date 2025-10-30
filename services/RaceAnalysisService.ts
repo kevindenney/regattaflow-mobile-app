@@ -7,6 +7,7 @@
 import { RaceAnalysisAgent } from './agents/RaceAnalysisAgent';
 import { RaceTimerService } from './RaceTimerService';
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface AnalysisResult {
   id: string;
@@ -24,6 +25,7 @@ export interface AnalysisResult {
   created_at: string;
 }
 
+const logger = createLogger('RaceAnalysisService');
 export class RaceAnalysisService {
   /**
    * Analyze a completed race session
@@ -45,12 +47,12 @@ export class RaceAnalysisService {
       // Check if already analyzed
       const isAnalyzed = await RaceTimerService.isAnalyzed(timerSessionId);
       if (isAnalyzed) {
-        console.log('Session already analyzed, returning existing analysis');
+        logger.debug('Session already analyzed, returning existing analysis');
         return this.getAnalysis(timerSessionId);
       }
 
       // Trigger AI agent analysis
-      console.log('Starting AI race analysis for session:', timerSessionId);
+      logger.debug('Starting AI race analysis for session:', timerSessionId);
       const agent = new RaceAnalysisAgent();
 
       const result = await agent.analyzeRace({
@@ -62,7 +64,7 @@ export class RaceAnalysisService {
         return null;
       }
 
-      console.log('AI race analysis completed successfully');
+      logger.debug('AI race analysis completed successfully');
 
       // Return the saved analysis
       return this.getAnalysis(timerSessionId);
@@ -140,10 +142,10 @@ export class RaceAnalysisService {
     try {
       const unanalyzedSessions = await RaceTimerService.getUnanalyzedSessions(sailorId);
 
-      console.log(`Found ${unanalyzedSessions.length} unanalyzed sessions`);
+      logger.debug(`Found ${unanalyzedSessions.length} unanalyzed sessions`);
 
       for (const session of unanalyzedSessions) {
-        console.log(`Analyzing session ${session.id}...`);
+        logger.debug(`Analyzing session ${session.id}...`);
         await this.analyzeRaceSession(session.id);
       }
     } catch (error) {

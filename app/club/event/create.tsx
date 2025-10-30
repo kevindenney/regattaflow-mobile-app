@@ -3,7 +3,7 @@
  * Multi-step form for creating club events with validation
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,21 +13,27 @@ import {
   Platform,
   Alert,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { EventType, EventVisibility, CreateEventInput } from '@/services/eventService';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 export default function CreateEventScreen() {
   const router = useRouter();
+  const {
+    clubId,
+    loading: personaLoading,
+    refresh: refreshPersonaContext,
+  } = useClubWorkspace();
   const params = useLocalSearchParams();
   const defaultType = (params.type as EventType) || 'regatta';
 
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState<CreateEventInput>({
-    club_id: '', // TODO: Get from user's club context
+  const [formData, setFormData] = useState<Omit<CreateEventInput, 'club_id'>>({
     title: '',
     description: '',
     event_type: defaultType,
@@ -49,11 +55,21 @@ export default function CreateEventScreen() {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'HKD'>('USD');
   const [loading, setLoading] = useState(false);
 
-  const updateField = (field: keyof CreateEventInput, value: any) => {
+  const personaReady = useMemo(() => !personaLoading, [personaLoading]);
+
+  const updateField = (field: keyof Omit<CreateEventInput, 'club_id'>, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleCreate = async () => {
+    if (!clubId) {
+      Alert.alert(
+        'Club workspace required',
+        'Please finish connecting your club profile before creating events.'
+      );
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -68,14 +84,10 @@ export default function CreateEventScreen() {
         return;
       }
 
-      // TODO: Get actual club_id from user context
-      if (!formData.club_id) {
-        formData.club_id = 'temp-club-id'; // Placeholder
-      }
-
       // Include payment configuration
       const eventData: CreateEventInput = {
         ...formData,
+        club_id: clubId,
         currency: currency,
         payment_required: paymentRequired,
         refund_policy: refundPolicy,
@@ -95,6 +107,35 @@ export default function CreateEventScreen() {
       setLoading(false);
     }
   };
+
+  if (!personaReady) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0EA5E9" />
+      </ThemedView>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <ThemedView style={styles.missingContainer}>
+        <Ionicons name="people-circle-outline" size={48} color="#94A3B8" />
+        <ThemedText style={styles.missingTitle}>Connect Your Club Workspace</ThemedText>
+        <ThemedText style={styles.missingDescription}>
+          You need an active club profile before you can publish events. Complete club onboarding or retry your connection.
+        </ThemedText>
+        <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+          <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryLink}
+          onPress={() => router.push('/(auth)/club-onboarding-chat')}
+        >
+          <ThemedText style={styles.secondaryLinkText}>Open Club Onboarding</ThemedText>
+        </TouchableOpacity>
+      </ThemedView>
+    );
+  }
 
   const renderStep1 = () => (
     <View style={styles.stepContent}>
@@ -519,6 +560,52 @@ export default function CreateEventScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  missingContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  missingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',

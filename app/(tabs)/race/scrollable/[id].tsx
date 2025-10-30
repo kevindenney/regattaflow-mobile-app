@@ -25,13 +25,25 @@ import {
   CurrentTideCard,
   TacticalPlanCard,
   PostRaceAnalysisCard,
-  CourseSelector
+  CourseSelector,
+  ContingencyPlansCard,
+  RaceDocumentsCard,
+  CrewEquipmentCard,
+  FleetRacersCard,
+  RacePhaseHeader,
+  RaceOverviewCard,
+  UpwindStrategyCard,
+  DownwindStrategyCard,
+  MarkRoundingCard,
+  RigTuningCard,
 } from '@/components/race-detail';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
 import type { Mark } from '@/types/courses';
 import { autoCourseGenerator } from '@/services/AutoCourseGeneratorService';
+import { createLogger } from '@/lib/utils/logger';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 
 interface RaceEvent {
   id: string;
@@ -45,8 +57,10 @@ interface RaceEvent {
   };
   racing_area_polygon?: any;
   boat_class?: {
+    id?: string;
     name?: string;
   };
+  class_id?: string;
 }
 
 interface CourseMark {
@@ -59,7 +73,7 @@ interface CourseMark {
 }
 
 export default function RaceDetailScrollable() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, courseId } = useLocalSearchParams<{ id: string; courseId?: string }>();
   const { user } = useAuth();
 
   const [race, setRace] = useState<RaceEvent | null>(null);
@@ -67,6 +81,8 @@ export default function RaceDetailScrollable() {
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [drawingPolygon, setDrawingPolygon] = useState<Array<{lat: number, lng: number}>>([]);
+  const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
+  const lastCourseParam = useRef<string | null>(null);
 
   // Get real weather for course filtering
   const venueForWeather = race?.venue ? {
@@ -81,12 +97,6 @@ export default function RaceDetailScrollable() {
   } : null;
 
   const { weather } = useRaceWeather(venueForWeather as any, race?.start_time);
-
-  // DEBUG: Log whenever drawingPolygon changes
-  useEffect(() => {
-    console.log('🟢 [RaceDetailScrollable] drawingPolygon state changed:', drawingPolygon);
-    console.log('🟢 [RaceDetailScrollable] drawingPolygon length:', drawingPolygon.length);
-  }, [drawingPolygon]);
 
   // Scroll animation for map resize
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -112,7 +122,7 @@ export default function RaceDetailScrollable() {
 
     try {
       setLoading(true);
-      console.log('[RaceDetailScrollable] Loading race:', id);
+      logger.debug('[RaceDetailScrollable] Loading race:', id);
 
       // Load race details from regattas table (same as original race detail)
       const { data: raceData, error: raceError } = await supabase
@@ -132,6 +142,10 @@ export default function RaceDetailScrollable() {
       }
 
       // Transform regatta data to RaceEvent format
+      const classIdFromMetadata = typeof raceData.metadata?.class_id === 'string'
+        ? raceData.metadata.class_id
+        : raceData.class_id || undefined;
+
       const transformedRace: RaceEvent = {
         id: raceData.id,
         race_name: raceData.name || 'Unnamed Race',
@@ -142,9 +156,11 @@ export default function RaceDetailScrollable() {
           coordinates_lat: raceData.metadata?.venue_lat || 22.2650,
           coordinates_lng: raceData.metadata?.venue_lng || 114.2620,
         } : undefined,
-        boat_class: raceData.metadata?.class_name ? {
-          name: raceData.metadata.class_name
+        boat_class: raceData.metadata?.class_name || classIdFromMetadata ? {
+          id: classIdFromMetadata,
+          name: raceData.metadata?.class_name || undefined
         } : undefined,
+        class_id: classIdFromMetadata,
       };
 
       // Look up actual venue ID from sailing_venues if we have a venue name
@@ -158,12 +174,12 @@ export default function RaceDetailScrollable() {
 
         if (venueData) {
           transformedRace.venue.id = venueData.id;
-          console.log('[RaceDetailScrollable] Found venue ID:', venueData.id);
+          logger.debug('[RaceDetailScrollable] Found venue ID:', venueData.id);
         }
       }
 
       setRace(transformedRace);
-      console.log('[RaceDetailScrollable] Race loaded:', transformedRace);
+      logger.debug('[RaceDetailScrollable] Race loaded:', transformedRace);
 
       // Try to find associated race_event for marks
       const { data: raceEvent } = await supabase
@@ -191,7 +207,7 @@ export default function RaceDetailScrollable() {
             sequence_order: 0, // Will be set by order in array
           }));
           setMarks(convertedMarks);
-          console.log('[RaceDetailScrollable] Marks loaded:', convertedMarks.length);
+          logger.debug('[RaceDetailScrollable] Marks loaded:', convertedMarks.length);
         }
       }
     } catch (error) {
@@ -201,6 +217,30 @@ export default function RaceDetailScrollable() {
     }
   };
 
+  const averageWindSpeed = weather?.wind
+    ? (weather.wind.speedMin + weather.wind.speedMax) / 2
+    : undefined;
+
+  const {
+    recommendation: tuningRecommendation,
+    loading: tuningLoading,
+    refresh: refreshTuning,
+  } = useRaceTuningRecommendation({
+    classId: race?.class_id,
+    averageWindSpeed,
+    pointsOfSail: 'upwind',
+    enabled: !!race?.class_id,
+  });
+
+  useEffect(() => {
+    const incomingCourseId = typeof courseId === 'string' ? courseId : null;
+    const key = incomingCourseId ? `${id}-${incomingCourseId}` : null;
+    if (incomingCourseId && lastCourseParam.current !== key) {
+      lastCourseParam.current = key;
+      setPendingCourseId(incomingCourseId);
+    }
+  }, [courseId, id]);
+
   const handleBack = () => {
     router.back();
   };
@@ -209,12 +249,25 @@ export default function RaceDetailScrollable() {
     setShowMenu(!showMenu);
   };
 
+  // Helper: Determine race status for phase-based rendering
+  const getRaceStatus = (): 'upcoming' | 'in_progress' | 'completed' => {
+    if (!race?.start_time) return 'upcoming';
+
+    const now = new Date();
+    const startTime = new Date(race.start_time);
+
+    // Race hasn't started yet
+    if (startTime > now) return 'upcoming';
+
+    // Race started - check if completed (assume 3 hour race duration)
+    const endTime = new Date(startTime.getTime() + 3 * 60 * 60 * 1000);
+    if (now > endTime) return 'completed';
+
+    return 'in_progress';
+  };
+
   const handleRacingAreaChange = (polygon: Array<{lat: number, lng: number}>) => {
-    console.log('🔵 [RaceDetailScrollable] handleRacingAreaChange called');
-    console.log('🔵 [RaceDetailScrollable] Current drawingPolygon BEFORE update:', drawingPolygon);
-    console.log('🔵 [RaceDetailScrollable] New polygon to set:', polygon);
     setDrawingPolygon(polygon);
-    console.log('🔵 [RaceDetailScrollable] setDrawingPolygon called with:', polygon);
   };
 
   const handleSaveRacingArea = async () => {
@@ -224,8 +277,8 @@ export default function RaceDetailScrollable() {
     }
 
     try {
-      console.log('[RaceDetailScrollable] Saving racing area:', drawingPolygon);
-      console.log('[RaceDetailScrollable] Race ID:', id);
+      logger.debug('[RaceDetailScrollable] Saving racing area:', drawingPolygon);
+      logger.debug('[RaceDetailScrollable] Race ID:', id);
 
       // First, check if race_event exists
       let raceEventId = null;
@@ -267,7 +320,7 @@ export default function RaceDetailScrollable() {
         west: Math.min(...lngs),
       };
 
-      console.log('[RaceDetailScrollable] Bounds:', bounds);
+      logger.debug('[RaceDetailScrollable] Bounds:', bounds);
 
       // Check if racing area already exists for this race
       const { data: existingArea } = await supabase
@@ -280,7 +333,7 @@ export default function RaceDetailScrollable() {
       let saveResult;
       if (existingArea) {
         // Update existing racing area
-        console.log('[RaceDetailScrollable] Updating existing racing area:', existingArea.id);
+        logger.debug('[RaceDetailScrollable] Updating existing racing area:', existingArea.id);
         const { data, error } = await supabase
           .from('racing_areas')
           .update({
@@ -301,7 +354,7 @@ export default function RaceDetailScrollable() {
         saveResult = data;
       } else {
         // Insert new racing area
-        console.log('[RaceDetailScrollable] Inserting new racing area');
+        logger.debug('[RaceDetailScrollable] Inserting new racing area');
         const { data, error } = await supabase
           .from('racing_areas')
           .insert({
@@ -322,7 +375,7 @@ export default function RaceDetailScrollable() {
         saveResult = data;
       }
 
-      console.log('[RaceDetailScrollable] Racing area saved to racing_areas table:', saveResult);
+      logger.debug('[RaceDetailScrollable] Racing area saved to racing_areas table:', saveResult);
 
       // ALSO save to regattas table for display
       const polygonGeoJSON = {
@@ -342,12 +395,10 @@ export default function RaceDetailScrollable() {
         throw regattaUpdateError;
       }
 
-      console.log('[RaceDetailScrollable] Racing area saved to regattas table successfully');
+      logger.debug('[RaceDetailScrollable] Racing area saved to regattas table successfully');
 
       // AUTO-GENERATE RACING MARKS
       try {
-        console.log('🏁 [RaceDetailScrollable] Auto-generating course marks');
-
         // Get wind data from weather hook
         const windDirection = weather?.wind?.direction || 'SE'; // Default SE if no weather
         const windSpeed = weather?.wind
@@ -392,8 +443,6 @@ export default function RaceDetailScrollable() {
           throw marksError;
         }
 
-        console.log('✅ [RaceDetailScrollable] Saved', insertedMarks?.length, 'course marks to database');
-
         // Convert to local mark format and update state
         const convertedMarks: CourseMark[] = generatedMarks.map((mark, index) => ({
           id: mark.id,
@@ -405,7 +454,6 @@ export default function RaceDetailScrollable() {
         }));
 
         setMarks(convertedMarks);
-        console.log('✅ [RaceDetailScrollable] Updated map with', convertedMarks.length, 'marks');
 
         alert(`Racing area saved with ${generatedMarks.length} auto-generated course marks!`);
       } catch (markError: any) {
@@ -422,14 +470,11 @@ export default function RaceDetailScrollable() {
   };
 
   const handleFullscreen = () => {
-    console.log('[RaceDetailScrollable] Fullscreen map');
+    logger.debug('[RaceDetailScrollable] Fullscreen map');
     // TODO: Implement fullscreen map modal
   };
 
   const handleCourseSelected = (courseMarks: Mark[]) => {
-    console.log('📍 [RaceDetailScrollable] Course selected with', courseMarks.length, 'marks');
-    console.log('📍 [RaceDetailScrollable] Raw course marks:', JSON.stringify(courseMarks, null, 2));
-
     // Convert Mark[] to CourseMark[] format
     const convertedMarks: CourseMark[] = courseMarks.map((mark, index) => ({
       id: mark.id || `mark-${index}`,
@@ -440,9 +485,7 @@ export default function RaceDetailScrollable() {
       sequence_order: index + 1,
     }));
 
-    console.log('📍 [RaceDetailScrollable] Converted marks:', JSON.stringify(convertedMarks, null, 2));
     setMarks(convertedMarks);
-    console.log('✅ [RaceDetailScrollable] Marks updated:', convertedMarks.length);
   };
 
   if (loading) {
@@ -503,13 +546,6 @@ export default function RaceDetailScrollable() {
         scrollEventThrottle={16}
       >
         {/* Map Hero Section */}
-        {(() => {
-          const polygonToPass = drawingPolygon.length > 0 ? drawingPolygon : undefined;
-          console.log('🔴 [RaceDetailScrollable] RENDERING RaceDetailMapHero');
-          console.log('🔴 [RaceDetailScrollable] drawingPolygon:', drawingPolygon);
-          console.log('🔴 [RaceDetailScrollable] Passing racingAreaPolygon:', polygonToPass);
-          return null;
-        })()}
         <RaceDetailMapHero
           race={race}
           racingAreaPolygon={drawingPolygon.length > 0 ? drawingPolygon : undefined}
@@ -535,17 +571,85 @@ export default function RaceDetailScrollable() {
                   undefined
                 }
                 currentWindSpeed={weather?.wind ? (weather.wind.speedMin + weather.wind.speedMax) / 2 : undefined}
+                autoSelectCourseId={pendingCourseId ?? undefined}
+                onAutoSelectComplete={() => {
+                  setPendingCourseId(null);
+                  lastCourseParam.current = null;
+                }}
               />
             </View>
           )}
 
-          {/* Phase 2: Real Strategy Cards */}
+          {/* ============================================ */}
+          {/*  PRE-RACE STRATEGY SECTION                 */}
+          {/* ============================================ */}
+          <RacePhaseHeader
+            icon="chess-knight"
+            title="Pre-Race Strategy"
+            subtitle="AI-generated plan based on conditions"
+            badge={getRaceStatus() === 'upcoming' ? 'Ready' : 'View'}
+            phase={getRaceStatus()}
+          />
 
+          {/* Race Overview - Quick Stats & Confidence */}
+          <RaceOverviewCard
+            raceId={race.id}
+            raceName={race.race_name}
+            startTime={race.start_time}
+            venue={race.venue}
+            weather={weather ? {
+              wind: weather.wind ? {
+                speed: (weather.wind.speedMin + weather.wind.speedMax) / 2,
+                direction: weather.wind.direction,
+                speedMin: weather.wind.speedMin,
+                speedMax: weather.wind.speedMax
+              } : undefined,
+              current: (weather as any).current
+            } : undefined}
+            boatClass={race.boat_class?.name}
+          />
+
+          {/* Start Strategy */}
           <StartStrategyCard
+            raceId={race.id}
+            raceName={race.race_name}
+            raceStartTime={race.start_time}
+            venueId={race.venue?.id}
+            venueName={race.venue?.name}
+            venueCoordinates={race.venue ? {
+              lat: race.venue.coordinates_lat || 0,
+              lng: race.venue.coordinates_lng || 0
+            } : undefined}
+            weather={weather ? {
+              wind: weather.wind ? {
+                speed: (weather.wind.speedMin + weather.wind.speedMax) / 2,
+                direction: weather.wind.direction,
+                speedMin: weather.wind.speedMin,
+                speedMax: weather.wind.speedMax
+              } : undefined,
+              current: (weather as any).current
+            } : undefined}
+          />
+
+          {/* Upwind Strategy - Dedicated Beats Card */}
+          <UpwindStrategyCard
             raceId={race.id}
             raceName={race.race_name}
           />
 
+          {/* Downwind Strategy - Dedicated Runs Card */}
+          <DownwindStrategyCard
+            raceId={race.id}
+            raceName={race.race_name}
+          />
+
+          {/* Mark Rounding Strategy */}
+          <MarkRoundingCard
+            raceId={race.id}
+            raceName={race.race_name}
+          />
+
+          {/* Weather & Conditions */}
           <WindWeatherCard
             raceId={race.id}
             raceTime={race.start_time}
@@ -563,6 +667,15 @@ export default function RaceDetailScrollable() {
               region: 'asia_pacific',
               country: 'HK'
             } : undefined}
+          />
+
+          {/* Rig Tuning */}
+          <RigTuningCard
+            raceId={race.id}
+            boatClassName={race.boat_class?.name}
+            recommendation={tuningRecommendation}
+            loading={tuningLoading}
+            onRefresh={race.class_id ? refreshTuning : undefined}
           />
 
           <CurrentTideCard
@@ -584,38 +697,74 @@ export default function RaceDetailScrollable() {
             } : undefined}
           />
 
-          <TacticalPlanCard
+          {/* Contingency Plans */}
+          <ContingencyPlansCard
             raceId={race.id}
-            raceName={race.race_name}
           />
 
-          <PostRaceAnalysisCard
-            raceId={race.id}
-            raceName={race.race_name}
-            raceStartTime={race.start_time}
+          {/* ============================================ */}
+          {/*  POST-RACE ANALYSIS SECTION                 */}
+          {/* ============================================ */}
+          {getRaceStatus() === 'completed' && (
+            <>
+              <RacePhaseHeader
+                icon="trophy"
+                title="Post-Race Analysis"
+                subtitle="Review performance and get coaching"
+                badge="Complete"
+                phase="completed"
+              />
+              <PostRaceAnalysisCard
+                raceId={race.id}
+                raceName={race.race_name}
+                raceStartTime={race.start_time}
+              />
+            </>
+          )}
+
+          {/* ============================================ */}
+          {/*  LOGISTICS SECTION                         */}
+          {/* ============================================ */}
+          <RacePhaseHeader
+            icon="package-variant"
+            title="Logistics"
+            subtitle="Crew, equipment, and race details"
+            phase="upcoming"
           />
 
-          <StrategyCard
-            icon="file-document-multiple"
-            title="Documents"
-            expandable={true}
-            defaultExpanded={false}
-          >
-            <Text style={styles.cardPlaceholder}>
-              Upload sailing instructions, NOR, or course diagrams.
-            </Text>
-          </StrategyCard>
+          <CrewEquipmentCard
+            raceId={race.id}
+            classId={race.boat_class?.id || race.class_id}
+            raceDate={race.start_time}
+            onManageCrew={() => {
+              logger.debug('[RaceDetail] Manage crew tapped');
+              // TODO: Navigate to crew management
+            }}
+          />
 
-          <StrategyCard
-            icon="account-group"
-            title="Crew & Equipment"
-            expandable={true}
-            defaultExpanded={false}
-          >
-            <Text style={styles.cardPlaceholder}>
-              Manage crew assignments and boat setup.
-            </Text>
-          </StrategyCard>
+          <FleetRacersCard
+            raceId={race.id}
+            classId={race.boat_class?.name}
+            venueId={race.venue?.id}
+            onJoinFleet={(fleetId) => {
+              logger.debug('[RaceDetail] Joined fleet:', fleetId);
+            }}
+          />
+
+          <RaceDocumentsCard
+            raceId={race.id}
+            onUpload={() => {
+              logger.debug('[RaceDetail] Upload document tapped');
+              // TODO: Navigate to document upload
+            }}
+            onDocumentPress={(doc) => {
+              logger.debug('[RaceDetail] Document pressed:', doc);
+              // TODO: Open document viewer
+            }}
+            onShareWithFleet={(docId) => {
+              logger.debug('[RaceDetail] Share document with fleet:', docId);
+            }}
+          />
 
           {/* Spacer for bottom */}
           <View style={styles.bottomSpacer} />
@@ -661,6 +810,7 @@ export default function RaceDetailScrollable() {
   );
 }
 
+const logger = createLogger('[id]');
 const styles = StyleSheet.create({
   container: {
     flex: 1,

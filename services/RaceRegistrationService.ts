@@ -5,6 +5,9 @@
 
 import { supabase } from './supabase';
 import { stripeService } from './payments/StripeService';
+import MutationQueueService from './MutationQueueService';
+
+const RACE_ENTRY_COLLECTION = 'race_entries';
 
 export interface RaceEntry {
   id: string;
@@ -14,7 +17,7 @@ export interface RaceEntry {
   entry_class: string;
   division?: string;
   sail_number: string;
-  status: 'draft' | 'pending_payment' | 'confirmed' | 'waitlist' | 'withdrawn' | 'rejected';
+  status: 'draft' | 'pending_payment' | 'confirmed' | 'waitlist' | 'withdrawn' | 'rejected' | 'pending_sync';
   entry_number?: string;
   entry_fee_amount: number;
   entry_fee_currency: string;
@@ -70,18 +73,14 @@ export interface EntryFormData {
 }
 
 export class RaceRegistrationService {
-  /**
-   * Create a new race entry (draft state)
-   */
-  async createEntry(
+  async createEntryDirect(
     userId: string,
     formData: EntryFormData
-  ): Promise<{ success: boolean; entry?: RaceEntry; error?: string }> {
-    try {
-      // Get regatta details for entry fee and club info
-      const { data: regatta, error: regattaError } = await supabase
-        .from('club_race_calendar')
-        .select(`
+  ): Promise<RaceEntry> {
+    // Get regatta details for entry fee and club info
+    const { data: regatta, error: regattaError } = await supabase
+      .from('club_race_calendar')
+      .select(`
           entry_fee,
           currency,
           event_name,
@@ -91,72 +90,122 @@ export class RaceRegistrationService {
             contact_email
           )
         `)
-        .eq('id', formData.regatta_id)
-        .single();
+      .eq('id', formData.regatta_id)
+      .single();
 
-      if (regattaError) throw regattaError;
+    if (regattaError) throw regattaError;
 
-      // Get document requirements
-      const { data: docRequirements } = await supabase
-        .from('regatta_document_requirements')
-        .select('*')
-        .eq('regatta_id', formData.regatta_id);
+    // Get document requirements
+    const { data: docRequirements } = await supabase
+      .from('regatta_document_requirements')
+      .select('*')
+      .eq('regatta_id', formData.regatta_id);
 
-      // Create entry
-      const { data: entry, error: entryError } = await supabase
-        .from('race_entries')
-        .insert({
-          regatta_id: formData.regatta_id,
-          sailor_id: userId,
-          boat_id: formData.boat_id,
-          entry_class: formData.entry_class,
-          division: formData.division,
-          sail_number: formData.sail_number,
-          entry_fee_amount: regatta?.entry_fee || 0,
-          entry_fee_currency: regatta?.currency || 'USD',
-          status: 'draft',
-          payment_status: 'unpaid',
-          crew_member_ids: formData.crew_member_ids,
-          special_requests: formData.special_requests,
-          dietary_requirements: formData.dietary_requirements,
-          equipment_notes: formData.equipment_notes,
-          documents_required: docRequirements || [],
-          registration_source: 'mobile',
-        })
-        .select()
-        .single();
+    // Create entry
+    const { data: entry, error: entryError } = await supabase
+      .from('race_entries')
+      .insert({
+        regatta_id: formData.regatta_id,
+        sailor_id: userId,
+        boat_id: formData.boat_id,
+        entry_class: formData.entry_class,
+        division: formData.division,
+        sail_number: formData.sail_number,
+        entry_fee_amount: regatta?.entry_fee || 0,
+        entry_fee_currency: regatta?.currency || 'USD',
+        status: 'draft',
+        payment_status: 'unpaid',
+        crew_member_ids: formData.crew_member_ids,
+        special_requests: formData.special_requests,
+        dietary_requirements: formData.dietary_requirements,
+        equipment_notes: formData.equipment_notes,
+        documents_required: docRequirements || [],
+        registration_source: 'mobile',
+      })
+      .select()
+      .single();
 
-      if (entryError) throw entryError;
+    if (entryError) throw entryError;
 
-      // Create crew assignments
-      if (formData.crew_member_ids.length > 0) {
-        await this.assignCrewMembers(entry.id, formData.crew_member_ids);
-      }
+    // Create crew assignments
+    if (formData.crew_member_ids.length > 0) {
+      await this.assignCrewMembers(entry.id, formData.crew_member_ids);
+    }
 
-      // Get sailor details for notification
-      const { data: sailor } = await supabase
-        .from('users')
-        .select('name, email')
-        .eq('id', userId)
-        .single();
+    // Get sailor details for notification
+    const { data: sailor } = await supabase
+      .from('users')
+      .select('name, email')
+      .eq('id', userId)
+      .single();
 
-      // Send new registration notification to club
-      if (regatta?.clubs?.contact_email) {
-        const { emailService } = await import('./EmailService');
-        await emailService.sendClubNotification({
-          club_name: regatta.clubs.name || 'Club',
-          club_email: regatta.clubs.contact_email,
-          notification_type: 'new_registration',
-          sailor_name: sailor?.name || 'Sailor',
-          regatta_name: regatta.event_name || 'Event',
-          entry_number: entry.entry_number || 'TBD',
-        });
-      }
+    // Send new registration notification to club
+    if (regatta?.clubs?.contact_email) {
+      const { emailService } = await import('./EmailService');
+      await emailService.sendClubNotification({
+        club_name: regatta.clubs.name || 'Club',
+        club_email: regatta.clubs.contact_email,
+        notification_type: 'new_registration',
+        sailor_name: sailor?.name || 'Sailor',
+        regatta_name: regatta.event_name || 'Event',
+        entry_number: entry.entry_number || 'TBD',
+      });
+    }
 
+    return entry as RaceEntry;
+  }
+
+  /**
+   * Create a new race entry (draft state)
+   */
+  async createEntry(
+    userId: string,
+    formData: EntryFormData
+  ): Promise<{ success: boolean; entry?: RaceEntry; error?: string; queued?: boolean }> {
+    try {
+      const entry = await this.createEntryDirect(userId, formData);
       return { success: true, entry };
     } catch (error: any) {
       console.error('Failed to create race entry:', error);
-      return { success: false, error: error.message };
+      await MutationQueueService.enqueueMutation(RACE_ENTRY_COLLECTION, 'upsert', {
+        action: 'create',
+        userId,
+        formData,
+      });
+
+      const tempId = `local_entry_${Date.now()}`;
+      const nowIso = new Date().toISOString();
+      const fallbackEntry: RaceEntry = {
+        id: tempId,
+        regatta_id: formData.regatta_id,
+        sailor_id: userId,
+        boat_id: formData.boat_id,
+        entry_class: formData.entry_class,
+        division: formData.division,
+        sail_number: formData.sail_number,
+        status: 'pending_sync',
+        entry_number: undefined,
+        entry_fee_amount: 0,
+        entry_fee_currency: 'USD',
+        payment_status: 'unpaid',
+        payment_intent_id: undefined,
+        special_requests: formData.special_requests,
+        dietary_requirements: formData.dietary_requirements,
+        equipment_notes: formData.equipment_notes,
+        crew_member_ids: formData.crew_member_ids,
+        documents_required: [],
+        documents_submitted: [],
+        documents_complete: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      return {
+        success: true,
+        entry: fallbackEntry,
+        queued: true,
+        error: error?.message,
+      };
     }
   }
 
@@ -653,3 +702,15 @@ export class RaceRegistrationService {
 }
 
 export const raceRegistrationService = new RaceRegistrationService();
+
+export function initializeRaceRegistrationMutationHandlers() {
+  MutationQueueService.registerHandler(RACE_ENTRY_COLLECTION, {
+    upsert: async (payload: any) => {
+      if (payload?.action === 'create') {
+        await raceRegistrationService.createEntryDirect(payload.userId, payload.formData);
+      } else {
+        console.warn('Unhandled race entry action', payload?.action);
+      }
+    },
+  });
+}

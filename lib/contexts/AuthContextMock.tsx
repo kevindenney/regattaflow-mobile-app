@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState } from 'react'
 import type { AuthContextType, User, AuthState } from '@/lib/types/auth'
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('AuthContextMock');
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -54,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (email: string) => {
     // Mock password reset
-    console.log('Password reset requested for:', email)
+    logger.debug('Password reset requested for:', email)
   }
 
   const value: AuthContextType = {

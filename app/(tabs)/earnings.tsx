@@ -1,11 +1,11 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useAuth } from '@/providers/AuthProvider';
 import { StripeConnectService } from '@/services/StripeConnectService';
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 
 type StripeTransaction = {
   id: string;
@@ -26,10 +26,9 @@ type MonthlyStats = {
 };
 
 export default function EarningsScreen() {
-  const { user } = useAuth();
+  const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
   const [connectStatus, setConnectStatus] = useState({
     connected: false,
     detailsSubmitted: false,
@@ -49,36 +48,12 @@ export default function EarningsScreen() {
   });
 
   useEffect(() => {
-    loadCoachProfile();
-  }, [user]);
-
-  const loadCoachProfile = async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // Get the coach profile ID
-      const { data: profile, error } = await supabase
-        .from('coach_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error || !profile) {
-        console.error('Error loading coach profile:', error);
-        setLoading(false);
-        return;
-      }
-
-      setCoachProfileId(profile.id);
-      await loadStripeStatus(profile.id);
-    } catch (error) {
-      console.error('Error loading coach profile:', error);
+    if (coachId) {
+      loadStripeStatus(coachId);
+    } else if (!personaLoading) {
       setLoading(false);
     }
-  };
+  }, [coachId, personaLoading]);
 
   const loadStripeStatus = async (profileId: string) => {
     if (!profileId) {
@@ -121,7 +96,7 @@ export default function EarningsScreen() {
   }, []);
 
   const loadMonthlyStats = useCallback(async () => {
-    if (!user) return;
+    if (!coachId) return;
 
     try {
       // Get current month's date range
@@ -133,7 +108,7 @@ export default function EarningsScreen() {
       const { data: sessions, error } = await supabase
         .from('coaching_sessions')
         .select('fee_amount, currency, paid, status')
-        .eq('coach_id', user.id)
+        .eq('coach_id', coachId)
         .eq('status', 'completed')
         .gte('completed_at', startOfMonth.toISOString())
         .lte('completed_at', endOfMonth.toISOString());
@@ -161,25 +136,25 @@ export default function EarningsScreen() {
     } catch (e: any) {
       console.error('Error loading monthly stats:', e);
     }
-  }, [user]);
+  }, [coachId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (coachProfileId) {
-        await Promise.all([loadStripeStatus(coachProfileId), loadFinancials(coachProfileId), loadMonthlyStats()]);
+      if (coachId) {
+        await Promise.all([loadStripeStatus(coachId), loadFinancials(coachId), loadMonthlyStats()]);
       }
     } finally {
       setRefreshing(false);
     }
-  }, [coachProfileId, loadFinancials, loadMonthlyStats]);
+  }, [coachId, loadFinancials, loadMonthlyStats]);
 
   const handleOpenDashboard = async () => {
-    if (!coachProfileId) return;
+    if (!coachId) return;
 
     setLoadingDashboard(true);
     try {
-      const result = await StripeConnectService.getDashboardLink(coachProfileId);
+      const result = await StripeConnectService.getDashboardLink(coachId);
       if (result.success && result.url) {
         await Linking.openURL(result.url);
       } else {
@@ -193,12 +168,12 @@ export default function EarningsScreen() {
   };
 
   const handleSetupStripe = async () => {
-    if (!coachProfileId) return;
+    if (!coachId) return;
 
     try {
       const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
       const result = await StripeConnectService.startOnboarding(
-        coachProfileId,
+        coachId,
         `${appUrl}/(tabs)/earnings`,
         `${appUrl}/(tabs)/earnings`
       );
@@ -213,12 +188,35 @@ export default function EarningsScreen() {
     }
   };
 
-  if (loading) {
+  if (personaLoading || loading) {
     return (
       <ThemedView style={styles.container}>
         <View style={[styles.container, styles.centered]}>
           <ActivityIndicator size="large" color="#007AFF" />
           <ThemedText style={styles.loadingText}>Loading earnings...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!coachId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="school-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Coach Workspace</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            Earnings data appears once your coach profile is active. Finish onboarding or refresh your connection to continue.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryLink}
+            onPress={() => Linking.openURL('https://regattaflow.com/coach-onboarding')}
+          >
+            <ThemedText style={styles.secondaryLinkText}>Open Coach Onboarding</ThemedText>
+          </TouchableOpacity>
         </View>
       </ThemedView>
     );
@@ -399,6 +397,45 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  missingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  missingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',

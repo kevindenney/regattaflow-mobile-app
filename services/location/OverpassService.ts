@@ -1,3 +1,5 @@
+import { createLogger } from '@/lib/utils/logger';
+
 /**
  * Overpass API Service
  * Query OpenStreetMap for marinas, yacht clubs, and sailing venues worldwide
@@ -33,6 +35,7 @@ export interface OverpassResponse {
   elements: OSMMarina[];
 }
 
+const logger = createLogger('OverpassService');
 export class OverpassService {
   private baseUrl = 'https://overpass-api.de/api/interpreter';
 
@@ -163,8 +166,8 @@ out center;
    * Execute raw Overpass QL query
    */
   async executeQuery(query: string): Promise<OSMMarina[]> {
-    console.log('🌍 Querying Overpass API...');
-    console.log('Query:', query.substring(0, 100) + '...');
+
+    logger.debug('Query:', query.substring(0, 100) + '...');
 
     try {
       const response = await fetch(this.baseUrl, {
@@ -182,8 +185,6 @@ out center;
 
       const data: OverpassResponse = await response.json();
 
-      console.log(`✅ Found ${data.elements.length} locations`);
-
       return data.elements.map(element => ({
         ...element,
         // For ways/relations, use center coordinates
@@ -191,7 +192,7 @@ out center;
         lon: element.lon || (element as any).center?.lon,
       })).filter(e => e.lat && e.lon); // Only keep elements with coordinates
     } catch (error: any) {
-      console.error('❌ Overpass query failed:', error);
+
       throw error;
     }
   }
@@ -239,8 +240,8 @@ out center${limit ? ` ${limit}` : ''};
    * Splits globe into regions and queries each
    */
   async downloadAllMarinasWorldwide(): Promise<OSMMarina[]> {
-    console.log('🌍 Downloading ALL marinas worldwide...');
-    console.log('This will take several minutes...\n');
+
+    logger.debug('This will take several minutes...\n');
 
     // Split world into regions to avoid timeout
     const regions = [
@@ -255,21 +256,16 @@ out center${limit ? ` ${limit}` : ''};
     const allMarinas: OSMMarina[] = [];
 
     for (const region of regions) {
-      console.log(`📍 Querying ${region.name}...`);
 
       try {
         const marinas = await this.queryMarinas(region.bounds as [number, number, number, number]);
         allMarinas.push(...marinas);
-        console.log(`   ✅ Found ${marinas.length} marinas in ${region.name}\n`);
 
         // Rate limiting - be nice to Overpass
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (error: any) {
-        console.log(`   ⚠️  ${region.name} failed: ${error.message}\n`);
       }
     }
-
-    console.log(`\n🎉 Total: ${allMarinas.length} marinas worldwide`);
 
     return allMarinas;
   }

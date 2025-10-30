@@ -49,12 +49,7 @@ export default function StrategyScreen() {
       startTime={startTime}
       forecastDuration={24}
       onLayersUpdate={(layers) => {
-        console.log('🌊 Environmental layers updated:', {
-          windParticles: layers.windParticles.length,
-          currentParticles: layers.currentParticles.length,
-          windShadows: layers.windShadowZones.length,
-          currentZones: layers.currentAccelerationZones.length
-        });
+
       }}
     />
   );

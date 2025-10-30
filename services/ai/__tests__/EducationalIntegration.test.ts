@@ -29,7 +29,6 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
     expect(result.applicableVenues).toContain('hong-kong');
     expect(result.educationalValue).toContain('Professional sailing safety standards integrated');
 
-    console.log('✅ Yacht club educational processing test passed:', result);
   });
 
   test('should enhance document analysis with educational framework', async () => {
@@ -76,12 +75,6 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
     expect(enhancedResult.recommendations.preparation).toBeDefined();
     expect(enhancedResult.recommendations.longTerm).toBeDefined();
 
-    console.log('✅ Enhanced document analysis test passed:', {
-      safetyProtocols: enhancedResult.educationalEnhancements.safetyProtocols.length,
-      culturalProtocols: enhancedResult.educationalEnhancements.culturalProtocols.length,
-      confidenceBoost: enhancedResult.integrationMetadata.confidenceBoost,
-      immediateRecommendations: enhancedResult.recommendations.immediate.length,
-    });
   });
 
   test('should provide venue-specific educational insights', async () => {
@@ -94,14 +87,7 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
       expect(venueInsights.culturalProtocols).toBeDefined();
       expect(venueInsights.localExpertise).toBeDefined();
 
-      console.log('✅ Venue-specific insights test passed:', {
-        venue: venueInsights.venueId,
-        safetyStandards: venueInsights.safetyStandards.length,
-        tacticalKnowledge: venueInsights.tacticalKnowledge.length,
-        culturalProtocols: venueInsights.culturalProtocols.length,
-      });
     } else {
-      console.log('ℹ️ No venue insights found for hong-kong (expected for initial test)');
     }
   });
 
@@ -123,11 +109,6 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
     expect(fullDemo.systemStatus.integration.status).toBe('active');
     expect(fullDemo.systemStatus.integration.enhancementActive).toBe(true);
 
-    console.log('✅ Full system integration test passed:', {
-      educationalResources: fullDemo.educationalProcessing.resourcesProcessed,
-      enhancementActive: fullDemo.systemStatus.integration.enhancementActive,
-      supportedVenues: fullDemo.systemStatus.integration.supportedVenues.length,
-    });
   });
 
   test('should generate educationally enhanced strategy', async () => {
@@ -148,13 +129,6 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
     expect(strategy.equipmentRecommendations).toBeDefined();
     expect(strategy.competitiveAdvantages).toBeDefined();
 
-    console.log('✅ Educational strategy generation test passed:', {
-      insights: strategy.insights.length,
-      safetyConsiderations: strategy.safetyConsiderations.length,
-      culturalProtocols: strategy.culturalProtocols.length,
-      equipmentRecommendations: strategy.equipmentRecommendations.length,
-      competitiveAdvantages: strategy.competitiveAdvantages.length,
-    });
   });
 
   test('should provide knowledge base statistics', () => {
@@ -165,11 +139,10 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
     expect(stats.lastUpdated).toBeInstanceOf(Date);
     expect(stats.resourceTypes).toBeDefined();
 
-    console.log('✅ Knowledge base statistics test passed:', stats);
   });
 
   afterAll(() => {
-    console.log('🏁 Enhanced AI integration testing complete');
+
     console.log('📚 The system successfully demonstrates how yacht club educational content');
     console.log('   enhances RegattaFlow\'s AI capabilities in a respectful and systematic way.');
   });
@@ -179,7 +152,6 @@ describe('Enhanced AI Integration with Yacht Club Education', () => {
  * Example usage demonstration
  */
 export const demonstrateEnhancedAI = async () => {
-  console.log('🚀 Demonstrating Enhanced AI with Yacht Club Educational Content');
   console.log('================================================================');
 
   // 1. Show how RHKYC-style content enhances AI analysis
@@ -195,9 +167,6 @@ export const demonstrateEnhancedAI = async () => {
     'hong-kong'
   );
 
-  console.log(`✅ Processed ${educationalResult.resourcesProcessed} educational resources`);
-  console.log(`✅ Extracted ${educationalResult.insightsExtracted} tactical insights`);
-  console.log(`✅ Enhanced venue intelligence for: ${educationalResult.applicableVenues.join(', ')}`);
 
   // 2. Show enhanced document processing
   console.log('\n🧠 Step 2: Enhanced Document Analysis');
@@ -220,20 +189,13 @@ export const demonstrateEnhancedAI = async () => {
     context
   );
 
-  console.log(`✅ Document enhanced with ${enhancedAnalysis.integrationMetadata.enhancementSources.length} sources`);
-  console.log(`✅ Confidence boosted by ${(enhancedAnalysis.integrationMetadata.confidenceBoost * 100).toFixed(1)}%`);
-  console.log(`✅ Generated ${enhancedAnalysis.recommendations.immediate.length} immediate recommendations`);
 
   // 3. Show educational strategy generation
-  console.log('\n🎯 Step 3: Educational Strategy Generation');
   const strategy = await sailingEducationService.getEducationallyEnhancedStrategy(
     'How should an international Dragon sailor prepare for racing in Hong Kong?',
     'hong-kong'
   );
 
-  console.log(`✅ Generated ${strategy.insights.length} tactical insights`);
-  console.log(`✅ Provided ${strategy.safetyConsiderations.length} safety protocols`);
-  console.log(`✅ Included ${strategy.culturalProtocols.length} cultural guidelines`);
 
   console.log('\n🏆 Integration Complete!');
   console.log('The AI now provides professional sailing education quality recommendations');

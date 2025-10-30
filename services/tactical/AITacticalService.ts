@@ -179,7 +179,6 @@ export class AITacticalService {
   private cacheTimeout = 30 * 1000; // 30 seconds
 
   constructor() {
-    console.log('🧠 AI Tactical Service initialized');
   }
 
   async calculateTacticalAnalysis(
@@ -193,11 +192,8 @@ export class AITacticalService {
     const cached = this.getCachedData(cacheKey);
 
     if (cached) {
-      console.log('📦 Using cached tactical analysis');
       return cached;
     }
-
-    console.log('🧠 Computing AI tactical analysis...');
 
     try {
       // Perform comprehensive tactical analysis
@@ -237,11 +233,10 @@ export class AITacticalService {
 
       this.setCachedData(cacheKey, analysis);
 
-      console.log(`✅ Tactical analysis complete (confidence: ${Math.round(confidence * 100)}%)`);
       return analysis;
 
     } catch (error) {
-      console.error('❌ Tactical analysis failed:', error);
+
       return this.getFallbackAnalysis(currentPosition, targetMark, weather);
     }
   }
@@ -252,7 +247,6 @@ export class AITacticalService {
     weather: AdvancedWeatherConditions,
     obstacles: GeoLocation[] = []
   ): Promise<NavigationResult> {
-    console.log('🗺️ Calculating optimal route with AI...');
 
     try {
       // Advanced route optimization considering wind, current, and obstacles
@@ -306,11 +300,10 @@ export class AITacticalService {
         confidence: weather.forecast.confidence
       };
 
-      console.log(`🧭 Route calculated: ${distance.toFixed(2)}nm, ${estimatedDuration.toFixed(1)}h`);
       return result;
 
     } catch (error) {
-      console.error('❌ Route calculation failed:', error);
+
       return this.getFallbackRoute(start, finish);
     }
   }
@@ -319,7 +312,6 @@ export class AITacticalService {
     currentConditions: AdvancedWeatherConditions,
     timeHorizon: number = 30 // minutes
   ): Promise<WindPrediction[]> {
-    console.log(`🌬️ Predicting wind shifts for next ${timeHorizon} minutes`);
 
     const predictions: WindPrediction[] = [];
     const intervals = [5, 10, 15, 30]; // minutes
@@ -863,6 +855,5 @@ export class AITacticalService {
 
   destroy(): void {
     this.cache.clear();
-    console.log('🧠 AI Tactical Service destroyed');
   }
 }

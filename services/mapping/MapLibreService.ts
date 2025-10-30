@@ -105,7 +105,6 @@ export class MapLibreService {
     pitch?: number;
   }): Promise<maplibregl.Map> {
     try {
-      console.log('🗺️ [MAPLIBRE] Initializing 3D sailing map');
 
       // Default to sailing tactical style
       const defaultStyle = this.mapStyles.find(s => s.optimizedFor === 'tactical')?.url ||
@@ -144,7 +143,7 @@ export class MapLibreService {
       await new Promise<void>((resolve) => {
         this.map!.on('load', () => {
           this.isInitialized = true;
-          console.log('✅ [MAPLIBRE] 3D sailing map initialized');
+
           resolve();
         });
       });
@@ -155,7 +154,7 @@ export class MapLibreService {
       return this.map;
 
     } catch (error) {
-      console.error('🔴 [MAPLIBRE] Failed to initialize map:', error);
+
       throw error;
     }
   }
@@ -199,10 +198,8 @@ export class MapLibreService {
         },
       });
 
-      console.log('✅ [MAPLIBRE] Marine layers setup complete');
-
     } catch (error) {
-      console.error('🔴 [MAPLIBRE] Failed to setup marine layers:', error);
+
     }
   }
 
@@ -215,7 +212,6 @@ export class MapLibreService {
     }
 
     try {
-      console.log(`🏁 [MAPLIBRE] Displaying race course: ${course.name}`);
 
       this.raceCourse = course;
 
@@ -237,10 +233,8 @@ export class MapLibreService {
       // Fit map to course bounds
       this.fitToCourse(course.marks);
 
-      console.log('✅ [MAPLIBRE] Race course displayed successfully');
-
     } catch (error) {
-      console.error('🔴 [MAPLIBRE] Failed to display race course:', error);
+
       throw error;
     }
   }
@@ -484,7 +478,6 @@ export class MapLibreService {
     if (!this.map || !this.isInitialized) return;
 
     try {
-      console.log(`🌊 [MAPLIBRE] Adding ${overlay.type} overlay`);
 
       const sourceId = `weather-${overlay.type}`;
       const layerId = `weather-${overlay.type}-layer`;
@@ -541,10 +534,8 @@ export class MapLibreService {
       }
 
       this.weatherOverlays.push(overlay);
-      console.log(`✅ [MAPLIBRE] ${overlay.type} overlay added`);
 
     } catch (error) {
-      console.error(`🔴 [MAPLIBRE] Failed to add ${overlay.type} overlay:`, error);
     }
   }
 
@@ -555,7 +546,6 @@ export class MapLibreService {
     if (!this.map || !this.isInitialized) return;
 
     try {
-      console.log(`🎯 [MAPLIBRE] Adding ${layer.type} tactical layer`);
 
       const sourceId = `tactical-${layer.type}`;
       const layerId = `tactical-${layer.type}-layer`;
@@ -572,10 +562,8 @@ export class MapLibreService {
       });
 
       this.tacticalLayers.push(layer);
-      console.log(`✅ [MAPLIBRE] ${layer.type} tactical layer added`);
 
     } catch (error) {
-      console.error(`🔴 [MAPLIBRE] Failed to add ${layer.type} tactical layer:`, error);
     }
   }
 
@@ -589,7 +577,6 @@ export class MapLibreService {
     if (!style) return;
 
     try {
-      console.log(`🎨 [MAPLIBRE] Switching to ${style.name} style`);
 
       this.map.setStyle(style.url);
 
@@ -611,7 +598,7 @@ export class MapLibreService {
       });
 
     } catch (error) {
-      console.error('🔴 [MAPLIBRE] Failed to switch map style:', error);
+
     }
   }
 

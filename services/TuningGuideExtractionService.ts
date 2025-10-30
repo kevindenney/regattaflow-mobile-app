@@ -8,7 +8,7 @@
  * TODO: Move extraction to backend API endpoint for web support
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from './supabase';
 
 // NOTE: Anthropic SDK disabled for web compatibility

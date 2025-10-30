@@ -1,6 +1,9 @@
 import { createChannelName, realtimeService } from '@/services/RealtimeService';
 import { supabase } from '@/services/supabase';
 import { useCallback, useEffect, useState } from 'react';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RaceResults');
 
 export interface RaceResult {
   id: string;
@@ -66,7 +69,7 @@ export function useRaceResults(raceId?: string) {
       if (resultsError) throw resultsError;
       setResults(resultsData || []);
     } catch (err) {
-      console.error('[useRaceResults] Error loading results:', err);
+      logger.error('Error loading results:', err);
       setError(err as Error);
     } finally {
       setLoading(false);
@@ -146,8 +149,6 @@ export function useLiveRaces(userId?: string) {
     }
 
     setLoading(true);
-    console.error('🔴🔴🔴 [useLiveRaces] EXECUTING QUERY - CODE_VERSION: LIMIT_100_FIX_V2 🔴🔴🔴');
-    console.error('🔴 [useLiveRaces] userId:', userId);
 
     try {
       // Get all regattas for the user (don't filter by status to show all races)
@@ -160,16 +161,13 @@ export function useLiveRaces(userId?: string) {
         .limit(100);
 
       if (error) {
-        console.warn('[useLiveRaces] returning empty due to error', error);
+        logger.warn('Returning empty due to error:', error);
         setLiveRaces([]);
         return;
       }
-      console.error('🔴 [useLiveRaces] QUERY COMPLETE - data count:', data?.length);
-      console.error('🔴 [useLiveRaces] First 3 races:', data?.slice(0, 3).map((r: any) => r.name));
-      console.error('🔴 [useLiveRaces] Last 3 races:', data?.slice(-3).map((r: any) => r.name));
       setLiveRaces((data as any[]) || []);
     } catch (err) {
-      console.error('[useLiveRaces] Error loading races:', err);
+      logger.error('Error loading races:', err);
     } finally {
       setLoading(false);
     }

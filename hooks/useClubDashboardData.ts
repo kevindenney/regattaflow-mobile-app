@@ -158,23 +158,23 @@ export function useClubDashboardData(): ClubDashboardData {
       if (eventsError) throw eventsError;
 
       // Skip club members query since table doesn't exist and foreign key relationships are missing
-      const membersData = null;
+      const membersData: any[] | null = null;
       const membersError = null;
 
       // Skip club facilities query since table doesn't exist
-      const facilitiesData = null;
+      const facilitiesData: any[] | null = null;
       const facilitiesError = null;
 
       // Skip volunteer positions query since table doesn't exist
-      const volunteersData = null;
+      const volunteersData: any[] | null = null;
       const volunteersError = null;
 
       // Skip club financials query since table doesn't exist
-      const financialsData = null;
+      const financialsData: any[] | null = null;
       const financialsError = null;
 
       // Skip club activity query since table doesn't exist
-      const activityData = null;
+      const activityData: any[] | null = null;
       const activityError = null;
 
       // Process events data
@@ -193,7 +193,7 @@ export function useClubDashboardData(): ClubDashboardData {
       })) || [];
 
       // Process members data
-      const processedMembers: ClubMember[] = membersData?.map(member => ({
+      const processedMembers: ClubMember[] = membersData?.map((member: any) => ({
         id: member.id,
         name: member.user?.name || 'Unknown Member',
         email: member.user?.email || '',
@@ -208,7 +208,7 @@ export function useClubDashboardData(): ClubDashboardData {
       })) || [];
 
       // Process facilities data
-      const processedFacilities: ClubFacility[] = facilitiesData?.map(facility => ({
+      const processedFacilities: ClubFacility[] = facilitiesData?.map((facility: any) => ({
         id: facility.id,
         name: facility.name,
         type: facility.type,
@@ -220,7 +220,7 @@ export function useClubDashboardData(): ClubDashboardData {
       })) || [];
 
       // Process volunteer data
-      const processedVolunteers: VolunteerPosition[] = volunteersData?.map(position => ({
+      const processedVolunteers: VolunteerPosition[] = volunteersData?.map((position: any) => ({
         id: position.id,
         role: position.role,
         event_id: position.event_id,
@@ -240,25 +240,25 @@ export function useClubDashboardData(): ClubDashboardData {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
 
-      const monthlyRevenue = financialsData?.filter(item => {
+      const monthlyRevenue = financialsData?.filter((item: any) => {
         const itemDate = new Date(item.date);
         return itemDate.getMonth() === currentMonth &&
                itemDate.getFullYear() === currentYear &&
                item.type === 'revenue';
-      }).reduce((sum, item) => sum + item.amount, 0) || 0;
+      }).reduce((sum: number, item: any) => sum + item.amount, 0) || 0;
 
-      const monthlyExpenses = financialsData?.filter(item => {
+      const monthlyExpenses = financialsData?.filter((item: any) => {
         const itemDate = new Date(item.date);
         return itemDate.getMonth() === currentMonth &&
                itemDate.getFullYear() === currentYear &&
                item.type === 'expense';
-      }).reduce((sum, item) => sum + item.amount, 0) || 0;
+      }).reduce((sum: number, item: any) => sum + item.amount, 0) || 0;
 
-      const outstandingDues = membersData?.filter(member => member.dues?.status === 'overdue')
-        .reduce((sum, member) => sum + (member.dues?.amount || 0), 0) || 0;
+      const outstandingDues = membersData?.filter((member: any) => member.dues?.status === 'overdue')
+        .reduce((sum: number, member: any) => sum + (member.dues?.amount || 0), 0) || 0;
 
       // Process recent activity
-      const processedActivity: ClubActivity[] = activityData?.map(activity => ({
+      const processedActivity: ClubActivity[] = activityData?.map((activity: any) => ({
         id: activity.id,
         type: activity.type,
         title: activity.title,
@@ -294,15 +294,15 @@ export function useClubDashboardData(): ClubDashboardData {
           monthly_revenue: monthlyRevenue,
           monthly_expenses: monthlyExpenses,
           outstanding_dues: outstandingDues,
-          event_revenue: financialsData?.filter(item => item.category === 'events' && item.type === 'revenue')
-            .reduce((sum, item) => sum + item.amount, 0) || 0,
-          membership_revenue: financialsData?.filter(item => item.category === 'membership' && item.type === 'revenue')
-            .reduce((sum, item) => sum + item.amount, 0) || 0,
-          facility_costs: financialsData?.filter(item => item.category === 'facilities' && item.type === 'expense')
-            .reduce((sum, item) => sum + item.amount, 0) || 0,
-          insurance_costs: financialsData?.filter(item => item.category === 'insurance' && item.type === 'expense')
-            .reduce((sum, item) => sum + item.amount, 0) || 0,
-          recent_transactions: financialsData?.slice(0, 10).map(item => ({
+          event_revenue: financialsData?.filter((item: any) => item.category === 'events' && item.type === 'revenue')
+            .reduce((sum: number, item: any) => sum + item.amount, 0) || 0,
+          membership_revenue: financialsData?.filter((item: any) => item.category === 'membership' && item.type === 'revenue')
+            .reduce((sum: number, item: any) => sum + item.amount, 0) || 0,
+          facility_costs: financialsData?.filter((item: any) => item.category === 'facilities' && item.type === 'expense')
+            .reduce((sum: number, item: any) => sum + item.amount, 0) || 0,
+          insurance_costs: financialsData?.filter((item: any) => item.category === 'insurance' && item.type === 'expense')
+            .reduce((sum: number, item: any) => sum + item.amount, 0) || 0,
+          recent_transactions: financialsData?.slice(0, 10).map((item: any) => ({
             id: item.id,
             type: item.type,
             category: item.category,

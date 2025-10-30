@@ -5,7 +5,7 @@
  * used for strategic racing recommendations.
  */
 
-import type { SailingVenue } from './venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Bathymetric (underwater depth) data for a racing area
@@ -108,6 +108,34 @@ export interface TidalAnalysis {
   /** Array of tidal predictions covering the time range */
   predictions: TidalPrediction[];
 
+  /** Representative current speed for the analysis window (knots) */
+  currentSpeed?: number;
+
+  /** Representative current direction for the analysis window (degrees true) */
+  currentDirection?: number;
+
+  /** Summary of prevailing current for race window */
+  currentSummary?: {
+    /** Average current speed in knots */
+    averageSpeed: number;
+
+    /** Average current direction in degrees true */
+    averageDirection: number;
+
+    /** Variability factor (0-1, higher = more variable) */
+    variability?: number;
+
+    /** Whether the current is flood, ebb, or slack dominant */
+    dominantPhase?: 'flood' | 'ebb' | 'slack';
+  };
+
+  /** Instantaneous current snapshot for race start */
+  currentSnapshot?: {
+    speed: number;
+    direction: number;
+    phase: 'flood' | 'ebb' | 'slack';
+  };
+
   /** Amphidromic point if relevant (point of zero tidal range) */
   amphidromicPoint?: {
     lat: number;
@@ -181,6 +209,17 @@ export interface StrategicZone {
 
   /** Confidence in this prediction (0-1) */
   confidence: number;
+
+  /** Optional friendly name */
+  name?: string;
+
+  /** Additional computed properties for visualization layers */
+  properties?: {
+    speedIncrease?: number;
+    confidence?: number;
+    description?: string;
+    name?: string;
+  };
 }
 
 /**
@@ -243,6 +282,27 @@ export interface UnderwaterAnalysis {
 
   /** Venue context */
   venue: SailingVenue;
+
+  /** Aggregated current metrics derived from tidal + bathymetry data */
+  current?: {
+    /** Average speed across the racing area */
+    averageSpeed: number;
+
+    /** Average direction across the racing area (degrees true) */
+    averageDirection: number;
+
+    /** Variability factor (0-1) */
+    variability?: number;
+
+    /** Collection of sampled current vectors for visualization */
+    samples?: Array<{
+      lat: number;
+      lng: number;
+      speed: number;
+      direction: number;
+      timestamp?: string;
+    }>;
+  };
 }
 
 /**

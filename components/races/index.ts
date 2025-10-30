@@ -1,3 +1,4 @@
+// Legacy components
 export { RaceCard } from './RaceCard';
 export { AddRaceModal } from './AddRaceModal';
 export { RaceTimer } from './RaceTimer';
@@ -11,6 +12,24 @@ export { CreateRaceEventScreen } from './CreateRaceEventScreen';
 export { DocumentList } from './DocumentList';
 export { DocumentViewer } from './DocumentViewer';
 export { ExtractionStatusBadge } from './ExtractionStatusBadge';
+
+// New redesigned components
+export { EnhancedRaceCard } from './EnhancedRaceCard';
+export { CountdownTimer } from './CountdownTimer';
+export { StartSequenceTimer } from './StartSequenceTimer';
+export { ConditionBadge } from './ConditionBadge';
+export { AddRaceBottomSheet } from './AddRaceBottomSheet';
+export { RaceDetailCards } from './RaceDetailCards';
+
+// AI-First Add Race Components
+export { AIQuickEntry } from './AIQuickEntry';
+export { ExtractionProgress } from './ExtractionProgress';
+export { ExtractionResults } from './ExtractionResults';
+export { ManualRaceForm } from './ManualRaceForm';
+export type { InputMethod } from './AIQuickEntry';
+export type { ExtractionStep } from './ExtractionProgress';
+export type { ExtractedRaceData, ExtractedField, FieldConfidence } from './ExtractionResults';
+export type { ManualRaceFormData } from './ManualRaceForm';
 
 // AI Validation Components (Phase 3)
 export { AIValidationScreen } from './AIValidationScreen';

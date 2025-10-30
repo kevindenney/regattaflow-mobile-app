@@ -4,11 +4,14 @@
  * Integrates Anthropic Claude for document parsing and autonomous agent workflows
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/services/supabase';
 import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('AIService');
 
 // ==================== Type Definitions ====================
 
@@ -160,7 +163,7 @@ export class AIStrategyService {
     venueId?: string
   ): Promise<CourseExtraction> {
     try {
-      console.log('📄 Parsing sailing instructions...', { documentUri, venueId });
+      logger.debug('Parsing sailing instructions');
 
       const documentContent = await this.readDocumentContent(documentUri);
 
@@ -269,13 +272,13 @@ Return ONLY valid JSON matching this structure:
         extraction.confidence_score = this.calculateConfidenceScore(extraction);
         extraction.venue_id = venueId;
 
-        console.log('✅ Course extracted with confidence:', extraction.confidence_score);
+        logger.debug(`Course extracted with confidence: ${extraction.confidence_score}`);
         return extraction;
       }
 
       throw new Error('No valid JSON found in AI response');
     } catch (error) {
-      console.error('❌ Failed to parse sailing instructions:', error);
+      logger.error('Failed to parse sailing instructions:', error);
       throw error;
     }
   }
@@ -289,7 +292,7 @@ Return ONLY valid JSON matching this structure:
     userId: string
   ): Promise<RaceStrategy> {
     try {
-      console.log('🎯 Generating race strategy...', { tier: options.tier });
+      logger.debug(`Generating ${options.tier} race strategy`);
 
 
       const prompt = `
@@ -437,10 +440,10 @@ Return ONLY valid JSON matching this structure:
         updated_at: new Date()
       };
 
-      console.log('✅ Strategy generated with confidence:', strategy.confidence_score);
+      logger.debug(`Strategy generated with confidence: ${strategy.confidence_score}`);
       return strategy;
     } catch (error) {
-      console.error('❌ Failed to generate strategy:', error);
+      logger.error('Failed to generate strategy:', error);
       throw error;
     }
   }
@@ -524,10 +527,10 @@ Return ONLY valid JSON matching this structure:
 
       strategy.id = savedStrategy.id;
 
-      console.log('✅ Complete strategy workflow finished');
+      logger.debug('Complete strategy workflow finished');
       return { course, strategy };
     } catch (error) {
-      console.error('❌ Strategy workflow failed:', error);
+      logger.error('Strategy workflow failed:', error);
       throw error;
     }
   }
@@ -597,7 +600,7 @@ Return JSON:
         risk_zones: []
       };
     } catch (error) {
-      console.error('❌ Monte Carlo simulation failed:', error);
+      logger.error('Monte Carlo simulation failed:', error);
       return undefined;
     }
   }
@@ -610,7 +613,7 @@ Return JSON:
         encoding: FileSystem.EncodingType.Base64,
       });
     } catch (error) {
-      console.error('Error reading document:', error);
+      logger.error('Error reading document:', error);
       throw error;
     }
   }

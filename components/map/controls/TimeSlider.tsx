@@ -55,7 +55,7 @@ export function TimeSlider({
 }: TimeSliderProps) {
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [sliderValue, setSliderValue] = useState(0);
-  const animationRef = useRef<NodeJS.Timeout | null>(null);
+  const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Convert time to slider value (0-1)
   const timeToSliderValue = (time: Date): number => {

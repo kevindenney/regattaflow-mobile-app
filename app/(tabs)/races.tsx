@@ -1,46 +1,69 @@
-import { RaceCard } from '@/components/races/RaceCard';
+import {
+    ContingencyPlansCard,
+    CrewEquipmentCard,
+    CurrentTideCard,
+    DownwindStrategyCard,
+    FleetRacersCard,
+    MarkRoundingCard,
+    PostRaceAnalysisCard,
+    RaceDetailMapHero,
+    RaceDocumentsCard,
+    RaceOverviewCard,
+    RacePhaseHeader,
+    StartStrategyCard,
+    UpwindStrategyCard,
+    WindWeatherCard,
+    RigTuningCard,
+} from '@/components/race-detail';
+import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
+import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
-import { MOCK_RACES } from '@/constants/mockData';
-import { supabase } from '@/services/supabase';
+import { RaceCard } from '@/components/races/RaceCard';
+import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
-import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
+import { MOCK_RACES } from '@/constants/mockData';
 import { useDashboardData } from '@/hooks/useData';
 import { useOffline } from '@/hooks/useOffline';
 import { useLiveRaces } from '@/hooks/useRaceResults';
-import { useVenueDetection } from '@/hooks/useVenueDetection';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
+import { useVenueDetection } from '@/hooks/useVenueDetection';
+import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
+import { supabase } from '@/services/supabase';
 import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  AlertTriangle,
-  Bell,
-  Calendar,
-  ChevronRight,
-  Flag,
-  MapPin,
-  Navigation,
-  Plus,
-  TrendingUp,
-  Trophy,
-  Users,
-  X
+    AlertTriangle,
+    Bell,
+    Calendar,
+    ChevronRight,
+    MapPin,
+    Navigation,
+    Pencil,
+    Plus,
+    Trash2,
+    TrendingUp,
+    Users,
+    X
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { ActivityIndicator, Modal, RefreshControl, ScrollView, Text, TouchableOpacity, View, Dimensions } from 'react-native';
-import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Modal, Platform, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+
+const logger = createLogger('RacesScreen');
 
 export default function RacesScreen() {
-  console.error('🚨🚨🚨 RACES_SCREEN_RENDERING - CODE_VERSION: LIMIT_100_FIX 🚨🚨🚨');
   const { user, signedIn, ready } = useAuth();
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ selected?: string }>();
   const [showCalendarImport, setShowCalendarImport] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const mainScrollViewRef = useRef<ScrollView>(null); // Main vertical ScrollView
+  const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
   // Post-race interview state
@@ -48,18 +71,36 @@ export default function RacesScreen() {
   const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
   const [completedRaceName, setCompletedRaceName] = useState<string>('');
 
-  // Redirect to login if not authenticated
-  React.useEffect(() => {
-    if (ready && !signedIn) {
-      console.log('[RacesScreen] User not authenticated, redirecting to login');
-      router.replace('/(auth)/login');
-    }
-  }, [ready, signedIn, router]);
+  // Selected race detail state
+  const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
+  const [selectedRaceData, setSelectedRaceData] = useState<any>(null);
+  const [selectedRaceMarks, setSelectedRaceMarks] = useState<any[]>([]);
+  const [loadingRaceDetail, setLoadingRaceDetail] = useState(false);
+  const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
+  const [isDeletingRace, setIsDeletingRace] = useState(false);
+  const [hasManuallySelected, setHasManuallySelected] = useState(false);
+  const initialSelectedRaceParam = useRef<string | null>(
+    typeof searchParams?.selected === 'string' ? searchParams.selected : null
+  );
 
-  // Check if user has completed onboarding
+  // Racing area drawing state
+  const [drawingRacingArea, setDrawingRacingArea] = useState<Array<{lat: number, lng: number}>>([]);
+
+  // Combined auth and onboarding check - prevents multiple re-renders
   React.useEffect(() => {
-    const checkOnboarding = async () => {
-      if (!ready || !signedIn || !user?.id) return;
+    const checkAuthAndOnboarding = async () => {
+      // Wait for auth to be ready
+      if (!ready) return;
+
+      // Redirect to login if not authenticated
+      if (!signedIn) {
+        logger.debug('User not authenticated, redirecting to login');
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      // Check onboarding status
+      if (!user?.id) return;
 
       try {
         const { data: userData } = await supabase
@@ -68,36 +109,35 @@ export default function RacesScreen() {
           .eq('id', user.id)
           .single();
 
-        console.log('[SailorDashboard] User onboarding status:', userData);
+        logger.debug('User onboarding status:', userData);
 
         // If no user type selected, redirect to persona selection
         if (!userData?.user_type) {
-          console.log('[SailorDashboard] No user type, redirecting to persona selection');
+          logger.debug('No user type, redirecting to persona selection');
           router.replace('/(auth)/persona-selection');
           return;
         }
 
         // If onboarding not completed, redirect to appropriate onboarding
         if (!userData?.onboarding_completed) {
-          console.log('[SailorDashboard] Onboarding not completed, redirecting');
+          logger.debug('Onboarding not completed, redirecting');
           if (userData.user_type === 'sailor') {
-            router.replace('/(auth)/onboarding-redesign');
+            router.replace('/(auth)/onboarding-redesign' as any);
           } else if (userData.user_type === 'coach') {
-            router.replace('/(auth)/coach-onboarding');
+            router.replace('/(auth)/coach-onboarding' as any);
           } else if (userData.user_type === 'club') {
-            router.replace('/(auth)/club-onboarding-chat');
+            router.replace('/(auth)/club-onboarding-chat' as any);
           }
         }
       } catch (error) {
-        console.error('[SailorDashboard] Error checking onboarding:', error);
+        logger.error('Error checking onboarding:', error);
       }
     };
 
-    checkOnboarding();
+    checkAuthAndOnboarding();
   }, [ready, signedIn, user?.id, router]);
 
   // Fetch data from API
-  console.log('[SailorDashboard] rendering start');
   const {
     profile,
     nextRace,
@@ -114,37 +154,33 @@ export default function RacesScreen() {
   } = useDashboardData();
 
   // Refetch races when dashboard comes into focus (after navigation back from race creation)
+  // Skip the initial mount to prevent unnecessary refetch
+  const isInitialMount = useRef(true);
   useFocusEffect(
     useCallback(() => {
-      console.log('[SailorDashboard] Screen focused - refetching races');
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
+      logger.debug('Screen focused - refetching races');
       refetch?.();
     }, [refetch])
   );
 
   // GPS Venue Detection
   const { currentVenue, isDetecting, confidence, error: venueError } = useVenueDetection();
-  console.log('[SailorDashboard] venue state', { isDetecting, confidence, venueId: currentVenue?.id, venueError });
 
   // Offline support
   const { isOnline, cacheNextRace } = useOffline();
-  console.log('[SailorDashboard] connection', { isOnline });
 
   // Real-time race updates
   const { liveRaces, loading: liveRacesLoading } = useLiveRaces(user?.id);
-  console.log('[SailorDashboard] live races state', { userId: user?.id, liveRacesCount: liveRaces?.length, liveRacesLoading });
 
   // Real-time weather for next race
   const { weather: raceWeather, loading: weatherLoading, error: weatherError } = useRaceWeather(
     currentVenue,
     nextRace?.date
   );
-  console.log('[SailorDashboard] race weather state', {
-    venue: currentVenue?.name,
-    raceDate: nextRace?.date,
-    hasWeather: !!raceWeather,
-    weatherLoading,
-    weatherError: weatherError?.message
-  });
 
   // AI Venue Analysis
   const [venueInsights, setVenueInsights] = useState<any>(null);
@@ -156,8 +192,17 @@ export default function RacesScreen() {
 
   // Get first recent race if available - MOVED UP before conditional returns
   const safeNextRace: any = (nextRace as any) || {};
-  const safeRecentRaces: any[] = Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [];
+  // Memoize safeRecentRaces to prevent unnecessary re-renders and effect triggers
+  const safeRecentRaces: any[] = useMemo(
+    () => Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [],
+    [recentRaces]
+  );
   const recentRace = safeRecentRaces.length > 0 ? safeRecentRaces[0] : null;
+  const hasRealRaces = safeRecentRaces.length > 0 || !!nextRace;
+  const selectedDemoRace = useMemo(
+    () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
+    [selectedDemoRaceId]
+  );
 
   // Determine race status (past, next, future)
   const getRaceStatus = (raceDate: string, isNextRace: boolean): 'past' | 'next' | 'future' => {
@@ -176,7 +221,7 @@ export default function RacesScreen() {
 
   // Handle race completion - trigger post-race interview
   const handleRaceComplete = useCallback((sessionId: string, raceName: string) => {
-    console.log('[RacesScreen] Race completed:', sessionId, raceName);
+    logger.debug('Race completed:', sessionId, raceName);
     setCompletedSessionId(sessionId);
     setCompletedRaceName(raceName);
     setShowPostRaceInterview(true);
@@ -184,7 +229,7 @@ export default function RacesScreen() {
 
   // Handle post-race interview completion
   const handlePostRaceInterviewComplete = useCallback(() => {
-    console.log('[RacesScreen] Post-race interview completed');
+    logger.debug('Post-race interview completed');
     setShowPostRaceInterview(false);
     setCompletedSessionId(null);
     setCompletedRaceName('');
@@ -192,14 +237,281 @@ export default function RacesScreen() {
     refetch?.();
   }, [refetch]);
 
-  // DEBUG LOGGING
-  console.error('🎯🎯🎯 RACES_SCREEN RENDER DEBUG 🎯🎯🎯');
-  console.error('🎯 User:', user?.email, 'ID:', user?.id);
-  console.error('🎯 nextRace:', nextRace ? `${nextRace.name} (${nextRace.date})` : 'null');
-  console.error('🎯 recentRaces received from hook (now contains ALL races):', recentRaces?.length);
-  console.error('🎯 safeRecentRaces after Array check:', safeRecentRaces.length);
-  console.error('🎯 Total races to render:', safeRecentRaces.length);
-  console.error('🎯 First 10 races chronologically:', safeRecentRaces.slice(0, 10).map(r => `${r.name} (${r.date})`));
+  const handleAddRaceNavigation = useCallback(() => {
+    router.push('/(tabs)/race/add');
+  }, [router]);
+
+  // Navigate to the comprehensive edit flow for the selected race
+  const handleEditSelectedRace = useCallback(() => {
+    if (!selectedRaceId) return;
+
+    try {
+      router.push(`/race/edit/${selectedRaceId}`);
+    } catch (error) {
+      logger.error('Error navigating to edit race:', error);
+    }
+  }, [logger, router, selectedRaceId]);
+
+  // Delete the currently selected race with confirmation
+  const handleDeleteSelectedRace = useCallback(() => {
+    if (!selectedRaceId || isDeletingRace) {
+      return;
+    }
+
+    const raceName = selectedRaceData?.name || 'this race';
+
+    const performDelete = async () => {
+      setIsDeletingRace(true);
+      try {
+        // Remove any race events associated with this regatta first to avoid FK conflicts
+        const { data: raceEvents, error: raceEventsError } = await supabase
+          .from('race_events')
+          .select('id')
+          .eq('regatta_id', selectedRaceId);
+
+        if (raceEventsError) {
+          throw raceEventsError;
+        }
+
+        const eventIds = (raceEvents || []).map((event: { id: string }) => event.id);
+
+        if (eventIds.length > 0) {
+          const { error: deleteEventsError } = await supabase
+            .from('race_events')
+            .delete()
+            .in('id', eventIds);
+
+          if (deleteEventsError) {
+            throw deleteEventsError;
+          }
+        }
+
+        // Delete the regatta itself
+        const { error: deleteRegattaError } = await supabase
+          .from('regattas')
+          .delete()
+          .eq('id', selectedRaceId);
+
+        if (deleteRegattaError) {
+          throw deleteRegattaError;
+        }
+
+        // Clear local selection and refresh dashboard data
+        setSelectedRaceId(null);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        setHasManuallySelected(false);
+        await refetch?.();
+
+        Alert.alert('Race deleted', `"${raceName}" has been removed.`);
+      } catch (error: any) {
+        logger.error('Error deleting race:', error);
+        const message = error?.message || 'Unable to delete race. Please try again.';
+        Alert.alert('Error', message);
+      } finally {
+        setIsDeletingRace(false);
+      }
+    };
+
+    Alert.alert(
+      'Delete race?',
+      `Are you sure you want to delete "${raceName}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void performDelete();
+          },
+        },
+      ],
+    );
+  }, [isDeletingRace, logger, refetch, selectedRaceData, selectedRaceId]);
+
+  // Handle racing area drawing
+  const handleRacingAreaChange = useCallback((polygon: Array<{lat: number, lng: number}>) => {
+    setDrawingRacingArea(polygon);
+  }, []);
+
+  // Handle saving racing area to database
+  const handleSaveRacingArea = useCallback(async () => {
+    if (!selectedRaceId || drawingRacingArea.length < 3) return;
+
+    try {
+      logger.debug('Saving racing area:', drawingRacingArea);
+
+      // Convert to GeoJSON format
+      const coordinates = drawingRacingArea.map(point => [point.lng, point.lat]);
+      const polygonGeoJSON = {
+        type: 'Polygon',
+        coordinates: [[...coordinates, coordinates[0]]] // Close the polygon
+      };
+
+      // Save to regattas table
+      const { error } = await supabase
+        .from('regattas')
+        .update({ racing_area_polygon: polygonGeoJSON })
+        .eq('id', selectedRaceId);
+
+      if (error) throw error;
+
+      logger.debug('Racing area saved successfully');
+
+      // Update local state immediately to prevent racing area from disappearing
+      setSelectedRaceData((prev: any) => ({
+        ...prev,
+        racing_area_polygon: polygonGeoJSON
+      }));
+
+      // Clear drawing state
+      setDrawingRacingArea([]);
+
+      // Refresh race data in background
+      refetch?.();
+    } catch (error) {
+      logger.error('Error saving racing area:', error);
+    }
+  }, [selectedRaceId, drawingRacingArea, refetch]);
+
+  // Handle adding a new mark
+  const handleMarkAdded = useCallback(async (mark: Omit<any, 'id'>) => {
+    if (!selectedRaceId) return;
+
+    try {
+      logger.debug('Adding new mark:', mark);
+
+      // First, get or create the race_event associated with this regatta
+      let raceEventId: string;
+
+      const { data: existingRaceEvent } = await supabase
+        .from('race_events')
+        .select('id')
+        .eq('regatta_id', selectedRaceId)
+        .maybeSingle();
+
+      if (existingRaceEvent) {
+        raceEventId = existingRaceEvent.id;
+      } else {
+        // Create a race_event if it doesn't exist
+        const startDateObj = selectedRaceData?.start_date
+          ? new Date(selectedRaceData.start_date)
+          : null;
+        const startTime = startDateObj && !Number.isNaN(startDateObj.getTime())
+          ? startDateObj.toISOString().split('T')[1]?.split('Z')[0]?.split('.')[0] || '00:00:00'
+          : '00:00:00';
+
+        const eventDate = startDateObj && !Number.isNaN(startDateObj.getTime())
+          ? startDateObj.toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+
+        const { data: newRaceEvent, error: createError } = await supabase
+          .from('race_events')
+          .insert({
+            regatta_id: selectedRaceId,
+            name: `${selectedRaceData?.name || 'Race'} - Event 1`,
+            start_time: startTime,
+            event_date: eventDate,
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        raceEventId = newRaceEvent.id;
+      }
+
+      // Prepare insert payload using only supported columns
+      const insertPayload: any = {
+        race_id: raceEventId,
+        name: mark.name || mark.mark_name || 'Custom Mark',
+        mark_type: mark.mark_type || 'custom',
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        sequence_order: typeof mark.sequence_order === 'number' ? mark.sequence_order : 0,
+        is_custom: true,
+      };
+
+      const { data: newMark, error } = await supabase
+        .from('race_marks')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      logger.debug('Mark added successfully:', newMark);
+
+      // Update local state
+      setSelectedRaceMarks((prev: any[]) => [
+        ...prev,
+        {
+          id: newMark.id,
+          mark_name: newMark.name,
+          mark_type: newMark.mark_type,
+          latitude: newMark.latitude,
+          longitude: newMark.longitude,
+          sequence_order: 0,
+        }
+      ]);
+    } catch (error) {
+      logger.error('Error adding mark:', error);
+    }
+  }, [selectedRaceId, selectedRaceData]);
+
+  // Handle updating a mark's position
+  const handleMarkUpdated = useCallback(async (mark: any) => {
+    try {
+      logger.debug('Updating mark:', mark.id);
+
+      const { error } = await supabase
+        .from('race_marks')
+        .update({
+          latitude: mark.latitude,
+          longitude: mark.longitude,
+        })
+        .eq('id', mark.id);
+
+      if (error) throw error;
+
+      logger.debug('Mark updated successfully');
+
+      // Update local state
+      setSelectedRaceMarks((prev: any[]) =>
+        prev.map((m: any) =>
+          m.id === mark.id
+            ? {
+                ...m,
+                latitude: mark.latitude,
+                longitude: mark.longitude,
+              }
+            : m
+        )
+      );
+    } catch (error) {
+      logger.error('Error updating mark:', error);
+    }
+  }, []);
+
+  // Handle deleting a mark
+  const handleMarkDeleted = useCallback(async (markId: string) => {
+    try {
+      logger.debug('Deleting mark:', markId);
+
+      const { error } = await supabase
+        .from('race_marks')
+        .delete()
+        .eq('id', markId);
+
+      if (error) throw error;
+
+      logger.debug('Mark deleted successfully');
+
+      // Update local state
+      setSelectedRaceMarks((prev: any[]) => prev.filter((m: any) => m.id !== markId));
+    } catch (error) {
+      logger.error('Error deleting mark:', error);
+    }
+  }, []);
 
   // Memoized navigation handlers
   const handleVenuePress = useCallback(() => {
@@ -212,15 +524,15 @@ export default function RacesScreen() {
       const cachedInsights = await venueIntelligenceService.getVenueInsights(venueId);
 
       if (cachedInsights) {
-        console.log('✅ Loaded cached venue insights from database');
+        logger.info('Loaded cached venue insights from database');
         setVenueInsights(cachedInsights);
         setShowInsights(true);
       } else {
-        console.log('ℹ️ No cached insights found for venue:', venueId);
+        logger.debug('No cached insights found for venue:', venueId);
         // Insights will be null, triggering auto-generation if GPS confidence is high
       }
     } catch (error: any) {
-      console.error('Error loading cached insights:', error);
+      logger.error('Error loading cached insights:', error);
     }
   }, []);
 
@@ -241,10 +553,10 @@ export default function RacesScreen() {
         setVenueInsights(result.insights);
         setShowInsights(true);
       } else {
-        console.error('Failed to get venue insights:', result.error);
+        logger.error('Failed to get venue insights:', result.error);
       }
     } catch (error: any) {
-      console.error('Error getting venue insights:', error);
+      logger.error('Error getting venue insights:', error);
     } finally {
       setLoadingInsights(false);
     }
@@ -254,7 +566,7 @@ export default function RacesScreen() {
   React.useEffect(() => {
     if (nextRace && user) {
       cacheNextRace(nextRace.id, user.id).catch(err =>
-        console.error('Failed to cache race:', err)
+        logger.error('Failed to cache race:', err)
       );
     }
   }, [nextRace, user]);
@@ -278,27 +590,193 @@ export default function RacesScreen() {
     }
   }, [currentVenue, confidence, venueInsights, handleGetVenueInsights]);
 
+  // Auto-select first race when races load (only runs once when loading completes)
+  // Using useRef to track if auto-selection has happened to prevent re-running
+  const hasAutoSelected = useRef(false);
+  React.useEffect(() => {
+    if (!loading && safeRecentRaces.length > 0 && !hasAutoSelected.current) {
+      // Select next race if available, otherwise first race
+      const raceToSelect = nextRace || safeRecentRaces[0];
+      logger.debug('[races.tsx] Auto-selecting race:', raceToSelect?.name, raceToSelect?.id);
+      setSelectedRaceId(raceToSelect.id);
+      hasAutoSelected.current = true;
+    }
+  }, [loading, safeRecentRaces, nextRace]); // Removed selectedRaceId from dependencies
+
+  // Handle deep links that request a specific race selection (e.g., after creation)
+  useEffect(() => {
+    const targetId = initialSelectedRaceParam.current;
+    if (!targetId || loading) {
+      return;
+    }
+
+    const matchingRace = safeRecentRaces.find((race: any) => race.id === targetId);
+    if (!matchingRace) {
+      return;
+    }
+
+    logger.debug('[races.tsx] Selecting race from route params:', targetId);
+    hasAutoSelected.current = true;
+    setSelectedRaceId(targetId);
+    setHasManuallySelected(true);
+    initialSelectedRaceParam.current = null;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('selected');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [loading, safeRecentRaces]);
+
+  useEffect(() => {
+    if (hasRealRaces) {
+      if (selectedDemoRaceId) {
+        setSelectedDemoRaceId(null);
+      }
+      return;
+    }
+
+    if (!loading && !selectedDemoRaceId && MOCK_RACES.length > 0) {
+      setSelectedDemoRaceId(MOCK_RACES[0].id);
+    }
+  }, [hasRealRaces, loading, selectedDemoRaceId]);
+
+  // Scroll to race detail when a race is selected (but not on initial auto-select)
+  React.useEffect(() => {
+    if (hasManuallySelected && selectedRaceId && mainScrollViewRef.current) {
+      // Simple scroll - just scroll down a fixed amount to show the detail section
+      // This works reliably on both native and web
+      setTimeout(() => {
+        mainScrollViewRef.current?.scrollTo({
+          y: 500, // Approximate position of race detail section
+          animated: true,
+        });
+      }, 100);
+    }
+  }, [selectedRaceId, hasManuallySelected]);
+
+  // Fetch race detail when selected race changes
+  React.useEffect(() => {
+    const fetchRaceDetail = async () => {
+      // Track the selection value at the beginning of this fetch to prevent stale updates
+      const selectionAtStart = selectedRaceId;
+      logger.debug('=====================================');
+      logger.debug('[races.tsx] 📥 FETCHING RACE DETAILS');
+      logger.debug('[races.tsx] selectedRaceId:', selectedRaceId);
+
+      if (!selectedRaceId) {
+        logger.debug('[races.tsx] No selectedRaceId, clearing data');
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        return;
+      }
+
+      setLoadingRaceDetail(true);
+      try {
+        logger.debug('[races.tsx] Querying database for race ID:', selectedRaceId);
+        const { data, error } = await supabase
+          .from('regattas')
+          .select('*')
+          .eq('id', selectedRaceId)
+          .single();
+
+        if (error) throw error;
+        logger.debug('[races.tsx] ✅ Race data fetched:', data?.name);
+        // If the selection changed during the fetch, ignore this result
+        if (selectionAtStart !== selectedRaceId) {
+          logger.debug(
+            '[races.tsx] ⏭️ Ignoring stale fetch result for',
+            data?.name,
+            'selection changed to',
+            selectedRaceId
+          );
+          return;
+        }
+        setSelectedRaceData(data);
+
+        // Try to find associated race_event for marks
+        const { data: raceEvent } = await supabase
+          .from('race_events')
+          .select('id')
+          .eq('regatta_id', selectedRaceId)
+          .maybeSingle();
+
+        if (raceEvent) {
+          // Load race marks
+          const { data: marksData, error: marksError} = await supabase
+            .from('race_marks')
+            .select('*')
+            .eq('race_id', raceEvent.id)
+            .order('name', { ascending: true });
+
+          if (!marksError && marksData) {
+            // Convert race_marks format to component format
+            const convertedMarks = marksData.map((mark: any) => ({
+              id: mark.id,
+              mark_name: mark.name,
+              mark_type: mark.mark_type,
+              latitude: mark.latitude,
+              longitude: mark.longitude,
+              sequence_order: 0,
+            }));
+            setSelectedRaceMarks(convertedMarks);
+            logger.debug('[races.tsx] Marks loaded:', convertedMarks.length);
+          }
+        }
+      } catch (error) {
+        console.error('[races.tsx] ❌ Error fetching race detail:', error);
+        logger.error('[races.tsx] ❌ Error fetching race detail:', error);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+      } finally {
+        setLoadingRaceDetail(false);
+        logger.debug('[races.tsx] 🏁 Fetch complete');
+        logger.debug('=====================================');
+      }
+    };
+
+    fetchRaceDetail();
+  }, [selectedRaceId]);
+
+  const selectedRaceClassId = useMemo(() => {
+    if (!selectedRaceData) return null;
+    return (
+      selectedRaceData.class_id ||
+      selectedRaceData.classId ||
+      selectedRaceData.metadata?.class_id ||
+      selectedRaceData.metadata?.classId ||
+      null
+    );
+  }, [selectedRaceData]);
+
+  const {
+    recommendation: selectedRaceTuningRecommendation,
+    loading: selectedRaceTuningLoading,
+    refresh: refreshSelectedRaceTuning,
+  } = useRaceTuningRecommendation({
+    classId: selectedRaceClassId,
+    pointsOfSail: 'upwind',
+    enabled: !!selectedRaceClassId,
+  });
+
+  // Clear old details immediately on selection change to avoid showing stale details
+  React.useEffect(() => {
+    logger.debug('[races.tsx] 🔄 Selection changed, clearing previous details for ID:', selectedRaceId);
+    setSelectedRaceData(null);
+    setSelectedRaceMarks([]);
+  }, [selectedRaceId]);
+
   // Auto-scroll to center on next race
   useEffect(() => {
-    console.error('🎬 Auto-scroll effect triggered');
-    console.error('  - loading:', loading);
-    console.error('  - scrollViewRef exists:', !!scrollViewRef.current);
-    console.error('  - nextRace exists:', !!nextRace);
-    console.error('  - nextRace name:', nextRace?.name);
-    console.error('  - safeRecentRaces length:', safeRecentRaces.length);
-
     // Don't scroll while data is loading or if requirements aren't met
     if (loading || !nextRace || safeRecentRaces.length === 0) {
-      console.error('  - Auto-scroll SKIPPED: missing requirements or still loading');
       return;
     }
 
     // Find index of next race in the array
     const nextRaceIndex = safeRecentRaces.findIndex((race: any) => race.id === nextRace.id);
-    console.error('  - Next race index in array:', nextRaceIndex);
 
     if (nextRaceIndex === -1) {
-      console.error('  - Auto-scroll SKIPPED: next race not found in array');
       return;
     }
 
@@ -309,18 +787,15 @@ export default function RacesScreen() {
 
     // Calculate scroll position to center the next race
     const scrollX = (nextRaceIndex * totalCardWidth) - (SCREEN_WIDTH / 2) + (cardWidth / 2);
-    console.error(`  - Scrolling to x=${Math.max(0, scrollX)} to center race at index ${nextRaceIndex}`);
 
     // Scroll to position with a delay to ensure layout is ready
-    // Use a longer delay to account for rendering time
     const timer = setTimeout(() => {
-      if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({
+      if (raceCardsScrollViewRef.current) {
+        raceCardsScrollViewRef.current.scrollTo({
           x: Math.max(0, scrollX), // Don't scroll to negative values
           y: 0,
           animated: true
         });
-        console.error('  - Auto-scroll EXECUTED');
       }
     }, 500);
 
@@ -330,19 +805,19 @@ export default function RacesScreen() {
 
   // Auth loading state - show while auth is being initialized
   if (!ready) {
-    console.log('[SailorDashboard] waiting for auth to be ready');
+    logger.debug('Waiting for auth to be ready');
     return <DashboardSkeleton />;
   }
 
   // Loading state - AFTER all hooks
   if (loading && !profile) {
-    console.log('[SailorDashboard] loading skeleton');
+    logger.debug('Loading skeleton');
     return <DashboardSkeleton />;
   }
 
   // Error state
   if (error && !profile) {
-    console.error('[SailorDashboard] top-level error', error);
+    logger.error('Top-level error', error);
     return (
       <View className="flex-1 bg-background-0 items-center justify-center">
         <ErrorMessage
@@ -355,18 +830,6 @@ export default function RacesScreen() {
     );
   }
 
-  // Debug: Log what the hook returns
-  console.log('Races Screen Data:', {
-    profile,
-    nextRace,
-    recentRaces,
-    performanceHistory,
-    boats,
-    fleets,
-    loading,
-    error
-  });
-
   return (
     <View className="flex-1 bg-gray-50">
       {/* Header */}
@@ -376,7 +839,7 @@ export default function RacesScreen() {
           <View className="flex-row gap-2 items-center">
             {!isOnline && <OfflineIndicator />}
             <AccessibleTouchTarget
-              onPress={() => router.push('/notifications')}
+              onPress={() => router.push('/notifications' as any)}
               accessibilityLabel="Notifications"
               accessibilityHint="View your notifications and alerts"
               className="bg-primary-600 rounded-full p-1"
@@ -415,6 +878,7 @@ export default function RacesScreen() {
 
       {/* Main Content */}
       <ScrollView
+        ref={mainScrollViewRef}
         className="px-4 py-4"
         refreshControl={
           <RefreshControl
@@ -424,17 +888,21 @@ export default function RacesScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        onTouchStart={() => console.log('[Dashboard] Vertical ScrollView touch started')}
-        onTouchEnd={() => console.log('[Dashboard] Vertical ScrollView touch ended')}
       >
         {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
-        {nextRace || (safeRecentRaces && safeRecentRaces.length > 0) ? (
+        {hasRealRaces ? (
           // User has real races - show all upcoming races
           <>
             <View className="mb-3 flex-row items-center justify-between">
               <View>
                 <Text className="text-base font-bold text-gray-800">All Races</Text>
                 <Text className="text-xs text-gray-500">Swipe to view all races chronologically</Text>
+                {/* DEBUG: Show selected race */}
+                {selectedRaceData && (
+                  <Text className="text-xs text-purple-600 font-bold mt-1">
+                    🔍 Selected: {selectedRaceData.name} (ID: {selectedRaceId?.slice(0, 8)}...)
+                  </Text>
+                )}
               </View>
               <View className="bg-blue-100 px-3 py-1 rounded-full">
                 <Text className="text-blue-800 font-semibold text-sm">
@@ -443,19 +911,17 @@ export default function RacesScreen() {
               </View>
             </View>
             <ScrollView
-              ref={scrollViewRef}
+              ref={raceCardsScrollViewRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               className="mb-4"
-              contentContainerStyle={{ paddingRight: 16, pointerEvents: 'box-none' }}
+              contentContainerStyle={{ paddingRight: 16 }}
               nestedScrollEnabled={true}
               scrollEventThrottle={16}
-              onTouchStart={() => console.log('[Dashboard] Upcoming races horizontal ScrollView touch started')}
-              onTouchEnd={() => console.log('[Dashboard] Upcoming races horizontal ScrollView touch ended')}
             >
               {/* All races in chronological order */}
               {safeRecentRaces.map((race: any, index: number) => {
-                const isNextRace = nextRace && race.id === nextRace.id;
+                const isNextRace = !!(nextRace && race.id === nextRace.id);
                 const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
                 return (
                   <RaceCard
@@ -472,10 +938,256 @@ export default function RacesScreen() {
                     isPrimary={isNextRace}
                     raceStatus={raceStatus}
                     onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name)}
+                    isSelected={selectedRaceId === race.id}
+                    onSelect={() => {
+                      logger.debug('=====================================');
+                      logger.debug('[RacesScreen] 🎯 RACE CARD CLICKED');
+                      logger.debug('[RacesScreen] Race name:', race.name);
+                      logger.debug('[RacesScreen] Race ID:', race.id);
+                      logger.debug('[RacesScreen] Previous selectedRaceId:', selectedRaceId);
+                      logger.debug('[RacesScreen] Will set selectedRaceId to:', race.id);
+                      logger.debug('=====================================');
+                      setHasManuallySelected(true);
+                      setSelectedRaceId(race.id);
+                    }}
                   />
                 );
               })}
             </ScrollView>
+
+            {/* Inline Comprehensive Race Detail Section */}
+            {loadingRaceDetail && !selectedRaceData && (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator size="large" color="#2563EB" />
+                <Text className="text-gray-500 mt-2">Loading race details...</Text>
+              </View>
+            )}
+
+            {selectedRaceData && (
+              <View className="mt-2 gap-4">
+                <View className="flex-row gap-3">
+                  <Button
+                    action="secondary"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onPress={handleEditSelectedRace}
+                  >
+                    <ButtonIcon as={Pencil} />
+                    <ButtonText>Edit Race</ButtonText>
+                  </Button>
+                  <Button
+                    action="negative"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onPress={handleDeleteSelectedRace}
+                    disabled={isDeletingRace}
+                  >
+                    <ButtonIcon as={Trash2} />
+                    <ButtonText>{isDeletingRace ? 'Deleting...' : 'Delete Race'}</ButtonText>
+                  </Button>
+                </View>
+
+                {/* Tactical Race Map */}
+                <RaceDetailMapHero
+                  race={{
+                    id: selectedRaceData.id,
+                    race_name: selectedRaceData.name,
+                    start_time: selectedRaceData.start_date,
+                    venue: selectedRaceData.metadata?.venue_name ? {
+                      name: selectedRaceData.metadata.venue_name,
+                      coordinates_lat: selectedRaceData.metadata?.venue_lat || 22.2650,
+                      coordinates_lng: selectedRaceData.metadata?.venue_lng || 114.2620,
+                    } : undefined,
+                    racing_area_polygon: selectedRaceData.racing_area_polygon,
+                    boat_class: selectedRaceData.metadata?.class_name ? {
+                      name: selectedRaceData.metadata.class_name
+                    } : undefined,
+                  }}
+                  marks={selectedRaceMarks}
+                  compact={false}
+                  racingAreaPolygon={
+                    drawingRacingArea.length > 0
+                      ? drawingRacingArea
+                      : selectedRaceData.racing_area_polygon?.coordinates?.[0]?.map((coord: number[]) => ({
+                          lat: coord[1],
+                          lng: coord[0]
+                        }))
+                  }
+                  onRacingAreaChange={handleRacingAreaChange}
+                  onSaveRacingArea={handleSaveRacingArea}
+                  onMarkAdded={handleMarkAdded}
+                  onMarkUpdated={handleMarkUpdated}
+                  onMarkDeleted={handleMarkDeleted}
+                />
+
+                {/* ============================================ */}
+                {/*  PRE-RACE STRATEGY SECTION                 */}
+                {/* ============================================ */}
+                <RacePhaseHeader
+                  icon="chess-knight"
+                  title="Pre-Race Strategy"
+                  subtitle="AI-generated plan based on conditions"
+                  badge="Ready"
+                  phase="upcoming"
+                />
+
+                {/* Race Overview - Quick Stats & Confidence */}
+                <RaceOverviewCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                  startTime={selectedRaceData.start_date}
+                  venue={selectedRaceData.metadata?.venue_name ? {
+                    id: selectedRaceData.metadata.venue_id,
+                    name: selectedRaceData.metadata.venue_name,
+                    coordinates_lat: selectedRaceData.metadata?.venue_lat || 22.2650,
+                    coordinates_lng: selectedRaceData.metadata?.venue_lng || 114.2620,
+                  } : undefined}
+                  boatClass={selectedRaceData.metadata?.class_name}
+                />
+
+                {/* Start Strategy */}
+                <StartStrategyCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                  raceStartTime={selectedRaceData.start_date}
+                  venueId={selectedRaceData.metadata?.venue_id}
+                  venueName={selectedRaceData.metadata?.venue_name}
+                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                    lat: selectedRaceData.metadata.venue_lat,
+                    lng: selectedRaceData.metadata.venue_lng
+                  } : undefined}
+                />
+
+                {/* Upwind Strategy - Dedicated Beats Card */}
+                <UpwindStrategyCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                />
+
+                {/* Downwind Strategy - Dedicated Runs Card */}
+                <DownwindStrategyCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                />
+
+                {/* Mark Rounding Strategy */}
+                <MarkRoundingCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                />
+
+                {/* Weather & Conditions */}
+                <WindWeatherCard
+                  raceId={selectedRaceData.id}
+                  raceTime={selectedRaceData.start_date}
+                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                    lat: selectedRaceData.metadata.venue_lat,
+                    lng: selectedRaceData.metadata.venue_lng
+                  } : undefined}
+                  venue={selectedRaceData.metadata?.venue_lat ? {
+                    id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                    name: selectedRaceData.metadata?.venue_name || 'Race Venue',
+                    coordinates: {
+                      latitude: selectedRaceData.metadata.venue_lat,
+                      longitude: selectedRaceData.metadata.venue_lng
+                    },
+                    region: 'asia_pacific',
+                    country: 'HK'
+                  } : undefined}
+                />
+
+                <RigTuningCard
+                  raceId={selectedRaceData.id}
+                  boatClassName={selectedRaceData.metadata?.class_name}
+                  recommendation={selectedRaceTuningRecommendation}
+                  loading={selectedRaceTuningLoading}
+                  onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
+                />
+
+                <CurrentTideCard
+                  raceId={selectedRaceData.id}
+                  raceTime={selectedRaceData.start_date}
+                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                    lat: selectedRaceData.metadata.venue_lat,
+                    lng: selectedRaceData.metadata.venue_lng
+                  } : undefined}
+                  venue={selectedRaceData.metadata?.venue_lat ? {
+                    id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                    name: selectedRaceData.metadata?.venue_name || 'Race Venue',
+                    coordinates: {
+                      latitude: selectedRaceData.metadata.venue_lat,
+                      longitude: selectedRaceData.metadata.venue_lng
+                    },
+                    region: 'asia_pacific',
+                    country: 'HK'
+                  } : undefined}
+                />
+
+                {/* Contingency Plans */}
+                <ContingencyPlansCard
+                  raceId={selectedRaceData.id}
+                />
+
+                {/* ============================================ */}
+                {/*  POST-RACE ANALYSIS SECTION                 */}
+                {/* ============================================ */}
+                <RacePhaseHeader
+                  icon="trophy"
+                  title="Post-Race Analysis"
+                  subtitle="Review performance and get coaching"
+                  badge="Complete"
+                  phase="completed"
+                />
+                <PostRaceAnalysisCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                  raceStartTime={selectedRaceData.start_date}
+                />
+
+                {/* ============================================ */}
+                {/*  LOGISTICS SECTION                         */}
+                {/* ============================================ */}
+                <RacePhaseHeader
+                  icon="package-variant"
+                  title="Logistics"
+                  subtitle="Crew, equipment, and race details"
+                  phase="upcoming"
+                />
+
+                <CrewEquipmentCard
+                  raceId={selectedRaceData.id}
+                  classId={selectedRaceData.class_id || selectedRaceData.metadata?.class_id}
+                  raceDate={selectedRaceData.start_date}
+                  onManageCrew={() => {
+                    logger.debug('Manage crew tapped');
+                  }}
+                />
+
+                <FleetRacersCard
+                  raceId={selectedRaceData.id}
+                  classId={selectedRaceData.metadata?.class_name}
+                  venueId={selectedRaceData.metadata?.venue_id}
+                  onJoinFleet={(fleetId) => {
+                    logger.debug('Joined fleet:', fleetId);
+                  }}
+                />
+
+                <RaceDocumentsCard
+                  raceId={selectedRaceData.id}
+                  onUpload={() => {
+                    logger.debug('Upload document tapped');
+                  }}
+                  onDocumentPress={(doc) => {
+                    logger.debug('Document pressed:', doc);
+                  }}
+                  onShareWithFleet={(docId) => {
+                    logger.debug('Share document with fleet:', docId);
+                  }}
+                />
+              </View>
+            )}
           </>
         ) : (
           // User has no races - show mock race cards horizontally
@@ -493,11 +1205,6 @@ export default function RacesScreen() {
               contentContainerStyle={{ paddingRight: 16, pointerEvents: 'box-none' }}
               nestedScrollEnabled={true}
               scrollEventThrottle={16}
-              onTouchStart={(e) => {
-                console.log('[Dashboard] 🟢 Demo races ScrollView touch started');
-                console.log('[Dashboard] Touch target:', e.target);
-              }}
-              onTouchEnd={() => console.log('[Dashboard] 🟢 Demo races ScrollView touch ended')}
             >
               {MOCK_RACES.map((race, index) => (
                 <RaceCard
@@ -513,9 +1220,14 @@ export default function RacesScreen() {
                   critical_details={race.critical_details}
                   isPrimary={index === 0}
                   isMock={true}
+                  isSelected={selectedDemoRaceId === race.id}
+                  onSelect={() => setSelectedDemoRaceId(race.id)}
                 />
               ))}
             </ScrollView>
+            {selectedDemoRace && (
+              <DemoRaceDetail race={selectedDemoRace} onAddRace={handleAddRaceNavigation} />
+            )}
           </>
         )}
 

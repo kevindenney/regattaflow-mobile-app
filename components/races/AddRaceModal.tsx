@@ -21,6 +21,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { RaceExtractionAgent } from '@/services/agents/RaceExtractionAgent';
 import { BoatSelector } from './BoatSelector';
+import { createLogger } from '@/lib/utils/logger';
 
 interface AddRaceModalProps {
   visible: boolean;
@@ -50,6 +51,7 @@ interface ExtractedRaceData {
   };
 }
 
+const logger = createLogger('AddRaceModal');
 export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProps) {
   const { user } = useAuth();
   const [inputText, setInputText] = useState('');
@@ -63,13 +65,13 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
     setIsProcessing(true);
 
     try {
-      console.log('[AddRaceModal] Starting AI extraction...');
+      logger.debug('[AddRaceModal] Starting AI extraction...');
 
       // Use Anthropic Agent SDK for intelligent extraction
       const agent = new RaceExtractionAgent();
       const result = await agent.extractRaceData(inputText);
 
-      console.log('[AddRaceModal] Extraction result:', result);
+      logger.debug('[AddRaceModal] Extraction result:', result);
 
       if (!result.success || !result.data) {
         Alert.alert(
@@ -104,7 +106,7 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
 
       if (error) throw error;
 
-      console.log('[AddRaceModal] Race saved successfully');
+      logger.debug('[AddRaceModal] Race saved successfully');
 
       // Clear input and close modal
       setInputText('');

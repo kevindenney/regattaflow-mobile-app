@@ -110,7 +110,7 @@ export class NominatimService {
           : undefined,
       }));
     } catch (error) {
-      console.error('❌ Nominatim search failed:', error);
+
       throw error;
     }
   }
@@ -161,7 +161,7 @@ export class NominatimService {
           : undefined,
       };
     } catch (error) {
-      console.error('❌ Nominatim reverse geocode failed:', error);
+
       return null;
     }
   }
@@ -258,7 +258,6 @@ export class NominatimService {
     const results: Array<{ query: string; result: NominatimResult | null }> = [];
 
     for (const query of queries) {
-      console.log(`🔍 Geocoding: ${query.name}`);
       const result = await this.geocodeYachtClub(query.name, query.country);
       results.push({
         query: query.name,

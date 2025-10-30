@@ -79,12 +79,12 @@ export function useStreamingChat(sailorId: string) {
     }
 
     // Parse user messages for data
-    const userMessagesWithMeta = messages.filter(m => m.role === 'user');
-    const userMessages = userMessagesWithMeta.map(m => m.content.toLowerCase());
+    const userMessagesWithMeta = messages.filter((m): m is ChatMessage => m.role === 'user');
+    const userMessages = userMessagesWithMeta.map((m: ChatMessage) => m.content.toLowerCase());
     const allText = userMessages.join(' ');
 
     // Extract role (owner, crew, both)
-    userMessagesWithMeta.forEach((msg, idx) => {
+    userMessagesWithMeta.forEach((msg) => {
       const content = msg.content.toLowerCase();
       if (content.includes('owner') && !newData.role) {
         newData.role = 'Owner';
@@ -309,20 +309,10 @@ export function useStreamingChat(sailorId: string) {
 
     setCollectedData(newData);
 
-    console.log('📊 [useStreamingChat] Collected data updated:', newData);
-    console.log('🕐 [useStreamingChat] Chronological items:', chronologicalItems);
   }, [messages, context]);
 
   // DEBUG: Log context changes
   useEffect(() => {
-    console.log('🔍 [useStreamingChat] Context updated:', {
-      sailorId: context.sailorId,
-      hasVenue: !!context.detectedVenue,
-      venueName: context.detectedVenue?.name,
-      boatClass: context.selectedBoatClass,
-      clubs: context.selectedClubs,
-      fleets: context.selectedFleets,
-    });
   }, [context]);
 
   // Initialize agent
@@ -395,7 +385,6 @@ export function useStreamingChat(sailorId: string) {
           conversationHistory: summary.messages,
         }));
       } catch (error: any) {
-        console.error('❌ Chat error:', error);
 
         // Add error message
         setMessages(prev => [

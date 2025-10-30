@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { RaceAnalysisAgent } from '@/services/agents/RaceAnalysisAgent';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceAnalysisViewProps {
   sessionId: string;
@@ -45,6 +46,7 @@ interface AICoachAnalysis {
   created_at: string;
 }
 
+const logger = createLogger('RaceAnalysisView');
 export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps) {
   const [analysis, setAnalysis] = useState<AICoachAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,7 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
         setAnalysis(data);
       } else {
         // No analysis yet - might still be processing
-        console.log('No analysis found for session:', sessionId);
+        logger.debug('No analysis found for session:', sessionId);
       }
     } catch (error: any) {
       console.error('Error loading analysis:', error);

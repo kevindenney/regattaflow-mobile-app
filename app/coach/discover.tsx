@@ -209,8 +209,6 @@ export default function CoachDiscoveryScreen() {
 
       if (error) {
         console.error('Failed to save match scores:', error);
-      } else {
-        console.log(`✅ Saved ${matchRecords.length} match scores to database`);
       }
     } catch (error) {
       console.error('Error saving match scores:', error);

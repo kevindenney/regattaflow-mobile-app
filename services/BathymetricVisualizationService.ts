@@ -6,7 +6,7 @@
  * and professional depth visualization.
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 import { BathymetryTileService, type BathymetrySources } from './BathymetryTileService';
 
 /**

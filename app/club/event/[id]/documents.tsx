@@ -20,21 +20,25 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { EventDocument, DocumentType } from '@/services/eventService';
 import { format } from 'date-fns';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 export default function EventDocumentsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const eventId = id as string;
+  const { clubId, loading: personaLoading, refresh: refreshPersonaContext } = useClubWorkspace();
 
   const [documents, setDocuments] = useState<EventDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
+    if (!clubId) return;
     loadDocuments();
-  }, [eventId]);
+  }, [eventId, clubId]);
 
   const loadDocuments = async () => {
+    if (!clubId) return;
     try {
       setLoading(true);
       const docs = await EventService.getEventDocuments(eventId);
@@ -196,6 +200,39 @@ export default function EventDocumentsScreen() {
   }, {} as Record<DocumentType, EventDocument[]>);
 
   const documentTypes: DocumentType[] = ['nor', 'si', 'course_map', 'amendment', 'notice', 'results', 'other'];
+
+  if (personaLoading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0EA5E9" />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="people-circle-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Club Workspace</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            You need an active club connection to publish event documents. Finish onboarding or refresh your workspace.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryLink}
+            onPress={() => router.push('/(auth)/club-onboarding-chat')}
+          >
+            <ThemedText style={styles.secondaryLinkText}>Open Club Onboarding</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
 
   if (loading) {
     return (
@@ -396,6 +433,45 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  missingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    backgroundColor: '#F8FAFC',
+  },
+  missingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
   content: {
     flex: 1,

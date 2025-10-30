@@ -23,6 +23,7 @@ import RaceCourseVisualization3D from '@/components/strategy/RaceCourseVisualiza
 import RaceDayInterface from '@/components/racing/RaceDayInterface';
 import { AIRaceAnalysisDashboard } from '@/components/ai/AIRaceAnalysisDashboard';
 import type { DocumentAnalysis, RaceCourseExtraction } from '@/lib/types/ai-knowledge';
+import { createLogger } from '@/lib/utils/logger';
 
 interface DashboardState {
   currentVenue: SailingVenue | null;
@@ -35,6 +36,7 @@ interface DashboardState {
   showAIAnalysis: boolean;
 }
 
+const logger = createLogger('RaceDashboard');
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth > 768;
 
@@ -80,7 +82,6 @@ export const RaceDashboard: React.FC = () => {
   }, []);
 
   const initializeDashboard = async () => {
-    console.log('🚀 Initializing Race Dashboard...');
 
     try {
       // Initialize venue detection
@@ -93,7 +94,6 @@ export const RaceDashboard: React.FC = () => {
         venueDetectionService.addLocationListener(handleLocationUpdate);
 
         if (currentVenue) {
-          console.log(`📍 Dashboard initialized at ${currentVenue.name}`);
         }
       }
 
@@ -101,7 +101,7 @@ export const RaceDashboard: React.FC = () => {
       await loadCachedData();
 
     } catch (error) {
-      console.error('❌ Dashboard initialization failed:', error);
+
     }
   };
 
@@ -121,7 +121,6 @@ export const RaceDashboard: React.FC = () => {
   };
 
   const loadVenueIntelligence = async (venue: SailingVenue) => {
-    console.log(`🌍 Loading intelligence for ${venue.name}...`);
 
     Alert.alert(
       '🧠 Local Intelligence Loaded',
@@ -134,7 +133,6 @@ export const RaceDashboard: React.FC = () => {
 
   const loadCachedData = async () => {
     // In a real implementation, this would load cached strategies and documents
-    console.log('📂 Loading cached race data...');
   };
 
   const generateFullStrategy = async () => {
@@ -169,8 +167,6 @@ export const RaceDashboard: React.FC = () => {
         Safety: All crew must wear PFDs
         VHF Channel 72 for race communication
       `;
-
-      console.log('🎯 Generating complete AI race strategy...');
 
       const strategy = await raceStrategyEngine.generateRaceStrategy(
         sailingInstructions,
@@ -546,7 +542,7 @@ export const RaceDashboard: React.FC = () => {
               setDashboardState(prev => ({ ...prev, activeStrategy: strategy }));
             }}
             onInsightGenerated={(insight) => {
-              console.log('New tactical insight:', insight);
+              logger.debug('New tactical insight:', insight);
             }}
           />
         </View>
@@ -576,7 +572,7 @@ export const RaceDashboard: React.FC = () => {
                 Alert.alert('Mark Selected', `Selected: ${markName}`)
               }
               onTacticalLayerToggle={(layer, enabled) =>
-                console.log(`Layer ${layer}: ${enabled ? 'enabled' : 'disabled'}`)
+                logger.debug(`Layer ${layer}: ${enabled ? 'enabled' : 'disabled'}`)
               }
             />
           )}

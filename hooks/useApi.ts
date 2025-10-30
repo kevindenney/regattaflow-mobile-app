@@ -31,28 +31,21 @@ export function useApi<T>(
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    console.log('[useApi] fetchData called, enabled:', enabled);
-
     if (!enabled) {
-      console.log('[useApi] fetchData SKIPPED - not enabled');
       return;
     }
 
-    console.log('[useApi] Setting loading to true');
     setLoading(true);
     setError(null);
 
     try {
-      console.log('[useApi] Calling apiFunction...');
       const result = await apiFunction();
-      console.log('[useApi] apiFunction result:', result);
 
       if (result.error) {
         console.error('[useApi] Error in result:', result.error);
         setError(result.error);
         onError?.(result.error);
       } else {
-        console.log('[useApi] Success - setting data:', result.data);
         setData(result.data);
         onSuccess?.(result.data as T);
       }
@@ -62,13 +55,12 @@ export function useApi<T>(
       setError(error);
       onError?.(error);
     } finally {
-      console.log('[useApi] Setting loading to false');
       setLoading(false);
     }
-  }, [apiFunction, enabled, onSuccess, onError]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   useEffect(() => {
-    console.log('[useApi] useEffect triggered - calling fetchData');
     fetchData();
   }, [fetchData]);
 
@@ -237,7 +229,8 @@ export function usePaginatedQuery<T>(
     } finally {
       setLoading(false);
     }
-  }, [queryFunction, pageSize, onSuccess, onError]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageSize]);
 
   useEffect(() => {
     fetchData(1, false);

@@ -13,6 +13,9 @@ import type {
   LocalWeatherSource,
   WeatherParameter
 } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
+import { WeatherAPIProService } from './WeatherAPIProService';
+import Constants from 'expo-constants';
 
 // Weather forecast data types
 export interface WeatherForecast {
@@ -103,9 +106,31 @@ export class RegionalWeatherService {
   private weatherModels: Map<string, RegionalWeatherModel> = new Map();
   private cache: Map<string, WeatherData> = new Map();
   private cacheTimeout = 30 * 60 * 1000; // 30 minutes
+  private weatherAPIService: WeatherAPIProService | null = null;
+  private logger = createLogger('RegionalWeatherService');
 
   constructor() {
     this.initializeWeatherModels();
+    this.initializeWeatherAPI();
+  }
+
+  /**
+   * Initialize Weather API service if API key is available
+   */
+  private initializeWeatherAPI(): void {
+    const apiKey = Constants.expoConfig?.extra?.weatherApiKey || process.env.WEATHER_API_KEY;
+
+    if (apiKey) {
+      this.weatherAPIService = new WeatherAPIProService({
+        apiKey,
+        baseUrl: 'https://api.weatherapi.com/v1',
+        timeout: 10000,
+        retryAttempts: 3
+      });
+      this.logger.info('Real weather API initialized');
+    } else {
+      console.warn('[RegionalWeatherService] No API key found - using simulated data. Set WEATHER_API_KEY in .env');
+    }
   }
 
   /**
@@ -246,11 +271,9 @@ export class RegionalWeatherService {
     // Check cache
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.lastUpdated.getTime() < this.cacheTimeout) {
-      console.log(`🌤️ Using cached weather for ${venue.name}`);
       return cached;
     }
 
-    console.log(`🌤️ Fetching fresh weather data for ${venue.name}`);
 
     try {
       // Select best weather models for this venue
@@ -262,11 +285,9 @@ export class RegionalWeatherService {
       // Cache the result
       this.cache.set(cacheKey, weatherData);
 
-      console.log(`✅ Weather data retrieved for ${venue.name} from ${weatherData.sources.primary}`);
       return weatherData;
 
     } catch (error: any) {
-      console.error(`❌ Failed to get weather for ${venue.name}:`, error);
       return null;
     }
   }
@@ -298,8 +319,6 @@ export class RegionalWeatherService {
       if (globalModel) models.push(globalModel);
     }
 
-    console.log(`🌤️ Selected ${models.length} weather models for ${venue.name}:`,
-                models.map(m => m.name).join(', '));
 
     return models.slice(0, 3); // Use top 3 models max
   }
@@ -353,25 +372,70 @@ export class RegionalWeatherService {
 
   /**
    * Generate venue-specific forecast based on typical conditions
+   * Uses real Weather API if available, falls back to simulated data
    */
   private async generateVenueSpecificForecast(
     venue: SailingVenue,
     timestamp: Date,
     model: RegionalWeatherModel
   ): Promise<WeatherForecast> {
-    const conditions = venue.sailingConditions || venue.conditions;
+    // Try to use real weather API first
+    if (this.weatherAPIService) {
+      try {
+        const location = {
+          latitude: venue.coordinates[1],
+          longitude: venue.coordinates[0],
+          name: venue.name
+        };
+
+        // Get forecast from Weather API
+        const hoursAhead = Math.ceil((timestamp.getTime() - Date.now()) / (1000 * 60 * 60));
+        const days = Math.min(7, Math.ceil(hoursAhead / 24));
+
+        const forecast = await this.weatherAPIService.getAdvancedForecast(location, days);
+
+        // Find the forecast closest to our target timestamp
+        if (forecast && forecast.length > 0) {
+          // For now, use the first forecast entry and transform it
+          const weatherData = forecast[0];
+
+          return {
+            timestamp,
+            windSpeed: Math.round(weatherData.wind.speed),
+            windDirection: Math.round(weatherData.wind.direction),
+            windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
+            waveHeight: weatherData.waves?.height || 0.5,
+            wavePeriod: weatherData.waves?.period || 5,
+            waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
+            airTemperature: weatherData.temperature || 20,
+            waterTemperature: (weatherData.temperature || 20) - 2,
+            visibility: weatherData.visibility.horizontal / 1000, // Convert meters to km
+            barometricPressure: weatherData.pressure.sealevel,
+            humidity: weatherData.humidity || 60,
+            precipitation: weatherData.precipitation || 0,
+            cloudCover: weatherData.cloudCover || 50,
+            weatherCondition: this.mapWeatherCondition(weatherData),
+            confidence: weatherData.forecast?.confidence || 0.85
+          };
+        }
+      } catch (error) {
+        console.error('[RegionalWeatherService] Weather API error, falling back to simulated data:', error);
+        // Fall through to simulated data
+      }
+    }
+
+    // Fallback: Use simulated data based on venue's typical conditions
+    const conditions = venue.sailingConditions;
     const typical = conditions?.typicalConditions;
 
-    // Use venue's typical conditions as baseline with some variation
     const baseWind = typical?.windSpeed?.average || 12;
-    const windVariation = (Math.random() - 0.5) * 8; // ±4 knots variation
+    const windVariation = (Math.random() - 0.5) * 8;
     const windSpeed = Math.max(0, baseWind + windVariation);
 
     const baseDirection = typical?.windDirection?.primary || 180;
-    const directionVariation = (Math.random() - 0.5) * 60; // ±30 degree variation
+    const directionVariation = (Math.random() - 0.5) * 60;
     const windDirection = (baseDirection + directionVariation + 360) % 360;
 
-    // Weather degrades over time for demo purposes
     const hoursFromNow = (timestamp.getTime() - Date.now()) / (1000 * 60 * 60);
     const weatherDegradation = Math.min(0.3, hoursFromNow * 0.01);
 
@@ -393,6 +457,22 @@ export class RegionalWeatherService {
       weatherCondition: this.determineWeatherCondition(windSpeed, weatherDegradation),
       confidence: model.reliability * (1 - weatherDegradation * 0.2)
     };
+  }
+
+  /**
+   * Map Weather API conditions to our weather condition string
+   */
+  private mapWeatherCondition(weatherData: any): string {
+    const windSpeed = weatherData.wind.speed;
+    const precipRate = weatherData.precipitation?.rate || 0;
+
+    if (precipRate > 5) return 'Stormy';
+    if (precipRate > 1) return 'Rainy';
+    if (windSpeed > 25) return 'Very Windy';
+    if (windSpeed > 15) return 'Windy';
+    if (windSpeed > 8) return 'Moderate Breeze';
+    if (windSpeed > 3) return 'Light Breeze';
+    return 'Calm';
   }
 
   /**
@@ -523,7 +603,6 @@ export class RegionalWeatherService {
       weatherMap.set(venue.id, weather);
     });
 
-    console.log(`🌤️ Compared weather for ${venues.length} venues`);
     return weatherMap;
   }
 
@@ -596,7 +675,6 @@ export class RegionalWeatherService {
    */
   clearCache(): void {
     this.cache.clear();
-    console.log('🌤️ Weather cache cleared');
   }
 
   /**

@@ -5,6 +5,7 @@
  */
 
 import { SupabaseVenueService } from './SupabaseVenueService';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   SailingVenue,
   VenueType,
@@ -15,6 +16,7 @@ import type {
   WeatherSourceConfig
 } from '@/lib/types/global-venues';
 
+const logger = createLogger('GlobalVenueDatabase');
 export class GlobalVenueDatabase {
   private venues: Map<string, SailingVenue> = new Map();
   private venuesByCoordinates: Map<string, string> = new Map(); // coordinates hash -> venue ID
@@ -33,28 +35,25 @@ export class GlobalVenueDatabase {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    console.log('🌍 Loading global venue intelligence database...');
-
     if (this.useSupabase) {
       try {
-        console.log('🌍 Attempting to load venues from Supabase PostGIS database...');
+
         await this.loadVenuesFromSupabase();
 
         if (this.venues.size > 0) {
-          console.log(`🌍 Successfully loaded ${this.venues.size} venues from Supabase`);
           this.buildLocationIndexes();
           this.initialized = true;
           return;
         } else {
-          console.log('🌍 No venues loaded from Supabase, falling back to local data');
+
         }
       } catch (error) {
-        console.warn('🌍 Supabase venue loading failed, falling back to local data:', error);
+
       }
     }
 
     // Fallback to local venues if Supabase fails or is disabled
-    console.log('🌍 Loading local venue data...');
+
     await this.loadChampionshipVenues();
     await this.loadPremierRacingCenters();
     await this.loadRegionalHubs();
@@ -62,7 +61,6 @@ export class GlobalVenueDatabase {
     this.buildLocationIndexes();
     this.initialized = true;
 
-    console.log(`🌍 Global venue database loaded: ${this.venues.size} venues across ${this.venuesByRegion.size} regions`);
   }
 
   /**
@@ -78,12 +76,10 @@ export class GlobalVenueDatabase {
       );
 
       if (distance <= radiusKm) {
-        console.log(`🌍 Found venue: ${venue.name} (${distance.toFixed(1)}km away)`);
         return venue;
       }
     }
 
-    console.log(`🌍 No venue found within ${radiusKm}km of [${latitude}, ${longitude}]`);
     return null;
   }
 
@@ -127,7 +123,6 @@ export class GlobalVenueDatabase {
       if (results.length >= limit) break;
     }
 
-    console.log(`🌍 Search "${query}" found ${results.length} venues`);
     return results;
   }
 
@@ -147,7 +142,6 @@ export class GlobalVenueDatabase {
     // Sort by distance
     nearby.sort((a, b) => a.distance - b.distance);
 
-    console.log(`🌍 Found ${nearby.length} venues within ${maxDistance}km`);
     return nearby.map(item => item.venue);
   }
 
@@ -255,7 +249,6 @@ export class GlobalVenueDatabase {
     ];
 
     championshipVenues.forEach(venue => this.venues.set(venue.id, venue));
-    console.log(`🏆 Loaded ${championshipVenues.length} championship venues`);
   }
 
   /**
@@ -354,7 +347,7 @@ export class GlobalVenueDatabase {
     ];
 
     premierVenues.forEach(venue => this.venues.set(venue.id, venue));
-    console.log(`⭐ Loaded ${premierVenues.length} premier racing centers`);
+    logger.debug(`⭐ Loaded ${premierVenues.length} premier racing centers`);
   }
 
   /**
@@ -459,7 +452,6 @@ export class GlobalVenueDatabase {
     ];
 
     regionalVenues.forEach(venue => this.venues.set(venue.id, venue));
-    console.log(`🌐 Loaded ${regionalVenues.length} regional hubs`);
   }
 
   /**
@@ -479,7 +471,6 @@ export class GlobalVenueDatabase {
       this.venuesByCoordinates.set(coordHash, venue.id);
     }
 
-    console.log(`🌍 Built location indexes: ${this.venuesByRegion.size} regions`);
   }
 
   /**
@@ -734,27 +725,22 @@ export class GlobalVenueDatabase {
    */
   private async loadVenuesFromSupabase(): Promise<void> {
     try {
-      console.log('🌍 Fetching global venues from Supabase PostGIS...');
 
       // Load all venues with their intelligence and cultural data
       const venues = await this.supabaseService.getAllVenues();
 
       if (!venues || venues.length === 0) {
-        console.log('🌍 No venues returned from Supabase');
+
         return;
       }
-
-      console.log(`🌍 Processing ${venues.length} venues from Supabase...`);
 
       // Convert Supabase venues to our internal format and store
       for (const venue of venues) {
         this.venues.set(venue.id, venue);
       }
 
-      console.log(`🌍 Successfully loaded ${this.venues.size} venues from Supabase PostGIS database`);
-
     } catch (error: any) {
-      console.error('🌍 Failed to load venues from Supabase:', error);
+
       throw error;
     }
   }

@@ -19,40 +19,25 @@ export default function AuthLayout() {
       currentRoute === 'onboarding-redesign'; // NEW UNIFIED ONBOARDING
     const needsOnboarding = userProfile && !userProfile.onboarding_completed;
 
-    console.log('🔍 [AUTH_LAYOUT] Navigation check:', {
-      state,
-      userType,
-      currentRoute,
-      isAuthEntryPoint,
-      isOnboardingRoute,
-      needsOnboarding,
-      onboardingCompleted: userProfile?.onboarding_completed
-    });
-
     if (state === 'signed_out' && !isAuthEntryPoint) {
-      console.log('🔍 [AUTH_LAYOUT] Redirecting to / (signed out)');
       router.replace('/');
     } else if (state === 'needs_role' && currentRoute !== 'signup' && currentRoute !== 'onboarding-redesign') {
       // Sailor-first launch: Skip persona selection, go directly to sailor onboarding
-      console.log('🔍 [AUTH_LAYOUT] Sailor-first launch: Redirecting to onboarding');
       router.replace('/(auth)/onboarding-redesign');
     } else if (state === 'ready' && userType) {
       // Don't redirect if currently on sailor onboarding route
       if (isOnboardingRoute) {
-        console.log('🔍 [AUTH_LAYOUT] On sailor onboarding route, allowing render');
         return;
       }
 
       // Don't redirect if user needs onboarding
       if (needsOnboarding) {
-        console.log('🔍 [AUTH_LAYOUT] User needs onboarding, redirecting to unified onboarding');
         router.replace('/(auth)/onboarding-redesign');
         return;
       }
 
       // Redirect to role home
       const destination = roleHome(userType);
-      console.log('🔍 [AUTH_LAYOUT] Redirecting to role home:', destination);
       router.replace(destination);
     }
   }, [state, userType, userProfile, currentRoute]);

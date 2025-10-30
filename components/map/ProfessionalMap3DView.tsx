@@ -7,6 +7,7 @@ import { NOAABathymetryService } from '@/services/bathymetry/NOAABathymetryServi
 import { AISStreamService } from '@/services/ais/AISStreamService';
 import { WebMapView } from './WebMapView';
 import sailingLocations from '@/data/sailing-locations.json';
+import { createLogger } from '@/lib/utils/logger';
 import {
   AdvancedMapConfig,
   AdvancedWeatherConditions,
@@ -33,6 +34,7 @@ interface ProfessionalMap3DViewProps {
   professionalMode?: boolean;
 }
 
+const logger = createLogger('ProfessionalMap3DView');
 export function ProfessionalMap3DView({
   config,
   venue = 'san-francisco-bay',
@@ -46,15 +48,6 @@ export function ProfessionalMap3DView({
   professionalMode = true
 }: ProfessionalMap3DViewProps) {
   // Debug logging for received props
-  console.log('🗺️🔥🔥🔥🔥🔥 ProfessionalMap3DView RENDER START =====');
-  console.log('🗺️🔥   venue:', venue);
-  console.log('🗺️🔥   venueType:', typeof venue);
-  console.log('🗺️🔥   marks received:', marks?.length || 0, 'race course marks');
-  console.log('🗺️🔥   clubMarkers received:', clubMarkers?.length || 0, 'club markers');
-  console.log('🗺️🔥   config:', config);
-  console.log('🗺️🔥   professionalMode:', professionalMode);
-  console.log('🗺️🔥   Platform.OS:', Platform.OS);
-  console.log('🗺️🔥   CRITICAL: This component IS rendering! Check if it returns the WebMapView...');
 
   // Core state
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -155,15 +148,12 @@ export function ProfessionalMap3DView({
     if (!mapContainerRef.current || isInitialized) return;
 
     const initializeMap = async () => {
-      console.log(`🗺️ Initializing professional map for venue: ${venue}`);
 
       try {
         // Use MapLibre engine (open source, no API key required)
         const engine = new MapLibreEngine();
 
         await engine.initialize(mapContainerRef.current!, finalConfig);
-
-        console.log('🚀 Using MapLibre engine (open source)');
 
         // Set initial view to venue location
         if (venueConfig?.coordinates?.center) {
@@ -178,9 +168,8 @@ export function ProfessionalMap3DView({
         setMapEngine(engine);
         setIsInitialized(true);
 
-        console.log('✅ Professional map initialized successfully');
       } catch (error) {
-        console.error('❌ Failed to initialize professional map:', error);
+
       }
     };
 
@@ -190,8 +179,6 @@ export function ProfessionalMap3DView({
   // Update map camera when venue changes (after initialization)
   useEffect(() => {
     if (!mapEngine || !isInitialized || !venueConfig?.coordinates?.center) return;
-
-    console.log(`🎯 Flying to new venue: ${venue}`);
 
     mapEngine.flyTo({
       center: {
@@ -212,7 +199,6 @@ export function ProfessionalMap3DView({
     if (!venueConfig?.coordinates?.center || !weatherService) return;
 
     const setupWeatherUpdates = async () => {
-      console.log('🌤️ Setting up professional weather updates');
 
       try {
         // Initial weather fetch
@@ -229,16 +215,13 @@ export function ProfessionalMap3DView({
             (updatedWeather) => {
               setCurrentWeather(updatedWeather);
               onWeatherUpdate?.(updatedWeather);
-              console.log('🔄 Weather updated:', {
-                wind: `${updatedWeather.wind.speed}kts @ ${updatedWeather.wind.direction}°`,
-                confidence: updatedWeather.forecast.confidence
-              });
+
             }
           );
           setRealTimeUpdates(updateId);
         }
       } catch (error) {
-        console.error('❌ Failed to setup weather updates:', error);
+
       }
     };
 
@@ -256,7 +239,6 @@ export function ProfessionalMap3DView({
     if (!venueConfig?.coordinates?.center || !aisService || !professionalMode || !showVessels) return;
 
     const setupVesselTracking = async () => {
-      console.log('🚢 Setting up AIS vessel tracking');
 
       try {
         // Define tracking area around the venue
@@ -279,7 +261,6 @@ export function ProfessionalMap3DView({
           bounds,
           (updatedVessels) => {
             setVessels(updatedVessels);
-            console.log(`🚢 Updated ${updatedVessels.length} vessels`);
 
             // Filter racing vessels for tactical analysis
             const racingVessels = updatedVessels.filter(v =>
@@ -287,7 +268,6 @@ export function ProfessionalMap3DView({
             );
 
             if (racingVessels.length > 0) {
-              console.log(`🏁 ${racingVessels.length} racing vessels detected`);
             }
           },
           {
@@ -300,9 +280,9 @@ export function ProfessionalMap3DView({
         );
 
         setFleetTrackingId(trackingId);
-        console.log('✅ AIS vessel tracking started');
+
       } catch (error) {
-        console.error('❌ Failed to setup vessel tracking:', error);
+
       }
     };
 
@@ -368,42 +348,33 @@ export function ProfessionalMap3DView({
       },
       visibility: {
         toggleLayer: (layerId: string) => {
-          console.log(`🔄 Toggling layer: ${layerId}`);
           // Implementation would update map engine
         },
         setLayerOpacity: (layerId: string, opacity: number) => {
-          console.log(`🎚️ Setting ${layerId} opacity to ${opacity}`);
         },
         showLayerGroup: (groupId: string) => {
-          console.log(`👁️ Showing layer group: ${groupId}`);
         },
         hideLayerGroup: (groupId: string) => {
-          console.log(`🙈 Hiding layer group: ${groupId}`);
         },
         resetToDefaults: () => {
-          console.log('🔄 Resetting layers to defaults');
+
         }
       },
       ordering: {
         moveLayerUp: (layerId: string) => {
-          console.log(`⬆️ Moving layer up: ${layerId}`);
         },
         moveLayerDown: (layerId: string) => {
-          console.log(`⬇️ Moving layer down: ${layerId}`);
         },
         setLayerOrder: (layerIds: string[]) => {
-          console.log('🔄 Setting layer order:', layerIds);
+
         }
       },
       styling: {
         updateLayerStyle: (layerId: string, style: any) => {
-          console.log(`🎨 Updating layer style: ${layerId}`, style);
         },
         createStylePreset: (name: string, styles: any) => {
-          console.log(`💾 Creating style preset: ${name}`);
         },
         applyStylePreset: (presetName: string) => {
-          console.log(`🎯 Applying style preset: ${presetName}`);
         }
       }
     };
@@ -418,7 +389,7 @@ export function ProfessionalMap3DView({
       setPerformanceMetrics(metrics);
 
       if (metrics.frameRate < 30) {
-        console.warn('⚠️ Performance degradation detected, optimizing...');
+
         mapEngine.optimizeForDevice();
       }
     }, 5000);
@@ -429,8 +400,6 @@ export function ProfessionalMap3DView({
   // Professional tactical calculations
   const calculateTacticalAdvantage = useCallback(async (position: GeoLocation) => {
     if (!currentWeather || !professionalMode) return;
-
-    console.log('🧠 Calculating tactical advantage at position:', position);
 
     // Calculate laylines, start line advantage, etc.
     const navigationResult: NavigationResult = {
@@ -475,15 +444,7 @@ export function ProfessionalMap3DView({
 
   const { width, height } = Dimensions.get('window');
 
-  console.log('🗺️🔥🔥🔥 ProfessionalMap3DView BEFORE RETURN:');
-  console.log('  Dimensions:', { width, height });
-  console.log('  About to render WebMapView with props:', {
-    venue,
-    marksCount: marks?.length,
-    clubMarkersCount: clubMarkers?.length,
-    hasOnMarkPress: !!onMarkPress,
-    hasOnMapPress: !!onMapPress,
-  });
+  logger.debug('  Dimensions:', { width, height });
 
   return (
     <View style={[styles.container, { width, height: height * 0.85 }]}>

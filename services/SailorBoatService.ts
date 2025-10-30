@@ -9,6 +9,8 @@
  */
 
 import { supabase } from './supabase';
+import MutationQueueService from './MutationQueueService';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface SailorBoat {
   id: string;
@@ -55,6 +57,8 @@ export interface SailorBoat {
     id: string;
     name: string;
   };
+  queuedForSync?: boolean;
+  offlineOperation?: string;
 }
 
 export interface CreateBoatInput {
@@ -93,12 +97,13 @@ export interface UpdateBoatInput {
   metadata?: Record<string, any>;
 }
 
+const logger = createLogger('SailorBoatService');
+const BOATS_COLLECTION = 'sailor_boats';
 export class SailorBoatService {
   /**
    * Get all boats for a sailor
    */
   async listBoatsForSailor(sailorId: string): Promise<SailorBoat[]> {
-    console.log('🔍 [SailorBoatService] Fetching boats for sailor:', sailorId);
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -111,12 +116,9 @@ export class SailorBoatService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('❌ [SailorBoatService] Error fetching sailor boats:', error);
+
       throw error;
     }
-
-    console.log(`✅ [SailorBoatService] Successfully fetched ${data?.length || 0} boats`);
-    console.log('📊 [SailorBoatService] Boat data:', JSON.stringify(data, null, 2));
 
     return data || [];
   }
@@ -125,7 +127,6 @@ export class SailorBoatService {
    * Get boats for a sailor filtered by class
    */
   async listBoatsForSailorClass(sailorId: string, classId: string): Promise<SailorBoat[]> {
-    console.log('🔍 [SailorBoatService] Fetching boats for sailor/class:', { sailorId, classId });
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -138,11 +139,9 @@ export class SailorBoatService {
       .order('is_primary', { ascending: false });
 
     if (error) {
-      console.error('❌ [SailorBoatService] Error fetching class boats:', error);
+
       throw error;
     }
-
-    console.log(`✅ [SailorBoatService] Successfully fetched ${data?.length || 0} class boats`);
 
     return data || [];
   }
@@ -151,7 +150,6 @@ export class SailorBoatService {
    * Get a specific boat by ID
    */
   async getBoat(boatId: string): Promise<SailorBoat | null> {
-    console.log('🔍 [SailorBoatService] Fetching boat:', boatId);
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -163,11 +161,9 @@ export class SailorBoatService {
       .single();
 
     if (error) {
-      console.error('❌ [SailorBoatService] Error fetching boat:', error);
+
       return null;
     }
-
-    console.log('✅ [SailorBoatService] Successfully fetched boat:', data);
 
     return data;
   }
@@ -176,7 +172,6 @@ export class SailorBoatService {
    * Get the primary boat for a sailor in a specific class
    */
   async getPrimaryBoat(sailorId: string, classId: string): Promise<SailorBoat | null> {
-    console.log('🔍 [SailorBoatService] Fetching primary boat:', { sailorId, classId });
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -190,10 +185,8 @@ export class SailorBoatService {
       .single();
 
     if (error && error.code !== 'PGRST116') { // Not found is OK
-      console.error('❌ [SailorBoatService] Error fetching primary boat:', error);
-    }
 
-    console.log('✅ [SailorBoatService] Primary boat result:', data || 'none');
+    }
 
     return data || null;
   }
@@ -202,7 +195,54 @@ export class SailorBoatService {
    * Create a new boat
    */
   async createBoat(input: CreateBoatInput): Promise<SailorBoat> {
-    console.log('🔍 [SailorBoatService] Creating boat:', input);
+    try {
+      return await this.createBoatDirect(input);
+    } catch (error: any) {
+      logger.warn('Error creating boat, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(BOATS_COLLECTION, 'upsert', {
+        action: 'create',
+        input,
+      });
+
+      const nowIso = new Date().toISOString();
+      const fallback: SailorBoat = {
+        id: `local_boat_${Date.now()}`,
+        sailor_id: input.sailor_id,
+        class_id: input.class_id,
+        name: input.name,
+        sail_number: input.sail_number,
+        hull_number: input.hull_number,
+        manufacturer: input.manufacturer,
+        year_built: input.year_built,
+        hull_material: input.hull_material,
+        is_primary: Boolean(input.is_primary),
+        status: 'active',
+        home_club_id: input.home_club_id,
+        storage_location: input.storage_location,
+        ownership_type: input.ownership_type,
+        purchase_date: input.purchase_date,
+        purchase_price: input.purchase_price,
+        notes: input.notes,
+        metadata: undefined,
+        created_at: nowIso,
+        updated_at: nowIso,
+        boat_class: undefined,
+        home_club: undefined,
+        queuedForSync: true,
+        offlineOperation: 'create',
+      };
+
+      const offlineError: any = new Error('Boat creation queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = fallback;
+      offlineError.originalError = error;
+      offlineError.operation = 'createBoat';
+      throw offlineError;
+    }
+  }
+
+  async createBoatDirect(input: CreateBoatInput): Promise<SailorBoat> {
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -217,11 +257,9 @@ export class SailorBoatService {
       .single();
 
     if (error) {
-      console.error('❌ [SailorBoatService] Error creating boat:', error);
+
       throw error;
     }
-
-    console.log('✅ [SailorBoatService] Successfully created boat:', data);
 
     return data;
   }
@@ -230,7 +268,32 @@ export class SailorBoatService {
    * Update a boat
    */
   async updateBoat(boatId: string, input: UpdateBoatInput): Promise<SailorBoat> {
-    console.log('🔍 [SailorBoatService] Updating boat:', { boatId, input });
+    try {
+      return await this.updateBoatDirect(boatId, input);
+    } catch (error: any) {
+      logger.warn('Error updating boat, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(BOATS_COLLECTION, 'upsert', {
+        action: 'update',
+        boatId,
+        input,
+      });
+
+      const offlineError: any = new Error('Boat update queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = {
+        id: boatId,
+        updates: input,
+        queuedForSync: true,
+        offlineOperation: 'update',
+      };
+      offlineError.originalError = error;
+      offlineError.operation = 'updateBoat';
+      throw offlineError;
+    }
+  }
+
+  async updateBoatDirect(boatId: string, input: UpdateBoatInput): Promise<SailorBoat> {
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -243,11 +306,9 @@ export class SailorBoatService {
       .single();
 
     if (error) {
-      console.error('❌ [SailorBoatService] Error updating boat:', error);
+
       throw error;
     }
-
-    console.log('✅ [SailorBoatService] Successfully updated boat:', data);
 
     return data;
   }
@@ -256,7 +317,6 @@ export class SailorBoatService {
    * Set a boat as primary for its class
    */
   async setPrimaryBoat(boatId: string): Promise<void> {
-    console.log('🔍 [SailorBoatService] Setting primary boat:', boatId);
 
     // First, get the boat to know which sailor and class we're working with
     const { data: boat, error: fetchError } = await supabase
@@ -266,14 +326,12 @@ export class SailorBoatService {
       .single();
 
     if (fetchError) {
-      console.error('❌ [SailorBoatService] Error fetching boat:', fetchError);
+
       throw fetchError;
     }
 
-    console.log('📊 [SailorBoatService] Boat details:', boat);
-
     // Unset all primary boats for this sailor/class
-    console.log('🔄 [SailorBoatService] Unsetting all primary boats for sailor/class...');
+
     const { error: unsetError } = await supabase
       .from('sailor_boats')
       .update({ is_primary: false })
@@ -281,29 +339,48 @@ export class SailorBoatService {
       .eq('class_id', boat.class_id);
 
     if (unsetError) {
-      console.error('❌ [SailorBoatService] Error unsetting primary boats:', unsetError);
+
       throw unsetError;
     }
 
     // Set the selected boat as primary
-    console.log('⭐ [SailorBoatService] Setting boat as primary...');
+    logger.debug('⭐ [SailorBoatService] Setting boat as primary...');
     const { error: setError } = await supabase
       .from('sailor_boats')
       .update({ is_primary: true })
       .eq('id', boatId);
 
     if (setError) {
-      console.error('❌ [SailorBoatService] Error setting primary boat:', setError);
+
       throw setError;
     }
 
-    console.log('✅ [SailorBoatService] Successfully set primary boat');
   }
 
   /**
    * Delete a boat
    */
   async deleteBoat(boatId: string): Promise<void> {
+    try {
+      await this.deleteBoatDirect(boatId);
+    } catch (error: any) {
+      logger.warn('Error deleting boat, queueing for offline sync', error);
+
+      await MutationQueueService.enqueueMutation(BOATS_COLLECTION, 'delete', {
+        action: 'delete',
+        boatId,
+      });
+
+      const offlineError: any = new Error('Boat deletion queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = { id: boatId };
+      offlineError.originalError = error;
+      offlineError.operation = 'deleteBoat';
+      throw offlineError;
+    }
+  }
+
+  async deleteBoatDirect(boatId: string): Promise<void> {
     const { error } = await supabase
       .from('sailor_boats')
       .delete()
@@ -372,3 +449,27 @@ export class SailorBoatService {
 }
 
 export const sailorBoatService = new SailorBoatService();
+
+export function initializeBoatMutationHandlers() {
+  MutationQueueService.registerHandler(BOATS_COLLECTION, {
+    upsert: async (payload: any) => {
+      switch (payload?.action) {
+        case 'create':
+          await sailorBoatService.createBoatDirect(payload.input);
+          break;
+        case 'update':
+          await sailorBoatService.updateBoatDirect(payload.boatId, payload.input || {});
+          break;
+        default:
+          logger.warn('Unhandled boat upsert action', payload?.action);
+      }
+    },
+    delete: async (payload: any) => {
+      if (payload?.action === 'delete' && payload.boatId) {
+        await sailorBoatService.deleteBoatDirect(payload.boatId);
+      } else {
+        logger.warn('Unhandled boat delete action', payload?.action);
+      }
+    },
+  });
+}

@@ -4,6 +4,9 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SaveSailorProfile');
 
 export interface SaveSailorProfileData {
   sailor_id: string;
@@ -29,8 +32,6 @@ export interface SaveSailorProfileData {
 export async function saveSailorProfile(data: SaveSailorProfileData) {
   const { sailor_id, role, club_name, venue_name, boat_class, sail_number, boat_name, next_race, fleet_mates } = data;
 
-  console.log('💾 Saving sailor profile:', data);
-
   if (!sailor_id) {
     throw new Error('sailor_id is required');
   }
@@ -46,10 +47,9 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
       .eq('id', sailor_id);
 
     if (userError) {
-      console.error('❌ User update error:', userError);
+      logger.error('User update error:', userError);
       throw userError;
     }
-    console.log('✅ Marked onboarding complete');
 
     // 2. Create/update sailor profile
     const { data: existingProfiles } = await supabase
@@ -76,10 +76,9 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
       .maybeSingle();
 
     if (profileError) {
-      console.error('❌ Sailor profile error:', profileError);
+      logger.error('Sailor profile error:', profileError);
       throw profileError;
     }
-    console.log('✅ Saved sailor profile');
 
     const sailorProfileId = savedProfile?.id;
     if (!sailorProfileId) {
@@ -88,7 +87,6 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
 
     // 3. Save club if provided (find or create)
     if (club_name) {
-      console.log('💾 Saving club:', club_name);
 
       // Try to find existing club
       const { data: existingClubs } = await supabase
@@ -113,10 +111,9 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
           .maybeSingle();
 
         if (clubError) {
-          console.error('❌ Club creation error:', clubError);
+          logger.error('Club creation error:', clubError);
         } else {
           club_id = newClub?.id;
-          console.log('✅ Created new club');
         }
       }
 
@@ -131,16 +128,13 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
           });
 
         if (membershipError) {
-          console.error('❌ Club membership error:', membershipError);
-        } else {
-          console.log('✅ Saved club membership');
+          logger.error('Club membership error:', membershipError);
         }
       }
     }
 
     // 4. Save boat if provided
     if (boat_class) {
-      console.log('💾 Saving boat:', boat_class, sail_number);
 
       // Try to find existing boat class
       const { data: existingClasses } = await supabase
@@ -165,10 +159,9 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
           .maybeSingle();
 
         if (classError) {
-          console.error('❌ Boat class creation error:', classError);
+          logger.error('Boat class creation error:', classError);
         } else {
           class_id = newClass?.id;
-          console.log('✅ Created new boat class');
         }
       }
 
@@ -186,17 +179,13 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
           });
 
         if (boatError) {
-          console.error('❌ Boat save error:', boatError);
-        } else {
-          console.log('✅ Saved boat');
+          logger.error('Boat save error:', boatError);
         }
       }
     }
 
     // 5. Save fleet mates as suggested connections
     if (fleet_mates && fleet_mates.length > 0) {
-      console.log('💾 Saving fleet mates as suggested connections:', fleet_mates.length);
-
       const connections = fleet_mates.map(mate => ({
         sailor_id: sailorProfileId,
         suggested_sailor_name: mate.owner_name,
@@ -212,16 +201,12 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
         .insert(connections);
 
       if (connectionsError) {
-        console.error('❌ Connections save error:', connectionsError);
-      } else {
-        console.log('✅ Saved suggested connections');
+        logger.error('Connections save error:', connectionsError);
       }
     }
 
     // 6. Save next race if provided (CRITICAL for strategy)
     if (next_race) {
-      console.log('💾 Saving next race:', next_race);
-
       const { error: raceError } = await supabase
         .from('sailor_race_calendar')
         .insert({
@@ -235,19 +220,16 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
         });
 
       if (raceError) {
-        console.error('❌ Race save error:', raceError);
-      } else {
-        console.log('✅ Saved next race');
+        logger.error('Race save error:', raceError);
       }
     }
 
-    console.log('✅ All profile data saved successfully!');
     return {
       success: true,
       sailor_profile_id: sailorProfileId,
     };
   } catch (error: any) {
-    console.error('❌ Profile save failed:', error);
+    logger.error('Profile save failed:', error);
     throw error;
   }
 }

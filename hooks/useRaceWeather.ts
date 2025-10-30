@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { regionalWeatherService } from '@/services/weather/RegionalWeatherService';
 import type { WeatherData } from '@/services/weather/RegionalWeatherService';
 import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceWeatherData {
   wind: {
@@ -36,6 +37,8 @@ interface UseRaceWeatherResult {
  * @param raceDate - ISO date string of the race
  * @returns Weather data, loading state, and refetch function
  */
+
+const logger = createLogger('useRaceWeather');
 export function useRaceWeather(
   venue: SailingVenue | null | undefined,
   raceDate: string | null | undefined
@@ -102,7 +105,6 @@ export function useRaceWeather(
         raw: weatherData,
       });
 
-      console.log(`✅ Weather data loaded for ${venue.name} on ${raceDate}`);
     } catch (err: any) {
       console.error('Error fetching race weather:', err);
       setError(err);
@@ -124,7 +126,7 @@ export function useRaceWeather(
 
     // Don't fetch weather for past races
     if (raceDateObj < now) {
-      console.log('[useRaceWeather] Race date is in the past, skipping weather fetch');
+      logger.debug('[useRaceWeather] Race date is in the past, skipping weather fetch');
       setWeather(null);
       return;
     }

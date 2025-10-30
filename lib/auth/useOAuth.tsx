@@ -8,6 +8,9 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('OAuth');
 
 // WebBrowser.maybeCompleteAuthSession() is required for Expo AuthSession to work properly
 WebBrowser.maybeCompleteAuthSession();
@@ -75,49 +78,24 @@ export const useGoogleAuth = () => {
 
   const signInWithGoogle = async (): Promise<void> => {
     try {
-      console.log('🔵 [OAUTH] ========================================');
-      console.log('🔵 [OAUTH] Starting Google sign-in flow');
-      console.log('🔍 [OAUTH] Platform:', Platform.OS);
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        console.log('🔍 [OAUTH] Current URL:', window.location.href);
-      }
-      console.log('🔍 [OAUTH] Environment variables check:', {
-        GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-        GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-        GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-        SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
-        hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-        supabaseKeyLength: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.length || 0,
-        currentPlatform: Platform.OS,
-        currentClientId: config.clientId,
-        redirectUri: config.redirectUri
-      });
-
       // Validate critical environment variables
       if (!config.clientId) {
-        console.error('🔴 [OAUTH] Missing Google Client ID for platform:', Platform.OS);
+        logger.error('Missing Google Client ID for platform:', Platform.OS);
         throw new Error(`Missing Google Client ID for ${Platform.OS} platform`);
       }
 
       if (!process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co') {
-        console.error('🔴 [OAUTH] Invalid Supabase URL configuration');
+        logger.error('Invalid Supabase URL configuration');
         throw new Error('Supabase URL not properly configured');
       }
 
       if (!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY === 'placeholder-key') {
-        console.error('🔴 [OAUTH] Invalid Supabase Anon Key configuration');
+        logger.error('Invalid Supabase Anon Key configuration');
         throw new Error('Supabase Anon Key not properly configured');
       }
 
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const redirectUrl = `${window.location.origin}/callback`;
-        console.log('🔍 [OAUTH] Configured redirect URL:', redirectUrl);
-        console.log('🔍 [OAUTH] Window origin:', window.location.origin);
-        console.log('🔍 [OAUTH] Full callback URL:', `${window.location.origin}/callback`);
-
-        // Log the Supabase client configuration
-        console.log('🔍 [OAUTH] Supabase client URL:', supabase.supabaseUrl);
-        console.log('🔍 [OAUTH] Initiating OAuth with provider: google');
 
         // For web, use Supabase's direct OAuth flow
         const { data, error } = await supabase.auth.signInWithOAuth({
@@ -131,52 +109,21 @@ export const useGoogleAuth = () => {
           },
         });
 
-        console.log('🔍 [OAUTH] Supabase OAuth response:', {
-          data,
-          error,
-          hasProvider: data?.provider,
-          hasUrl: data?.url,
-          timestamp: new Date().toISOString()
-        });
-
         if (error) {
-          console.error('🔴 [OAUTH] Supabase OAuth error details:', {
-            message: error.message,
-            status: error.status,
-            statusText: error.statusText,
-            name: error.name,
-            stack: error.stack,
-            fullError: error,
-            timestamp: new Date().toISOString(),
-            supabaseProjectUrl: supabase.supabaseUrl,
-            redirectUrlUsed: redirectUrl
-          });
+          logger.error('OAuth error:', error.message);
 
-          // Log specific OAuth configuration hints
+          // Provide specific hints for common errors
           if (error.message?.includes('client')) {
-            console.error('🔴 [OAUTH] CLIENT ERROR - Check Google Client ID/Secret in Supabase dashboard');
-            console.error('🔴 [OAUTH] Required: Client Secret must be set in Supabase > Authentication > Providers > Google');
+            logger.error('Client configuration error - check Google OAuth credentials in Supabase dashboard');
           }
 
           if (error.message?.includes('redirect')) {
-            console.error('🔴 [OAUTH] REDIRECT ERROR - Check authorized redirect URIs in Google Console');
-            console.error('🔴 [OAUTH] Expected redirect URI:', redirectUrl);
-          }
-
-          if (error.message?.includes('scope') || error.message?.includes('access')) {
-            console.error('🔴 [OAUTH] SCOPE ERROR - Check OAuth scopes in Google Console');
+            logger.error('Redirect URI error - check authorized redirect URIs in Google Console');
           }
 
           throw error;
         }
 
-        if (data?.url) {
-          console.log('🔍 [OAUTH] OAuth URL generated:', data.url);
-          console.log('🔍 [OAUTH] Redirecting to OAuth provider...');
-        }
-
-        console.log('✅ [OAUTH] OAuth initiated successfully');
-        console.log('🔵 [OAUTH] ========================================');
         return data;
       } else {
         // For mobile, use the existing Expo AuthSession flow
@@ -219,7 +166,7 @@ export const useGoogleAuth = () => {
         }
       }
     } catch (error) {
-      console.error('🔴 [OAUTH] Google sign-in error:', error);
+      logger.error('Google sign-in error:', error);
       throw error;
     }
   };
@@ -304,7 +251,7 @@ export const useAppleAuth = () => {
         throw new Error('Apple authentication was cancelled');
       }
     } catch (error) {
-      console.error('🔴 [OAUTH] Apple sign-in error:', error);
+      logger.error('Apple sign-in error:', error);
       throw error;
     }
   };

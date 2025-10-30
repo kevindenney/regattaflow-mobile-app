@@ -14,6 +14,7 @@ import {
   View
 } from 'react-native';
 import { CardMenu, CardMenuItem } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface BoatClass {
   id: string;
@@ -41,6 +42,7 @@ interface ClassSelectorProps {
   showAddButton?: boolean;
 }
 
+const logger = createLogger('ClassSelector');
 export function ClassSelector({
   classes,
   selectedClass,
@@ -130,17 +132,17 @@ export function ClassSelector({
             {
               label: 'Edit Boat',
               icon: 'create-outline',
-              onPress: () => console.log('Edit boat:', boatClass.id),
+              onPress: () => logger.debug('Edit boat:', boatClass.id),
             },
             {
               label: boatClass.isPrimary ? 'Remove Primary' : 'Set as Primary',
               icon: boatClass.isPrimary ? 'star' : 'star-outline',
-              onPress: () => console.log('Toggle primary:', boatClass.id),
+              onPress: () => logger.debug('Toggle primary:', boatClass.id),
             },
             {
               label: 'Remove Boat',
               icon: 'trash-outline',
-              onPress: () => console.log('Remove boat:', boatClass.id),
+              onPress: () => logger.debug('Remove boat:', boatClass.id),
               variant: 'destructive' as const,
             },
           ];

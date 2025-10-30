@@ -62,7 +62,7 @@ const RaceTimerProScreen = () => {
   const [activeTab, setActiveTab] = useState('timer');
   const [aiResponses, setAiResponses] = useState<any[]>([]);
   const [userResponse, setUserResponse] = useState('');
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const windAnimation = useRef(new Animated.Value(0)).current;
   const boatPositionAnimation = useRef(new Animated.Value(0)).current;
 
@@ -402,7 +402,7 @@ const RaceTimerProScreen = () => {
     intervalRef.current = setInterval(() => {
       setTimer(prev => {
         if (prev <= 1) {
-          clearInterval(intervalRef.current as NodeJS.Timeout);
+          clearInterval(intervalRef.current as ReturnType<typeof setInterval>);
           return 0;
         }
         return prev - 1;
@@ -450,8 +450,8 @@ const RaceTimerProScreen = () => {
 
       setPerformanceData(prev => ({
         ...prev,
-        avgSpeed: avgSpeed.toFixed(1),
-        distance: (avgSpeed * (timer / 3600)).toFixed(1), // Rough distance calculation
+        avgSpeed: parseFloat(avgSpeed.toFixed(1)),
+        distance: parseFloat((avgSpeed * (timer / 3600)).toFixed(1)), // Rough distance calculation
       }));
     }
   };

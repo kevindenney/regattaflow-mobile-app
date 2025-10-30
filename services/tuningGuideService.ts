@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface TuningGuide {
   id: string;
@@ -50,6 +51,7 @@ export interface TuningGuideSource {
   urlPattern: string;
 }
 
+const logger = createLogger('tuningGuideService');
 class TuningGuideService {
   /**
    * Get tuning guides for a specific boat class
@@ -243,7 +245,7 @@ class TuningGuideService {
 
     await Promise.all(scrapePromises);
     
-    console.log(`Triggered auto-scrape for ${sources.length} sources for class: ${className}`);
+    logger.debug(`Triggered auto-scrape for ${sources.length} sources for class: ${className}`);
   }
 
   /**

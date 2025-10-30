@@ -59,7 +59,7 @@ const RaceTimerProScreen = () => {
   const [activeTab, setActiveTab] = useState('timer');
   const [aiResponses, setAiResponses] = useState<any[]>([]);
   const [userResponse, setUserResponse] = useState('');
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const windAnimation = useRef(new Animated.Value(0)).current;
   const boatPositionAnimation = useRef(new Animated.Value(0)).current;
 
@@ -189,7 +189,7 @@ const RaceTimerProScreen = () => {
     intervalRef.current = setInterval(() => {
       setTimer(prev => {
         if (prev <= 1) {
-          clearInterval(intervalRef.current as NodeJS.Timeout);
+          clearInterval(intervalRef.current as ReturnType<typeof setInterval>);
           setIsRunning(false);
           setIsCompleted(true);
           setGpsTracking(false);

@@ -15,6 +15,7 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   RaceCourseExtraction,
   RaceStrategy,
@@ -22,6 +23,8 @@ import type {
 } from '@/services/ai/RaceStrategyEngine';
 
 // Web-compatible MapLibre GL JS import for Expo
+
+const logger = createLogger('RaceCourseVisualization3D');
 const isWeb = typeof window !== 'undefined';
 
 interface RaceCourseVisualization3DProps {
@@ -154,7 +157,7 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
         addRaceMarks(map);
         addEnvironmentalLayers(map);
         addTacticalLayers(map);
-        console.log('🗺️ 3D Race Course Map initialized successfully');
+
       });
 
       map.on('click', (e) => {
@@ -172,7 +175,7 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
       });
 
     } catch (error) {
-      console.error('❌ Failed to initialize 3D map:', error);
+
     }
   };
 
@@ -241,7 +244,6 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
       }
     });
 
-    console.log('⚓ Added', markFeatures.length, 'race marks to 3D visualization');
   };
 
   const getMarkCoordinates = (mark: any, index: number): [number, number] => {
@@ -338,12 +340,11 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
 
   const addCurrentFlow = (map: any, current: any) => {
     // Current flow visualization would be implemented here
-    console.log('🌊 Adding current flow visualization');
+
   };
 
   const addWavePatterns = (map: any, waves: any) => {
     // Wave pattern visualization would be implemented here
-    console.log('〰️ Adding wave pattern visualization');
   };
 
   const addTacticalLayers = (map: any) => {
@@ -362,12 +363,11 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
 
   const addLaylines = (map: any, wind: any) => {
     // Layline calculation and visualization
-    console.log('📐 Adding tactical laylines');
   };
 
   const addStartStrategy = (map: any, startStrategy: any) => {
     // Start strategy visualization
-    console.log('🏁 Adding start strategy overlay');
+
   };
 
   const toggleLayer = (layerId: string) => {
@@ -393,7 +393,7 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
             layer.enabled ? 'visible' : 'none'
           );
         } catch (error) {
-          console.log(`Layer ${layerId} not found on map`);
+          logger.debug(`Layer ${layerId} not found on map`);
         }
       }
     }

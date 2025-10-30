@@ -10,7 +10,7 @@ import { VStack, Text, Button, Card } from '@/components/ui';
 import { CheckCircle } from 'lucide-react-native';
 import { RaceRegistrationForm } from './RaceRegistrationForm';
 import { PaymentFlowComponent } from './PaymentFlowComponent';
-import { raceRegistrationService } from '@/services/RaceRegistrationService';
+import { raceRegistrationService, RaceEntry } from '@/services/RaceRegistrationService';
 
 interface RaceRegistrationWithPaymentProps {
   regattaId: string;
@@ -63,6 +63,11 @@ export function RaceRegistrationWithPayment({
     } finally {
       setProcessing(false);
     }
+  };
+
+  const handleFormQueued = (entry: RaceEntry) => {
+    Alert.alert('Offline', 'Your entry will sync automatically once you are back online.');
+    handleFormCancel();
   };
 
   /**
@@ -198,6 +203,7 @@ export function RaceRegistrationWithPayment({
           userId={userId}
           onSuccess={handleFormSuccess}
           onCancel={handleFormCancel}
+          onQueued={handleFormQueued}
         />
       )}
 

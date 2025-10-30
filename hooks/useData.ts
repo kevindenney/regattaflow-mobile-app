@@ -4,6 +4,9 @@ import api from '@/services/apiService';
 import { useApi, useMutation, usePaginatedQuery, usePullToRefreshReturn, usePullToRefresh } from './useApi';
 import { Tables, TablesInsert, TablesUpdate } from '@/services/supabase';
 import { useLiveRaces } from './useRaceResults';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useData');
 
 // ============================================================================
 // Sailor Profile Hooks
@@ -67,30 +70,23 @@ export function useSaveVenue() {
 
 export function useRaces() {
   const { user } = useAuth();
-  console.log('🏁🏁🏁 [useRaces] FUNCTION CALLED - User:', user?.id);
 
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    console.log('🏁 [useRaces] useEffect FIRED - user:', user?.id);
-
     if (!user?.id) {
-      console.log('🏁 [useRaces] No user ID - setting loading to false');
       setLoading(false);
       return;
     }
 
-    console.log('🏁 [useRaces] Starting database query...');
     setLoading(true);
     setError(null);
 
     // Execute query directly in useEffect
     (async () => {
       try {
-        console.error('🏁🏁🏁 USERACES HOOK EXECUTING - CODE_VERSION: LIMIT_100_FIX 🏁🏁🏁');
-        console.error('🏁 Querying for user:', user.id);
         const { data: rawData, error: dbError } = await api.supabase
           .from('regattas')
           .select('id, name, start_date, end_date, metadata, created_by, created_at, updated_at')
@@ -98,43 +94,51 @@ export function useRaces() {
           .order('start_date', { ascending: true })
           .limit(100); // Increased to support full season calendars (CSV imports)
 
-        console.error('🏁 QUERY RESULT - rawData count:', rawData?.length, 'error:', dbError);
-        console.error('🏁 First 3:', rawData?.slice(0, 3).map(r => ({ name: r.name, date: r.start_date })));
-        console.error('🏁 Last 3:', rawData?.slice(-3).map(r => ({ name: r.name, date: r.start_date })));
-
         if (dbError) {
-          console.error('🏁 [useRaces] Database error:', dbError);
+          logger.error('Database error fetching races:', dbError);
           setError(dbError as Error);
           setData([]);
           setLoading(false);
           return;
         }
 
-        console.log('🏁 [useRaces] Mapping', rawData?.length || 0, 'records...');
-
         // Map to expected format
-        const mapped = (rawData || []).map((regatta: any) => ({
-          id: regatta.id,
-          name: regatta.name,
-          venue: regatta.metadata?.venue_name || 'Venue TBD',
-          date: regatta.start_date,
-          startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
-          status: regatta.status || 'upcoming',
-          wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
-          tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
-          strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-          critical_details: regatta.metadata?.critical_details
-        }));
+        const mapped = (rawData || []).map((regatta: any) => {
+          // Extract time from start_date in 24-hour format (HH:MM:SS)
+          const extractTimeFrom24Hour = (isoDate: string): string => {
+            try {
+              const date = new Date(isoDate);
+              if (isNaN(date.getTime())) return '10:00:00';
 
-        console.log('🏁 [useRaces] Mapped races count:', mapped.length);
-        console.log('🏁 [useRaces] Mapped race names (first 10):', mapped.slice(0, 10).map(r => r.name));
-        console.log('🏁 [useRaces] Mapped race names (last 5):', mapped.slice(-5).map(r => r.name));
-        console.log('🏁 [useRaces] Setting data with', mapped.length, 'mapped races');
+              const hours = date.getUTCHours().toString().padStart(2, '0');
+              const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+              const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+              return `${hours}:${minutes}:${seconds}`;
+            } catch (err) {
+              logger.error('Error extracting time from date:', err);
+              return '10:00:00';
+            }
+          };
+
+          return {
+            id: regatta.id,
+            name: regatta.name,
+            venue: regatta.metadata?.venue_name || 'Venue TBD',
+            date: regatta.start_date,
+            startTime: regatta.warning_signal_time || extractTimeFrom24Hour(regatta.start_date),
+            boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
+            status: regatta.status || 'upcoming',
+            wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
+            tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
+            strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
+            critical_details: regatta.metadata?.critical_details
+          };
+        });
+
         setData(mapped);
         setLoading(false);
       } catch (err) {
-        console.error('🏁 [useRaces] Exception during query:', err);
+        logger.error('Exception during query:', err);
         setError(err as Error);
         setData([]);
         setLoading(false);
@@ -143,8 +147,6 @@ export function useRaces() {
   }, [user?.id]);
 
   const refetch = useCallback(async () => {
-    console.log('🏁 [useRaces] refetch called');
-    // Trigger re-fetch by updating a dependency
     setLoading(true);
   }, []);
 
@@ -480,7 +482,7 @@ export function useRaceTimerSession(sessionId: string) {
         .from('race_timer_sessions')
         .select(`
           *,
-          regattas(id, name, venue_id, start_date)
+          regattas(id, name, start_date)
         `)
         .eq('id', sessionId)
         .single();
@@ -505,7 +507,7 @@ export function useRecentTimerSessions(limit: number = 5) {
         .from('race_timer_sessions')
         .select(`
           *,
-          regattas(id, name, venue_id, start_date)
+          regattas(id, name, start_date)
         `)
         .eq('sailor_id', user?.id)
         .not('end_time', 'is', null)
@@ -521,8 +523,6 @@ export function useRecentTimerSessions(limit: number = 5) {
 
 export function useDashboardData() {
   const { user } = useAuth();
-
-  console.log('🏠 [useDashboardData] Fetching dashboard for user:', user?.id);
 
   const profile = useSailorProfile();
   const { liveRaces, loading: racesLoading, refresh: racesRefresh } = useLiveRaces(user?.id);
@@ -546,19 +546,6 @@ export function useDashboardData() {
     critical_details: regatta.metadata?.critical_details
   }));
 
-  console.log('🏠 [useDashboardData] Data loaded:', {
-    profile: profile.data,
-    profileError: profile.error,
-    liveRacesCount: liveRaces?.length,
-    mappedRacesCount: mappedRaces.length,
-    boats: boats.data,
-    boatsCount: boats.data?.length,
-    boatsError: boats.error,
-    fleets: fleets.data,
-    fleetsCount: fleets.data?.length,
-    fleetsError: fleets.error,
-  });
-
   const loading = profile.loading || racesLoading || performanceHistory.loading || boats.loading || fleets.loading || recentSessions.loading;
   const error = profile.error || performanceHistory.error || boats.error || fleets.error || recentSessions.error;
 
@@ -579,8 +566,6 @@ export function useDashboardData() {
   // Compare dates only (ignore time) to avoid issues with races at midnight
   const now = new Date();
   const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  console.error('📊 Current date/time:', now.toISOString());
-  console.error('📊 Today (date only for comparison):', todayDateOnly.toISOString());
 
   const nextRaceIndex = mappedRaces.findIndex((race: any) => {
     const raceDate = new Date(race.date);
@@ -591,12 +576,6 @@ export function useDashboardData() {
 
   // All races in chronological order (mappedRaces is already sorted by date ascending)
   const recentRaces = mappedRaces;
-
-  console.error('📊📊📊 DASHBOARD DATA HOOK RETURNING 📊📊📊');
-  console.error('📊 Total races count:', mappedRaces?.length);
-  console.error('📊 nextRace:', nextRace?.name, nextRace?.date);
-  console.error('📊 nextRace index in chronological order:', nextRaceIndex);
-  console.error('📊 First 5 race names:', mappedRaces.slice(0, 5).map((r: any) => `${r.name} (${r.date})`));
 
   return {
     profile: profile.data,

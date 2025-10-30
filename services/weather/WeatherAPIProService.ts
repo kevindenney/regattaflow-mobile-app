@@ -1,5 +1,6 @@
 import axios from 'axios';
-import type { GeoLocation, AdvancedWeatherConditions } from '@/lib/types/advanced-map';
+import type { GeoLocation } from '@/lib/types/map';
+import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 
 export interface WeatherAPIProConfig {
   apiKey: string;
@@ -15,10 +16,10 @@ export class WeatherAPIProService {
 
   constructor(config: WeatherAPIProConfig) {
     this.config = {
-      baseUrl: 'https://api.weatherapi.com/v1',
-      timeout: 10000,
-      retryAttempts: 3,
-      ...config
+      ...config,
+      baseUrl: config.baseUrl || 'https://api.weatherapi.com/v1',
+      timeout: config.timeout || 10000,
+      retryAttempts: config.retryAttempts || 3
     };
   }
 
@@ -27,7 +28,6 @@ export class WeatherAPIProService {
     const cached = this.getCachedData(cacheKey);
 
     if (cached) {
-      console.log('📦 Using cached WeatherAPI Pro data');
       return cached;
     }
 
@@ -40,10 +40,9 @@ export class WeatherAPIProService {
       const weatherData = this.transformCurrentWeather(response.data);
       this.setCachedData(cacheKey, weatherData);
 
-      console.log('🌤️ WeatherAPI Pro current weather fetched');
       return weatherData;
     } catch (error) {
-      console.error('❌ WeatherAPI Pro current weather error:', error);
+
       throw new Error(`WeatherAPI Pro service error: ${error}`);
     }
   }
@@ -59,10 +58,9 @@ export class WeatherAPIProService {
 
       const forecast = this.transformMarineForecast(response.data);
 
-      console.log(`🌊 WeatherAPI Pro marine forecast fetched for ${hours} hours`);
       return forecast;
     } catch (error) {
-      console.error('❌ WeatherAPI Pro marine forecast error:', error);
+
       throw new Error(`WeatherAPI Pro marine service error: ${error}`);
     }
   }
@@ -78,10 +76,9 @@ export class WeatherAPIProService {
 
       const forecast = this.transformAdvancedForecast(response.data);
 
-      console.log(`⚡ WeatherAPI Pro advanced forecast fetched for ${days} days`);
       return forecast;
     } catch (error) {
-      console.error('❌ WeatherAPI Pro advanced forecast error:', error);
+
       throw new Error(`WeatherAPI Pro advanced service error: ${error}`);
     }
   }
@@ -102,7 +99,6 @@ export class WeatherAPIProService {
       return response;
     } catch (error: any) {
       if (attempt < this.config.retryAttempts) {
-        console.log(`🔄 Retrying WeatherAPI Pro request (attempt ${attempt + 1})`);
         await this.delay(1000 * attempt);
         return this.makeRequest(endpoint, params, attempt + 1);
       }
@@ -114,52 +110,74 @@ export class WeatherAPIProService {
     const current = data.current;
     const location = data.location;
 
+    const windSpeedKnots = this.kphToKnots(current.wind_kph);
+    const gustKnots = this.kphToKnots(current.gust_kph || current.wind_kph * 1.3);
+    const visibilityMeters = current.vis_km * 1000;
+    const visibilityCondition = this.determineVisibilityCondition(current.vis_km, current.condition.text);
+    const totalCloudCover = this.estimateCloudCover(current.condition.text);
+    const waveHeight = this.estimateWaveHeight(windSpeedKnots);
+    const wavePeriod = this.estimateWavePeriod(windSpeedKnots);
+
     return {
       wind: {
-        speed: this.kphToKnots(current.wind_kph),
+        speed: windSpeedKnots,
         direction: current.wind_degree,
-        gusts: this.kphToKnots(current.gust_kph || current.wind_kph * 1.3),
+        gusts: gustKnots,
         variability: this.calculateWindVariability(current.wind_degree),
-        beaufortScale: this.calculateBeaufortScale(this.kphToKnots(current.wind_kph))
+        beaufortScale: this.calculateBeaufortScale(windSpeedKnots)
       },
       pressure: {
         sealevel: current.pressure_mb,
         trend: this.calculatePressureTrend(current.pressure_mb),
-        rate: 0 // Would need historical data
+        gradient: 0,
+        rate: 0
       },
-      temperature: {
+      temperature: current.temp_c,
+      humidity: current.humidity,
+      precipitation: current.precip_mm,
+      cloudCover: totalCloudCover,
+      temperatureProfile: {
         air: current.temp_c,
-        water: current.temp_c - 2, // Estimate
+        water: current.temp_c - 2,
         dewpoint: this.calculateDewPoint(current.temp_c, current.humidity),
         feelslike: current.feelslike_c
       },
-      humidity: {
+      humidityProfile: {
         relative: current.humidity,
         absolute: this.calculateAbsoluteHumidity(current.temp_c, current.humidity)
       },
       visibility: {
-        horizontal: current.vis_km * 1000,
-        vertical: current.vis_km * 1000 * 0.8 // Estimate
+        horizontal: visibilityMeters,
+        vertical: visibilityMeters * 0.8,
+        conditions: visibilityCondition
       },
-      precipitation: {
+      precipitationProfile: {
         rate: current.precip_mm,
         probability: this.estimatePrecipProbability(current.precip_mm),
         type: this.determinePrecipType(current.condition.text, current.temp_c)
       },
-      cloudCover: {
-        total: this.estimateCloudCover(current.condition.text),
+      cloudLayerProfile: {
+        total: totalCloudCover,
         low: this.estimateLowClouds(current.condition.text),
         medium: this.estimateMediumClouds(current.condition.text),
         high: this.estimateHighClouds(current.condition.text)
       },
       waves: {
-        height: this.estimateWaveHeight(this.kphToKnots(current.wind_kph)),
-        period: this.estimateWavePeriod(this.kphToKnots(current.wind_kph)),
+        height: waveHeight,
+        period: wavePeriod,
         direction: current.wind_degree + this.randomOffset(20)
       },
+      seaState: {
+        waveHeight,
+        wavePeriod,
+        swellHeight: waveHeight * 0.6,
+        swellPeriod: wavePeriod * 1.2,
+        swellDirection: current.wind_degree + this.randomOffset(40),
+        seaTemperature: current.temp_c - 2
+      },
       tide: {
-        height: 0, // Would need separate tide service
-        direction: 'unknown' as any,
+        height: 0,
+        direction: 'unknown',
         speed: 0,
         nextHigh: new Date(Date.now() + 6 * 60 * 60 * 1000),
         nextLow: new Date(Date.now() + 12 * 60 * 60 * 1000)
@@ -168,10 +186,13 @@ export class WeatherAPIProService {
         confidence: 0.85,
         source: 'WeatherAPI Pro',
         model: 'GFS/ECMWF Ensemble',
+        modelRun: new Date(location.localtime),
+        validTime: new Date(location.localtime),
+        resolution: '25km',
         lastUpdated: new Date(location.localtime),
         nextUpdate: new Date(Date.now() + 60 * 60 * 1000)
       },
-      timestamp: new Date(),
+      timestamp: new Date(location.localtime),
       location: {
         latitude: location.lat,
         longitude: location.lon,
@@ -209,52 +230,74 @@ export class WeatherAPIProService {
   }
 
   private transformHourlyWeather(hour: any, location: any, dayIndex: number = 0): AdvancedWeatherConditions {
+    const windSpeedKnots = this.kphToKnots(hour.wind_kph);
+    const gustKnots = this.kphToKnots(hour.gust_kph || hour.wind_kph * 1.3);
+    const visibilityMeters = hour.vis_km * 1000;
+    const visibilityCondition = this.determineVisibilityCondition(hour.vis_km, hour.condition.text);
+    const totalCloudCover = hour.cloud ?? this.estimateCloudCover(hour.condition.text);
+    const waveHeight = this.estimateWaveHeight(windSpeedKnots);
+    const wavePeriod = this.estimateWavePeriod(windSpeedKnots);
+
     return {
       wind: {
-        speed: this.kphToKnots(hour.wind_kph),
+        speed: windSpeedKnots,
         direction: hour.wind_degree,
-        gusts: this.kphToKnots(hour.gust_kph || hour.wind_kph * 1.3),
+        gusts: gustKnots,
         variability: this.calculateWindVariability(hour.wind_degree),
-        beaufortScale: this.calculateBeaufortScale(this.kphToKnots(hour.wind_kph))
+        beaufortScale: this.calculateBeaufortScale(windSpeedKnots)
       },
       pressure: {
         sealevel: hour.pressure_mb,
         trend: this.calculatePressureTrend(hour.pressure_mb),
+        gradient: 0,
         rate: 0
       },
-      temperature: {
+      temperature: hour.temp_c,
+      humidity: hour.humidity,
+      precipitation: hour.precip_mm,
+      cloudCover: totalCloudCover,
+      temperatureProfile: {
         air: hour.temp_c,
         water: hour.temp_c - 2,
-        dewpoint: hour.dewpoint_c,
+        dewpoint: hour.dewpoint_c ?? this.calculateDewPoint(hour.temp_c, hour.humidity),
         feelslike: hour.feelslike_c
       },
-      humidity: {
+      humidityProfile: {
         relative: hour.humidity,
         absolute: this.calculateAbsoluteHumidity(hour.temp_c, hour.humidity)
       },
       visibility: {
-        horizontal: hour.vis_km * 1000,
-        vertical: hour.vis_km * 1000 * 0.8
+        horizontal: visibilityMeters,
+        vertical: visibilityMeters * 0.8,
+        conditions: visibilityCondition
       },
-      precipitation: {
+      precipitationProfile: {
         rate: hour.precip_mm,
-        probability: hour.chance_of_rain || hour.chance_of_snow || 0,
+        probability: hour.chance_of_rain || hour.chance_of_snow || this.estimatePrecipProbability(hour.precip_mm),
         type: this.determinePrecipType(hour.condition.text, hour.temp_c)
       },
-      cloudCover: {
-        total: hour.cloud || this.estimateCloudCover(hour.condition.text),
+      cloudLayerProfile: {
+        total: totalCloudCover,
         low: this.estimateLowClouds(hour.condition.text),
         medium: this.estimateMediumClouds(hour.condition.text),
         high: this.estimateHighClouds(hour.condition.text)
       },
       waves: {
-        height: this.estimateWaveHeight(this.kphToKnots(hour.wind_kph)),
-        period: this.estimateWavePeriod(this.kphToKnots(hour.wind_kph)),
+        height: waveHeight,
+        period: wavePeriod,
         direction: hour.wind_degree + this.randomOffset(20)
+      },
+      seaState: {
+        waveHeight,
+        wavePeriod,
+        swellHeight: waveHeight * 0.6,
+        swellPeriod: wavePeriod * 1.2,
+        swellDirection: hour.wind_degree + this.randomOffset(40),
+        seaTemperature: hour.temp_c - 2
       },
       tide: {
         height: 0,
-        direction: 'unknown' as any,
+        direction: 'unknown',
         speed: 0,
         nextHigh: new Date(Date.now() + (6 + dayIndex * 24) * 60 * 60 * 1000),
         nextLow: new Date(Date.now() + (12 + dayIndex * 24) * 60 * 60 * 1000)
@@ -263,6 +306,9 @@ export class WeatherAPIProService {
         confidence: Math.max(0.9 - dayIndex * 0.1, 0.6),
         source: 'WeatherAPI Pro Marine',
         model: 'GFS/ECMWF Marine',
+        modelRun: new Date(hour.time),
+        validTime: new Date(hour.time),
+        resolution: '25km',
         lastUpdated: new Date(hour.time),
         nextUpdate: new Date(Date.now() + 60 * 60 * 1000)
       },
@@ -302,6 +348,15 @@ export class WeatherAPIProService {
     if (knots < 56) return 10;
     if (knots < 64) return 11;
     return 12;
+  }
+
+  private determineVisibilityCondition(visKm: number, conditionText?: string): 'clear' | 'haze' | 'fog' | 'rain' | 'snow' {
+    const condition = (conditionText || '').toLowerCase();
+    if (condition.includes('snow')) return 'snow';
+    if (condition.includes('rain') || condition.includes('shower')) return 'rain';
+    if (visKm <= 1) return 'fog';
+    if (visKm <= 5) return 'haze';
+    return 'clear';
   }
 
   private calculatePressureTrend(pressure: number): 'rising' | 'falling' | 'steady' {

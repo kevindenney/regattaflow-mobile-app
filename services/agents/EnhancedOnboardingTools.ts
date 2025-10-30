@@ -212,8 +212,6 @@ This is the main data persistence tool.`,
       try {
         const { sailor_id, profile_data } = input;
 
-        console.log('💾 Saving sailor profile:', { sailor_id, profile_data });
-
         if (!sailor_id) {
           throw new Error('sailor_id is required');
         }
@@ -228,10 +226,9 @@ This is the main data persistence tool.`,
           .eq('id', sailor_id);
 
         if (userError) {
-          console.error('❌ User update error:', userError);
+
           throw userError;
         }
-        console.log('✅ Marked onboarding complete');
 
         // 2. Create/update sailor profile
         const { data: existingProfile } = await supabase
@@ -257,10 +254,9 @@ This is the main data persistence tool.`,
           .single();
 
         if (profileError) {
-          console.error('❌ Sailor profile error:', profileError);
+
           throw profileError;
         }
-        console.log('✅ Saved sailor profile');
 
         // Get the sailor_profile ID for foreign key references
         const sailorProfileId = savedProfile?.id;
@@ -270,7 +266,7 @@ This is the main data persistence tool.`,
 
         // 3. Save boats
         if (profile_data.boats && profile_data.boats.length > 0) {
-          console.log('💾 Saving boats:', profile_data.boats);
+
           const boatsToInsert = profile_data.boats.map(boat => ({
             sailor_id: sailorProfileId,
             class_id: boat.class_id,
@@ -284,15 +280,15 @@ This is the main data persistence tool.`,
             .upsert(boatsToInsert);
 
           if (boatsError) {
-            console.error('❌ Boats save error:', boatsError);
+
           } else {
-            console.log('✅ Saved boats');
+
           }
         }
 
         // 4. Save club memberships
         if (profile_data.clubs && profile_data.clubs.length > 0) {
-          console.log('💾 Saving clubs:', profile_data.clubs);
+
           const clubMemberships = profile_data.clubs.map(club_id => ({
             sailor_id: sailorProfileId,
             club_id,
@@ -304,15 +300,15 @@ This is the main data persistence tool.`,
             .upsert(clubMemberships);
 
           if (clubsError) {
-            console.error('❌ Clubs save error:', clubsError);
+
           } else {
-            console.log('✅ Saved clubs');
+
           }
         }
 
         // 5. Save fleet memberships
         if (profile_data.fleets && profile_data.fleets.length > 0) {
-          console.log('💾 Saving fleets:', profile_data.fleets);
+
           const fleetMemberships = profile_data.fleets.map(fleet_id => ({
             sailor_id: sailorProfileId,
             fleet_id,
@@ -324,19 +320,18 @@ This is the main data persistence tool.`,
             .upsert(fleetMemberships);
 
           if (fleetsError) {
-            console.error('❌ Fleets save error:', fleetsError);
+
           } else {
-            console.log('✅ Saved fleets');
+
           }
         }
 
-        console.log('✅ All profile data saved successfully!');
         return {
           success: true,
           natural_language: `✅ Profile saved! I've recorded your ${profile_data.role} role, ${profile_data.boats?.length || 0} boat(s), ${profile_data.clubs?.length || 0} club(s), and ${profile_data.fleets?.length || 0} fleet(s).`,
         };
       } catch (error: any) {
-        console.error('❌ Save profile failed:', error);
+
         return {
           success: false,
           natural_language: `Error saving profile: ${error.message}`,

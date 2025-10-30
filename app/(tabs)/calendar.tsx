@@ -166,9 +166,9 @@ const CalendarScreen = () => {
       latitude: venueLat,
       longitude: venueLon,
       distance: Math.round(distance * 10) / 10, // Round to 1 decimal
-      type: race.status === 'completed' ? 'registered' : race.status === 'in_progress' ? 'registered' : 'available',
+      type: (race.status === 'completed' ? 'registered' : race.status === 'in_progress' ? 'registered' : 'available') as 'registered' | 'available' | 'travel' | 'training' | 'social',
       boatClass: race.classId || 'Unknown Class',
-      registrationStatus: race.status === 'completed' || race.status === 'in_progress' ? 'confirmed' : 'pending',
+      registrationStatus: (race.status === 'completed' || race.status === 'in_progress' ? 'confirmed' : 'pending') as 'confirmed' | 'pending' | 'waitlist',
       prepStatus: race.hasStrategy ? 75 : 25,
       documents: race.documentsReady,
       strategy: race.hasStrategy,
@@ -513,7 +513,7 @@ const CalendarScreen = () => {
                 // @ts-ignore - Router navigation if available
                 if (global.router && selectedEvent?.id) {
                   // @ts-ignore
-                  global.router.push(`/(tabs)/race/${selectedEvent.id}`);
+                  global.router.push(`/(tabs)/race/scrollable/${selectedEvent.id}`);
                 }
               }}
             >

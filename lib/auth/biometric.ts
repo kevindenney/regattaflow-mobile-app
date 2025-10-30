@@ -7,11 +7,9 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Platform, Alert } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 
-// Platform compatibility debugging
-console.log('🔍 [BIOMETRIC] Module loading - Platform:', Platform.OS);
-console.log('🔍 [BIOMETRIC] SecureStore methods available:', Object.keys(SecureStore));
-console.log('🔍 [BIOMETRIC] LocalAuthentication methods available:', Object.keys(LocalAuthentication));
+const logger = createLogger('Biometric');
 
 /**
  * Web-compatible SecureStore wrapper
@@ -21,15 +19,11 @@ const SecureStoreWrapper = {
   async getItemAsync(key: string): Promise<string | null> {
     try {
       if (Platform.OS === 'web') {
-        // Fallback to localStorage for web platform
-        console.log('🌐 [BIOMETRIC] Using localStorage fallback for key:', key);
         return localStorage.getItem(`secure_${key}`);
       }
-
-      // Use native SecureStore for mobile platforms
       return await SecureStore.getItemAsync(key);
     } catch (error) {
-      console.error('🔴 [BIOMETRIC] SecureStore getItem error:', error);
+      logger.error('SecureStore getItem error:', error);
       return null;
     }
   },
@@ -37,16 +31,12 @@ const SecureStoreWrapper = {
   async setItemAsync(key: string, value: string): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        // Fallback to localStorage for web platform
-        console.log('🌐 [BIOMETRIC] Using localStorage fallback to set key:', key);
         localStorage.setItem(`secure_${key}`, value);
         return;
       }
-
-      // Use native SecureStore for mobile platforms
       await SecureStore.setItemAsync(key, value);
     } catch (error) {
-      console.error('🔴 [BIOMETRIC] SecureStore setItem error:', error);
+      logger.error('SecureStore setItem error:', error);
       throw error;
     }
   },
@@ -54,16 +44,12 @@ const SecureStoreWrapper = {
   async deleteItemAsync(key: string): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        // Fallback to localStorage for web platform
-        console.log('🌐 [BIOMETRIC] Using localStorage fallback to delete key:', key);
         localStorage.removeItem(`secure_${key}`);
         return;
       }
-
-      // Use native SecureStore for mobile platforms
       await SecureStore.deleteItemAsync(key);
     } catch (error) {
-      console.error('🔴 [BIOMETRIC] SecureStore deleteItem error:', error);
+      logger.error('SecureStore deleteItem error:', error);
       throw error;
     }
   }
@@ -111,7 +97,7 @@ export const getBiometricCapabilities = async (): Promise<BiometricCapabilities>
       securityLevel,
     };
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Error checking capabilities:', error);
+    logger.error('Error checking capabilities:', error);
     return {
       isAvailable: false,
       isEnrolled: false,
@@ -167,7 +153,6 @@ export const authenticateWithBiometrics = async (): Promise<BiometricResult> => 
     });
 
     if (result.success) {
-      console.log('✅ [BIOMETRIC] Authentication successful');
       return { success: true };
     } else {
       const errorMessage = result.error === 'user_cancel'
@@ -182,7 +167,7 @@ export const authenticateWithBiometrics = async (): Promise<BiometricResult> => 
       };
     }
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Authentication error:', error);
+    logger.error('Authentication error:', error);
     return {
       success: false,
       error: 'Biometric authentication encountered an error',
@@ -219,8 +204,6 @@ export const enableBiometricAuth = async (
     await SecureStoreWrapper.setItemAsync(BIOMETRIC_KEYS.USER_ID, userId);
     await SecureStoreWrapper.setItemAsync(BIOMETRIC_KEYS.TOKEN, authToken);
 
-    console.log('✅ [BIOMETRIC] Biometric authentication enabled');
-
     return {
       success: true,
       warning: Platform.OS === 'ios'
@@ -228,7 +211,7 @@ export const enableBiometricAuth = async (
         : 'RegattaFlow will use biometric authentication for secure access',
     };
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Error enabling biometric auth:', error);
+    logger.error('Error enabling biometric auth:', error);
     return {
       success: false,
       error: 'Failed to enable biometric authentication',
@@ -247,11 +230,9 @@ export const disableBiometricAuth = async (): Promise<BiometricResult> => {
     await SecureStoreWrapper.deleteItemAsync(BIOMETRIC_KEYS.USER_ID);
     await SecureStoreWrapper.deleteItemAsync(BIOMETRIC_KEYS.TOKEN);
 
-    console.log('✅ [BIOMETRIC] Biometric authentication disabled');
-
     return { success: true };
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Error disabling biometric auth:', error);
+    logger.error('Error disabling biometric auth:', error);
     return {
       success: false,
       error: 'Failed to disable biometric authentication',
@@ -264,18 +245,10 @@ export const disableBiometricAuth = async (): Promise<BiometricResult> => {
  */
 export const isBiometricAuthEnabled = async (): Promise<boolean> => {
   try {
-    console.log('🔍 [BIOMETRIC] Checking if enabled - Platform:', Platform.OS);
-
     const enabled = await SecureStoreWrapper.getItemAsync(BIOMETRIC_KEYS.ENABLED);
-    console.log('✅ [BIOMETRIC] Successfully retrieved enabled status:', enabled);
     return enabled === 'true';
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Error checking if enabled:', error);
-    console.error('🔴 [BIOMETRIC] Error details:', {
-      name: error?.name,
-      message: error?.message,
-      platform: Platform.OS
-    });
+    logger.error('Error checking if biometric enabled:', error);
     return false;
   }
 };
@@ -286,24 +259,15 @@ export const isBiometricAuthEnabled = async (): Promise<boolean> => {
  */
 export const getBiometricAuthToken = async (): Promise<string | null> => {
   try {
-    console.log('🔍 [BIOMETRIC] Getting auth token - Platform:', Platform.OS);
-
     const enabled = await isBiometricAuthEnabled();
     if (!enabled) {
-      console.log('🔍 [BIOMETRIC] Biometric auth not enabled, returning null');
       return null;
     }
 
     const token = await SecureStoreWrapper.getItemAsync(BIOMETRIC_KEYS.TOKEN);
-    console.log('✅ [BIOMETRIC] Successfully retrieved token:', token ? 'EXISTS' : 'NULL');
     return token;
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Error getting auth token:', error);
-    console.error('🔴 [BIOMETRIC] Token error details:', {
-      name: error?.name,
-      message: error?.message,
-      platform: Platform.OS
-    });
+    logger.error('Error getting auth token:', error);
     return null;
   }
 };
@@ -313,24 +277,15 @@ export const getBiometricAuthToken = async (): Promise<string | null> => {
  */
 export const getBiometricUserId = async (): Promise<string | null> => {
   try {
-    console.log('🔍 [BIOMETRIC] Getting user ID - Platform:', Platform.OS);
-
     const enabled = await isBiometricAuthEnabled();
     if (!enabled) {
-      console.log('🔍 [BIOMETRIC] Biometric auth not enabled for user ID');
       return null;
     }
 
     const userId = await SecureStoreWrapper.getItemAsync(BIOMETRIC_KEYS.USER_ID);
-    console.log('✅ [BIOMETRIC] Successfully retrieved user ID:', userId ? 'EXISTS' : 'NULL');
     return userId;
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Error getting user ID:', error);
-    console.error('🔴 [BIOMETRIC] User ID error details:', {
-      name: error?.name,
-      message: error?.message,
-      platform: Platform.OS
-    });
+    logger.error('Error getting user ID:', error);
     return null;
   }
 };
@@ -382,7 +337,7 @@ export const biometricLogin = async (): Promise<{
       userId,
     };
   } catch (error) {
-    console.error('🔴 [BIOMETRIC] Login error:', error);
+    logger.error('Login error:', error);
     return {
       success: false,
       error: 'Biometric login failed',

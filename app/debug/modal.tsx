@@ -11,7 +11,7 @@ export default function ModalDebugPage() {
       <Pressable
         style={styles.openButton}
         onPress={() => {
-          console.log('🔴 [DEBUG] Open modal pressed');
+
           setVisible(true);
         }}
       >
@@ -28,7 +28,7 @@ export default function ModalDebugPage() {
           <Pressable
             style={styles.backdrop}
             onPress={() => {
-              console.log('🔴 [DEBUG] Backdrop pressed');
+
               setVisible(false);
             }}
           />
@@ -38,7 +38,7 @@ export default function ModalDebugPage() {
 
             <Pressable
               onPress={() => {
-                console.log('🔴 [DEBUG] Test press button clicked!');
+
               }}
               style={({ pressed }) => ({
                 paddingVertical: 10,
@@ -53,7 +53,7 @@ export default function ModalDebugPage() {
             <Pressable
               style={styles.closeButton}
               onPress={() => {
-                console.log('🔴 [DEBUG] Close pressed');
+
                 setVisible(false);
               }}
             >

@@ -6,7 +6,8 @@
  */
 
 import { Platform } from 'react-native';
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Tile identifier
@@ -40,6 +41,8 @@ export type DownloadProgressCallback = (progress: {
 /**
  * Bathymetry Tile Cache Service
  */
+
+const logger = createLogger('BathymetryTileCacheService');
 export class BathymetryTileCacheService {
   private static instance: BathymetryTileCacheService;
   private cacheDir = 'bathymetry-tiles';
@@ -67,10 +70,9 @@ export class BathymetryTileCacheService {
     zoomLevels: number[] = [8, 9, 10, 11, 12],
     onProgress?: DownloadProgressCallback
   ): Promise<void> {
-    console.log(`📥 Pre-downloading bathymetry tiles for ${venue.name}...`);
 
     const tiles = this.getTilesForArea(racingArea, zoomLevels);
-    console.log(`   Total tiles to download: ${tiles.length}`);
+    logger.debug(`   Total tiles to download: ${tiles.length}`);
 
     let downloaded = 0;
     const total = tiles.length;
@@ -91,14 +93,13 @@ export class BathymetryTileCacheService {
 
         // Log progress every 10 tiles
         if (downloaded % 10 === 0) {
-          console.log(`   Progress: ${downloaded}/${total} (${((downloaded / total) * 100).toFixed(0)}%)`);
+          logger.debug(`   Progress: ${downloaded}/${total} (${((downloaded / total) * 100).toFixed(0)}%)`);
         }
       } catch (error) {
         console.error(`   Failed to cache tile z${tile.z}/${tile.x}/${tile.y}:`, error);
       }
     }
 
-    console.log(`✅ Downloaded ${downloaded}/${total} tiles`);
   }
 
   /**
@@ -475,7 +476,6 @@ export class BathymetryTileCacheService {
    * Clear cache for a specific venue
    */
   async clearVenueCache(venue: SailingVenue): Promise<void> {
-    console.log(`🗑️  Clearing bathymetry cache for ${venue.name}...`);
 
     if (Platform.OS === 'web') {
       await this.clearWebCache();
@@ -483,7 +483,6 @@ export class BathymetryTileCacheService {
       await this.clearMobileVenueCache(venue);
     }
 
-    console.log('✅ Cache cleared');
   }
 
   /**
@@ -513,7 +512,6 @@ export class BathymetryTileCacheService {
    * Clear all cache
    */
   async clearAllCache(): Promise<void> {
-    console.log('🗑️  Clearing all bathymetry cache...');
 
     if (Platform.OS === 'web') {
       await this.clearWebCache();
@@ -521,7 +519,6 @@ export class BathymetryTileCacheService {
       await this.clearAllMobileCache();
     }
 
-    console.log('✅ All cache cleared');
   }
 
   /**

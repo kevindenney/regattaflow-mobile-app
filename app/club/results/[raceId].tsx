@@ -19,6 +19,7 @@ import { Checkbox, CheckboxIndicator, CheckboxIcon, CheckboxLabel } from '@/comp
 import { CheckIcon } from '@/components/ui/icon';
 import { supabase } from '@/services/supabase';
 import ResultsService from '@/services/ResultsService';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 type ScoreCode = 'DNC' | 'DNS' | 'DNF' | 'DSQ' | 'OCS' | 'RET' | 'RAF';
 
@@ -49,6 +50,7 @@ interface RaceResult {
 export default function RaceResultsEntryScreen() {
   const { raceId } = useLocalSearchParams<{ raceId: string }>();
   const router = useRouter();
+  const { clubId, loading: personaLoading, refresh: refreshPersonaContext } = useClubWorkspace();
 
   const [race, setRace] = useState<any>(null);
   const [entries, setEntries] = useState<RaceEntry[]>([]);
@@ -59,10 +61,13 @@ export default function RaceResultsEntryScreen() {
   const [useManualPositions, setUseManualPositions] = useState(false);
 
   useEffect(() => {
-    loadRaceData();
-  }, [raceId]);
+    if (raceId && clubId) {
+      loadRaceData();
+    }
+  }, [raceId, clubId]);
 
   const loadRaceData = async () => {
+    if (!raceId || !clubId) return;
     try {
       setLoading(true);
 
@@ -280,6 +285,35 @@ export default function RaceResultsEntryScreen() {
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  if (personaLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-gray-50">
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <View className="flex-1 items-center justify-center bg-gray-50 px-6">
+        <Text className="text-xl font-semibold text-gray-800 text-center mb-3">
+          Connect Your Club Workspace
+        </Text>
+        <Text className="text-center text-gray-600 mb-6">
+          Entering race results requires an active club connection. Finish onboarding or refresh your workspace to continue.
+        </Text>
+        <VStack space="sm" className="w-full max-w-xs">
+          <Button onPress={refreshPersonaContext}>
+            <ButtonText>Retry Connection</ButtonText>
+          </Button>
+          <Button variant="outline" onPress={() => router.push('/(auth)/club-onboarding-chat')}>
+            <ButtonText>Open Club Onboarding</ButtonText>
+          </Button>
+        </VStack>
+      </View>
+    );
+  }
 
   if (loading) {
     return (

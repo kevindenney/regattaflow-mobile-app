@@ -64,7 +64,6 @@ export function TimeBasedEnvironmentalMap({
     if (typeof window === 'undefined') return;
 
     try {
-      console.log('🗺️ Initializing TimeBasedEnvironmentalMap...');
 
       // Import MapLibre GL synchronously (Metro compatible)
       const maplibregl = require('maplibre-gl');
@@ -89,7 +88,7 @@ export function TimeBasedEnvironmentalMap({
       mapRef.current = map;
 
       map.on('load', () => {
-        console.log('✅ Environmental map loaded');
+
         setMapLoaded(true);
 
         // Add racing area outline
@@ -101,11 +100,10 @@ export function TimeBasedEnvironmentalMap({
         // Load initial environmental data
         updateEnvironmentalLayers(currentTime);
 
-        console.log('✅ Particle systems initialized and environmental data loaded');
       });
 
       map.on('error', (e) => {
-        console.error('❌ Map error:', e);
+
       });
 
       // Add navigation controls
@@ -117,7 +115,7 @@ export function TimeBasedEnvironmentalMap({
         'top-right'
       );
     } catch (error) {
-      console.error('❌ Failed to initialize map:', error);
+
     }
 
     return () => {
@@ -133,10 +131,8 @@ export function TimeBasedEnvironmentalMap({
 
   // Initialize particle systems
   const initializeParticleSystems = (map: any) => {
-    console.log('🎨 Initializing particle systems...');
 
     const container = map.getContainer();
-    console.log('📍 Map container:', container);
 
     // Create canvas overlay for wind particles
     const windCanvas = document.createElement('canvas');
@@ -148,7 +144,6 @@ export function TimeBasedEnvironmentalMap({
     windCanvas.style.pointerEvents = 'none';
     windCanvas.style.zIndex = '1000';
     container.appendChild(windCanvas);
-    console.log('✅ Wind canvas added to map container');
 
     // Create canvas overlay for current particles
     const currentCanvas = document.createElement('canvas');
@@ -160,7 +155,6 @@ export function TimeBasedEnvironmentalMap({
     currentCanvas.style.pointerEvents = 'none';
     currentCanvas.style.zIndex = '999'; // Below wind particles
     container.appendChild(currentCanvas);
-    console.log('✅ Current canvas added to map container');
 
     // Initialize wind particle system
     windParticlesRef.current = new WindParticleSystem(windCanvas, map);
@@ -168,7 +162,6 @@ export function TimeBasedEnvironmentalMap({
     // Initialize current particle system
     currentParticlesRef.current = new CurrentParticleSystem(currentCanvas, map);
 
-    console.log('✅ Particle systems ready');
   };
 
   // Handle time change from slider
@@ -219,9 +212,8 @@ export function TimeBasedEnvironmentalMap({
         });
       }
 
-      console.log(`🌊 Environmental layers updated for ${time.toLocaleTimeString()}`);
     } catch (error) {
-      console.error('❌ Failed to update environmental layers:', error);
+
     }
   };
 
@@ -250,7 +242,6 @@ export function TimeBasedEnvironmentalMap({
     };
 
     // Start particle animation
-    console.log('🎬 Starting particle animation loop (wind + current)');
     animationFrameRef.current = requestAnimationFrame(animateParticles);
 
     return () => {
@@ -462,7 +453,6 @@ function addRacingAreaOutline(map: any, racingArea: GeoJSON.Polygon) {
     },
   });
 
-  console.log('✅ Racing area outline added');
 }
 
 /** Update depth overlay */
@@ -477,7 +467,6 @@ function updateDepthOverlay(map: any, depth: { average: number; min: number; max
 
   // For now, just log depth data
   // TODO: Add actual depth overlay using graduated colors
-  console.log('📊 Depth overlay updated:', depth);
 }
 
 /** Update wind shadow zones */
@@ -511,7 +500,6 @@ function updateWindShadowZones(map: any, shadows: any[]) {
     },
   });
 
-  console.log(`⚫ Wind shadow zones updated (${shadows.length} zones)`);
 }
 
 /** Generate mock environmental data for a specific time */
@@ -566,8 +554,6 @@ class WindParticleSystem {
     this.ctx = canvas.getContext('2d');
     this.map = map;
 
-    console.log('💨 WindParticleSystem created');
-
     // Resize canvas to match map
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
@@ -575,14 +561,12 @@ class WindParticleSystem {
     // Initialize particles
     this.initializeParticles();
 
-    console.log(`✅ Initialized ${this.maxParticles} wind particles`);
   }
 
   private resizeCanvas() {
     const container = this.map.getContainer();
     this.canvas.width = container.clientWidth;
     this.canvas.height = container.clientHeight;
-    console.log(`📐 Canvas resized to ${this.canvas.width}x${this.canvas.height}`);
   }
 
   private initializeParticles() {
@@ -598,12 +582,11 @@ class WindParticleSystem {
   updateWind(speed: number, direction: number) {
     this.windSpeed = speed;
     this.windDirection = direction;
-    console.log(`💨 Wind updated: ${speed.toFixed(1)}kt @ ${direction.toFixed(0)}°`);
   }
 
   animate() {
     if (!this.ctx) {
-      console.error('❌ Canvas context not available');
+
       return;
     }
 
@@ -666,8 +649,6 @@ class CurrentParticleSystem {
     this.ctx = canvas.getContext('2d');
     this.map = map;
 
-    console.log('🌊 CurrentParticleSystem created');
-
     // Resize canvas to match map
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
@@ -675,14 +656,12 @@ class CurrentParticleSystem {
     // Initialize particles
     this.initializeParticles();
 
-    console.log(`✅ Initialized ${this.maxParticles} current particles`);
   }
 
   private resizeCanvas() {
     const container = this.map.getContainer();
     this.canvas.width = container.clientWidth;
     this.canvas.height = container.clientHeight;
-    console.log(`📐 Current canvas resized to ${this.canvas.width}x${this.canvas.height}`);
   }
 
   private initializeParticles() {
@@ -698,12 +677,11 @@ class CurrentParticleSystem {
   updateCurrent(speed: number, direction: number) {
     this.currentSpeed = speed;
     this.currentDirection = direction;
-    console.log(`🌊 Current updated: ${speed.toFixed(2)}kt @ ${direction.toFixed(0)}°`);
   }
 
   animate() {
     if (!this.ctx) {
-      console.error('❌ Canvas context not available');
+
       return;
     }
 

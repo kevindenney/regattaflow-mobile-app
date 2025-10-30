@@ -41,7 +41,32 @@ export function RaceTimer({
   // Calculate countdown
   useEffect(() => {
     const calculateCountdown = () => {
-      const raceDateTime = new Date(`${raceDate}T${raceTime}`);
+      // Validate inputs
+      if (!raceDate || !raceTime) {
+        console.warn('[RaceTimer] Missing race date or time:', { raceDate, raceTime });
+        setTimeUntilRace({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+
+      // Parse the race date and time
+      // Handle both ISO format times (10:00:00) and date concatenation
+      let raceDateTime: Date;
+
+      // If raceDate already includes time, use it directly
+      if (raceDate.includes('T')) {
+        raceDateTime = new Date(raceDate);
+      } else {
+        // Concatenate date and time
+        raceDateTime = new Date(`${raceDate}T${raceTime}`);
+      }
+
+      // Validate the resulting date
+      if (isNaN(raceDateTime.getTime())) {
+        console.warn('[RaceTimer] Invalid race date/time:', { raceDate, raceTime });
+        setTimeUntilRace({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+
       const now = new Date();
       const diff = raceDateTime.getTime() - now.getTime();
 
@@ -116,7 +141,6 @@ export function RaceTimer({
       setElapsedSeconds(0);
       setGpsPointCount(0);
 
-      console.log('✅ Race timer started:', session.id);
     } catch (error: any) {
       console.error('Error starting race timer:', error);
       Alert.alert('Error', 'Failed to start race timer. Please try again.');
@@ -131,7 +155,6 @@ export function RaceTimer({
       // Stop GPS tracking (this also saves track points)
       const trackPoints = await gpsTracker.stopTracking();
 
-      console.log(`✅ Race timer stopped. Recorded ${trackPoints.length} GPS points`);
 
       setIsTracking(false);
 

@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import TacticalRaceMap from './TacticalRaceMap';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   RaceEventWithDetails,
   CourseMark,
@@ -14,7 +15,6 @@ import type {
 } from '@/types/raceEvents';
 
 export default function TacticalMapStandalone() {
-  console.log('🎯 TacticalMapStandalone mounting...');
 
   const [selectedMark, setSelectedMark] = useState<CourseMark | null>(null);
   const [racingAreaCoords, setRacingAreaCoords] = useState<[number, number][] | null>(null);
@@ -193,12 +193,12 @@ export default function TacticalMapStandalone() {
 
   const handleMarkSelected = (mark: CourseMark) => {
     setSelectedMark(mark);
-    console.log('Mark selected:', mark.mark_name);
+    logger.debug('Mark selected:', mark.mark_name);
   };
 
   const handleRacingAreaSelected = (coordinates: [number, number][]) => {
     setRacingAreaCoords(coordinates);
-    console.log('✅ Racing area selected with', coordinates.length, 'points:', coordinates);
+
   };
 
   return (
@@ -269,6 +269,7 @@ export default function TacticalMapStandalone() {
   );
 }
 
+const logger = createLogger('TacticalMapStandalone');
 const styles = StyleSheet.create({
   container: {
     flex: 1,

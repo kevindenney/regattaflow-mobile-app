@@ -32,6 +32,15 @@ export interface SailorFormData {
   // Clubs & Venues (optional)
   yachtClub?: string;
   homeVenue?: string;
+
+  // Racing Calendar (optional)
+  racingCalendar?: string;
+
+  // Next Race Info (optional)
+  nextRaceName?: string;
+  nextRaceDate?: string;
+  nextRaceLocation?: string;
+  nextRaceTime?: string;
 }
 
 export function OnboardingFormFields({ onSubmit, initialData }: OnboardingFormFieldsProps) {

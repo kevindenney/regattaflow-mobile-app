@@ -81,9 +81,7 @@ export const secureStore = async (
       accessGroup: options.accessGroup,
     });
 
-    console.log(`✅ [SECURE_STORE] Stored: ${key}`);
   } catch (error) {
-    console.error(`🔴 [SECURE_STORE] Failed to store ${key}:`, error);
     throw new Error(`Failed to securely store ${key}`);
   }
 };
@@ -112,12 +110,10 @@ export const secureRetrieve = async (
     // Check data age (optional validation)
     const age = Date.now() - parsed.timestamp;
     if (age > 30 * 24 * 60 * 60 * 1000) { // 30 days
-      console.warn(`⚠️ [SECURE_STORE] Old data for ${key}, age: ${Math.round(age / (24 * 60 * 60 * 1000))} days`);
     }
 
     return parsed.data;
   } catch (error) {
-    console.error(`🔴 [SECURE_STORE] Failed to retrieve ${key}:`, error);
     return null;
   }
 };
@@ -133,9 +129,7 @@ export const secureDelete = async (
     await SecureStore.deleteItemAsync(key, {
       keychainService: options.keychainService,
     });
-    console.log(`✅ [SECURE_STORE] Deleted: ${key}`);
   } catch (error) {
-    console.error(`🔴 [SECURE_STORE] Failed to delete ${key}:`, error);
     throw new Error(`Failed to securely delete ${key}`);
   }
 };
@@ -152,9 +146,9 @@ export const storeAuthTokens = async (
       secureStore(STORAGE_KEYS.ACCESS_TOKEN, accessToken, HIGH_SECURITY_OPTIONS),
       secureStore(STORAGE_KEYS.REFRESH_TOKEN, refreshToken, HIGH_SECURITY_OPTIONS),
     ]);
-    console.log('✅ [SECURE_STORE] Auth tokens stored');
+
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Failed to store auth tokens:', error);
+
     throw error;
   }
 };
@@ -174,7 +168,7 @@ export const getAuthTokens = async (): Promise<{
 
     return { accessToken, refreshToken };
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Failed to retrieve auth tokens:', error);
+
     return { accessToken: null, refreshToken: null };
   }
 };
@@ -195,9 +189,8 @@ export const clearAuthData = async (): Promise<void> => {
       authKeys.map(key => secureDelete(key, HIGH_SECURITY_OPTIONS))
     );
 
-    console.log('✅ [SECURE_STORE] All auth data cleared');
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Failed to clear auth data:', error);
+
     throw error;
   }
 };
@@ -209,9 +202,9 @@ export const storeUserSession = async (sessionData: object): Promise<void> => {
   try {
     const sessionString = JSON.stringify(sessionData);
     await secureStore(STORAGE_KEYS.USER_SESSION, sessionString, HIGH_SECURITY_OPTIONS);
-    console.log('✅ [SECURE_STORE] User session stored');
+
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Failed to store user session:', error);
+
     throw error;
   }
 };
@@ -228,7 +221,7 @@ export const getUserSession = async (): Promise<object | null> => {
 
     return JSON.parse(sessionString);
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Failed to retrieve user session:', error);
+
     return null;
   }
 };
@@ -244,9 +237,7 @@ export const storeOfflineData = async (
   try {
     const dataString = JSON.stringify(data);
     await secureStore(STORAGE_KEYS[key], dataString, DEFAULT_OPTIONS);
-    console.log(`✅ [SECURE_STORE] Offline data stored: ${key}`);
   } catch (error) {
-    console.error(`🔴 [SECURE_STORE] Failed to store offline data ${key}:`, error);
     throw error;
   }
 };
@@ -265,7 +256,6 @@ export const getOfflineData = async (
 
     return JSON.parse(dataString);
   } catch (error) {
-    console.error(`🔴 [SECURE_STORE] Failed to retrieve offline data ${key}:`, error);
     return null;
   }
 };
@@ -282,7 +272,7 @@ export const generateSecureHash = async (data: string): Promise<string> => {
     );
     return hash;
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Failed to generate hash:', error);
+
     throw error;
   }
 };
@@ -302,7 +292,7 @@ export const isSecureStorageAvailable = async (): Promise<boolean> => {
 
     return retrieved === testValue;
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Secure storage not available:', error);
+
     return false;
   }
 };
@@ -357,7 +347,7 @@ export const performSecurityCheck = async (): Promise<{
       recommendations,
     };
   } catch (error) {
-    console.error('🔴 [SECURE_STORE] Security check failed:', error);
+
     return {
       isSecure: false,
       issues: ['Security check failed'],

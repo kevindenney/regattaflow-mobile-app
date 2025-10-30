@@ -15,6 +15,7 @@ import {
   Modal,
   FlatList,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,6 +23,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { Audio } from 'expo-av';
 import ProtestModal from '@/components/race-control/ProtestModal';
+import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 
 // Types
 interface Regatta {
@@ -79,6 +81,7 @@ export default function RaceControlScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
+  const { clubId, loading: personaLoading, refresh: refreshPersonaContext } = useClubWorkspace();
 
   // State
   const [regatta, setRegatta] = useState<Regatta | null>(null);
@@ -100,10 +103,12 @@ export default function RaceControlScreen() {
 
   // Sound
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+  const countdownInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load data
   useEffect(() => {
+    if (!clubId) return;
+
     loadRegattaData();
     loadEntries();
     loadResults();
@@ -116,10 +121,12 @@ export default function RaceControlScreen() {
         sound.unloadAsync();
       }
     };
-  }, [id, raceNumber]);
+  }, [id, raceNumber, clubId]);
 
   // Realtime subscription for results
   useEffect(() => {
+    if (!clubId) return;
+
     const channel = supabase
       .channel(`race-control-${id}-${raceNumber}`)
       .on(
@@ -139,9 +146,10 @@ export default function RaceControlScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, raceNumber]);
+  }, [id, raceNumber, clubId]);
 
   const loadRegattaData = async () => {
+    if (!clubId) return;
     try {
       const { data, error } = await supabase
         .from('regattas')
@@ -158,6 +166,7 @@ export default function RaceControlScreen() {
   };
 
   const loadEntries = async () => {
+    if (!clubId) return;
     try {
       const { data, error } = await supabase
         .from('race_entries')
@@ -174,6 +183,7 @@ export default function RaceControlScreen() {
   };
 
   const loadResults = async () => {
+    if (!clubId) return;
     try {
       const { data, error } = await supabase
         .from('race_results')
@@ -698,6 +708,35 @@ export default function RaceControlScreen() {
     }
   };
 
+  if (personaLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0EA5E9" />
+      </View>
+    );
+  }
+
+  if (!clubId) {
+    return (
+      <View style={styles.missingContainer}>
+        <Ionicons name="people-circle-outline" size={48} color="#94A3B8" />
+        <Text style={styles.missingTitle}>Connect Your Club Workspace</Text>
+        <Text style={styles.missingDescription}>
+          Race control tools require an active club connection. Finish onboarding or refresh your workspace to continue.
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+          <Text style={styles.retryButtonText}>Retry Connection</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryLink}
+          onPress={() => router.push('/(auth)/club-onboarding-chat')}
+        >
+          <Text style={styles.secondaryLinkText}>Open Club Onboarding</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -775,6 +814,51 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  missingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    backgroundColor: '#f5f5f5',
+  },
+  missingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
   header: {
     backgroundColor: '#2196F3',

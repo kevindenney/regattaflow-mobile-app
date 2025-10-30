@@ -43,7 +43,7 @@ export class VenueDetectionService {
         return await this.initializeMobileDetection();
       }
     } catch (error) {
-      console.error('🌍 Failed to initialize venue detection:', error);
+
       // Fallback to timezone detection
       await this.performTimezoneBasedDetection();
       this.isInitialized = true;
@@ -57,7 +57,7 @@ export class VenueDetectionService {
   private async initializeBrowserDetection(): Promise<boolean> {
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      console.warn('🌍 Geolocation not supported, using timezone detection');
+
       await this.performTimezoneBasedDetection();
       this.isInitialized = true;
       return false;
@@ -69,10 +69,10 @@ export class VenueDetectionService {
     if (hasPermission) {
       this.startBrowserLocationWatching();
       this.isInitialized = true;
-      console.log('✅ Browser GPS venue detection initialized');
+
       return true;
     } else {
-      console.warn('🌍 GPS permission denied, falling back to timezone detection');
+
       await this.performTimezoneBasedDetection();
       this.isInitialized = true;
       return false;
@@ -103,7 +103,6 @@ export class VenueDetectionService {
 
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          console.log('✅ Browser location permission granted');
 
           // Immediately detect venue from current position
           const coordinates: Coordinates = [
@@ -117,12 +116,12 @@ export class VenueDetectionService {
             await this.detectVenueFromCoordinates(coordinates);
             resolve(true);
           } catch (error) {
-            console.warn('🌍 Venue detection failed:', error);
+
             resolve(true); // Still resolve true since location was obtained
           }
         },
         (error) => {
-          console.warn('🌍 Browser location permission denied or failed:', error.message);
+
           resolve(false);
         },
         {
@@ -153,12 +152,12 @@ export class VenueDetectionService {
         if (this.hasLocationChangedSignificantly(coordinates)) {
           this.currentLocation = coordinates;
           this.detectVenueFromCoordinates(coordinates).catch(error => {
-            console.error('🌍 GPS venue detection failed:', error);
+
           });
         }
       },
       (error) => {
-        console.warn('🌍 Browser GPS watch error:', error.message);
+
       },
       {
         enableHighAccuracy: true,
@@ -224,7 +223,7 @@ export class VenueDetectionService {
       this.updateCurrentVenue(null);
 
     } catch (error) {
-      console.error('❌ Timezone detection failed:', error);
+
       this.updateCurrentVenue(null);
     }
   }
@@ -291,7 +290,7 @@ export class VenueDetectionService {
 
       this.updateCurrentVenue(detectedVenue);
     } catch (error) {
-      console.error('🌍 Failed to detect venue from coordinates:', error);
+
       this.updateCurrentVenue(null);
     }
   }
@@ -370,7 +369,7 @@ export class VenueDetectionService {
         try {
           callback(transition);
         } catch (error) {
-          console.error('❌ Venue transition callback error:', error);
+
         }
       });
     }
@@ -383,7 +382,7 @@ export class VenueDetectionService {
       try {
         callback(venue);
       } catch (error) {
-        console.error('❌ Venue detection callback error:', error);
+
       }
     });
 
@@ -505,7 +504,7 @@ export class VenueDetectionService {
       try {
         callback(venue);
       } catch (error) {
-        console.error('🌍 Error in venue detection callback:', error);
+
       }
     });
   }
@@ -518,7 +517,7 @@ export class VenueDetectionService {
       try {
         callback(transition);
       } catch (error) {
-        console.error('🌍 Error in venue transition callback:', error);
+
       }
     });
   }
@@ -564,14 +563,12 @@ export class VenueDetectionService {
       const venue = allVenues.find(v => v.id === venueId);
 
       if (!venue) {
-        console.error(`❌ Venue not found: ${venueId}`);
         return false;
       }
 
       this.updateCurrentVenue(venue);
       return true;
     } catch (error) {
-      console.error(`❌ Failed to select venue ${venueId}:`, error);
       return false;
     }
   }
@@ -620,7 +617,7 @@ export class VenueDetectionService {
             resolve();
           },
           async (error) => {
-            console.warn('🌍 GPS detection failed, using timezone fallback:', error.message);
+
             await this.performTimezoneBasedDetection();
             resolve();
           },

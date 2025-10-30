@@ -9,10 +9,29 @@
  * - Save/load courses
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { MapPin, Plus, Trash2, Save, Layers, Wind, Waves } from 'lucide-react-native';
-import { MockCourse } from '@/constants/mockData';
+import CourseMapView from './CourseMapView';
+export type CourseDraft = {
+  id?: string;
+  name: string;
+  venue?: string;
+  courseType: 'windward_leeward' | 'olympic' | 'trapezoid' | 'coastal' | 'custom';
+  marks: Array<{
+    name: string;
+    lat: number;
+    lng: number;
+    type?: CourseMark['type'];
+  }>;
+  windRange: {
+    min: number;
+    max: number;
+    preferredDirection?: number;
+  };
+  length?: number;
+  lastUsed?: string;
+};
 
 interface CourseMark {
   id: string;
@@ -24,8 +43,8 @@ interface CourseMark {
 }
 
 interface CourseBuilderProps {
-  initialCourse?: MockCourse;
-  onSave?: (course: MockCourse) => void;
+  initialCourse?: CourseDraft;
+  onSave?: (course: CourseDraft) => void;
   onCancel?: () => void;
   venueCenter?: { lat: number; lng: number };
   venueName?: string;
@@ -39,18 +58,22 @@ export function CourseBuilder({
   venueName = 'Royal Hong Kong Yacht Club',
 }: CourseBuilderProps) {
   const [courseName, setCourseName] = useState(initialCourse?.name || 'New Course');
-  const [courseType, setCourseType] = useState<MockCourse['courseType']>(
+  const [courseType, setCourseType] = useState<CourseDraft['courseType']>(
     initialCourse?.courseType || 'windward_leeward'
   );
   const [marks, setMarks] = useState<CourseMark[]>(
-    initialCourse?.marks.map((m, idx) => ({
-      id: `mark-${idx}`,
-      name: m.name,
-      lat: m.lat,
-      lng: m.lng,
-      type: determineMarkType(m.name),
-      draggable: true,
-    })) || []
+    initialCourse?.marks.map((m, idx) => {
+      const inferredType =
+        'type' in m && m.type ? (m.type as CourseMark['type']) : determineMarkType(m.name);
+      return {
+        id: `mark-${idx}`,
+        name: m.name,
+        lat: m.lat,
+        lng: m.lng,
+        type: inferredType,
+        draggable: true,
+      };
+    }) || []
   );
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   const [showLayers, setShowLayers] = useState(false);
@@ -64,6 +87,40 @@ export function CourseBuilder({
 
   // Calculate course length based on mark positions
   const courseLength = calculateCourseLength(marks);
+
+  const courseMapMarks = useMemo(
+    () =>
+      marks.map((m) => ({
+        id: m.id,
+        name: m.name,
+        type: mapBuilderMarkTypeToMapType(m.type),
+        coordinates: {
+          latitude: m.lat,
+          longitude: m.lng,
+        },
+      })),
+    [marks]
+  );
+
+  const mapCenter = useMemo(() => {
+    if (courseMapMarks.length === 0) {
+      return { latitude: venueCenter.lat, longitude: venueCenter.lng };
+    }
+
+    const totals = courseMapMarks.reduce(
+      (acc, mark) => {
+        acc.lat += mark.coordinates.latitude;
+        acc.lng += mark.coordinates.longitude;
+        return acc;
+      },
+      { lat: 0, lng: 0 }
+    );
+
+    return {
+      latitude: totals.lat / courseMapMarks.length,
+      longitude: totals.lng / courseMapMarks.length,
+    };
+  }, [courseMapMarks, venueCenter.lat, venueCenter.lng]);
 
   const handleAddMark = () => {
     const newMark: CourseMark = {
@@ -85,6 +142,14 @@ export function CourseBuilder({
     }
   };
 
+  const handleMarkPositionChange = (markId: string, newLat: number, newLng: number) => {
+    setMarks((prev) =>
+      prev.map((mark) =>
+        mark.id === markId ? { ...mark, lat: newLat, lng: newLng } : mark
+      )
+    );
+  };
+
   const handleMarkNameChange = (markId: string, newName: string) => {
     setMarks(
       marks.map((m) =>
@@ -94,7 +159,7 @@ export function CourseBuilder({
   };
 
   const handleSaveCourse = () => {
-    const course: MockCourse = {
+    const course: CourseDraft = {
       id: initialCourse?.id || `course-${Date.now()}`,
       name: courseName,
       venue: venueName,
@@ -103,6 +168,7 @@ export function CourseBuilder({
         name: m.name,
         lat: m.lat,
         lng: m.lng,
+        type: m.type,
       })),
       windRange: {
         min: 8,
@@ -124,17 +190,14 @@ export function CourseBuilder({
       {/* Map Container */}
       <View className="flex-1 relative">
         {Platform.OS === 'web' ? (
-          <NauticalMapView
-            marks={marks}
-            onMarkMove={(markId, newLat, newLng) => {
-              setMarks(
-                marks.map((m) => (m.id === markId ? { ...m, lat: newLat, lng: newLng } : m))
-              );
-            }}
-            onMarkSelect={setSelectedMarkId}
-            selectedMarkId={selectedMarkId}
-            center={venueCenter}
-            overlays={overlays}
+          <CourseMapView
+            courseMarks={courseMapMarks}
+            centerCoordinate={mapCenter}
+            selectedMarkId={selectedMarkId ?? undefined}
+            onMarkPress={(mark) => setSelectedMarkId(mark.id)}
+            onMarkMove={(markId, coords) =>
+              handleMarkPositionChange(markId, coords.latitude, coords.longitude)
+            }
           />
         ) : (
           <View className="flex-1 bg-blue-100 items-center justify-center">
@@ -352,56 +415,6 @@ function OverlayToggle({ label, icon, enabled, onToggle }: OverlayToggleProps) {
   );
 }
 
-// Placeholder for web map view
-interface NauticalMapViewProps {
-  marks: CourseMark[];
-  onMarkMove: (markId: string, newLat: number, newLng: number) => void;
-  onMarkSelect: (markId: string | null) => void;
-  selectedMarkId: string | null;
-  center: { lat: number; lng: number };
-  overlays: {
-    nauticalChart: boolean;
-    depthContours: boolean;
-    wind: boolean;
-    current: boolean;
-    waves: boolean;
-  };
-}
-
-function NauticalMapView({ marks, center, overlays }: NauticalMapViewProps) {
-  return (
-    <View className="flex-1 bg-blue-50 items-center justify-center">
-      <View className="bg-white rounded-lg p-6 shadow-lg max-w-md">
-        <View className="items-center mb-4">
-          <MapPin size={48} color="#3B82F6" />
-        </View>
-        <Text className="text-lg font-bold text-gray-900 text-center mb-2">
-          Interactive Nautical Chart
-        </Text>
-        <Text className="text-sm text-gray-600 text-center mb-4">
-          Full MapLibre GL implementation coming soon
-        </Text>
-        <View className="bg-gray-50 rounded-lg p-4">
-          <Text className="text-xs text-gray-700 mb-2">Active Overlays:</Text>
-          {Object.entries(overlays)
-            .filter(([, enabled]) => enabled)
-            .map(([key]) => (
-              <Text key={key} className="text-xs text-gray-600">
-                • {key.replace(/([A-Z])/g, ' $1').trim()}
-              </Text>
-            ))}
-        </View>
-        <View className="mt-4">
-          <Text className="text-xs text-gray-700 mb-2">Marks: {marks.length}</Text>
-          <Text className="text-xs text-gray-600">
-            Center: {center.lat.toFixed(4)}, {center.lng.toFixed(4)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 // Helper Functions
 
 function determineMarkType(name: string): CourseMark['type'] {
@@ -415,6 +428,22 @@ function determineMarkType(name: string): CourseMark['type'] {
     return 'leeward';
   }
   return 'mark';
+}
+
+function mapBuilderMarkTypeToMapType(
+  type: CourseMark['type']
+): 'start' | 'mark' | 'finish' | 'gate' {
+  switch (type) {
+    case 'start':
+      return 'start';
+    case 'finish':
+      return 'finish';
+    case 'gate_left':
+    case 'gate_right':
+      return 'gate';
+    default:
+      return 'mark';
+  }
 }
 
 function calculateCourseLength(marks: CourseMark[]): number {

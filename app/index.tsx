@@ -36,16 +36,8 @@ export default function LandingPage() {
     }
   }, [signedIn, ready, userProfile, loading, isRedirecting]);
 
-  // Show loading while checking auth, loading profile, or redirecting
-  if (!ready || loading || isRedirecting) {
-    return (
-      <View style={styles.loadingContainer}>
-        {/* Simple loading state - you can enhance this */}
-      </View>
-    );
-  }
-
-  // Show landing page for unauthenticated users
+  // Show landing page immediately - don't wait for auth
+  // (Auth redirect will happen in useEffect once ready)
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
   return (
     <Container style={styles.container}>

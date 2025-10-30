@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface SubscriptionPlan {
   id: string;
@@ -21,6 +22,7 @@ export interface SubscriptionStatus {
   cancelAtPeriodEnd?: boolean;
 }
 
+const logger = createLogger('StripeService.web');
 export class StripeService {
   private readonly apiUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:3000';
 
@@ -287,7 +289,7 @@ export class StripeService {
    * Initialize Stripe for web - Stripe.js loaded via script tag
    */
   async initializeStripe(): Promise<void> {
-    console.log('Stripe: Web platform - Stripe.js loaded via script tag');
+    logger.debug('Stripe: Web platform - Stripe.js loaded via script tag');
     return;
   }
 

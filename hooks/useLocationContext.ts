@@ -6,6 +6,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SailingNetworkService, LocationSummary, LocationContext } from '@/services/SailingNetworkService';
 import { useAuth } from '@/providers/AuthProvider';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('LocationContext');
 
 export interface UseLocationContextState {
   currentLocation: LocationContext | null;
@@ -36,10 +39,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
    * Fetch user's current location context and all locations
    */
   const fetchLocationContext = useCallback(async () => {
-    console.log('📍 useLocationContext: fetchLocationContext called', { hasUser: !!user, userId: user?.id });
-
     if (!user) {
-      console.log('📍 useLocationContext: No user, returning empty state');
       setState({
         currentLocation: null,
         myLocations: [],
@@ -52,18 +52,10 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      console.log('📍 useLocationContext: Fetching location data for user:', user.id);
-
       const [currentLocation, myLocations] = await Promise.all([
         SailingNetworkService.getCurrentLocationContext(),
         SailingNetworkService.getMyLocations(),
       ]);
-
-      console.log('📍 useLocationContext: Location data received', {
-        currentLocation,
-        myLocations,
-        locationsCount: myLocations.length,
-      });
 
       setState({
         currentLocation,
@@ -71,13 +63,8 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
         isLoading: false,
         error: null,
       });
-
-      console.log('📍 useLocationContext: Location context loaded', {
-        current: currentLocation?.locationName,
-        totalLocations: myLocations.length,
-      });
     } catch (error: any) {
-      console.error('❌ useLocationContext: Failed to fetch location context:', error);
+      logger.error('Failed to fetch location context:', error);
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -96,8 +83,6 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
   ) => {
     if (!user) throw new Error('User not authenticated');
 
-    console.log('📍 useLocationContext: Switching location to:', locationName);
-
     try {
       await SailingNetworkService.setLocationContext(
         locationName,
@@ -109,7 +94,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
       // Refresh location context
       await fetchLocationContext();
     } catch (error: any) {
-      console.error('❌ useLocationContext: Failed to switch location:', error);
+      logger.error('Failed to switch location:', error);
       throw error;
     }
   }, [user, fetchLocationContext]);
@@ -124,8 +109,6 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
   ) => {
     if (!user) throw new Error('User not authenticated');
 
-    console.log('📍 useLocationContext: Setting location via GPS:', locationName);
-
     try {
       await SailingNetworkService.setLocationContext(
         locationName,
@@ -137,7 +120,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
       // Refresh location context
       await fetchLocationContext();
     } catch (error: any) {
-      console.error('❌ useLocationContext: Failed to set GPS location:', error);
+      logger.error('Failed to set GPS location:', error);
       throw error;
     }
   }, [user, fetchLocationContext]);

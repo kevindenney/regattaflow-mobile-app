@@ -15,6 +15,9 @@ import Voice, {
 import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('VoiceCommand');
 
 // ============================================================================
 // Types
@@ -211,7 +214,7 @@ class VoiceCommandService {
         this.commandQueue = JSON.parse(stored);
       }
     } catch (error) {
-      console.error('Failed to load queued commands:', error);
+      logger.error('Failed to load queued commands:', error);
     }
   }
 
@@ -219,7 +222,7 @@ class VoiceCommandService {
     try {
       await AsyncStorage.setItem('voice_command_queue', JSON.stringify(this.commandQueue));
     } catch (error) {
-      console.error('Failed to save queued commands:', error);
+      logger.error('Failed to save queued commands:', error);
     }
   }
 
@@ -228,20 +231,20 @@ class VoiceCommandService {
   // ============================================================================
 
   private onSpeechStart = (e: SpeechStartEvent) => {
-    console.log('Speech started');
+    logger.debug('Speech started');
   };
 
   private onSpeechRecognized = (e: SpeechRecognizedEvent) => {
-    console.log('Speech recognized');
+    logger.debug('Speech recognized');
   };
 
   private onSpeechEnd = (e: SpeechEndEvent) => {
-    console.log('Speech ended');
+    logger.debug('Speech ended');
     this.isListening = false;
   };
 
   private onSpeechError = (e: SpeechErrorEvent) => {
-    console.error('Speech error:', e.error);
+    logger.error('Speech error:', e.error);
     this.isListening = false;
     this.isWakeListening = false;
   };
@@ -250,7 +253,7 @@ class VoiceCommandService {
     if (!e.value || e.value.length === 0) return;
 
     const transcription = e.value[0].toLowerCase();
-    console.log('Transcription:', transcription);
+    logger.debug('Transcription received');
 
     // Check for wake phrase
     if (this.isWakeListening) {
@@ -289,7 +292,7 @@ class VoiceCommandService {
       this.isWakeListening = true;
       return true;
     } catch (error) {
-      console.error('Failed to start wake listening:', error);
+      logger.error('Failed to start wake listening:', error);
       return false;
     }
   }
@@ -304,7 +307,7 @@ class VoiceCommandService {
       this.isListening = true;
       return true;
     } catch (error) {
-      console.error('Failed to start command listening:', error);
+      logger.error('Failed to start command listening:', error);
       return false;
     }
   }
@@ -315,7 +318,7 @@ class VoiceCommandService {
       this.isListening = false;
       this.isWakeListening = false;
     } catch (error) {
-      console.error('Failed to stop listening:', error);
+      logger.error('Failed to stop listening:', error);
     }
   }
 
@@ -325,7 +328,7 @@ class VoiceCommandService {
       this.isListening = false;
       this.isWakeListening = false;
     } catch (error) {
-      console.error('Failed to destroy voice:', error);
+      logger.error('Failed to destroy voice:', error);
     }
   }
 
@@ -346,7 +349,7 @@ class VoiceCommandService {
       }
       return true;
     } catch (error) {
-      console.error('Failed to check microphone permission:', error);
+      logger.error('Failed to check microphone permission:', error);
       return false;
     }
   }
@@ -356,7 +359,7 @@ class VoiceCommandService {
   // ============================================================================
 
   private async processCommand(transcription: string): Promise<void> {
-    console.log('Processing command:', transcription);
+    logger.debug('Processing command');
 
     // Find matching command pattern
     for (const pattern of this.COMMAND_PATTERNS) {
@@ -370,7 +373,7 @@ class VoiceCommandService {
 
     // No match found
     await this.playFeedback('error');
-    console.log('No matching command found for:', transcription);
+    logger.debug('No matching command found');
   }
 
   private async executeCommand(
@@ -381,7 +384,7 @@ class VoiceCommandService {
   ): Promise<void> {
     const handler = this.commandHandlers.get(handlerName);
     if (!handler) {
-      console.error('No handler registered for:', handlerName);
+      logger.error('No handler registered for:', handlerName);
       await this.playFeedback('error');
       return;
     }
@@ -418,7 +421,7 @@ class VoiceCommandService {
         }
       }
     } catch (error) {
-      console.error('Command execution failed:', error);
+      logger.error('Command execution failed:', error);
       await this.playFeedback('error');
     }
   }
@@ -451,9 +454,9 @@ class VoiceCommandService {
       // - voice-error.mp3
 
       // Temporary: Use haptic feedback instead
-      console.log(`Voice feedback: ${type}`);
+      logger.debug(`Voice feedback: ${type}`);
     } catch (error) {
-      console.error('Failed to play audio feedback:', error);
+      logger.error('Failed to play audio feedback:', error);
     }
   }
 
@@ -518,7 +521,7 @@ class VoiceCommandService {
 
       await AsyncStorage.setItem('voice_command_history', JSON.stringify(history));
     } catch (error) {
-      console.error('Failed to log command:', error);
+      logger.error('Failed to log command:', error);
     }
   }
 
@@ -527,7 +530,7 @@ class VoiceCommandService {
       const stored = await AsyncStorage.getItem('voice_command_history');
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
-      console.error('Failed to get command history:', error);
+      logger.error('Failed to get command history:', error);
       return [];
     }
   }

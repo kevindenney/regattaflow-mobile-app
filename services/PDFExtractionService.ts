@@ -8,6 +8,7 @@
 
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
+import { createLogger } from '@/lib/utils/logger';
 
 // PDF.js will be loaded from CDN on web
 let pdfjsLib: any = null;
@@ -23,7 +24,7 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-    console.log('[PDFExtractionService] PDF.js loaded from CDN');
+    logger.debug('[PDFExtractionService] PDF.js loaded from CDN');
   };
   script.onerror = () => {
     console.error('[PDFExtractionService] Failed to load PDF.js from CDN');
@@ -43,6 +44,7 @@ interface PDFExtractionResult {
   error?: string;
 }
 
+const logger = createLogger('PDFExtractionService');
 export class PDFExtractionService {
   /**
    * Extract text from PDF file
@@ -88,7 +90,7 @@ export class PDFExtractionService {
     try {
       // Wait for PDF.js to load if not already loaded
       if (!pdfjsLib) {
-        console.log('[PDFExtractionService] Waiting for PDF.js to load from CDN...');
+        logger.debug('[PDFExtractionService] Waiting for PDF.js to load from CDN...');
         const loaded = await this.waitForPdfJs();
         if (!loaded) {
           return {
@@ -98,13 +100,13 @@ export class PDFExtractionService {
         }
       }
 
-      console.log('[PDFExtractionService] Loading PDF document from:', fileUri);
+      logger.debug('[PDFExtractionService] Loading PDF document from:', fileUri);
 
       // Load PDF document
       const loadingTask = pdfjsLib.getDocument(fileUri);
       const pdf = await loadingTask.promise;
 
-      console.log('[PDFExtractionService] PDF loaded successfully, pages:', pdf.numPages);
+      logger.debug('[PDFExtractionService] PDF loaded successfully, pages:', pdf.numPages);
 
       const totalPages = Math.min(
         pdf.numPages,

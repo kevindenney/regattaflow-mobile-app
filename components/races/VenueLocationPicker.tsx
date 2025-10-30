@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { MapPin, X } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 interface VenueLocation {
   name: string;
@@ -38,6 +39,7 @@ interface VenueLocationPickerProps {
   placeholder?: string;
 }
 
+const logger = createLogger('VenueLocationPicker');
 export function VenueLocationPicker({
   value,
   onChangeText,
@@ -81,7 +83,7 @@ export function VenueLocationPicker({
           lng: v.coordinates_lng,
         }));
 
-        console.log(`[VenueLocationPicker] Found ${suggestions.length} venues matching "${value}"`);
+        logger.debug(`[VenueLocationPicker] Found ${suggestions.length} venues matching "${value}"`);
 
         setVenueSuggestions(suggestions);
         setShowSuggestions(suggestions.length > 0);
@@ -101,7 +103,7 @@ export function VenueLocationPicker({
     onChangeText(suggestion.name);
     onCoordinatesChange({ lat: suggestion.lat, lng: suggestion.lng });
     setShowSuggestions(false);
-    console.log(`[VenueLocationPicker] Selected venue: ${suggestion.name} (${suggestion.lat}, ${suggestion.lng})`);
+    logger.debug(`[VenueLocationPicker] Selected venue: ${suggestion.name} (${suggestion.lat}, ${suggestion.lng})`);
   };
 
   const handleOpenMap = () => {

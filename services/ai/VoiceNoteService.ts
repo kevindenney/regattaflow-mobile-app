@@ -6,7 +6,7 @@
 
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { Platform } from 'react-native';
 import type { RaceStrategy, RaceConditions } from './RaceStrategyEngine';
 
@@ -90,9 +90,8 @@ class VoiceNoteService {
       });
 
       this.isInitialized = true;
-      console.log('🎤 VoiceNoteService initialized successfully');
     } catch (error) {
-      console.error('❌ Failed to initialize VoiceNoteService:', error);
+
       throw error;
     }
   }
@@ -154,11 +153,10 @@ class VoiceNoteService {
       }, maxDuration * 1000);
 
       const recordingId = `voice_note_${startTime}`;
-      console.log(`🎤 Started recording voice note: ${recordingId}`);
 
       return recordingId;
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
+
       this.recording = null;
       throw error;
     }
@@ -166,7 +164,7 @@ class VoiceNoteService {
 
   async stopRecording(): Promise<VoiceNote | null> {
     if (!this.recording) {
-      console.warn('⚠️ No recording in progress');
+
       return null;
     }
 
@@ -193,14 +191,12 @@ class VoiceNoteService {
 
       this.recording = null;
 
-      console.log(`🎤 Recording completed: ${voiceNote.id} (${duration.toFixed(1)}s)`);
-
       // Start background processing
       this.processVoiceNote(voiceNote);
 
       return voiceNote;
     } catch (error) {
-      console.error('❌ Failed to stop recording:', error);
+
       this.recording = null;
       throw error;
     }
@@ -212,16 +208,14 @@ class VoiceNoteService {
     try {
       await this.recording.stopAndUnloadAsync();
       this.recording = null;
-      console.log('🎤 Recording cancelled');
     } catch (error) {
-      console.error('❌ Failed to cancel recording:', error);
+
       this.recording = null;
     }
   }
 
   private async processVoiceNote(voiceNote: VoiceNote): Promise<VoiceNote> {
     try {
-      console.log(`🤖 Processing voice note: ${voiceNote.id}`);
       const startTime = Date.now();
 
       // Convert audio to text using Google AI Speech-to-Text
@@ -243,11 +237,10 @@ class VoiceNoteService {
         isProcessing: false,
       };
 
-      console.log(`✅ Voice note processed in ${processingTime.toFixed(1)}s: ${processedNote.id}`);
       return processedNote;
 
     } catch (error) {
-      console.error('❌ Failed to process voice note:', error);
+
       return {
         ...voiceNote,
         isProcessing: false,
@@ -259,8 +252,6 @@ class VoiceNoteService {
     // For now, return a simulated transcription
     // In production, this would integrate with Google Speech-to-Text API
     // or use the device's built-in speech recognition
-
-    console.log('🎯 Transcribing audio...');
 
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -332,7 +323,6 @@ Return as JSON with this structure:
 
         return analysis;
       } catch (parseError) {
-        console.error('❌ Failed to parse AI analysis:', parseError);
 
         // Fallback analysis
         return {
@@ -344,7 +334,6 @@ Return as JSON with this structure:
         };
       }
     } catch (error) {
-      console.error('❌ AI analysis failed:', error);
 
       // Fallback to basic analysis
       return {
@@ -426,9 +415,8 @@ Return as JSON with this structure:
         await FileSystem.deleteAsync(voiceNote.fileUri);
       }
 
-      console.log(`🗑️ Deleted voice note: ${voiceNote.id}`);
     } catch (error) {
-      console.error('❌ Failed to delete voice note:', error);
+
       throw error;
     }
   }
@@ -443,7 +431,7 @@ Return as JSON with this structure:
     try {
       return await this.recording.getStatusAsync();
     } catch (error) {
-      console.error('❌ Failed to get recording status:', error);
+
       return null;
     }
   }

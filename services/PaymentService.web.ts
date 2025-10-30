@@ -1,6 +1,7 @@
 // Payment Service for Coach Marketplace (Web)
 import { supabase } from './supabase';
 import { CoachingSession } from '../types/coach';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface PaymentIntent {
   client_secret: string;
@@ -15,6 +16,7 @@ export interface PaymentResult {
   error?: string;
 }
 
+const logger = createLogger('PaymentService.web');
 export class PaymentService {
   /**
    * Create payment intent for coaching session
@@ -386,11 +388,11 @@ export class PaymentService {
   }
 
   private static async simulateRefund(paymentIntentId: string, amount: number): Promise<void> {
-    console.log(`Simulated refund of ${amount} cents for payment ${paymentIntentId}`);
+    logger.debug(`Simulated refund of ${amount} cents for payment ${paymentIntentId}`);
   }
 
   private static async simulateCoachPayout(coachId: string, amount: number): Promise<void> {
-    console.log(`Simulated payout of ${amount} cents to coach ${coachId}`);
+    logger.debug(`Simulated payout of ${amount} cents to coach ${coachId}`);
   }
 
   private static calculateRefundAmount(session: CoachingSession): number {

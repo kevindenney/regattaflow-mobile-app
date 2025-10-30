@@ -5,6 +5,7 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export type ServiceType =
   | 'venue'
@@ -53,6 +54,7 @@ export interface LocationContext {
   detectionMethod: 'gps' | 'manual' | 'calendar';
 }
 
+const logger = createLogger('SailingNetworkService');
 export class SailingNetworkService {
   /**
    * Get user's saved network for a specific location
@@ -60,7 +62,7 @@ export class SailingNetworkService {
   static async getMyNetwork(locationName?: string): Promise<NetworkPlace[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.log('No user authenticated, returning empty network');
+      logger.debug('No user authenticated, returning empty network');
       return [];
     }
 
@@ -119,7 +121,7 @@ export class SailingNetworkService {
       .select('venue_id')
       .eq('user_id', user.id);
 
-    const savedVenueIds = new Set((savedVenues || []).map(sv => sv.venue_id));
+    const savedVenueIds = new Set((savedVenues || []).map((sv: { venue_id: string }) => sv.venue_id));
 
     // Query sailing venues in this location
     let query = supabase
@@ -137,8 +139,8 @@ export class SailingNetworkService {
 
     // Filter out already saved venues
     const unsavedVenues = (data || [])
-      .filter(venue => !savedVenueIds.has(venue.id))
-      .map(venue => ({
+      .filter((venue: any) => !savedVenueIds.has(venue.id))
+      .map((venue: any) => ({
         id: venue.id,
         type: 'venue' as ServiceType, // Default to venue for now
         name: venue.name,
@@ -226,28 +228,18 @@ export class SailingNetworkService {
    */
   static async getMyLocations(): Promise<LocationSummary[]> {
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('🗺️  SailingNetworkService.getMyLocations: User check', { hasUser: !!user, userId: user?.id });
 
     if (!user) {
-      console.log('🗺️  SailingNetworkService.getMyLocations: No user, returning empty');
+
       return [];
     }
-
-    console.log('🗺️  SailingNetworkService.getMyLocations: Calling RPC with user:', user.id);
 
     const { data, error } = await supabase.rpc('get_user_locations_summary', {
       p_user_id: user.id,
     });
 
-    console.log('🗺️  SailingNetworkService.getMyLocations: RPC result', {
-      hasData: !!data,
-      dataLength: data?.length,
-      error,
-      rawData: data
-    });
-
     if (error) {
-      console.error('❌ Failed to get locations summary:', error);
+
       return []; // Return empty array instead of throwing
     }
 
@@ -259,8 +251,6 @@ export class SailingNetworkService {
       serviceTypes: item.service_types,
     }));
 
-    console.log('🗺️  SailingNetworkService.getMyLocations: Returning mapped locations', mapped);
-
     return mapped;
   }
 
@@ -269,14 +259,11 @@ export class SailingNetworkService {
    */
   static async getCurrentLocationContext(): Promise<LocationContext | null> {
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('📍 SailingNetworkService.getCurrentLocationContext: User check', { hasUser: !!user, userId: user?.id });
 
     if (!user) {
-      console.log('📍 SailingNetworkService.getCurrentLocationContext: No user, returning null');
+
       return null;
     }
-
-    console.log('📍 SailingNetworkService.getCurrentLocationContext: Querying for user:', user.id);
 
     const { data, error } = await supabase
       .from('user_location_context')
@@ -284,14 +271,12 @@ export class SailingNetworkService {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    console.log('📍 SailingNetworkService.getCurrentLocationContext: Query result', { hasData: !!data, error });
-
     if (error) {
-      console.error('❌ Failed to get location context:', error);
+
       return null; // Return null instead of throwing to prevent app crash
     }
     if (!data) {
-      console.log('📍 SailingNetworkService.getCurrentLocationContext: No data, returning null');
+
       return null;
     }
 
@@ -305,7 +290,6 @@ export class SailingNetworkService {
       detectionMethod: data.detection_method as 'gps' | 'manual' | 'calendar',
     };
 
-    console.log('📍 SailingNetworkService.getCurrentLocationContext: Returning result', result);
     return result;
   }
 

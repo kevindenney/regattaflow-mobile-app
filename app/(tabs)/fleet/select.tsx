@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { DashboardSection } from '@/components/dashboard/shared';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 interface Fleet {
   id: string;
@@ -50,9 +51,9 @@ export default function FleetSelectionScreen() {
   }, [hongKongFleets.length, user?.id]);
 
   const loadHongKongFleets = async () => {
-    console.log('[FleetSelect] loadHongKongFleets started');
+    logger.debug('[FleetSelect] loadHongKongFleets started');
     try {
-      console.log('[FleetSelect] Fetching fleets from Supabase...');
+      logger.debug('[FleetSelect] Fetching fleets from Supabase...');
       const { data, error } = await supabase
         .from('fleets')
         .select(`
@@ -67,19 +68,24 @@ export default function FleetSelectionScreen() {
         .eq('region', 'Hong Kong')
         .order('name');
 
-      console.log('[FleetSelect] Query result:', { data, error, count: data?.length });
+      logger.debug('[FleetSelect] Query result:', { data, error, count: data?.length });
 
       if (error) {
         console.error('[FleetSelect] Query error:', error);
         throw error;
       }
 
-      console.log('[FleetSelect] Setting Hong Kong fleets:', data?.length);
-      setHongKongFleets(data || []);
+      logger.debug('[FleetSelect] Setting Hong Kong fleets:', data?.length);
+      // Transform data to ensure boat_class is a single object, not an array
+      const transformedData = (data || []).map(fleet => ({
+        ...fleet,
+        boat_class: Array.isArray(fleet.boat_class) ? fleet.boat_class[0] : fleet.boat_class
+      }));
+      setHongKongFleets(transformedData);
     } catch (error) {
       console.error('[FleetSelect] Error loading Hong Kong fleets:', error);
     } finally {
-      console.log('[FleetSelect] Setting loading to false');
+      logger.debug('[FleetSelect] Setting loading to false');
       setLoading(false);
     }
   };
@@ -146,12 +152,12 @@ export default function FleetSelectionScreen() {
       return;
     }
 
-    console.log('Starting save with user:', user.id);
+    logger.debug('Starting save with user:', user.id);
     setSaving(true);
     try {
       const selectedFleetIds = Array.from(selectedFleets);
       const selectedFleetsList = hongKongFleets.filter(f => selectedFleets.has(f.id));
-      console.log('Selected fleets:', selectedFleetsList.map(f => f.name));
+      logger.debug('Selected fleets:', selectedFleetsList.map(f => f.name));
 
       // Add user to selected fleets
       for (const fleetId of selectedFleetIds) {
@@ -180,8 +186,8 @@ export default function FleetSelectionScreen() {
           .eq('user_id', user.id);
       }
 
-      console.log('Save completed successfully');
-      console.log('Selected fleets saved:', selectedFleetsList.map(f => f.name));
+      logger.debug('Save completed successfully');
+      logger.debug('Selected fleets saved:', selectedFleetsList.map(f => f.name));
 
       // Wait a moment for database to sync, then navigate back
       setTimeout(() => {
@@ -322,6 +328,7 @@ export default function FleetSelectionScreen() {
   );
 }
 
+const logger = createLogger('select');
 const styles = StyleSheet.create({
   container: {
     flex: 1,

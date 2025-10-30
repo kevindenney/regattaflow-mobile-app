@@ -95,7 +95,7 @@ export class VenueIntelligenceService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('❌ Failed to save venue insights:', error);
+
       return {
         success: false,
         error: error.message || 'Failed to save insights',
@@ -138,7 +138,7 @@ export class VenueIntelligenceService {
 
       return insights;
     } catch (error: any) {
-      console.error('❌ Failed to retrieve venue insights:', error);
+
       return null;
     }
   }
@@ -182,7 +182,7 @@ export class VenueIntelligenceService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('❌ Failed to delete venue insights:', error);
+
       return {
         success: false,
         error: error.message || 'Failed to delete insights',

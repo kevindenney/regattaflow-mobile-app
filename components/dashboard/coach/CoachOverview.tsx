@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DashboardKPICard, DashboardSection, QuickAction, QuickActionGrid } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface CoachStats {
   activeClients: number;
@@ -44,6 +45,7 @@ interface CoachOverviewProps {
   onManageAvailability: () => void;
 }
 
+const logger = createLogger('CoachOverview');
 export function CoachOverview({
   stats,
   upcomingSessions = [],
@@ -83,7 +85,7 @@ export function CoachOverview({
     switch (type) {
       case 'analysis': return 'analytics';
       case 'live': return 'videocam';
-      case 'race_day': return 'sailboat';
+      case 'race_day': return 'boat';
       default: return 'calendar';
     }
   };
@@ -151,7 +153,7 @@ export function CoachOverview({
         subtitle="Your coaching schedule for the next few days"
         headerAction={{
           label: 'View All',
-          onPress: () => console.log('View all sessions'),
+          onPress: () => logger.debug('View all sessions'),
           icon: 'calendar-outline'
         }}
       >
@@ -218,7 +220,7 @@ export function CoachOverview({
         subtitle="New coaching opportunities from the marketplace"
         headerAction={{
           label: 'View All',
-          onPress: () => console.log('View all leads'),
+          onPress: () => logger.debug('View all leads'),
           icon: 'arrow-forward'
         }}
       >

@@ -216,9 +216,18 @@ export function CrewAvailabilityCalendar({
       setNewAvailability({ status: 'available', reason: '', notes: '' });
       loadAvailability();
       onUpdate?.();
-    } catch (err) {
-      console.error('Error saving availability:', err);
-      Alert.alert('Error', 'Failed to save availability');
+    } catch (err: any) {
+      if (err?.queuedForSync && err?.entity) {
+        setAvailability(prev => [...prev, err.entity as CrewAvailability]);
+        Alert.alert('Offline', 'Availability will sync once you are back online.');
+        setShowAddModal(false);
+        setSelectedRange(null);
+        setNewAvailability({ status: 'available', reason: '', notes: '' });
+        onUpdate?.();
+      } else {
+        console.error('Error saving availability:', err);
+        Alert.alert('Error', 'Failed to save availability');
+      }
     }
   };
 

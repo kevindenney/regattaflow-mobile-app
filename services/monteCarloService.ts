@@ -431,31 +431,31 @@ export class MonteCarloService {
       positionCounts[i] = 0;
     }
 
-    iterations.forEach(iter => {
-      positionCounts[iter.finishPosition]++;
+    iterations.forEach((iteration: SimulationIteration) => {
+      positionCounts[iteration.finishPosition]++;
     });
 
     const positionDistribution: Record<number, number> = {};
-    Object.entries(positionCounts).forEach(([pos, count]) => {
+    Object.entries(positionCounts).forEach(([pos, count]: [string, number]) => {
       positionDistribution[Number(pos)] = count / iterations.length;
     });
 
     // Expected and median finish
     const sortedPositions = iterations
-      .map(i => i.finishPosition)
-      .sort((a, b) => a - b);
+      .map((iteration: SimulationIteration) => iteration.finishPosition)
+      .sort((a: number, b: number) => a - b);
 
     const expectedFinish =
-      sortedPositions.reduce((a, b) => a + b, 0) / iterations.length;
+      sortedPositions.reduce((a: number, b: number) => a + b, 0) / iterations.length;
 
     const medianFinish = sortedPositions[Math.floor(iterations.length / 2)];
 
     // Probabilities
     const podiumProbability =
-      iterations.filter(i => i.finishPosition <= 3).length / iterations.length;
+      iterations.filter((iteration: SimulationIteration) => iteration.finishPosition <= 3).length / iterations.length;
 
     const winProbability =
-      iterations.filter(i => i.finishPosition === 1).length / iterations.length;
+      iterations.filter((iteration: SimulationIteration) => iteration.finishPosition === 1).length / iterations.length;
 
     // Success factors analysis
     const successFactors = this.analyzeSuccessFactors(iterations);
@@ -498,8 +498,8 @@ export class MonteCarloService {
         factor: 'Start Position',
         impact: this.calculateCorrelation(
           iterations,
-          i => i.tacticalDecisions.startPosition === 'pin' ? 1 : 0,
-          i => i.finishPosition
+          (iteration: SimulationIteration) => iteration.tacticalDecisions.startPosition === 'pin' ? 1 : 0,
+          (iteration: SimulationIteration) => iteration.finishPosition
         ),
         description: 'Impact of favoring pin end vs. committee boat',
       },
@@ -507,8 +507,8 @@ export class MonteCarloService {
         factor: 'First Beat Tack',
         impact: this.calculateCorrelation(
           iterations,
-          i => i.tacticalDecisions.firstBeatTack === 'right' ? 1 : 0,
-          i => i.finishPosition
+          (iteration: SimulationIteration) => iteration.tacticalDecisions.firstBeatTack === 'right' ? 1 : 0,
+          (iteration: SimulationIteration) => iteration.finishPosition
         ),
         description: 'Choosing the lifted tack on first upwind leg',
       },
@@ -525,8 +525,9 @@ export class MonteCarloService {
         factor: 'Wind Shifts',
         impact: Math.abs(this.calculateCorrelation(
           iterations,
-          i => Math.abs(i.windShifts.reduce((a, b) => a + b, 0)),
-          i => i.finishPosition
+          (iteration: SimulationIteration) =>
+            Math.abs(iteration.windShifts.reduce((a: number, b: number) => a + b, 0)),
+          (iteration: SimulationIteration) => iteration.finishPosition
         )),
         description: 'Responding to wind direction changes',
       },
@@ -547,8 +548,8 @@ export class MonteCarloService {
     const xs = iterations.map(xFunc);
     const ys = iterations.map(yFunc);
 
-    const meanX = xs.reduce((a, b) => a + b, 0) / n;
-    const meanY = ys.reduce((a, b) => a + b, 0) / n;
+    const meanX = xs.reduce((a: number, b: number) => a + b, 0) / n;
+    const meanY = ys.reduce((a: number, b: number) => a + b, 0) / n;
 
     let numerator = 0;
     let denomX = 0;
@@ -575,36 +576,36 @@ export class MonteCarloService {
   ): SimulationResults['alternativeStrategies'] {
     // Analyze what worked best
     const topQuartile = iterations
-      .filter(i => i.finishPosition <= fleetSize / 4)
-      .sort((a, b) => a.finishPosition - b.finishPosition);
+      .filter((iteration: SimulationIteration) => iteration.finishPosition <= fleetSize / 4)
+      .sort((a: SimulationIteration, b: SimulationIteration) => a.finishPosition - b.finishPosition);
 
     const bottomQuartile = iterations
-      .filter(i => i.finishPosition > fleetSize * 0.75)
-      .sort((a, b) => b.finishPosition - a.finishPosition);
+      .filter((iteration: SimulationIteration) => iteration.finishPosition > fleetSize * 0.75)
+      .sort((a: SimulationIteration, b: SimulationIteration) => b.finishPosition - a.finishPosition);
 
     // Conservative strategy (minimize risk)
-    const conservativePositions = iterations.map(i => {
+    const conservativePositions = iterations.map((iteration: SimulationIteration) => {
       // Simulate more cautious approach (less aggressive tactics)
-      return Math.min(fleetSize, i.finishPosition + 2);
+      return Math.min(fleetSize, iteration.finishPosition + 2);
     });
     const conservativeExpected =
-      conservativePositions.reduce((a, b) => a + b, 0) / iterations.length;
+      conservativePositions.reduce((a: number, b: number) => a + b, 0) / iterations.length;
 
     // Aggressive strategy (maximize upside)
-    const aggressivePositions = iterations.map(i => {
+    const aggressivePositions = iterations.map((iteration: SimulationIteration) => {
       // Simulate more risky approach (higher variance)
       const variance = Math.random() < 0.5 ? -3 : 3;
-      return Math.max(1, Math.min(fleetSize, i.finishPosition + variance));
+      return Math.max(1, Math.min(fleetSize, iteration.finishPosition + variance));
     });
     const aggressiveExpected =
-      aggressivePositions.reduce((a, b) => a + b, 0) / iterations.length;
+      aggressivePositions.reduce((a: number, b: number) => a + b, 0) / iterations.length;
 
     return [
       {
         name: 'Conservative',
         expectedFinish: conservativeExpected,
         podiumProbability:
-          conservativePositions.filter(p => p <= 3).length / iterations.length,
+          conservativePositions.filter((position: number) => position <= 3).length / iterations.length,
         riskLevel: 'low',
         description: 'Minimize risk, prioritize consistent performance',
       },
@@ -612,7 +613,7 @@ export class MonteCarloService {
         name: 'Aggressive',
         expectedFinish: aggressiveExpected,
         podiumProbability:
-          aggressivePositions.filter(p => p <= 3).length / iterations.length,
+          aggressivePositions.filter((position: number) => position <= 3).length / iterations.length,
         riskLevel: 'high',
         description: 'High-risk, high-reward tactical approach',
       },
@@ -620,12 +621,12 @@ export class MonteCarloService {
         name: 'Pin-favored Start',
         expectedFinish:
           topQuartile
-            .filter(i => i.tacticalDecisions.startPosition === 'pin')
-            .reduce((sum, i) => sum + i.finishPosition, 0) /
-          topQuartile.filter(i => i.tacticalDecisions.startPosition === 'pin').length || fleetSize / 2,
+            .filter((iteration: SimulationIteration) => iteration.tacticalDecisions.startPosition === 'pin')
+            .reduce((sum: number, iteration: SimulationIteration) => sum + iteration.finishPosition, 0) /
+          topQuartile.filter((iteration: SimulationIteration) => iteration.tacticalDecisions.startPosition === 'pin').length || fleetSize / 2,
         podiumProbability:
-          topQuartile.filter(i =>
-            i.tacticalDecisions.startPosition === 'pin' && i.finishPosition <= 3
+          topQuartile.filter((iteration: SimulationIteration) =>
+            iteration.tacticalDecisions.startPosition === 'pin' && iteration.finishPosition <= 3
           ).length / iterations.length,
         riskLevel: 'medium',
         description: 'Favor pin end for better wind and current',

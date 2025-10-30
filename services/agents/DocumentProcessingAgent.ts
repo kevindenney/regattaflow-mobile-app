@@ -6,7 +6,7 @@
 
 import { BaseAgentService, AgentTool } from './BaseAgentService';
 import { z } from 'zod';
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import RaceCourseExtractor from '@/services/ai/RaceCourseExtractor';
 import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
 import { supabase } from '@/services/supabase';
@@ -78,7 +78,6 @@ Returns structured course data with confidence scores.`,
         venueHint: z.string().optional().describe('Optional venue name to help with coordinate inference'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: extract_race_course_from_si', { filename: input.filename, textLength: input.documentText.length });
 
         try {
           // Use RaceCourseExtractor service with Claude
@@ -107,7 +106,7 @@ Returns structured course data with confidence scores.`,
             },
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: extract_race_course_from_si', error);
+
           return {
             success: false,
             error: `Failed to extract race course: ${error.message}`,
@@ -143,7 +142,6 @@ Returns MapLibre-compatible GeoJSON.`,
         }).describe('Course layout information'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: generate_3d_course_visualization', { marksCount: input.marks.length });
 
         try {
           // Filter marks with coordinates
@@ -221,7 +219,7 @@ Returns MapLibre-compatible GeoJSON.`,
             },
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: generate_3d_course_visualization', error);
+
           return {
             success: false,
             error: `Failed to generate visualization: ${error.message}`,
@@ -254,7 +252,6 @@ Returns strategic insights for race planning.`,
         venueContext: z.string().optional().describe('Venue name or context'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: analyze_race_strategy', { courseType: input.courseData.courseLayout.type });
 
         try {
           const prompt = `Analyze this race course and provide strategic recommendations for sailors:
@@ -316,7 +313,7 @@ Provide tactical analysis in JSON format:
             },
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: analyze_race_strategy', error);
+
           return {
             success: false,
             error: `Failed to analyze strategy: ${error.message}`,
@@ -344,7 +341,6 @@ Returns confirmation with database IDs.`,
         venueId: z.string().optional().describe('Associated venue ID'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: save_to_knowledge_base', { filename: input.filename });
 
         try {
           // Get current user
@@ -440,7 +436,7 @@ Returns confirmation with database IDs.`,
             message: `Document ${input.filename} processed and saved to knowledge base. Analysis ID: ${analysis.id}`,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: save_to_knowledge_base', error);
+
           return {
             success: false,
             error: `Failed to save to knowledge base: ${error.message}`,

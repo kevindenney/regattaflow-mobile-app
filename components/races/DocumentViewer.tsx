@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { createLogger } from '@/lib/utils/logger';
 
 interface DocumentViewerProps {
   visible: boolean;
@@ -25,6 +26,7 @@ interface DocumentViewerProps {
   onClose: () => void;
 }
 
+const logger = createLogger('DocumentViewer');
 export function DocumentViewer({
   visible,
   documentName,
@@ -89,7 +91,7 @@ export function DocumentViewer({
                   style={styles.openExternalButton}
                   onPress={() => {
                     // TODO: Open in external PDF viewer
-                    console.log('Open PDF:', documentUrl);
+                    logger.debug('Open PDF:', documentUrl);
                   }}
                 >
                   <MaterialCommunityIcons

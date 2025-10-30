@@ -14,7 +14,7 @@ export default function StartSequenceScreen() {
 
   // Countdown timer effect
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (isRunning && countdown > 0) {
       timer = setInterval(() => {
         setCountdown(prev => prev - 1);

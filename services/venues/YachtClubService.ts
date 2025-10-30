@@ -63,7 +63,6 @@ export class YachtClubService {
       });
     });
 
-    console.log(`🏆 Initialized ${this.clubs.size} yacht clubs`);
   }
 
   /**

@@ -26,6 +26,7 @@ import {
     View,
 } from 'react-native';
 import { CardMenu, CardMenuItem } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface CrewManagementProps {
   sailorId: string;
@@ -36,6 +37,7 @@ interface CrewManagementProps {
   onManagePress?: () => void;
 }
 
+const logger = createLogger('CrewManagement');
 const ROLE_ICONS: Record<CrewRole, string> = {
   helmsman: 'navigate-circle',
   tactician: 'compass',
@@ -114,9 +116,16 @@ export function CrewManagement({
       setShowInviteModal(false);
       setInviteForm({ email: '', name: '', role: 'trimmer' });
       loadCrew();
-    } catch (err) {
-      console.error('Error inviting crew:', err);
-      Alert.alert('Error', 'Failed to send invite');
+    } catch (err: any) {
+      if (err?.queuedForSync && err?.entity) {
+        setCrew(prev => [...prev, err.entity as CrewMember]);
+        Alert.alert('Offline', `${inviteForm.name} will be invited once you're back online.`);
+        setShowInviteModal(false);
+        setInviteForm({ email: '', name: '', role: 'trimmer' });
+      } else {
+        console.error('Error inviting crew:', err);
+        Alert.alert('Error', 'Failed to send invite');
+      }
     }
   };
 
@@ -133,8 +142,13 @@ export function CrewManagement({
             try {
               await crewManagementService.removeCrewMember(member.id);
               loadCrew();
-            } catch (err) {
-              Alert.alert('Error', 'Failed to remove crew member');
+            } catch (err: any) {
+              if (err?.queuedForSync) {
+                setCrew(prev => prev.filter(c => c.id !== member.id));
+                Alert.alert('Offline', `${member.name} will be removed when you're back online.`);
+              } else {
+                Alert.alert('Error', 'Failed to remove crew member');
+              }
             }
           },
         },
@@ -174,9 +188,20 @@ export function CrewManagement({
       setShowEditModal(false);
       setSelectedMember(null);
       loadCrew();
-    } catch (err) {
-      console.error('Error updating crew:', err);
-      Alert.alert('Error', 'Failed to update crew member');
+    } catch (err: any) {
+      if (err?.queuedForSync && err?.entity?.updates) {
+        const updates = err.entity.updates as Partial<CrewMember>;
+        setCrew(prev => prev.map(crewMember => {
+          if (crewMember.id !== selectedMember.id) return crewMember;
+          return { ...crewMember, ...updates, queuedForSync: true } as CrewMember;
+        }));
+        Alert.alert('Offline', 'Changes saved locally and will sync when online.');
+        setShowEditModal(false);
+        setSelectedMember(null);
+      } else {
+        console.error('Error updating crew:', err);
+        Alert.alert('Error', 'Failed to update crew member');
+      }
     }
   };
 
@@ -363,7 +388,7 @@ export function CrewManagement({
               {
                 label: 'View Profile',
                 icon: 'person-outline',
-                onPress: () => console.log('View profile:', member.id),
+                onPress: () => logger.debug('View profile:', member.id),
               },
               {
                 label: 'Edit Details',

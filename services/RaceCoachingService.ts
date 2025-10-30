@@ -7,7 +7,7 @@
  * Uses the race-strategy-analyst Claude Skill for expert tactical analysis.
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {

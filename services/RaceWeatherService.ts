@@ -9,6 +9,7 @@
 import { regionalWeatherService } from './weather/RegionalWeatherService';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import type { WeatherData } from './weather/RegionalWeatherService';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface RaceWeatherMetadata {
   wind: {
@@ -26,6 +27,7 @@ export interface RaceWeatherMetadata {
   confidence: number;
 }
 
+const logger = createLogger('RaceWeatherService');
 export class RaceWeatherService {
   /**
    * Fetch weather by exact coordinates (NEW - for map-based selection)
@@ -44,7 +46,7 @@ export class RaceWeatherService {
   ): Promise<RaceWeatherMetadata | null> {
     try {
       const displayName = venueName || `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-      console.log(`[RaceWeatherService] Fetching weather for coordinates: ${displayName}`);
+      logger.debug(`[RaceWeatherService] Fetching weather for coordinates: ${displayName}`);
 
       // Calculate hours until race
       const raceDateObj = new Date(raceDate);
@@ -53,13 +55,13 @@ export class RaceWeatherService {
 
       // Don't fetch weather for races more than 10 days (240 hours) away
       if (hoursUntil > 240) {
-        console.log(`[RaceWeatherService] Race is ${Math.round(hoursUntil / 24)} days away - using defaults`);
+        logger.debug(`[RaceWeatherService] Race is ${Math.round(hoursUntil / 24)} days away - using defaults`);
         return null;
       }
 
       // Don't fetch weather for past races
       if (hoursUntil < 0) {
-        console.log(`[RaceWeatherService] Race is in the past - using defaults`);
+        logger.debug(`[RaceWeatherService] Race is in the past - using defaults`);
         return null;
       }
 
@@ -125,7 +127,7 @@ export class RaceWeatherService {
     raceDate: string
   ): Promise<RaceWeatherMetadata | null> {
     try {
-      console.log(`[RaceWeatherService] Fetching weather for ${venue.name} on ${raceDate}`);
+      logger.debug(`[RaceWeatherService] Fetching weather for ${venue.name} on ${raceDate}`);
 
       // Calculate hours until race
       const raceDateObj = new Date(raceDate);
@@ -134,13 +136,13 @@ export class RaceWeatherService {
 
       // Don't fetch weather for races more than 10 days (240 hours) away
       if (hoursUntil > 240) {
-        console.log(`[RaceWeatherService] Race is ${Math.round(hoursUntil / 24)} days away - using defaults`);
+        logger.debug(`[RaceWeatherService] Race is ${Math.round(hoursUntil / 24)} days away - using defaults`);
         return null;
       }
 
       // Don't fetch weather for past races
       if (hoursUntil < 0) {
-        console.log(`[RaceWeatherService] Race is in the past - using defaults`);
+        logger.debug(`[RaceWeatherService] Race is in the past - using defaults`);
         return null;
       }
 
@@ -200,7 +202,6 @@ export class RaceWeatherService {
         confidence: raceForecast.confidence,
       };
 
-      console.log(`✅ Weather data fetched for ${venue.name} from ${weatherData.sources.primary}`);
       return weatherMetadata;
 
     } catch (error: any) {
@@ -222,7 +223,7 @@ export class RaceWeatherService {
     raceDate: string
   ): Promise<RaceWeatherMetadata | null> {
     try {
-      console.log(`[RaceWeatherService] Looking up venue: "${venueName}"`);
+      logger.debug(`[RaceWeatherService] Looking up venue: "${venueName}"`);
 
       // Clean venue name (remove country/region suffixes)
       const cleanVenueName = venueName
@@ -231,7 +232,7 @@ export class RaceWeatherService {
         .replace(/, HK$/i, '')
         .trim();
 
-      console.log(`[RaceWeatherService] Cleaned venue name: "${cleanVenueName}"`);
+      logger.debug(`[RaceWeatherService] Cleaned venue name: "${cleanVenueName}"`);
 
       // Look up venue in global venues database
       const { supabase } = await import('./supabase');
@@ -261,7 +262,7 @@ export class RaceWeatherService {
 
       const venue = venues[0];
 
-      console.log(`[RaceWeatherService] Found venue: ${venue.name} (${venue.id})`);
+      logger.debug(`[RaceWeatherService] Found venue: ${venue.name} (${venue.id})`);
 
       // Convert database venue to SailingVenue type
       const sailingVenue: SailingVenue = {

@@ -318,9 +318,9 @@ export default function UnifiedOnboarding() {
       if (selectedPersona === 'sailor') {
         router.replace('/(tabs)/races');
       } else if (selectedPersona === 'club') {
-        router.replace('/(tabs)/club-dashboard');
+        router.replace('/(tabs)/dashboard');
       } else {
-        router.replace('/(tabs)/coach-dashboard');
+        router.replace('/(tabs)/dashboard');
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');

@@ -67,7 +67,6 @@ Returns performance metrics and initial weakness indicators.`,
         venueId: z.string().optional().describe('Filter by specific venue'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: analyze_sailor_performance', input);
 
         try {
           // Calculate date range
@@ -152,7 +151,7 @@ Returns performance metrics and initial weakness indicators.`,
             weakAreas,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: analyze_sailor_performance', error);
+
           return {
             success: false,
             error: `Failed to analyze performance: ${error.message}`,
@@ -182,7 +181,6 @@ Returns prioritized list of skill gaps with coaching recommendations.`,
         }).describe('Sailor profile information'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: identify_skill_gaps', { experience: input.sailorProfile.experience });
 
         try {
           const { performanceData, sailorProfile } = input;
@@ -246,7 +244,7 @@ Returns prioritized list of skill gaps with coaching recommendations.`,
             summary: `Identified ${skillGaps.length} key areas for coaching focus.`,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: identify_skill_gaps', error);
+
           return {
             success: false,
             error: `Failed to identify skill gaps: ${error.message}`,
@@ -273,7 +271,6 @@ Returns list of coaches with relevant experience.`,
         maxResults: z.number().optional().default(10).describe('Maximum coaches to return'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: search_coaches_by_expertise', input);
 
         try {
           // Build query
@@ -327,7 +324,7 @@ Returns list of coaches with relevant experience.`,
             count: formattedCoaches.length,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: search_coaches_by_expertise', error);
+
           return {
             success: false,
             error: `Failed to search coaches: ${error.message}`,
@@ -358,7 +355,6 @@ Returns scored and ranked coaches with detailed reasoning.`,
         skillGaps: z.array(z.any()).describe('Skill gaps from identify_skill_gaps'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: calculate_compatibility_scores', { coachCount: input.coaches.length });
 
         try {
           const scores = input.coaches.map(coach => {
@@ -434,7 +430,7 @@ Returns scored and ranked coaches with detailed reasoning.`,
             topMatch: scores[0],
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: calculate_compatibility_scores', error);
+
           return {
             success: false,
             error: `Failed to calculate compatibility: ${error.message}`,
@@ -460,7 +456,6 @@ Returns complete session plan ready for booking.`,
         skillGaps: z.array(z.any()).describe('Prioritized skill gaps'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: generate_session_recommendations');
 
         try {
           const topSkillGap = input.skillGaps[0];
@@ -513,7 +508,7 @@ Returns complete session plan ready for booking.`,
             preparationTips,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: generate_session_recommendations', error);
+
           return {
             success: false,
             error: `Failed to generate recommendations: ${error.message}`,

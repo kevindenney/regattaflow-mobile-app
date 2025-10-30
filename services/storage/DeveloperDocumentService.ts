@@ -68,7 +68,6 @@ export class DeveloperDocumentService {
       }))
     };
 
-    console.log(`📦 Created training batch: ${batchName} (${documents.length} documents)`);
     return batch;
   }
 
@@ -145,7 +144,6 @@ export class DeveloperDocumentService {
       documents
     );
 
-    console.log(`🏆 Created yacht club training batch for ${yachtClubName}`);
     return batch;
   }
 
@@ -153,7 +151,6 @@ export class DeveloperDocumentService {
    * Process a training batch
    */
   async processBatch(batch: TrainingDocumentBatch): Promise<void> {
-    console.log(`🔄 Processing training batch: ${batch.batchName}`);
     batch.status = 'processing';
 
     for (const doc of batch.documents) {
@@ -168,10 +165,7 @@ export class DeveloperDocumentService {
         doc.processed = true;
         batch.processedCount++;
 
-        console.log(`✅ Processed training document: ${doc.filename}`);
-
       } catch (error: any) {
-        console.error(`❌ Failed to process ${doc.filename}:`, error);
         doc.status = 'failed';
         doc.error = error.message;
         batch.failedCount++;
@@ -181,7 +175,6 @@ export class DeveloperDocumentService {
     batch.status = batch.failedCount === 0 ? 'completed' : 'failed';
     batch.completedAt = new Date();
 
-    console.log(`🏁 Batch processing complete: ${batch.processedCount}/${batch.documentCount} successful`);
   }
 
   /**
@@ -225,7 +218,6 @@ export class DeveloperDocumentService {
 
     // Save to database (in development mode, this might be optional)
     if (process.env.NODE_ENV === 'development') {
-      console.log(`🔧 [DEV MODE] Would save training document: ${doc.filename}`);
     } else {
       await this.saveTrainingDocument(mockDocument);
     }

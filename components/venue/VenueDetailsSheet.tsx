@@ -107,20 +107,17 @@ export function VenueDetailsSheet({ venue, onClose }: VenueDetailsSheetProps) {
   const handleToggleSave = async () => {
     if (!venue) return;
 
-    console.log('🔖 VenueDetailsSheet: Toggling save for venue:', venue.id, 'Currently saved:', isSaved);
     setIsSaving(true);
     try {
       if (isSaved) {
-        console.log('🔖 VenueDetailsSheet: Unsaving venue...');
         await unsaveVenue(venue.id);
-        console.log('✅ VenueDetailsSheet: Venue unsaved successfully');
+
       } else {
-        console.log('🔖 VenueDetailsSheet: Saving venue...');
         await saveVenue(venue.id);
-        console.log('✅ VenueDetailsSheet: Venue saved successfully');
+
       }
     } catch (error) {
-      console.error('❌ VenueDetailsSheet: Error toggling venue save:', error);
+
     } finally {
       setIsSaving(false);
     }

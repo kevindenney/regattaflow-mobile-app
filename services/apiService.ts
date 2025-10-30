@@ -563,18 +563,58 @@ export const clubsApi = {
   async getClubs(userId: string) {
     try {
       const { data, error } = await supabase
-        .from('club_memberships')
-        .select('*, club:yacht_clubs(*)')
+        .from('club_members')
+        .select(`
+          id,
+          club_id,
+          membership_type,
+          status,
+          role,
+          member_number,
+          joined_date,
+          expiry_date,
+          payment_status,
+          total_volunteer_hours,
+          yacht_clubs:club_id (
+            id,
+            name,
+            location,
+            country,
+            website,
+            contact_email,
+            description,
+            facilities,
+            metadata
+          )
+        `)
         .eq('user_id', userId)
-        .order('joined_at', { ascending: false });
+        .order('joined_date', { ascending: false });
 
-      // If table doesn't exist, return empty array instead of error
-      if (error && (error.message.includes('relation') || error.message.includes('does not exist'))) {
-        console.warn('Club tables not yet created, returning empty array');
-        return { data: [], error: null, loading: false };
+      if (error) {
+        if (error.message.includes('relation') || error.message.includes('does not exist')) {
+          console.warn('club_members table not available, falling back to legacy club_memberships');
+          const legacyResult = await supabase
+            .from('club_memberships')
+            .select('*, club:yacht_clubs(*)')
+            .eq('user_id', userId)
+            .order('joined_at', { ascending: false });
+
+          if (legacyResult.error && (legacyResult.error.message.includes('relation') || legacyResult.error.message.includes('does not exist'))) {
+            console.warn('Club membership tables not yet created, returning empty array');
+            return { data: [], error: null, loading: false };
+          }
+
+          return { data: legacyResult.data, error: legacyResult.error, loading: false };
+        }
+
+        return { data: [], error, loading: false };
       }
 
-      return { data, error, loading: false };
+      return {
+        data,
+        error: null,
+        loading: false,
+      };
     } catch (error) {
       console.error('Error in getClubs:', error);
       return { data: [], error: error as Error, loading: false };

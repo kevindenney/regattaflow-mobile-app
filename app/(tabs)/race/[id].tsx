@@ -28,6 +28,7 @@ import { QuickDrawMode } from '@/components/race-strategy/QuickDrawMode';
 import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryArea } from 'victory';
 import { RaceDetailsView, DocumentList, type Document, CourseVisualization, CourseSetupPrompt, CourseSelector } from '@/components/races';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceDetails {
   id: string;
@@ -66,18 +67,20 @@ async function generateDocumentHash(content: string): Promise<string> {
       return hash;
     }
   } catch (error) {
-    console.warn('⚠️ Hash generation failed, using fallback:', error);
+
     // Fallback: simple hash based on content length and first 100 chars
     return `fallback_${content.length}_${content.substring(0, 100).length}`;
   }
 }
 
 export default function RaceDetailScreen() {
-  const { id, tab, action } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     tab?: string;
     action?: 'quickdraw' | 'template';
+    courseId?: string;
   }>();
+  const { id, tab, action, courseId } = params;
   const { user } = useAuth();
 
   // ✨ REDIRECT TO NEW SCROLLABLE DESIGN ✨
@@ -86,10 +89,19 @@ export default function RaceDetailScreen() {
 
   useEffect(() => {
     if (USE_SCROLLABLE_DESIGN && id) {
-      console.log('[RaceDetail] Redirecting to new scrollable design:', `/race/scrollable/${id}`);
-      router.replace(`/race/scrollable/${id}`);
+      const redirectParams: Record<string, string> = { id };
+      if (tab) redirectParams.tab = tab;
+      if (action) redirectParams.action = action;
+      if (courseId) redirectParams.courseId = courseId;
+      logger.debug(
+        '[RaceDetail] Redirecting to new scrollable design:',
+        `/race/scrollable/${id}`,
+        'with params',
+        redirectParams
+      );
+      router.replace({ pathname: '/race/scrollable/[id]', params: redirectParams } as any);
     }
-  }, [id]);
+  }, [id, tab, action, courseId]);
 
   // If redirecting, show nothing
   if (USE_SCROLLABLE_DESIGN) {
@@ -127,51 +139,50 @@ export default function RaceDetailScreen() {
 
   // Reset urlActionHandled when action parameter changes
   useEffect(() => {
-    console.log('[RaceDetail] Action parameter changed, resetting urlActionHandled');
+    logger.debug('[RaceDetail] Action parameter changed, resetting urlActionHandled');
     urlActionHandled.current = false;
   }, [action]);
 
   useEffect(() => {
-    console.log('[RaceDetail] ===== URL PARAMS EFFECT =====');
-    console.log('[RaceDetail] tab:', tab, 'action:', action);
-    console.log('[RaceDetail] urlActionHandled.current:', urlActionHandled.current);
-    console.log('[RaceDetail] Current state - isQuickDrawMode:', isQuickDrawMode, 'showCourseSelector:', showCourseSelector);
+    logger.debug('[RaceDetail] ===== URL PARAMS EFFECT =====');
+    logger.debug('[RaceDetail] tab:', tab, 'action:', action);
+    logger.debug('[RaceDetail] urlActionHandled.current:', urlActionHandled.current);
+    logger.debug('[RaceDetail] Current state - isQuickDrawMode:', isQuickDrawMode, 'showCourseSelector:', showCourseSelector);
 
     if (tab) {
-      console.log('[RaceDetail] Setting active tab from URL:', tab);
+      logger.debug('[RaceDetail] Setting active tab from URL:', tab);
       setActiveTab(tab as TabType);
     }
 
     // Only handle action parameter once per page load
     if (action && !urlActionHandled.current) {
-      console.log('[RaceDetail] Processing action:', action);
+      logger.debug('[RaceDetail] Processing action:', action);
 
       if (action === 'quickdraw') {
-        console.log('[RaceDetail] ===== QUICK DRAW ACTION DETECTED =====');
-        console.log('[RaceDetail] Setting isQuickDrawMode to TRUE');
+        logger.debug('[RaceDetail] ===== QUICK DRAW ACTION DETECTED =====');
+        logger.debug('[RaceDetail] Setting isQuickDrawMode to TRUE');
         urlActionHandled.current = true;
         // Enable Quick Draw mode instead of showing CourseSetupPrompt
         setIsQuickDrawMode(true);
-        console.log('[RaceDetail] isQuickDrawMode state updated');
       } else if (action === 'template') {
-        console.log('[RaceDetail] ===== TEMPLATE ACTION DETECTED =====');
-        console.log('[RaceDetail] Setting showCourseSelector to TRUE');
-        console.log('[RaceDetail] Race object exists?', !!race);
+        logger.debug('[RaceDetail] ===== TEMPLATE ACTION DETECTED =====');
+        logger.debug('[RaceDetail] Setting showCourseSelector to TRUE');
+        logger.debug('[RaceDetail] Race object exists?', !!race);
         urlActionHandled.current = true;
         // Show course template selector
         setTimeout(() => {
-          console.log('[RaceDetail] Timeout fired - setting showCourseSelector(true)');
+          logger.debug('[RaceDetail] Timeout fired - setting showCourseSelector(true)');
           setShowCourseSelector(true);
         }, 300);
       } else {
-        console.log('[RaceDetail] Unknown action:', action);
+        logger.debug('[RaceDetail] Unknown action:', action);
       }
     } else {
       if (!action) {
-        console.log('[RaceDetail] No action parameter in URL');
+        logger.debug('[RaceDetail] No action parameter in URL');
       }
       if (urlActionHandled.current) {
-        console.log('[RaceDetail] Action already handled, skipping');
+        logger.debug('[RaceDetail] Action already handled, skipping');
       }
     }
   }, [tab, action]);
@@ -179,7 +190,7 @@ export default function RaceDetailScreen() {
   const loadRaceDetails = async () => {
     try {
       setLoading(true);
-      console.log('[RaceDetail] Loading race:', id);
+      logger.debug('[RaceDetail] Loading race:', id);
 
       // Add safety check for undefined/null id
       if (!id) {
@@ -190,7 +201,6 @@ export default function RaceDetailScreen() {
 
       // Check if this is a mock race
       if (id.startsWith('mock-race-')) {
-        console.log('📋 Loading mock race data for:', id);
 
         // Add timeout to prevent hanging
         const timeoutPromise = new Promise((_, reject) =>
@@ -200,10 +210,8 @@ export default function RaceDetailScreen() {
         const importPromise = import('@/constants/mockData');
 
         const { MOCK_RACES, getRaceWithLinks } = await Promise.race([importPromise, timeoutPromise]) as any;
-        console.log('📋 Mock data imported successfully');
 
         const linkedData = getRaceWithLinks(id);
-        console.log('📋 Linked data:', linkedData);
 
         if (!linkedData) {
           console.error('Mock race not found');
@@ -254,21 +262,21 @@ export default function RaceDetailScreen() {
       }
 
       // Fetch race details from Supabase for real races
-      console.log('[RaceDetail] Fetching race from Supabase, ID:', id);
-      console.log('[RaceDetail] User ID:', user?.id);
+      logger.debug('[RaceDetail] Fetching race from Supabase, ID:', id);
+      logger.debug('[RaceDetail] User ID:', user?.id);
       const { supabase } = await import('@/services/supabase');
 
       // First, try a simple count query to see if race exists at all (bypassing RLS for diagnostics)
-      console.log('[RaceDetail] Testing if race exists in database...');
+      logger.debug('[RaceDetail] Testing if race exists in database...');
       const { count, error: countError } = await supabase
         .from('regattas')
         .select('*', { count: 'exact', head: true })
         .eq('id', id);
 
-      console.log('[RaceDetail] Count query result:', { count, countError });
+      logger.debug('[RaceDetail] Count query result:', { count, countError });
 
       // Add timeout to prevent hanging
-      console.log('[RaceDetail] Fetching full race data...');
+      logger.debug('[RaceDetail] Fetching full race data...');
       const fetchPromise = supabase
         .from('regattas')
         .select('*') // Load ALL fields for comprehensive race details
@@ -305,7 +313,7 @@ export default function RaceDetailScreen() {
         return;
       }
 
-      console.log('[RaceDetail] Race data loaded:', regattaData);
+      logger.debug('[RaceDetail] Race data loaded:', regattaData);
 
       // Store full race data for details view
       setRaceFullData(regattaData);
@@ -318,7 +326,7 @@ export default function RaceDetailScreen() {
       // Load race documents from database (sailing_documents table)
       // NOTE: regatta_id column doesn't exist yet in sailing_documents table
       // For now, load all user's documents (Phase 3 will add race linking)
-      console.log('[RaceDetail] Loading documents for user:', user?.id);
+      logger.debug('[RaceDetail] Loading documents for user:', user?.id);
       let docsData = null;
       try {
         const { data, error: docsError } = await supabase
@@ -340,7 +348,7 @@ export default function RaceDetailScreen() {
             extraction: doc.course_data ? doc.course_data : undefined,
           }));
           setDocuments(loadedDocs);
-          console.log('[RaceDetail] Loaded', loadedDocs.length, 'documents');
+          logger.debug('[RaceDetail] Loaded', loadedDocs.length, 'documents');
           docsData = data;
         }
       } catch (docError) {
@@ -350,7 +358,7 @@ export default function RaceDetailScreen() {
 
       // Load race strategy if exists (race_strategies table with regatta_id)
       // TODO: race_strategies table doesn't exist yet - commented out until table is created
-      console.log('[RaceDetail] Skipping strategy loading (table not yet created)');
+      logger.debug('[RaceDetail] Skipping strategy loading (table not yet created)');
       let strategyData = null;
       /*
       try {
@@ -366,7 +374,7 @@ export default function RaceDetailScreen() {
         if (strategyError) {
           console.warn('[RaceDetail] Error loading strategy (non-critical):', strategyError);
         } else if (data) {
-          console.log('[RaceDetail] Loaded strategy');
+          logger.debug('[RaceDetail] Loaded strategy');
           strategyData = data;
         }
       } catch (strategyLoadError) {
@@ -413,7 +421,7 @@ export default function RaceDetailScreen() {
       }
 
       // Check for course marks - look up race_event and marks
-      console.log('[RaceDetail] Checking for course marks...');
+      logger.debug('[RaceDetail] Checking for course marks...');
       try {
         // Find race_event associated with this regatta
         const { data: raceEvent } = await supabase
@@ -423,7 +431,7 @@ export default function RaceDetailScreen() {
           .maybeSingle();
 
         if (raceEvent) {
-          console.log('[RaceDetail] Found race_event:', raceEvent.id);
+          logger.debug('[RaceDetail] Found race_event:', raceEvent.id);
 
           // Check for marks
           const { data: marks, count } = await supabase
@@ -431,10 +439,10 @@ export default function RaceDetailScreen() {
             .select('*', { count: 'exact' })
             .eq('race_id', raceEvent.id);
 
-          console.log('[RaceDetail] Found', count || 0, 'marks for race_event');
+          logger.debug('[RaceDetail] Found', count || 0, 'marks for race_event');
           setHasCourseMarks((count || 0) > 0);
         } else {
-          console.log('[RaceDetail] No race_event found for regatta');
+          logger.debug('[RaceDetail] No race_event found for regatta');
           setHasCourseMarks(false);
         }
       } catch (marksError) {
@@ -482,7 +490,6 @@ export default function RaceDetailScreen() {
       }
 
       const file = result.assets[0];
-      console.log('📄 Document selected:', file.name);
 
       // Create document entry
       const newDoc: UploadedDocument = {
@@ -513,8 +520,6 @@ export default function RaceDetailScreen() {
         d.id === docId ? { ...d, extractionStatus: 'processing' } : d
       ));
 
-      console.log('📄 Reading file:', { name: file.name, size: file.size, uri: file.uri, mimeType: file.mimeType });
-
       // Read actual file content (PDF text extraction)
       let documentText = '';
 
@@ -522,19 +527,16 @@ export default function RaceDetailScreen() {
         // Use PDFExtractionService (static method)
         const { PDFExtractionService } = await import('@/services/PDFExtractionService');
 
-        console.log('📄 Extracting text from PDF...');
         const result = await PDFExtractionService.extractText(file.uri);
 
         if (result.success && result.text) {
           documentText = result.text;
-          console.log('✅ PDF text extracted successfully');
-          console.log('📄 Pages:', result.pages, 'Text length:', documentText.length);
+
         } else {
           throw new Error(result.error || 'PDF extraction returned no text');
         }
       } catch (pdfError) {
-        console.warn('⚠️ PDF extraction failed:', pdfError);
-        console.warn('⚠️ Falling back to filename as hint for extraction');
+
         // Fallback: Use filename as hint for extraction
         documentText = `Document: ${file.name}`;
       }
@@ -544,15 +546,12 @@ export default function RaceDetailScreen() {
       }
 
       const extractor = new RaceCourseExtractor();
-      console.log('🤖 Starting AI extraction...');
+
       const extraction = await extractor.extractRaceCourse(documentText, {
         filename: file.name,
         venue: race?.venue,
         documentType: 'sailing_instructions',
       });
-
-      console.log('✅ Extraction completed:', extraction);
-      console.log('📊 Results: courseType:', extraction.courseLayout?.type, 'marks:', extraction.marks?.length);
 
       // Save document to Supabase
       const { supabase } = await import('@/services/supabase');
@@ -581,14 +580,14 @@ export default function RaceDetailScreen() {
         .single();
 
       if (saveError) {
-        console.error('❌ Error saving document to database:', saveError);
+
         if (Platform.OS === 'web') {
           window.alert('Save Failed: Document extracted but could not be saved to database.');
         } else {
           Alert.alert('Save Failed', 'Document extracted but could not be saved to database.');
         }
       } else {
-        console.log('✅ Document saved to database:', savedDoc.id);
+
       }
 
       // Update document with extraction and real database ID
@@ -622,8 +621,6 @@ export default function RaceDetailScreen() {
       }
 
     } catch (error) {
-      console.error('❌ Error extracting document:', error);
-      console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error');
 
       setDocuments(prev => prev.map(d =>
         d.id === docId ? { ...d, extractionStatus: 'failed' } : d
@@ -637,7 +634,7 @@ export default function RaceDetailScreen() {
         Alert.alert('Extraction Failed', errorMessage);
       }
     } finally {
-      console.log('🏁 Extraction process complete for document:', docId);
+
     }
   };
 
@@ -710,7 +707,6 @@ export default function RaceDetailScreen() {
       if (!race || !raceFullData) return;
 
       setGeneratingStrategy(true);
-      console.log('🧠 Generating AI race strategy...');
 
       // Get weather data from raceFullData.metadata or use defaults
       const metadata = raceFullData.metadata || {};
@@ -778,8 +774,6 @@ export default function RaceDetailScreen() {
       if (docWithExtraction) {
         try {
           // MODE 1: Full strategy with sailing instructions and course marks (WITH TIMEOUT)
-          console.log('📋 Generating full strategy with sailing instructions...');
-          console.warn('⏱️ Timeout set to 60 seconds for document processing...');
 
           generatedStrategy = await withTimeout(
             raceStrategyEngine.generateRaceStrategy(
@@ -797,10 +791,7 @@ export default function RaceDetailScreen() {
             'Document processing timed out after 60 seconds'
           );
 
-          console.log('✅ Document-based strategy generated successfully');
         } catch (docError: any) {
-          console.error('❌ Document-based strategy failed:', docError.message);
-          console.log('🔄 Falling back to venue-based strategy...');
 
           // FALLBACK: Generate venue-based strategy instead
           generatedStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
@@ -818,12 +809,6 @@ export default function RaceDetailScreen() {
         }
       } else {
         // MODE 2: Venue-based strategy without documents (NEW!)
-        console.log('🌍 Generating venue-based strategy without sailing instructions...');
-        console.log('Using conditions:', {
-          wind: `${windData.direction} ${windSpeed}-${windSpeedMax}kts`,
-          tide: `${tideData.state} ${tideData.height}m`,
-          raceTime: raceFullData.warning_signal_time
-        });
 
         generatedStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
           venueId,
@@ -839,12 +824,6 @@ export default function RaceDetailScreen() {
         );
       }
 
-      console.log('🎯 Strategy object received:', {
-        hasStartLineStrategy: !!generatedStrategy?.startLineStrategy,
-        hasKeyPoints: !!generatedStrategy?.keyTacticalPoints,
-        keyPointsLength: generatedStrategy?.keyTacticalPoints?.length
-      });
-
       setStrategy(generatedStrategy);
       setRace(prev => prev ? { ...prev, hasStrategy: true } : null);
 
@@ -858,10 +837,9 @@ export default function RaceDetailScreen() {
           strategyText = 'Strategy generated - view full details in strategy tab';
         }
 
-        console.log('💾 Attempting to save strategy to database...');
-        console.log('  Race ID:', id);
-        console.log('  Strategy text:', strategyText);
-        console.log('  Current metadata keys:', Object.keys(metadata));
+        logger.debug('  Race ID:', id);
+        logger.debug('  Strategy text:', strategyText);
+        logger.debug('  Current metadata keys:', Object.keys(metadata));
 
         const { data: updateData, error: updateError } = await supabase
           .from('regattas')
@@ -877,20 +855,17 @@ export default function RaceDetailScreen() {
           .select();
 
         if (updateError) {
-          console.error('❌ Failed to save strategy to database:', updateError);
+
           console.error('  Error details:', JSON.stringify(updateError, null, 2));
           Alert.alert('Warning', `Strategy generated but failed to save: ${updateError.message}`);
         } else {
-          console.log('✅ Strategy saved to database successfully');
-          console.log('  Updated data:', updateData?.[0]?.metadata);
+
           Alert.alert('Success', 'Strategy generated and saved!');
         }
       } catch (saveError) {
-        console.error('❌ Exception while saving strategy:', saveError);
+
         Alert.alert('Warning', 'Strategy generated but failed to save. It may not persist.');
       }
-
-      console.log('✅ Strategy generated successfully');
 
     } catch (error) {
       console.error('Error generating strategy:', error);
@@ -1056,11 +1031,10 @@ export default function RaceDetailScreen() {
   const renderStrategy = () => {
     const docWithExtraction = documents.find(d => d.extraction);
 
-    console.log('[RaceDetail] renderStrategy called, isQuickDrawMode:', isQuickDrawMode);
+    logger.debug('[RaceDetail] renderStrategy called, isQuickDrawMode:', isQuickDrawMode);
 
     // QUICK DRAW MODE (Phase 2 navigation, Phase 3 full implementation)
     if (isQuickDrawMode) {
-      console.log('[RaceDetail] Rendering QuickDrawMode component');
       // Get extracted marks from documents or metadata
       const extractedMarks = docWithExtraction?.extraction?.marks?.map(m => ({
         name: m.name,
@@ -1076,13 +1050,13 @@ export default function RaceDetailScreen() {
             extractedMarks={extractedMarks}
             racingAreaName={racingArea}
             onComplete={(marks) => {
-              console.log('[RaceDetail] Quick Draw complete, marks:', marks);
+              logger.debug('[RaceDetail] Quick Draw complete, marks:', marks);
               setIsQuickDrawMode(false);
               Alert.alert('Success', `${marks.length} marks placed successfully!`);
               // TODO: Save marks to course_marks table (Phase 3)
             }}
             onCancel={() => {
-              console.log('[RaceDetail] Quick Draw cancelled');
+              logger.debug('[RaceDetail] Quick Draw cancelled');
               setIsQuickDrawMode(false);
             }}
           />
@@ -1258,7 +1232,7 @@ export default function RaceDetailScreen() {
             courseExtraction={docWithExtraction.extraction!}
             activeLayer={activeLayer}
             showLaylines={showLaylines}
-            onMapLoad={() => console.log('🗺️ Map loaded and ready')}
+            onMapLoad={() => {}}
           />
 
           {/* Confidence Badge Overlay */}
@@ -1573,13 +1547,12 @@ export default function RaceDetailScreen() {
     if (!doc) return;
 
     // TODO: Re-extract document content
-    console.log('Re-extracting document:', documentId);
+    logger.debug('Re-extracting document:', documentId);
     Alert.alert('Re-extraction', 'Document re-extraction will be implemented soon.');
   };
 
   const handleDeleteDocument = async (documentId: string) => {
     try {
-      console.log('🗑️ Deleting document:', documentId);
 
       // Check if document ID is a UUID (saved to database) or timestamp (local only)
       const isUUID = documentId.includes('-'); // UUIDs have hyphens, timestamps don't
@@ -1593,7 +1566,7 @@ export default function RaceDetailScreen() {
           .eq('id', documentId);
 
         if (deleteError) {
-          console.error('❌ Error deleting document from database:', deleteError);
+
           if (Platform.OS === 'web') {
             window.alert('Delete Failed: Could not delete document from database.');
           } else {
@@ -1601,18 +1574,17 @@ export default function RaceDetailScreen() {
           }
           return;
         }
-        console.log('✅ Document deleted from database:', documentId);
+
       } else {
         // Document is local only (still processing or failed)
-        console.log('📝 Removing local-only document:', documentId);
+
       }
 
       // Remove from local state
       setDocuments(prev => prev.filter(d => d.id !== documentId));
-      console.log('✅ Document removed from UI:', documentId);
 
     } catch (error) {
-      console.error('❌ Error deleting document:', error);
+
       if (Platform.OS === 'web') {
         window.alert(`Error: An unexpected error occurred while deleting the document.`);
       } else {
@@ -1898,22 +1870,22 @@ export default function RaceDetailScreen() {
             }))
           }
           onQuickDraw={() => {
-            console.log('[RaceDetail] Quick Draw selected');
+            logger.debug('[RaceDetail] Quick Draw selected');
             setShowCourseSetup(false);
             // Launch Quick Draw Mode
             setIsQuickDrawMode(true);
           }}
           onLoadTemplate={() => {
-            console.log('[RaceDetail] ===== LOAD TEMPLATE CLICKED =====');
-            console.log('[RaceDetail] Current state before:', { isQuickDrawMode, showCourseSelector, showCourseSetup });
+            logger.debug('[RaceDetail] ===== LOAD TEMPLATE CLICKED =====');
+            logger.debug('[RaceDetail] Current state before:', { isQuickDrawMode, showCourseSelector, showCourseSetup });
             setShowCourseSetup(false);
             // Show course template selector
-            console.log('[RaceDetail] Calling setShowCourseSelector(true)');
+            logger.debug('[RaceDetail] Calling setShowCourseSelector(true)');
             setShowCourseSelector(true);
-            console.log('[RaceDetail] setShowCourseSelector called');
+            logger.debug('[RaceDetail] setShowCourseSelector called');
           }}
           onSkip={() => {
-            console.log('[RaceDetail] Skipped course setup');
+            logger.debug('[RaceDetail] Skipped course setup');
             setShowCourseSetup(false);
           }}
           onClose={() => setShowCourseSetup(false)}
@@ -1922,16 +1894,16 @@ export default function RaceDetailScreen() {
 
       {/* CourseSelector - Load Venue Template */}
       {(() => {
-        console.log('[RaceDetail] CourseSelector render check - race exists?', !!race, 'showCourseSelector:', showCourseSelector);
+        logger.debug('[RaceDetail] CourseSelector render check - race exists?', !!race, 'showCourseSelector:', showCourseSelector);
         return race && (
           <CourseSelector
             visible={showCourseSelector}
             onClose={() => {
-              console.log('[RaceDetail] CourseSelector onClose called');
+              logger.debug('[RaceDetail] CourseSelector onClose called');
               setShowCourseSelector(false);
             }}
             onCourseSelected={(course) => {
-              console.log('[RaceDetail] Course template selected:', course);
+              logger.debug('[RaceDetail] Course template selected:', course);
               setShowCourseSelector(false);
 
             // Apply course template marks to race
@@ -1945,7 +1917,7 @@ export default function RaceDetailScreen() {
             // TODO: Update race with course configuration
           }}
           onCreateNew={() => {
-            console.log('[RaceDetail] Create new course from CourseSelector');
+            logger.debug('[RaceDetail] Create new course from CourseSelector');
             setShowCourseSelector(false);
             // Launch Quick Draw for custom course
             setIsQuickDrawMode(true);
@@ -1959,6 +1931,7 @@ export default function RaceDetailScreen() {
   );
 }
 
+const logger = createLogger('[id]');
 const styles = StyleSheet.create({
   container: {
     flex: 1,

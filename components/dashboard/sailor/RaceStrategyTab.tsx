@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { DashboardSection } from '../shared';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceStrategy {
   id: string;
@@ -37,6 +38,7 @@ interface RaceStrategyTabProps {
   onUploadDocuments: () => void;
 }
 
+const logger = createLogger('RaceStrategyTab');
 export function RaceStrategyTab({
   activeStrategy,
   strategyLibrary,
@@ -237,7 +239,7 @@ export function RaceStrategyTab({
         subtitle="Previous strategies and templates"
         headerAction={{
           label: 'View All',
-          onPress: () => console.log('View all strategies'),
+          onPress: () => logger.debug('View all strategies'),
           icon: 'library-outline'
         }}
       >

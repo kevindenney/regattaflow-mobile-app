@@ -6,6 +6,7 @@
 
 import { supabase } from './supabase';
 import * as Location from 'expo-location';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface GPSTrackPoint {
   timestamp: string;
@@ -39,9 +40,10 @@ export interface RaceConditions {
   wave_height?: number;
 }
 
+const logger = createLogger('RaceTimerService');
 export class RaceTimerService {
   private static activeSession: string | null = null;
-  private static trackingInterval: NodeJS.Timeout | null = null;
+  private static trackingInterval: ReturnType<typeof setInterval> | null = null;
   private static trackPoints: GPSTrackPoint[] = [];
 
   /**
@@ -202,9 +204,9 @@ export class RaceTimerService {
       const { RaceAnalysisService } = await import('./RaceAnalysisService');
 
       // Trigger analysis (runs asynchronously)
-      console.log('Triggering AI analysis for session:', sessionId);
+      logger.debug('Triggering AI analysis for session:', sessionId);
       await RaceAnalysisService.analyzeRaceSession(sessionId);
-      console.log('AI analysis completed for session:', sessionId);
+      logger.debug('AI analysis completed for session:', sessionId);
     } catch (error) {
       // Log error but don't throw - this is a background operation
       console.error('Error triggering AI analysis:', error);

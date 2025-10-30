@@ -6,6 +6,7 @@
 
 import { supabase } from '../supabase';
 import { SailingVenue } from '@/types/venues';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface ExternalResultSource {
   id: string;
@@ -64,6 +65,7 @@ export interface PollingStatus {
   nextPollTime: Date;
 }
 
+const logger = createLogger('ExternalResultsService');
 export class ExternalResultsService {
   private static sources: ExternalResultSource[] = [
     {
@@ -126,7 +128,7 @@ export class ExternalResultsService {
    * Start polling for race results from all active sources
    */
   static async startPolling(): Promise<void> {
-    console.log('Starting external results polling system...');
+    logger.debug('Starting external results polling system...');
 
     for (const source of this.sources.filter(s => s.active)) {
       this.pollSource(source);
@@ -143,7 +145,7 @@ export class ExternalResultsService {
    */
   private static async pollSource(source: ExternalResultSource): Promise<void> {
     try {
-      console.log(`Polling ${source.name} for results...`);
+      logger.debug(`Polling ${source.name} for results...`);
 
       await this.updatePollingStatus(source.id, 'started');
 
@@ -176,7 +178,7 @@ export class ExternalResultsService {
 
       if (results.length > 0) {
         await this.saveResults(results);
-        console.log(`Saved ${results.length} results from ${regatta.name}`);
+        logger.debug(`Saved ${results.length} results from ${regatta.name}`);
       }
     } catch (error) {
       console.error(`Error fetching results for ${regatta.name}:`, error);

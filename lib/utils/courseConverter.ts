@@ -10,7 +10,6 @@ import type { RaceMark, GeoLocation } from '@/lib/types/map';
  * Convert AI-extracted race course to 3D map format
  */
 export function convertCourseToMarks(courseExtraction: RaceCourseExtraction): RaceMark[] {
-  console.log('🔄 Converting race course extraction to map marks');
 
   const marks: RaceMark[] = [];
   let markIdCounter = 1;
@@ -32,9 +31,7 @@ export function convertCourseToMarks(courseExtraction: RaceCourseExtraction): Ra
       };
 
       marks.push(mark);
-      console.log(`✅ Converted mark: ${mark.name} (${mark.type}) at ${mark.position.latitude}, ${mark.position.longitude}`);
     } else {
-      console.log(`⚠️ Skipping mark with no coordinates: ${extractedMark.name}`);
     }
   });
 
@@ -47,7 +44,6 @@ export function convertCourseToMarks(courseExtraction: RaceCourseExtraction): Ra
     };
   });
 
-  console.log(`🏁 Course conversion complete: ${marks.length} marks created from ${courseExtraction.marks.length} extracted marks`);
 
   return marks;
 }
@@ -143,7 +139,7 @@ export function calculateCourseCenter(courseExtraction: RaceCourseExtraction): G
   );
 
   if (validMarks.length === 0) {
-    console.log('⚠️ No valid coordinates found for course center calculation');
+
     return null;
   }
 
@@ -155,7 +151,6 @@ export function calculateCourseCenter(courseExtraction: RaceCourseExtraction): G
     longitude: sumLng / validMarks.length
   };
 
-  console.log(`📍 Course center calculated: ${center.latitude.toFixed(6)}, ${center.longitude.toFixed(6)}`);
 
   return center;
 }

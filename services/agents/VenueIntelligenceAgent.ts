@@ -81,7 +81,6 @@ Only call this if you don't already have a confirmed venue ID.`,
         }, z.number().optional().default(50)).describe('Search radius in kilometers (default: 50)'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: detect_venue_from_gps', input);
 
         try {
           // Query venues within radius using PostGIS; fallback to bounding box if RPC missing
@@ -141,7 +140,7 @@ Only call this if you don't already have a confirmed venue ID.`,
             })),
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: detect_venue_from_gps', error);
+
           return {
             success: false,
             error: `Failed to detect venue: ${error.message}`,
@@ -165,7 +164,6 @@ Returns complete intelligence data that informs all other tools.`,
         venueId: z.string().describe('The unique ID of the sailing venue'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: load_regional_intelligence', input);
 
         try {
           // Get venue from database
@@ -202,7 +200,7 @@ Returns complete intelligence data that informs all other tools.`,
             },
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: load_regional_intelligence', error);
+
           return {
             success: false,
             error: `Failed to load intelligence: ${error.message}`,
@@ -231,7 +229,6 @@ Critical for race safety and strategy planning.`,
         region: z.enum(['north-america', 'europe', 'asia-pacific', 'other']).describe('Geographic region'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: fetch_regional_weather', input);
 
         try {
           // Get weather intelligence from service
@@ -260,7 +257,7 @@ Critical for race safety and strategy planning.`,
             racingRecommendations: weatherIntelligence.racingRecommendations,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: fetch_regional_weather', error);
+
           return {
             success: false,
             error: `Failed to fetch weather: ${error.message}`,
@@ -287,7 +284,6 @@ Makes RegattaFlow feel native to sailors everywhere.`,
         protocolReminders: z.array(z.string()).describe('Important cultural protocols to display'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: apply_cultural_settings', input);
 
         try {
           // In a real implementation, this would update app state/context
@@ -302,7 +298,7 @@ Makes RegattaFlow feel native to sailors everywhere.`,
             message: `App UI adapted for ${input.venueId}. Language: ${input.language}, Currency: ${input.currency}`,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: apply_cultural_settings', error);
+
           return {
             success: false,
             error: `Failed to apply cultural settings: ${error.message}`,
@@ -327,7 +323,6 @@ Critical for sailors who lose connectivity on the water.`,
         dataToCacheKeys: z.array(z.string()).describe('Keys of data to cache (e.g., "weather", "tactical", "cultural")'),
       }),
       execute: async (input) => {
-        console.log('🔧 Tool: cache_offline_data', input);
 
         try {
           // In a real implementation, this would use AsyncStorage or similar
@@ -342,7 +337,7 @@ Critical for sailors who lose connectivity on the water.`,
             message: `Offline data cached for ${input.venueId}. Data will be available without internet.`,
           };
         } catch (error: any) {
-          console.error('❌ Tool failed: cache_offline_data', error);
+
           return {
             success: false,
             error: `Failed to cache offline data: ${error.message}`,
@@ -416,7 +411,7 @@ Critical for sailors who lose connectivity on the water.`,
         toolsUsed: data.tools_used || [],
       };
     } catch (error: any) {
-      console.error('❌ Failed to get cached insights:', error);
+
       return null;
     }
   }
@@ -448,9 +443,8 @@ Critical for sailors who lose connectivity on the water.`,
         generation_time_ms: metadata.generationTimeMs || null,
       });
 
-      console.log('✅ Venue insights cached for 24 hours');
     } catch (error: any) {
-      console.error('❌ Failed to cache insights:', error);
+
     }
   }
 
@@ -466,9 +460,8 @@ Critical for sailors who lose connectivity on the water.`,
         .eq('user_id', userId)
         .eq('agent_type', 'venue_intelligence');
 
-      console.log('✅ Cache invalidated for venue:', venueId);
     } catch (error: any) {
-      console.error('❌ Failed to invalidate cache:', error);
+
     }
   }
 
@@ -486,7 +479,6 @@ Critical for sailors who lose connectivity on the water.`,
           const ageHours = Math.floor(
             (Date.now() - new Date(cached.generatedAt).getTime()) / (1000 * 60 * 60)
           );
-          console.log(`✅ Using cached venue insights (${ageHours}h old)`);
           return {
             success: true,
             insights: cached.insights,
@@ -582,9 +574,9 @@ Structure your response as actionable recommendations for a sailor new to this v
       // Save insights to database
       const saveResult = await venueIntelligenceService.saveVenueInsights(insights);
       if (!saveResult.success) {
-        console.warn('⚠️ Failed to save venue insights to database:', saveResult.error);
+
       } else {
-        console.log('✅ Venue insights saved to database');
+
       }
 
       // Cache insights for user (if userId provided)
@@ -611,7 +603,7 @@ Structure your response as actionable recommendations for a sailor new to this v
         toolsUsed: result.toolsUsed,
       };
     } catch (error: any) {
-      console.error('❌ Venue analysis failed:', error);
+
       return {
         success: false,
         error: error.message || 'Failed to analyze venue',

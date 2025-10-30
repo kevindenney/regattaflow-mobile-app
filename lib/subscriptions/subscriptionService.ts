@@ -7,6 +7,7 @@
 import * as InAppPurchases from 'expo-in-app-purchases';
 import { Platform, Alert } from 'react-native';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface SubscriptionProduct {
   id: string;
@@ -44,6 +45,8 @@ export interface PurchaseResult {
  * RegattaFlow Subscription Products
  * Professional sailing platform pricing tiers
  */
+
+const logger = createLogger('subscriptionService');
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
   sailor_pro_monthly: {
     id: Platform.select({
@@ -169,8 +172,6 @@ export class SubscriptionService {
     try {
       if (this.isInitialized) return;
 
-      console.log('🔍 [SUBSCRIPTION] Initializing subscription service...');
-
       // Connect to app store
       await InAppPurchases.connectAsync();
 
@@ -181,9 +182,9 @@ export class SubscriptionService {
       this.setupPurchaseListener();
 
       this.isInitialized = true;
-      console.log('✅ [SUBSCRIPTION] Subscription service initialized');
+
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Failed to initialize:', error);
+
       throw new Error('Failed to initialize subscription service');
     }
   }
@@ -210,12 +211,11 @@ export class SubscriptionService {
           };
         });
 
-        console.log(`✅ [SUBSCRIPTION] Loaded ${this.availableProducts.length} products`);
       } else {
         throw new Error(`Failed to load products: ${responseCode}`);
       }
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Failed to load products:', error);
+
       throw error;
     }
   }
@@ -230,7 +230,7 @@ export class SubscriptionService {
           this.handlePurchaseComplete(purchase);
         });
       } else {
-        console.error('🔴 [SUBSCRIPTION] Purchase failed:', { responseCode, errorCode });
+
       }
     });
   }
@@ -240,7 +240,6 @@ export class SubscriptionService {
    */
   private async handlePurchaseComplete(purchase: any): Promise<void> {
     try {
-      console.log('✅ [SUBSCRIPTION] Purchase completed:', purchase.productId);
 
       // Verify purchase with backend
       await this.verifyPurchase(purchase);
@@ -257,7 +256,7 @@ export class SubscriptionService {
         [{ text: 'Start Racing', style: 'default' }]
       );
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Failed to handle purchase:', error);
+
       Alert.alert(
         '🔴 Purchase Error',
         'There was an issue processing your purchase. Please contact support if the problem persists.'
@@ -284,9 +283,8 @@ export class SubscriptionService {
         throw error;
       }
 
-      console.log('✅ [SUBSCRIPTION] Purchase verified with backend');
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Purchase verification failed:', error);
+
       throw error;
     }
   }
@@ -310,8 +308,6 @@ export class SubscriptionService {
         await this.initialize();
       }
 
-      console.log('🔍 [SUBSCRIPTION] Starting purchase for:', productId);
-
       const { responseCode, results, errorCode } = await InAppPurchases.purchaseItemAsync(productId);
 
       if (responseCode === InAppPurchases.IAPResponseCode.OK) {
@@ -333,7 +329,7 @@ export class SubscriptionService {
         };
       }
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Purchase error:', error);
+
       return {
         success: false,
         error: 'Purchase failed due to technical error',
@@ -349,8 +345,6 @@ export class SubscriptionService {
       if (!this.isInitialized) {
         await this.initialize();
       }
-
-      console.log('🔍 [SUBSCRIPTION] Restoring purchases...');
 
       const { responseCode, results } = await InAppPurchases.getPurchaseHistoryAsync();
 
@@ -379,7 +373,7 @@ export class SubscriptionService {
         };
       }
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Restore failed:', error);
+
       return {
         success: false,
         error: 'Failed to restore purchases',
@@ -397,7 +391,7 @@ export class SubscriptionService {
       }
       return this.currentStatus!;
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Failed to get status:', error);
+
       return this.getDefaultStatus();
     }
   }
@@ -434,9 +428,8 @@ export class SubscriptionService {
         platform: data.subscription_platform || Platform.OS,
       };
 
-      console.log('✅ [SUBSCRIPTION] Status refreshed:', this.currentStatus.tier);
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Failed to refresh status:', error);
+
       this.currentStatus = this.getDefaultStatus();
     }
   }
@@ -478,7 +471,7 @@ export class SubscriptionService {
             text: 'Open Settings',
             onPress: () => {
               // Open device settings (implementation depends on platform)
-              console.log('Opening device subscription settings...');
+              logger.debug('Opening device subscription settings...');
             }
           },
         ]
@@ -486,7 +479,7 @@ export class SubscriptionService {
 
       return true;
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Cancel failed:', error);
+
       return false;
     }
   }
@@ -498,9 +491,9 @@ export class SubscriptionService {
     try {
       await InAppPurchases.disconnectAsync();
       this.isInitialized = false;
-      console.log('✅ [SUBSCRIPTION] Disconnected from app store');
+
     } catch (error) {
-      console.error('🔴 [SUBSCRIPTION] Disconnect failed:', error);
+
     }
   }
 }

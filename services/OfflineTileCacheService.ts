@@ -14,7 +14,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Tile layer type
@@ -254,7 +254,7 @@ export class OfflineTileCacheService {
     } else {
       // Query AsyncStorage
       const keys = await AsyncStorage.getAllKeys();
-      const tileKeys = keys.filter(key => key.startsWith(this.CACHE_PREFIX));
+      const tileKeys = keys.filter((key: string) => key.startsWith(this.CACHE_PREFIX));
 
       for (const key of tileKeys) {
         const tileJson = await AsyncStorage.getItem(key);
@@ -307,7 +307,7 @@ export class OfflineTileCacheService {
       }
     } else {
       const keys = await AsyncStorage.getAllKeys();
-      const tileKeys = keys.filter(key => {
+      const tileKeys = keys.filter((key: string) => {
         if (!key.startsWith(this.CACHE_PREFIX)) return false;
         if (!layerType) return true;
         return key.includes(`_${layerType}_`);

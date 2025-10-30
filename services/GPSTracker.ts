@@ -93,7 +93,6 @@ class GPSTrackerService {
         }
       );
 
-      console.log('✅ GPS tracking started for session:', sessionId);
       return true;
     } catch (error) {
       console.error('Error starting GPS tracking:', error);
@@ -120,7 +119,6 @@ class GPSTrackerService {
 
     // Log every 10 points to avoid spam
     if (this.trackPoints.length % 10 === 0) {
-      console.log(`📍 Recorded ${this.trackPoints.length} GPS points`);
     }
   }
 
@@ -155,7 +153,6 @@ class GPSTrackerService {
         if (error) {
           console.error('Error saving GPS track:', error);
         } else {
-          console.log(`✅ Saved ${this.trackPoints.length} GPS points to database`);
         }
       }
 

@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Image } from '@/components/ui';
-import { 
-  CheckCircle2, 
-  Edit3, 
-  ChevronRight, 
-  MapPin, 
-  Users, 
+import { createLogger } from '@/lib/utils/logger';
+import {
+  CheckCircle2,
+  Edit3,
+  ChevronRight,
+  MapPin,
+  Users,
   Calendar,
   Trophy,
   Shield,
   User,
   ChevronLeft
 } from 'lucide-react-native';
+
+const logger = createLogger('ConfirmCrew');
 
 export default function ConfirmCrewScreen() {
   // Mock data representing all verified information
@@ -66,7 +69,7 @@ export default function ConfirmCrewScreen() {
       `Would you like to edit your ${section}?`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Edit", onPress: () => console.log(`Editing ${section}`) }
+        { text: "Edit", onPress: () => logger.debug(`Editing ${section}`) }
       ]
     );
   };
@@ -76,7 +79,7 @@ export default function ConfirmCrewScreen() {
       "Setup Complete!",
       "Your club profile has been successfully verified and is now active.",
       [
-        { text: "Go to Dashboard", onPress: () => console.log("Navigating to dashboard") }
+        { text: "Go to Dashboard", onPress: () => logger.debug("Navigating to dashboard") }
       ]
     );
   };

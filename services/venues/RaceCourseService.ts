@@ -94,7 +94,6 @@ export class RaceCourseService {
       this.coursesByVenue.set(venue, venueCourses);
     });
 
-    console.log(`⛵ Initialized ${this.courses.size} race courses`);
   }
 
   /**

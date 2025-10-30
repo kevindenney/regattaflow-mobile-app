@@ -45,7 +45,7 @@ export class AISStreamService {
   private vessels: Map<number, VesselData> = new Map();
   private subscribers: Map<string, (vessels: VesselData[]) => void> = new Map();
   private reconnectAttempts = 0;
-  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: ReturnType<typeof setInterval> | null = null;
   private connectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
   private currentBounds: BoundingBox | null = null;
 
@@ -68,9 +68,8 @@ export class AISStreamService {
 
     try {
       await this.establishConnection();
-      console.log('🌐 Connected to AISStream.io');
     } catch (error) {
-      console.error('❌ Failed to connect to AISStream.io:', error);
+
       this.scheduleReconnect();
     }
   }
@@ -99,7 +98,6 @@ export class AISStreamService {
         this.websocket.onclose = (event) => {
           clearTimeout(connectionTimeout);
           this.connectionState = 'disconnected';
-          console.log(`🔌 AISStream connection closed: ${event.code} ${event.reason}`);
 
           if (event.code !== 1000) { // Not a normal closure
             this.scheduleReconnect();
@@ -108,7 +106,7 @@ export class AISStreamService {
 
         this.websocket.onerror = (error) => {
           clearTimeout(connectionTimeout);
-          console.error('❌ AISStream WebSocket error:', error);
+
           this.connectionState = 'disconnected';
           reject(error);
         };
@@ -139,9 +137,8 @@ export class AISStreamService {
 
     try {
       this.websocket.send(JSON.stringify(subscriptionMessage));
-      console.log('📡 Sent AISStream subscription message');
     } catch (error) {
-      console.error('❌ Failed to send subscription:', error);
+
     }
   }
 
@@ -150,7 +147,7 @@ export class AISStreamService {
       const message: AISStreamMessage = JSON.parse(data);
       this.processAISMessage(message);
     } catch (error) {
-      console.error('❌ Failed to parse AISStream message:', error);
+
     }
   }
 
@@ -285,7 +282,7 @@ export class AISStreamService {
 
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
-      console.error('❌ Max reconnection attempts reached for AISStream');
+
       return;
     }
 
@@ -295,8 +292,6 @@ export class AISStreamService {
 
     this.reconnectAttempts++;
     const delay = this.config.reconnectInterval * Math.min(this.reconnectAttempts, 5);
-
-    console.log(`🔄 Scheduling AISStream reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
       if (this.currentBounds) {
@@ -314,9 +309,6 @@ export class AISStreamService {
       vessel.type === VesselType.RACING_YACHT ||
       vessel.status === NavigationStatus.RACING
     );
-
-    console.log(`🚢 Updated ${vessels.length} vessels`);
-    console.log(`🏁 ${racingVessels.length} racing vessels detected`);
 
     this.subscribers.forEach(callback => {
       callback(racingVessels);
@@ -356,8 +348,6 @@ export class AISStreamService {
       await this.connect(bounds);
     }
 
-    console.log(`🔄 Started AISStream fleet tracking (ID: ${trackingId})`);
-
     // Send initial data
     const currentVessels = await this.getVesselsInArea(bounds, options);
     callback(currentVessels);
@@ -367,7 +357,6 @@ export class AISStreamService {
 
   stopFleetTracking(trackingId: string): void {
     this.subscribers.delete(trackingId);
-    console.log(`⏹️ Stopped AISStream fleet tracking (ID: ${trackingId})`);
 
     // If no more subscribers, we could optionally disconnect
     if (this.subscribers.size === 0) {
@@ -391,12 +380,10 @@ export class AISStreamService {
     this.subscribers.clear();
     this.reconnectAttempts = 0;
 
-    console.log('🔌 Disconnected from AISStream.io');
   }
 
   destroy(): void {
     this.disconnect();
-    console.log('🚢 AISStream service destroyed');
   }
 
   // Status methods

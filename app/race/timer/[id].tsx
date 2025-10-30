@@ -20,7 +20,9 @@ import * as Location from 'expo-location';
 import { useAuth } from '@/providers/AuthProvider';
 import { RaceTimerService } from '@/services/RaceTimerService';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('[id]');
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface RaceInfo {
@@ -85,9 +87,9 @@ export default function RaceTimerScreen() {
   const [twaStarboard, setTwaStarboard] = useState<number>(45); // True Wind Angle Starboard
 
   // Intervals
-  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
-  const raceTimeInterval = useRef<NodeJS.Timeout | null>(null);
-  const positionInterval = useRef<NodeJS.Timeout | null>(null);
+  const countdownInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const raceTimeInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const positionInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load race data
   useEffect(() => {
@@ -301,7 +303,7 @@ export default function RaceTimerScreen() {
 
       if (distance < ROUNDING_DISTANCE) {
         // Mark rounded - could trigger haptic feedback or notification
-        console.log(`Rounded mark: ${mark.name}`);
+        logger.debug(`Rounded mark: ${mark.name}`);
       }
     });
   };

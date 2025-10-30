@@ -60,8 +60,8 @@ export function WeatherOverlay3D({
 
       // Get comprehensive weather data
       const weather = await weatherService.current.getAdvancedWeatherData(
-        bounds.north + (bounds.north - bounds.south) / 2, // Center latitude
-        bounds.west + (bounds.east - bounds.west) / 2,    // Center longitude
+        bounds.northeast.latitude + (bounds.northeast.latitude - bounds.southwest.latitude) / 2, // Center latitude
+        bounds.southwest.longitude + (bounds.northeast.longitude - bounds.southwest.longitude) / 2,    // Center longitude
         venue
       );
 
@@ -76,16 +76,8 @@ export function WeatherOverlay3D({
       const currents = await weatherService.current.getTidalCurrents(bounds);
       setTidalCurrents(currents);
 
-      console.log('🌤️ Weather overlay updated:', {
-        wind: `${weather.wind.speed}kts @ ${weather.wind.direction}°`,
-        pressure: `${weather.pressure.sealevel}mb`,
-        confidence: `${Math.round(weather.forecast.confidence * 100)}%`,
-        windFieldPoints: windGrid.length,
-        currentPoints: currents.length
-      });
-
     } catch (error) {
-      console.error('❌ Failed to load weather data:', error);
+
     } finally {
       setLoading(false);
     }
@@ -153,8 +145,8 @@ function generateWindField(bounds: BoundingBox, weather: AdvancedWeatherConditio
   const gridPoints: WindFieldData[] = [];
   const gridSpacing = 0.01; // Degrees (roughly 1km)
 
-  for (let lat = bounds.south; lat <= bounds.north; lat += gridSpacing) {
-    for (let lng = bounds.west; lng <= bounds.east; lng += gridSpacing) {
+  for (let lat = bounds.southwest.latitude; lat <= bounds.northeast.latitude; lat += gridSpacing) {
+    for (let lng = bounds.southwest.longitude; lng <= bounds.northeast.longitude; lng += gridSpacing) {
       // Add some realistic wind variation
       const windVariation = (Math.random() - 0.5) * 0.2; // ±10% variation
       const directionVariation = (Math.random() - 0.5) * 20; // ±10° variation
@@ -195,8 +187,8 @@ function WindParticleSystem({
   // Initialize particles
   useEffect(() => {
     windField.forEach((point, i) => {
-      const x = ((point.position.longitude - bounds.west) / (bounds.east - bounds.west)) * 100 - 50;
-      const z = ((bounds.north - point.position.latitude) / (bounds.north - bounds.south)) * 100 - 50;
+      const x = ((point.position.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
+      const z = ((bounds.northeast.latitude - point.position.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
       const y = 5 + Math.random() * 15; // Height variation
 
       particles[i * 3] = x;
@@ -372,8 +364,8 @@ function TidalCurrentArrows3D({
   return (
     <group>
       {currents.map((current, index) => {
-        const x = ((current.location.longitude - bounds.west) / (bounds.east - bounds.west)) * 100 - 50;
-        const z = ((bounds.north - current.location.latitude) / (bounds.north - bounds.south)) * 100 - 50;
+        const x = ((current.location.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
+        const z = ((bounds.northeast.latitude - current.location.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
 
         return (
           <TidalCurrentArrow3D

@@ -11,7 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
@@ -112,7 +112,7 @@ export default function MembersScreen() {
   };
 
   const handleViewMemberDetail = (memberId: string) => {
-    router.push(`/members/${memberId}`);
+    router.push(`/members/${memberId}` as Href);
   };
 
   const toggleFilter = (filterType: keyof MemberFilters, value: string) => {
@@ -361,7 +361,7 @@ export default function MembersScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push('/members/send-email')}
+            onPress={() => router.push('/members/send-email' as Href)}
           >
             <Ionicons name="mail-outline" size={24} color="#007AFF" />
             <ThemedText style={styles.actionButtonText}>
@@ -370,7 +370,7 @@ export default function MembersScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push('/members/import')}
+            onPress={() => router.push('/members/import' as Href)}
           >
             <Ionicons name="cloud-upload-outline" size={24} color="#007AFF" />
             <ThemedText style={styles.actionButtonText}>

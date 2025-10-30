@@ -172,32 +172,27 @@ export function useSailorDashboardData(): SailorDashboardData {
   });
 
   const fetchSailorData = useCallback(async (overrideClassId?: string | null) => {
-    console.log('🔍 [SAILOR-DATA] fetchSailorData called', { userId: user?.id, hasUser: !!user });
 
     if (!user) {
-      console.log('❌ [SAILOR-DATA] No user, stopping');
+
       setData(prev => ({ ...prev, loading: false, error: 'No user authenticated' }));
       return;
     }
 
     try {
-      console.log('✅ [SAILOR-DATA] User authenticated, starting fetch', user.id);
-      setData(prev => ({ ...prev, loading: true, error: null }));
 
+      setData(prev => ({ ...prev, loading: true, error: null }));
 
       // Query regattas using only the existing created_by column
       
       // Step 1: Fetch classes for this sailor (WITHOUT foreign key join to avoid deadlock)
-      console.log('📊 [SAILOR-DATA] Fetching classes for user:', user.id);
       const { data: classRows, error: classError } = await supabase
         .from('sailor_classes')
         .select('class_id, is_primary, boat_name, sail_number')
         .eq('sailor_id', user.id);
 
-      console.log('📊 [SAILOR-DATA] Classes result:', { count: classRows?.length, error: classError });
-
       if (classError) {
-        console.error('❌ [SAILOR-DATA] Classes error:', classError);
+
         throw classError;
       }
 
@@ -290,7 +285,7 @@ export function useSailorDashboardData(): SailorDashboardData {
         .order('start_date', { ascending: true });
 
       if (racesError) {
-        console.error('❌ [SAILOR-DATA] Regattas error:', racesError);
+
         throw racesError;
       }
 
@@ -302,7 +297,7 @@ export function useSailorDashboardData(): SailorDashboardData {
         .order('created_at', { ascending: false });
 
       if (documentsError) {
-        console.error('❌ [SAILOR-DATA] Documents error:', documentsError);
+
         throw documentsError;
       }
 
@@ -318,7 +313,7 @@ export function useSailorDashboardData(): SailorDashboardData {
         .order('updated_at', { ascending: false });
 
       if (strategiesError) {
-        console.error('❌ [SAILOR-DATA] Strategies error:', strategiesError);
+
         throw strategiesError;
       }
 
@@ -334,10 +329,9 @@ export function useSailorDashboardData(): SailorDashboardData {
         .limit(20);
 
       if (resultsError) {
-        console.error('❌ [SAILOR-DATA] Results error:', resultsError);
+
         throw resultsError;
       }
-
 
       // Process and set data
       const processedRaces: SailorRace[] = racesData?.map(race => {
@@ -493,7 +487,6 @@ export function useSailorDashboardData(): SailorDashboardData {
         loading: false,
       }));
 
-
       // Step 8: Load venue data in background (non-blocking)
       supabaseVenueService.listVenuesForClient(100)
         .then(clientVenues => {
@@ -566,7 +559,6 @@ export function useSailorDashboardData(): SailorDashboardData {
           }));
         })
         .catch(error => {
-          console.error('⚠️ [SAILOR-DATA] Background venue fetch failed (non-critical):', error);
           // Keep empty venue state on error
           setData(prev => ({
             ...prev,
@@ -579,12 +571,6 @@ export function useSailorDashboardData(): SailorDashboardData {
         });
 
     } catch (error) {
-      console.error('💥 [SAILOR-DATA] Error in fetchSailorData:', error);
-      console.error('💥 [SAILOR-DATA] Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        user: user ? { id: user.id, email: user.email } : 'No user'
-      });
-
       setData(prev => ({
         ...prev,
         loading: false,
@@ -594,10 +580,8 @@ export function useSailorDashboardData(): SailorDashboardData {
   }, [user]);
 
   useEffect(() => {
-    console.log('🔄 [SAILOR-DATA] useEffect triggered', { hasUser: !!user, userId: user?.id });
 
     if (user) {
-      console.log('👤 [SAILOR-DATA] User exists, starting fetch with timeout');
       // Add timeout fallback to prevent infinite loading
       const timeout = setTimeout(() => {
         console.error('⏰ [SAILOR-DATA] Fetch timeout after 10 seconds');
@@ -609,11 +593,11 @@ export function useSailorDashboardData(): SailorDashboardData {
       }, 10000);
 
       fetchSailorData().finally(() => {
-        console.log('✅ [SAILOR-DATA] Fetch completed, clearing timeout');
+
         clearTimeout(timeout);
       });
     } else {
-      console.log('❌ [SAILOR-DATA] No user in useEffect, stopping loading');
+
       // If no user, stop loading
       setData(prev => ({ ...prev, loading: false, error: null }));
     }
@@ -622,7 +606,6 @@ export function useSailorDashboardData(): SailorDashboardData {
   const setActiveClassId = useCallback((classId: string | null) => {
     setData(prev => ({ ...prev, activeClassId: classId }));
     fetchSailorData(classId).catch(error => {
-      console.error('💥 [SAILOR-DATA] Failed to update class selection:', error);
     });
   }, [fetchSailorData]);
 

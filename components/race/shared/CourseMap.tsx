@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { RaceCourse, Mark } from '../RaceBuilder';
+import { createLogger } from '@/lib/utils/logger';
 
 // MapLibre GL JS for web, placeholder for native
 let maplibregl: any = null;
@@ -22,6 +23,7 @@ export interface CourseMapProps {
   venueCoordinates?: [number, number];
 }
 
+const logger = createLogger('CourseMap');
 export function CourseMap({
   course,
   onMarkMove,
@@ -272,22 +274,22 @@ export function CourseMap({
   const addWindLayer = () => {
     // Placeholder for wind visualization
     // In production, this would fetch real wind data
-    console.log('Wind layer would be added here');
+    logger.debug('Wind layer would be added here');
   };
 
   const addCurrentLayer = () => {
     // Placeholder for current visualization
-    console.log('Current layer would be added here');
+    logger.debug('Current layer would be added here');
   };
 
   const addDepthLayer = () => {
     // Placeholder for depth contours
-    console.log('Depth layer would be added here');
+    logger.debug('Depth layer would be added here');
   };
 
   const addTacticalLayer = () => {
     // Placeholder for tactical zones (laylines, favored sides)
-    console.log('Tactical layer would be added here');
+    logger.debug('Tactical layer would be added here');
   };
 
   // Native placeholder

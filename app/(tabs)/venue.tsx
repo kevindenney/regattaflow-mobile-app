@@ -26,6 +26,9 @@ import { MapControls, MapLayers } from '@/components/venue/MapControls';
 import { VenueDetailsSheet } from '@/components/venue/VenueDetailsSheet';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
 import * as Location from 'expo-location';
+import { Ionicons } from '@expo/vector-icons';
+import { VenueHeroCard } from '@/components/venue/VenueHeroCard';
+import { TravelResourceChips } from '@/components/venue/TravelResourceChips';
 
 interface Venue {
   id: string;
@@ -39,14 +42,25 @@ interface Venue {
 
 export default function VenueIntelligenceScreen() {
   const { user } = useAuth();
-  const { currentVenue, isDetecting, initializeDetection, setVenueManually } = useVenueIntelligence();
+  const { currentVenue: rawCurrentVenue, isDetecting, initializeDetection, setVenueManually } = useVenueIntelligence();
   const { savedVenueIds, isLoading: savedVenuesLoading } = useSavedVenues();
+
+  // Transform SailingVenue to Venue type for compatibility
+  const currentVenue = rawCurrentVenue ? {
+    id: rawCurrentVenue.id,
+    name: rawCurrentVenue.name,
+    country: rawCurrentVenue.country,
+    region: rawCurrentVenue.region,
+    venue_type: rawCurrentVenue.venueType,
+    coordinates_lat: rawCurrentVenue.coordinates[1],
+    coordinates_lng: rawCurrentVenue.coordinates[0],
+  } : null;
 
 
   // UI State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedVenueForSheet, setSelectedVenueForSheet] = useState<Venue | null>(null);
-  const [is3DEnabled, setIs3DEnabled] = useState(false);
+  const [isThreeDEnabled, setIsThreeDEnabled] = useState(false);
   const [areLayersVisible, setAreLayersVisible] = useState(true);
   const [showOnlySavedVenues, setShowOnlySavedVenues] = useState(false);
   const [mapLayers, setMapLayers] = useState<MapLayers>({
@@ -135,7 +149,7 @@ export default function VenueIntelligenceScreen() {
         })),
       };
     } catch (error: any) {
-      console.error('❌ Fallback detection failed:', error);
+
       return {
         success: false,
         message: error.message,
@@ -166,8 +180,6 @@ export default function VenueIntelligenceScreen() {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      console.log('📍 GPS Location:', location.coords);
-
       // Try AI detection first
       let venueData = null;
       let usedFallback = false;
@@ -179,19 +191,18 @@ export default function VenueIntelligenceScreen() {
           longitude: location.coords.longitude,
         });
 
-        console.log('🤖 Venue Agent Result:', JSON.stringify(agentResult, null, 2));
 
         if (agentResult.success && agentResult.toolResults?.detect_venue_from_gps) {
           venueData = agentResult.toolResults.detect_venue_from_gps;
         } else {
           // AI failed, use fallback
-          console.log('⚠️ AI detection failed, using GPS fallback');
+
           usedFallback = true;
           venueData = await detectVenueWithoutAI(location.coords.latitude, location.coords.longitude);
         }
       } catch (aiError: any) {
         // AI error, use fallback
-        console.log('⚠️ AI error, using GPS fallback:', aiError.message);
+
         usedFallback = true;
         venueData = await detectVenueWithoutAI(location.coords.latitude, location.coords.longitude);
       }
@@ -218,7 +229,6 @@ export default function VenueIntelligenceScreen() {
       }
     } catch (error: any) {
       setIsDetectingVenue(false);
-      console.error('❌ Venue detection error:', error);
 
       Alert.alert(
         'Detection Error',
@@ -234,7 +244,7 @@ export default function VenueIntelligenceScreen() {
   // Confirm AI detected venue
   const handleConfirmVenue = async () => {
     if (!aiVenueResult?.venueId) {
-      console.warn('⚠️ No venue ID to confirm');
+
       return;
     }
 
@@ -254,7 +264,7 @@ export default function VenueIntelligenceScreen() {
         );
       }
     } catch (error: any) {
-      console.error('❌ Venue confirm error:', error);
+
       Alert.alert(
         'Error',
         error.message || 'Failed to confirm venue selection'
@@ -284,7 +294,6 @@ export default function VenueIntelligenceScreen() {
         forceRefresh
       );
 
-      console.log('🤖 Venue Analysis Result:', JSON.stringify(result, null, 2));
 
       setLoadingVenueAnalysis(false);
 
@@ -396,9 +405,72 @@ export default function VenueIntelligenceScreen() {
           selectedVenue={selectedVenueForSheet}
           showOnlySavedVenues={showOnlySavedVenues}
           savedVenueIds={savedVenueIds}
-          is3DEnabled={is3DEnabled}
+          is3DEnabled={isThreeDEnabled}
           mapLayers={mapLayers}
         />
+      </View>
+
+      <View style={styles.overlayColumn}>
+        {currentVenue ? (
+          <>
+            <VenueHeroCard
+              venueName={currentVenue.name}
+              country={currentVenue.country}
+              region={currentVenue.region}
+              distanceLabel={
+                aiVenueResult?.distance
+                  ? `You are ${aiVenueResult.distance.toFixed(1)} km away`
+                  : undefined
+              }
+              windSummary={
+                venueAnalysis?.recommendations?.timing ||
+                venueAnalysis?.summary ||
+                undefined
+              }
+              travelTip={
+                venueAnalysis?.recommendations?.practice ||
+                venueAnalysis?.recommendations?.racing ||
+                'Local sailing intel, service providers, and practice spots at a glance.'
+              }
+              onSave={() => setShowOnlySavedVenues(true)}
+              isSaved={savedVenueIds.has(currentVenue.id)}
+              latitude={currentVenue.coordinates_lat}
+              longitude={currentVenue.coordinates_lng}
+            />
+
+            <TravelResourceChips
+              layers={mapLayers}
+              onToggleLayer={(layer) =>
+                setMapLayers((prev) => ({
+                  ...prev,
+                  [layer]: !prev[layer],
+                }))
+              }
+            />
+          </>
+        ) : (
+          <View style={styles.discoveryCard}>
+            <ThemedText style={styles.discoveryTitle}>Find your next sailing base</ThemedText>
+            <ThemedText style={styles.discoveryCopy}>
+              Explore yacht clubs, fuel docks, repair yards, and local coaching before you travel.
+              Tap a venue on the map or let AI detect where you are headed.
+            </ThemedText>
+            <View style={styles.discoveryHighlights}>
+              <View style={styles.discoveryHighlight}>
+                <Ionicons name="airplane-outline" size={18} color="#2563EB" />
+                <ThemedText style={styles.discoveryHighlightText}>Destination-ready intel</ThemedText>
+              </View>
+              <View style={styles.discoveryHighlight}>
+                <Ionicons name="cloud-outline" size={18} color="#2563EB" />
+                <ThemedText style={styles.discoveryHighlightText}>Live conditions & tactics</ThemedText>
+              </View>
+              <View style={styles.discoveryHighlight}>
+                <Ionicons name="briefcase-outline" size={18} color="#2563EB" />
+                <ThemedText style={styles.discoveryHighlightText}>Service directory in one view</ThemedText>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Left Sidebar - Sailing Network */}
@@ -422,11 +494,11 @@ export default function VenueIntelligenceScreen() {
 
       {/* Upper Right Map Controls */}
       <MapControls
-        onToggle3D={() => setIs3DEnabled(!is3DEnabled)}
+        onToggle3D={() => setIsThreeDEnabled(prev => !prev)}
         onToggleLayers={() => setAreLayersVisible(!areLayersVisible)}
         onToggleSavedVenues={() => setShowOnlySavedVenues(!showOnlySavedVenues)}
         onSearchNearby={initializeDetection}
-        is3DEnabled={is3DEnabled}
+        is3DEnabled={isThreeDEnabled}
         areLayersVisible={areLayersVisible}
         showOnlySavedVenues={showOnlySavedVenues}
         savedVenuesCount={savedVenueIds.size}
@@ -730,6 +802,51 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     ...StyleSheet.absoluteFillObject,
+  },
+  overlayColumn: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 80 : 40,
+    left: 20,
+    right: 20,
+    gap: 16,
+    zIndex: 90,
+    alignItems: 'flex-start',
+  },
+  discoveryCard: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 18,
+    padding: 20,
+    maxWidth: 420,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  discoveryTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  discoveryCopy: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  discoveryHighlights: {
+    gap: 8,
+  },
+  discoveryHighlight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  discoveryHighlightText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
   },
 
   // Loading

@@ -8,7 +8,9 @@
 
 import { supabase } from './supabase';
 import { emailService } from './EmailService';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('RaceReminderService');
 export class RaceReminderService {
   /**
    * Send race reminders for all races starting in approximately 24 hours
@@ -19,8 +21,6 @@ export class RaceReminderService {
       const now = new Date();
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const tomorrowPlus2Hours = new Date(tomorrow.getTime() + 2 * 60 * 60 * 1000); // 2-hour window
-
-      console.log(`📧 Checking for races between ${tomorrow.toISOString()} and ${tomorrowPlus2Hours.toISOString()}`);
 
       // Get all confirmed race entries for races starting tomorrow
       const { data: entries, error } = await supabase
@@ -54,11 +54,11 @@ export class RaceReminderService {
       }
 
       if (!entries || entries.length === 0) {
-        console.log('No races found for tomorrow');
+        logger.debug('No races found for tomorrow');
         return { success: true, sent: 0, errors: 0 };
       }
 
-      console.log(`Found ${entries.length} race entries for tomorrow`);
+      logger.debug(`Found ${entries.length} race entries for tomorrow`);
 
       let sent = 0;
       let errors = 0;
@@ -95,18 +95,14 @@ export class RaceReminderService {
 
           if (result.success) {
             sent++;
-            console.log(`✅ Sent reminder to ${entry.users.email} for ${entry.regattas.event_name}`);
           } else {
             errors++;
-            console.error(`❌ Failed to send reminder to ${entry.users.email}:`, result.error);
           }
         } catch (entryError: any) {
           errors++;
           console.error(`Error processing entry ${entry.id}:`, entryError);
         }
       }
-
-      console.log(`📊 Race reminders complete: ${sent} sent, ${errors} errors`);
 
       return {
         success: true,

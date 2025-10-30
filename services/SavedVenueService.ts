@@ -4,7 +4,6 @@
  */
 
 import { supabase } from './supabase';
-import type { SailingVenue } from './venue/GlobalVenueDatabase';
 
 export interface SavedVenue {
   id: string;
@@ -16,11 +15,18 @@ export interface SavedVenue {
   updated_at: string;
 }
 
-export interface SavedVenueWithDetails extends SailingVenue {
+export interface SavedVenueWithDetails {
+  id: string;
+  name: string;
+  coordinates: [number, number];
   saved_venue_id: string;
   notes: string | null;
   is_home_venue: boolean;
   saved_at: string;
+  country?: string;
+  region?: string;
+  venueType?: string;
+  timeZone?: string;
 }
 
 export class SavedVenueService {
@@ -29,19 +35,15 @@ export class SavedVenueService {
    */
   static async getSavedVenues(): Promise<SavedVenueWithDetails[]> {
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('💾 SavedVenueService.getSavedVenues: User check', { hasUser: !!user, userId: user?.id });
 
     if (!user) throw new Error('User not authenticated');
 
     // Test: Query saved_venues table directly first
-    console.log('💾 SavedVenueService.getSavedVenues: Testing direct table query...');
+
     const { data: directData, error: directError } = await supabase
       .from('saved_venues')
       .select('*')
       .eq('user_id', user.id);
-    console.log('💾 SavedVenueService.getSavedVenues: Direct table result', { hasData: !!directData, error: directError, dataLength: directData?.length, data: directData });
-
-    console.log('💾 SavedVenueService.getSavedVenues: Querying saved_venues_with_details for user:', user.id);
 
     const { data, error } = await supabase
       .from('saved_venues_with_details')
@@ -49,8 +51,6 @@ export class SavedVenueService {
       .eq('user_id', user.id)
       .order('is_home_venue', { ascending: false })
       .order('saved_at', { ascending: false });
-
-    console.log('💾 SavedVenueService.getSavedVenues: Query result', { hasData: !!data, error, dataLength: data?.length, viewData: data });
 
     if (error) throw error;
     return data || [];
@@ -192,11 +192,8 @@ export class SavedVenueService {
    */
   static async getHomeVenue(): Promise<SavedVenueWithDetails | null> {
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('🏠 SavedVenueService.getHomeVenue: User check', { hasUser: !!user, userId: user?.id });
 
     if (!user) return null;
-
-    console.log('🏠 SavedVenueService.getHomeVenue: Querying for home venue for user:', user.id);
 
     const { data, error } = await supabase
       .from('saved_venues_with_details')
@@ -204,8 +201,6 @@ export class SavedVenueService {
       .eq('user_id', user.id)
       .eq('is_home_venue', true)
       .maybeSingle();
-
-    console.log('🏠 SavedVenueService.getHomeVenue: Query result', { hasData: !!data, error });
 
     if (error) throw error;
     return data;

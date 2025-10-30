@@ -1,43 +1,105 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { Link, useFocusEffect } from 'expo-router';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { Link, useFocusEffect, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Linking, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import {
+  Alert,
+  ActivityIndicator,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+} from 'react-native';
 import { DashboardSection, QuickActionGrid, type QuickAction } from '@/components/dashboard/shared';
 import { useAuth } from '@/providers/AuthProvider';
 import { useFleetOverview, useUserFleets } from '@/hooks/useFleetData';
 import { useFleetPosts } from '@/hooks/useFleetSocial';
-import { FleetPost } from '@/services/FleetSocialService';
-import { PostComposer } from '@/components/fleets/PostComposer';
-import { AnnouncementComposer } from '@/components/fleets/AnnouncementComposer';
-import { ResourceUploadComposer } from '@/components/fleets/ResourceUploadComposer';
-import { fleetService } from '@/services/fleetService';
+import { useFleetSuggestions } from '@/hooks/useFleetDiscovery';
+import { useFleetResources } from '@/hooks/useFleetResources';
+import { useFleetSharedContent } from '@/hooks/useFleetSharedContent';
+import type { FleetPost } from '@/services/FleetSocialService';
+import {
+  PostComposer,
+  AnnouncementComposer,
+  ResourceUploadComposer,
+} from '@/components/fleets';
+import {
+  fleetService,
+  type FleetCourseSummary,
+  type FleetRaceSummary,
+  type FleetResource,
+  type FleetMembership,
+} from '@/services/fleetService';
+import type { Fleet as SuggestedFleet } from '@/services/FleetDiscoveryService';
 import { RealtimeConnectionIndicator } from '@/components/ui/RealtimeConnectionIndicator';
+import { createLogger } from '@/lib/utils/logger';
 
 export default function FleetOverviewScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [showPostComposer, setShowPostComposer] = useState(false);
   const [showAnnouncementComposer, setShowAnnouncementComposer] = useState(false);
   const [showResourceUpload, setShowResourceUpload] = useState(false);
+  const [selectedFleetIndex, setSelectedFleetIndex] = useState(0);
+  const [joiningFleetId, setJoiningFleetId] = useState<string | null>(null);
+  const [leavingFleetId, setLeavingFleetId] = useState<string | null>(null);
+  const [pendingHighlightFleetId, setPendingHighlightFleetId] = useState<string | null>(null);
 
-  console.log('[FleetOverview] Component render - user:', user?.id);
+  logger.debug('[FleetOverview] Component render - user:', user?.id);
 
   const { fleets, loading: fleetsLoading, refresh: refreshFleets } = useUserFleets(user?.id);
-  console.log('[FleetOverview] After useUserFleets:', { fleetsCount: fleets.length, fleetsLoading });
+  logger.debug('[FleetOverview] After useUserFleets:', { fleetsCount: fleets.length, fleetsLoading });
 
   // Refresh fleets when screen comes into focus (after returning from select screen)
   useFocusEffect(
     React.useCallback(() => {
-      console.log('[FleetOverview] useFocusEffect triggered - refreshing fleets');
+      logger.debug('[FleetOverview] useFocusEffect triggered - refreshing fleets');
       refreshFleets();
     }, [refreshFleets])
   );
 
-  const activeFleet = fleets[0]?.fleet;
-  console.log('[FleetOverview] Active fleet:', activeFleet?.id, activeFleet?.name);
+  useEffect(() => {
+    if (pendingHighlightFleetId && fleets.length > 0) {
+      const matchedIndex = fleets.findIndex(membership => membership.fleet.id === pendingHighlightFleetId);
+      if (matchedIndex !== -1 && matchedIndex !== selectedFleetIndex) {
+        setSelectedFleetIndex(matchedIndex);
+      }
+      setPendingHighlightFleetId(null);
+      return;
+    }
+
+    if (selectedFleetIndex >= fleets.length && fleets.length > 0) {
+      setSelectedFleetIndex(Math.max(0, fleets.length - 1));
+    } else if (fleets.length === 0 && selectedFleetIndex !== 0) {
+      setSelectedFleetIndex(0);
+    }
+  }, [fleets, pendingHighlightFleetId, selectedFleetIndex]);
+
+  const activeFleetMembership = fleets[selectedFleetIndex];
+  const activeFleet = activeFleetMembership?.fleet;
+  logger.debug('[FleetOverview] Active fleet:', activeFleet?.id, activeFleet?.name);
 
   const { overview, loading: overviewLoading } = useFleetOverview(activeFleet?.id);
   const { posts, loading: postsLoading, likePost, unlikePost, createPost } = useFleetPosts(activeFleet?.id, { limit: 10 });
+  const { resources, loading: resourcesLoading } = useFleetResources(activeFleet?.id, { limit: 6 });
+  const {
+    courses: sharedCourses,
+    races: sharedRaces,
+    loading: sharedContentLoading,
+  } = useFleetSharedContent({ clubId: activeFleet?.clubId, classId: activeFleet?.classId });
+  const {
+    suggestions,
+    loading: suggestionsLoading,
+    refresh: refreshSuggestions,
+  } = useFleetSuggestions({ userId: user?.id, classId: activeFleet?.classId });
+
+  const membershipFleetIds = useMemo(() => new Set(fleets.map(item => item.fleet.id)), [fleets]);
+  const filteredSuggestions = useMemo(
+    () => suggestions.filter(fleet => !membershipFleetIds.has(fleet.id)),
+    [suggestions, membershipFleetIds]
+  );
+  const summaryFleet = overview?.fleet ?? activeFleet ?? null;
 
   const handleCreatePost = async (params: { postType: any; content: string }) => {
     await createPost(params);
@@ -67,6 +129,61 @@ export default function FleetOverviewScreen() {
     setShowResourceUpload(false);
   };
 
+  const handleSelectFleet = useCallback((index: number) => {
+    setSelectedFleetIndex(index);
+  }, []);
+
+  const handleJoinFleet = useCallback(async (fleetId: string) => {
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Sign in to join fleets and access shared content.');
+      return;
+    }
+
+    setJoiningFleetId(fleetId);
+    try {
+      await fleetService.joinFleet(user.id, fleetId);
+      await refreshFleets();
+      setPendingHighlightFleetId(fleetId);
+      refreshSuggestions();
+      Alert.alert('Success', 'You have joined the fleet. Shared resources will appear shortly.');
+    } catch (error: any) {
+      logger.error('[FleetOverview] Failed to join fleet:', error);
+      Alert.alert('Unable to join fleet', error?.message ?? 'Please try again in a few moments.');
+    } finally {
+      setJoiningFleetId(null);
+    }
+  }, [user?.id, refreshFleets, refreshSuggestions]);
+
+  const handleLeaveFleetConfirmed = useCallback(async (fleetId: string) => {
+    if (!user?.id) {
+      return;
+    }
+
+    setLeavingFleetId(fleetId);
+    try {
+      await fleetService.leaveFleet(user.id, fleetId);
+      await refreshFleets();
+      refreshSuggestions();
+      Alert.alert('You left the fleet', 'You can rejoin anytime from the discovery list.');
+    } catch (error: any) {
+      logger.error('[FleetOverview] Failed to leave fleet:', error);
+      Alert.alert('Unable to leave fleet', error?.message ?? 'Please try again later.');
+    } finally {
+      setLeavingFleetId(null);
+    }
+  }, [user?.id, refreshFleets, refreshSuggestions]);
+
+  const confirmLeaveFleet = useCallback((fleetId: string, fleetName?: string) => {
+    Alert.alert(
+      `Leave ${fleetName ?? 'this fleet'}?`,
+      'You will lose access to shared documents, planning updates, and fleet messaging.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: () => handleLeaveFleetConfirmed(fleetId) },
+      ]
+    );
+  }, [handleLeaveFleetConfirmed]);
+
   // Memoized handlers for posts
   const handleLike = useCallback((postId: string, isLiked: boolean) => {
     if (isLiked) {
@@ -84,6 +201,16 @@ export default function FleetOverviewScreen() {
     const whatsappLink = overview.fleet.whatsappLink;
 
     return [
+      {
+        id: 'share-update',
+        title: 'Share Update',
+        icon: 'message-plus-outline',
+        iconSet: 'mci',
+        gradientColors: ['#10B981', '#059669'],
+        onPress: () => {
+          setShowPostComposer(true);
+        },
+      },
       {
         id: 'open-whatsapp',
         title: 'Open WhatsApp',
@@ -122,53 +249,167 @@ export default function FleetOverviewScreen() {
   }, [overview?.fleet]);
 
   const shouldShowEmpty = !fleetsLoading && (!fleets.length || !activeFleet);
-  console.log('[FleetOverview] Empty state check:', {
-    fleetsLoading,
-    fleetsLength: fleets.length,
-    hasActiveFleet: !!activeFleet,
-    shouldShowEmpty
-  });
+  logger.debug('[FleetOverview] Empty state check:', { shouldShowEmpty, fleetsLoading });
 
   if (shouldShowEmpty) {
-    console.log('[FleetOverview] Rendering empty state');
     return (
-      <ScrollView contentContainerStyle={[styles.container, styles.centerContent]}>
-        <MaterialCommunityIcons name="sail-boat" size={52} color="#94A3B8" />
-        <Text style={styles.emptyTitle}>Join your fleets</Text>
-        <Text style={styles.emptySubtitle}>
-          Fleets are groups of sailors in the same class (e.g., "Hong Kong Dragon Fleet").
-          This is separate from your individual boats. Join fleets to see updates, documents, and connect with other sailors.
-        </Text>
-        <Link href="/(tabs)/fleet/select" style={styles.link}>
-          Join Fleets
-        </Link>
+      <ScrollView style={styles.container} contentContainerStyle={styles.emptyStateContent}>
+        <View style={styles.heroBanner}>
+          <View style={styles.heroTextGroup}>
+            <Text style={styles.heroEyebrow}>Fleet collaboration</Text>
+            <Text style={styles.heroTitle}>Join fleets to unlock shared planning</Text>
+            <Text style={styles.heroSubtitle}>
+              Follow your class, share documents, coordinate regattas, and review race insights with your squad.
+            </Text>
+          </View>
+          <View style={styles.heroIcon}>
+            <MaterialCommunityIcons name="account-group" size={56} color="#2563EB" />
+          </View>
+        </View>
+
+        <View style={styles.ctaRow}>
+          <Link href="/(tabs)/fleet/select" asChild>
+            <TouchableOpacity style={styles.primaryCta}>
+              <MaterialCommunityIcons name="account-plus" size={20} color="#FFFFFF" />
+              <Text style={styles.primaryCtaText}>Find Fleets</Text>
+            </TouchableOpacity>
+          </Link>
+          <Link href="/(tabs)/fleet/settings" asChild>
+            <TouchableOpacity style={styles.secondaryCta}>
+              <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#2563EB" />
+              <Text style={styles.secondaryCtaText}>Create Fleet</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+
+        <DashboardSection
+          title="Suggested fleets"
+          subtitle="Match by class, venue, and active activity"
+          showBorder={false}
+        >
+          {suggestionsLoading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color="#2563EB" />
+              <Text style={styles.loadingLabel}>Looking for fleets near you…</Text>
+            </View>
+          )}
+
+          {!suggestionsLoading && filteredSuggestions.length === 0 && (
+            <Text style={styles.placeholderText}>
+              We don’t see obvious matches yet. Tap “Find Fleets” to browse the full directory.
+            </Text>
+          )}
+
+          {!suggestionsLoading && filteredSuggestions.length > 0 && (
+            <View style={styles.suggestionGrid}>
+              {filteredSuggestions.slice(0, 6).map(fleet => (
+                <FleetSuggestionCard
+                  key={fleet.id}
+                  fleet={fleet}
+                  isMember={membershipFleetIds.has(fleet.id)}
+                  joining={joiningFleetId === fleet.id}
+                  onJoin={() => handleJoinFleet(fleet.id)}
+                />
+              ))}
+            </View>
+          )}
+        </DashboardSection>
+
+        <DashboardSection
+          title="What fleets share"
+          subtitle="Keep your team aligned from briefing to debrief"
+          showBorder={false}
+        >
+          <View style={styles.benefitsList}>
+            <BenefitRow
+              icon="file-upload-outline"
+              label="Central document library"
+              description="Upload tuning guides, NOR/SSI files, and rig checklists once for everyone."
+            />
+            <BenefitRow
+              icon="calendar-clock"
+              label="Shared courses & calendars"
+              description="Clone proven courses, coordinate race days, and keep everyone on schedule."
+            />
+            <BenefitRow
+              icon="message-text"
+              label="Fleet messaging & announcements"
+              description="Post updates, tag coaches, and keep dock talk organized across channels."
+            />
+            <BenefitRow
+              icon="chart-line-variant"
+              label="Race replays & analysis"
+              description="Replay GPS tracks, review mark roundings, and compare notes after racing."
+            />
+          </View>
+        </DashboardSection>
       </ScrollView>
     );
   }
 
-  console.log('[FleetOverview] Rendering fleet content');
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      {/* Real-time Connection Status */}
       <View style={styles.connectionStatusContainer}>
         <RealtimeConnectionIndicator variant="full" />
       </View>
 
       <DashboardSection
-        title={overview?.fleet.name ?? 'Fleet overview'}
-        subtitle={overview?.fleet.region ?? 'Fleet status and key metrics'}
+        title="Your Fleets"
+        subtitle="Switch between classes and clubs"
+        showBorder={false}
+        headerAction={{
+          label: 'Manage',
+          onPress: () => router.push('/(tabs)/fleet/select'),
+        }}
+      >
+        <View style={styles.fleetChipsRow}>
+          {fleets.map((membership, index) => (
+            <FleetChip
+              key={membership.fleet.id}
+              label={membership.fleet.name}
+              role={membership.role}
+              active={index === selectedFleetIndex}
+              onPress={() => handleSelectFleet(index)}
+            />
+          ))}
+          <Link href="/(tabs)/fleet/select" asChild>
+            <TouchableOpacity style={styles.fleetAddChip}>
+              <MaterialCommunityIcons name="plus" size={18} color="#2563EB" />
+              <Text style={styles.fleetAddChipLabel}>Join</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      </DashboardSection>
+
+      <DashboardSection
+        title={summaryFleet?.name ?? 'Fleet workspace'}
+        subtitle={summaryFleet?.region ?? 'Status and shared insights'}
         showBorder={false}
       >
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <View>
-              <Text style={styles.summaryTitle}>{overview?.fleet.name ?? 'Fleet'}</Text>
-              {overview?.fleet.classId && (
-                <Text style={styles.summarySubtitle}>Class ID: {overview.fleet.classId}</Text>
-              )}
+              <Text style={styles.summaryTitle}>{summaryFleet?.name ?? 'Fleet'}</Text>
+              <Text style={styles.summarySubtitle}>
+                {summaryFleet?.region ?? 'Class workspace'}
+                {activeFleetMembership?.role ? ` • ${formatRole(activeFleetMembership.role)}` : ''}
+              </Text>
             </View>
-            <MaterialCommunityIcons name="sail-boat" size={36} color="#1D4ED8" />
+            {summaryFleet?.id && (
+              <TouchableOpacity
+                style={styles.leaveButton}
+                onPress={() => confirmLeaveFleet(summaryFleet.id, summaryFleet.name)}
+              >
+                {leavingFleetId === summaryFleet.id ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="logout" size={18} color="#DC2626" />
+                    <Text style={styles.leaveButtonText}>Leave</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.metricsRow}>
@@ -178,15 +419,89 @@ export default function FleetOverviewScreen() {
           </View>
 
           <View style={styles.metaRow}>
-            <InfoPill icon="shield-account" text={`Visibility: ${overview?.fleet.visibility ?? 'private'}`} />
-            {overview?.fleet.region && <InfoPill icon="map-marker" text={overview.fleet.region} />}
-            {overview?.fleet.whatsappLink && <InfoPill icon="whatsapp" text="WhatsApp linked" highlight />}
+            <InfoPill icon="shield-account" text={`Visibility: ${summaryFleet?.visibility ?? 'private'}`} />
+            {summaryFleet?.region && <InfoPill icon="map-marker" text={summaryFleet.region} />}
+            {summaryFleet?.whatsappLink && <InfoPill icon="whatsapp" text="WhatsApp linked" highlight />}
+          </View>
+
+          <View style={styles.summaryFooter}>
+            <TouchableOpacity style={styles.summaryAction} onPress={() => setShowPostComposer(true)}>
+              <MaterialCommunityIcons name="message-plus" size={18} color="#2563EB" />
+              <Text style={styles.summaryActionText}>Share update</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.summaryAction} onPress={() => setShowResourceUpload(true)}>
+              <MaterialCommunityIcons name="file-upload-outline" size={18} color="#2563EB" />
+              <Text style={styles.summaryActionText}>Upload doc</Text>
+            </TouchableOpacity>
+            {!!summaryFleet?.whatsappLink && (
+              <TouchableOpacity
+                style={styles.summaryAction}
+                onPress={() => {
+                  if (summaryFleet?.whatsappLink) {
+                    Linking.openURL(summaryFleet.whatsappLink).catch(err =>
+                      console.warn('Unable to open WhatsApp link:', err)
+                    );
+                  }
+                }}
+              >
+                <MaterialCommunityIcons name="whatsapp" size={18} color="#22C55E" />
+                <Text style={styles.summaryActionText}>Open chat</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </DashboardSection>
 
       <DashboardSection title="Quick Actions" showBorder={false}>
         <QuickActionGrid actions={quickActions} />
+      </DashboardSection>
+
+      <DashboardSection
+        title="Shared Resources"
+        subtitle="Fleet documents, guides, and playbooks"
+        showBorder={false}
+        headerAction={activeFleet ? {
+          label: 'Library',
+          onPress: () => router.push('/(tabs)/fleet/resources'),
+        } : undefined}
+      >
+        {resourcesLoading && <Text style={styles.placeholderText}>Loading documents…</Text>}
+        {!resourcesLoading && resources.length === 0 && (
+          <Text style={styles.placeholderText}>
+            No documents yet. Upload tuning guides, NOR/SSI, or debrief notes to get started.
+          </Text>
+        )}
+        {!resourcesLoading && resources.length > 0 && (
+          <View style={styles.resourceGrid}>
+            {resources.map(resource => (
+              <ResourceCard key={resource.id} resource={resource} />
+            ))}
+          </View>
+        )}
+      </DashboardSection>
+
+      <DashboardSection
+        title="Planning Board"
+        subtitle="Upcoming races and saved courses for this fleet"
+      >
+        <View style={styles.planningGrid}>
+          <PlanningColumn
+            title="Upcoming races"
+            icon="flag-checkered"
+            loading={sharedContentLoading}
+            items={sharedRaces}
+            renderItem={race => <RaceCard key={race.id} race={race} />}
+            emptyMessage="No upcoming races shared yet. Add race days from the Races tab."
+          />
+          <PlanningColumn
+            title="Favorite courses"
+            icon="map-marker-distance"
+            loading={sharedContentLoading}
+            items={sharedCourses}
+            renderItem={course => <CourseCard key={course.id} course={course} />}
+            emptyMessage="No shared courses yet. Save a course from the Course Library to surface it here."
+          />
+        </View>
       </DashboardSection>
 
       <DashboardSection
@@ -201,20 +516,35 @@ export default function FleetOverviewScreen() {
           <PostCard
             key={post.id}
             post={post}
-            onLike={() => handleLike(post.id, post.isLikedByUser)}
+            onLike={() => handleLike(post.id, !!post.isLikedByUser)}
           />
         ))}
       </DashboardSection>
 
-      <DashboardSection
-        title="Fleet Directory"
-        subtitle="See everyone sailing in this fleet"
-        footerAction={{ label: 'View members', href: '/(tabs)/fleet/members' }}
-      >
-        <Text style={styles.placeholderText}>
-          Member list coming soon. You'll be able to follow sailors, invite crew, and connect with coaches.
-        </Text>
-      </DashboardSection>
+      {filteredSuggestions.length > 0 && (
+        <DashboardSection
+          title="More fleets to follow"
+          subtitle="Expand your network with nearby classes"
+          showBorder={false}
+          headerAction={{
+            label: 'Browse',
+            onPress: () => router.push('/(tabs)/fleet/select'),
+          }}
+        >
+          <View style={styles.suggestionGrid}>
+            {filteredSuggestions.slice(0, 3).map(fleet => (
+              <FleetSuggestionCard
+                key={`more-${fleet.id}`}
+                fleet={fleet}
+                compact
+                isMember={membershipFleetIds.has(fleet.id)}
+                joining={joiningFleetId === fleet.id}
+                onJoin={() => handleJoinFleet(fleet.id)}
+              />
+            ))}
+          </View>
+        </DashboardSection>
+      )}
 
       {/* Post Composers */}
       <PostComposer
@@ -241,6 +571,23 @@ export default function FleetOverviewScreen() {
     </ScrollView>
   );
 }
+
+const logger = createLogger('index');
+
+const formatRole = (role: FleetMembership['role']): string => {
+  switch (role) {
+    case 'owner':
+      return 'Owner';
+    case 'captain':
+      return 'Fleet captain';
+    case 'coach':
+      return 'Coach';
+    case 'support':
+      return 'Support crew';
+    default:
+      return 'Member';
+  }
+};
 
 const FleetMetric = ({ label, value, loading }: { label: string; value: number; loading?: boolean }) => (
   <View style={styles.metricItem}>
@@ -349,6 +696,230 @@ const PostCard = React.memo(({ post, onLike }: { post: FleetPost; onLike: () => 
   );
 });
 
+const FleetChip = ({ label, role, active, onPress }: {
+  label: string;
+  role?: FleetMembership['role'];
+  active: boolean;
+  onPress: () => void;
+}) => (
+  <TouchableOpacity
+    style={[styles.fleetChip, active && styles.fleetChipActive]}
+    onPress={onPress}
+  >
+    <MaterialCommunityIcons
+      name="sail-boat"
+      size={18}
+      color={active ? '#2563EB' : '#64748B'}
+    />
+    <View style={styles.fleetChipText}>
+      <Text style={[styles.fleetChipLabel, active && styles.fleetChipLabelActive]} numberOfLines={1}>
+        {label}
+      </Text>
+      {role && (
+        <Text style={styles.fleetChipRole}>{formatRole(role)}</Text>
+      )}
+    </View>
+  </TouchableOpacity>
+);
+
+const ResourceCard = React.memo(({ resource }: { resource: FleetResource }) => {
+  const filename = resource.document?.filename ?? 'Shared resource';
+  const uploadedAt = resource.createdAt ? new Date(resource.createdAt).toLocaleDateString() : '';
+  const owner = resource.ownerProfile?.fullName ?? 'Fleet library';
+
+  return (
+    <View style={styles.resourceCard}>
+      <View style={styles.resourceHeader}>
+        <MaterialCommunityIcons name="file-document-outline" size={22} color="#2563EB" />
+        <View style={styles.resourceHeaderText}>
+          <Text style={styles.resourceTitle} numberOfLines={2}>{filename}</Text>
+          <Text style={styles.resourceMeta} numberOfLines={1}>
+            {owner}{uploadedAt ? ` • ${uploadedAt}` : ''}
+          </Text>
+        </View>
+      </View>
+
+      {resource.tags.length > 0 && (
+        <View style={styles.resourceTags}>
+          {resource.tags.slice(0, 3).map(tag => (
+            <View key={tag} style={styles.tagPill}>
+              <Text style={styles.tagPillText}>{tag}</Text>
+            </View>
+          ))}
+          {resource.tags.length > 3 && (
+            <View style={styles.tagPillMuted}>
+              <Text style={styles.tagPillMutedText}>+{resource.tags.length - 3}</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+});
+
+type PlanningColumnProps<T> = {
+  title: string;
+  icon: string;
+  loading: boolean;
+  items: T[];
+  renderItem: (item: T) => React.ReactNode;
+  emptyMessage: string;
+};
+
+const PlanningColumn = <T,>({
+  title,
+  icon,
+  loading,
+  items,
+  renderItem,
+  emptyMessage,
+}: PlanningColumnProps<T>) => (
+  <View style={styles.planningColumn}>
+    <View style={styles.planningHeader}>
+      <MaterialCommunityIcons name={icon as any} size={20} color="#2563EB" />
+      <Text style={styles.planningTitle}>{title}</Text>
+    </View>
+
+    {loading && <Text style={styles.placeholderText}>Loading…</Text>}
+
+    {!loading && items.length === 0 && (
+      <Text style={styles.placeholderText}>{emptyMessage}</Text>
+    )}
+
+    {!loading && items.length > 0 && (
+      <View style={styles.planningList}>
+        {items.slice(0, 4).map(renderItem)}
+      </View>
+    )}
+  </View>
+);
+
+const RaceCard = ({ race }: { race: FleetRaceSummary }) => {
+  const startText = race.startTime
+    ? new Date(race.startTime).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+      })
+    : 'Timing TBA';
+
+  return (
+    <View style={styles.planningCard}>
+      <Text style={styles.planningCardTitle} numberOfLines={2}>{race.raceName}</Text>
+      <Text style={styles.planningCardMeta}>
+        {startText}
+        {race.venueName ? ` • ${race.venueName}` : ''}
+      </Text>
+      {race.racingAreaName && (
+        <Text style={styles.planningCardCaption} numberOfLines={1}>{race.racingAreaName}</Text>
+      )}
+    </View>
+  );
+};
+
+const CourseCard = ({ course }: { course: FleetCourseSummary }) => {
+  const lastUsed = course.lastUsedDate
+    ? `Last used ${new Date(course.lastUsedDate).toLocaleDateString()}`
+    : 'Never used';
+
+  return (
+    <View style={styles.planningCard}>
+      <Text style={styles.planningCardTitle} numberOfLines={2}>{course.name}</Text>
+      <Text style={styles.planningCardMeta}>
+        {course.courseType ? course.courseType.replace('_', ' ') : 'Course'} • {lastUsed}
+      </Text>
+      {course.description && (
+        <Text style={styles.planningCardCaption} numberOfLines={2}>{course.description}</Text>
+      )}
+    </View>
+  );
+};
+
+interface FleetSuggestionCardProps {
+  fleet: SuggestedFleet;
+  isMember: boolean;
+  joining: boolean;
+  onJoin: () => void;
+  compact?: boolean;
+}
+
+const FleetSuggestionCard = ({
+  fleet,
+  isMember,
+  joining,
+  onJoin,
+  compact,
+}: FleetSuggestionCardProps) => (
+  <View style={[styles.suggestionCard, compact && styles.suggestionCardCompact]}>
+    <View style={styles.suggestionHeader}>
+      <MaterialCommunityIcons name="sail-boat" size={24} color="#2563EB" />
+      <View style={styles.suggestionHeaderText}>
+        <Text style={styles.suggestionTitle} numberOfLines={compact ? 1 : 2}>{fleet.name}</Text>
+        {fleet.region && (
+          <Text style={styles.suggestionSubtitle} numberOfLines={1}>{fleet.region}</Text>
+        )}
+      </View>
+    </View>
+
+    {!compact && fleet.description && (
+      <Text style={styles.suggestionDescription} numberOfLines={3}>{fleet.description}</Text>
+    )}
+
+    <View style={styles.suggestionMeta}>
+      {fleet.boat_classes?.name && (
+        <View style={styles.suggestionMetaItem}>
+          <MaterialCommunityIcons name="sail-boat" size={14} color="#64748B" />
+          <Text style={styles.suggestionMetaText}>{fleet.boat_classes.name}</Text>
+        </View>
+      )}
+      {typeof fleet.member_count === 'number' && (
+        <View style={styles.suggestionMetaItem}>
+          <MaterialCommunityIcons name="account-group" size={14} color="#64748B" />
+          <Text style={styles.suggestionMetaText}>{fleet.member_count} sailors</Text>
+        </View>
+      )}
+    </View>
+
+    <View style={styles.suggestionFooter}>
+      {isMember ? (
+        <View style={styles.suggestionJoined}>
+          <MaterialCommunityIcons name="check-circle" size={18} color="#16A34A" />
+          <Text style={styles.suggestionJoinedText}>Already joined</Text>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[
+            styles.suggestionButton,
+            joining && styles.suggestionButtonDisabled,
+          ]}
+          onPress={onJoin}
+          disabled={joining}
+        >
+          {joining ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <MaterialCommunityIcons name="account-plus" size={18} color="#FFFFFF" />
+              <Text style={styles.suggestionButtonText}>Join fleet</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+    </View>
+  </View>
+);
+
+const BenefitRow = ({ icon, label, description }: { icon: string; label: string; description: string }) => (
+  <View style={styles.benefitRow}>
+    <MaterialCommunityIcons name={icon as any} size={22} color="#2563EB" />
+    <View style={styles.benefitText}>
+      <Text style={styles.benefitLabel}>{label}</Text>
+      <Text style={styles.benefitDescription}>{description}</Text>
+    </View>
+  </View>
+);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -362,28 +933,85 @@ const styles = StyleSheet.create({
   connectionStatusContainer: {
     marginBottom: 12,
   },
-  centerContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  emptyStateContent: {
+    padding: 16,
+    paddingBottom: 32,
+    gap: 18,
+  },
+  heroBanner: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 18,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 16,
-    padding: 32,
   },
-  emptyTitle: {
-    fontSize: 20,
+  heroTextGroup: {
+    flex: 1,
+    gap: 8,
+  },
+  heroEyebrow: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#4338CA',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  emptySubtitle: {
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E1B4B',
+  },
+  heroSubtitle: {
     fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
+    color: '#4338CA',
     lineHeight: 20,
   },
-  link: {
-    fontSize: 14,
-    color: '#2563EB',
+  heroIcon: {
+    backgroundColor: '#E0E7FF',
+    borderRadius: 14,
+    padding: 12,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  primaryCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  primaryCtaText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
+  },
+  secondaryCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  secondaryCtaText: {
+    color: '#2563EB',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingLabel: {
+    fontSize: 14,
+    color: '#64748B',
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',
@@ -392,6 +1020,59 @@ const styles = StyleSheet.create({
     gap: 16,
     boxShadow: '0px 8px',
     elevation: 4,
+  },
+  fleetChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  fleetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CBD5F5',
+    backgroundColor: '#F8FAFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  fleetChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  fleetChipText: {
+    maxWidth: 160,
+  },
+  fleetChipLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  fleetChipLabelActive: {
+    color: '#1D4ED8',
+  },
+  fleetChipRole: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  fleetAddChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  fleetAddChipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
   },
   summaryHeader: {
     flexDirection: 'row',
@@ -455,10 +1136,272 @@ const styles = StyleSheet.create({
   pillTextHighlight: {
     color: '#047857',
   },
+  summaryFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  summaryAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  summaryActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  leaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FDA4AF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#FEF2F2',
+  },
+  leaveButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
   placeholderText: {
     fontSize: 14,
     color: '#64748B',
     lineHeight: 20,
+  },
+  resourceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  resourceCard: {
+    flexBasis: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    gap: 10,
+  },
+  resourceHeader: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  resourceHeaderText: {
+    flex: 1,
+    gap: 4,
+  },
+  resourceTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  resourceMeta: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  resourceTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  tagPill: {
+    backgroundColor: '#E0E7FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  tagPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#3730A3',
+  },
+  tagPillMuted: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  tagPillMutedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  planningGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  planningColumn: {
+    flex: 1,
+    minWidth: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    gap: 12,
+  },
+  planningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  planningTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  planningList: {
+    gap: 10,
+  },
+  planningCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  planningCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  planningCardMeta: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  planningCardCaption: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  suggestionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  suggestionCard: {
+    flexBasis: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    gap: 12,
+  },
+  suggestionCardCompact: {
+    flexBasis: '30%',
+  },
+  suggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  suggestionHeaderText: {
+    flex: 1,
+    gap: 4,
+  },
+  suggestionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  suggestionSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  suggestionDescription: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  suggestionMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  suggestionMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  suggestionMetaText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  suggestionFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  suggestionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  suggestionButtonDisabled: {
+    backgroundColor: '#93C5FD',
+  },
+  suggestionButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  suggestionJoined: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  suggestionJoinedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#047857',
+  },
+  benefitsList: {
+    gap: 16,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  benefitText: {
+    flex: 1,
+    gap: 4,
+  },
+  benefitLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  benefitDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
   },
   postCard: {
     backgroundColor: '#FFFFFF',

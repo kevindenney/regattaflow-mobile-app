@@ -1,3 +1,5 @@
+import { createLogger } from '@/lib/utils/logger';
+
 /**
  * Course Template Service
  * AI-powered race course generation based on:
@@ -48,6 +50,7 @@ export interface BoatClassRequirements {
   preferredCourseTypes: string[];
 }
 
+const logger = createLogger('CourseTemplateService');
 export class CourseTemplateService {
   /**
    * Generate course templates based on wind forecast and racing area
@@ -58,10 +61,10 @@ export class CourseTemplateService {
     boatClass: string,
     raceStartTime: string
   ): Promise<CourseTemplate[]> {
-    console.log('[CourseTemplateService] Generating templates...');
-    console.log('Racing area:', racingArea);
-    console.log('Wind forecast:', windForecast);
-    console.log('Boat class:', boatClass);
+    logger.debug('[CourseTemplateService] Generating templates...');
+    logger.debug('Racing area:', racingArea);
+    logger.debug('Wind forecast:', windForecast);
+    logger.debug('Boat class:', boatClass);
 
     const templates: CourseTemplate[] = [];
 
@@ -70,7 +73,7 @@ export class CourseTemplateService {
 
     // Calculate area dimensions
     const areaDimensions = this.calculateAreaDimensions(racingArea);
-    console.log('Area dimensions:', areaDimensions);
+    logger.debug('Area dimensions:', areaDimensions);
 
     // Generate Windward/Leeward template (most common)
     const wlTemplate = this.generateWindwardLeewardTemplate(
@@ -541,7 +544,7 @@ export class CourseTemplateService {
     raceTime: string
   ): Promise<WindForecast> {
     // Placeholder - will integrate with WeatherAggregationService
-    console.log('[CourseTemplateService] Getting wind forecast for race time:', raceTime);
+    logger.debug('[CourseTemplateService] Getting wind forecast for race time:', raceTime);
 
     // Default: SW wind at 12 knots (common Hong Kong conditions)
     return {

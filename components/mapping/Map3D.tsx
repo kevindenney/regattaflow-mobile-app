@@ -210,7 +210,7 @@ const Map3D = forwardRef<Map3DRef, Map3DProps>(({
         onMapLoad?.();
       }
     } catch (error) {
-      console.error('🔴 [MAP3D] Failed to initialize web map:', error);
+
     }
   };
 
@@ -533,7 +533,7 @@ const Map3D = forwardRef<Map3DRef, Map3DProps>(({
           break;
       }
     } catch (error) {
-      console.error('🔴 [MAP3D] Error handling WebView message:', error);
+
     }
   };
 
@@ -558,8 +558,8 @@ const Map3D = forwardRef<Map3DRef, Map3DProps>(({
         allowFileAccess
         allowUniversalAccessFromFileURLs
         mixedContentMode="compatibility"
-        onError={(error) => console.error('🔴 [MAP3D] WebView error:', error)}
-        onHttpError={(error) => console.error('🔴 [MAP3D] WebView HTTP error:', error)}
+        onError={(error) => console.error('[MAP3D] WebView error:', error)}
+        onHttpError={(error) => console.error('[MAP3D] WebView HTTP error:', error)}
       />
     </View>
   );

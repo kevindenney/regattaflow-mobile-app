@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Animated, Platform, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import type { Map3DConfig, RaceMark, WeatherConditions } from '@/lib/types/map';
+import { createLogger } from '@/lib/utils/logger';
 
 interface Map3DViewProps {
   config?: Partial<Map3DConfig>
@@ -11,7 +12,7 @@ interface Map3DViewProps {
   onMapPress?: (coordinates: { latitude: number; longitude: number }) => void
 }
 
-
+const logger = createLogger('Map3DView');
 const defaultConfig: Map3DConfig = {
   elevation: {
     exaggeration: 1.5,
@@ -88,12 +89,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
   }>({});
 
   // Debug logging
-  console.log('🗺️ Map3DView render:', {
-    weatherData: weather,
-    marksCount: marks.length,
-    viewConfig: viewConfig,
-    layersState: viewConfig.layers
-  });
 
   const { width, height } = Dimensions.get('window');
 
@@ -126,12 +121,10 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
 
     // DISABLED: Animation causing infinite render loop
     // Static particles - no animation to prevent re-renders
-    console.log('🌬️ Wind particles generated (static):', windParticles.length);
   }, [weather, weatherLayers.windField]);
 
   // Toggle weather layers
   const toggleWeatherLayer = (layer: keyof typeof weatherLayers) => {
-    console.log(`🌤️ Toggling weather layer ${layer}: ${weatherLayers[layer]} → ${!weatherLayers[layer]}`);
     setWeatherLayers(prev => ({
       ...prev,
       [layer]: !prev[layer]
@@ -190,8 +183,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
 
   const toggleLayer = (layer: keyof Map3DConfig['layers']) => {
     const oldState = viewConfig.layers[layer];
-    console.log(`🔄 Toggling layer ${layer}: ${oldState} → ${!oldState}`);
-    console.log('🌤️ Weather data available:', !!weather);
     setViewConfig(prev => {
       const newConfig = {
         ...prev,
@@ -200,13 +191,13 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
           [layer]: !prev.layers[layer]
         }
       };
-      console.log('📋 New layer config:', newConfig.layers);
+
       return newConfig;
     });
   };
 
   const toggle3D = () => {
-    console.log('Toggling 3D mode from pitch:', viewConfig.camera.pitch);
+    logger.debug('Toggling 3D mode from pitch:', viewConfig.camera.pitch);
     setViewConfig(prev => ({
       ...prev,
       camera: {
@@ -219,8 +210,7 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
   const is3DMode = viewConfig.camera.pitch > 0;
 
   const handleCompass = () => {
-    console.log('🧭 Compass button clicked - resetting to north');
-    console.log('Current bearing:', viewConfig.camera.bearing);
+    logger.debug('Current bearing:', viewConfig.camera.bearing);
 
     // Reset map offset to center
     setMapOffset({ x: 0, y: 0 });
@@ -233,14 +223,13 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
           bearing: 0
         }
       };
-      console.log('🧭 Updated bearing to:', newConfig.camera.bearing);
       return newConfig;
     });
   };
 
   const handleGPS = () => {
-    console.log('📍 GPS button clicked - centering map and resetting view');
-    console.log('Current map state:', { mapCenter, mapZoom, mapOffset });
+
+    logger.debug('Current map state:', { mapCenter, mapZoom, mapOffset });
 
     // Reset map to default San Francisco Bay location
     setMapCenter({ lat: 37.8, lon: -122.4 });
@@ -258,13 +247,13 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
           pitch: prev.camera.pitch
         }
       };
-      console.log('📍 Updated map state:', { lat: 37.8, lon: -122.4, zoom: 15, offset: { x: 0, y: 0 } });
+
       return newConfig;
     });
   };
 
   const handleRaceMarkPress = (mark: RaceMark) => {
-    console.log('Race mark pressed:', mark.name);
+    logger.debug('Race mark pressed:', mark.name);
     onMarkPress?.(mark);
   };
 
@@ -278,24 +267,14 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
         transform: is3DMode ? [{ perspective: 1000 }, { rotateX: '15deg' }] : []
       }]}
       onTouchStart={(e) => {
-        console.log('🗺️ Map touch started', {
-          touches: e.nativeEvent.touches.length,
-          x: e.nativeEvent.touches[0]?.pageX,
-          y: e.nativeEvent.touches[0]?.pageY
-        });
+
       }}
-      onTouchEnd={() => console.log('🗺️ Map touch ended')}
       onTouchMove={(e) => {
-        console.log('🗺️ Map touch moved', {
-          touches: e.nativeEvent.touches.length,
-          x: e.nativeEvent.touches[0]?.pageX,
-          y: e.nativeEvent.touches[0]?.pageY
-        });
+
       }}
       onMouseDown={(e) => {
         const clientX = e.nativeEvent.clientX;
         const clientY = e.nativeEvent.clientY;
-        console.log('🖱️ Map mouse down', { x: clientX, y: clientY, measurementMode });
 
         // Handle measurement clicks
         if (measurementMode !== 'off') {
@@ -315,8 +294,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
           const deltaX = clientX - lastMousePosition.x;
           const deltaY = clientY - lastMousePosition.y;
 
-          console.log('🖱️ Map dragging', { deltaX, deltaY, bearing: viewConfig.camera.bearing });
-
           // Pan the map by updating the offset
           setMapOffset(prev => ({
             x: prev.x + deltaX,
@@ -327,14 +304,13 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
         }
       }}
       onMouseUp={() => {
-        console.log('🖱️ Map mouse up - ending drag');
+
         setIsDragging(false);
         setLastMousePosition(null);
       }}
       onWheel={(e) => {
         const delta = e.nativeEvent.deltaY;
         const zoomChange = delta > 0 ? -1 : 1;
-        console.log('🖱️ Map wheel zoom', { delta, zoomChange, currentZoom: mapZoom });
 
         // Update the actual map zoom state (affects tile generation)
         setMapZoom(prev => Math.max(5, Math.min(18, prev + zoomChange)));
@@ -398,7 +374,7 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
                       zIndex: 1,
                     }]}
                     onLoad={() => {
-                      console.log('🗺️ Base map tile loaded successfully');
+
                       setTilesLoaded(prev => prev + 1);
                     }}
                   />
@@ -418,11 +394,10 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
                       left: 0,
                     }]}
                     onLoad={() => {
-                      console.log('🗺️ Nautical overlay loaded successfully');
+
                       setTilesLoaded(prev => prev + 1);
                     }}
                     onError={(error) => {
-                      console.log('🗺️ Nautical overlay failed (expected for some tiles)');
                     }}
                   />
                 </View>
@@ -841,7 +816,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
             <TouchableOpacity
               style={styles.zoomButton}
               onPress={() => {
-                console.log('🔍 Zoom in pressed');
                 const newZoom = Math.min(18, mapZoom + 1);
                 setMapZoom(newZoom);
                 setViewConfig(prev => ({
@@ -856,7 +830,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
             <TouchableOpacity
               style={styles.zoomButton}
               onPress={() => {
-                console.log('🔍 Zoom out pressed');
                 const newZoom = Math.max(5, mapZoom - 1);
                 setMapZoom(newZoom);
                 setViewConfig(prev => ({
@@ -887,8 +860,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
             }]}
             onPress={handleCompass}
             activeOpacity={0.8}
-            onPressIn={() => console.log('🧭 Compass pressed in')}
-            onPressOut={() => console.log('🧭 Compass pressed out')}
           >
             <ThemedText style={styles.controlText}>🧭</ThemedText>
           </TouchableOpacity>
@@ -897,8 +868,6 @@ export function Map3DView({ config, marks = [], weather, onMarkPress, onMapPress
             style={styles.controlButton}
             onPress={handleGPS}
             activeOpacity={0.8}
-            onPressIn={() => console.log('📍 GPS pressed in')}
-            onPressOut={() => console.log('📍 GPS pressed out')}
           >
             <ThemedText style={[styles.controlText, { fontSize: 14 }]}>📍</ThemedText>
           </TouchableOpacity>

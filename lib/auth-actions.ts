@@ -1,11 +1,13 @@
 import { supabase } from '@/services/supabase'
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('auth-actions');
 const AUTH_ACTIONS_DEBUG_ENABLED = false
-const authActionsLog = (...args: Parameters<typeof console.log>) => {
+const authActionsLog = (...args: Parameters<typeof logger.debug>) => {
   if (!AUTH_ACTIONS_DEBUG_ENABLED) {
     return
   }
-  console.log(...args)
+  logger.debug(...args)
 }
 
 export const signOutEverywhere = async () => {

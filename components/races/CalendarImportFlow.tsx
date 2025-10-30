@@ -19,6 +19,7 @@ import { Calendar, Upload, CheckCircle, XCircle, AlertTriangle } from 'lucide-re
 import { useAuth } from '@/providers/AuthProvider';
 import { CalendarImportService, CalendarRace } from '@/services/CalendarImportService';
 import { BulkRaceCreationService } from '@/services/BulkRaceCreationService';
+import { createLogger } from '@/lib/utils/logger';
 
 interface CalendarImportFlowProps {
   onComplete: (createdCount: number) => void;
@@ -29,6 +30,7 @@ interface CalendarImportFlowProps {
 
 type Step = 'upload' | 'preview' | 'importing' | 'complete';
 
+const logger = createLogger('CalendarImportFlow');
 export function CalendarImportFlow({
   onComplete,
   onCancel,
@@ -76,7 +78,7 @@ export function CalendarImportFlow({
       const file = result.assets[0];
       setFileName(file.name);
 
-      console.log('[CalendarImportFlow] Reading CSV file:', file.name);
+      logger.debug('[CalendarImportFlow] Reading CSV file:', file.name);
 
       // Read file content
       let csvContent: string;
@@ -90,7 +92,7 @@ export function CalendarImportFlow({
         csvContent = await FileSystem.readAsStringAsync(file.uri);
       }
 
-      console.log('[CalendarImportFlow] CSV content length:', csvContent.length);
+      logger.debug('[CalendarImportFlow] CSV content length:', csvContent.length);
 
       // Parse CSV
       const parseResult = CalendarImportService.parseCSV(csvContent);
@@ -101,11 +103,11 @@ export function CalendarImportFlow({
         return;
       }
 
-      console.log(`[CalendarImportFlow] Parsed ${parseResult.races.length} races`);
+      logger.debug(`[CalendarImportFlow] Parsed ${parseResult.races.length} races`);
 
       // Validate races
       const validation = CalendarImportService.validateRaces(parseResult.races);
-      console.log(`[CalendarImportFlow] ${validation.valid.length} valid, ${validation.invalid.length} invalid`);
+      logger.debug(`[CalendarImportFlow] ${validation.valid.length} valid, ${validation.invalid.length} invalid`);
 
       setParsedRaces(validation.valid);
       setSkippedEntries([
@@ -154,7 +156,7 @@ export function CalendarImportFlow({
       setLoading(true);
       setStep('importing');
 
-      console.log(`[CalendarImportFlow] Importing ${willCreate.length} races...`);
+      logger.debug(`[CalendarImportFlow] Importing ${willCreate.length} races...`);
 
       const result = await BulkRaceCreationService.createRacesFromCalendar(willCreate, {
         userId: user.id,
@@ -163,7 +165,7 @@ export function CalendarImportFlow({
         skipExisting: true
       });
 
-      console.log('[CalendarImportFlow] Import complete:', result);
+      logger.debug('[CalendarImportFlow] Import complete:', result);
 
       setImportResult(result);
       setStep('complete');

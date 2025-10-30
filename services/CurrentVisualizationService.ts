@@ -11,7 +11,7 @@
  * - Real-time current data
  */
 
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
 
 /**
  * Current data point
@@ -135,8 +135,8 @@ export class CurrentVisualizationService {
     config: CurrentVisualizationConfig
   ): GeoJSON.FeatureCollection {
     const features = dataPoints
-      .filter(point => point.speed >= config.minSpeed)
-      .map(point => {
+      .filter((point: CurrentDataPoint) => point.speed >= config.minSpeed)
+      .map((point: CurrentDataPoint) => {
         // Calculate arrow endpoint based on direction and speed
         const arrowLength = this.calculateArrowLength(point.speed, config.arrowSize);
         const endpoint = this.calculateEndpoint(
@@ -439,7 +439,7 @@ export class CurrentVisualizationService {
     ];
 
     // Filter by distance
-    return stations.filter(station => {
+    return stations.filter((station: TideStation) => {
       const distance = this.calculateDistance(coordinates, station.coordinates);
       return distance <= radiusKm;
     });

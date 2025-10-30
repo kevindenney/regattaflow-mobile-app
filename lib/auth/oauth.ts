@@ -136,7 +136,7 @@ export const signInWithGoogle = async (): Promise<void> => {
       throw new Error('OAuth authentication was cancelled');
     }
   } catch (error) {
-    console.error('🔴 [OAUTH] Google sign-in error:', error);
+
     throw error;
   }
 };
@@ -203,7 +203,7 @@ export const signInWithApple = async (): Promise<void> => {
       throw new Error('Apple authentication was cancelled');
     }
   } catch (error) {
-    console.error('🔴 [OAUTH] Apple sign-in error:', error);
+
     throw error;
   }
 };
@@ -240,7 +240,6 @@ export const isOAuthConfigured = (provider: string): boolean => {
  */
 export const handleOAuthRedirect = async (url: string): Promise<boolean> => {
   try {
-    console.log('🔍 [OAUTH] Handling redirect:', url);
 
     // Parse the redirect URL
     const { hostname, pathname, searchParams } = new URL(url);
@@ -254,7 +253,7 @@ export const handleOAuthRedirect = async (url: string): Promise<boolean> => {
       }
 
       if (code) {
-        console.log('✅ [OAUTH] Authorization code received');
+
         // The OAuth flow will be completed by the auth session
         return true;
       }
@@ -262,7 +261,7 @@ export const handleOAuthRedirect = async (url: string): Promise<boolean> => {
 
     return false;
   } catch (error) {
-    console.error('🔴 [OAUTH] Redirect handling error:', error);
+
     return false;
   }
 };

@@ -25,18 +25,16 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      console.log('📝 [SIGNUP] Attempting signup with:', { email, hasPassword: !!password, fullName, persona: params.persona });
+
       const result = await signUp(email, password, fullName);
-      console.log('📝 [SIGNUP] Signup successful');
 
       // Always go to the new unified onboarding with tabs
-      console.log('📝 [SIGNUP] Navigating to unified onboarding');
+
       router.replace({
         pathname: '/(auth)/onboarding-redesign',
         params: { persona: params.persona || 'sailor' }
       });
     } catch (error: any) {
-      console.error('📝 [SIGNUP] Signup failed:', error);
 
       // Better error messages
       let errorMessage = error.message || 'Signup failed';

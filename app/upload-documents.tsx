@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Image } from '@/components/ui';
 import { Upload, File, Plus, Camera, FileText, Award, Calendar } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('upload-documents');
 const UploadDocumentsScreen = () => {
   const [documents, setDocuments] = useState([
     {
@@ -50,15 +52,15 @@ const UploadDocumentsScreen = () => {
       [
         {
           text: 'Camera',
-          onPress: () => console.log('Camera pressed'),
+          onPress: () => logger.debug('Camera pressed'),
         },
         {
           text: 'Photo Library',
-          onPress: () => console.log('Photo Library pressed'),
+          onPress: () => logger.debug('Photo Library pressed'),
         },
         {
           text: 'Files',
-          onPress: () => console.log('Files pressed'),
+          onPress: () => logger.debug('Files pressed'),
         },
         {
           text: 'Cancel',

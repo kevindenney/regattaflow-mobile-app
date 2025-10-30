@@ -28,7 +28,9 @@ import {
 import { supabase } from '@/services/supabase';
 import TacticalRaceMap from './TacticalRaceMap';
 import type { RaceEventWithDetails, CourseMark } from '@/types/raceEvents';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('QuickDrawMode');
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface Mark {
@@ -128,7 +130,6 @@ export function QuickDrawMode({
           setBoundsSource('venue');
         }
 
-        console.log(`✓ Loaded venue bounds for "${racingAreaName}":`, mapBounds.current);
       }
     } catch (err) {
       console.error('Exception loading venue bounds:', err);
@@ -336,7 +337,7 @@ export function QuickDrawMode({
               }}
               marks={[]}
               onRacingAreaSelected={(coordinates) => {
-                console.log('Racing area selected:', coordinates);
+                logger.debug('Racing area selected:', coordinates);
                 setRacingAreaPolygon(coordinates);
                 setMode('adjust');
               }}

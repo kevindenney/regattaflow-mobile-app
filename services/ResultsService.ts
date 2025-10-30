@@ -6,6 +6,7 @@
 
 import { supabase } from './supabase';
 import { ScoringEngine, ScoringConfiguration, SeriesStanding, DEFAULT_LOW_POINT_CONFIG } from './scoring/ScoringEngine';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface RegattaWithResults {
   id: string;
@@ -25,6 +26,7 @@ export interface ResultsPublishingOptions {
   notifyParticipants?: boolean;
 }
 
+const logger = createLogger('ResultsService');
 export class ResultsService {
   /**
    * Get scoring configuration for a regatta
@@ -383,7 +385,7 @@ export class ResultsService {
 
     // Send notifications (would integrate with email service)
     // For now, this is a placeholder
-    console.log(`Notifying ${entries.length} participants about ${regatta.name} results`);
+    logger.debug(`Notifying ${entries.length} participants about ${regatta.name} results`);
 
     // TODO: Integrate with EmailService or push notifications
   }
@@ -415,7 +417,7 @@ export class ResultsService {
       .select('division')
       .eq('regatta_id', regattaId);
 
-    const divisions = [...new Set((entries || []).map(e => e.division).filter(Boolean))];
+    const divisions = [...new Set((entries || []).map((entry: { division: string | null }) => entry.division).filter(Boolean))];
 
     return {
       id: data.id,
@@ -437,7 +439,7 @@ export class ResultsService {
     const races = await this.getRaces(regattaId);
     const standings = await this.getStandings(regattaId);
 
-    const completedRaces = races.filter(r => r.status === 'completed').length;
+    const completedRaces = races.filter((race: { status: string }) => race.status === 'completed').length;
     const totalRaces = races.length;
     const totalEntries = standings.length;
 

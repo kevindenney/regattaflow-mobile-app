@@ -1,6 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import type { BoatPerformanceStats } from '@/hooks/useBoatPerformanceStats';
 
 interface BoatDetailProps {
   boat: {
@@ -15,6 +23,13 @@ interface BoatDetailProps {
     homeClub?: string;
     storageLocation?: string;
     ownership?: string;
+  };
+  performanceStats?: BoatPerformanceStats | null;
+  performanceLoading?: boolean;
+  summaryCounts?: {
+    crew?: number | null;
+    sails?: number | null;
+    maintenance?: number | null;
   };
 }
 
@@ -46,12 +61,132 @@ const MOCK_VENUE_CONFIGS: VenueConfig[] = [
   },
 ];
 
-export function BoatDetail({ boat }: BoatDetailProps) {
+export function BoatDetail({
+  boat,
+  performanceStats,
+  performanceLoading = false,
+  summaryCounts,
+}: BoatDetailProps) {
+  const stats = performanceStats ?? null;
+  const counts = summaryCounts ?? {};
+
+  const formatNumber = (value: number | null | undefined, decimals = 1) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return '—';
+    }
+    return Number(value).toFixed(decimals);
+  };
+
+  const formatPercent = (value: number | null | undefined) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return '—';
+    }
+    return `${Math.round(value)}%`;
+  };
+
+  const formatDate = (value: string | null | undefined) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const avgTrend = stats?.avgDelta ?? null;
+  const avgTrendIcon =
+    avgTrend === null
+      ? 'remove'
+      : avgTrend > 0
+        ? 'trending-up'
+        : avgTrend < 0
+          ? 'trending-down'
+          : 'remove';
+  const avgTrendColor =
+    avgTrend === null
+      ? '#94A3B8'
+      : avgTrend > 0
+        ? '#10B981'
+        : avgTrend < 0
+          ? '#EF4444'
+          : '#64748B';
+  const avgTrendLabel = !stats
+    ? 'Race data unavailable'
+    : avgTrend === null
+      ? 'No recent change'
+      : avgTrend > 0
+        ? `Improved ${Math.abs(avgTrend).toFixed(1)} vs previous races`
+        : avgTrend < 0
+          ? `Declined ${Math.abs(avgTrend).toFixed(1)} vs previous races`
+          : 'Flat compared to previous races';
+
+  const podiumLabel = !stats
+    ? 'Race data unavailable'
+    : stats.topThreeRate !== null && stats.topThreeRate !== undefined
+      ? `${Math.round(stats.topThreeRate)}% podium rate`
+      : 'Log more finishes to unlock podium stats';
+
+  const lastRaceLabel = (() => {
+    if (!stats) {
+      return performanceLoading ? 'Syncing race data…' : 'Race results temporarily unavailable';
+    }
+    const formatted = formatDate(stats.lastRaceDate);
+    return formatted || 'Add your first result to start tracking';
+  })();
+
+  const totalRacesDisplay =
+    stats && stats.totalRaces !== undefined && stats.totalRaces !== null
+      ? stats.totalRaces
+      : '—';
+
+  const quickActions = [
+    {
+      key: 'crew',
+      label: 'Crew',
+      icon: 'people' as const,
+      badge: counts.crew,
+    },
+    {
+      key: 'sails',
+      label: 'Sails',
+      icon: 'flag' as const,
+      badge: counts.sails,
+    },
+    {
+      key: 'rigging',
+      label: 'Rigging',
+      icon: 'git-network' as const,
+      badge: null,
+    },
+    {
+      key: 'maintenance',
+      label: 'Maintenance',
+      icon: 'build' as const,
+      badge: counts.maintenance,
+    },
+    {
+      key: 'performance',
+      label: 'Performance',
+      icon: 'stats-chart' as const,
+      badge:
+        stats && stats.totalRaces !== undefined && stats.totalRaces !== null
+          ? stats.totalRaces
+          : performanceLoading
+            ? null
+            : undefined,
+    },
+  ];
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Boat Info Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Boat Information</Text>
+        <Text style={[styles.cardTitle, styles.cardTitleStandalone]}>Boat Information</Text>
         <View style={styles.infoGrid}>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Class</Text>
@@ -92,7 +227,7 @@ export function BoatDetail({ boat }: BoatDetailProps) {
 
       {/* Location & Storage */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Location & Storage</Text>
+        <Text style={[styles.cardTitle, styles.cardTitleStandalone]}>Location & Storage</Text>
         <View style={styles.locationInfo}>
           {boat.homeClub && (
             <View style={styles.locationItem}>
@@ -124,30 +259,38 @@ export function BoatDetail({ boat }: BoatDetailProps) {
             <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
           </TouchableOpacity>
         </View>
+
+        {performanceLoading && (
+          <View style={styles.statsLoading}>
+            <ActivityIndicator size="small" color="#2563EB" />
+            <Text style={styles.statsLoadingText}>Syncing race results…</Text>
+          </View>
+        )}
+
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>3.2</Text>
-            <Text style={styles.statLabel}>Avg Finish</Text>
-            <View style={styles.trendBadge}>
-              <Ionicons name="trending-up" size={12} color="#10B981" />
-              <Text style={styles.trendText}>+0.5</Text>
+            <Text style={styles.statValue}>{formatNumber(stats?.avgFinish, 1)}</Text>
+            <Text style={styles.statLabel}>Average Finish</Text>
+            <View style={styles.statMeta}>
+              <Ionicons name={avgTrendIcon} size={14} color={avgTrendColor} />
+              <Text style={[styles.statMetaText, { color: avgTrendColor }]}>
+                {avgTrendLabel}
+              </Text>
             </View>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>28%</Text>
+            <Text style={styles.statValue}>{formatPercent(stats?.winRate)}</Text>
             <Text style={styles.statLabel}>Win Rate</Text>
-            <View style={styles.trendBadge}>
-              <Ionicons name="trending-up" size={12} color="#10B981" />
-              <Text style={styles.trendText}>+5%</Text>
-            </View>
+            <Text style={[styles.statMetaText, styles.statMetaTextMuted]}>
+              {podiumLabel}
+            </Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>64</Text>
-            <Text style={styles.statLabel}>Total Races</Text>
-            <View style={styles.trendBadge}>
-              <Ionicons name="remove" size={12} color="#64748B" />
-              <Text style={styles.trendText}>-</Text>
-            </View>
+            <Text style={styles.statValue}>{totalRacesDisplay}</Text>
+            <Text style={styles.statLabel}>Total Races Logged</Text>
+            <Text style={[styles.statMetaText, styles.statMetaTextMuted]}>
+              {lastRaceLabel}
+            </Text>
           </View>
         </View>
       </View>
@@ -189,24 +332,23 @@ export function BoatDetail({ boat }: BoatDetailProps) {
 
       {/* Quick Actions */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Quick Actions</Text>
+        <Text style={[styles.cardTitle, styles.cardTitleStandalone]}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
-          <TouchableOpacity style={styles.actionCard}>
-            <Ionicons name="fish" size={24} color="#3B82F6" />
-            <Text style={styles.actionText}>View Sails</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard}>
-            <Ionicons name="git-network" size={24} color="#3B82F6" />
-            <Text style={styles.actionText}>Rigging</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard}>
-            <Ionicons name="build" size={24} color="#3B82F6" />
-            <Text style={styles.actionText}>Maintenance</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard}>
-            <Ionicons name="stats-chart" size={24} color="#3B82F6" />
-            <Text style={styles.actionText}>Performance</Text>
-          </TouchableOpacity>
+          {quickActions.map((action) => (
+            <TouchableOpacity key={action.key} style={styles.actionCard}>
+              <Ionicons
+                name={action.icon}
+                size={24}
+                color={action.key === 'maintenance' ? '#DC2626' : '#1D4ED8'}
+              />
+              <Text style={styles.actionText}>{action.label}</Text>
+              {action.badge !== null && action.badge !== undefined && (
+                <View style={styles.actionBadge}>
+                  <Text style={styles.actionBadgeText}>{action.badge}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
     </ScrollView>
@@ -218,28 +360,43 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+  content: {
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 20,
+  },
   card: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginBottom: 8,
+    padding: 20,
+    marginHorizontal: 0,
+    marginBottom: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
+    color: '#0F172A',
+  },
+  cardTitleStandalone: {
+    marginBottom: 16,
   },
   cardSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
-    marginBottom: 12,
-    marginTop: -8,
+    marginBottom: 16,
   },
   viewAllButton: {
     flexDirection: 'row',
@@ -254,11 +411,12 @@ const styles = StyleSheet.create({
   infoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    columnGap: 24,
+    rowGap: 18,
   },
   infoItem: {
-    minWidth: '45%',
-    gap: 4,
+    minWidth: '46%',
+    gap: 6,
   },
   infoLabel: {
     fontSize: 12,
@@ -292,43 +450,63 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1E293B',
   },
+  statsLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  statsLoadingText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
   statsGrid: {
     flexDirection: 'row',
     gap: 12,
+    flexWrap: 'wrap',
+    rowGap: 12,
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
+    minWidth: 160,
+    backgroundColor: '#F1F5F9',
+    padding: 16,
+    borderRadius: 14,
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: '#1E293B',
   },
   statLabel: {
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: 13,
+    color: '#475569',
   },
-  trendBadge: {
+  statMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
+    gap: 6,
+    marginTop: 6,
   },
-  trendText: {
-    fontSize: 11,
+  statMetaText: {
+    fontSize: 12,
     fontWeight: '600',
-    color: '#10B981',
+    color: '#475569',
+  },
+  statMetaTextMuted: {
+    color: '#64748B',
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 6,
   },
   venueCard: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: '#F1F5F9',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 12,
   },
   venueHeader: {
     flexDirection: 'row',
@@ -363,15 +541,32 @@ const styles = StyleSheet.create({
   actionCard: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: '#EFF6FF',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: '#EEF2FF',
+    paddingVertical: 18,
+    borderRadius: 14,
     alignItems: 'center',
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    position: 'relative',
   },
   actionText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#3B82F6',
+  },
+  actionBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#1D4ED8',
+  },
+  actionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

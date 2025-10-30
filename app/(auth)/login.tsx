@@ -9,22 +9,13 @@ export default function Login() {
   const [password, setPassword] = useState('');
 
   const onEmailLogin = async () => {
-    console.log('🔍 [LOGIN] Sign in button clicked');
-    console.log('🔍 [LOGIN] Email:', email);
-    console.log('🔍 [LOGIN] Password:', password ? '[PROVIDED]' : '[EMPTY]');
-    console.log('🔍 [LOGIN] Loading state:', loading);
-    console.log('🔍 [LOGIN] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
-    console.log('🔍 [LOGIN] Has Anon Key:', !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
     if (!email || !password) {
-      console.log('🔍 [LOGIN] Validation failed - missing email or password');
       Alert.alert('Error', 'Please enter your email and password');
       return;
     }
     try {
-      console.log('🔍 [LOGIN] Calling signIn function...');
       await signIn(email, password);
-      console.log('🔍 [LOGIN] signIn completed successfully');
     } catch (e: any) {
       console.error('🔍 [LOGIN] Sign in failed:', e);
       Alert.alert('Sign in failed', e?.message || 'Please try again');

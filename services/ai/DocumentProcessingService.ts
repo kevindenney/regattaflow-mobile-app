@@ -3,7 +3,7 @@
  * Processes PDFs, sailing instructions, and strategy documents using Claude AI
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import RaceCourseExtractor from './RaceCourseExtractor';
 import type {
   DocumentUpload,
@@ -41,7 +41,6 @@ export class DocumentProcessingService {
    * Upload and process a sailing strategy document
    */
   async uploadDocument(upload: DocumentUpload): Promise<DocumentAnalysis> {
-    console.log('📄 Processing document:', upload.filename);
 
     try {
       // Extract text from PDF/document
@@ -55,9 +54,9 @@ export class DocumentProcessingService {
       if (['sailing_instructions', 'race_strategy', 'rules'].includes(analysis.documentClass)) {
         try {
           raceCourseExtraction = await this.extractRaceCourse(upload, upload.metadata?.venue);
-          console.log('🏁 Race course extracted alongside document analysis');
+
         } catch (error) {
-          console.warn('⚠️ Failed to extract race course, continuing with document analysis only:', error);
+
         }
       }
 
@@ -79,16 +78,10 @@ export class DocumentProcessingService {
 
       this.knowledgeBase.set(processedDoc.id, processedDoc);
 
-      console.log('✅ Document processed and added to knowledge base:', {
-        id: processedDoc.id,
-        class: analysis.documentClass,
-        insights: analysis.insights.length
-      });
-
       return analysis;
 
     } catch (error: any) {
-      console.error('❌ Failed to process document:', error);
+
       throw new Error(`Document processing failed: ${error.message}`);
     }
   }
@@ -101,7 +94,6 @@ export class DocumentProcessingService {
     conditions?: string;
     raceType?: string;
   }): Promise<StrategyInsight[]> {
-    console.log('🔍 Querying knowledge base:', query);
 
     try {
       // Generate query embeddings
@@ -113,11 +105,10 @@ export class DocumentProcessingService {
       // Generate insights using Claude AI
       const insights = await this.generateInsights(query, relevantDocs, context);
 
-      console.log('✅ Generated insights:', insights.length);
       return insights;
 
     } catch (error: any) {
-      console.error('❌ Knowledge base query failed:', error);
+
       throw new Error(`Knowledge base query failed: ${error.message}`);
     }
   }
@@ -130,7 +121,6 @@ export class DocumentProcessingService {
     upload: DocumentUpload,
     venue?: string
   ): Promise<RaceCourseExtraction> {
-    console.log('🏁 Extracting race course from document:', upload.filename);
 
     try {
       // Extract text from document
@@ -146,16 +136,10 @@ export class DocumentProcessingService {
         }
       );
 
-      console.log('✅ Race course extraction completed:', {
-        courseType: courseExtraction.courseLayout.type,
-        marksExtracted: courseExtraction.marks.length,
-        confidence: courseExtraction.extractionMetadata.overallConfidence.toFixed(2)
-      });
-
       return courseExtraction;
 
     } catch (error: any) {
-      console.error('❌ Race course extraction failed:', error);
+
       throw new Error(`Race course extraction failed: ${error.message}`);
     }
   }
@@ -171,7 +155,6 @@ export class DocumentProcessingService {
       venue: string;
     }
   ): Promise<StrategyInsight[]> {
-    console.log('🎯 Analyzing race strategy');
 
     try {
       const prompt = this.buildRaceAnalysisPrompt(racingDocuments, conditions);
@@ -198,7 +181,7 @@ export class DocumentProcessingService {
       return insights;
 
     } catch (error: any) {
-      console.error('❌ Race strategy analysis failed:', error);
+
       throw new Error(`Race strategy analysis failed: ${error.message}`);
     }
   }

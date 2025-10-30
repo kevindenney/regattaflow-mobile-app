@@ -6,8 +6,13 @@
  * topographic-wind-analyst Skill to generate strategic recommendations.
  */
 
-// import Anthropic from '@anthropic-ai/sdk';
-import * as turf from '@turf/turf';
+import Anthropic from '@anthropic-ai/sdk';
+import { feature } from '@turf/helpers';
+import { featureCollection } from '@turf/helpers';
+import intersect from '@turf/intersect';
+import centroid from '@turf/centroid';
+import { point } from '@turf/helpers';
+import distance from '@turf/distance';
 import {
   TerrainDataSource,
   BuildingDataSource,
@@ -28,20 +33,23 @@ import {
   type ElevationContour,
   type WindArrow
 } from '../types/wind';
-import type { SailingVenue } from '../types/venues';
+import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Main service for topographic and wind analysis
  */
+
+const logger = createLogger('TopographicWindService');
 export class TopographicWindService {
-    // private anthropic: Anthropic; // Disabled for web compatibility
+  private anthropic: Anthropic;
 
   constructor() {
     const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY not configured');
     }
-        // this.anthropic = new Anthropic({ apiKey });
+    this.anthropic = new Anthropic({ apiKey });
   }
 
   /**
@@ -56,7 +64,7 @@ export class TopographicWindService {
   ): Promise<WindAnalysis> {
     try {
       // Fetch terrain elevation data
-      console.log('Fetching terrain elevation data...');
+      logger.debug('Fetching terrain elevation data...');
       const terrain = await this.fetchTerrain(
         request.racingArea,
         request.venue,
@@ -64,7 +72,7 @@ export class TopographicWindService {
       );
 
       // Fetch building data
-      console.log('Fetching building data...');
+      logger.debug('Fetching building data...');
       const buildings = await this.fetchBuildings(
         request.racingArea,
         request.venue,
@@ -72,7 +80,7 @@ export class TopographicWindService {
       );
 
       // Fetch wind forecast
-      console.log('Fetching wind forecast...');
+      logger.debug('Fetching wind forecast...');
       const centerPoint = this.calculateCenterPoint(request.racingArea);
       const gradientWind = await this.fetchWindForecast(
         centerPoint,
@@ -82,7 +90,7 @@ export class TopographicWindService {
       );
 
       // Calculate wind shadow zones
-      console.log('Calculating wind shadow zones...');
+      logger.debug('Calculating wind shadow zones...');
       const windShadowZones = this.calculateWindShadows(
         buildings,
         terrain,
@@ -91,7 +99,7 @@ export class TopographicWindService {
       );
 
       // Calculate wind acceleration zones
-      console.log('Calculating wind acceleration zones...');
+      logger.debug('Calculating wind acceleration zones...');
       const accelerationZones = this.calculateAccelerationZones(
         buildings,
         terrain,
@@ -100,7 +108,7 @@ export class TopographicWindService {
       );
 
       // Predict thermal wind (if applicable)
-      console.log('Predicting thermal wind...');
+      logger.debug('Predicting thermal wind...');
       const thermalWindPrediction = await this.predictThermalWind(
         request.venue,
         request.raceTime
@@ -112,7 +120,7 @@ export class TopographicWindService {
         : undefined;
 
       // Call Claude API with topographic-wind-analyst Skill
-      console.log('Generating AI analysis with topographic-wind-analyst Skill...');
+      logger.debug('Generating AI analysis with topographic-wind-analyst Skill...');
       const aiResult = await this.callClaudeWithSkill({
         terrain,
         buildings,
@@ -372,10 +380,10 @@ export class TopographicWindService {
     }
 
     return {
-      buildings: buildings.filter(b => b.height >= minHeight),
+      buildings: buildings.filter((building: any) => building.height >= minHeight),
       source: BuildingDataSource.OpenStreetMap,
       date: new Date().toISOString(),
-      count: buildings.filter(b => b.height >= minHeight).length
+      count: buildings.filter((building: any) => building.height >= minHeight).length
     };
   }
 
@@ -579,11 +587,11 @@ export class TopographicWindService {
     racingArea: GeoJSON.Polygon
   ): boolean {
     try {
-      const shadowFeature = turf.feature(shadowPolygon);
-      const racingFeature = turf.feature(racingArea);
+      const shadowFeature = feature(shadowPolygon);
+      const racingFeature = feature(racingArea);
 
-      const intersection = turf.intersect(
-        turf.featureCollection([shadowFeature, racingFeature])
+      const intersection = intersect(
+        featureCollection([shadowFeature, racingFeature])
       );
 
       return intersection !== null;
@@ -919,8 +927,8 @@ Format your response as JSON:
   }
 
   private calculateCenterPoint(polygon: GeoJSON.Polygon): { lat: number; lng: number } {
-    const feature = turf.feature(polygon);
-    const center = turf.centroid(feature);
+    const featureObj = feature(polygon);
+    const center = centroid(featureObj);
     return {
       lng: center.geometry.coordinates[0],
       lat: center.geometry.coordinates[1]
@@ -928,9 +936,9 @@ Format your response as JSON:
   }
 
   private distanceBetweenPoints(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }): number {
-    const from = turf.point([p1.lng, p1.lat]);
-    const to = turf.point([p2.lng, p2.lat]);
-    return turf.distance(from, to, { units: 'meters' });
+    const from = point([p1.lng, p1.lat]);
+    const to = point([p2.lng, p2.lat]);
+    return distance(from, to, { units: 'meters' });
   }
 
   private angleBetweenPoints(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }): number {

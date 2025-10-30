@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { Image } from '@/components/ui';
+import { createLogger } from '@/lib/utils/logger';
 import {
   Camera,
   MapPin,
@@ -23,6 +24,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 
+const logger = createLogger('post-update');
 const { width } = Dimensions.get('window');
 
 const PostUpdateScreen = () => {
@@ -77,7 +79,7 @@ const PostUpdateScreen = () => {
 
   const handlePost = () => {
     // In a real app, this would send the post to a backend
-    console.log('Posting:', { postText, selectedImages, location, raceEvent });
+    logger.debug('Posting:', { postText, selectedImages, location, raceEvent });
     setPostText('');
     setSelectedImages([]);
     // Reset to default values
