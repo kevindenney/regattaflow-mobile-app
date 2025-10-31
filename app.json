@@ -21,12 +21,23 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.regattaflow.app",
+      "buildNumber": "1.0.0",
       "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "RegattaFlow needs your location to track race performance and provide accurate wind and current data.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "RegattaFlow needs your location to track race performance and provide accurate wind and current data.",
+        "NSCameraUsageDescription": "RegattaFlow needs camera access to capture race moments and scan course marks.",
+        "NSMicrophoneUsageDescription": "RegattaFlow needs microphone access for voice notes and coaching feedback.",
+        "NSPhotoLibraryUsageDescription": "RegattaFlow needs photo library access to save and share race media."
+      },
       "config": {
         "googleMapsApiKey": "YOUR_GOOGLE_MAPS_IOS_API_KEY"
       }
     },
     "android": {
+      "package": "com.regattaflow.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,6 +46,14 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "YOUR_GOOGLE_MAPS_ANDROID_API_KEY"
@@ -42,8 +61,9 @@
       }
     },
     "web": {
-      "bundler": "metro",
+      "bundler": "webpack",
       "favicon": "./assets/images/favicon.png",
+      "output": "static",
       "name": "RegattaFlow - Sailing Race Strategy & Performance",
       "shortName": "RegattaFlow",
       "description": "AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide",
