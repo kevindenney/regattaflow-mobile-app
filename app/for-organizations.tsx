@@ -224,8 +224,301 @@ export default function ForOrganizationsPage() {
         </View>
       </View>
 
-      {/* Bottom Spacing */}
-      <View style={{ height: 100 }} />
+      {/* Features Section */}
+      <View style={[styles.section, styles.featuresSection]}>
+        <View style={styles.sectionContent}>
+          <Text style={styles.sectionTitle}>Everything You Need</Text>
+          <Text style={styles.sectionSubtitle}>
+            Complete custom app development from concept to launch
+          </Text>
+
+          <View style={[styles.featuresGrid, isDesktop && styles.featuresGridDesktop]}>
+            {/* Feature 1 */}
+            <View style={styles.featureCard}>
+              <View style={[styles.featureIconLarge, { backgroundColor: '#DBEAFE' }]}>
+                <Ionicons name="phone-portrait" size={32} color="#4169E1" />
+              </View>
+              <Text style={styles.featureCardTitle}>Native Mobile Apps</Text>
+              <Text style={styles.featureCardText}>
+                Beautiful iOS and Android apps customized for your event with your branding
+              </Text>
+            </View>
+
+            {/* Feature 2 */}
+            <View style={styles.featureCard}>
+              <View style={[styles.featureIconLarge, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="speedometer" size={32} color="#F59E0B" />
+              </View>
+              <Text style={styles.featureCardTitle}>Live Race Tracking</Text>
+              <Text style={styles.featureCardText}>
+                Real-time GPS tracking, live leaderboards, and instant results for sailors and spectators
+              </Text>
+            </View>
+
+            {/* Feature 3 */}
+            <View style={styles.featureCard}>
+              <View style={[styles.featureIconLarge, { backgroundColor: '#D1FAE5' }]}>
+                <Ionicons name="calendar" size={32} color="#10B981" />
+              </View>
+              <Text style={styles.featureCardTitle}>Event Management</Text>
+              <Text style={styles.featureCardText}>
+                Complete scheduling, registration, and communication tools in one platform
+              </Text>
+            </View>
+
+            {/* Feature 4 */}
+            <View style={styles.featureCard}>
+              <View style={[styles.featureIconLarge, { backgroundColor: '#FCE7F3' }]}>
+                <Ionicons name="megaphone" size={32} color="#EC4899" />
+              </View>
+              <Text style={styles.featureCardTitle}>Sponsor Integration</Text>
+              <Text style={styles.featureCardText}>
+                Showcase sponsors with branded content, banners, and premium placements
+              </Text>
+            </View>
+
+            {/* Feature 5 */}
+            <View style={styles.featureCard}>
+              <View style={[styles.featureIconLarge, { backgroundColor: '#E0E7FF' }]}>
+                <Ionicons name="notifications" size={32} color="#6366F1" />
+              </View>
+              <Text style={styles.featureCardTitle}>Push Notifications</Text>
+              <Text style={styles.featureCardText}>
+                Send updates, race alerts, and important announcements directly to participants
+              </Text>
+            </View>
+
+            {/* Feature 6 */}
+            <View style={styles.featureCard}>
+              <View style={[styles.featureIconLarge, { backgroundColor: '#DBEAFE' }]}>
+                <Ionicons name="stats-chart" size={32} color="#0EA5E9" />
+              </View>
+              <Text style={styles.featureCardTitle}>Analytics Dashboard</Text>
+              <Text style={styles.featureCardText}>
+                Track engagement, downloads, and usage to measure success and improve future events
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* How It Works Section */}
+      <View style={[styles.section, styles.howItWorksSection]}>
+        <View style={styles.sectionContent}>
+          <Text style={styles.sectionTitle}>Simple Process, Professional Results</Text>
+          <Text style={styles.sectionSubtitle}>
+            From concept to launch in 6-8 weeks
+          </Text>
+
+          <View style={[styles.stepsContainer, isDesktop && styles.stepsContainerDesktop]}>
+            {/* Step 1 */}
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>1</Text>
+              </View>
+              <Text style={styles.stepTitle}>Discovery Call</Text>
+              <Text style={styles.stepText}>
+                We learn about your event, goals, and requirements
+              </Text>
+            </View>
+
+            {isDesktop && <View style={styles.stepArrow}>
+              <Ionicons name="arrow-forward" size={24} color="#D1D5DB" />
+            </View>}
+
+            {/* Step 2 */}
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>2</Text>
+              </View>
+              <Text style={styles.stepTitle}>Design & Planning</Text>
+              <Text style={styles.stepText}>
+                Custom designs matching your brand and event identity
+              </Text>
+            </View>
+
+            {isDesktop && <View style={styles.stepArrow}>
+              <Ionicons name="arrow-forward" size={24} color="#D1D5DB" />
+            </View>}
+
+            {/* Step 3 */}
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>3</Text>
+              </View>
+              <Text style={styles.stepTitle}>Development</Text>
+              <Text style={styles.stepText}>
+                Build and test your custom app with your feedback
+              </Text>
+            </View>
+
+            {isDesktop && <View style={styles.stepArrow}>
+              <Ionicons name="arrow-forward" size={24} color="#D1D5DB" />
+            </View>}
+
+            {/* Step 4 */}
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>4</Text>
+              </View>
+              <Text style={styles.stepTitle}>Launch</Text>
+              <Text style={styles.stepText}>
+                Deploy to App Store and Google Play with full support
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Testimonials Section */}
+      <View style={[styles.section, styles.testimonialsSection]}>
+        <View style={styles.sectionContent}>
+          <Text style={styles.sectionTitle}>Trusted by Leading Sailing Organizations</Text>
+
+          <View style={[styles.testimonialsGrid, isDesktop && styles.testimonialsGridDesktop]}>
+            {/* Testimonial 1 */}
+            <View style={styles.testimonialCard}>
+              <View style={styles.quoteIcon}>
+                <Ionicons name="quote" size={32} color="#4169E1" />
+              </View>
+              <Text style={styles.testimonialText}>
+                "The custom app transformed our regatta. Sailors loved the live tracking and results were posted instantly. Worth every penny."
+              </Text>
+              <View style={styles.testimonialAuthor}>
+                <Text style={styles.authorName}>Sarah Mitchell</Text>
+                <Text style={styles.authorTitle}>Race Director, Newport Yacht Club</Text>
+              </View>
+            </View>
+
+            {/* Testimonial 2 */}
+            <View style={styles.testimonialCard}>
+              <View style={styles.quoteIcon}>
+                <Ionicons name="quote" size={32} color="#4169E1" />
+              </View>
+              <Text style={styles.testimonialText}>
+                "Our sponsors were thrilled with the visibility. The app paid for itself through increased sponsorship revenue."
+              </Text>
+              <View style={styles.testimonialAuthor}>
+                <Text style={styles.authorName}>James Chen</Text>
+                <Text style={styles.authorTitle}>Commodore, San Francisco YC</Text>
+              </View>
+            </View>
+
+            {/* Testimonial 3 */}
+            <View style={styles.testimonialCard}>
+              <View style={styles.quoteIcon}>
+                <Ionicons name="quote" size={32} color="#4169E1" />
+              </View>
+              <Text style={styles.testimonialText}>
+                "RegattaFlow made us look incredibly professional. Participation doubled the following year."
+              </Text>
+              <View style={styles.testimonialAuthor}>
+                <Text style={styles.authorName}>Emma Thompson</Text>
+                <Text style={styles.authorTitle}>Event Manager, Royal Yacht Squadron</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Final CTA Section */}
+      <View style={[styles.section, styles.finalCTASection]}>
+        <View style={styles.sectionContent}>
+          <Text style={[styles.sectionTitle, { color: '#FFFFFF' }]}>
+            Ready to Elevate Your Event?
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: '#FFFFFF', opacity: 0.9 }]}>
+            Schedule a demo to see how a custom app can transform your regatta
+          </Text>
+
+          <View style={[styles.ctaButtons, { marginTop: 32 }]}>
+            <TouchableOpacity
+              style={[styles.primaryCTA, { backgroundColor: '#FFFFFF' }]}
+              onPress={handleScheduleDemo}
+            >
+              <Ionicons name="calendar" size={20} color="#4169E1" />
+              <Text style={[styles.primaryCTAText, { color: '#4169E1' }]}>Schedule Demo</Text>
+              <Ionicons name="arrow-forward" size={18} color="#4169E1" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <View style={styles.footerContent}>
+          <View style={styles.footerTop}>
+            <View style={styles.footerBrand}>
+              <View style={styles.logo}>
+                <Text style={styles.logoText}>RF</Text>
+              </View>
+              <Text style={styles.brandName}>RegattaFlow</Text>
+            </View>
+
+            <Text style={styles.footerTagline}>
+              Professional sailing race management platform
+            </Text>
+          </View>
+
+          <View style={styles.footerLinks}>
+            <View style={styles.footerColumn}>
+              <Text style={styles.footerColumnTitle}>Product</Text>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Features</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Pricing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Case Studies</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footerColumn}>
+              <Text style={styles.footerColumnTitle}>Resources</Text>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Documentation</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Support</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Blog</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footerColumn}>
+              <Text style={styles.footerColumnTitle}>Company</Text>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>About</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Contact</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Privacy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.footerBottom}>
+            <Text style={styles.footerCopyright}>
+              © 2025 RegattaFlow. All rights reserved.
+            </Text>
+            <View style={styles.footerSocial}>
+              <TouchableOpacity style={styles.socialIcon}>
+                <Ionicons name="logo-twitter" size={20} color="#6B7280" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.socialIcon}>
+                <Ionicons name="logo-linkedin" size={20} color="#6B7280" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.socialIcon}>
+                <Ionicons name="logo-instagram" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -553,5 +846,249 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     backgroundColor: '#4169E1',
+  },
+  // New Section Styles
+  section: {
+    paddingVertical: 80,
+    paddingHorizontal: 24,
+  },
+  sectionContent: {
+    maxWidth: 1200,
+    marginHorizontal: 'auto',
+    width: '100%',
+  },
+  sectionTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 18,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 48,
+  },
+  featuresSection: {
+    backgroundColor: '#FFFFFF',
+  },
+  featuresGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 24,
+    justifyContent: 'center',
+  },
+  featuresGridDesktop: {
+    gap: 32,
+  },
+  featureCard: {
+    flex: 1,
+    minWidth: 280,
+    maxWidth: 350,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  featureIconLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  featureCardTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  featureCardText: {
+    fontSize: 15,
+    color: '#6B7280',
+    lineHeight: 24,
+  },
+  howItWorksSection: {
+    backgroundColor: '#F9FAFB',
+  },
+  stepsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 32,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  stepsContainerDesktop: {
+    flexWrap: 'nowrap',
+    gap: 16,
+  },
+  step: {
+    flex: 1,
+    minWidth: 200,
+    maxWidth: 280,
+    alignItems: 'center',
+  },
+  stepArrow: {
+    paddingTop: 40,
+  },
+  stepNumber: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#4169E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  stepNumberText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  stepTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  stepText: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  testimonialsSection: {
+    backgroundColor: '#FFFFFF',
+  },
+  testimonialsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 24,
+    justifyContent: 'center',
+  },
+  testimonialsGridDesktop: {
+    gap: 32,
+  },
+  testimonialCard: {
+    flex: 1,
+    minWidth: 300,
+    maxWidth: 380,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  quoteIcon: {
+    marginBottom: 20,
+    opacity: 0.2,
+  },
+  testimonialText: {
+    fontSize: 16,
+    color: '#374151',
+    lineHeight: 26,
+    marginBottom: 24,
+    fontStyle: 'italic',
+  },
+  testimonialAuthor: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 16,
+  },
+  authorName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  authorTitle: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  finalCTASection: {
+    backgroundColor: '#4169E1',
+  },
+  footer: {
+    backgroundColor: '#1F2937',
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+  },
+  footerContent: {
+    maxWidth: 1200,
+    marginHorizontal: 'auto',
+    width: '100%',
+  },
+  footerTop: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  footerBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  footerTagline: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  footerLinks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 48,
+    justifyContent: 'center',
+    marginBottom: 40,
+  },
+  footerColumn: {
+    minWidth: 150,
+  },
+  footerColumnTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F3F4F6',
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  footerLink: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    marginBottom: 12,
+  },
+  footerBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 32,
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  footerCopyright: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  footerSocial: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  socialIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
