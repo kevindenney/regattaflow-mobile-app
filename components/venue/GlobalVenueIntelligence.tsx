@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useGlobalVenueIntelligence } from '@/hooks/useGlobalVenueIntelligence';
 import { WeatherIntelligence } from '@/components/weather/WeatherIntelligence';
 import type { SailingVenue, VenueType } from '@/lib/types/global-venues';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface GlobalVenueIntelligenceProps {
   onVenueSelected?: (venue: SailingVenue) => void;
@@ -622,8 +623,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-    boxShadow: '0px 2px',
-    elevation: 2,
+    ...getShadowStyle('sm'),
   },
   venueHeader: {
     flexDirection: 'row',
@@ -825,8 +825,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    boxShadow: '0px 1px',
-    elevation: 1,
+    ...getShadowStyle('xs'),
   },
   searchResultName: {
     fontSize: 14,
@@ -876,8 +875,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    boxShadow: '0px 1px',
-    elevation: 1,
+    ...getShadowStyle('xs'),
   },
   visitedVenueName: {
     fontSize: 14,
@@ -920,15 +918,13 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-    boxShadow: '0px 2px',
-    elevation: 2,
+    ...getShadowStyle('sm'),
   },
   regionStats: {
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
-    boxShadow: '0px 2px',
-    elevation: 2,
+    ...getShadowStyle('sm'),
   },
   statRow: {
     flexDirection: 'row',

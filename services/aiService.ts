@@ -241,7 +241,7 @@ Return ONLY valid JSON matching this structure:
 
       const mimeType = this.getMimeType(documentUri);
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-sonnet-latest',
+        model: 'claude-3-5-haiku-latest',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{

@@ -10,6 +10,7 @@ import { createLogger } from '@/lib/utils/logger';
 
 export interface RaceTuningRequest {
   classId?: string | null;
+  className?: string | null;
   averageWindSpeed?: number | null;
   pointsOfSail?: 'upwind' | 'downwind' | 'reach' | 'all';
   limit?: number;
@@ -37,17 +38,18 @@ const logger = createLogger('RaceTuningService');
 class RaceTuningService {
   async getRecommendations({
     classId,
+    className,
     averageWindSpeed,
     pointsOfSail = 'all',
     limit = 1,
   }: RaceTuningRequest): Promise<RaceTuningRecommendation[]> {
-    if (!classId) {
-      logger.debug('[RaceTuningService] No classId provided, skipping tuning lookup');
+    if (!classId && !className) {
+      logger.debug('[RaceTuningService] No class reference provided, skipping tuning lookup');
       return [];
     }
 
     try {
-      const guides = await tuningGuideService.getGuidesForClass(classId);
+      const guides = await tuningGuideService.getGuidesByReference({ classId, className });
       const candidateSections = this.collectCandidateSections(
         guides,
         averageWindSpeed ?? undefined,

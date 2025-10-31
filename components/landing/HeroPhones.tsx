@@ -11,7 +11,7 @@ import { Link, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
-import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/lib/utils/userTypeRouting';
+import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { MiniSailorDashboard } from './MiniSailorDashboard';
 import { MiniCoachDashboard } from './MiniCoachDashboard';
 import { MiniClubDashboard } from './MiniClubDashboard';
@@ -37,13 +37,7 @@ export function HeroPhones() {
   const handleGetStarted = () => {
 
     if (user && userProfile) {
-      // Check if onboarding is needed
-      if (shouldCompleteOnboarding(userProfile)) {
-        const onboardingRoute = getOnboardingRoute(userProfile);
-        router.push(onboardingRoute);
-      } else {
-        router.push(getDashboardRoute(userProfile.user_type));
-      }
+      router.push(getDashboardRoute(userProfile.user_type));
     } else {
       // For new users, default to sailor persona (can be changed later if we add tabs)
       router.push({

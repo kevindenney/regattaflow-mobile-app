@@ -1,9 +1,7 @@
-import {
+import type { GeoLocation, BoundingBox } from '@/lib/types/map';
+import type {
   AdvancedWeatherConditions,
-  WeatherAlert,
-  GeoLocation,
-  BoundingBox,
-  WeatherDataSource
+  WeatherAlert
 } from '@/lib/types/advanced-map';
 import { WeatherAPIProService } from './WeatherAPIProService';
 import { WorldTidesProService } from '../tides/WorldTidesProService';
@@ -57,7 +55,7 @@ export class ProfessionalWeatherService {
       // Integrate tide data into weather conditions
       primaryWeather.tide = {
         height: tideData.height,
-        direction: tideData.direction,
+        direction: tideData.direction ?? 'unknown',
         speed: tideData.speed,
         nextHigh: tideData.nextHigh,
         nextLow: tideData.nextLow
@@ -161,7 +159,7 @@ export class ProfessionalWeatherService {
     updateWeather();
 
     // Setup 15-minute intervals for racing conditions
-    const interval = setInterval(updateWeather, 15 * 60 * 1000);
+    const interval = setInterval(updateWeather, 15 * 60 * 1000) as ReturnType<typeof setInterval>;
     this.updateIntervals.set(updateId, interval);
 
     return updateId;

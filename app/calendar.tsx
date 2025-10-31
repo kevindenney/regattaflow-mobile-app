@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Dimensions, FlatList } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Dimensions, FlatList, TextInput as RNTextInput } from 'react-native';
 import {
   Calendar,
   ChevronLeft,
@@ -31,10 +31,70 @@ import {
   Mail
 } from 'lucide-react-native';
 
+type EventStatus = 'confirmed' | 'draft' | 'completed' | 'cancelled';
+type EventType = 'series' | 'championship' | 'club';
+type FilterType = 'all' | EventType;
+type ViewMode = 'month' | 'week' | 'day' | 'list';
+
+type OfficialStatus = 'confirmed' | 'pending';
+type DocumentStatus = 'published' | 'draft';
+
+interface EventOfficial {
+  name: string;
+  role: string;
+  status: OfficialStatus;
+}
+
+interface EventDocument {
+  name: string;
+  status: DocumentStatus;
+}
+
+interface EventCommunication {
+  sender: string;
+  message: string;
+  time: string;
+}
+
+interface EventWeather {
+  wind: string;
+  gusts: string;
+  temp: string;
+}
+
+interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: EventStatus;
+  type: EventType;
+  entryCount: number;
+  entryLimit: number;
+  pendingPayments: number;
+  course: string;
+  laps: number;
+  marks: string;
+  timeLimit: string;
+  officials: EventOfficial[];
+  documents: EventDocument[];
+  weather: EventWeather;
+  communications: EventCommunication[];
+}
+
+type RegattaTemplateType = EventType | 'custom';
+
+interface RegattaTemplate {
+  id: RegattaTemplateType;
+  title: string;
+  description: string;
+  type: RegattaTemplateType;
+}
+
 const { width } = Dimensions.get('window');
 
-// Mock data for events
-const mockEvents = [
+const mockEvents: CalendarEvent[] = [
   {
     id: '1',
     title: 'RHKYC Spring Series R1',
@@ -124,7 +184,7 @@ const mockEvents = [
 ];
 
 // Template data for creating new regattas
-const templates = [
+const templates: RegattaTemplate[] = [
   {
     id: 'series',
     title: 'Series Race Template',
@@ -145,14 +205,29 @@ const templates = [
   }
 ];
 
+const VIEW_MODES: ViewMode[] = ['month', 'week', 'day', 'list'];
+const FILTER_OPTIONS: FilterType[] = ['all', 'series', 'championship', 'club'];
+
 const CalendarScreen = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // month, week, day, list
-  const [filter, setFilter] = useState('all'); // all, series, championship, club
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCreateRegattaModal, setShowCreateRegattaModal] = useState(false);
+
+  const filteredEvents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return mockEvents.filter((event) => {
+      const matchesFilter = filter === 'all' || event.type === filter;
+      const matchesQuery =
+        !query ||
+        event.title.toLowerCase().includes(query) ||
+        event.course.toLowerCase().includes(query);
+      return matchesFilter && matchesQuery;
+    });
+  }, [filter, searchQuery]);
 
   // Get days in month for calendar grid
   const getDaysInMonth = (year: number, month: number) => {
@@ -165,9 +240,9 @@ const CalendarScreen = () => {
   };
 
   // Get events for a specific date
-  const getEventsForDate = (date: Date) => {
+  const getEventsForDate = (date: Date): CalendarEvent[] => {
     const dateString = date.toISOString().split('T')[0];
-    return mockEvents.filter(event => event.date === dateString);
+    return filteredEvents.filter((event) => event.date === dateString);
   };
 
   // Navigate to previous month
@@ -244,8 +319,8 @@ const CalendarScreen = () => {
   // Render event list
   const renderEventList = () => {
     return (
-      <FlatList
-        data={mockEvents}
+      <FlatList<CalendarEvent>
+        data={filteredEvents}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity 
@@ -621,7 +696,7 @@ const CalendarScreen = () => {
       <View className="bg-white px-4 py-3 shadow-sm">
         {/* View Switcher */}
         <View className="flex-row mb-3">
-          {['month', 'week', 'day', 'list'].map((mode) => (
+          {VIEW_MODES.map((mode) => (
             <TouchableOpacity
               key={mode}
               className={`px-3 py-2 rounded-lg mr-2 ${
@@ -644,7 +719,7 @@ const CalendarScreen = () => {
         <View className="flex-row items-center mb-3">
           <View className="flex-row flex-1 bg-gray-100 rounded-lg px-3 py-2 mr-2">
             <Search color="#6B7280" size={20} />
-            <TextInput
+            <RNTextInput
               placeholder="Search events..."
               className="flex-1 ml-2 text-gray-700"
               value={searchQuery}
@@ -666,7 +741,7 @@ const CalendarScreen = () => {
         
         {/* Filter Dropdown */}
         <View className="flex-row mb-2">
-          {['all', 'series', 'championship', 'club'].map((filterType) => (
+          {FILTER_OPTIONS.map((filterType) => (
             <TouchableOpacity
               key={filterType}
               className={`px-3 py-1 rounded-full mr-2 ${
@@ -765,13 +840,5 @@ const CalendarScreen = () => {
     </View>
   );
 };
-
-// Note: We need to add TextInput to the imports for the search functionality
-// Since we're not allowed to modify the imports, we'll simulate the TextInput with a View
-const TextInput = (props: any) => (
-  <View className={props.className}>
-    {props.children}
-  </View>
-);
 
 export default CalendarScreen;

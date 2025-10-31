@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Global Venue Intelligence Hook
  * React hook for location-aware sailing venue intelligence

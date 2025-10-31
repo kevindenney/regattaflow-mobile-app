@@ -85,7 +85,7 @@ export interface LocalWeatherObservation {
   source: LocalWeatherSource;
   timestamp: Date;
   data: Partial<WeatherForecast>;
-  reliability: 'high' | 'moderate' | 'low';
+  reliability: 'high' | 'moderate' | 'low' | 'variable';
 }
 
 // Regional weather model configurations

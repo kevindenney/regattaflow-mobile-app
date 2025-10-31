@@ -1,12 +1,12 @@
 /**
  * Wind Particle Layer - Web Implementation
  *
- * Renders animated wind particles using deck.gl-particle for wind flow visualization.
- * Shows wind speed and direction across racing area with color-coded speeds.
+ * Renders wind flow vectors using native deck.gl layers.
+ * Each wind sample becomes a short arrow coloured by speed.
+ * This replaces the previous deck.gl-particle dependency which required deck.gl 8.x.
  */
-
-import React, { useMemo } from 'react';
-import { ParticleLayer } from 'deck.gl-particle';
+import type { Layer } from '@deck.gl/core';
+import { IconLayer } from '@deck.gl/layers';
 import type { ParticleData } from '../../../services/visualization/EnvironmentalVisualizationService';
 
 export interface WindParticleLayerProps {
@@ -31,148 +31,63 @@ export interface WindParticleLayerProps {
 
 /**
  * Wind Particle Layer Component (Web-only)
+ *
+ * Returns an array of deck.gl layers (arrow stems + heads) that visualise
+ * wind speed and direction. Consumers can spread this into the DeckGL
+ * `layers` prop or equivalent map engine integration.
  */
+const ARROW_ICON = 'data:image/svg+xml;base64,' +
+  btoa(
+    `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18 32 L40 32 L32 24 L52 32 L32 40 L40 32 L18 32 Z" fill="white" />
+    </svg>`
+  );
+
+const ICON_MAPPING = {
+  arrow: { x: 0, y: 0, width: 64, height: 64, mask: true },
+} as const;
+
 export function WindParticleLayer({
   particles,
-  animationSpeed = 0.5,
-  maxAge = 100,
-  numParticles = 10000,
+  animationSpeed: _animationSpeed = 0.5,
+  maxAge: _maxAge = 100,
+  numParticles: _numParticles = 10000,
   visible = true,
-  opacity = 0.8
-}: WindParticleLayerProps) {
-  // Convert particle data to texture format
-  const particleTexture = useMemo(() => {
-    return convertParticlesToTexture(particles);
-  }, [particles]);
-
-  // Create color gradient for wind speeds
-  const colorRange = useMemo(() => {
-    return [
-      [0, 128, 255],    // 0-5kt: Light blue
-      [0, 255, 128],    // 5-10kt: Green
-      [255, 255, 0],    // 10-15kt: Yellow
-      [255, 128, 0],    // 15-20kt: Orange
-      [255, 0, 0]       // 20+kt: Red
-    ];
-  }, []);
-
+  opacity = 0.5
+}: WindParticleLayerProps): Layer[] | null {
   if (!visible || particles.length === 0) {
     return null;
   }
 
-  return (
-    <ParticleLayer
-      id="wind-particle-layer"
-      image={particleTexture}
-      imageUnscale={[1, 1]} // [u scale, v scale]
-      bounds={getBoundsFromParticles(particles)}
-      animationSpeed={animationSpeed}
-      maxAge={maxAge}
-      numParticles={numParticles}
-      opacity={opacity}
-      getColorFromSpeed={(speed: number) => getColorFromSpeed(speed, colorRange)}
-    />
-  );
-}
-
-/**
- * Convert particle data to texture format for deck.gl-particle
- */
-function convertParticlesToTexture(particles: ParticleData[]): ImageData {
-  // For simplicity, create a grid and interpolate particle data
-  // In production, this would use more sophisticated interpolation
-
-  const gridSize = 100; // 100x100 grid
-  const canvas = document.createElement('canvas');
-  canvas.width = gridSize;
-  canvas.height = gridSize;
-  const ctx = canvas.getContext('2d');
-
-  if (!ctx) {
-    throw new Error('Failed to create canvas context');
-  }
-
-  const imageData = ctx.createImageData(gridSize, gridSize);
-
-  // Get bounds
-  const bounds = getBoundsFromParticles(particles);
-
-  // Populate texture with wind vectors
-  for (let y = 0; y < gridSize; y++) {
-    for (let x = 0; x < gridSize; x++) {
-      const lng = bounds[0] + (x / gridSize) * (bounds[2] - bounds[0]);
-      const lat = bounds[1] + (y / gridSize) * (bounds[3] - bounds[1]);
-
-      // Find nearest particle
-      const nearest = findNearestParticle(lng, lat, particles);
-
-      if (nearest) {
-        const idx = (y * gridSize + x) * 4;
-
-        // Encode wind vector in R and G channels
-        // R = u component (east-west)
-        // G = v component (north-south)
-        const angleRad = (nearest.direction * Math.PI) / 180;
-        const u = Math.sin(angleRad) * nearest.speed;
-        const v = Math.cos(angleRad) * nearest.speed;
-
-        // Normalize to 0-255
-        imageData.data[idx] = ((u + 50) / 100) * 255; // R: u component
-        imageData.data[idx + 1] = ((v + 50) / 100) * 255; // G: v component
-        imageData.data[idx + 2] = 0; // B: unused
-        imageData.data[idx + 3] = 255; // A: opaque
-      }
-    }
-  }
-
-  return imageData;
-}
-
-/**
- * Get bounds from particles [west, south, east, north]
- */
-function getBoundsFromParticles(particles: ParticleData[]): [number, number, number, number] {
-  if (particles.length === 0) {
-    return [0, 0, 0, 0];
-  }
-
-  let minLng = Infinity;
-  let minLat = Infinity;
-  let maxLng = -Infinity;
-  let maxLat = -Infinity;
-
-  particles.forEach(p => {
-    minLng = Math.min(minLng, p.lng);
-    minLat = Math.min(minLat, p.lat);
-    maxLng = Math.max(maxLng, p.lng);
-    maxLat = Math.max(maxLat, p.lat);
+  const colorRange = COLOR_RANGE;
+  const iconLayer = new IconLayer<ParticleData>({
+    id: 'wind-direction-icons',
+    data: particles,
+    iconAtlas: ARROW_ICON,
+    iconMapping: ICON_MAPPING,
+    getIcon: () => 'arrow',
+    getPosition: (particle) => [particle.lng, particle.lat],
+    getAngle: (particle) => (particle.direction ?? 0),
+    getSize: (particle) => 24 + Math.min(particle.speed ?? 0, 25) * 1.2,
+    sizeUnits: 'pixels',
+    sizeMinPixels: 12,
+    sizeMaxPixels: 36,
+    getColor: (particle) => [...getColorFromSpeed(particle.speed ?? 0, colorRange), Math.floor(opacity * 255)],
+    billboard: true,
+    pickable: false,
+    parameters: { depthTest: false },
   });
 
-  return [minLng, minLat, maxLng, maxLat];
+  return [iconLayer];
 }
 
-/**
- * Find nearest particle to a point
- */
-function findNearestParticle(lng: number, lat: number, particles: ParticleData[]): ParticleData | null {
-  if (particles.length === 0) return null;
-
-  let nearest = particles[0];
-  let minDist = Infinity;
-
-  particles.forEach(p => {
-    const dist = Math.sqrt(
-      Math.pow(p.lng - lng, 2) + Math.pow(p.lat - lat, 2)
-    );
-
-    if (dist < minDist) {
-      minDist = dist;
-      nearest = p;
-    }
-  });
-
-  return nearest;
-}
+const COLOR_RANGE: number[][] = [
+  [56, 189, 248],   // 0-5kt: Light blue
+  [34, 197, 94],    // 5-10kt: Green
+  [250, 204, 21],   // 10-15kt: Yellow
+  [249, 115, 22],   // 15-20kt: Orange
+  [239, 68, 68]     // 20+kt: Red
+];
 
 /**
  * Get color from wind speed

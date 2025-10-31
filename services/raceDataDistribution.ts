@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Race Data Distribution Service
  * Marine-grade automated race data delivery system

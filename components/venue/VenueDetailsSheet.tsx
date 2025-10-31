@@ -19,6 +19,7 @@ import { supabase } from '@/services/supabase';
 import { useRouter } from 'expo-router';
 import { useSavedVenues } from '@/hooks/useSavedVenues';
 import { INFO_ICONS, VENUE_ICONS, getCountryFlag as getFlag } from '@/constants/sailing-icons';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface Venue {
   id: string;
@@ -227,14 +228,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     zIndex: 200,
     paddingBottom: 20,
-    ...(Platform.OS === 'web'
-      ? {
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.15)',
-          backdropFilter: 'blur(20px)',
-        }
-      : {
-          elevation: 10,
-        }),
+    ...getShadowStyle('lg'),
+    ...(Platform.OS !== 'android' ? { shadowOffset: { width: 0, height: -4 } } : {}),
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)' } : {}),
   },
 
   // Drag Handle

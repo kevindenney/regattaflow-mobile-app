@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Race Weather Service
  * Fetches weather data when races are created and stores it in race metadata

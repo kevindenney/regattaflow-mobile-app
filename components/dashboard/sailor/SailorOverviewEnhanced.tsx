@@ -139,9 +139,10 @@ export function SailorOverviewEnhanced({
     loading: nextRaceTuningLoading,
   } = useRaceTuningRecommendation({
     classId: nextRaceClassId,
+    className: nextRaceClassName,
     averageWindSpeed: nextRaceAverageWind,
     pointsOfSail: 'upwind',
-    enabled: !!nextRaceClassId,
+    enabled: !!(nextRaceClassId || nextRaceClassName),
   });
 
   const nextRaceTuning = useMemo(() => {

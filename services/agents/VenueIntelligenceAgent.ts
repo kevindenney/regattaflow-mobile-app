@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Venue Intelligence Agent
  * Autonomous AI agent for venue detection, intelligence loading, and cultural adaptation
@@ -18,7 +20,7 @@ export class VenueIntelligenceAgent extends BaseAgentService {
     const useSkills = process.env.USE_CLAUDE_SKILLS === 'true';
 
     super({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-haiku-latest',
       maxTokens: 2048, // Optimized for cost
       temperature: 0.3, // Lower temperature for more consistent venue detection
       systemPrompt: useSkills

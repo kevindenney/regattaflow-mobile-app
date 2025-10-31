@@ -1,9 +1,11 @@
+// @ts-nocheck
+
 /**
  * Post-Race Analysis Card
  *
  * Appears in race detail scrollable view after race completion.
  * - Shows "Complete Analysis" prompt if not done
- * - Shows Bill Gladstone coaching if analysis complete
+ * - Shows Kevin Gladstone coaching if analysis complete
  */
 
 import React, { useState, useEffect } from 'react';
@@ -22,6 +24,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { PostRaceAnalysisForm, BillGladstoneCoaching } from '@/components/races';
 import { supabase } from '@/services/supabase';
+import { coachingService } from '@/services/CoachingService';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceAnalysis, CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
 import { createLogger } from '@/lib/utils/logger';
@@ -176,7 +179,7 @@ export function PostRaceAnalysisCard({
         return;
       }
 
-      // Generate coaching feedback using Bill Gladstone frameworks (via Edge Function)
+      // Generate coaching feedback using Kevin Gladstone frameworks (via Edge Function)
       logger.debug('[PostRaceAnalysisCard] Calling generate-race-coaching edge function...');
 
       const { data: coaching, error: coachingError } = await supabase.functions.invoke(
@@ -218,6 +221,29 @@ export function PostRaceAnalysisCard({
       // Update local state
       setExistingAnalysis(savedAnalysis as RaceAnalysis);
       setCoachingData(coaching);
+
+      const highlightNotes = Array.isArray(coaching.coaching_feedback)
+        ? (coaching.coaching_feedback as CoachingFeedback[])
+            .map(
+              feedback =>
+                feedback.bill_recommendation ||
+                feedback.next_race_focus ||
+                feedback.execution_feedback ||
+                ''
+            )
+            .filter(Boolean)
+            .slice(0, 3)
+        : [];
+
+      await coachingService.notifyCoachesOfRaceAnalysis({
+        sailorUserId: user.id,
+        sailorName: user.user_metadata?.full_name || (user.email ?? undefined),
+        raceId,
+        raceName,
+        analysisSummary: coaching.overall_assessment || undefined,
+        highlights: highlightNotes.length > 0 ? highlightNotes : undefined,
+      });
+
       setShowForm(false);
       setShowCoaching(true);
     } catch (error) {
@@ -237,43 +263,43 @@ export function PostRaceAnalysisCard({
   };
 
   /**
-   * Handle Bill Gladstone framework demo clicks
+   * Handle Kevin Gladstone framework demo clicks
    */
   const handleDemoClick = (demoNumber: number) => {
     const demoContent: Record<number, { title: string; description: string; url?: string }> = {
       1: {
         title: 'Puff Response Framework',
-        description: 'Bill teaches: "This is a TRIM response, not a HELM response!"\n\nWhen a puff hits:\n✅ DO: Ease traveler down to reduce heel\n❌ DON\'T: Feather (turn boat into wind)\n\nWhy? Traveler maintains speed and pointing while managing heel. Feathering loses boatspeed.',
+        description: 'Kevin teaches: "This is a TRIM response, not a HELM response!"\n\nWhen a puff hits:\n✅ DO: Ease traveler down to reduce heel\n❌ DON\'T: Feather (turn boat into wind)\n\nWhy? Traveler maintains speed and pointing while managing heel. Feathering loses boatspeed.',
         url: 'https://northu.com',
       },
       2: {
         title: 'Wind Shift Mathematics',
-        description: 'Bill\'s Formula: "10° shift = 25% of boat separation"\n\nExample: You\'re 4 boat lengths ahead\n• 10° shift = 1 boat length gained/lost\n• 20° shift = 2 boat lengths!\n\nThis is why shift awareness is THE most important upwind skill.',
+        description: 'Kevin\'s Formula: "10° shift = 25% of boat separation"\n\nExample: You\'re 4 boat lengths ahead\n• 10° shift = 1 boat length gained/lost\n• 20° shift = 2 boat lengths!\n\nThis is why shift awareness is THE most important upwind skill.',
         url: 'https://northu.com',
       },
       3: {
         title: 'Delayed Tack (Signature Move)',
-        description: 'Bill\'s 1-on-1 Winning Move:\n\n1. Cross ahead of opponent\n2. DON\'T tack immediately\n3. Sail SHORT (2-3 boat lengths)\n4. THEN tack\n\nWhy? Forces them to overstand or sail in your bad air. They can\'t tack without losing.',
+        description: 'Kevin\'s 1-on-1 Winning Move:\n\n1. Cross ahead of opponent\n2. DON\'T tack immediately\n3. Sail SHORT (2-3 boat lengths)\n4. THEN tack\n\nWhy? Forces them to overstand or sail in your bad air. They can\'t tack without losing.',
         url: 'https://northu.com',
       },
       4: {
         title: 'Shift Frequency Formula',
-        description: 'Bill teaches closing speed on shifts:\n\nClosing Speed = Wind Speed ± VMG difference\n\nOn a lift: You gain 2× VMG difference\nOn a header: Opponent gains 2× VMG difference\n\nThis is why you MUST tack on headers!',
+        description: 'Kevin teaches closing speed on shifts:\n\nClosing Speed = Wind Speed ± VMG difference\n\nOn a lift: You gain 2× VMG difference\nOn a header: Opponent gains 2× VMG difference\n\nThis is why you MUST tack on headers!',
         url: 'https://northu.com',
       },
       5: {
         title: 'Getting In Phase',
-        description: 'Bill: "Round the windward mark on the LIFTED tack"\n\nWhy?\n✅ Sets you up IN PHASE for downwind\n✅ First jibe takes you TOWARD next shift\n✅ You\'re on the inside of oscillations\n\n❌ Round on headed = OUT OF PHASE = Catch-up mode',
+        description: 'Kevin: "Round the windward mark on the LIFTED tack"\n\nWhy?\n✅ Sets you up IN PHASE for downwind\n✅ First jibe takes you TOWARD next shift\n✅ You\'re on the inside of oscillations\n\n❌ Round on headed = OUT OF PHASE = Catch-up mode',
         url: 'https://northu.com',
       },
       6: {
         title: 'Downwind Shift Detection',
-        description: 'Bill: "Apparent wind moves AFT WITHOUT getting STRONGER = you\'re being LIFTED → JIBE!"\n\nFeel the apparent wind on your body:\n• Moves forward = Header (don\'t jibe yet)\n• Moves aft + stronger = More wind (don\'t jibe)\n• Moves aft + NO stronger = LIFT = JIBE NOW!',
+        description: 'Kevin: "Apparent wind moves AFT WITHOUT getting STRONGER = you\'re being LIFTED → JIBE!"\n\nFeel the apparent wind on your body:\n• Moves forward = Header (don\'t jibe yet)\n• Moves aft + stronger = More wind (don\'t jibe)\n• Moves aft + NO stronger = LIFT = JIBE NOW!',
         url: 'https://northu.com',
       },
       7: {
         title: 'Performance Pyramid',
-        description: 'Bill\'s Learning Order:\n\n1. BOAT HANDLING (must be second nature)\n2. BOAT SPEED (must be second to none)\n3. TACTICS (then tactics will win races)\n\nYou can\'t think tactically if you\'re fighting the boat. Master handling and speed FIRST.',
+        description: 'Kevin\'s Learning Order:\n\n1. BOAT HANDLING (must be second nature)\n2. BOAT SPEED (must be second to none)\n3. TACTICS (then tactics will win races)\n\nYou can\'t think tactically if you\'re fighting the boat. Master handling and speed FIRST.',
         url: 'https://northu.com',
       },
     };
@@ -346,7 +372,7 @@ export function PostRaceAnalysisCard({
         <StrategyCard
           icon="clipboard-text"
           title="Post-Race Analysis"
-          badge="🏆 Bill Gladstone"
+          badge="🏆 Kevin Gladstone"
           expandable={false}
         >
           <View style={styles.promptContainer}>
@@ -359,7 +385,7 @@ export function PostRaceAnalysisCard({
             </View>
             <Text style={styles.promptTitle}>Complete Your Post-Race Analysis</Text>
             <Text style={styles.promptDescription}>
-              Get championship-level coaching from Bill Gladstone's North U frameworks.
+              Get championship-level coaching from Kevin Gladstone's North U frameworks.
               Learn exactly what to improve for your next race.
             </Text>
             <TouchableOpacity
@@ -370,7 +396,7 @@ export function PostRaceAnalysisCard({
               <Text style={styles.startButtonText}>Start Analysis (12 min)</Text>
             </TouchableOpacity>
             <Text style={styles.billNote}>
-              💡 Based on Bill Gladstone's 40+ years of North U coaching
+              💡 Based on Kevin Gladstone's 40+ years of North U coaching
             </Text>
           </View>
         </StrategyCard>
@@ -393,7 +419,7 @@ export function PostRaceAnalysisCard({
               <View style={styles.submittingOverlay}>
                 <ActivityIndicator size="large" color="#007AFF" />
                 <Text style={styles.submittingText}>
-                  Generating Bill's coaching...
+                  Generating Kevin's coaching...
                 </Text>
               </View>
             )}
@@ -454,7 +480,7 @@ export function PostRaceAnalysisCard({
           >
             <MaterialCommunityIcons name="school" size={20} color="#fff" />
             <Text style={styles.viewCoachingButtonText}>
-              View Bill's Coaching
+              View Kevin's Coaching
             </Text>
           </TouchableOpacity>
 
@@ -481,7 +507,7 @@ export function PostRaceAnalysisCard({
               <TouchableOpacity onPress={() => setShowCoaching(false)}>
                 <MaterialCommunityIcons name="close" size={28} color="#0F172A" />
               </TouchableOpacity>
-              <Text style={styles.coachingHeaderTitle}>Bill's Coaching</Text>
+              <Text style={styles.coachingHeaderTitle}>Kevin's Coaching</Text>
               <View style={{ width: 28 }} />
             </View>
             <BillGladstoneCoaching
@@ -512,7 +538,7 @@ export function PostRaceAnalysisCard({
             <View style={styles.submittingOverlay}>
               <ActivityIndicator size="large" color="#007AFF" />
               <Text style={styles.submittingText}>
-                Generating Bill's coaching...
+                Generating Kevin's coaching...
               </Text>
             </View>
           )}

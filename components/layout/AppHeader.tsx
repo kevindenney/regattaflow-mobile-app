@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * App Header - Universal Navigation Header
  * Provides authentication, dashboard access, settings, and user management

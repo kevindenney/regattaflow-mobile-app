@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, AccessibilityInfo, ViewStyle, TextStyle } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  AccessibilityInfo,
+  ViewStyle,
+  TextStyle,
+  StyleProp,
+} from 'react-native';
 
 /**
  * VisuallyHidden
@@ -22,7 +30,11 @@ import { View, Text, StyleSheet, AccessibilityInfo, ViewStyle, TextStyle } from 
  */
 export function VisuallyHidden({ children }: { children: React.ReactNode }) {
   return (
-    <Text style={styles.visuallyHidden} accessibilityElementsHidden={false}>
+    <Text
+      style={styles.visuallyHidden}
+      accessibilityElementsHidden={false}
+      importantForAccessibility="yes"
+    >
       {children}
     </Text>
   );
@@ -60,7 +72,7 @@ interface LiveRegionProps {
   polite?: boolean;
   /** Assertive: interrupts immediately */
   assertive?: boolean;
-  style?: ViewStyle | TextStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export function LiveRegion({ children, polite = true, assertive = false, style }: LiveRegionProps) {
@@ -110,7 +122,6 @@ export function Heading({ children, level, style }: HeadingProps) {
   return (
     <Text
       accessibilityRole="header"
-      accessibilityLevel={level}
       style={headingStyles}
     >
       {children}
@@ -225,10 +236,7 @@ const styles = StyleSheet.create({
     height: 1,
     margin: -1,
     padding: 0,
-    overflow: 'hidden',
-    clip: 'rect(0, 0, 0, 0)',
-    whiteSpace: 'nowrap',
-    borderWidth: 0,
+    opacity: 0,
   },
   heading1: {
     fontSize: 32,

@@ -37,10 +37,47 @@ export function DownwindStrategyCard({
 
   useEffect(() => {
     loadDownwindStrategy();
-  }, [raceId]);
+
+    // Subscribe to realtime changes for this race's strategy
+    const subscription = supabase
+      .channel(`race_strategy_downwind_${raceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_strategies',
+          filter: `regatta_id=eq.${raceId}`,
+        },
+        (payload) => {
+          console.log('[DownwindStrategyCard] Realtime update received:', payload);
+          // Reload strategy when it changes
+          loadDownwindStrategy();
+        }
+      )
+      .subscribe();
+
+    // Poll for strategy updates every 3 seconds if no data yet
+    // This handles the case where strategy is generated after component mounts
+    const pollInterval = setInterval(() => {
+      if (runs.length === 0 && !loading) {
+        console.log('[DownwindStrategyCard] Polling for strategy updates...');
+        loadDownwindStrategy();
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [raceId, runs.length, loading]);
 
   const loadDownwindStrategy = async () => {
+    console.log('[DownwindStrategyCard] Loading strategy for raceId:', raceId);
+    console.log('[DownwindStrategyCard] Current user:', user?.id);
+
     if (!user) {
+      console.log('[DownwindStrategyCard] No user found, skipping load');
       setLoading(false);
       return;
     }
@@ -49,6 +86,11 @@ export function DownwindStrategyCard({
       setLoading(true);
       setError(null);
 
+      console.log('[DownwindStrategyCard] Querying race_strategies table with:', {
+        regatta_id: raceId,
+        user_id: user.id
+      });
+
       const { data, error: fetchError } = await supabase
         .from('race_strategies')
         .select('strategy_content')
@@ -56,21 +98,67 @@ export function DownwindStrategyCard({
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (fetchError) throw fetchError;
+      console.log('[DownwindStrategyCard] Query result:', {
+        data: data ? 'Data received' : 'No data',
+        error: fetchError,
+        hasStrategyContent: !!data?.strategy_content
+      });
+
+      if (fetchError) {
+        console.error('[DownwindStrategyCard] Fetch error:', fetchError);
+        throw fetchError;
+      }
 
       if (data && data.strategy_content) {
         const strategyContent = data.strategy_content as any;
+        console.log('[DownwindStrategyCard] Strategy content structure:', {
+          hasTacticalPlan: !!strategyContent.tacticalPlan,
+          hasRecommendations: !!strategyContent.tacticalPlan?.recommendations,
+          recommendationsCount: strategyContent.tacticalPlan?.recommendations?.length || 0,
+          hasFullAIStrategy: !!strategyContent.fullAIStrategy,
+          hasRunStrategy: !!strategyContent.fullAIStrategy?.strategy?.runStrategy
+        });
 
-        // Extract downwind runs from tacticalPlan
+        let downwindRuns: RunRecommendation[] = [];
+
+        // Try new structure first: tacticalPlan.recommendations
         if (strategyContent.tacticalPlan?.recommendations) {
-          const downwindRuns = strategyContent.tacticalPlan.recommendations.filter(
+          downwindRuns = strategyContent.tacticalPlan.recommendations.filter(
             (rec: RunRecommendation) => rec.leg.toLowerCase().includes('downwind')
           );
+          console.log('[DownwindStrategyCard] Found downwind runs from tacticalPlan:', downwindRuns.length);
+        }
+        // Fallback to old structure: fullAIStrategy.strategy.runStrategy
+        else if (strategyContent.fullAIStrategy?.strategy?.runStrategy) {
+          console.log('[DownwindStrategyCard] Using fullAIStrategy.strategy.runStrategy (legacy format)');
+
+          // Transform runStrategy to RunRecommendation format
+          const runStrategy = strategyContent.fullAIStrategy.strategy.runStrategy;
+          downwindRuns = runStrategy.map((run: any, index: number) => ({
+            leg: `Downwind Leg ${index + 1}`,
+            favoredSide: 'middle', // Default, could be extracted from action if needed
+            reasoning: run.reasoning || run.theory || '',
+            keyPoints: [
+              run.execution,
+              run.action,
+              `Confidence: ${run.confidence}%`
+            ].filter(Boolean),
+            confidence: run.confidence || 70,
+            theory: run.theory,
+            execution: run.execution
+          }));
+          console.log('[DownwindStrategyCard] Transformed run strategy to downwind runs:', downwindRuns.length);
+        }
+
+        if (downwindRuns.length > 0) {
+          console.log('[DownwindStrategyCard] Final downwind runs:', downwindRuns);
           setRuns(downwindRuns);
         } else {
+          console.warn('[DownwindStrategyCard] No downwind strategy found in any format');
           setError('No downwind strategy found. Generate your tactical plan first.');
         }
       } else {
+        console.warn('[DownwindStrategyCard] No data or strategy_content found');
         setError('No strategy found. Generate your tactical plan first.');
       }
     } catch (err) {
@@ -206,7 +294,7 @@ export function DownwindStrategyCard({
             <View style={styles.tipBox}>
               <MaterialCommunityIcons name="waves" size={16} color="#8B5CF6" />
               <Text style={styles.tipText}>
-                <Text style={styles.tipBold}>Bill's Tip:</Text> Apparent wind moves AFT without getting STRONGER = LIFT = JIBE!
+                <Text style={styles.tipBold}>Kevin's Tip:</Text> Apparent wind moves AFT without getting STRONGER = LIFT = JIBE!
               </Text>
             </View>
 

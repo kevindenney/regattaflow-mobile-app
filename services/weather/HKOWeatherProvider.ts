@@ -19,7 +19,7 @@ import {
   TideData,
   ConfidenceLevel,
   TideState
-} from '@/types/raceEvents';
+} from '@/types/environmental';
 
 // HKO API base URL
 const HKO_API_BASE = 'https://data.weather.gov.hk/weatherAPI/opendata';

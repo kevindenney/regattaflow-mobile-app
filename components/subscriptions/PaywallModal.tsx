@@ -127,7 +127,7 @@ export default function PaywallModal({
 
   const handleViewAllPlans = () => {
     onClose();
-    router.push('/(app)/pricing');
+    router.push('/legacy');
   };
 
   return (

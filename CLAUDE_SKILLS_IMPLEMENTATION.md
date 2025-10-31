@@ -2,7 +2,7 @@
 
 ## 🎉 What We Just Did
 
-Successfully implemented Claude Skills API integration for RegattaFlow's race strategy engine, combining Bill Gladstone's North U Performance Racing Tactics with Steve Colgate's championship execution techniques.
+Successfully implemented Claude Skills API integration for RegattaFlow's race strategy engine, combining Kevin Gladstone's North U Performance Racing Tactics with Kevin Colgate's championship execution techniques.
 
 ## ✅ Completed Tasks
 
@@ -12,7 +12,7 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
 
 ### 2. Custom Skill Creation
 - ✅ Created `/skills/race-strategy-analyst/SKILL.md`
-- ✅ Documented all Bill Gladstone frameworks:
+- ✅ Documented all Kevin Gladstone frameworks:
   - Wind Shift Mathematics ("10° shift = 25% of boat separation")
   - Puff Response (header+less=tack, lift+more=stay)
   - Delayed Tack (signature move for 3-4 length advantage)
@@ -20,7 +20,7 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
   - Getting In Phase (tack on headers, stay on lifts)
   - Start Line Bias (5° bias = ~2 boat-length advantage)
 
-- ✅ Documented all Steve Colgate execution techniques:
+- ✅ Documented all Kevin Colgate execution techniques:
   - Tight Cover Timing
   - Rhythmic Jibing with Telltale Awareness
   - Compass Discipline
@@ -66,8 +66,8 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
 
 ### Files Created
 1. `/skills/race-strategy-analyst/SKILL.md`
-   - Complete Bill Gladstone frameworks (theory/what/why)
-   - Complete Steve Colgate techniques (execution/how)
+   - Complete Kevin Gladstone frameworks (theory/what/why)
+   - Complete Kevin Colgate techniques (execution/how)
    - Confidence ratings (85-95% for physics-based tactics)
    - Champion examples and stories
    - Integration guidelines for AI
@@ -182,8 +182,8 @@ console.log(strategy.strategy.startStrategy);
 - [Anthropic Skills Documentation](https://docs.claude.com/en/api/skills-guide)
 - [Claude Skills GitHub](https://github.com/anthropics/skills)
 - [Skills API Quickstart](https://docs.claude.com/en/api/skills-guide)
-- Bill Gladstone's North U Performance Racing Tactics
-- Steve Colgate's Offshore Sailing School techniques
+- Kevin Gladstone's North U Performance Racing Tactics
+- Kevin Colgate's Offshore Sailing School techniques
 
 ## ⚠️ Important Notes
 

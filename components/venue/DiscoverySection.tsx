@@ -11,11 +11,11 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { NetworkPlace, ServiceType, SailingNetworkService } from '@/services/SailingNetworkService';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface DiscoverySectionProps {
   locationName: string;
@@ -241,7 +241,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#333',
-    outlineStyle: 'none',
   },
 
   // Filters
@@ -285,9 +284,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#e1e5e9',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }
-      : { elevation: 1 }),
+    ...getShadowStyle('xs'),
   },
   placeIcon: {
     width: 40,

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Dimensions, Animated, PanGestureHandler, State } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import {
   Map,
   Upload,

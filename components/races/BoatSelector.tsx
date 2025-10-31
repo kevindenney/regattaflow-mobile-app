@@ -48,6 +48,7 @@ export function BoatSelector({
   const loadBoats = async () => {
     if (!user) {
       logger.warn('No user found - cannot load boats');
+      console.log('🚢 [BoatSelector] No user found - cannot load boats');
       setLoading(false);
       setError('Not authenticated');
       return;
@@ -55,12 +56,14 @@ export function BoatSelector({
 
     if (!user.id) {
       logger.error('User object missing ID');
+      console.log('🚢 [BoatSelector] User object missing ID');
       setLoading(false);
       setError('User ID not found');
       return;
     }
 
     logger.debug(`Starting boat load for user: ${user.id}`);
+    console.log(`🚢 [BoatSelector] Loading boats for user: ${user.id} (${user.email})`);
     setLoading(true);
     setError(null);
 
@@ -81,6 +84,8 @@ export function BoatSelector({
       }
 
       logger.debug(`Successfully loaded ${loadedBoats.length} boats`);
+      console.log(`🚢 [BoatSelector] Successfully loaded ${loadedBoats.length} boats:`,
+        loadedBoats.map(b => `${b.name} (${b.boat_class?.name}) - Primary: ${b.is_primary}`));
       setBoats(loadedBoats);
       setError(null); // Clear any previous errors
 
@@ -89,6 +94,7 @@ export function BoatSelector({
         const defaultBoat = loadedBoats.find((b) => b.is_primary);
         if (defaultBoat) {
           logger.debug(`Auto-selecting default boat: ${defaultBoat.id}`);
+          console.log(`🚢 [BoatSelector] Auto-selecting default boat: ${defaultBoat.name} (${defaultBoat.id})`);
           onSelect(defaultBoat.id);
         }
       }

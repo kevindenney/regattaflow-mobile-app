@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SavedNetworkSection } from './SavedNetworkSection';
 import { SailingNetworkService, NetworkPlace, ServiceType } from '@/services/SailingNetworkService';
 import { supabase } from '@/services/supabase';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface NetworkSidebarProps {
   isCollapsed: boolean;
@@ -304,14 +305,9 @@ const styles = StyleSheet.create({
     width: 380,
     backgroundColor: 'rgba(255, 255, 255, 0.97)',
     zIndex: 100,
-    ...(Platform.OS === 'web'
-      ? {
-          boxShadow: '2px 0 12px rgba(0, 0, 0, 0.15)',
-          backdropFilter: 'blur(20px)',
-        }
-      : {
-          elevation: 8,
-        }),
+    ...getShadowStyle('lg'),
+    ...(Platform.OS !== 'android' ? { shadowOffset: { width: 2, height: 0 } } : {}),
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)' } : {}),
   },
 
   // Search Container (Google Maps style)
@@ -324,9 +320,7 @@ const styles = StyleSheet.create({
     marginTop: Platform.OS === 'web' ? 20 : 60,
     paddingHorizontal: 12,
     height: 48,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)' }
-      : { elevation: 3 }),
+    ...getShadowStyle('sm'),
     borderWidth: 1,
     borderColor: '#e1e5e9',
   },
@@ -337,7 +331,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#1a1a1a',
-    outlineStyle: 'none',
   },
   clearButton: {
     padding: 4,
@@ -452,9 +445,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 101,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '2px 2px 8px rgba(0, 0, 0, 0.2)' }
-      : { elevation: 5 }),
+    ...getShadowStyle('sm'),
+    ...(Platform.OS !== 'android' ? { shadowOffset: { width: 2, height: 2 } } : {}),
   },
   toggleButtonCollapsed: {
     left: 0,

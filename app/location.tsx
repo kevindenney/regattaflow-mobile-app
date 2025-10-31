@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Dimensions, Platform, type ViewStyle } from 'react-native';
 import { Image } from '@/components/ui';
 import { Search, MapPin, Navigation, Wifi, Navigation2, ChevronRight, RefreshCw } from 'lucide-react-native';
 
@@ -39,6 +39,13 @@ export default function LocationScreen() {
     detectLocation();
   }, []);
 
+  const refreshIconStyle = isDetecting
+    ? [
+        { transform: [{ rotate: '360deg' }] },
+        Platform.OS === 'web' ? ({ transition: 'transform 1s linear' } as ViewStyle) : null,
+      ]
+    : undefined;
+
   return (
     <View className="flex-1 bg-white">
       {/* Progress Header */}
@@ -76,7 +83,7 @@ export default function LocationScreen() {
                 <RefreshCw 
                   size={20} 
                   className={isDetecting ? "text-gray-400" : "text-blue-600"} 
-                  style={isDetecting ? { transform: [{ rotate: '360deg' }], transition: 'transform 1s linear' } : {}}
+                  style={refreshIconStyle}
                 />
               </TouchableOpacity>
             </View>

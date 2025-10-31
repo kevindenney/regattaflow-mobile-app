@@ -8,6 +8,7 @@ import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSettin
 
 export interface UseRaceTuningOptions {
   classId?: string | null;
+  className?: string | null;
   averageWindSpeed?: number | null;
   pointsOfSail?: 'upwind' | 'downwind' | 'reach' | 'all';
   limit?: number;
@@ -72,6 +73,7 @@ function selectTopSettings(settings: RaceTuningSetting[], limit: number): RigSet
 export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseRaceTuningResult {
   const {
     classId,
+    className,
     averageWindSpeed,
     pointsOfSail = 'upwind',
     limit = 1,
@@ -83,7 +85,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const [error, setError] = useState<Error | null>(null);
 
   const fetchRecommendation = useCallback(async () => {
-    if (!enabled || !classId) {
+    if (!enabled || (!classId && !className)) {
       setRecommendation(null);
       return;
     }
@@ -94,6 +96,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     try {
       const [result] = await raceTuningService.getRecommendations({
         classId,
+        className,
         averageWindSpeed: averageWindSpeed ?? undefined,
         pointsOfSail,
         limit,
@@ -106,7 +109,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     } finally {
       setLoading(false);
     }
-  }, [enabled, classId, averageWindSpeed, pointsOfSail, limit]);
+  }, [enabled, classId, className, averageWindSpeed, pointsOfSail, limit]);
 
   useEffect(() => {
     let cancelled = false;

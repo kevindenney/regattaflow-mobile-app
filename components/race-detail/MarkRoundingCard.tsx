@@ -38,7 +38,40 @@ export function MarkRoundingCard({
 
   useEffect(() => {
     loadMarkRoundings();
-  }, [raceId]);
+
+    // Subscribe to realtime changes for this race's strategy
+    const subscription = supabase
+      .channel(`race_strategy_marks_${raceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_strategies',
+          filter: `regatta_id=eq.${raceId}`,
+        },
+        (payload) => {
+          console.log('[MarkRoundingCard] Realtime update received:', payload);
+          // Reload strategy when it changes
+          loadMarkRoundings();
+        }
+      )
+      .subscribe();
+
+    // Poll for strategy updates every 3 seconds if no data yet
+    // This handles the case where strategy is generated after component mounts
+    const pollInterval = setInterval(() => {
+      if (roundings.length === 0 && !loading) {
+        console.log('[MarkRoundingCard] Polling for strategy updates...');
+        loadMarkRoundings();
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [raceId, roundings.length, loading]);
 
   const loadMarkRoundings = async () => {
     if (!user) {

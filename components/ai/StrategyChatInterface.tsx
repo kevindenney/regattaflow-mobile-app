@@ -183,13 +183,17 @@ export function StrategyChatInterface({
     let response = `Based on my analysis of your sailing documents, here's what I found:\n\n`;
 
     insights.forEach((insight, index) => {
-      const emoji = {
+      const emojiMap: Record<StrategyInsight['type'], string> = {
         tactical: '🎯',
         strategic: '🧭',
         rules: '📋',
         conditions: '🌤️',
+        safety: '🛟',
+        cultural: '🤝',
         general: '💡'
-      }[insight.type] || '💡';
+      };
+
+      const emoji = emojiMap[insight.type] ?? '💡';
 
       response += `${emoji} **${insight.title}**\n`;
       response += `${insight.description}\n`;

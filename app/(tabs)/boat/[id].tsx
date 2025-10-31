@@ -6,7 +6,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -55,10 +55,12 @@ interface RigTuning {
 
 type TabType = 'overview' | 'crew' | 'sails' | 'rigging' | 'equipment' | 'maintenance' | 'performance' | 'tuning3d' | 'guides';
 
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
 const TAB_CONFIG: Array<{
   key: TabType;
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IoniconName;
   description: string;
   badge?: 'crew' | 'sails' | 'maintenance' | 'performance';
 }> = [
@@ -204,6 +206,12 @@ export default function BoatDetailScreen() {
     return ownership.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
+  const { stats: performanceStats, loading: performanceLoading } = useBoatPerformanceStats({
+    sailorId: boat?.sailorId,
+    sailNumber: boat?.sailNumber,
+    className: boat?.className,
+  });
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -229,38 +237,37 @@ export default function BoatDetailScreen() {
     );
   }
 
-  const { stats: performanceStats, loading: performanceLoading } = useBoatPerformanceStats({
-    sailorId: boat.sailorId,
-    sailNumber: boat.sailNumber,
-    className: boat.className,
-  });
-
   const summaryCounts = {
     crew: tabCounts.crew ?? undefined,
     sails: tabCounts.sails ?? undefined,
     maintenance: tabCounts.maintenance ?? undefined,
   };
 
-  const heroQuickFacts = [
+  const heroQuickFacts: Array<{
+    label: string;
+    value: string;
+    icon: IoniconName;
+    highlight?: boolean;
+  }> = [
     {
       label: 'Class',
       value: boat.className || 'Unclassified',
-      icon: 'sail-outline' as const,
+      icon: 'boat-outline',
     },
     {
       label: 'Sail Number',
       value: boat.sailNumber || 'Not set',
-      icon: 'flag-outline' as const,
+      icon: 'flag-outline',
     },
     {
       label: 'Ownership',
       value: formatOwnership(boat.ownership),
-      icon: 'person-outline' as const,
+      icon: 'person-outline',
     },
     {
       label: 'Status',
       value: boat.isPrimary ? 'Primary campaign boat' : 'Fleet boat',
-      icon: boat.isPrimary ? 'ribbon' : 'boat-outline',
+      icon: boat.isPrimary ? 'ribbon-outline' : 'boat-outline',
       highlight: boat.isPrimary,
     },
   ];
@@ -410,6 +417,7 @@ export default function BoatDetailScreen() {
             performanceStats={performanceStats}
             performanceLoading={performanceLoading}
             summaryCounts={summaryCounts}
+            onNavigate={setActiveTab}
           />
         )}
         {activeTab === 'crew' && (
@@ -463,7 +471,11 @@ export default function BoatDetailScreen() {
           </ScrollView>
         )}
         {activeTab === 'guides' && (
-          <TuningGuideList boatClass={boat.className} />
+          <TuningGuideList
+            boatClass={boat.className}
+            classId={boat.classId}
+            sailorId={boat.sailorId}
+          />
         )}
       </View>
 

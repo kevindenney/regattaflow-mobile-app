@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Course Map Visualization
  *

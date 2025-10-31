@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';

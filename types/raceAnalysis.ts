@@ -1,7 +1,37 @@
 /**
  * Post-Race Analysis Types
- * Structured analysis with Bill Gladstone framework integration
+ * Structured analysis with Kevin Gladstone framework integration
  */
+
+export interface RaceTimerSessionSummary {
+  id: string;
+  start_time: string;
+  regattas?: {
+    id: string;
+    name?: string | null;
+    start_date?: string | null;
+  } | null;
+  fleet_size?: number | null;
+  position?: number | null;
+  duration_seconds?: number | null;
+  wind_speed?: number | null;
+  wind_direction?: number | null;
+  wave_height?: number | null;
+}
+
+export interface AiCoachAnalysisSummary {
+  timer_session_id: string;
+  confidence_score?: number | null;
+  overall_summary?: string | null;
+  start_analysis?: string | null;
+  upwind_analysis?: string | null;
+  downwind_analysis?: string | null;
+  tactical_decisions?: string | null;
+  boat_handling?: string | null;
+  recommendations?: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export interface RaceAnalysis {
   id: string;
@@ -110,7 +140,7 @@ export interface CoachingFeedback {
   your_approach: string;
   bill_recommendation: string;
 
-  // Steve Colgate Execution Analysis (Phase 3 Enhancement)
+  // Kevin Colgate Execution Analysis (Phase 3 Enhancement)
   colgate_execution_technique?: string; // Champion execution technique that applies
   execution_score?: number; // 0-100: How well sailor executed the technique
   execution_feedback?: string; // Specific execution coaching from Colgate's methods
@@ -119,7 +149,7 @@ export interface CoachingFeedback {
   confidence: number; // 0-100
   impact: 'high' | 'medium' | 'low';
   next_race_focus: string;
-  demo_reference?: string; // e.g., "./bill-demo 2"
+  demo_reference?: string; // e.g., "./Kevin-demo 2"
 }
 
 export type RacePhase =
@@ -181,7 +211,7 @@ export interface AnalysisStep {
   title: string;
   description?: string;
   questions: AnalysisQuestion[];
-  bill_context?: string; // Bill Gladstone framework hint for this section
+  bill_context?: string; // Kevin Gladstone framework hint for this section
 }
 
 export interface AnalysisQuestion {
@@ -208,7 +238,7 @@ export type QuestionType =
 export interface QuestionOption {
   value: string;
   label: string;
-  bill_framework_note?: string; // "✅ Bill's recommendation" or "⚠️ Consider Bill's approach"
+  bill_framework_note?: string; // "✅ Kevin's recommendation" or "⚠️ Consider Kevin's approach"
 }
 
 export interface ValidationRule {

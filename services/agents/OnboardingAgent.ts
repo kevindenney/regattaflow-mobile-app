@@ -11,7 +11,7 @@ import { supabase } from '../supabase';
 export class OnboardingAgent extends BaseAgentService {
   constructor() {
     super({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-haiku-latest',
       maxTokens: 4096,
       temperature: 0.7,
       systemPrompt: `You are an expert sailing onboarding assistant for RegattaFlow. Your goal is to help sailors set up their profile by:

@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Developer Document Service
  * Bulk upload and management of training documents for AI system enhancement

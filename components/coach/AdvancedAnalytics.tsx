@@ -10,12 +10,14 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '@/providers/AuthProvider';
 import ComputerVisionService from '../../services/ComputerVisionService';
 import IoTSensorService from '../../services/IoTSensorService';
 
+type AnalyticsTabId = 'realtime' | 'trim' | 'sensors' | 'vision';
+
 interface AnalyticsTab {
-  id: string;
+  id: AnalyticsTabId;
   title: string;
   icon: string;
 }
@@ -306,17 +308,17 @@ function SensorHealth({ health }: SensorHealthProps) {
 
 export default function AdvancedAnalytics() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('realtime');
+  const [activeTab, setActiveTab] = useState<AnalyticsTabId>('realtime');
   const [loading, setLoading] = useState(false);
-  const [telemetry, setTelemetry] = useState(null);
-  const [sailTelemetry, setSailTelemetry] = useState(null);
-  const [performanceMetrics, setPerformanceMetrics] = useState(null);
-  const [sailTrimAnalysis, setSailTrimAnalysis] = useState(null);
-  const [analysisImageUri, setAnalysisImageUri] = useState(null);
-  const [sensorHealth, setSensorHealth] = useState(null);
+  const [telemetry, setTelemetry] = useState<any>(null);
+  const [sailTelemetry, setSailTelemetry] = useState<any>(null);
+  const [performanceMetrics, setPerformanceMetrics] = useState<any>(null);
+  const [sailTrimAnalysis, setSailTrimAnalysis] = useState<any>(null);
+  const [analysisImageUri, setAnalysisImageUri] = useState<string | undefined>(undefined);
+  const [sensorHealth, setSensorHealth] = useState<any>(null);
   const [isRecording, setIsRecording] = useState(false);
 
-  const updateInterval = useRef<ReturnType<typeof setInterval>>();
+  const updateInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     initializeServices();
@@ -325,6 +327,7 @@ export default function AdvancedAnalytics() {
     return () => {
       if (updateInterval.current) {
         clearInterval(updateInterval.current);
+        updateInterval.current = null;
       }
     };
   }, []);
@@ -375,7 +378,7 @@ export default function AdvancedAnalytics() {
     try {
       const { imageUri, analysis } = await ComputerVisionService.captureAndAnalyzeTrim();
       setSailTrimAnalysis(analysis);
-      setAnalysisImageUri(imageUri);
+      setAnalysisImageUri(imageUri ?? undefined);
       setActiveTab('trim');
     } catch (error) {
       console.error('Error capturing and analyzing:', error);

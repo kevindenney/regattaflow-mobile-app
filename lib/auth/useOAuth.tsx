@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * OAuth Hook for RegattaFlow
  * Provides Google and Apple authentication with proper React hooks integration

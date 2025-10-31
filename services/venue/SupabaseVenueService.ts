@@ -227,7 +227,7 @@ export class SupabaseVenueService {
           venueType: venue.venue_type,
           establishedYear: venue.established_year,
           timeZone: venue.time_zone,
-          primaryClubs: venue.yacht_clubs || [],
+          primaryClubs: [],
           sailingConditions: {
             windPatterns: [],
             typicalConditions: {
@@ -243,7 +243,7 @@ export class SupabaseVenueService {
           culturalContext: {
             primaryLanguages: [{ code: 'en', name: 'English', prevalence: 'primary' }],
             sailingCulture: {
-              tradition: 'modern',
+              tradition: 'established',
               competitiveness: 'regional',
               formality: 'relaxed',
               inclusivity: 'welcoming',
@@ -270,7 +270,7 @@ export class SupabaseVenueService {
           weatherSources: {
             primary: {
               name: 'Generic Weather Service',
-              type: 'commercial',
+              type: 'global_model',
               region: venue.region,
               accuracy: 'moderate',
               forecastHorizon: 72,
@@ -284,7 +284,7 @@ export class SupabaseVenueService {
           localServices: [],
           createdAt: new Date(venue.created_at),
           updatedAt: new Date(venue.updated_at),
-          dataQuality: venue.data_quality
+          dataQuality: (venue.data_quality as 'verified' | 'community' | 'estimated') || 'estimated'
         }));
 
         return venues;

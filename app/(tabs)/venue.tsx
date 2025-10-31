@@ -368,12 +368,6 @@ export default function VenueIntelligenceScreen() {
     initVenue();
   }, [initializeDetection, setVenueManually]);
 
-  // Handle venue selection from sidebar
-  const handleVenueSelect = async (venue: Venue) => {
-    await setVenueManually(venue.id);
-    setSelectedVenueForSheet(venue); // Show details sheet for selected venue
-  };
-
   // Handle marker press on map
   const handleMarkerPress = (venue: Venue) => {
     setSelectedVenueForSheet(venue);
@@ -399,13 +393,11 @@ export default function VenueIntelligenceScreen() {
       <View style={styles.mapContainer}>
         <VenueMapView
           currentVenue={currentVenue}
-          onVenueSelect={handleVenueSelect}
           onMarkerPress={handleMarkerPress}
           showAllVenues={true}
           selectedVenue={selectedVenueForSheet}
           showOnlySavedVenues={showOnlySavedVenues}
           savedVenueIds={savedVenueIds}
-          is3DEnabled={isThreeDEnabled}
           mapLayers={mapLayers}
         />
       </View>
@@ -518,7 +510,7 @@ export default function VenueIntelligenceScreen() {
         {currentVenue && (
           <TouchableOpacity
             style={[styles.aiDetectionButton, { backgroundColor: '#10B981', marginBottom: 12 }]}
-            onPress={handleAskAIAboutVenue}
+            onPress={() => handleAskAIAboutVenue()}
             disabled={loadingVenueAnalysis}
           >
             {loadingVenueAnalysis ? (

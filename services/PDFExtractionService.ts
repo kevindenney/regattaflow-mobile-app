@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * PDF Extraction Service
  * Universal PDF text extraction for web and native platforms

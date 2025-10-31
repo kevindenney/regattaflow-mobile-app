@@ -19,7 +19,7 @@ import {
   TideData,
   ConfidenceLevel,
   TideState
-} from '@/types/raceEvents';
+} from '@/types/environmental';
 
 const OWM_API_BASE = 'https://api.openweathermap.org/data/2.5';
 

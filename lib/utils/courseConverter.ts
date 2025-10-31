@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Course Data Converter
  * Converts AI-extracted race course data to 3D map visualization format

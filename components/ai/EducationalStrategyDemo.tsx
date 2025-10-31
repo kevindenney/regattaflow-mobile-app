@@ -257,9 +257,9 @@ export const EducationalStrategyDemo: React.FC<EducationalStrategyDemoProps> = (
             🏆 {venueId} Educational Insights
           </Text>
           <Text style={styles.venueInsightsStats}>
-            {venueInsights.tacticalKnowledge?.length || 0} Tactical Insights • {' '}
-            {venueInsights.safetyStandards?.length || 0} Safety Standards • {' '}
-            {venueInsights.culturalProtocols?.length || 0} Cultural Protocols
+            {venueInsights.tacticalKnowledge?.length ?? 0} Tactical Insights • {' '}
+            {venueInsights.safetyStandards?.length ?? 0} Safety Standards • {' '}
+            {venueInsights.racingProtocols?.length ?? 0} Cultural Protocols
           </Text>
         </View>
       )}

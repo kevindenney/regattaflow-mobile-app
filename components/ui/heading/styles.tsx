@@ -1,5 +1,6 @@
 import { tva } from '@gluestack-ui/nativewind-utils/tva';
 import { isWeb } from '@gluestack-ui/nativewind-utils/IsWeb';
+import type { VariantProps } from '@gluestack-ui/nativewind-utils';
 const baseStyle = isWeb
   ? 'font-sans tracking-sm bg-transparent border-0 box-border display-inline list-none margin-0 padding-0 position-relative text-start no-underline whitespace-pre-wrap word-wrap-break-word'
   : '';
@@ -41,3 +42,6 @@ export const headingStyle = tva({
     },
   },
 });
+
+export type HeadingVariants = VariantProps<typeof headingStyle>;
+export type HeadingSize = NonNullable<HeadingVariants['size']>;

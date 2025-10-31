@@ -17,7 +17,7 @@ export class DocumentProcessingAgent extends BaseAgentService {
 
   constructor() {
     super({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-haiku-latest',
       maxTokens: 3000,
       temperature: 0.4, // Balanced for extraction accuracy
       systemPrompt: `You are a sailing document processing specialist for RegattaFlow.

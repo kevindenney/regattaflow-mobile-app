@@ -41,8 +41,8 @@ export default function DashboardRedirect() {
         break;
 
       default:
-        // No user type - redirect to persona selection
-        router.replace('/(auth)/persona-selection');
+        // Fallback to sailor experience when role is missing
+        router.replace('/(tabs)/races');
     }
   }, [userProfile, loading, ready]);
 

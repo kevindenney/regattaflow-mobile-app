@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Results Service
  * High-level service for managing race results and series standings

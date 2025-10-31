@@ -69,12 +69,17 @@ export interface RaceReminderData {
 export interface CoachNotificationData {
   coach_name: string;
   coach_email: string;
-  notification_type: 'new_booking' | 'cancellation' | 'payment_received';
+  notification_type: 'new_booking' | 'cancellation' | 'payment_received' | 'analysis_shared';
   sailor_name?: string;
   session_date?: string;
   amount?: number;
   currency?: string;
   message?: string;
+  race_name?: string;
+  regatta_name?: string;
+  analysis_summary?: string;
+  highlights?: string[];
+  analysis_url?: string;
 }
 
 export interface ClubNotificationData {
@@ -767,6 +772,22 @@ RegattaFlow - Your Complete Sailing Platform
           <p>The payment will be transferred to your connected account according to your payout schedule.</p>
         `;
         break;
+      case 'analysis_shared': {
+        subject = `New Race Analysis from ${data.sailor_name || 'your sailor'}`;
+        const summary = data.analysis_summary || data.message;
+        const highlights = (data.highlights || []).filter(Boolean);
+        const highlightList = highlights.length
+          ? `<ul>${highlights.map((item) => `<li>${item}</li>`).join('')}</ul>`
+          : '';
+        content = `
+          <p>${data.sailor_name || 'Your sailor'} just shared a fresh post-race analysis${data.race_name ? ` for <strong>${data.race_name}</strong>` : ''}.</p>
+          ${data.regatta_name ? `<p><strong>Regatta:</strong> ${data.regatta_name}</p>` : ''}
+          ${summary ? `<p><strong>Summary:</strong> ${summary}</p>` : ''}
+          ${highlightList}
+          <p>Log in to review the AI insights and respond with coaching feedback.</p>
+        `;
+        break;
+      }
     }
 
     const html = `
@@ -800,11 +821,19 @@ RegattaFlow - Your Complete Sailing Platform
       </html>
     `;
 
+    const textContent = content
+      .replace(/<li>/g, '- ')
+      .replace(/<\/li>/g, '\n')
+      .replace(/<\/ul>/g, '\n')
+      .replace(/<ul>/g, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ');
+
     const text = `COACH NOTIFICATION
 
 Hi ${data.coach_name},
 
-${content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')}
+${textContent}
 
 View Dashboard: https://regattaflow.com/coach/dashboard
 

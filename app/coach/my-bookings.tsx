@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { coachingService } from '@/services/CoachingService';
+import { format, formatDistanceToNow } from 'date-fns';
 
 export default function MyBookingsScreen() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export default function MyBookingsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<string>('all');
+  const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [completedSessions, setCompletedSessions] = useState<any[]>([]);
 
   useEffect(() => {
     loadBookings();
@@ -27,8 +30,17 @@ export default function MyBookingsScreen() {
     try {
       setLoading(true);
       const statusFilter = filter === 'all' ? undefined : filter;
-      const results = await coachingService.getSailorBookingRequests(statusFilter);
+      const [results, sessions] = await Promise.all([
+        coachingService.getSailorBookingRequests(statusFilter),
+        coachingService.getSailorSessions()
+      ]);
       setBookings(results);
+      const completed = sessions.filter((session: any) => session.status === 'completed');
+      const upcoming = sessions.filter((session: any) =>
+        session.status === 'scheduled' || session.status === 'confirmed' || session.status === 'pending'
+      );
+      setCompletedSessions(completed);
+      setUpcomingSessions(upcoming);
     } catch (error) {
       console.error('Error loading bookings:', error);
     } finally {
@@ -212,6 +224,63 @@ export default function MyBookingsScreen() {
             </View>
           ))
         )}
+
+        {upcomingSessions.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
+            {upcomingSessions.map((session) => (
+              <View key={session.id} style={styles.sessionCard}>
+                <View style={styles.sessionHeaderRow}>
+                  <Text style={styles.sessionCoach}>{session.coach?.display_name || 'Coach'}</Text>
+                  {session.scheduled_at && (
+                    <Text style={styles.sessionDate}>
+                      {format(new Date(session.scheduled_at), 'MMM d, h:mm a')}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.sessionTypeLabel}>
+                  {session.session_type?.replace('_', ' ') || 'Session'}
+                </Text>
+                {session.location_notes && (
+                  <Text style={styles.sessionNotes}>{session.location_notes}</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {completedSessions.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Coach Feedback</Text>
+            {completedSessions.map((session) => (
+              <View key={session.id} style={styles.feedbackCard}>
+                <View style={styles.sessionHeaderRow}>
+                  <Text style={styles.sessionCoach}>{session.coach?.display_name || 'Coach'}</Text>
+                  {session.completed_at && (
+                    <Text style={styles.sessionDate}>
+                      {formatDistanceToNow(new Date(session.completed_at), { addSuffix: true })}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.sessionTypeLabel}>
+                  {session.session_type?.replace('_', ' ') || 'Session'}
+                </Text>
+                {session.session_notes && (
+                  <View style={styles.feedbackBlock}>
+                    <Text style={styles.feedbackLabel}>Coach Notes</Text>
+                    <Text style={styles.feedbackText}>{session.session_notes}</Text>
+                  </View>
+                )}
+                {session.homework && (
+                  <View style={styles.feedbackBlock}>
+                    <Text style={styles.feedbackLabel}>Homework</Text>
+                    <Text style={styles.feedbackText}>{session.homework}</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -372,6 +441,78 @@ const styles = StyleSheet.create({
   responseText: {
     fontSize: 14,
     color: '#333',
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  sessionCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  sessionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  sessionCoach: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  sessionDate: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  sessionTypeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    textTransform: 'capitalize',
+  },
+  sessionNotes: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginTop: 4,
+  },
+  feedbackCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  feedbackBlock: {
+    marginTop: 10,
+  },
+  feedbackLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  feedbackText: {
+    fontSize: 13,
+    color: '#1F2937',
+    lineHeight: 18,
   },
   cancelButton: {
     backgroundColor: '#FEE2E2',

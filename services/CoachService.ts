@@ -13,7 +13,8 @@ import {
   SearchResponse,
   CoachDashboardData,
   StudentDashboardData,
-  SailingSpecialty
+  SailingSpecialty,
+  SailorProfile
 } from '../types/coach';
 
 export class CoachMarketplaceService {
@@ -74,6 +75,28 @@ export class CoachMarketplaceService {
     } catch (error) {
       console.error('Error registering coach:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get the sailor profile associated with a user
+   */
+  static async getSailorProfile(userId: string): Promise<SailorProfile | null> {
+    try {
+      const { data, error } = await supabase
+        .from('sailor_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      return (data as SailorProfile) ?? null;
+    } catch (error) {
+      console.error('Error fetching sailor profile:', error);
+      return null;
     }
   }
 

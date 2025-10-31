@@ -120,9 +120,13 @@ export class YachtClubService {
    * Get premier yacht clubs (royal charters, etc.)
    */
   getPremiereClubs(): YachtClubData[] {
+    const premiereList = Array.isArray(yachtClubsData.clubCategories?.premiere?.clubs)
+      ? yachtClubsData.clubCategories.premiere.clubs
+      : [];
+
     return Array.from(this.clubs.values()).filter(club =>
       club.status === 'royal-charter' ||
-      (yachtClubsData.clubCategories.premiere as string[]).includes(club.id)
+      premiereList.includes(club.id)
     );
   }
 
@@ -151,25 +155,37 @@ export class YachtClubService {
     const club = this.clubs.get(clubId);
     if (!club) return [];
 
-    const venues = [];
+    const venues: {
+      id: string;
+      name: string;
+      coordinates: [number, number];
+      type: string;
+      location: string;
+    }[] = [];
 
     if (club.multipleVenues && club.venues) {
       // Multi-venue club
       Object.entries(club.venues).forEach(([venueId, venue]: [string, any]) => {
+        const coordinates: [number, number] = [
+          venue.coordinates.longitude,
+          venue.coordinates.latitude
+        ];
+
         venues.push({
           id: venueId,
           name: venue.name,
-          coordinates: [venue.coordinates.longitude, venue.coordinates.latitude],
+          coordinates,
           type: venue.type,
           location: venue.location
         });
       });
     } else {
       // Single venue club
+      const [lng, lat] = club.headquarters.coordinates;
       venues.push({
         id: 'headquarters',
         name: club.headquarters.name,
-        coordinates: [club.headquarters.coordinates[0], club.headquarters.coordinates[1]],
+        coordinates: [lng, lat],
         type: 'headquarters',
         location: club.headquarters.address
       });
@@ -228,7 +244,8 @@ export class YachtClubService {
    */
   getReciprocalClubs(clubId: string): string[] {
     const club = this.clubs.get(clubId);
-    return club?.membership.reciprocal || [];
+    const reciprocal = club?.membership.reciprocal;
+    return Array.isArray(reciprocal) ? reciprocal : [];
   }
 
   /**

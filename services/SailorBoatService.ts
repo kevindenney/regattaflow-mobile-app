@@ -332,16 +332,25 @@ export class SailorBoatService {
 
     // Unset all primary boats for this sailor/class
 
-    const { error: unsetError } = await supabase
+    logger.debug('⭐ [SailorBoatService] Loaded boat for primary toggle', boat);
+
+    const { data: previousPrimaries, error: unsetError } = await supabase
       .from('sailor_boats')
       .update({ is_primary: false })
       .eq('sailor_id', boat.sailor_id)
-      .eq('class_id', boat.class_id);
+      .neq('id', boatId)
+      .select('id, name');
+    logger.debug('⭐ [SailorBoatService] Clearing existing primaries for sailor', {
+      sailorId: boat.sailor_id,
+      targetBoatId: boatId,
+      cleared: previousPrimaries?.map((p: any) => p.id) ?? [],
+    });
 
     if (unsetError) {
 
       throw unsetError;
     }
+    logger.debug('⭐ [SailorBoatService] Cleared previous primary boats');
 
     // Set the selected boat as primary
     logger.debug('⭐ [SailorBoatService] Setting boat as primary...');
@@ -354,6 +363,7 @@ export class SailorBoatService {
 
       throw setError;
     }
+    logger.debug('⭐ [SailorBoatService] Primary boat updated successfully');
 
   }
 

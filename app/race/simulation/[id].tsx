@@ -22,7 +22,7 @@ import { Card } from '@/components/ui/card';
 import { Button, ButtonText } from '@/components/ui/button';
 import { Badge, BadgeText } from '@/components/ui/badge';
 import { Divider } from '@/components/ui/divider';
-import { Icon } from '@/components/ui/icon';
+import { LockIcon } from '@/components/ui/icon';
 import { monteCarloService, SimulationResults } from '@/services/monteCarloService';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
@@ -124,7 +124,7 @@ export default function SimulationResultsScreen() {
           <Card className="p-6 border-2 border-amber-500">
             <VStack space="md">
               <HStack space="sm" className="items-center">
-                <Icon name="lock" size={24} className="text-amber-600" />
+                <LockIcon className="text-amber-600 w-5 h-5" />
                 <Heading size="lg">Championship Feature</Heading>
               </HStack>
 

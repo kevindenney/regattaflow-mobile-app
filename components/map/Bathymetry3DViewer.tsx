@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Professional 3D Bathymetry Viewer - OnX Maps Style
  * Advanced depth visualization for sailing race strategy

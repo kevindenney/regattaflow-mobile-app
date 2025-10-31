@@ -11,6 +11,21 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('Biometric');
 
+type WebStorage = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
+
+const getWebStorage = (): WebStorage | undefined => {
+  if (Platform.OS !== 'web') {
+    return undefined;
+  }
+
+  const globalObject = globalThis as { localStorage?: WebStorage };
+  return globalObject.localStorage;
+};
+
 /**
  * Web-compatible SecureStore wrapper
  * Falls back to localStorage on web platform
@@ -19,10 +34,11 @@ const SecureStoreWrapper = {
   async getItemAsync(key: string): Promise<string | null> {
     try {
       if (Platform.OS === 'web') {
-        return localStorage.getItem(`secure_${key}`);
+        const storage = getWebStorage();
+        return storage?.getItem(`secure_${key}`) ?? null;
       }
       return await SecureStore.getItemAsync(key);
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('SecureStore getItem error:', error);
       return null;
     }
@@ -31,11 +47,12 @@ const SecureStoreWrapper = {
   async setItemAsync(key: string, value: string): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        localStorage.setItem(`secure_${key}`, value);
+        const storage = getWebStorage();
+        storage?.setItem(`secure_${key}`, value);
         return;
       }
       await SecureStore.setItemAsync(key, value);
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('SecureStore setItem error:', error);
       throw error;
     }
@@ -44,15 +61,16 @@ const SecureStoreWrapper = {
   async deleteItemAsync(key: string): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        localStorage.removeItem(`secure_${key}`);
+        const storage = getWebStorage();
+        storage?.removeItem(`secure_${key}`);
         return;
       }
       await SecureStore.deleteItemAsync(key);
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('SecureStore deleteItem error:', error);
       throw error;
     }
-  }
+  },
 };
 
 interface BiometricCapabilities {
@@ -145,7 +163,6 @@ export const authenticateWithBiometrics = async (): Promise<BiometricResult> => 
 
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: `🌊 RegattaFlow Security`,
-      subPromptMessage: `Use ${biometricTypeName} to access your sailing data securely`,
       fallbackLabel: 'Use Passcode',
       cancelLabel: 'Cancel',
       disableDeviceFallback: false,

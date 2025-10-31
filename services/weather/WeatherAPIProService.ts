@@ -4,22 +4,29 @@ import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 
 export interface WeatherAPIProConfig {
   apiKey: string;
+  baseUrl?: string;
+  timeout?: number;
+  retryAttempts?: number;
+}
+
+type NormalizedConfig = {
+  apiKey: string;
   baseUrl: string;
   timeout: number;
   retryAttempts: number;
-}
+};
 
 export class WeatherAPIProService {
-  private config: WeatherAPIProConfig;
+  private config: NormalizedConfig;
   private cache: Map<string, { data: AdvancedWeatherConditions; timestamp: number }> = new Map();
   private cacheTimeout = 15 * 60 * 1000; // 15 minutes
 
   constructor(config: WeatherAPIProConfig) {
     this.config = {
-      ...config,
-      baseUrl: config.baseUrl || 'https://api.weatherapi.com/v1',
-      timeout: config.timeout || 10000,
-      retryAttempts: config.retryAttempts || 3
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl ?? 'https://api.weatherapi.com/v1',
+      timeout: config.timeout ?? 10000,
+      retryAttempts: config.retryAttempts ?? 3
     };
   }
 

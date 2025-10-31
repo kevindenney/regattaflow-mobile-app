@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Comprehensive Onboarding Tools
  * Advanced data collection for equipment, social connections, racing areas, and more

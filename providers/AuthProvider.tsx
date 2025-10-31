@@ -10,6 +10,9 @@ import { createLogger } from '@/lib/utils/logger';
 // Re-export UserType for backward compatibility
 export type { UserType } from '@/services/supabase'
 
+type PersonaRole = Exclude<UserType, null>;
+const DEFAULT_PERSONA: PersonaRole = 'sailor';
+
 // Bind diagnostics once at app boot
 bindAuthDiagnostics(supabase)
 
@@ -22,7 +25,7 @@ const authDebugLog = (...args: Parameters<typeof logger.debug>) => {
   logger.debug(...args)
 }
 
-type AuthState = 'checking' | 'signed_out' | 'needs_role' | 'ready'
+type AuthState = 'checking' | 'signed_out' | 'ready'
 
 type AuthCtx = {
   state: AuthState
@@ -31,8 +34,8 @@ type AuthCtx = {
   user: any | null
   loading: boolean
   personaLoading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, fullName?: string) => Promise<any>
+  signIn: (identifier: string, password: string) => Promise<void>
+  signUp: (username: string, password: string, persona: PersonaRole) => Promise<any>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
@@ -45,6 +48,7 @@ type AuthCtx = {
   refreshPersonaContext: () => Promise<void>
   updateUserProfile: (updates: any) => Promise<void>
   fetchUserProfile: (userId?: string) => Promise<any>
+  isDemoSession: boolean
 }
 
 const Ctx = createContext<AuthCtx>({
@@ -68,6 +72,7 @@ const Ctx = createContext<AuthCtx>({
   fetchUserProfile: async (_userId?: string) => null,
   userType: null,
   userProfile: null,
+  isDemoSession: false,
 })
 
 export function AuthProvider({children}:{children: React.ReactNode}) {
@@ -80,6 +85,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [userType, setUserType] = useState<UserType>(null)
   const [clubProfile, setClubProfile] = useState<any | null>(null)
   const [coachProfile, setCoachProfile] = useState<any | null>(null)
+  const [isDemoSession, setIsDemoSession] = useState(false)
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
@@ -115,10 +121,37 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         return null
       }
 
+      let resolvedProfile = data
+      const userTypeWasMissing = !data?.user_type
+      let resolvedUserType: PersonaRole = userTypeWasMissing
+        ? DEFAULT_PERSONA
+        : (data.user_type as PersonaRole)
+
+      if (userTypeWasMissing) {
+        authDebugLog('[fetchUserProfile] No user_type found, defaulting to', resolvedUserType)
+        try {
+          await supabase
+            .from('users')
+            .update({
+              user_type: resolvedUserType,
+              onboarding_completed: true,
+            })
+            .eq('id', uid)
+        } catch (updateError) {
+          console.warn('[fetchUserProfile] Failed to persist default user_type:', updateError)
+        }
+
+        resolvedProfile = {
+          ...data,
+          user_type: resolvedUserType,
+          onboarding_completed: true,
+        }
+      }
+
       authDebugLog('[fetchUserProfile] Setting userProfile and userType')
-      setUserProfile(data)
-      setUserType(data?.user_type as UserType)
-      return data
+      setUserProfile(resolvedProfile)
+      setUserType(resolvedUserType as UserType)
+      return resolvedProfile
     } catch (error) {
       console.error('[fetchUserProfile] Exception:', error)
       return null
@@ -198,7 +231,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }
 
   const loadPersonaContext = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || isDemoSession) {
       setClubProfile(null)
       setCoachProfile(null)
       setPersonaLoading(false)
@@ -257,7 +290,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     } finally {
       setPersonaLoading(false)
     }
-  }, [user?.id, userType])
+  }, [user?.id, userType, isDemoSession])
 
   // Initial auth state setup with proper session restoration
   useEffect(() => {
@@ -338,7 +371,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }, []) // Run once on mount
 
   useEffect(() => {
-    if (!signedIn || !user?.id) {
+    if (!signedIn || !user?.id || isDemoSession) {
       setClubProfile(null)
       setCoachProfile(null)
       setPersonaLoading(false)
@@ -346,7 +379,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
 
     loadPersonaContext()
-  }, [loadPersonaContext, signedIn, user?.id, userType])
+  }, [loadPersonaContext, signedIn, user?.id, userType, isDemoSession])
 
   // Auth state change listener - depends on router for navigation
   useEffect(()=>{
@@ -373,6 +406,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('🔔 [AUTH] Updating auth state...')
       setSignedIn(!!session)
       setUser(session?.user || null)
+      if (session?.user) {
+        setIsDemoSession(false)
+      }
       authDebugLog('🔔 [AUTH] Auth state updated:', { signedIn: !!session, hasUser: !!session?.user })
 
       // Log updated state
@@ -451,8 +487,19 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     return ()=>{ alive=false; sub.subscription.unsubscribe() }
   }, [router])
 
-  const signIn = async (email: string, password: string) => {
+  const identifierToAuthEmail = (value: string) => {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) {
+      throw new Error('Identifier is required')
+    }
+    if (normalized.includes('@')) {
+      return normalized
+    }
+    return `${normalized}@users.regattaflow.app`
+  }
 
+  const signIn = async (identifier: string, password: string) => {
+    const email = identifierToAuthEmail(identifier)
     setLoading(true)
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -487,6 +534,28 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       loading,
       ready
     })
+
+    if (isDemoSession) {
+      authDebugLog('🚪 [AUTH] Demo session detected, performing local sign out.')
+      setSignedIn(false)
+      setUser(null)
+      setUserProfile(null)
+      setUserType(null)
+      setPersonaLoading(false)
+      setLoading(false)
+      setClubProfile(null)
+      setCoachProfile(null)
+      setIsDemoSession(false)
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.replaceState(null, '', '/')
+        } catch (historyError) {
+          console.warn('🚪 [AUTH] History replace error for demo sign out:', historyError)
+        }
+      }
+      router.replace('/')
+      return
+    }
 
     setLoading(true)
     authDebugLog('🚪 [AUTH] Loading set to true')
@@ -548,8 +617,24 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
-    authDebugLog('🚀 [AUTH] signUp called with:', { email, hasPassword: !!password, fullName })
+  const signUp = async (username: string, password: string, persona: PersonaRole) => {
+    const displayName = username.trim()
+    const personaRole = persona
+
+    if (!displayName) {
+      throw new Error('Username is required')
+    }
+    if (!personaRole) {
+      throw new Error('A persona is required')
+    }
+
+    const email = identifierToAuthEmail(displayName)
+    authDebugLog('🚀 [AUTH] signUp called with:', {
+      username: displayName,
+      persona: personaRole,
+      hasPassword: !!password
+    })
+
     setLoading(true)
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -557,8 +642,10 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         password,
         options: {
           data: {
-            full_name: fullName || '',
-            name: fullName || ''
+            username: displayName,
+            persona: personaRole,
+            full_name: displayName,
+            name: displayName
           },
           emailRedirectTo: Platform.OS === 'web'
             ? `${window.location.origin}/callback`
@@ -572,14 +659,34 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       authDebugLog('✅ [AUTH] Supabase signUp successful:', data)
 
-      // Profile is created automatically by database trigger
-      // Check if profile was created and fetch it
       if (data.user?.id) {
+        const profilePayload = {
+          id: data.user.id,
+          email,
+          full_name: displayName,
+          user_type: personaRole,
+          onboarding_completed: true,
+        }
+
+        const { error: profileError } = await supabase
+          .from('users')
+          .upsert(profilePayload, { onConflict: 'id' })
+
+        if (profileError) {
+          logger.warn('[AUTH] Profile upsert failed during signUp:', profileError)
+        } else {
+          setUserProfile((prev: any) => ({
+            ...(prev ?? {}),
+            ...profilePayload
+          }))
+        }
+        setUserType(personaRole)
+
         try {
-          authDebugLog('🔍 [AUTH] Fetching automatically created profile...')
+          authDebugLog('🔍 [AUTH] Refreshing profile after signUp...')
           await fetchUserProfile(data.user.id)
         } catch (profileError) {
-          // This is not critical - profile fetch can happen later
+          logger.warn('[AUTH] Profile fetch after signUp failed:', profileError)
         }
       }
 
@@ -649,8 +756,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       state = 'checking'
     } else if (!signedIn) {
       state = 'signed_out'
-    } else if (!userType) {
-      state = 'needs_role'
     } else {
       state = 'ready'
     }
@@ -675,9 +780,10 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       coachProfile,
       refreshPersonaContext: loadPersonaContext,
       updateUserProfile,
-      fetchUserProfile
+      fetchUserProfile,
+      isDemoSession
     }
-  }, [ready, signedIn, user, loading, personaLoading, userProfile, userType, clubProfile, coachProfile, loadPersonaContext])
+  }, [ready, signedIn, user, loading, personaLoading, userProfile, userType, clubProfile, coachProfile, loadPersonaContext, isDemoSession])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

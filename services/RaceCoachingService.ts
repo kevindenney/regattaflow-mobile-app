@@ -224,7 +224,7 @@ export class RaceCoachingService {
         bill_framework: 'Delayed Tack',
         your_approach: 'You used the Delayed Tack in 1-on-1 situations',
         bill_recommendation:
-          '🏆 Outstanding! You used Bill\'s SIGNATURE MOVE. The Delayed Tack (cross opponent → sail SHORT distance <1 length → THEN tack) is his most reliable tactical tip. Keep refining the execution - the goal is turning a 1-length lead into 3-4 lengths at the windward mark.',
+          '🏆 Outstanding! You used Kevin\'s SIGNATURE MOVE. The Delayed Tack (cross opponent → sail SHORT distance <1 length → THEN tack) is his most reliable tactical tip. Keep refining the execution - the goal is turning a 1-length lead into 3-4 lengths at the windward mark.',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Tight Cover Timing (Championship technique)',
@@ -468,9 +468,9 @@ export class RaceCoachingService {
         colgate_execution_technique: 'Smooth Mark Rounding Mechanics',
         execution_score: 90,
         execution_feedback:
-          '🏆 Excellent strategic rounding! Now refine execution mechanics from Advanced tactics: As you round, minimize rudder angle (wide smooth arc), keep boat speed up through turn, set spinnaker when stable (not mid-turn). If rounding close behind boat, consider Bill Cox delayed spinnaker technique - sail close reach on main/jib to blanket leader, then set chute in controlling position.',
+          '🏆 Excellent strategic rounding! Now refine execution mechanics from Advanced tactics: As you round, minimize rudder angle (wide smooth arc), keep boat speed up through turn, set spinnaker when stable (not mid-turn). If rounding close behind boat, consider Kevin Cox delayed spinnaker technique - sail close reach on main/jib to blanket leader, then set chute in controlling position.',
         champion_story:
-          'Bill Cox (American Eagle 1968 America\'s Cup): Round weather mark close behind, delay spinnaker set, sail close reach with main/jib trimmed properly while boat ahead slows with crew bouncing around setting spinnaker. Get on their wind, making their spinnaker difficult to fly.',
+          'Kevin Cox (American Eagle 1968 America\'s Cup): Round weather mark close behind, delay spinnaker set, sail close reach with main/jib trimmed properly while boat ahead slows with crew bouncing around setting spinnaker. Get on their wind, making their spinnaker difficult to fly.',
 
         confidence: 90,
         impact: 'high',
@@ -487,7 +487,7 @@ export class RaceCoachingService {
         your_approach:
           'You rounded on lifted tack but felt out of phase downwind',
         bill_recommendation:
-          '⚡ You executed Bill\'s approach (round on lifted) but still felt out of phase. Possible causes: (1) wind shifted just after rounding, (2) fleet forced you off course. Focus on maintaining your chosen jibe after rounding - don\'t let fleet push you out of phase.',
+          '⚡ You executed Kevin\'s approach (round on lifted) but still felt out of phase. Possible causes: (1) wind shifted just after rounding, (2) fleet forced you off course. Focus on maintaining your chosen jibe after rounding - don\'t let fleet push you out of phase.',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Post-Rounding Commitment + Hans Fogh Reverse',
@@ -662,7 +662,7 @@ Provide a 2-3 paragraph overall assessment in The teaching style:
 Use The voice: quantified, tactical, encouraging, with his signature phrases when appropriate.`;
 
     const response = await this.anthropic.messages.create({
-      model: 'claude-3-5-sonnet-latest',
+      model: 'claude-3-5-haiku-latest',
       max_tokens: 512,
       temperature: 0.7,
       messages: [{ role: 'user', content: prompt }],

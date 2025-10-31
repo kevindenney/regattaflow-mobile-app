@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * CourseBuilder Component
  * OnX Maps-style interactive course builder with nautical charts

@@ -13,7 +13,6 @@ export const RoleGate = ({ children }: { children: React.ReactNode }) => {
   const { state } = useAuth();
   if (state === 'checking') return null;
   if (state === 'signed_out') return <Redirect href="/" />;
-  if (state === 'needs_role') return <Redirect href="/(auth)/persona-selection" />;
   return <>{children}</>;
 };
 

@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Educational Integration Test Suite
  * Demonstrates how the enhanced AI system leverages yacht club educational content

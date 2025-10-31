@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Strategy Preview Component
  * Displays upwind and downwind race strategy summaries

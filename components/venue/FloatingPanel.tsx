@@ -11,9 +11,11 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface FloatingPanelProps {
   title: string;
@@ -121,8 +123,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    boxShadow: '0px 2px',
-    elevation: 5,
+    ...getShadowStyle('sm'),
   },
   headerCollapsed: {
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -161,8 +162,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
-    boxShadow: '0px 4px',
-    elevation: 5,
+    ...getShadowStyle('md'),
   },
   scrollView: {
     padding: 16,

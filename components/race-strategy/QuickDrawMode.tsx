@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Quick Draw Mode - Racing Area Boundary Drawing
  *

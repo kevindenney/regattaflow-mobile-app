@@ -18,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 import { VENUE_ICONS, getCountryFlag as getFlag } from '@/constants/sailing-icons';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface Venue {
   id: string;
@@ -313,14 +314,8 @@ const styles = StyleSheet.create({
     width: 340,
     backgroundColor: 'rgba(255, 255, 255, 0.97)',
     zIndex: 100,
-    ...(Platform.OS === 'web'
-      ? {
-          boxShadow: '2px 0 12px rgba(0, 0, 0, 0.15)',
-          backdropFilter: 'blur(20px)',
-        }
-      : {
-          elevation: 8,
-        }),
+    ...getShadowStyle('lg'),
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)' } : {}),
   },
 
   // Header
@@ -506,9 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 101,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '2px 2px 8px rgba(0, 0, 0, 0.2)' }
-      : { elevation: 5 }),
+    ...getShadowStyle('sm'),
   },
   toggleButtonCollapsed: {
     left: 0,

@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useAuth } from '@/providers/AuthProvider';
+import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import {
   coachingService,
   ClientDetails,
@@ -38,7 +38,7 @@ const screenWidth = Dimensions.get('window').width;
 export default function ClientDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const { user } = useAuth();
+  const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clientDetails, setClientDetails] = useState<ClientDetails | null>(null);
@@ -47,13 +47,13 @@ export default function ClientDetailScreen() {
   const [selectedTab, setSelectedTab] = useState<'sessions' | 'progress' | 'notes'>('sessions');
 
   useEffect(() => {
-    if (user && id) {
+    if (coachId && id) {
       loadClientDetails();
     }
-  }, [user, id]);
+  }, [coachId, id]);
 
   const loadClientDetails = async () => {
-    if (!id || typeof id !== 'string') return;
+    if (!coachId || !id || typeof id !== 'string') return;
 
     try {
       const details = await coachingService.getClientDetails(id);
@@ -218,6 +218,106 @@ export default function ClientDetailScreen() {
     );
   };
 
+  const renderRaceInsights = () => {
+    const hasAnalysis = Boolean(clientDetails?.recentRaceAnalysis?.length);
+    const hasStrategies = Boolean(clientDetails?.recentRaceStrategies?.length);
+
+    if (!hasAnalysis && !hasStrategies) {
+      return null;
+    }
+
+    return (
+      <View>
+        {hasAnalysis && (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Recent Race Analysis</ThemedText>
+            {clientDetails?.recentRaceAnalysis?.map((analysis) => (
+              <View key={analysis.id} style={styles.analysisCard}>
+                <View style={styles.analysisHeader}>
+                  <ThemedText style={styles.analysisTitle}>
+                    {analysis.race_name || 'Race Summary'}
+                  </ThemedText>
+                  <ThemedText style={styles.analysisDate}>
+                    {format(new Date(analysis.created_at), 'MMM d, yyyy')}
+                  </ThemedText>
+                </View>
+                {analysis.regatta_name && (
+                  <ThemedText style={styles.analysisMeta}>{analysis.regatta_name}</ThemedText>
+                )}
+                {analysis.overall_satisfaction && (
+                  <View style={styles.analysisRow}>
+                    <Ionicons name="star" size={16} color="#F59E0B" />
+                    <ThemedText style={styles.analysisText}>
+                      Satisfaction: {'⭐'.repeat(analysis.overall_satisfaction)}
+                    </ThemedText>
+                  </View>
+                )}
+                {analysis.key_learnings && analysis.key_learnings.length > 0 && (
+                  <View style={styles.analysisList}>
+                    {analysis.key_learnings.slice(0, 3).map((learning, idx) => (
+                      <ThemedText key={idx} style={styles.analysisBullet}>
+                        • {learning}
+                      </ThemedText>
+                    ))}
+                  </View>
+                )}
+                {analysis.ai_coaching_feedback && analysis.ai_coaching_feedback.length > 0 && (
+                  <View style={styles.analysisCoachBlock}>
+                    <ThemedText style={styles.analysisCoachTitle}>AI Coaching Highlights</ThemedText>
+                    {analysis.ai_coaching_feedback.slice(0, 2).map((feedback, idx) => (
+                      <View key={idx} style={styles.analysisFeedback}>
+                        <ThemedText style={styles.analysisFeedbackPhase}>
+                          {feedback.phase.toUpperCase()}
+                        </ThemedText>
+                        <ThemedText style={styles.analysisFeedbackSummary}>
+                          {feedback.bill_recommendation}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {hasStrategies && (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Pre-Race Strategy Plans</ThemedText>
+            {clientDetails?.recentRaceStrategies?.map((strategy) => (
+              <View
+                key={`${strategy.regatta_id}-${strategy.generated_at}`}
+                style={styles.strategyCard}
+              >
+                <View style={styles.analysisHeader}>
+                  <ThemedText style={styles.analysisTitle}>
+                    {strategy.regatta_name || 'Race Strategy'}
+                  </ThemedText>
+                  {strategy.generated_at && (
+                    <ThemedText style={styles.analysisDate}>
+                      {format(new Date(strategy.generated_at), 'MMM d, yyyy')}
+                    </ThemedText>
+                  )}
+                </View>
+                <ThemedText style={styles.strategyMeta}>
+                  Favored Start: {strategy.favored_end ? strategy.favored_end.toUpperCase() : 'Unknown'}
+                </ThemedText>
+                {strategy.wind_strategy && (
+                  <ThemedText style={styles.strategySummary}>{strategy.wind_strategy}</ThemedText>
+                )}
+                {strategy.confidence_score !== null && strategy.confidence_score !== undefined && (
+                  <ThemedText style={styles.strategyConfidence}>
+                    Confidence: {strategy.confidence_score}%
+                  </ThemedText>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderNotes = () => {
     return (
       <View style={styles.notesContainer}>
@@ -252,11 +352,35 @@ export default function ClientDetailScreen() {
     );
   };
 
-  if (loading) {
+  if (personaLoading || loading) {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
+          <ThemedText style={styles.loadingText}>Loading client details...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!coachId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="school-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Coach Workspace</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            Client management requires an active coach workspace. Finish onboarding or refresh your connection to continue.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryLink}
+            onPress={() => router.push('/(tabs)/dashboard')}
+          >
+            <ThemedText style={styles.secondaryLinkText}>Back to Dashboard</ThemedText>
+          </TouchableOpacity>
         </View>
       </ThemedView>
     );
@@ -389,7 +513,12 @@ export default function ClientDetailScreen() {
             </View>
           )}
 
-          {selectedTab === 'progress' && renderProgressChart()}
+          {selectedTab === 'progress' && (
+            <View>
+              {renderProgressChart()}
+              {renderRaceInsights()}
+            </View>
+          )}
 
           {selectedTab === 'notes' && renderNotes()}
         </View>
@@ -450,6 +579,49 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#64748B',
+    fontSize: 16,
+  },
+  missingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  missingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,
@@ -595,6 +767,15 @@ const styles = StyleSheet.create({
   tabContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  section: {
+    marginTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 12,
   },
   sessionCard: {
     backgroundColor: '#FFFFFF',
@@ -742,6 +923,111 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#64748B',
     marginTop: 16,
+  },
+  analysisCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  analysisHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  analysisTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    flex: 1,
+    marginRight: 12,
+  },
+  analysisDate: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  analysisMeta: {
+    fontSize: 13,
+    color: '#475569',
+    marginBottom: 8,
+  },
+  analysisRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  analysisText: {
+    fontSize: 13,
+    color: '#334155',
+  },
+  analysisList: {
+    marginBottom: 8,
+    gap: 4,
+  },
+  analysisBullet: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  analysisCoachBlock: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 8,
+    gap: 8,
+  },
+  analysisCoachTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  analysisFeedback: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 10,
+    gap: 4,
+  },
+  analysisFeedbackPhase: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  analysisFeedbackSummary: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  strategyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  strategyMeta: {
+    fontSize: 13,
+    color: '#475569',
+    marginBottom: 6,
+  },
+  strategySummary: {
+    fontSize: 13,
+    color: '#1F2937',
+    lineHeight: 18,
+  },
+  strategyConfidence: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 8,
   },
   fab: {
     position: 'absolute',

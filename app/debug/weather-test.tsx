@@ -16,7 +16,7 @@ import {
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { regionalWeatherService } from '@/services/weather/RegionalWeatherService';
-import type { SailingVenue } from '@/lib/types/global-venues';
+import type { Coordinates, SailingVenue } from '@/lib/types/global-venues';
 
 export default function WeatherTestScreen() {
   const [loading, setLoading] = useState(false);
@@ -24,16 +24,17 @@ export default function WeatherTestScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Test venue: Hong Kong
-  const testVenue: SailingVenue = {
+  const testCoordinates: Coordinates = [114.1628, 22.2793];
+  const testVenue = {
     id: 'test-hk',
     name: 'Hong Kong Test Venue',
-    coordinates: {
-      latitude: 22.2793,
-      longitude: 114.1628,
-    },
-    region: 'asia_pacific',
-    country: 'HK',
-  };
+    coordinates: testCoordinates,
+    country: 'Hong Kong',
+    region: 'asia-pacific',
+    venueType: 'premier',
+    timeZone: 'Asia/Hong_Kong',
+  } as SailingVenue;
+  const [longitude, latitude] = testCoordinates;
 
   const testWeatherAPI = async () => {
     setLoading(true);
@@ -82,7 +83,7 @@ export default function WeatherTestScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Coordinates:</Text>
             <Text style={styles.infoValue}>
-              {testVenue.coordinates.latitude.toFixed(4)}, {testVenue.coordinates.longitude.toFixed(4)}
+              {latitude.toFixed(4)}, {longitude.toFixed(4)}
             </Text>
           </View>
           <View style={styles.infoRow}>

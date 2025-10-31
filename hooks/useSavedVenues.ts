@@ -23,10 +23,12 @@ export interface UseSavedVenuesActions {
   refreshSavedVenues: () => Promise<void>;
 }
 
+type UseSavedVenuesReturn = UseSavedVenuesState & UseSavedVenuesActions;
+
 /**
  * Hook to manage user's saved sailing venues
  */
-export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
+export function useSavedVenues(): UseSavedVenuesReturn {
   const { user } = useAuth();
   const [state, setState] = useState<UseSavedVenuesState>({
     savedVenues: [],
@@ -39,7 +41,7 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
   /**
    * Fetch saved venues for current user
    */
-  const fetchSavedVenues = useCallback(async () => {
+  const fetchSavedVenues = useCallback(async (): Promise<void> => {
     if (!user) {
       setState({
         savedVenues: [],
@@ -59,7 +61,7 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
         SavedVenueService.getHomeVenue(),
       ]);
 
-      const venueIds = new Set(venues.map((v: SavedVenue) => v.id));
+      const venueIds = new Set(venues.map((venue) => venue.id));
 
       setState({
         savedVenues: venues,
@@ -68,13 +70,18 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
         isLoading: false,
         error: null,
       });
-
-    } catch (error: any) {
-
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : 'Failed to fetch saved venues';
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: error.message || 'Failed to fetch saved venues',
+        error: message,
       }));
     }
   }, [user]);
@@ -82,55 +89,47 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
   /**
    * Save a venue to favorites
    */
-  const saveVenue = useCallback(async (
-    venueId: string,
-    options?: { notes?: string; isHomeVenue?: boolean }
-  ) => {
-    if (!user) throw new Error('User not authenticated');
+  const saveVenue = useCallback(
+    async (venueId: string, options?: { notes?: string; isHomeVenue?: boolean }): Promise<void> => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-    try {
-      const result = await SavedVenueService.saveVenue(venueId, options);
-
+      await SavedVenueService.saveVenue(venueId, options);
       await fetchSavedVenues(); // Refresh list
-
-    } catch (error: any) {
-
-      throw error;
-    }
-  }, [user, fetchSavedVenues]);
+    },
+    [user, fetchSavedVenues]
+  );
 
   /**
    * Remove a venue from favorites
    */
-  const unsaveVenue = useCallback(async (venueId: string) => {
-    if (!user) throw new Error('User not authenticated');
+  const unsaveVenue = useCallback(
+    async (venueId: string): Promise<void> => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-    try {
       await SavedVenueService.unsaveVenue(venueId);
       await fetchSavedVenues(); // Refresh list
-    } catch (error: any) {
-
-      throw error;
-    }
-  }, [user, fetchSavedVenues]);
+    },
+    [user, fetchSavedVenues]
+  );
 
   /**
    * Update saved venue details
    */
-  const updateSavedVenue = useCallback(async (
-    venueId: string,
-    updates: { notes?: string; isHomeVenue?: boolean }
-  ) => {
-    if (!user) throw new Error('User not authenticated');
+  const updateSavedVenue = useCallback(
+    async (venueId: string, updates: { notes?: string; isHomeVenue?: boolean }): Promise<void> => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-    try {
       await SavedVenueService.updateSavedVenue(venueId, updates);
       await fetchSavedVenues(); // Refresh list
-    } catch (error: any) {
-
-      throw error;
-    }
-  }, [user, fetchSavedVenues]);
+    },
+    [user, fetchSavedVenues]
+  );
 
   /**
    * Check if a venue is saved (fast Set lookup)
@@ -142,7 +141,7 @@ export function useSavedVenues(): UseSavedVenuesState & UseSavedVenuesActions {
   /**
    * Manually refresh saved venues
    */
-  const refreshSavedVenues = useCallback(async () => {
+  const refreshSavedVenues = useCallback(async (): Promise<void> => {
     await fetchSavedVenues();
   }, [fetchSavedVenues]);
 

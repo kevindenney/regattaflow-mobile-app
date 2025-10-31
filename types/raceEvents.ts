@@ -5,23 +5,129 @@
  * See: plans/race-strategy-data-gathering-ux.md
  */
 
-import { Database } from '@/services/supabase';
+import { TideState, ConfidenceLevel } from './environmental';
+import type {
+  WindData,
+  TideData,
+  WaveData,
+  EnvironmentalSnapshot,
+  WeatherForecast,
+  EnvironmentalIntelligence,
+  TacticalAlert,
+} from './environmental';
+export { TideState, ConfidenceLevel } from './environmental';
+export type {
+  WindData,
+  TideData,
+  WaveData,
+  EnvironmentalSnapshot,
+  WeatherForecast,
+  EnvironmentalIntelligence,
+  TacticalAlert,
+} from './environmental';
 
 // =============================================================================
 // Database Types (from Supabase schema)
 // =============================================================================
 
-export type RaceEvent = Database['public']['Tables']['race_events']['Row'];
-export type RaceEventInsert = Database['public']['Tables']['race_events']['Insert'];
-export type RaceEventUpdate = Database['public']['Tables']['race_events']['Update'];
+export interface RaceEvent {
+  id: string;
+  user_id: string;
+  race_name: string;
+  race_series?: string | null;
+  boat_class?: string | null;
+  start_time: string;
+  venue_id?: string | null;
+  racing_area_name?: string | null;
+  source_url?: string | null;
+  source_documents?: SourceDocument[];
+  extraction_method?: ExtractionMethod | null;
+  extraction_status?: ExtractionStatus;
+  race_status?: RaceStatus;
+  strategy_analysis?: StrategyAnalysis | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any;
+}
 
-export type CourseMark = Database['public']['Tables']['course_marks']['Row'];
-export type CourseMarkInsert = Database['public']['Tables']['course_marks']['Insert'];
-export type CourseMarkUpdate = Database['public']['Tables']['course_marks']['Update'];
+export type RaceEventInsert = Omit<RaceEvent, 'id' | 'created_at' | 'updated_at'> & {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+};
 
-export type VenueCourseCorrection = Database['public']['Tables']['venue_course_corrections']['Row'];
-export type EnvironmentalForecast = Database['public']['Tables']['environmental_forecasts']['Row'];
-export type DocumentProcessingJob = Database['public']['Tables']['document_processing_jobs']['Row'];
+export type RaceEventUpdate = Partial<RaceEvent>;
+
+export interface CourseMark {
+  id: string;
+  race_id: string;
+  mark_name?: string | null;
+  mark_type?: MarkType | string | null;
+  latitude: number;
+  longitude: number;
+  rounding?: RoundingDirection | null;
+  sequence?: number | null;
+  metadata?: Record<string, any> | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any;
+}
+
+export type CourseMarkInsert = Omit<CourseMark, 'id' | 'created_at' | 'updated_at'> & {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CourseMarkUpdate = Partial<CourseMark>;
+
+export interface VenueCourseCorrection {
+  id: string;
+  venue_id: string;
+  race_event_id: string;
+  original_marks: CourseMark[];
+  corrected_marks: CourseMark[];
+  correction_type: CorrectionType;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EnvironmentalForecast {
+  id: string;
+  race_event_id: string;
+  forecast_time: string;
+  wind_speed?: number | null;
+  wind_direction?: number | null;
+  wind_gust?: number | null;
+  temperature?: number | null;
+  pressure?: number | null;
+  cloud_cover?: number | null;
+  wave_height?: number | null;
+  wave_direction?: number | null;
+  wave_period?: number | null;
+  tide_height?: number | null;
+  tidal_current_speed?: number | null;
+  tidal_current_direction?: number | null;
+  tide_state?: TideState | null;
+  provider?: string | null;
+  forecast_issued_at?: string | null;
+  confidence_level?: ConfidenceLevel | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any;
+}
+
+export interface DocumentProcessingJob {
+  id: string;
+  race_event_id: string;
+  document_type: DocumentType;
+  status: ProcessingStatus;
+  progress_percentage: number;
+  metadata?: Record<string, any> | null;
+  created_at?: string;
+  updated_at?: string;
+}
 
 // =============================================================================
 // Enhanced Types with Relationships
@@ -120,20 +226,6 @@ export enum ProcessingStatus {
   CANCELLED = 'cancelled'
 }
 
-export enum TideState {
-  HIGH = 'high',
-  LOW = 'low',
-  FLOOD = 'flood',
-  EBB = 'ebb',
-  SLACK = 'slack'
-}
-
-export enum ConfidenceLevel {
-  HIGH = 'high',
-  MEDIUM = 'medium',
-  LOW = 'low'
-}
-
 // =============================================================================
 // Document Processing Types
 // =============================================================================
@@ -230,63 +322,6 @@ export interface RacingAreaProperties {
 // =============================================================================
 // Environmental Data Types
 // =============================================================================
-
-export interface EnvironmentalSnapshot {
-  wind: WindData;
-  tide: TideData;
-  wave?: WaveData;
-  temperature?: number;
-  pressure?: number;
-  timestamp: string;
-}
-
-export interface WindData {
-  speed: number; // knots
-  direction: number; // degrees (0-360)
-  gust?: number; // knots
-}
-
-export interface TideData {
-  height: number; // meters
-  current_speed?: number; // knots
-  current_direction?: number; // degrees (0-360)
-  state: TideState;
-}
-
-export interface WaveData {
-  height: number; // meters
-  direction: number; // degrees (0-360)
-  period: number; // seconds
-  swell_height?: number; // meters
-  swell_direction?: number; // degrees (0-360)
-}
-
-export interface WeatherForecast {
-  time: string;
-  wind: WindData;
-  tide?: TideData;
-  wave?: WaveData;
-  temperature?: number;
-  pressure?: number;
-  cloud_cover?: number;
-  confidence: ConfidenceLevel;
-  provider: string;
-}
-
-export interface EnvironmentalIntelligence {
-  current: EnvironmentalSnapshot;
-  forecast: WeatherForecast[];
-  summary: string; // e.g., "15-18kt NE, building throughout race. Flood tide."
-  alerts?: TacticalAlert[];
-}
-
-export interface TacticalAlert {
-  type: 'wind_shift' | 'tide_change' | 'weather_front' | 'current_advantage';
-  severity: 'info' | 'warning' | 'critical';
-  title: string;
-  message: string;
-  timestamp: string;
-}
 
 // =============================================================================
 // AI Strategy Types

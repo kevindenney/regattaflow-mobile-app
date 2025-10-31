@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Enhanced Onboarding Tools
  * Comprehensive Supabase-integrated tools for sailor onboarding

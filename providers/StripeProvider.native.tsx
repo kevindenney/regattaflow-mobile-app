@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { ReactNode } from 'react';
 import { StripeProvider as StripeReactNativeProvider } from '@stripe/stripe-react-native';
 

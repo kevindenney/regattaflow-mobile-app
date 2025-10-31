@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import {
   ArrowLeft,
   ChevronRight,
@@ -94,7 +94,7 @@ export default function SettingsScreen() {
           onPress: async () => {
             try {
               await signOut();
-              router.replace('/(auth)/signin');
+              router.replace('/(auth)/login' as Href);
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out');
             }

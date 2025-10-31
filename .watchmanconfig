@@ -1,0 +1,14 @@
+{
+  "ignore_dirs": [
+    ".git",
+    ".expo",
+    "dist",
+    "web-build",
+    "coverage",
+    ".vscode",
+    ".idea",
+    "ios",
+    "android"
+  ],
+  "settle": 3000
+}

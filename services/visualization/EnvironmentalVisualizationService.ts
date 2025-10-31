@@ -126,6 +126,8 @@ export interface VisualizationLayers {
   };
 }
 
+export type EnvironmentalLayers = VisualizationLayers;
+
 /**
  * Environmental Visualization Service
  */

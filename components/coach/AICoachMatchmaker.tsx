@@ -9,10 +9,10 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
-import { CoachMarketplaceService } from '../../services/CoachService';
-import AICoachMatchingService from '../../services/AICoachMatchingService';
-import { CoachSearchResult, SailorProfile } from '../../types/coach';
+import { useAuth } from '@/providers/AuthProvider';
+import { CoachMarketplaceService } from '@/services/CoachService';
+import AICoachMatchingService from '@/services/AICoachMatchingService';
+import { CoachSearchResult, SailorProfile } from '@/types/coach';
 import CoachCard from './CoachCard';
 
 interface MatchingPreferences {
@@ -88,7 +88,9 @@ export default function AICoachMatchmaker() {
       setSailorProfile(profile);
 
       // Auto-analyze learning style
-      await analyzeLearningingStyle(profile);
+      if (profile) {
+        await analyzeLearningingStyle(profile);
+      }
     } catch (error) {
       console.error('Error loading sailor profile:', error);
     }
@@ -122,13 +124,14 @@ export default function AICoachMatchmaker() {
     setLoading(true);
     try {
       // Get available coaches
-      const coaches = await CoachMarketplaceService.searchCoaches({
+      const searchResponse = await CoachMarketplaceService.searchCoaches({
         location: sailorProfile.location,
         boat_classes: sailorProfile.boat_classes || [],
         specialties: preferences.targetSkills,
-        min_price: preferences.budgetRange.min,
-        max_price: preferences.budgetRange.max,
+        price_range: [preferences.budgetRange.min, preferences.budgetRange.max],
       });
+
+      const coaches = searchResponse.coaches ?? [];
 
       if (coaches.length === 0) {
         Alert.alert('No Coaches Found', 'Try adjusting your preferences to see more options');
@@ -143,7 +146,7 @@ export default function AICoachMatchmaker() {
           targetSkills: preferences.targetSkills,
           learningStyle: preferences.learningStyle,
           upcomingEvents: preferences.upcomingEvents,
-          preferredLocation: sailorProfile.location,
+          preferredLocation: sailorProfile.location ?? '',
           budgetRange: preferences.budgetRange,
           availabilityPreference: preferences.availabilityPreference,
         },

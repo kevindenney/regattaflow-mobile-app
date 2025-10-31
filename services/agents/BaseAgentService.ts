@@ -77,7 +77,7 @@ export class BaseAgentService {
       // Don't throw immediately - allow imports and instantiation
       // Only fail when run() is actually called
       this.config = {
-        model: config.model || 'claude-sonnet-4-5-20250929',
+        model: config.model || 'claude-3-5-haiku-latest',
         maxTokens: config.maxTokens || 4096,
         temperature: config.temperature || 0.7,
         systemPrompt: config.systemPrompt || 'You are a helpful AI assistant for RegattaFlow, a sailing race strategy platform.',
@@ -97,7 +97,7 @@ export class BaseAgentService {
     });
 
     this.config = {
-      model: config.model || 'claude-sonnet-4-5-20250929',
+      model: config.model || 'claude-3-5-haiku-latest',
       maxTokens: config.maxTokens || 4096,
       temperature: config.temperature || 0.7,
       systemPrompt: config.systemPrompt || 'You are a helpful AI assistant for RegattaFlow, a sailing race strategy platform.',

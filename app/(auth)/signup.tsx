@@ -1,74 +1,60 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
+import { roleHome } from '@/lib/gates';
 import { useAuth } from '../../providers/AuthProvider';
-import { supabase } from '../../services/supabase';
+
+type PersonaRole = 'sailor' | 'coach' | 'club';
+
+type PersonaOption = {
+  value: PersonaRole;
+  label: string;
+  description: string;
+};
 
 export default function SignUp() {
   const { signUp } = useAuth();
-  const params = useLocalSearchParams<{ persona?: string }>();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const personaOptions = useMemo<PersonaOption[]>(
+    () => [
+      { value: 'sailor', label: 'Sailor', description: 'Track races and improve performance' },
+      { value: 'coach', label: 'Coach', description: 'Manage clients and coaching sessions' },
+      { value: 'club', label: 'Club', description: 'Organize regattas and member programs' },
+    ],
+    []
+  );
 
-  const onSignUp = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [persona, setPersona] = useState<PersonaRole>('sailor');
+  const [loading, setLoading] = useState(false);
+  const lastPersonaValue = personaOptions[personaOptions.length - 1]?.value;
+
+  const handleSignUp = async () => {
+    const trimmedUsername = username.trim();
+
+    if (!trimmedUsername) {
+      Alert.alert('Missing username', 'Choose a username to continue.');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert('Weak password', 'Password must be at least 6 characters long.');
       return;
     }
 
     setLoading(true);
     try {
-
-      const result = await signUp(email, password, fullName);
-
-      // Always go to the new unified onboarding with tabs
-
-      router.replace({
-        pathname: '/(auth)/onboarding-redesign',
-        params: { persona: params.persona || 'sailor' }
-      });
+      await signUp(trimmedUsername, password, persona);
+      router.replace(roleHome(persona));
     } catch (error: any) {
+      console.error('[Signup] Account creation error:', error);
+      const message = (error?.message ?? '').toString();
+      const lower = message.toLowerCase();
 
-      // Better error messages
-      let errorMessage = error.message || 'Signup failed';
-      let isAlreadyRegistered = false;
-
-      // Check for various "already registered" error patterns
-      if (errorMessage.toLowerCase().includes('already registered') ||
-          errorMessage.toLowerCase().includes('already exists') ||
-          errorMessage.toLowerCase().includes('user already exists') ||
-          errorMessage.toLowerCase().includes('duplicate')) {
-        errorMessage = 'This email is already registered.';
-        isAlreadyRegistered = true;
-      } else if (errorMessage.includes('Password')) {
-        errorMessage = 'Password must be at least 6 characters';
-      }
-
-      // Show alert with appropriate action
-      if (isAlreadyRegistered) {
-        Alert.alert(
-          'Account Already Exists',
-          'This email is already registered. Would you like to sign in instead?',
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
-            {
-              text: 'Sign In',
-              onPress: () => router.push('/(auth)/login')
-            }
-          ]
-        );
+      if (lower.includes('registered') || lower.includes('duplicate')) {
+        Alert.alert('Username taken', 'That username is already registered. Try another one.');
       } else {
-        Alert.alert('Signup Error', errorMessage);
+        Alert.alert('Signup error', message || 'Unable to create your account right now.');
       }
     } finally {
       setLoading(false);
@@ -78,45 +64,64 @@ export default function SignUp() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Sign up to get started</Text>
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>Pick a role, choose a username, and start sailing.</Text>
 
+        <Text style={styles.sectionLabel}>Username</Text>
         <TextInput
           style={styles.input}
-          placeholder="Full Name (optional)"
-          value={fullName}
-          onChangeText={setFullName}
-          autoCapitalize="words"
-          editable={!loading}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
+          placeholder="racecaptain"
+          value={username}
+          onChangeText={setUsername}
           autoCapitalize="none"
-          keyboardType="email-address"
+          autoCorrect={false}
           editable={!loading}
         />
 
+        <Text style={styles.sectionLabel}>Password</Text>
         <TextInput
           style={styles.input}
-          placeholder="Password (min 6 characters)"
+          placeholder="Minimum 6 characters"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           editable={!loading}
         />
 
+        <Text style={styles.sectionLabel}>How will you use RegattaFlow?</Text>
+        <View style={styles.personaRow}>
+          {personaOptions.map((option) => {
+            const selected = persona === option.value;
+            const isLast = option.value === lastPersonaValue;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.personaButton,
+                  selected && styles.personaButtonSelected,
+                  isLast && styles.personaButtonLast,
+                ]}
+                onPress={() => setPersona(option.value)}
+                disabled={loading}
+                testID={`choose-${option.value}`}
+              >
+                <Text style={[styles.personaLabel, selected && styles.personaLabelSelected]}>
+                  {option.label}
+                </Text>
+                <Text style={[styles.personaDescription, selected && styles.personaDescriptionSelected]}>
+                  {option.description}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={onSignUp}
+          style={[styles.primaryButton, loading && styles.buttonDisabled]}
+          onPress={handleSignUp}
           disabled={loading}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Creating Account...' : 'Sign Up'}
-          </Text>
+          <Text style={styles.primaryButtonText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -124,9 +129,7 @@ export default function SignUp() {
           onPress={() => router.push('/(auth)/login')}
           disabled={loading}
         >
-          <Text style={styles.linkText}>
-            Already have an account? Sign In
-          </Text>
+          <Text style={styles.linkText}>Already have an account? Sign in</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -139,24 +142,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  personaButtonLast: {
+    marginBottom: 0,
   },
   content: {
     width: '100%',
-    maxWidth: 400,
-    padding: 20,
+    maxWidth: 440,
+    paddingVertical: 32,
   },
   title: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#0F172A',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 18,
-    color: '#64748B',
+    fontSize: 15,
+    color: '#475569',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 28,
+    lineHeight: 22,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 8,
   },
   input: {
     backgroundColor: '#FFFFFF',
@@ -164,30 +178,63 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     fontSize: 16,
   },
-  button: {
-    backgroundColor: '#0066CC',
+  personaRow: {
+    flexDirection: 'column',
+    marginBottom: 24,
+  },
+  personaButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
     borderRadius: 12,
     padding: 16,
+    marginBottom: 12,
+  },
+  personaButtonSelected: {
+    borderColor: '#2563EB',
+    backgroundColor: '#DBEAFE',
+  },
+  personaLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  personaLabelSelected: {
+    color: '#1D4ED8',
+  },
+  personaDescription: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  personaDescriptionSelected: {
+    color: '#1E3A8A',
+  },
+  primaryButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
-  buttonText: {
+  primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   linkButton: {
-    marginTop: 16,
+    marginTop: 24,
     alignItems: 'center',
   },
   linkText: {
-    color: '#0066CC',
+    color: '#2563EB',
     fontSize: 14,
+    fontWeight: '500',
   },
 });

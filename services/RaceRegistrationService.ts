@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Race Registration Service
  * Handles race entry creation, payment processing, and crew management

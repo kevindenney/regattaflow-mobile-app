@@ -359,9 +359,9 @@ export class VenueDetectionService {
       const transition: VenueTransition = {
         fromVenue: previousVenue,
         toVenue: venue,
-        timestamp: new Date(),
-        detectionMethod: 'gps',
-        confidence: 0.9
+        transitionType: 'traveling',
+        transitionDate: new Date(),
+        adaptationRequired: [],
       };
 
       // Notify transition callbacks
@@ -522,20 +522,6 @@ export class VenueDetectionService {
     });
   }
 
-
-  /**
-   * Get current venue
-   */
-  getCurrentVenue(): SailingVenue | null {
-    return this.currentVenue;
-  }
-
-  /**
-   * Get current location
-   */
-  getCurrentLocation(): Coordinates | null {
-    return this.currentLocation;
-  }
 
   /**
    * Get detection status

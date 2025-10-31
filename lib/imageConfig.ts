@@ -11,15 +11,20 @@
  */
 
 import { Image } from 'expo-image';
+import type { ImageProps } from 'expo-image';
 import { Platform } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';
+
+type PrefetchableImageSource = Parameters<typeof Image.prefetch>[0];
+type ImageContentFitValue = NonNullable<ImageProps['contentFit']>;
+type ImageCachePolicyValue = NonNullable<ImageProps['cachePolicy']>;
 
 /**
  * Initialize expo-image with optimal cache settings
  */
 
 const logger = createLogger('imageConfig');
-export function initializeImageCache() {
+export function initializeImageCache(): void {
   // Clear any old cache on app start (optional - remove if you want persistent cache)
   // Image.clearMemoryCache();
 
@@ -31,8 +36,8 @@ export function initializeImageCache() {
 /**
  * Prefetch commonly used images to improve performance
  */
-async function prefetchCommonImages() {
-  const commonImages = [
+async function prefetchCommonImages(): Promise<void> {
+  const commonImages: PrefetchableImageSource[] = [
     // Add your app's commonly used images here
     // Example: require('@/assets/images/logo.png'),
   ];
@@ -50,34 +55,34 @@ async function prefetchCommonImages() {
  * Get optimal content fit based on use case
  */
 export const ImageContentFit = {
-  AVATAR: 'cover' as const,
-  THUMBNAIL: 'cover' as const,
-  PHOTO: 'contain' as const,
-  BACKGROUND: 'cover' as const,
-  ICON: 'contain' as const,
-};
+  AVATAR: 'cover',
+  THUMBNAIL: 'cover',
+  PHOTO: 'contain',
+  BACKGROUND: 'cover',
+  ICON: 'contain',
+} as const satisfies Record<string, ImageContentFitValue>;
 
 /**
  * Get optimal cache policy based on image type
  */
 export const ImageCachePolicy = {
   // Cache everything in memory and disk (default, best performance)
-  DEFAULT: 'memory-disk' as const,
+  DEFAULT: 'memory-disk',
 
   // Only cache in memory (faster but less persistent)
-  MEMORY_ONLY: 'memory' as const,
+  MEMORY_ONLY: 'memory',
 
   // Only cache on disk (saves memory but slower)
-  DISK_ONLY: 'disk' as const,
+  DISK_ONLY: 'disk',
 
   // Don't cache (for dynamic/sensitive images)
-  NO_CACHE: 'none' as const,
-};
+  NO_CACHE: 'none',
+} as const satisfies Record<string, ImageCachePolicyValue>;
 
 /**
  * Get optimal transition duration based on platform
  */
-export function getImageTransition(duration: number = 300) {
+export function getImageTransition(duration: number = 300): number {
   return Platform.OS === 'web' ? duration : duration * 0.7; // Slightly faster on native
 }
 
@@ -99,7 +104,7 @@ export const ImagePlaceholders = {
 /**
  * Clear image cache (useful for troubleshooting or memory management)
  */
-export async function clearImageCache() {
+export async function clearImageCache(): Promise<void> {
   try {
     await Image.clearMemoryCache();
     await Image.clearDiskCache();
@@ -112,7 +117,7 @@ export async function clearImageCache() {
 /**
  * Get cache size (useful for monitoring)
  */
-export async function getImageCacheSize() {
+export async function getImageCacheSize(): Promise<{ memory: number; disk: number }> {
   try {
     // Note: expo-image doesn't provide a direct API for this yet
     // This is a placeholder for future implementation

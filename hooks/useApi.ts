@@ -1,14 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+type ApiEnvelope<T> = {
+  data: T | null;
+  error?: Error | null;
+  loading?: boolean;
+};
+
+type ApiResult<T> = T | ApiEnvelope<T | null> | null | undefined;
+
+const normalizeApiResult = <T,>(result: ApiResult<T>): { data: T | null; error: Error | null } => {
+  if (result === null || result === undefined) {
+    return { data: null, error: null };
+  }
+
+  if (typeof result === 'object' && 'data' in result) {
+    const envelope = result as ApiEnvelope<T | null>;
+    return {
+      data: envelope.data ?? null,
+      error: envelope.error ?? null,
+    };
+  }
+
+  return { data: result as T, error: null };
+};
 
 // ============================================================================
 // Generic API Hook
 // ============================================================================
 
 export interface UseApiOptions<T> {
-  onSuccess?: (data: T) => void;
+  onSuccess?: (data: T | null) => void;
   onError?: (error: Error) => void;
-  initialData?: T;
+  initialData?: T | null;
   enabled?: boolean;
 }
 
@@ -17,18 +40,23 @@ export interface UseApiReturn<T> {
   loading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
-  mutate: (optimisticData?: T) => Promise<void>;
+  mutate: (optimisticData?: T | null) => Promise<void>;
 }
 
 export function useApi<T>(
-  apiFunction: () => Promise<{ data: T | null; error: Error | null; loading: boolean }>,
+  apiFunction: () => Promise<ApiResult<T>>,
   options: UseApiOptions<T> = {}
 ): UseApiReturn<T> {
   const { enabled = true, initialData = null, onSuccess, onError } = options;
 
-  const [data, setData] = useState<T | null>(initialData);
+  const [data, setData] = useState<T | null>(initialData ?? null);
   const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
+  const apiRef = useRef(apiFunction);
+
+  useEffect(() => {
+    apiRef.current = apiFunction;
+  }, [apiFunction]);
 
   const fetchData = useCallback(async () => {
     if (!enabled) {
@@ -39,44 +67,49 @@ export function useApi<T>(
     setError(null);
 
     try {
-      const result = await apiFunction();
+      const result = await apiRef.current();
+      const normalized = normalizeApiResult<T>(result);
 
-      if (result.error) {
-        console.error('[useApi] Error in result:', result.error);
-        setError(result.error);
-        onError?.(result.error);
-      } else {
-        setData(result.data);
-        onSuccess?.(result.data as T);
+      if (normalized.error) {
+        console.error('[useApi] Error in result:', normalized.error);
+        setError(normalized.error);
+        onError?.(normalized.error);
       }
+
+      setData(normalized.data);
+      onSuccess?.(normalized.data);
     } catch (err) {
-      const error = err as Error;
-      console.error('[useApi] Exception caught:', error);
-      setError(error);
-      onError?.(error);
+      const typedError = err as Error;
+      console.error('[useApi] Exception caught:', typedError);
+      setError(typedError);
+      onError?.(typedError);
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  }, [enabled, onError, onSuccess]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const mutate = useCallback(async (optimisticData?: T) => {
-    if (optimisticData) {
-      setData(optimisticData);
+    if (enabled) {
+      fetchData();
     }
-    await fetchData();
-  }, [fetchData]);
+  }, [enabled, fetchData]);
+
+  const mutate = useCallback(
+    async (optimisticData?: T | null) => {
+      if (optimisticData !== undefined) {
+        setData(optimisticData);
+      }
+      await fetchData();
+    },
+    [fetchData]
+  );
 
   return {
     data,
     loading,
     error,
     refetch: fetchData,
-    mutate
+    mutate,
   };
 }
 
@@ -85,14 +118,14 @@ export function useApi<T>(
 // ============================================================================
 
 export interface UseMutationOptions<TData, TVariables> {
-  onSuccess?: (data: TData) => void;
+  onSuccess?: (data: TData | null) => void;
   onError?: (error: Error) => void;
   onMutate?: (variables: TVariables) => void;
 }
 
 export interface UseMutationReturn<TData, TVariables> {
   mutate: (variables: TVariables) => Promise<void>;
-  mutateAsync: (variables: TVariables) => Promise<TData>;
+  mutateAsync: (variables: TVariables) => Promise<TData | null>;
   loading: boolean;
   error: Error | null;
   data: TData | null;
@@ -100,7 +133,7 @@ export interface UseMutationReturn<TData, TVariables> {
 }
 
 export function useMutation<TData, TVariables>(
-  mutationFunction: (variables: TVariables) => Promise<{ data: TData | null; error: Error | null; loading: boolean }>,
+  mutationFunction: (variables: TVariables) => Promise<ApiResult<TData>>,
   options: UseMutationOptions<TData, TVariables> = {}
 ): UseMutationReturn<TData, TVariables> {
   const { onSuccess, onError, onMutate } = options;
@@ -109,56 +142,53 @@ export function useMutation<TData, TVariables>(
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const mutate = useCallback(async (variables: TVariables) => {
-    onMutate?.(variables);
-    setLoading(true);
-    setError(null);
+  const execute = useCallback(
+    async (variables: TVariables, throwOnError: boolean): Promise<TData | null> => {
+      onMutate?.(variables);
+      setLoading(true);
+      setError(null);
 
-    try {
-      const result = await mutationFunction(variables);
+      try {
+        const result = await mutationFunction(variables);
+        const normalized = normalizeApiResult<TData>(result);
 
-      if (result.error) {
-        setError(result.error);
-        onError?.(result.error);
-      } else {
-        setData(result.data);
-        onSuccess?.(result.data as TData);
+        if (normalized.error) {
+          setError(normalized.error);
+          onError?.(normalized.error);
+          if (throwOnError) {
+            throw normalized.error;
+          }
+        }
+
+        setData(normalized.data);
+        onSuccess?.(normalized.data);
+        return normalized.data;
+      } catch (err) {
+        const typedError = err as Error;
+        setError(typedError);
+        onError?.(typedError);
+        if (throwOnError) {
+          throw typedError;
+        }
+        return null;
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      onError?.(error);
-    } finally {
-      setLoading(false);
-    }
-  }, [mutationFunction, onSuccess, onError, onMutate]);
+    },
+    [mutationFunction, onError, onMutate, onSuccess]
+  );
 
-  const mutateAsync = useCallback(async (variables: TVariables): Promise<TData> => {
-    onMutate?.(variables);
-    setLoading(true);
-    setError(null);
+  const mutate = useCallback(
+    async (variables: TVariables) => {
+      await execute(variables, false);
+    },
+    [execute]
+  );
 
-    try {
-      const result = await mutationFunction(variables);
-
-      if (result.error) {
-        setError(result.error);
-        onError?.(result.error);
-        throw result.error;
-      } else {
-        setData(result.data);
-        onSuccess?.(result.data as TData);
-        return result.data as TData;
-      }
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      onError?.(error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  }, [mutationFunction, onSuccess, onError, onMutate]);
+  const mutateAsync = useCallback(
+    async (variables: TVariables) => execute(variables, true),
+    [execute]
+  );
 
   const reset = useCallback(() => {
     setData(null);
@@ -172,7 +202,7 @@ export function useMutation<TData, TVariables>(
     loading,
     error,
     data,
-    reset
+    reset,
   };
 }
 
@@ -212,25 +242,27 @@ export function usePaginatedQuery<T>(
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
 
-  const fetchData = useCallback(async (pageNum: number, append: boolean = false) => {
-    setLoading(true);
-    setError(null);
+  const fetchData = useCallback(
+    async (pageNum: number, append: boolean = false) => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      const result = await queryFunction(pageNum, pageSize);
+      try {
+        const result = await queryFunction(pageNum, pageSize);
 
-      setData(prev => append ? [...prev, ...result.data] : result.data);
-      setHasMore(result.hasMore);
-      onSuccess?.(result.data);
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      onError?.(error);
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageSize]);
+        setData(prev => (append ? [...prev, ...result.data] : result.data));
+        setHasMore(result.hasMore);
+        onSuccess?.(result.data);
+      } catch (err) {
+        const typedError = err as Error;
+        setError(typedError);
+        onError?.(typedError);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onError, onSuccess, pageSize, queryFunction]
+  );
 
   useEffect(() => {
     fetchData(1, false);
@@ -242,7 +274,7 @@ export function usePaginatedQuery<T>(
     const nextPage = page + 1;
     setPage(nextPage);
     await fetchData(nextPage, true);
-  }, [hasMore, loading, page, fetchData]);
+  }, [fetchData, hasMore, loading, page]);
 
   const refetch = useCallback(async () => {
     setPage(1);
@@ -261,7 +293,7 @@ export function usePaginatedQuery<T>(
     hasMore,
     fetchMore,
     refetch,
-    refresh
+    refresh,
   };
 }
 
@@ -282,42 +314,38 @@ export function useOptimisticUpdate<T>(
   const [data, setData] = useState<T | null>(initialData);
   const [previousData, setPreviousData] = useState<T | null>(null);
 
-  const update = useCallback(async (
-    optimisticData: T,
-    mutationFn: () => Promise<{ data: T | null; error: Error | null }>
-  ) => {
-    // Store current data for potential rollback
-    setPreviousData(data);
+  const update = useCallback(
+    async (optimisticData: T, mutationFn: () => Promise<ApiResult<T>>) => {
+      setPreviousData(data);
+      setData(optimisticData);
 
-    // Optimistically update
-    setData(optimisticData);
+      try {
+        const result = await mutationFn();
+        const normalized = normalizeApiResult<T>(result);
 
-    try {
-      const result = await mutationFn();
+        if (normalized.error) {
+          if (rollbackOnError) {
+            setData(previousData);
+          }
+          throw normalized.error;
+        }
 
-      if (result.error) {
+        setData(normalized.data);
+        return normalized.data;
+      } catch (err) {
         if (rollbackOnError) {
-          // Rollback on error
           setData(previousData);
         }
-        throw result.error;
-      } else {
-        // Update with real data
-        setData(result.data);
-        return result.data;
+        throw err;
       }
-    } catch (error) {
-      if (rollbackOnError) {
-        setData(previousData);
-      }
-      throw error;
-    }
-  }, [data, previousData, rollbackOnError]);
+    },
+    [data, previousData, rollbackOnError]
+  );
 
   return {
     data,
     setData,
-    update
+    update,
   };
 }
 
@@ -330,9 +358,7 @@ export interface UsePullToRefreshReturn {
   onRefresh: () => Promise<void>;
 }
 
-export function usePullToRefresh(
-  refreshFunction: () => Promise<void>
-): UsePullToRefreshReturn {
+export function usePullToRefresh(refreshFunction: () => Promise<void>): UsePullToRefreshReturn {
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -346,6 +372,6 @@ export function usePullToRefresh(
 
   return {
     refreshing,
-    onRefresh
+    onRefresh,
   };
 }

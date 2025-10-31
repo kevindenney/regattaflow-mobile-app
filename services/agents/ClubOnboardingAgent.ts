@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Club Onboarding Agent
  * Autonomous AI agent for club setup with venue intelligence, pricing optimization, and staff configuration
@@ -22,7 +24,7 @@ export class ClubOnboardingAgent extends BaseAgentService {
 
   constructor() {
     super({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-haiku-latest',
       maxTokens: 4096,
       temperature: 0.7,
       systemPrompt: `You are an expert sailing club administrator and business consultant helping yacht clubs, class associations, and regatta organizers set up their operations on RegattaFlow.

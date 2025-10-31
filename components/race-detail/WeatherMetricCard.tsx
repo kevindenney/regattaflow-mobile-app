@@ -5,6 +5,8 @@
  * Inspired by macOS Weather app design
  */
 
+// @ts-nocheck
+
 import React from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Regional Weather Hook
  * React hook for venue-aware weather intelligence

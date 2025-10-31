@@ -10,6 +10,17 @@ import {
 } from 'react-native';
 import type { BoatPerformanceStats } from '@/hooks/useBoatPerformanceStats';
 
+type BoatDetailTab =
+  | 'overview'
+  | 'crew'
+  | 'sails'
+  | 'rigging'
+  | 'equipment'
+  | 'maintenance'
+  | 'performance'
+  | 'tuning3d'
+  | 'guides';
+
 interface BoatDetailProps {
   boat: {
     id: string;
@@ -31,6 +42,7 @@ interface BoatDetailProps {
     sails?: number | null;
     maintenance?: number | null;
   };
+  onNavigate?: (tab: BoatDetailTab) => void;
 }
 
 interface VenueConfig {
@@ -66,6 +78,7 @@ export function BoatDetail({
   performanceStats,
   performanceLoading = false,
   summaryCounts,
+  onNavigate,
 }: BoatDetailProps) {
   const stats = performanceStats ?? null;
   const counts = summaryCounts ?? {};
@@ -147,24 +160,28 @@ export function BoatDetail({
       label: 'Crew',
       icon: 'people' as const,
       badge: counts.crew,
+      tab: 'crew' as BoatDetailTab,
     },
     {
       key: 'sails',
       label: 'Sails',
       icon: 'flag' as const,
       badge: counts.sails,
+      tab: 'sails' as BoatDetailTab,
     },
     {
       key: 'rigging',
       label: 'Rigging',
       icon: 'git-network' as const,
       badge: null,
+      tab: 'rigging' as BoatDetailTab,
     },
     {
       key: 'maintenance',
       label: 'Maintenance',
       icon: 'build' as const,
       badge: counts.maintenance,
+      tab: 'maintenance' as BoatDetailTab,
     },
     {
       key: 'performance',
@@ -176,6 +193,7 @@ export function BoatDetail({
           : performanceLoading
             ? null
             : undefined,
+      tab: 'performance' as BoatDetailTab,
     },
   ];
   return (
@@ -254,7 +272,10 @@ export function BoatDetail({
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Performance Profile</Text>
-          <TouchableOpacity style={styles.viewAllButton}>
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={() => onNavigate?.('performance')}
+          >
             <Text style={styles.viewAllText}>View All</Text>
             <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
           </TouchableOpacity>
@@ -335,7 +356,11 @@ export function BoatDetail({
         <Text style={[styles.cardTitle, styles.cardTitleStandalone]}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           {quickActions.map((action) => (
-            <TouchableOpacity key={action.key} style={styles.actionCard}>
+            <TouchableOpacity
+              key={action.key}
+              style={styles.actionCard}
+              onPress={() => onNavigate?.(action.tab)}
+            >
               <Ionicons
                 name={action.icon}
                 size={24}

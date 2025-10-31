@@ -118,6 +118,7 @@ export default function TabLayout() {
         { key: 'fleet', label: 'Fleets', icon: 'people-outline', route: '/(tabs)/fleet' },
         { key: 'club', label: 'Clubs', icon: 'people-circle-outline', route: '/(tabs)/clubs' },
         { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' },
+        { key: 'coaching', label: 'Coaching Marketplace', icon: 'school-outline', route: '/(tabs)/coaching' },
         { key: 'tuning-guides', label: 'Tuning Guides', icon: 'book-outline', route: '/(tabs)/tuning-guides' },
         { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
         { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' }
@@ -486,7 +487,19 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="add-race-redesign"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="race/comprehensive-add"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="race-detail-demo"
           options={{
             href: null,
           }}

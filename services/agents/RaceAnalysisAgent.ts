@@ -11,7 +11,7 @@ import { supabase } from '../supabase';
 export class RaceAnalysisAgent extends BaseAgentService {
   constructor() {
     super({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-haiku-latest',
       maxTokens: 8192, // More tokens for detailed analysis
       temperature: 0.7,
       systemPrompt: `You are an expert sailing coach analyzing race performance. Your goal is to provide constructive, actionable feedback that helps sailors improve.

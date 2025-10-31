@@ -29,6 +29,13 @@ export class GlobalVenueDatabase {
     this.supabaseService = new SupabaseVenueService();
   }
 
+  private storeVenue(venue: SailingVenue): void {
+    this.venues.set(venue.id, {
+      ...venue,
+      yachtClubs: venue.primaryClubs,
+    });
+  }
+
   /**
    * Initialize the global venue database with core venues
    */
@@ -103,6 +110,20 @@ export class GlobalVenueDatabase {
    */
   getVenuesByType(venueType: VenueType): SailingVenue[] {
     return Array.from(this.venues.values()).filter(venue => venue.venueType === venueType);
+  }
+
+  /**
+   * Return all venues currently loaded in memory
+   */
+  getAllVenues(): SailingVenue[] {
+    return Array.from(this.venues.values());
+  }
+
+  /**
+   * Utility: calculate distance between two coordinates in kilometers
+   */
+  getDistanceBetweenCoordinates(coord1: Coordinates, coord2: Coordinates): number {
+    return this.calculateDistance(coord1, coord2);
   }
 
   /**
@@ -248,7 +269,7 @@ export class GlobalVenueDatabase {
       }
     ];
 
-    championshipVenues.forEach(venue => this.venues.set(venue.id, venue));
+    championshipVenues.forEach(venue => this.storeVenue(venue));
   }
 
   /**
@@ -346,7 +367,7 @@ export class GlobalVenueDatabase {
       }
     ];
 
-    premierVenues.forEach(venue => this.venues.set(venue.id, venue));
+    premierVenues.forEach(venue => this.storeVenue(venue));
     logger.debug(`⭐ Loaded ${premierVenues.length} premier racing centers`);
   }
 
@@ -451,7 +472,7 @@ export class GlobalVenueDatabase {
       }
     ];
 
-    regionalVenues.forEach(venue => this.venues.set(venue.id, venue));
+    regionalVenues.forEach(venue => this.storeVenue(venue));
   }
 
   /**
@@ -736,7 +757,7 @@ export class GlobalVenueDatabase {
 
       // Convert Supabase venues to our internal format and store
       for (const venue of venues) {
-        this.venues.set(venue.id, venue);
+        this.storeVenue(venue as SailingVenue);
       }
 
     } catch (error: any) {
@@ -870,14 +891,14 @@ export class GlobalVenueDatabase {
         {
           name: 'Island time',
           description: 'Relaxed approach to scheduling',
-          importance: 'moderate',
-          context: 'racing-general'
+          importance: 'helpful',
+          type: 'social'
         },
         {
           name: 'Rum tradition',
           description: 'Post-race celebrations often include local rum',
-          importance: 'cultural',
-          context: 'social'
+          importance: 'helpful',
+          type: 'social'
         }
       ],
       socialProtocols: [
@@ -885,13 +906,13 @@ export class GlobalVenueDatabase {
           name: 'Casual dress',
           description: 'Informal tropical attire acceptable',
           context: 'general',
-          importance: 'moderate'
+          importance: 'helpful'
         },
         {
           name: 'Open hospitality',
           description: 'Welcoming attitude to visiting sailors',
-          context: 'social',
-          importance: 'high'
+          context: 'general',
+          importance: 'important'
         }
       ],
       economicFactors: {
@@ -910,20 +931,25 @@ export class GlobalVenueDatabase {
         },
         safetyRequirements: [
           {
-            name: 'Offshore safety equipment',
-            description: 'Category 1 offshore requirements for distance races'
+            category: 'equipment',
+            requirement: 'Carry Category 1 offshore safety equipment for distance races',
+            mandatory: true,
+            seasonality: ['winter_series']
           }
         ],
         environmentalRestrictions: [
           {
-            name: 'Marine protected areas',
-            description: 'Coral reef protection zones'
+            type: 'marine_park',
+            description: 'Coral reef protection zones',
+            timing: 'permanent',
+            implications: 'Avoid anchoring or sailing in restricted coral areas'
           }
         ],
         entryRequirements: [
           {
-            name: 'US territory access',
-            description: 'Standard US entry requirements for foreign vessels'
+            type: 'customs',
+            description: 'Standard US entry requirements for foreign vessels',
+            processingTime: 'Varies by port of entry'
           }
         ]
       }
@@ -958,7 +984,7 @@ export class GlobalVenueDatabase {
         },
         {
           name: 'Windy Caribbean Model',
-          type: 'commercial',
+          type: 'regional_model',
           region: 'Caribbean',
           accuracy: 'moderate',
           forecastHorizon: 72,

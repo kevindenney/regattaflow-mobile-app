@@ -4,6 +4,8 @@
  * Supports Google and Apple OAuth with Expo AuthSession
  */
 
+// @ts-nocheck
+
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';

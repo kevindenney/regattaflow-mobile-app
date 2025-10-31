@@ -3,6 +3,10 @@ import { Map3DConfig, RaceMark, WeatherConditions, GeoLocation, BoundingBox } fr
 // Re-export base types for convenience
 export type { GeoLocation, BoundingBox };
 
+type BaseWind = WeatherConditions['wind'];
+type BaseTide = WeatherConditions['tide'];
+type BaseWaves = WeatherConditions['waves'];
+
 // Depth point for bathymetry data
 export interface DepthPoint {
   latitude: number;
@@ -74,17 +78,12 @@ export interface WeatherCapabilities {
 
 // Professional weather data
 export interface AdvancedWeatherConditions extends WeatherConditions {
-  wind: {
-    speed: number;
-    direction: number;
-    gusts: number;
+  wind: BaseWind & {
     variability?: number;
     beaufortScale?: number;
   };
-  tide: {
-    height: number;
+  tide: BaseTide & {
     direction: 'flood' | 'ebb' | 'slack' | 'unknown';
-    speed: number;
     nextHigh?: Date;
     nextLow?: Date;
   };
@@ -104,8 +103,13 @@ export interface AdvancedWeatherConditions extends WeatherConditions {
     relative: number;
     absolute: number;
   };
+  waves: BaseWaves & {
+    swellHeight?: number; // meters
+    swellPeriod?: number; // seconds
+    swellDirection?: number; // degrees
+  };
   visibility: {
-    horizontal: number; // nautical miles
+    horizontal: number; // meters
     conditions: 'clear' | 'haze' | 'fog' | 'rain' | 'snow';
     restrictions?: string[];
     vertical?: number;

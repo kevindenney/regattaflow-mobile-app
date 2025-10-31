@@ -18,6 +18,7 @@ import { EnvironmentalAnalysisService, type EnvironmentalAnalysis } from '../../
 import { EnvironmentalVisualizationService } from '../../../services/visualization/EnvironmentalVisualizationService';
 import type { SailingVenue } from '../../../types/venues';
 import { createLogger } from '@/lib/utils/logger';
+import { buildEnvironmentalDeckLayers } from '@/components/map/layers/buildEnvironmentalDeckLayers';
 
 // MapLibre imports (web only)
 let MapLibreEngine: any;
@@ -117,6 +118,7 @@ export function HongKongEnvironmentalTest() {
       const vizStartTime = performance.now();
 
       const layers = vizService.generateLayers(result);
+      const deckLayers = buildEnvironmentalDeckLayers(layers);
 
       const vizTime = performance.now() - vizStartTime;
       logger.debug(`   - Wind particles: ${layers.windParticles.length}`);
@@ -124,6 +126,7 @@ export function HongKongEnvironmentalTest() {
       logger.debug(`   - Wind shadows: ${layers.windShadowZones.length}`);
       logger.debug(`   - Current zones: ${layers.currentAccelerationZones.length}`);
       logger.debug(`   - Buildings: ${layers.buildings.features.length}`);
+      logger.debug('   - Deck layers ready:', deckLayers.map(layer => layer.id));
 
       // Step 3: Render on map (web only for now)
       if (Platform.OS === 'web' && MapLibreEngine) {

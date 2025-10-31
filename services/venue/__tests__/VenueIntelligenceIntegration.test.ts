@@ -91,8 +91,8 @@ describe('Venue Intelligence Integration', () => {
 
       if (venue) {
         // Test venue has comprehensive data
-        expect(venue.yachtClubs).toBeDefined();
-        expect(venue.conditions).toBeDefined();
+        expect(venue.primaryClubs).toBeDefined();
+        expect(venue.sailingConditions).toBeDefined();
         expect(venue.culturalContext).toBeDefined();
         expect(venue.weatherSources).toBeDefined();
 
@@ -121,8 +121,11 @@ describe('Venue Intelligence Integration', () => {
           visitCount: 1,
           lastVisit: new Date(),
           preferences: {
-            preferredBoatClasses: ['Dragon', 'Etchells'],
-            racingFocus: 'fleet_racing'
+            accommodationType: 'hotel',
+            transportPreference: 'rental_car',
+            diningPreference: 'local_restaurants',
+            equipmentPreference: 'ship_own',
+            socialParticipation: 'moderate'
           }
         }
       );
@@ -135,25 +138,69 @@ describe('Venue Intelligence Integration', () => {
       const venue = globalVenueDatabase.getVenueById(testVenueId);
       if (venue) {
         await supabaseVenueService.recordVenueTransition(testUserId, {
-          fromVenue: null, // First visit
+          fromVenue: undefined, // First visit
           toVenue: venue,
           transitionType: 'first_visit',
-          adaptationRequired: ['language', 'currency'],
+          adaptationRequired: [
+            {
+              category: 'language',
+              description: 'Local terminology differs from standard English phrases.',
+              priority: 'helpful',
+              actionRequired: 'Review Cantonese sailing terminology before racing.',
+              userCanConfigure: true
+            },
+            {
+              category: 'currency',
+              description: 'Prepare for Hong Kong Dollar transactions at the venue.',
+              priority: 'important',
+              actionRequired: 'Arrange payment methods compatible with HKD.',
+              userCanConfigure: false
+            }
+          ],
           culturalBriefing: {
             venueId: venue.id,
             languageInfo: {
-              primaryLanguage: 'English',
-              commonPhrases: [],
-              sailingTerminology: []
+              primaryLanguage: venue.culturalContext.primaryLanguages[0] ?? {
+                code: 'en',
+                name: 'English',
+                prevalence: 'primary'
+              },
+              commonPhrases: [
+                {
+                  english: 'Hello',
+                  local: 'Nei hou',
+                  context: 'greeting'
+                }
+              ],
+              sailingTerminology: [
+                {
+                  english: 'Start line',
+                  local: 'Hoi hang sin',
+                  context: 'race_start'
+                }
+              ]
             },
-            culturalProtocols: [],
+            culturalProtocols: [
+              {
+                situation: 'social',
+                expectedBehavior: 'Attend opening socials and respect club dress codes.',
+                importance: 'important'
+              }
+            ],
             economicInfo: {
               currency: 'HKD',
               tippingCustoms: [],
               typicalCosts: [],
               paymentMethods: []
             },
-            practicalTips: []
+            practicalTips: [
+              {
+                category: 'transport',
+                tip: 'Allow extra transit time through Victoria Harbour traffic.',
+                importance: 'important',
+                source: 'verified'
+              }
+            ]
           }
         });
 

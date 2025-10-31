@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import type { Layer } from '@deck.gl/core';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Pressable } from 'react-native';
 import { TimeSlider } from '../map/controls/TimeSlider';
 import { TimeBasedForecastService } from '../../services/TimeBasedForecastService';
@@ -25,6 +26,7 @@ import type { SailingVenue } from '../../types/venues';
 import type { ForecastTimeSeries, ForecastPoint } from '../../services/TimeBasedForecastService';
 import type { CacheStats } from '../../services/BathymetryTileCacheService';
 import type { EnvironmentalLayers } from '../../services/visualization/EnvironmentalVisualizationService';
+import { buildEnvironmentalDeckLayers } from '@/components/map/layers/buildEnvironmentalDeckLayers';
 
 export interface TimeBasedEnvironmentalVisualizationProps {
   /** Sailing venue */
@@ -72,6 +74,7 @@ export function TimeBasedEnvironmentalVisualization({
   const [currentTime, setCurrentTime] = useState(startTime);
   const [currentForecast, setCurrentForecast] = useState<ForecastPoint | null>(null);
   const [currentLayers, setCurrentLayers] = useState<EnvironmentalLayers | null>(null);
+  const [deckLayers, setDeckLayers] = useState<Layer[]>([]);
 
   // Cache state
   const [isCaching, setIsCaching] = useState(false);
@@ -109,6 +112,7 @@ export function TimeBasedEnvironmentalVisualization({
 
         // Generate initial environmental layers
         const layers = vizService.generateLayers(initialForecast.analysis);
+        setDeckLayers(buildEnvironmentalDeckLayers(layers));
         setCurrentLayers(layers);
         onLayersUpdate?.(layers);
       }
@@ -164,6 +168,7 @@ export function TimeBasedEnvironmentalVisualization({
 
         // Generate environmental layers for new time
         const layers = vizService.generateLayers(forecast.analysis);
+        setDeckLayers(buildEnvironmentalDeckLayers(layers));
         setCurrentLayers(layers);
         onLayersUpdate?.(layers);
       }
@@ -324,6 +329,13 @@ export function TimeBasedEnvironmentalVisualization({
               <Text style={styles.layerCount}>
                 {currentLayers.currentAccelerationZones.length}
               </Text>
+            </View>
+          )}
+
+          {deckLayers.length > 0 && (
+            <View style={styles.layerItem}>
+              <Text style={styles.layerLabel}>Deck Layers Ready</Text>
+              <Text style={styles.layerCount}>{deckLayers.length}</Text>
             </View>
           )}
         </View>

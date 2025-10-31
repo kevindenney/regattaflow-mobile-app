@@ -20,20 +20,41 @@ const RaceAnalysisScreen = () => {
   const loading = sessionLoading || analysisLoading;
 
   // Format session data
-  const raceData = session ? {
-    id: session.id,
-    date: new Date(session.start_time).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-    venue: session.regattas?.name || 'Unknown Venue',
-    fleetSize: session.fleet_size || 0,
-    position: session.position || 0,
-    elapsedTime: session.duration_seconds ? `${Math.floor(session.duration_seconds / 60)}:${(session.duration_seconds % 60).toString().padStart(2, '0')}` : '--:--',
-  } : null;
+  const raceData = session
+    ? {
+        id: session.id,
+        date: new Date(session.start_time).toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        }),
+        venue: session.regattas?.name || 'Unknown Venue',
+        fleetSize: session.fleet_size ?? 0,
+        position: session.position ?? 0,
+        elapsedTime: session.duration_seconds
+          ? `${Math.floor(session.duration_seconds / 60)}:${(session.duration_seconds % 60)
+              .toString()
+              .padStart(2, '0')}`
+          : '--:--',
+      }
+    : null;
 
-  const conditions = session ? {
-    windSpeed: session.wind_speed ? `${session.wind_speed} knots` : 'N/A',
-    windDirection: session.wind_direction ? `${session.wind_direction}°` : 'N/A',
-    waveHeight: session.wave_height ? `${session.wave_height}m` : 'N/A',
-  } : null;
+  const conditions = session
+    ? {
+        windSpeed:
+          session.wind_speed !== undefined && session.wind_speed !== null
+            ? `${session.wind_speed} knots`
+            : 'N/A',
+        windDirection:
+          session.wind_direction !== undefined && session.wind_direction !== null
+            ? `${session.wind_direction}°`
+            : 'N/A',
+        waveHeight:
+          session.wave_height !== undefined && session.wave_height !== null
+            ? `${session.wave_height}m`
+            : 'N/A',
+      }
+    : null;
 
   const renderAICoach = () => {
     if (!analysis) {

@@ -1,7 +1,7 @@
 /**
  * Post-Race Analysis Form
  *
- * Multi-step form for structured post-race analysis with Bill Gladstone framework integration.
+ * Multi-step form for structured post-race analysis with Kevin Gladstone framework integration.
  * Works on iOS, Android, and Web (React Native Universal).
  */
 
@@ -22,14 +22,14 @@ import type {
   PostRaceAnalysisFormProps,
 } from '@/types/raceAnalysis';
 
-// Step definitions with Bill's framework hints
+// Step definitions with Kevin's framework hints
 const ANALYSIS_STEPS: AnalysisStep[] = [
   {
     id: 'equipment_planning',
     title: 'Equipment & Planning',
     description: 'How prepared were you for this race?',
     bill_context:
-      '💡 Bill Gladstone: "Boat handling must be second nature, boat speed second to none, THEN tactics will win races."',
+      '💡 Kevin Gladstone: "Boat handling must be second nature, boat speed second to none, THEN tactics will win races."',
     questions: [
       {
         id: 'equipment_rating',
@@ -131,7 +131,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
     title: 'Upwind Leg',
     description: 'How did you perform sailing to windward?',
     bill_context:
-      '💡 Bill: "10° shift = 25% of boat separation. Small shifts have massive impact!"',
+      '💡 Kevin: "10° shift = 25% of boat separation. Small shifts have massive impact!"',
     questions: [
       {
         id: 'upwind_rating',
@@ -143,14 +143,14 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         id: 'upwind_puff_handling',
         type: 'select',
         label: 'How did you handle puffs?',
-        hint: '💡 Bill teaches: "TRIM response, not HELM response"',
+        hint: '💡 Kevin teaches: "TRIM response, not HELM response"',
         required: true,
         bill_framework_reference: 'Puff Response Framework',
         options: [
           {
             value: 'traveler',
             label: 'Traveler down/up',
-            bill_framework_note: '✅ Bill\'s recommendation for moderate keelboats',
+            bill_framework_note: '✅ Kevin\'s recommendation for moderate keelboats',
           },
           {
             value: 'mainsheet',
@@ -178,7 +178,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
           {
             value: 'delayed_tack',
             label: 'Delayed Tack',
-            bill_framework_note: '🏆 Bill\'s signature move!',
+            bill_framework_note: '🏆 Kevin\'s signature move!',
           },
           { value: 'cross_and_cover', label: 'Cross & Cover' },
           { value: 'slam_dunk', label: 'Slam Dunk' },
@@ -199,7 +199,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
     id: 'windward_mark',
     title: 'Windward Mark',
     description: 'How was your windward mark rounding?',
-    bill_context: '💡 Bill: "Round on the LIFTED tack to set up downwind leg"',
+    bill_context: '💡 Kevin: "Round on the LIFTED tack to set up downwind leg"',
     questions: [
       {
         id: 'windward_mark_rating',
@@ -211,7 +211,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         id: 'windward_mark_approach_tack',
         type: 'select',
         label: 'Which tack did you round on?',
-        hint: '💡 Bill recommends rounding on the LIFTED tack',
+        hint: '💡 Kevin recommends rounding on the LIFTED tack',
         required: true,
         bill_framework_reference: 'Getting In Phase',
         options: [
@@ -242,7 +242,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
     title: 'Downwind Leg',
     description: 'How did you sail the run?',
     bill_context:
-      '💡 Bill: "Apparent wind aft WITHOUT stronger = lift → JIBE immediately"',
+      '💡 Kevin: "Apparent wind aft WITHOUT stronger = lift → JIBE immediately"',
     questions: [
       {
         id: 'downwind_rating',
@@ -254,14 +254,14 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         id: 'downwind_shift_detection',
         type: 'select',
         label: 'How did you detect shifts downwind?',
-        hint: '💡 Bill teaches apparent wind feel method',
+        hint: '💡 Kevin teaches apparent wind feel method',
         required: true,
         bill_framework_reference: 'Downwind Shift Detection',
         options: [
           {
             value: 'apparent_wind',
             label: 'Apparent wind feel',
-            bill_framework_note: '✅ Bill\'s method!',
+            bill_framework_note: '✅ Kevin\'s method!',
           },
           { value: 'compass', label: 'Compass' },
           { value: 'schooled_upwind_boats', label: 'Watched upwind boats' },
@@ -444,7 +444,7 @@ export function PostRaceAnalysisForm({
 
   /**
    * Fill with test data (development only)
-   * Fills realistic data that triggers Bill's coaching scenarios
+   * Fills realistic data that triggers Kevin's coaching scenarios
    */
   const fillTestData = () => {
     const testData: Partial<RaceAnalysis> = {
@@ -466,7 +466,7 @@ export function PostRaceAnalysisForm({
 
       // Upwind - Mix of good and needs-improvement responses
       upwind_rating: 3,
-      upwind_puff_handling: 'feathered', // ❌ Will trigger Bill's coaching!
+      upwind_puff_handling: 'feathered', // ❌ Will trigger Kevin's coaching!
       upwind_shift_awareness: 2, // ❌ Low - high priority coaching
       upwind_tactics_used: ['cross_and_cover', 'tack_on_header'], // ❌ Missing delayed_tack
       upwind_notes: 'Lost distance to fleet on right side. Didn\'t see the shift coming.',
@@ -478,7 +478,7 @@ export function PostRaceAnalysisForm({
 
       // Downwind
       downwind_rating: 3,
-      downwind_shift_detection: 'compass', // 🎯 Good but not Bill's method
+      downwind_shift_detection: 'compass', // 🎯 Good but not Kevin's method
       downwind_jibe_count: 8,
       downwind_in_phase: false, // ❌ Because rounded on headed tack
       downwind_notes: 'Felt like I was jibing reactively instead of proactively.',

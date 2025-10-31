@@ -284,7 +284,14 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
     </View>
   );
 
-  const getActivityIcon = (type: string): string => {
+  type ActivityIconName =
+    | 'checkmark-circle'
+    | 'close-circle'
+    | 'add-circle'
+    | 'document-text'
+    | 'information-circle';
+
+  const getActivityIcon = (type: string): ActivityIconName => {
     switch (type) {
       case 'poll_success': return 'checkmark-circle';
       case 'poll_error': return 'close-circle';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -13,13 +13,80 @@ import { useSailorDashboardData } from '@/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { CrewMember } from '@/services/crewManagementService';
+import { useLocalSearchParams } from 'expo-router';
 
 export default function CrewScreen() {
   const { user } = useAuth();
   const sailorData = useSailorDashboardData();
+  const searchParams = useLocalSearchParams<{
+    fromRaceId?: string | string[];
+    classId?: string | string[];
+    className?: string | string[];
+    raceName?: string | string[];
+    raceDate?: string | string[];
+  }>();
   const [selectedMember, setSelectedMember] = useState<CrewMember | null>(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [showPerformanceModal, setShowPerformanceModal] = useState(false);
+
+  const getParam = (value?: string | string[]) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const routeContext = useMemo(() => {
+    const classId = getParam(searchParams.classId);
+    const className = getParam(searchParams.className);
+    const raceName = getParam(searchParams.raceName);
+    const raceDate = getParam(searchParams.raceDate);
+
+    return {
+      classId: classId ?? undefined,
+      className: className ?? undefined,
+      raceName: raceName ?? undefined,
+      raceDate: raceDate ?? undefined,
+    };
+  }, [searchParams]);
+
+  const fallbackClasses = useMemo(() => {
+    if (!routeContext.classId) return [];
+
+    const fallbackName =
+      routeContext.className ||
+      routeContext.raceName ||
+      'Assigned Crew';
+
+    return [
+      {
+        id: routeContext.classId,
+        name: fallbackName,
+        isPrimary: true,
+        boatName: undefined,
+        sailNumber: undefined,
+        tuningGuideUrl: null,
+        group: undefined,
+      },
+    ];
+  }, [routeContext.classId, routeContext.className, routeContext.raceName]);
+
+  const classesToRender = useMemo(() => {
+    if (routeContext.classId) {
+      const matches = sailorData.classes.filter(cls => cls.id === routeContext.classId);
+      if (matches.length > 0) {
+        return matches;
+      }
+      return fallbackClasses;
+    }
+    return sailorData.classes;
+  }, [routeContext.classId, sailorData.classes, fallbackClasses]);
+
+  const loading = sailorData.loading && !routeContext.classId;
+  const errorMessage = !routeContext.classId ? sailorData.error : null;
+  const formattedRaceDate = useMemo(() => {
+    if (!routeContext.raceDate) return undefined;
+    const parsed = new Date(routeContext.raceDate);
+    return Number.isNaN(parsed.getTime())
+      ? routeContext.raceDate
+      : parsed.toLocaleDateString();
+  }, [routeContext.raceDate]);
 
   if (!user) {
     return (
@@ -29,7 +96,7 @@ export default function CrewScreen() {
     );
   }
 
-  if (sailorData.loading) {
+  if (loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#3B82F6" />
@@ -38,15 +105,15 @@ export default function CrewScreen() {
     );
   }
 
-  if (sailorData.error) {
+  if (errorMessage) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.message}>Unable to load crew data: {sailorData.error}</Text>
+        <Text style={styles.message}>Unable to load crew data: {errorMessage}</Text>
       </View>
     );
   }
 
-  if (sailorData.classes.length === 0) {
+  if (classesToRender.length === 0) {
     return (
       <View style={styles.centered}>
         <Text style={styles.message}>
@@ -59,6 +126,19 @@ export default function CrewScreen() {
   return (
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        {routeContext.classId && (
+          <View style={styles.contextBanner}>
+            <Text style={styles.contextTitle}>
+              Managing crew for {routeContext.raceName || routeContext.className || 'selected race'}
+            </Text>
+            {formattedRaceDate && (
+              <Text style={styles.contextSubtitle}>
+                Race date: {formattedRaceDate}
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <View>
@@ -95,7 +175,7 @@ export default function CrewScreen() {
         </View>
 
         {/* Crew by Class */}
-        {sailorData.classes.map(cls => (
+        {classesToRender.map(cls => (
           <View key={cls.id} style={styles.section}>
             <Text style={styles.sectionTitle}>{cls.name}</Text>
             <CrewManagement
@@ -190,6 +270,23 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     gap: 16,
+  },
+  contextBanner: {
+    backgroundColor: '#E0EAFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    gap: 4,
+  },
+  contextTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  contextSubtitle: {
+    fontSize: 13,
+    color: '#1E3A8A',
   },
   centered: {
     flex: 1,

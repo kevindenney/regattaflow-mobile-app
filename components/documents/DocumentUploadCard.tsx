@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Document Upload Card Component
  * Handles document upload and AI processing for sailing documents

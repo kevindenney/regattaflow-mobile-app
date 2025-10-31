@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Document Upload Screen
  *

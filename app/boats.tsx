@@ -1,15 +1,44 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
-import { Image } from '@/components/ui';
-import { Search, Anchor, PlusCircle, ChevronRight, Trash2 } from 'lucide-react-native';
+import { Search, Anchor, ChevronRight, Trash2 } from 'lucide-react-native';
+
+type BoatOption = {
+  id: number;
+  name: string;
+  popularity: string;
+  image?: string;
+};
 
 export default function BoatsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBoats, setSelectedBoats] = useState([]);
-  const [suggestions, setSuggestions] = useState([
-    { id: 1, name: 'Dragon', popularity: 'High popularity at RHKYC', image: 'https://example.com/dragon.jpg' },
-    { id: 2, name: 'International Dragon', popularity: 'Active fleet at RHKYC', image: 'https://example.com/int-dragon.jpg' }
+  const [selectedBoats, setSelectedBoats] = useState<BoatOption[]>([]);
+
+  const [suggestions] = useState<BoatOption[]>([
+    {
+      id: 1,
+      name: 'Dragon',
+      popularity: 'High popularity at RHKYC',
+      image: 'https://example.com/dragon.jpg',
+    },
+    {
+      id: 2,
+      name: 'International Dragon',
+      popularity: 'Active fleet at RHKYC',
+      image: 'https://example.com/int-dragon.jpg',
+    },
   ]);
+
+  const filteredSuggestions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return suggestions;
+    }
+    return suggestions.filter(
+      (boat) =>
+        boat.name.toLowerCase().includes(query) ||
+        boat.popularity.toLowerCase().includes(query)
+    );
+  }, [searchQuery, suggestions]);
 
   return (
     <View className="flex-1 bg-white">
@@ -49,7 +78,7 @@ export default function BoatsScreen() {
           </View>
 
           {/* Selected Boats */}
-          {selectedBoats.map((boat, index) => (
+          {selectedBoats.map((boat) => (
             <View key={boat.id} className="bg-blue-50 rounded-xl p-4 mb-4">
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center flex-1">
@@ -61,7 +90,7 @@ export default function BoatsScreen() {
                 </View>
                 <TouchableOpacity
                   onPress={() => {
-                    setSelectedBoats(boats => boats.filter(b => b.id !== boat.id));
+                    setSelectedBoats((boatsState) => boatsState.filter((b) => b.id !== boat.id));
                   }}
                 >
                   <Trash2 size={20} className="text-blue-600" />
@@ -76,14 +105,17 @@ export default function BoatsScreen() {
               Popular at your location
             </Text>
             
-            {suggestions.map((boat) => (
+            {filteredSuggestions.map((boat) => (
               <TouchableOpacity
                 key={boat.id}
                 className="flex-row items-center bg-white border border-gray-200 rounded-xl p-4 mb-3"
                 onPress={() => {
-                  if (!selectedBoats.find(b => b.id === boat.id)) {
-                    setSelectedBoats([...selectedBoats, boat]);
-                  }
+                  setSelectedBoats((prev) => {
+                    if (prev.some((existing) => existing.id === boat.id)) {
+                      return prev;
+                    }
+                    return [...prev, boat];
+                  });
                 }}
               >
                 <View className="flex-row items-center flex-1">

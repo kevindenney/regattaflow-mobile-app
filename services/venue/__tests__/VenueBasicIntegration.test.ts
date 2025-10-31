@@ -4,6 +4,7 @@
  */
 
 import { globalVenueDatabase } from '../GlobalVenueDatabase';
+import type { Coordinates } from '@/lib/types/global-venues';
 
 describe('Venue Intelligence Basic Integration', () => {
   beforeAll(async () => {
@@ -15,13 +16,13 @@ describe('Venue Intelligence Basic Integration', () => {
       const stats = globalVenueDatabase.getGlobalStats();
 
       expect(stats.totalVenues).toBeGreaterThan(0);
-      expect(stats.totalRegions).toBeGreaterThan(0);
       expect(Object.keys(stats.venuesByType)).toContain('premier');
       expect(Object.keys(stats.venuesByRegion)).toContain('asia-pacific');
+      expect(Object.keys(stats.venuesByRegion).length).toBeGreaterThan(0);
     });
 
     test('should find Hong Kong venue by coordinates', () => {
-      const hongKongCoords = [114.1694, 22.3193];
+      const hongKongCoords: Coordinates = [114.1694, 22.3193];
 
       const venue = globalVenueDatabase.findVenueByLocation(hongKongCoords, 50);
 
@@ -39,7 +40,7 @@ describe('Venue Intelligence Basic Integration', () => {
     });
 
     test('should find nearby venues', () => {
-      const hongKongCoords = [114.1694, 22.3193];
+      const hongKongCoords: Coordinates = [114.1694, 22.3193];
 
       const nearby = globalVenueDatabase.getNearbyVenues(hongKongCoords, 500);
 
@@ -77,13 +78,13 @@ describe('Venue Intelligence Basic Integration', () => {
         expect(venue.timeZone).toBeDefined();
 
         // Check yacht clubs
-        expect(venue.yachtClubs).toBeDefined();
-        expect(venue.yachtClubs.length).toBeGreaterThan(0);
+        expect(venue.primaryClubs).toBeDefined();
+        expect(venue.primaryClubs.length).toBeGreaterThan(0);
 
         // Check sailing conditions
-        expect(venue.conditions).toBeDefined();
-        expect(venue.conditions.windPatterns).toBeDefined();
-        expect(venue.conditions.typicalConditions).toBeDefined();
+        expect(venue.sailingConditions).toBeDefined();
+        expect(venue.sailingConditions.windPatterns).toBeDefined();
+        expect(venue.sailingConditions.typicalConditions).toBeDefined();
 
         // Check cultural context
         expect(venue.culturalContext).toBeDefined();
@@ -103,7 +104,7 @@ describe('Venue Intelligence Basic Integration', () => {
     });
 
     test('should return null for middle of ocean', () => {
-      const oceanCoords = [180.0, 0.0]; // Middle of Pacific
+      const oceanCoords: Coordinates = [180.0, 0.0]; // Middle of Pacific
       const venue = globalVenueDatabase.findVenueByLocation(oceanCoords, 50);
       expect(venue).toBeNull();
     });
@@ -116,20 +117,20 @@ describe('Venue Intelligence Basic Integration', () => {
 
   describe('Distance Calculations', () => {
     test('should calculate distances correctly', () => {
-      const hongKongCoords = [114.1694, 22.3193];
-      const cowesCoords = [-1.2982, 50.7612]; // Cowes, UK
+      const hongKongCoords: Coordinates = [114.1694, 22.3193];
+      const cowesCoords: Coordinates = [-1.2982, 50.7612]; // Cowes, UK
 
       // These two venues should be thousands of kilometers apart
-      const distance = globalVenueDatabase.calculateDistance(hongKongCoords, cowesCoords);
+      const distance = globalVenueDatabase.getDistanceBetweenCoordinates(hongKongCoords, cowesCoords);
 
       expect(distance).toBeGreaterThan(8000); // Should be ~9600km
       expect(distance).toBeLessThan(12000);
     });
 
     test('should calculate zero distance for same coordinates', () => {
-      const coords = [114.1694, 22.3193];
+      const coords: Coordinates = [114.1694, 22.3193];
 
-      const distance = globalVenueDatabase.calculateDistance(coords, coords);
+      const distance = globalVenueDatabase.getDistanceBetweenCoordinates(coords, coords);
 
       expect(distance).toBe(0);
     });
@@ -148,8 +149,8 @@ describe('Venue Intelligence Basic Integration', () => {
         expect(venue.region).toBeTruthy();
         expect(venue.venueType).toBeTruthy();
         expect(venue.timeZone).toBeTruthy();
-        expect(venue.yachtClubs).toBeDefined();
-        expect(venue.conditions).toBeDefined();
+        expect(venue.primaryClubs).toBeDefined();
+        expect(venue.sailingConditions).toBeDefined();
         expect(venue.culturalContext).toBeDefined();
         expect(venue.weatherSources).toBeDefined();
       });
@@ -170,8 +171,8 @@ describe('Venue Intelligence Basic Integration', () => {
     test('yacht clubs should have valid data', () => {
       const venue = globalVenueDatabase.getVenueById('hong-kong-victoria-harbor');
 
-      if (venue && venue.yachtClubs.length > 0) {
-        venue.yachtClubs.forEach(club => {
+      if (venue && venue.primaryClubs.length > 0) {
+        venue.primaryClubs.forEach(club => {
           expect(club.id).toBeTruthy();
           expect(club.name).toBeTruthy();
           expect(club.prestigeLevel).toBeTruthy();

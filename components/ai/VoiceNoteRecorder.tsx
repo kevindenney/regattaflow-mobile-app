@@ -67,12 +67,13 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
   const waveAnimation = useRef(new Animated.Value(0)).current;
 
   // Timer for recording duration
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, []);
@@ -117,6 +118,7 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
       waveAnimation.stopAnimation();
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
     }
   }, [recordingState.isRecording]);

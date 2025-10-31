@@ -165,11 +165,7 @@ export class VenueService {
       // Cache for offline use
       let offline_data_cached = false;
       if (options?.cacheOffline !== false) {
-        await offlineService.cacheVenue(
-          venue,
-          venue.sailingConditions,
-          venue.weatherSources
-        );
+        await offlineService.cacheVenue(venue.id);
         offline_data_cached = true;
       }
 
@@ -359,7 +355,7 @@ export class VenueService {
       .slice(0, 5)
       .map(protocol => ({
         situation: protocol.context,
-        expectedBehavior: protocol.protocol,
+        expectedBehavior: protocol.protocol ?? 'Follow local customs and etiquette.',
         importance: protocol.importance,
         consequences: protocol.consequences,
       }));

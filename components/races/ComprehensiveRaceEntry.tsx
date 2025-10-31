@@ -3,7 +3,7 @@
  * Complete race strategy planning interface with AI-powered auto-suggest
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -44,6 +44,7 @@ import { VenueLocationPicker } from './VenueLocationPicker';
 import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
 import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
 import { createLogger } from '@/lib/utils/logger';
+import { sailorBoatService } from '@/services/SailorBoatService';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
@@ -131,6 +132,7 @@ export function ComprehensiveRaceEntry({
   const [venueCoordinates, setVenueCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [description, setDescription] = useState('');
   const [selectedBoatId, setSelectedBoatId] = useState<string | undefined>();
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
   // Timing & Sequence
   const [warningSignalTime, setWarningSignalTime] = useState('10:00');
@@ -174,6 +176,21 @@ export function ComprehensiveRaceEntry({
 
   // Class & Fleet
   const [classDivisions, setClassDivisions] = useState<ClassDivision[]>([{ name: '', fleet_size: 0 }]);
+  const [classSuggestion, setClassSuggestion] = useState<{
+    name?: string;
+    boatName?: string;
+    sailNumber?: string | null;
+    message?: string;
+  } | null>(null);
+  const [classSuggestionLoading, setClassSuggestionLoading] = useState(false);
+  const [hasManualClassEdit, setHasManualClassEdit] = useState(false);
+  const lastSuggestedClassRef = useRef<string | null>(null);
+  const previousBoatIdRef = useRef<string | undefined>(undefined);
+  const hasManualClassEditRef = useRef(false);
+
+  useEffect(() => {
+    hasManualClassEditRef.current = hasManualClassEdit;
+  }, [hasManualClassEdit]);
   const [expectedFleetSize, setExpectedFleetSize] = useState('');
 
   // Weather & Conditions
@@ -255,6 +272,7 @@ export function ComprehensiveRaceEntry({
 
         // Populate boat selection
         setSelectedBoatId(race.boat_id || undefined);
+        setSelectedClassId(race.class_id || race.metadata?.class_id || null);
 
         // Populate timing & start sequence (from top-level fields)
         if (race.warning_signal_time) setWarningSignalTime(race.warning_signal_time);
@@ -293,7 +311,19 @@ export function ComprehensiveRaceEntry({
         if (race.notice_of_race_url) setNoticeOfRaceUrl(race.notice_of_race_url);
 
         // Populate class & fleet (from top-level fields)
-        if (race.class_divisions) setClassDivisions(race.class_divisions);
+        if (race.class_divisions && Array.isArray(race.class_divisions) && race.class_divisions.length > 0) {
+          setClassDivisions(race.class_divisions);
+          if (race.class_divisions.some((div: ClassDivision) => div.name?.trim())) {
+            setHasManualClassEdit(true);
+            hasManualClassEditRef.current = true;
+            lastSuggestedClassRef.current = race.class_divisions[0]?.name ?? null;
+          }
+        } else if (race.metadata?.class_name) {
+          setClassDivisions([{ name: race.metadata.class_name, fleet_size: race.expected_fleet_size || 0 }]);
+          setHasManualClassEdit(true);
+          hasManualClassEditRef.current = true;
+          lastSuggestedClassRef.current = race.metadata.class_name;
+        }
         if (race.expected_fleet_size) setExpectedFleetSize(race.expected_fleet_size.toString());
 
         // Populate weather conditions (from top-level fields)
@@ -338,6 +368,97 @@ export function ComprehensiveRaceEntry({
 
     loadRaceData();
   }, [existingRaceId]);
+
+  useEffect(() => {
+    if (previousBoatIdRef.current && previousBoatIdRef.current !== selectedBoatId) {
+      setHasManualClassEdit(false);
+      hasManualClassEditRef.current = false;
+      lastSuggestedClassRef.current = null;
+      setSelectedClassId(null);
+    }
+
+    previousBoatIdRef.current = selectedBoatId;
+  }, [selectedBoatId]);
+
+  useEffect(() => {
+    if (hasManualClassEdit && classSuggestion?.name) {
+      setClassSuggestion(null);
+    }
+  }, [hasManualClassEdit, classSuggestion?.name]);
+
+  useEffect(() => {
+    if (!selectedBoatId) {
+      setClassSuggestion(null);
+      setClassSuggestionLoading(false);
+      setSelectedClassId(null);
+      return;
+    }
+
+    let cancelled = false;
+    setClassSuggestionLoading(true);
+
+    const loadBoatForSuggestion = async () => {
+      try {
+        const boat = await sailorBoatService.getBoat(selectedBoatId);
+
+        if (cancelled) return;
+
+        setClassSuggestionLoading(false);
+
+        if (!boat) {
+          setClassSuggestion({
+            message: 'Unable to load boat details. Select a class manually.',
+          });
+          setSelectedClassId(null);
+          return;
+        }
+
+        if (boat.boat_class?.name) {
+          setClassSuggestion({
+            name: boat.boat_class.name,
+            boatName: boat.name,
+            sailNumber: boat.sail_number || null,
+          });
+          setSelectedClassId(boat.boat_class.id || null);
+
+          if (!hasManualClassEditRef.current) {
+            setClassDivisions((prev) => {
+              const next = prev.length > 0 ? [...prev] : [{ name: '', fleet_size: 0 }];
+              const currentName = next[0]?.name?.trim();
+              if (!currentName || currentName === lastSuggestedClassRef.current) {
+                next[0] = {
+                  ...(next[0] || { fleet_size: 0 }),
+                  name: boat.boat_class?.name || '',
+                };
+                lastSuggestedClassRef.current = boat.boat_class?.name || null;
+              }
+              return next;
+            });
+          }
+        } else {
+          setClassSuggestion({
+            message: `Boat ${boat.name}${boat.sail_number ? ` (${boat.sail_number})` : ''} doesn't have a class yet. Choose the class below to unlock tuning.`,
+          });
+          setSelectedClassId(null);
+        }
+      } catch (error) {
+        console.error('[ComprehensiveRaceEntry] Failed to fetch boat for class suggestion:', error);
+        if (!cancelled) {
+          setClassSuggestionLoading(false);
+          setClassSuggestion({
+            message: 'Unable to fetch boat details. Select a class manually.',
+          });
+          setSelectedClassId(null);
+        }
+      }
+    };
+
+    loadBoatForSuggestion();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBoatId]);
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -1021,12 +1142,16 @@ export function ComprehensiveRaceEntry({
             );
       }
 
+      const primaryClassEntry = classDivisions.find((d) => d.name?.trim());
+      const primaryClassName = primaryClassEntry?.name?.trim() || null;
+
       const raceData = {
         created_by: user.id,
         name: raceName.trim(),
         start_date: raceDate,
         description: description.trim() || null,
         boat_id: selectedBoatId || null,
+        class_id: selectedClassId ?? null,
         metadata: {
           venue_name: venue.trim(),
           // Store racing area coordinates if selected on map
@@ -1037,6 +1162,8 @@ export function ComprehensiveRaceEntry({
           weather_provider: weatherData?.provider,
           weather_fetched_at: weatherData?.fetchedAt,
           weather_confidence: weatherData?.confidence,
+          ...(selectedClassId ? { class_id: selectedClassId } : {}),
+          ...(primaryClassName ? { class_name: primaryClassName } : {}),
         },
         status: 'planned',
 
@@ -2139,6 +2266,16 @@ export function ComprehensiveRaceEntry({
                     const newDivs = [...classDivisions];
                     newDivs[idx].name = text;
                     setClassDivisions(newDivs);
+                    if (idx === 0) {
+                      const trimmed = text.trim();
+                      const manual = trimmed.length > 0;
+                      setHasManualClassEdit(manual);
+                      hasManualClassEditRef.current = manual;
+                      if (!manual) {
+                        lastSuggestedClassRef.current = null;
+                        setSelectedClassId(null);
+                      }
+                    }
                   }}
                   placeholder="Class Name"
                   className="flex-[2] bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -2165,6 +2302,43 @@ export function ComprehensiveRaceEntry({
               <Plus size={16} color="#0284c7" />
               <Text className="text-sm font-semibold text-sky-600">Add Class</Text>
             </Pressable>
+
+            {classSuggestionLoading && (
+              <View className="flex-row items-center gap-2 mt-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                <ActivityIndicator size="small" color="#0284c7" />
+                <Text className="text-xs text-blue-700">Matching your boat to likely class divisions…</Text>
+              </View>
+            )}
+
+            {!classSuggestionLoading && classSuggestion && (
+              <View
+                className={`flex-row items-start gap-2 mt-3 px-3 py-2 rounded-lg border ${classSuggestion.name ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}
+              >
+                <MaterialCommunityIcons
+                  name={classSuggestion.name ? 'lightbulb-on-outline' : 'alert-circle-outline'}
+                  size={18}
+                  color={classSuggestion.name ? '#0284c7' : '#b45309'}
+                  style={{ marginTop: 2 }}
+                />
+                <View className="flex-1">
+                  {classSuggestion.name ? (
+                    <>
+                      <Text className="text-xs font-semibold text-blue-700">
+                        Suggested class: {classSuggestion.name}
+                      </Text>
+                      <Text className="text-xs text-blue-600 mt-1">
+                        Based on boat {classSuggestion.boatName}
+                        {classSuggestion.sailNumber ? ` (${classSuggestion.sailNumber})` : ''}. You can change this if needed.
+                      </Text>
+                    </>
+                  ) : (
+                    <Text className="text-xs text-amber-700">
+                      {classSuggestion.message}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
         )}
 

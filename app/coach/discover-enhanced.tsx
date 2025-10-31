@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,23 +16,42 @@ import { CoachMatchingAgent } from '@/services/agents/CoachMatchingAgent';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
 import { supabase } from '@/services/supabase';
+import type { SailorProfile as MatchingSailorProfile } from '@/types/coach';
 
 interface CoachWithMatch extends CoachProfile {
+  display_name?: string | null;
+  profile_photo_url?: string | null;
   matchScore?: number;
   matchReasoning?: string;
-  skillGapAnalysis?: {
-    gaps: string[];
-    strengths: string[];
-    recommendations: string[];
+  recommendations?: string[];
+  compatibilityBreakdown?: {
+    experienceMatch?: number;
+    teachingStyleMatch?: number;
+    specialtyAlignment?: number;
+    successRateRelevance?: number;
+    availabilityMatch?: number;
+    locationConvenience?: number;
+    valueScore?: number;
   };
+  skillGapInsights?: Array<{
+    skill: string;
+    priority?: string;
+    reasoning?: string;
+  }>;
 }
 
 type SortOption = 'compatibility' | 'rating' | 'price' | 'sessions';
 
+const formatBreakdownLabel = (label: string) =>
+  label
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function EnhancedCoachDiscoveryScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { recentRaces } = useSailorDashboardData();
+  const sailorDashboard = useSailorDashboardData();
 
   const [loading, setLoading] = useState(true);
   const [matchingInProgress, setMatchingInProgress] = useState(false);
@@ -46,12 +65,27 @@ export default function EnhancedCoachDiscoveryScreen() {
     maxHourlyRate: 0,
     specialties: [] as string[],
   });
+  const { classes, venues, performance } = sailorDashboard;
+  const recentResults = useMemo(
+    () => performance?.recentResults ?? [],
+    [performance]
+  );
+  const fallbackBoatClasses = useMemo(
+    () =>
+      classes
+        .map((sailorClass) => sailorClass.name)
+        .filter((name): name is string => Boolean(name)),
+    [classes]
+  );
+  const currentVenueId = venues.currentVenue?.id;
 
-  useEffect(() => {
-    loadCoachesWithMatching();
-  }, []);
+  const loadCoachesWithMatching = useCallback(async () => {
+    if (!user?.id) {
+      setLoading(false);
+      setMatchingInProgress(false);
+      return;
+    }
 
-  const loadCoachesWithMatching = async () => {
     try {
       setLoading(true);
       setMatchingInProgress(true);
@@ -64,44 +98,100 @@ export default function EnhancedCoachDiscoveryScreen() {
         specializations: filters.specialties.length > 0 ? filters.specialties : undefined,
       });
 
-      // 2. Run AI matching agent
-      const matchingAgent = new CoachMatchingAgent();
-      const matchResult = await matchingAgent.matchCoaches({
-        userId: user.id,
-        recentRaces: recentRaces || [],
-        preferences: {
-          boatClass: user.primary_boat_class,
-          maxHourlyRate: filters.maxHourlyRate || undefined,
-          preferredLanguages: ['en'],
-        },
-      });
+      // 2. Load sailor profile data to feed the matching agent
+      const { data: sailorProfileData, error: sailorProfileError } = await supabase
+        .from('sailor_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-      if (matchResult.success) {
-        // 3. Merge match scores with coach data
-        const coachesWithMatches = results.map((coach) => {
-          const match = matchResult.result.matches?.find(
-            (m) => m.coachId === coach.id
-          );
+      if (sailorProfileError) {
+        console.warn(
+          'Unable to load sailor profile for coach matching:',
+          sailorProfileError.message
+        );
+      }
+
+      const profileBoatClasses =
+        (Array.isArray(sailorProfileData?.boat_classes)
+          ? (sailorProfileData?.boat_classes as string[])
+          : []) || [];
+
+      const sailorProfile: MatchingSailorProfile = {
+        id: sailorProfileData?.id ?? user.id,
+        user_id: user.id,
+        sailing_experience: sailorProfileData?.sailing_experience ?? 5,
+        boat_classes:
+          profileBoatClasses.length > 0
+            ? profileBoatClasses
+            : fallbackBoatClasses,
+        goals: sailorProfileData?.goals ?? 'Improve racing performance',
+        competitive_level: sailorProfileData?.competitive_level ?? 'intermediate',
+        learning_style: sailorProfileData?.learning_style ?? undefined,
+        location: sailorProfileData?.location ?? sailorProfileData?.home_port ?? undefined,
+        budget_range: sailorProfileData?.budget_range ?? undefined,
+      };
+
+      // 3. Run AI matching agent
+      const matchingAgent = new CoachMatchingAgent();
+      const matchResult = await matchingAgent.matchSailorWithCoach(
+        user.id,
+        sailorProfile,
+        {
+          boatClass:
+            sailorProfile.boat_classes[0] ||
+            user.primary_boat_class ||
+            fallbackBoatClasses[0],
+          venueId: currentVenueId,
+          goals: sailorProfile.goals,
+        }
+      );
+
+      if (matchResult.success && matchResult.result) {
+        const agentOutput = matchResult.result;
+        const scores = Array.isArray(agentOutput.scores)
+          ? agentOutput.scores
+          : [];
+        const skillGapInsights = Array.isArray(agentOutput.skillGaps)
+          ? agentOutput.skillGaps
+          : [];
+
+        const coachesWithMatches: CoachWithMatch[] = results.map((coach) => {
+          const score = scores.find((entry: any) => entry.coachId === coach.id);
+
           return {
             ...coach,
-            matchScore: match?.score,
-            matchReasoning: match?.reasoning,
-            skillGapAnalysis: match?.skillGaps,
+            matchScore: score ? score.overallScore / 100 : undefined,
+            matchReasoning: score?.reasoning,
+            recommendations: score?.recommendations,
+            compatibilityBreakdown: score?.breakdown,
+            skillGapInsights,
           };
         });
 
-        // 4. Save match scores to database
-        if (matchResult.result.matches) {
-          await supabase.from('coach_match_scores').upsert(
-            matchResult.result.matches.map((match) => ({
-              user_id: user.id,
-              coach_id: match.coachId,
-              compatibility_score: match.score,
-              skill_gap_analysis: match.skillGaps,
-              match_reasoning: match.reasoning,
-              performance_data_used: { races: recentRaces?.length || 0 },
-            }))
-          );
+        if (scores.length > 0) {
+          const { error: matchSaveError } = await supabase
+            .from('coach_match_scores')
+            .upsert(
+              scores.map((score: any) => ({
+                user_id: user.id,
+                coach_id: score.coachId,
+                compatibility_score: score.overallScore / 100,
+                skill_gap_analysis: skillGapInsights,
+                match_reasoning: score.reasoning ?? null,
+                score_breakdown: score.breakdown ?? null,
+                performance_data_used: {
+                  trends: agentOutput.trends ?? {},
+                  recentResults: agentOutput.recentResults ?? [],
+                  recentRaceCount: recentResults.length,
+                },
+              })),
+              { onConflict: 'user_id,coach_id' }
+            );
+
+          if (matchSaveError) {
+            console.warn('Failed to persist coach match scores:', matchSaveError.message);
+          }
         }
 
         setCoaches(coachesWithMatches);
@@ -115,7 +205,25 @@ export default function EnhancedCoachDiscoveryScreen() {
       setLoading(false);
       setMatchingInProgress(false);
     }
-  };
+  }, [
+    currentVenueId,
+    fallbackBoatClasses,
+    filters.location,
+    filters.maxHourlyRate,
+    filters.minRating,
+    filters.specialties,
+    recentResults.length,
+    user?.id,
+    user?.primary_boat_class,
+  ]);
+
+  useEffect(() => {
+    if (!user?.id || sailorDashboard.loading) {
+      return;
+    }
+
+    loadCoachesWithMatching();
+  }, [loadCoachesWithMatching, sailorDashboard.loading, user?.id]);
 
   const sortedCoaches = [...coaches].sort((a, b) => {
     switch (sortBy) {
@@ -363,6 +471,11 @@ export default function EnhancedCoachDiscoveryScreen() {
           sortedCoaches.map((coach, index) => {
             const badge = getMatchBadge(coach.matchScore);
             const isExpanded = expandedCoach === coach.id;
+            const displayName =
+              coach.display_name ||
+              coach.based_at ||
+              `Coach ${index + 1}`;
+            const avatarInitial = displayName.charAt(0).toUpperCase();
 
             return (
               <View key={coach.id} style={styles.coachCard}>
@@ -390,19 +503,19 @@ export default function EnhancedCoachDiscoveryScreen() {
                       />
                     ) : (
                       <Text style={styles.avatarText}>
-                        {coach.display_name.charAt(0).toUpperCase()}
+                        {avatarInitial}
                       </Text>
                     )}
                   </View>
                   <View style={styles.coachInfo}>
-                    <Text style={styles.coachName}>{coach.display_name}</Text>
+                    <Text style={styles.coachName}>{displayName}</Text>
                     <View style={styles.ratingContainer}>
                       <Text style={styles.ratingStars}>★</Text>
                       <Text style={styles.ratingValue}>
                         {coach.average_rating?.toFixed(1) || '0.0'}
                       </Text>
                       <Text style={styles.sessionCount}>
-                        ({coach.total_sessions} sessions)
+                        ({coach.total_sessions ?? 0} sessions)
                       </Text>
                     </View>
                   </View>
@@ -460,51 +573,50 @@ export default function EnhancedCoachDiscoveryScreen() {
                           {coach.matchReasoning}
                         </Text>
 
-                        {coach.skillGapAnalysis && (
-                          <>
-                            {coach.skillGapAnalysis.gaps.length > 0 && (
-                              <View style={styles.analysisSection}>
-                                <Text style={styles.analysisSectionTitle}>
-                                  🎯 Areas to improve:
-                                </Text>
-                                {coach.skillGapAnalysis.gaps.map((gap, idx) => (
-                                  <Text key={idx} style={styles.analysisItem}>
-                                    • {gap}
+                        {coach.skillGapInsights && coach.skillGapInsights.length > 0 && (
+                          <View style={styles.analysisSection}>
+                            <Text style={styles.analysisSectionTitle}>
+                              🎯 Focus areas:
+                            </Text>
+                            {coach.skillGapInsights.map((gap, idx) => (
+                              <Text key={idx} style={styles.analysisItem}>
+                                • {gap.skill}
+                                {gap.priority ? ` (${gap.priority})` : ''}
+                                {gap.reasoning ? ` – ${gap.reasoning}` : ''}
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+
+                        {coach.recommendations && coach.recommendations.length > 0 && (
+                          <View style={styles.analysisSection}>
+                            <Text style={styles.analysisSectionTitle}>
+                              📋 Recommended next steps:
+                            </Text>
+                            {coach.recommendations.map((rec, idx) => (
+                              <Text key={idx} style={styles.analysisItem}>
+                                • {rec}
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+
+                        {coach.compatibilityBreakdown && (
+                          <View style={styles.breakdownContainer}>
+                            <Text style={styles.analysisSectionTitle}>Match breakdown</Text>
+                            <View style={styles.breakdownGrid}>
+                              {Object.entries(coach.compatibilityBreakdown).map(([key, value]) => (
+                                <View key={key} style={styles.breakdownItem}>
+                                  <Text style={styles.breakdownLabel}>
+                                    {formatBreakdownLabel(key)}
                                   </Text>
-                                ))}
-                              </View>
-                            )}
-
-                            {coach.skillGapAnalysis.strengths.length > 0 && (
-                              <View style={styles.analysisSection}>
-                                <Text style={styles.analysisSectionTitle}>
-                                  💪 Your strengths:
-                                </Text>
-                                {coach.skillGapAnalysis.strengths.map(
-                                  (strength, idx) => (
-                                    <Text key={idx} style={styles.analysisItem}>
-                                      • {strength}
-                                    </Text>
-                                  )
-                                )}
-                              </View>
-                            )}
-
-                            {coach.skillGapAnalysis.recommendations.length > 0 && (
-                              <View style={styles.analysisSection}>
-                                <Text style={styles.analysisSectionTitle}>
-                                  📋 Recommended focus:
-                                </Text>
-                                {coach.skillGapAnalysis.recommendations.map(
-                                  (rec, idx) => (
-                                    <Text key={idx} style={styles.analysisItem}>
-                                      • {rec}
-                                    </Text>
-                                  )
-                                )}
-                              </View>
-                            )}
-                          </>
+                                  <Text style={styles.breakdownValue}>
+                                    {value ?? 0}%
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
                         )}
                       </View>
                     )}
@@ -868,6 +980,37 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginLeft: 8,
+  },
+  breakdownContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+  },
+  breakdownGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    gap: 8,
+  },
+  breakdownItem: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  breakdownLabel: {
+    fontSize: 12,
+    color: '#475569',
+    marginBottom: 2,
+  },
+  breakdownValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   actionsContainer: {
     flexDirection: 'row',

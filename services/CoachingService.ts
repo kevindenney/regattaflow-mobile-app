@@ -9,10 +9,13 @@
  */
 
 import { supabase } from './supabase';
+import type { CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
 
 export interface CoachProfile {
   id: string;
   user_id: string;
+  display_name?: string | null;
+  profile_photo_url?: string | null;
   bio?: string;
   specialties: string[];
   experience_years?: number;
@@ -61,9 +64,11 @@ export interface CoachingSession {
   session_type: 'on_water' | 'video_review' | 'strategy' | 'boat_setup' | 'fitness' | 'mental_coaching';
   duration_minutes: number;
   scheduled_at?: string;
+  start_time?: string;
+  end_time?: string;
   started_at?: string;
   completed_at?: string;
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show' | 'confirmed' | 'pending';
   venue_id?: string;
   location_notes?: string;
   focus_areas?: string[];
@@ -90,6 +95,11 @@ export interface CoachingSession {
     id: string;
     name: string;
   };
+  coach?: {
+    id: string;
+    display_name?: string | null;
+    profile_photo_url?: string | null;
+  } | null;
   feedback?: SessionFeedback;
 }
 
@@ -141,6 +151,31 @@ export interface ClientDetails extends CoachingClient {
     lastSessionDate?: string;
     nextSessionDate?: string;
   };
+  recentRaceAnalysis?: SharedRaceAnalysisSummary[];
+  recentRaceStrategies?: SharedRaceStrategySummary[];
+}
+
+export interface SharedRaceAnalysisSummary {
+  id: string;
+  race_id: string;
+  race_name?: string;
+  regatta_name?: string;
+  created_at: string;
+  overall_satisfaction?: number;
+  key_learnings?: string[];
+  ai_coaching_feedback?: CoachingFeedback[];
+  framework_scores?: FrameworkScores | null;
+}
+
+export interface SharedRaceStrategySummary {
+  regatta_id: string;
+  regatta_name?: string;
+  generated_at?: string;
+  strategy_type?: string | null;
+  favored_end?: string | null;
+  wind_strategy?: string | null;
+  confidence_score?: number | null;
+  strategy_content?: any;
 }
 
 class CoachingService {
@@ -319,6 +354,118 @@ class CoachingService {
     const lastSession = completedSessions.find(s => s.completed_at);
     const nextSession = upcomingSessions.find(s => s.scheduled_at);
 
+    let recentRaceAnalysis: SharedRaceAnalysisSummary[] = [];
+    let recentRaceStrategies: SharedRaceStrategySummary[] = [];
+
+    try {
+      const sailorUserId = clientResult.data?.sailor_id;
+
+      if (sailorUserId) {
+        const { data: sailorProfile } = await supabase
+          .from('sailor_profiles')
+          .select('id')
+          .eq('user_id', sailorUserId)
+          .maybeSingle();
+
+        if (sailorProfile?.id) {
+          const { data: analysisRows } = await supabase
+            .from('race_analysis')
+            .select(`
+              id,
+              race_id,
+              created_at,
+              overall_satisfaction,
+              key_learnings,
+              ai_coaching_feedback,
+              framework_scores
+            `)
+            .eq('sailor_id', sailorProfile.id)
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+          const raceIds = (analysisRows || []).map(row => row.race_id).filter(Boolean);
+          let raceMeta = new Map<string, { race_name?: string; regatta_name?: string }>();
+
+          if (raceIds.length > 0) {
+            const { data: racesData } = await supabase
+              .from('regatta_races')
+              .select(`
+                id,
+                race_name,
+                regatta:regatta_id(name)
+              `)
+              .in('id', raceIds);
+
+            racesData?.forEach((race: any) => {
+              raceMeta.set(race.id, {
+                race_name: race.race_name,
+                regatta_name: race.regatta?.name,
+              });
+            });
+          }
+
+          recentRaceAnalysis = (analysisRows || []).map(row => {
+            const meta = raceMeta.get(row.race_id) || {};
+            return {
+              id: row.id,
+              race_id: row.race_id,
+              created_at: row.created_at,
+              overall_satisfaction: row.overall_satisfaction,
+              key_learnings: row.key_learnings || [],
+              ai_coaching_feedback: row.ai_coaching_feedback || [],
+              framework_scores: row.framework_scores || null,
+              race_name: meta.race_name,
+              regatta_name: meta.regatta_name,
+            };
+          });
+        }
+
+        const { data: strategyRows } = await supabase
+          .from('race_strategies')
+          .select(`
+            regatta_id,
+            generated_at,
+            strategy_type,
+            favored_end,
+            wind_strategy,
+            confidence_score,
+            strategy_content
+          `)
+          .eq('user_id', sailorUserId)
+          .order('generated_at', { ascending: false })
+          .limit(5);
+
+        if (strategyRows?.length) {
+          const regattaIds = strategyRows.map((row: any) => row.regatta_id).filter(Boolean);
+          let regattaMeta = new Map<string, string>();
+
+          if (regattaIds.length > 0) {
+            const { data: regattaRows } = await supabase
+              .from('regattas')
+              .select('id, name')
+              .in('id', regattaIds);
+
+            regattaRows?.forEach((regatta: any) => {
+              regattaMeta.set(regatta.id, regatta.name);
+            });
+          }
+
+          recentRaceStrategies = strategyRows.map((row: any) => ({
+            regatta_id: row.regatta_id,
+            regatta_name: regattaMeta.get(row.regatta_id) || undefined,
+            generated_at: row.generated_at,
+            strategy_type: row.strategy_type,
+            favored_end: row.favored_end,
+            wind_strategy: row.wind_strategy,
+            confidence_score: row.confidence_score,
+            strategy_content: row.strategy_content,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading shared race insights:', error);
+    }
+
     return {
       ...clientResult.data,
       sessions,
@@ -330,7 +477,9 @@ class CoachingService {
         averageRating,
         lastSessionDate: lastSession?.completed_at,
         nextSessionDate: nextSession?.scheduled_at
-      }
+      },
+      recentRaceAnalysis,
+      recentRaceStrategies,
     };
   }
 
@@ -835,6 +984,40 @@ class CoachingService {
   }
 
   /**
+   * Get coaching sessions for a sailor (confirmed/completed)
+   */
+  async getSailorSessions(status?: 'scheduled' | 'completed' | 'pending'): Promise<CoachingSession[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    let query = supabase
+      .from('coaching_sessions')
+      .select(`
+        *,
+        coach:coach_profiles!coach_id (
+          id,
+          display_name,
+          profile_photo_url
+        )
+      `)
+      .eq('sailor_id', user.id)
+      .order(status === 'scheduled' ? 'scheduled_at' : 'completed_at', { ascending: false, nullsFirst: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching sailor sessions:', error);
+      throw error;
+    }
+
+    return (data as CoachingSession[]) || [];
+  }
+
+  /**
    * Get booking requests for coach
    */
   async getCoachBookingRequests(coachId: string, status?: string): Promise<any[]> {
@@ -1010,6 +1193,73 @@ class CoachingService {
         session_date: booking.requested_start_time,
         message: reason,
       });
+    }
+  }
+
+  /**
+   * Notify all active coaches when a sailor shares a new race analysis
+   */
+  async notifyCoachesOfRaceAnalysis(params: {
+    sailorUserId: string;
+    sailorName?: string | null;
+    raceId: string;
+    raceName?: string;
+    regattaName?: string;
+    analysisSummary?: string | null;
+    highlights?: string[];
+  }): Promise<void> {
+    try {
+      const { data, error } = await supabase
+        .from('coaching_clients')
+        .select(`
+          id,
+          status,
+          coach:coach_profiles!coach_id (
+            id,
+            display_name,
+            user_id,
+            users:coach_profiles_user_id_fkey (
+              email,
+              full_name
+            )
+          )
+        `)
+        .eq('sailor_id', params.sailorUserId)
+        .eq('status', 'active');
+
+      if (error) {
+        throw error;
+      }
+
+      const activeCoaches = (data || []).filter(
+        (row: any) => row.coach?.users?.email
+      );
+
+      if (activeCoaches.length === 0) {
+        return;
+      }
+
+      const { emailService } = await import('./EmailService');
+
+      await Promise.all(
+        activeCoaches.map(async (row: any) => {
+          const coachEmail = row.coach?.users?.email;
+          if (!coachEmail) return;
+
+          await emailService.sendCoachNotification({
+            coach_name: row.coach?.display_name || row.coach?.users?.full_name || 'Coach',
+            coach_email: coachEmail,
+            notification_type: 'analysis_shared',
+            sailor_name: params.sailorName || 'Sailor',
+            race_name: params.raceName,
+            regatta_name: params.regattaName,
+            analysis_summary: params.analysisSummary || undefined,
+            highlights: params.highlights,
+          });
+        })
+      );
+    } catch (error) {
+      console.error('Error notifying coaches of shared race analysis:', error);
     }
   }
 

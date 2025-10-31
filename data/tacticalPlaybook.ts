@@ -304,7 +304,7 @@ export const TACTICAL_PLAYBOOK_DATA: TacticalTactic[] = [
     execution:
       'Round mark close behind leader. Maintain close reach on main/jib (don\'t fall to course yet). Trim perfectly while their crew is chaotic. Sail into their wind shadow. Once you\'ve blanketed them: set spinnaker smoothly. Both boats slowed but relative positions maintained.',
     championExample:
-      'Bill Cox (American Eagle 1968 America\'s Cup) used this tactic widely. Defense: Lead boat sails close reach to discourage this maneuver. Widely adopted in fleet racing when rounding close behind.',
+      'Kevin Cox (American Eagle 1968 America\'s Cup) used this tactic widely. Defense: Lead boat sails close reach to discourage this maneuver. Widely adopted in fleet racing when rounding close behind.',
     whenToUse: [
       'Rounding close behind another boat (<2 lengths)',
       'Reaching spinnaker leg',

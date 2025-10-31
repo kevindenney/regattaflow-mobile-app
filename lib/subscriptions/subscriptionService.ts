@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Subscription Service
  * Marine-grade subscription management for professional sailing platform

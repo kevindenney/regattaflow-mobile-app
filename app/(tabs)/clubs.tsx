@@ -15,6 +15,7 @@ import { useClubs } from '@/hooks/useData';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   ClubIntegrationSnapshot,
+  ClubDocumentSnapshot,
   useClubIntegrationSnapshots,
 } from '@/hooks/useClubIntegrationSnapshots';
 import yachtClubsDirectory from '@/data/yacht-clubs.json';
@@ -24,6 +25,13 @@ import {
   fetchUserManualClubs,
   upsertUserManualClub,
 } from '@/services/userManualClubsService';
+import {
+  ClubRole,
+  getClubRoleDefinition,
+  hasAdminAccess,
+  isManagementRole,
+  normalizeClubRole,
+} from '@/types/club';
 
 type ManualClub = {
   id: string;
@@ -70,6 +78,76 @@ const directoryClubs = Object.values((yachtClubsDirectory as any).clubs || {}).m
   })
 );
 
+type AdminActionConfig = {
+  id: string;
+  title: string;
+  description: string;
+  emoji: string;
+  roles?: ClubRole[];
+};
+
+const ADMIN_ACTIONS: AdminActionConfig[] = [
+  {
+    id: 'create-regatta',
+    title: 'Create Regatta',
+    description: 'Set dates, fleets, scoring, and registration windows.',
+    emoji: '📅',
+    roles: ['admin', 'race_officer', 'sailing_manager'],
+  },
+  {
+    id: 'manage-entries',
+    title: 'Manage Entries & Payments',
+    description: 'Review entries, reconcile payments, issue refunds.',
+    emoji: '💳',
+    roles: ['admin', 'treasurer'],
+  },
+  {
+    id: 'publish-documents',
+    title: 'Publish Race Documents',
+    description: 'Upload NORs, SIs, and automate expiry reminders.',
+    emoji: '📄',
+    roles: ['admin', 'communications', 'race_officer'],
+  },
+  {
+    id: 'configure-microsite',
+    title: 'Configure Microsite & Widgets',
+    description: 'Brand the public site and embed live widgets.',
+    emoji: '🖥️',
+    roles: ['admin', 'communications'],
+  },
+  {
+    id: 'membership-approvals',
+    title: 'Membership & Roles',
+    description: 'Approve applications and assign club roles.',
+    emoji: '✅',
+    roles: ['admin', 'membership_manager'],
+  },
+  {
+    id: 'volunteer-roster',
+    title: 'Volunteer & RC Roster',
+    description: 'Assign PRO, signal boats, and volunteer shifts.',
+    emoji: '🚩',
+    roles: ['admin', 'race_officer', 'sailing_manager', 'race_committee'],
+  },
+  {
+    id: 'results-center',
+    title: 'Results & Scoring Center',
+    description: 'Validate finishes and publish standings.',
+    emoji: '🏆',
+    roles: ['admin', 'scorer', 'race_officer'],
+  },
+];
+
+const ADMIN_ACTION_DESTINATIONS: Partial<Record<string, { view?: string; tab?: string }>> = {
+  'create-regatta': { view: 'events' },
+  'manage-entries': { view: 'entries' },
+  'publish-documents': { view: 'documents' },
+  'configure-microsite': { view: 'publishing' },
+  'membership-approvals': { view: 'members' },
+  'volunteer-roster': { view: 'volunteers' },
+  'results-center': { view: 'results' },
+};
+
 export default function ClubsScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -115,6 +193,15 @@ export default function ClubsScreen() {
   useEffect(() => {
     manualClubsRef.current = manualClubs;
   }, [manualClubs]);
+
+  const persistManualClubs = useCallback(async (records: ManualClub[]) => {
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(records));
+    } catch (storageError) {
+      console.warn('[ClubsScreen] Failed to persist manual clubs', storageError);
+    }
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -191,20 +278,18 @@ export default function ClubsScreen() {
     }
   }, [integrationError]);
 
-  const persistManualClubs = useCallback(async (records: ManualClub[]) => {
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      await AsyncStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(records));
-    } catch (storageError) {
-      console.warn('[ClubsScreen] Failed to persist manual clubs', storageError);
-    }
-  }, []);
-
   const hasConnectedClub = snapshots.length > 0;
   const selectedSnapshot = useMemo<ClubIntegrationSnapshot | null>(() => {
     if (!selectedClubId) return null;
     return snapshots.find((snapshot) => snapshot.clubId === selectedClubId) || null;
   }, [selectedClubId, snapshots]);
+  const selectedRole = useMemo<ClubRole | null>(() => {
+    if (!selectedSnapshot) return null;
+    return normalizeClubRole(selectedSnapshot.membership.role);
+  }, [selectedSnapshot]);
+  const roleDefinition = selectedRole ? getClubRoleDefinition(selectedRole) : null;
+  const hasAdminPrivileges = selectedRole ? hasAdminAccess(selectedRole) : false;
+  const hasManagementPrivileges = selectedRole ? isManagementRole(selectedRole) : false;
 
   const upcomingVolunteers = useMemo(() => {
     if (!selectedSnapshot) return [];
@@ -336,6 +421,154 @@ export default function ClubsScreen() {
       Alert.alert('Unable to open website', 'Please try again later.');
     }
   }, []);
+
+  const handleAdminActionPress = useCallback(
+    (actionId: string) => {
+      if (!selectedSnapshot) {
+        return;
+      }
+
+      const clubName = selectedSnapshot.club.name;
+      const destination = ADMIN_ACTION_DESTINATIONS[actionId];
+
+      if (destination) {
+        router.push({
+          pathname: '/club-dashboard',
+          params: {
+            clubId: selectedSnapshot.clubId,
+            view: destination.view,
+            tab: destination.tab,
+          },
+        });
+        return;
+      }
+
+      switch (actionId) {
+        case 'create-regatta':
+          Alert.alert(
+            'Regatta workspace',
+            `The regatta creation flow for ${clubName} is being finalised. Your admin board will soon let you add dates, fleets, and scoring in one place.`
+          );
+          return;
+        case 'manage-entries':
+          Alert.alert(
+            'Entries & payments',
+            'Entry approvals, invoices, and refunds are wiring up now. Expect a ledger view and payout reconciliation in the next build.'
+          );
+          return;
+        case 'publish-documents':
+          Alert.alert(
+            'Publishing tools',
+            'Document automation will roll out with template support and scheduled expiry. For now, upload documents via the web console.'
+          );
+          return;
+        case 'configure-microsite':
+          Alert.alert(
+            'Microsite configuration',
+            'Branding, custom domains, and widget embeds are on the roadmap. We will notify you when the white-label publisher is ready.'
+          );
+          return;
+        case 'membership-approvals':
+          Alert.alert(
+            'Membership approvals',
+            'The role-based approval queue is nearly complete. You will soon be able to approve members and assign roles here.'
+          );
+          return;
+        case 'volunteer-roster':
+          Alert.alert(
+            'Volunteer roster',
+            'Volunteer scheduling and race committee assignments are in development. Keep an eye on updates in the Club Control Center.'
+          );
+          return;
+        case 'results-center':
+          Alert.alert(
+            'Results center',
+            'Live scoring review, protest tracking, and standings publishing will land after the entry pipeline ships.'
+          );
+          return;
+        default:
+          Alert.alert('Coming soon', 'Club control center modules are being assembled.');
+      }
+    },
+    [selectedSnapshot]
+  );
+
+  const renderAdminPanel = () => {
+    if (!selectedSnapshot || !selectedRole || !hasManagementPrivileges || !roleDefinition) {
+      return null;
+    }
+
+    const actions = ADMIN_ACTIONS.filter((action) => {
+      if (!action.roles || action.roles.length === 0) {
+        return true;
+      }
+
+      return action.roles.includes(selectedRole);
+    });
+
+    if (actions.length === 0) {
+      return null;
+    }
+
+    const adminStats = [
+      {
+        id: 'open-entries',
+        label: 'Open entries',
+        value: selectedSnapshot.insights.openRegistrations ?? 0,
+      },
+      {
+        id: 'volunteer-needs',
+        label: 'Volunteer shifts',
+        value: selectedSnapshot.insights.volunteerNeeds ?? 0,
+      },
+      {
+        id: 'docs',
+        label: 'New documents',
+        value: selectedSnapshot.insights.newDocuments ?? 0,
+      },
+    ];
+
+    return (
+      <View style={styles.adminPanel}>
+        <View style={styles.adminHeader}>
+          <Text style={styles.adminTitle}>Club Control Center</Text>
+          <Text style={styles.adminSubtitle}>
+            Signed in as {roleDefinition.label}
+            {hasAdminPrivileges ? ' • full access' : ' • management access'}
+          </Text>
+        </View>
+
+        <View style={styles.adminStatsRow}>
+          {adminStats.map((stat, index) => (
+            <View
+              key={stat.id}
+              style={[
+                styles.adminStatCard,
+                index === adminStats.length - 1 && { marginRight: 0 },
+              ]}
+            >
+              <Text style={styles.adminStatValue}>{stat.value}</Text>
+              <Text style={styles.adminStatLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.adminActionGrid}>
+          {actions.map((action) => (
+            <TouchableOpacity
+              key={action.id}
+              style={styles.adminActionCard}
+              onPress={() => handleAdminActionPress(action.id)}
+            >
+              <Text style={styles.adminActionEmoji}>{action.emoji}</Text>
+              <Text style={styles.adminActionTitle}>{action.title}</Text>
+              <Text style={styles.adminActionDescription}>{action.description}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   const renderInsightCards = () => {
     if (!selectedSnapshot) return null;
@@ -591,6 +824,11 @@ export default function ClubsScreen() {
                   <Text style={styles.membershipMeta}>
                     Status: {selectedSnapshot.membership.paymentStatus || 'current'}
                   </Text>
+                  {roleDefinition && (
+                    <Text style={styles.membershipMeta}>
+                      Role: {roleDefinition.label}
+                    </Text>
+                  )}
                   {selectedSnapshot.membership.memberNumber && (
                     <Text style={styles.membershipMeta}>
                       Member #{selectedSnapshot.membership.memberNumber}
@@ -598,13 +836,27 @@ export default function ClubsScreen() {
                   )}
                 </View>
                 <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => router.push('/club-dashboard')}
+                  style={[
+                    styles.primaryButton,
+                    !selectedSnapshot && { opacity: 0.6 },
+                    !hasManagementPrivileges && { backgroundColor: '#1f5fbf' },
+                  ]}
+                  onPress={() => {
+                    if (!selectedSnapshot) return;
+                    router.push({
+                      pathname: '/club-dashboard',
+                      params: { clubId: selectedSnapshot.clubId },
+                    });
+                  }}
                 >
-                  <Text style={styles.primaryButtonText}>Open Club Workspace</Text>
+                  <Text style={styles.primaryButtonText}>
+                    {hasManagementPrivileges ? 'Open Club Workspace' : 'View Club Workspace'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
+
+            {renderAdminPanel()}
 
             {renderInsightCards()}
           </View>
@@ -907,6 +1159,75 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#E5F0FF',
     marginTop: 2,
+  },
+  adminPanel: {
+    backgroundColor: '#0B2C4A',
+    borderRadius: 16,
+    padding: 18,
+    marginTop: 18,
+  },
+  adminHeader: {
+    marginBottom: 12,
+  },
+  adminTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  adminSubtitle: {
+    fontSize: 13,
+    color: '#C7E1FF',
+    marginTop: 4,
+  },
+  adminStatsRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  adminStatCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 12,
+  },
+  adminStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  adminStatLabel: {
+    fontSize: 12,
+    color: '#E5F0FF',
+    marginTop: 4,
+  },
+  adminActionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -6,
+  },
+  adminActionCard: {
+    flexBasis: '48%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    padding: 14,
+    marginHorizontal: 6,
+    marginBottom: 12,
+    minHeight: 120,
+  },
+  adminActionEmoji: {
+    fontSize: 22,
+  },
+  adminActionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 8,
+  },
+  adminActionDescription: {
+    fontSize: 12,
+    color: '#DAE9FF',
+    marginTop: 6,
+    lineHeight: 16,
   },
   insightGrid: {
     flexDirection: 'row',

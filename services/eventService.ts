@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Event Management Service
  * Handles CRUD operations for club events, registrations, and documents

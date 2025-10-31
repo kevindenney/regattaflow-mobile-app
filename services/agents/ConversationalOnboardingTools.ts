@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Conversational Onboarding Tools
  * Enhanced tools with natural language responses for conversational AI

@@ -13,7 +13,7 @@ import { router } from 'expo-router';
 // New redesigned components
 import { EnhancedRaceCard } from '@/components/races';
 import {
-  RaceMapCard,
+  RaceDetailMapHero,
   RaceOverviewCard,
   TimingCard,
   WeatherCard,
@@ -90,6 +90,30 @@ const MOCK_COURSE = {
   ],
 };
 
+const MOCK_RACE_EVENT = {
+  id: 'demo-race',
+  race_name: 'Demo Race',
+  start_time: new Date().toISOString(),
+  venue: {
+    name: 'Victoria Harbour',
+    coordinates_lat: MOCK_MAP_REGION.latitude,
+    coordinates_lng: MOCK_MAP_REGION.longitude,
+  },
+};
+
+const MOCK_MARKS = MOCK_COURSE.marks.map((mark, index) => ({
+  id: `mark_${index}`,
+  mark_name: `Mark ${index + 1}`,
+  mark_type: 'windward',
+  latitude: mark.coordinate.latitude,
+  longitude: mark.coordinate.longitude,
+}));
+
+const MOCK_RACING_AREA_POLYGON = MOCK_COURSE.path.map((point) => ({
+  lat: point.latitude,
+  lng: point.longitude,
+}));
+
 const MOCK_WIND_CONDITIONS = {
   speed: 16,
   direction: 180,
@@ -145,23 +169,32 @@ export default function RaceDetailDemoScreen() {
 
       {/* Detail Content - Scrollable */}
       <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
-        {/* 🗺️ MAP CARD - HERO ELEMENT */}
-        <RaceMapCard
-          mapRegion={MOCK_MAP_REGION}
-          course={MOCK_COURSE}
-          windConditions={MOCK_WIND_CONDITIONS}
-          currentConditions={MOCK_CURRENT_CONDITIONS}
+        {/* 🗺️ MAP HERO */}
+        <RaceDetailMapHero
+          compact
+          race={{
+            ...MOCK_RACE_EVENT,
+            id: selectedRaceId,
+            race_name: selectedRace?.name || MOCK_RACE_EVENT.race_name,
+            start_time: selectedRace?.startTime?.toISOString() || MOCK_RACE_EVENT.start_time,
+            venue: {
+              name: selectedRace?.venue,
+              coordinates_lat: MOCK_MAP_REGION.latitude,
+              coordinates_lng: MOCK_MAP_REGION.longitude,
+            },
+          }}
+          marks={MOCK_MARKS}
+          racingAreaPolygon={MOCK_RACING_AREA_POLYGON}
         />
 
         {/* Race Overview */}
         <RaceOverviewCard
+          raceId={selectedRaceId}
           raceName={selectedRace?.name || 'Unknown Race'}
-          startDate="10/19/2025"
-          startTime="12:45 PM"
-          duration="2h 15m"
+          startTime={selectedRace?.startTime?.toISOString()}
           boatClass="Dragon"
-          venue={selectedRace?.venue}
-          description="Important race in the championship series"
+          venue={{ name: selectedRace?.venue }}
+          onRegenerateStrategy={() => logger.debug('Regenerate strategy')}
         />
 
         {/* Timing & Start Sequence */}
@@ -223,7 +256,17 @@ export default function RaceDetailDemoScreen() {
         <CrewEquipmentCard
           raceId={selectedRaceId}
           classId="dragon-class"
-          onManageCrew={() => logger.debug('Manage crew')}
+          onManageCrew={() =>
+            router.push({
+              pathname: '/(tabs)/crew',
+              params: {
+                fromRaceId: MOCK_RACE_EVENT.id,
+                raceName: MOCK_RACE_EVENT.race_name,
+                classId: 'demo-class',
+                className: 'Demo Class',
+              },
+            })
+          }
         />
 
         {/* ⛵ FLEET RACERS CARD - WHO'S RACING? */}

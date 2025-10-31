@@ -27,6 +27,7 @@ export interface SailingVenue {
 
   // Basic sailing characteristics
   primaryClubs: YachtClub[];
+  yachtClubs?: YachtClub[]; // backward compatibility alias
   sailingConditions: VenueConditionProfile;
   culturalContext: VenueCulturalProfile;
   weatherSources: WeatherSourceConfig;
@@ -50,10 +51,25 @@ export interface YachtClub {
   facilities: ClubFacility[];
   prestigeLevel: 'international' | 'national' | 'regional' | 'local';
   membershipType: 'private' | 'public' | 'reciprocal';
+  racingProgram?: {
+    signature?: string[];
+    yearRound?: string[];
+    majorEvents?: string[];
+  };
 }
 
 export interface ClubFacility {
-  type: 'marina' | 'launch_ramp' | 'dry_storage' | 'repair' | 'restaurant' | 'accommodation';
+  type:
+    | 'marina'
+    | 'launch_ramp'
+    | 'dry_storage'
+    | 'repair'
+    | 'restaurant'
+    | 'accommodation'
+    | 'bar'
+    | 'event_space'
+    | 'fuel'
+    | 'storage';
   name: string;
   available: boolean;
   reservationRequired?: boolean;
@@ -84,7 +100,7 @@ export interface WindPattern {
   frequency: number; // percentage of time
   seasons: string[];
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
-  reliability: 'high' | 'moderate' | 'low';
+  reliability: 'high' | 'moderate' | 'low' | 'very_high';
 }
 
 export interface CurrentPattern {
@@ -113,7 +129,7 @@ export interface SeasonalCondition {
 }
 
 export interface VenueHazard {
-  type: 'shallow_water' | 'rocks' | 'traffic' | 'restricted_area' | 'weather' | 'current';
+  type: 'shallow_water' | 'rocks' | 'traffic' | 'restricted_area' | 'weather' | 'current' | 'navigation';
   name: string;
   location?: Coordinates;
   description: string;
@@ -125,11 +141,11 @@ export interface VenueHazard {
 export interface RacingArea {
   name: string;
   coordinates: Coordinates[];
-  type: 'inshore' | 'offshore' | 'harbor' | 'bay' | 'lake' | 'river';
+  type: 'inshore' | 'offshore' | 'harbor' | 'bay' | 'lake' | 'river' | 'protected_harbor' | 'open_water';
   depth: { min: number; max: number; average: number };
   typicalCourses: CourseType[];
   capacity: number; // maximum boats
-  protection: 'sheltered' | 'semi_sheltered' | 'exposed';
+  protection: 'sheltered' | 'semi_sheltered' | 'exposed' | 'moderate';
 }
 
 export type CourseType =
@@ -138,7 +154,8 @@ export type CourseType =
   | 'trapezoid'
   | 'round_the_buoys'
   | 'distance'
-  | 'pursuit';
+  | 'pursuit'
+  | 'coastal';
 
 // Cultural and regional context
 export interface VenueCulturalProfile {
@@ -153,12 +170,12 @@ export interface VenueCulturalProfile {
 export interface Language {
   code: string; // ISO 639-1
   name: string;
-  prevalence: 'primary' | 'common' | 'useful' | 'rare';
+  prevalence: 'primary' | 'common' | 'useful' | 'rare' | 'secondary';
   sailingTerminology?: boolean;
 }
 
 export interface SailingCultureProfile {
-  tradition: 'historic' | 'established' | 'developing' | 'emerging';
+  tradition: 'historic' | 'established' | 'developing' | 'emerging' | 'modern';
   competitiveness: 'international' | 'national' | 'regional' | 'recreational';
   formality: 'formal' | 'semi_formal' | 'casual' | 'relaxed';
   inclusivity: 'open' | 'welcoming' | 'selective' | 'exclusive';
@@ -169,13 +186,15 @@ export interface RacingCustom {
   type: 'start_sequence' | 'protests' | 'awards' | 'social' | 'equipment';
   name: string;
   description: string;
-  importance: 'critical' | 'important' | 'helpful' | 'nice_to_know';
+  importance: 'critical' | 'important' | 'helpful' | 'nice_to_know' | 'moderate' | 'cultural';
 }
 
 export interface SocialProtocol {
-  context: 'pre_race' | 'post_race' | 'awards' | 'dining' | 'general';
-  protocol: string;
-  importance: 'critical' | 'important' | 'helpful' | 'nice_to_know';
+  name?: string;
+  context: 'pre_race' | 'post_race' | 'awards' | 'dining' | 'general' | 'social';
+  protocol?: string;
+  description?: string;
+  importance: 'critical' | 'important' | 'helpful' | 'nice_to_know' | 'moderate' | 'high';
   consequences?: string;
 }
 
@@ -206,9 +225,11 @@ export interface RegulatoryProfile {
 
 export interface SafetyRequirement {
   category: 'equipment' | 'certification' | 'experience' | 'insurance';
-  requirement: string;
-  mandatory: boolean;
+  requirement?: string;
+  mandatory?: boolean;
   seasonality?: string[];
+  name?: string;
+  description?: string;
 }
 
 export interface EnvironmentalRestriction {
@@ -217,11 +238,13 @@ export interface EnvironmentalRestriction {
   area?: Coordinates[];
   timing?: 'permanent' | 'seasonal' | 'variable';
   implications: string;
+  name?: string;
 }
 
 export interface EntryRequirement {
   type: 'visa' | 'passport' | 'health' | 'customs' | 'equipment';
   description: string;
+  name?: string;
   processingTime?: string;
   cost?: number;
   validityPeriod?: string;
@@ -239,7 +262,7 @@ export interface WeatherSourceConfig {
 
 export interface WeatherService {
   name: string;
-  type: 'global_model' | 'regional_model' | 'local_station';
+  type: 'global_model' | 'regional_model' | 'local_station' | 'commercial';
   region: string;
   accuracy: 'high' | 'moderate' | 'basic';
   forecastHorizon: number; // hours
@@ -571,7 +594,7 @@ export interface SailingTerm {
 export interface ProtocolBriefing {
   situation: string;
   expectedBehavior: string;
-  importance: 'critical' | 'important' | 'helpful' | 'nice_to_know';
+  importance: 'critical' | 'important' | 'helpful' | 'nice_to_know' | 'high' | 'moderate';
   consequences?: string;
 }
 

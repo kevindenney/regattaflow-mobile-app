@@ -1,88 +1,123 @@
-import React, { forwardRef } from 'react';
-import type { VariantProps } from '@gluestack-ui/nativewind-utils';
-import { Animated, Easing, Platform, View } from 'react-native';
-import { skeletonStyle, skeletonTextStyle } from './styles';
+import React, { forwardRef, useEffect, useRef } from 'react';
+import {
+  Animated,
+  Easing,
+  Platform,
+  View,
+  type ViewProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {
+  skeletonStyle,
+  skeletonTextStyle,
+  type SkeletonVariants,
+  type SkeletonTextVariants,
+} from './styles';
 
-type ISkeletonProps = React.ComponentProps<typeof View> &
-  VariantProps<typeof skeletonStyle> & {
-    isLoaded?: boolean;
-    startColor?: string;
-  };
+type BaseViewProps = ViewProps & { className?: string };
 
-type ISkeletonTextProps = React.ComponentProps<typeof View> &
-  VariantProps<typeof skeletonTextStyle> & {
-    _lines?: number;
-    isLoaded?: boolean;
-    startColor?: string;
-  };
+const BaseView = View as unknown as React.ComponentType<BaseViewProps>;
 
-const Skeleton = forwardRef<
-  React.ElementRef<typeof Animated.View>,
-  ISkeletonProps
->(
+const AnimatedSkeletonView = Animated.createAnimatedComponent(BaseView);
+
+type AnimatedSkeletonRef = React.ComponentRef<typeof AnimatedSkeletonView>;
+
+type SkeletonProps = Omit<ViewProps, 'className'> & {
+  className?: string;
+  variant?: SkeletonVariants['variant'];
+  speed?: SkeletonVariants['speed'];
+  startColor?: string;
+  isLoaded?: boolean;
+  children?: React.ReactNode;
+};
+
+type SkeletonTextProps = Omit<ViewProps, 'className'> & {
+  className?: string;
+  _lines?: number;
+  isLoaded?: boolean;
+  startColor?: string;
+  gap?: SkeletonTextVariants['gap'];
+  speed?: SkeletonTextVariants['speed'];
+  children?: React.ReactNode;
+};
+
+const Skeleton = forwardRef<AnimatedSkeletonRef, SkeletonProps>(
   (
     {
       className,
-      variant,
-      children,
+      variant = 'rounded',
+      speed = 2,
       startColor = 'bg-background-200',
       isLoaded = false,
-      speed = 2,
+      children,
+      style,
       ...props
     },
     ref
   ) => {
-    const pulseAnim = new Animated.Value(1);
-    const customTimingFunction = Easing.bezier(0.4, 0, 0.6, 1);
-    const fadeDuration = 0.6;
-    const animationDuration = (fadeDuration * 10000) / speed; // Convert seconds to milliseconds
+    const opacity = useRef(new Animated.Value(1)).current;
 
-    const pulse = Animated.sequence([
-      Animated.timing(pulseAnim, {
-        toValue: 1, // Start with opacity 1
-        duration: animationDuration / 2, // Third of the animation duration
-        easing: customTimingFunction,
-        useNativeDriver: Platform.OS !== 'web',
-      }),
-      Animated.timing(pulseAnim, {
-        toValue: 0.75,
-        duration: animationDuration / 2, // Third of the animation duration
-        easing: customTimingFunction,
-        useNativeDriver: Platform.OS !== 'web',
-      }),
-      Animated.timing(pulseAnim, {
-        toValue: 1,
-        duration: animationDuration / 2, // Third of the animation duration
-        easing: customTimingFunction,
-        useNativeDriver: Platform.OS !== 'web',
-      }),
-    ]);
+    useEffect(() => {
+      if (isLoaded) {
+        opacity.setValue(1);
+        return;
+      }
 
-    if (!isLoaded) {
-      Animated.loop(pulse).start();
-      return (
-        <Animated.View
-          style={{ opacity: pulseAnim }}
-          className={`${startColor} ${skeletonStyle({
-            variant,
-            class: className,
-          })}`}
-          {...props}
-          ref={ref}
-        />
+      const easing = Easing.bezier(0.4, 0, 0.6, 1);
+      const duration = (0.6 * 1000 * 10) / Math.max(speed ?? 1, 1);
+
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: duration / 2,
+            easing,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.75,
+            duration: duration / 2,
+            easing,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: duration / 2,
+            easing,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+        ])
       );
-    } else {
-      Animated.loop(pulse).stop();
 
-      return children;
+      animation.start();
+      return () => {
+        animation.stop();
+      };
+    }, [isLoaded, opacity, speed]);
+
+    if (isLoaded) {
+      return <>{children}</>;
     }
+
+    return (
+      <AnimatedSkeletonView
+        ref={ref}
+        {...props}
+        style={
+          (style
+            ? ([{ opacity }, style] as StyleProp<ViewStyle>)
+            : ([{ opacity }] as StyleProp<ViewStyle>))
+        }
+        className={`${startColor} ${skeletonStyle({ variant, speed, class: className })}`}
+      />
+    );
   }
 );
 
-const SkeletonText = forwardRef<
-  React.ElementRef<typeof View>,
-  ISkeletonTextProps
->(
+Skeleton.displayName = 'Skeleton';
+
+const SkeletonText = forwardRef<View, SkeletonTextProps>(
   (
     {
       className,
@@ -90,49 +125,50 @@ const SkeletonText = forwardRef<
       isLoaded = false,
       startColor = 'bg-background-200',
       gap = 2,
+      speed = 2,
       children,
       ...props
     },
     ref
   ) => {
-    if (!isLoaded) {
-      if (_lines) {
-        return (
-          <View
-            className={`${skeletonTextStyle({
-              gap,
-            })}`}
-            ref={ref}
-          >
-            {Array.from({ length: _lines }).map((_, index) => (
-              <Skeleton
-                key={index}
-                className={`${startColor} ${skeletonTextStyle({
-                  class: className,
-                })}`}
-                {...props}
-              />
-            ))}
-          </View>
-        );
-      } else {
-        return (
-          <Skeleton
-            className={`${startColor} ${skeletonTextStyle({
-              class: className,
-            })}`}
-            {...props}
-            ref={ref}
-          />
-        );
-      }
-    } else {
-      return children;
+    if (isLoaded) {
+      return <>{children}</>;
     }
+
+    if (_lines && _lines > 0) {
+      return (
+        <View
+          ref={ref}
+          {...props}
+          className={skeletonTextStyle({ gap, speed, class: className })}
+        >
+          {Array.from({ length: _lines }).map((_, index) => (
+            <Skeleton
+              key={index}
+              startColor={startColor}
+              speed={speed}
+              className={skeletonTextStyle({ class: className })}
+              variant="rounded"
+            />
+          ))}
+        </View>
+      );
+    }
+
+    return (
+      <Skeleton
+        startColor={startColor}
+        speed={speed}
+        className={skeletonTextStyle({ class: className })}
+        variant="rounded"
+        {...props}
+      >
+        {children}
+      </Skeleton>
+    );
   }
 );
 
-Skeleton.displayName = 'Skeleton';
 SkeletonText.displayName = 'SkeletonText';
 
 export { Skeleton, SkeletonText };

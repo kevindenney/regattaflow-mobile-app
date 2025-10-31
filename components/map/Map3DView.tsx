@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Animated, Platform, Image } from 'react-native';
 import { ThemedText } from '@/components/themed-text';

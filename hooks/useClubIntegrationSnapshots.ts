@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/services/supabase';
+import { ClubRole, normalizeClubRole } from '@/types/club';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 export interface ClubMembershipRecord {
   id: string;
   club_id?: string;
   membership_type?: string;
   status?: string;
-  role?: string;
+  role?: ClubRole | string | null;
   member_number?: string;
   joined_date?: string;
   joined_at?: string;
@@ -111,7 +113,7 @@ export interface ClubIntegrationSnapshot {
   membership: {
     membershipType?: string;
     status?: string;
-    role?: string;
+    role: ClubRole;
     memberNumber?: string;
     joinedDate?: string;
     expiryDate?: string;
@@ -131,13 +133,77 @@ interface IntegrationState {
   error: string | null;
 }
 
-const isMissingTableError = (error: any) => {
-  if (!error) return false;
-  const message = typeof error?.message === 'string' ? error.message : '';
+interface ClubRaceCalendarRow {
+  id: string;
+  club_id: string | null;
+  event_name: string | null;
+  event_type: string | null;
+  registration_status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  entry_fee: number | null;
+  currency: string | null;
+  nor_url: string | null;
+  si_url: string | null;
+  results_url: string | null;
+  venue_id: string | null;
+}
+
+interface ClubEventRow {
+  id: string;
+  club_id: string | null;
+  title: string | null;
+  event_type: string | null;
+  status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  registration_opens: string | null;
+  registration_closes: string | null;
+  venue_id: string | null;
+  location_name: string | null;
+  max_participants: number | null;
+}
+
+interface ClubDocumentRow {
+  id: string;
+  club_id: string | null;
+  title: string | null;
+  document_type: string | null;
+  publish_date: string | null;
+  url: string | null;
+  parsed: boolean | null;
+}
+
+interface ClubServiceRow {
+  id: string;
+  club_id: string | null;
+  service_type: string | null;
+  business_name: string | null;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  specialties: string[] | null;
+  classes_supported: string[] | null;
+  preferred_by_club: boolean | null;
+}
+
+const isMissingTableError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+
+  const message =
+    'message' in error && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : '';
   return message.includes('relation') || message.includes('does not exist');
 };
 
-async function fetchSafely<T>(query: any): Promise<T[]> {
+type QueryResult<T> = {
+  data: T[] | null;
+  error: PostgrestError | null;
+};
+
+async function fetchSafely<T>(query: PromiseLike<QueryResult<T>>): Promise<T[]> {
   try {
     const { data, error } = await query;
 
@@ -150,7 +216,7 @@ async function fetchSafely<T>(query: any): Promise<T[]> {
     }
 
     return data || [];
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isMissingTableError(error)) {
       return [];
     }
@@ -159,11 +225,27 @@ async function fetchSafely<T>(query: any): Promise<T[]> {
   }
 }
 
-const extractClubDetails = (membership: ClubMembershipRecord) => {
-  return membership.yacht_clubs || membership.club || null;
+type ClubDetails = NonNullable<ClubMembershipRecord['club']>;
+
+const extractClubDetails = (membership: ClubMembershipRecord): ClubDetails | null => {
+  return (membership.yacht_clubs as ClubDetails | null | undefined) ?? membership.club ?? null;
 };
 
-export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[]) {
+type NormalizedMembership = {
+  clubId: string;
+  club: ClubDetails;
+  membership: ClubMembershipRecord;
+};
+
+const isNonNull = <T>(value: T | null | undefined): value is T => value != null;
+
+type UseClubIntegrationSnapshotsReturn = IntegrationState & {
+  refetch: () => Promise<void>;
+};
+
+export function useClubIntegrationSnapshots(
+  memberships: ClubMembershipRecord[]
+): UseClubIntegrationSnapshotsReturn {
   const [state, setState] = useState<IntegrationState>({
     snapshots: [],
     loading: false,
@@ -178,13 +260,15 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
     return Array.from(new Set(ids));
   }, [memberships]);
 
-  const normalizedMemberships = useMemo(() => {
+  const normalizedMemberships = useMemo<NormalizedMembership[]>(() => {
     return memberships
-      .map((membership) => {
+      .map<NormalizedMembership | null>((membership) => {
         const club = extractClubDetails(membership);
-        const clubId = club?.id || membership.club_id;
+        const clubId = club?.id ?? membership.club_id ?? null;
 
-        if (!clubId || !club) return null;
+        if (!clubId || !club) {
+          return null;
+        }
 
         return {
           clubId,
@@ -192,7 +276,7 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
           membership,
         };
       })
-      .filter((item): item is { clubId: string; club: NonNullable<ReturnType<typeof extractClubDetails>>; membership: ClubMembershipRecord } => Boolean(item));
+      .filter(isNonNull);
   }, [memberships]);
 
   const fetchSnapshots = useCallback(async () => {
@@ -212,7 +296,7 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
       const fourteenDaysAgoMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
       const [regattaRows, eventRows, documentRows, serviceRows] = await Promise.all([
-        fetchSafely(
+        fetchSafely<ClubRaceCalendarRow>(
           supabase
             .from('club_race_calendar')
             .select(`
@@ -235,7 +319,7 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
             .order('start_date', { ascending: true })
             .limit(clubIds.length * 6)
         ),
-        fetchSafely(
+        fetchSafely<ClubEventRow>(
           supabase
             .from('club_events')
             .select(`
@@ -257,7 +341,7 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
             .order('start_date', { ascending: true })
             .limit(clubIds.length * 6)
         ),
-        fetchSafely(
+        fetchSafely<ClubDocumentRow>(
           supabase
             .from('club_documents')
             .select(`
@@ -273,7 +357,7 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
             .order('publish_date', { ascending: false })
             .limit(clubIds.length * 10)
         ),
-        fetchSafely(
+        fetchSafely<ClubServiceRow>(
           supabase
             .from('club_services')
             .select(`
@@ -297,6 +381,10 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
       const snapshotMap = new Map<string, ClubIntegrationSnapshot>();
 
       normalizedMemberships.forEach(({ clubId, club, membership }) => {
+        const normalizedRole = normalizeClubRole(
+          (membership.role as string | null | undefined) ?? null
+        );
+
         snapshotMap.set(clubId, {
           clubId,
           club: {
@@ -307,16 +395,12 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
             website: club.website || undefined,
             contactEmail: club.contact_email || undefined,
             description: club.description || undefined,
-            facilities: Array.isArray(club.facilities)
-              ? (club.facilities as string[])
-              : typeof club.facilities === 'string'
-              ? [club.facilities]
-              : [],
+            facilities: Array.isArray(club.facilities) ? [...club.facilities] : [],
           },
           membership: {
             membershipType: membership.membership_type,
             status: membership.status,
-            role: membership.role,
+            role: normalizedRole,
             memberNumber: membership.member_number,
             joinedDate: membership.joined_date || membership.joined_at,
             expiryDate: membership.expiry_date,
@@ -337,8 +421,8 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
         });
       });
 
-      regattaRows.forEach((row: any) => {
-        const clubId = row.club_id;
+      regattaRows.forEach((row) => {
+        const clubId = row.club_id ?? undefined;
         const snapshot = clubId ? snapshotMap.get(clubId) : undefined;
         if (!snapshot) return;
 
@@ -360,8 +444,8 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
         snapshot.regattas.push(regatta);
       });
 
-      eventRows.forEach((row: any) => {
-        const clubId = row.club_id;
+      eventRows.forEach((row) => {
+        const clubId = row.club_id ?? undefined;
         const snapshot = clubId ? snapshotMap.get(clubId) : undefined;
         if (!snapshot) return;
 
@@ -382,8 +466,8 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
         snapshot.events.push(event);
       });
 
-      documentRows.forEach((row: any) => {
-        const clubId = row.club_id;
+      documentRows.forEach((row) => {
+        const clubId = row.club_id ?? undefined;
         const snapshot = clubId ? snapshotMap.get(clubId) : undefined;
         if (!snapshot) return;
 
@@ -399,8 +483,8 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
         snapshot.documents.push(document);
       });
 
-      serviceRows.forEach((row: any) => {
-        const clubId = row.club_id;
+      serviceRows.forEach((row) => {
+        const clubId = row.club_id ?? undefined;
         const snapshot = clubId ? snapshotMap.get(clubId) : undefined;
         if (!snapshot) return;
 
@@ -412,8 +496,8 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
           email: row.email,
           phone: row.phone,
           website: row.website,
-          specialties: Array.isArray(row.specialties) ? (row.specialties as string[]) : null,
-          classesSupported: Array.isArray(row.classes_supported) ? (row.classes_supported as string[]) : null,
+          specialties: Array.isArray(row.specialties) ? row.specialties : null,
+          classesSupported: Array.isArray(row.classes_supported) ? row.classes_supported : null,
           preferredByClub: row.preferred_by_club,
         };
 
@@ -484,12 +568,16 @@ export function useClubIntegrationSnapshots(memberships: ClubMembershipRecord[])
         loading: false,
         error: null,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[useClubIntegrationSnapshots] Failed to fetch club snapshots', error);
+      const message =
+        typeof error === 'object' && error && 'message' in error && typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : 'Failed to load club data';
       setState({
         snapshots: [],
         loading: false,
-        error: error?.message || 'Failed to load club data',
+        error: message,
       });
     }
   }, [clubIds, normalizedMemberships]);

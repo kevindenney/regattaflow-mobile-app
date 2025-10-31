@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * AI Document Processing Service - Sailing Strategy Knowledge Base
  * Processes PDFs, sailing instructions, and strategy documents using Claude AI

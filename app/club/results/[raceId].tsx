@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, ScrollView, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { VStack } from '@/components/ui/vstack';
@@ -96,7 +96,22 @@ export default function RaceResultsEntryScreen() {
         .order('entry_number');
 
       if (entriesError) throw entriesError;
-      setEntries(entriesData || []);
+
+      const normalizedEntries: RaceEntry[] = (entriesData || []).map((entry: any) => {
+        const sailorRecord = Array.isArray(entry.sailor) ? entry.sailor[0] : entry.sailor;
+        return {
+          id: entry.id,
+          entry_number: entry.entry_number ?? '',
+          sail_number: entry.sail_number ?? '',
+          entry_class: entry.entry_class ?? '',
+          sailor: {
+            full_name: sailorRecord?.full_name ?? 'Unknown Sailor',
+            club_name: sailorRecord?.club_name ?? undefined,
+          },
+        };
+      });
+
+      setEntries(normalizedEntries);
 
       // Get existing results
       const { data: resultsData, error: resultsError } = await supabase
@@ -132,7 +147,7 @@ export default function RaceResultsEntryScreen() {
       }
     } catch (error) {
       console.error('Failed to load race data:', error);
-      alert('Failed to load race data');
+      Alert.alert('Error', 'Failed to load race data');
     } finally {
       setLoading(false);
     }
@@ -151,23 +166,40 @@ export default function RaceResultsEntryScreen() {
   };
 
   const setFinishTime = (entryId: string, time: string) => {
+    const trimmed = time.trim();
+
+    if (!trimmed) {
+      updateResult(entryId, {
+        finish_time: undefined,
+        status: 'racing',
+      });
+      return;
+    }
+
     if (!startTime) {
-      alert('Please set the race start time first');
+      Alert.alert('Set Start Time', 'Please set the race start time first.');
       return;
     }
 
     const start = new Date(startTime);
-    const finish = new Date(time);
-    const elapsed = Math.floor((finish.getTime() - start.getTime()) / 1000);
+    const finish = new Date(trimmed);
 
-    if (elapsed < 0) {
-      alert('Finish time cannot be before start time');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime())) {
+      updateResult(entryId, {
+        finish_time: trimmed,
+      });
+      return;
+    }
+
+    if (finish.getTime() < start.getTime()) {
+      Alert.alert('Invalid Time', 'Finish time cannot be before the start time.');
       return;
     }
 
     updateResult(entryId, {
-      finish_time: time,
+      finish_time: trimmed,
       status: 'finished',
+      score_code: undefined,
     });
   };
 
@@ -254,11 +286,11 @@ export default function RaceResultsEntryScreen() {
         .update({ status: 'completed' })
         .eq('id', raceId);
 
-      alert('Results saved successfully');
+      Alert.alert('Success', 'Results saved successfully');
       router.back();
     } catch (error) {
       console.error('Failed to save results:', error);
-      alert('Failed to save results');
+      Alert.alert('Error', 'Failed to save results');
     } finally {
       setSaving(false);
     }
@@ -274,6 +306,11 @@ export default function RaceResultsEntryScreen() {
     if (!finishTime || !startTime) return '-';
     const start = new Date(startTime);
     const finish = new Date(finishTime);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime())) {
+      return '-';
+    }
+
     const elapsed = Math.floor((finish.getTime() - start.getTime()) / 1000);
 
     const hours = Math.floor(elapsed / 3600);
@@ -358,10 +395,16 @@ export default function RaceResultsEntryScreen() {
               <Text className="font-semibold">Race Start Time</Text>
               <Input>
                 <InputField
-                  type={Platform.OS === 'web' ? 'datetime-local' : 'text'}
                   value={startTime}
                   onChangeText={setStartTime}
-                  placeholder="Set start time"
+                  placeholder="YYYY-MM-DDTHH:MM"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType={Platform.select({
+                    ios: 'numbers-and-punctuation',
+                    android: 'numbers-and-punctuation',
+                    default: 'default',
+                  })}
                 />
               </Input>
             </VStack>
@@ -448,12 +491,18 @@ export default function RaceResultsEntryScreen() {
                         <HStack space="sm" className="items-center">
                           <Text className="w-20 text-sm text-gray-600">Finish:</Text>
                           <Input className="flex-1">
-                            <InputField
-                              type={Platform.OS === 'web' ? 'datetime-local' : 'text'}
-                              value={result?.finish_time || ''}
-                              onChangeText={(value) => setFinishTime(entry.id, value)}
-                              placeholder="Finish time"
-                            />
+                          <InputField
+                            value={result?.finish_time || ''}
+                            onChangeText={(value) => setFinishTime(entry.id, value)}
+                            placeholder="YYYY-MM-DDTHH:MM"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            keyboardType={Platform.select({
+                              ios: 'numbers-and-punctuation',
+                              android: 'numbers-and-punctuation',
+                              default: 'default',
+                            })}
+                          />
                           </Input>
                           <Text className="w-20 text-sm font-mono">
                             {calculateElapsed(result?.finish_time)}
@@ -466,15 +515,17 @@ export default function RaceResultsEntryScreen() {
                         <HStack space="sm" className="items-center">
                           <Text className="w-20 text-sm text-gray-600">Position:</Text>
                           <Input className="w-24">
-                            <InputField
-                              type="number"
-                              value={result?.finish_position?.toString() || ''}
-                              onChangeText={(value) => updateResult(entry.id, {
-                                finish_position: parseInt(value) || undefined,
-                                corrected_position: parseInt(value) || undefined,
-                              })}
-                              placeholder="Pos"
-                            />
+                          <InputField
+                            value={result?.finish_position?.toString() || ''}
+                            onChangeText={(value) =>
+                              updateResult(entry.id, {
+                                finish_position: parseInt(value, 10) || undefined,
+                                corrected_position: parseInt(value, 10) || undefined,
+                              })
+                            }
+                            placeholder="Pos"
+                            keyboardType="numeric"
+                          />
                           </Input>
                         </HStack>
                       )}
@@ -484,22 +535,30 @@ export default function RaceResultsEntryScreen() {
                         <Text className="w-20 text-sm text-gray-600">Penalty:</Text>
                         <Input className="w-32">
                           <InputField
-                            type="number"
                             value={result?.time_penalty_minutes?.toString() || ''}
-                            onChangeText={(value) => updateResult(entry.id, {
-                              time_penalty_minutes: parseFloat(value) || undefined,
-                            })}
+                            onChangeText={(value) =>
+                              updateResult(entry.id, {
+                                time_penalty_minutes: parseFloat(value) || undefined,
+                              })
+                            }
                             placeholder="Minutes"
+                            keyboardType={Platform.select({
+                              ios: 'decimal-pad',
+                              android: 'decimal-pad',
+                              default: 'numeric',
+                            })}
                           />
                         </Input>
                         <Input className="w-32">
                           <InputField
-                            type="number"
                             value={result?.scoring_penalty?.toString() || ''}
-                            onChangeText={(value) => updateResult(entry.id, {
-                              scoring_penalty: parseInt(value) || undefined,
-                            })}
+                            onChangeText={(value) =>
+                              updateResult(entry.id, {
+                                scoring_penalty: parseInt(value, 10) || undefined,
+                              })
+                            }
                             placeholder="Points"
+                            keyboardType="numeric"
                           />
                         </Input>
                       </HStack>

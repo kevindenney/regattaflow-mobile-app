@@ -2,7 +2,7 @@
 
 ## 🎉 What's Now Working
 
-Your RegattaFlow app now features **fully automated AI-powered race strategy generation** using Bill Gladstone's North U frameworks and Steve Colgate's championship execution techniques!
+Your RegattaFlow app now features **fully automated AI-powered race strategy generation** using Kevin Gladstone's North U frameworks and Kevin Colgate's championship execution techniques!
 
 ## 📊 Implementation Summary
 
@@ -48,8 +48,8 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
 
 4. **`/skills/race-strategy-analyst/SKILL.md`**
    - ✅ Created comprehensive Claude Skill definition
-   - ✅ Documented all Bill Gladstone frameworks
-   - ✅ Documented all Steve Colgate execution techniques
+   - ✅ Documented all Kevin Gladstone frameworks
+   - ✅ Documented all Kevin Colgate execution techniques
    - ✅ Added confidence ratings and usage guidelines
 
 5. **`/package.json`**
@@ -70,7 +70,7 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
    │  ├─ Venue intelligence (Hong Kong, San Francisco, etc.)
    │  ├─ Current conditions (wind, current, waves)
    │  ├─ Race context (name, time, boat type, fleet size)
-   │  └─ Bill Gladstone + Steve Colgate frameworks (via Skills API when uploaded)
+   │  └─ Kevin Gladstone + Kevin Colgate frameworks (via Skills API when uploaded)
    ├─ Extracts start strategy from full AI response
    └─ Saves to database
 5. Strategy displayed to sailor
@@ -163,7 +163,7 @@ Strategies are saved to `race_strategies` table:
 
 Your AI strategy engine has complete knowledge of:
 
-### Bill Gladstone's North U Frameworks:
+### Kevin Gladstone's North U Frameworks:
 - **Wind Shift Mathematics**: "10° shift = 25% of boat separation"
 - **Puff Response**: Header+less=tack, lift+more=stay
 - **Delayed Tack**: Signature move for 3-4 length advantage
@@ -171,7 +171,7 @@ Your AI strategy engine has complete knowledge of:
 - **Getting In Phase**: Tack on headers, stay on lifts
 - **Start Line Bias**: 5° bias = ~2 boat-length advantage
 
-### Steve Colgate's Execution Techniques:
+### Kevin Colgate's Execution Techniques:
 - **Tight Cover Timing**: Tack at right moment for dead-on wind
 - **Rhythmic Jibing**: Smooth jibes maintaining boat speed
 - **Compass Discipline**: Foundation of shift awareness
@@ -265,8 +265,8 @@ Card displays:
 
 - ✅ Auto-generation: **WORKING**
 - ✅ Claude Skills: **READY** (upload pending)
-- ✅ Bill Gladstone frameworks: **INTEGRATED**
-- ✅ Steve Colgate techniques: **INTEGRATED**
+- ✅ Kevin Gladstone frameworks: **INTEGRATED**
+- ✅ Kevin Colgate techniques: **INTEGRATED**
 - ✅ Venue intelligence: **ACTIVE**
 - ✅ Weather integration: **LIVE**
 - ✅ Database persistence: **SAVING**

@@ -1,12 +1,14 @@
 {
   "name": "regattaflow-app",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "scripts": {
-    "start": "NODE_OPTIONS='--max-old-space-size=8192' expo start",
+    "start": "NODE_OPTIONS='--max-old-space-size=12288' expo start",
+    "start:reset": "watchman watch-del-all && rm -rf .expo && rm -rf node_modules/.cache && NODE_OPTIONS='--max-old-space-size=12288' expo start --clear",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "node scripts/fix-peer-deps.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
@@ -56,6 +58,7 @@
     "@react-native-voice/voice": "^3.2.4",
     "@react-navigation/bottom-tabs": "^7.5.0",
     "@react-navigation/native": "^7.1.18",
+    "@react-three/fiber": "^9.4.0",
     "@shopify/flash-list": "^2.0.2",
     "@stripe/stripe-react-native": "^0.50.3",
     "@supabase/supabase-js": "^2.76.1",
@@ -67,9 +70,8 @@
     "axios": "^1.12.2",
     "date-fns": "^4.1.0",
     "deck.gl": "^9.2.2",
-    "deck.gl-particle": "^1.1.0",
     "dotenv": "^17.2.3",
-    "expo": "~54.0.20",
+    "expo": "^54.0.21",
     "expo-auth-session": "^7.0.8",
     "expo-av": "^16.0.7",
     "expo-blur": "^15.0.7",
@@ -86,7 +88,7 @@
     "expo-linking": "~8.0.8",
     "expo-local-authentication": "^17.0.7",
     "expo-location": "^19.0.7",
-    "expo-router": "~6.0.13",
+    "expo-router": "~6.0.14",
     "expo-secure-store": "^15.0.7",
     "expo-splash-screen": "~31.0.10",
     "expo-status-bar": "~3.0.8",
@@ -114,6 +116,7 @@
     "react-native-url-polyfill": "^3.0.0",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "^0.5.1",
+    "three": "^0.180.0",
     "victory": "^37.3.6",
     "victory-native": "^41.20.1",
     "zod": "^4.1.12"
@@ -124,7 +127,7 @@
     "@types/jest": "^29.5.14",
     "@types/maplibre-gl": "^1.13.2",
     "@types/pg": "^8.15.5",
-    "@types/react": "~19.1.0",
+    "@types/react": "19.1.0",
     "@types/react-native": "^0.72.8",
     "@types/three": "^0.180.0",
     "autoprefixer": "^10.4.21",

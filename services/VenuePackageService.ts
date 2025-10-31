@@ -136,8 +136,11 @@ export class VenuePackageService {
 
     // Calculate size on disk for this venue's layers
     let sizeOnDiskMB = 0;
-    metadata.layers.forEach(layer => {
-      sizeOnDiskMB += stats.layerBreakdown[layer].bytes / (1024 * 1024);
+    metadata.layers.forEach((layer: TileLayerType) => {
+      const breakdown = stats.layerBreakdown[layer];
+      if (breakdown) {
+        sizeOnDiskMB += breakdown.bytes / (1024 * 1024);
+      }
     });
 
     return {

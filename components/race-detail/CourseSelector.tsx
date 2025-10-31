@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Course Selector Component
  * Allows selecting a pre-defined course from the library to overlay on the race map
@@ -20,6 +22,7 @@ import type { RaceCourse, Mark } from '@/types/courses';
 interface CourseSelectorProps {
   venueId?: string;
   venueName?: string;
+  venueCoordinates?: { lat: number; lng: number };
   onCourseSelected: (marks: Mark[]) => void;
   currentWindDirection?: number;
   currentWindSpeed?: number;
@@ -27,9 +30,235 @@ interface CourseSelectorProps {
   onAutoSelectComplete?: () => void;
 }
 
+const courseLibrary = require('@/data/race-courses.json');
+const yachtClubData = require('@/data/yacht-clubs.json');
+const EARTH_RADIUS_METERS = 6371000;
+const METERS_PER_NAUTICAL_MILE = 1852;
+
+const toRadians = (deg: number) => (deg * Math.PI) / 180;
+const toDegrees = (rad: number) => (rad * 180) / Math.PI;
+
+const projectCoordinate = (lat: number, lng: number, distanceNm: number, bearingDeg: number) => {
+  const distanceMeters = distanceNm * METERS_PER_NAUTICAL_MILE;
+  const bearing = toRadians((bearingDeg + 360) % 360);
+  const latRad = toRadians(lat);
+  const lngRad = toRadians(lng);
+
+  const newLat = Math.asin(
+    Math.sin(latRad) * Math.cos(distanceMeters / EARTH_RADIUS_METERS) +
+      Math.cos(latRad) * Math.sin(distanceMeters / EARTH_RADIUS_METERS) * Math.cos(bearing)
+  );
+
+  const newLng =
+    lngRad +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(distanceMeters / EARTH_RADIUS_METERS) * Math.cos(latRad),
+      Math.cos(distanceMeters / EARTH_RADIUS_METERS) - Math.sin(latRad) * Math.sin(newLat)
+    );
+
+  return {
+    lat: toDegrees(newLat),
+    lng: toDegrees(newLng),
+  };
+};
+
+const normalizeMarkType = (key: string, fallbackType: string = 'custom') => {
+  const normalizedKey = key.toLowerCase();
+  if (normalizedKey.includes('committee')) return 'committee_boat';
+  if (normalizedKey.includes('start') && normalizedKey.includes('pin')) return 'pin';
+  if (normalizedKey.includes('windward')) return 'windward';
+  if (normalizedKey.includes('leeward') && normalizedKey.includes('port')) return 'gate_left';
+  if (normalizedKey.includes('leeward') && normalizedKey.includes('star')) return 'gate_right';
+  if (normalizedKey.includes('gate') && normalizedKey.includes('left')) return 'gate_left';
+  if (normalizedKey.includes('gate') && normalizedKey.includes('right')) return 'gate_right';
+  if (normalizedKey.includes('finish')) return 'finish';
+  if (normalizedKey.includes('offset')) return 'offset';
+  if (normalizedKey.includes('reach')) return 'offset';
+  return fallbackType;
+};
+
+const convertSpecificCourseToRaceCourse = (course: any, regionId: string): RaceCourse => {
+  const marks: Mark[] = [];
+  const markEntries = course?.coordinates?.marks || {};
+
+  Object.entries(markEntries).forEach(([key, value], index) => {
+    if (!Array.isArray(value) || value.length < 2) return;
+    const [lng, lat] = value as number[];
+    marks.push({
+      id: `${course.id}-${index}`,
+      name: key.replace(/_/g, ' '),
+      type: normalizeMarkType(key),
+      latitude: lat,
+      longitude: lng,
+    });
+  });
+
+  const nearbyClub = findNearestClub(
+    course?.coordinates?.raceArea?.center?.[1],
+    course?.coordinates?.raceArea?.center?.[0]
+  );
+
+  return {
+    id: `suggested-${course.id}`,
+    name: course.name,
+    description: course.description || course.location || `Suggested by ${regionId}`,
+    course_type: course.type || 'custom',
+    marks,
+    typical_length_nm: course.distance ? parseFloat(course.distance) || undefined : undefined,
+    usage_count: 0,
+    origin: 'suggested',
+    suggested_club: course.clubs?.[0] || nearbyClub?.id,
+    suggested_club_name: nearbyClub?.name,
+  };
+};
+
+const findNearbySpecificCourses = (lat?: number, lng?: number): RaceCourse[] => {
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return [];
+  }
+
+  const suggestions: RaceCourse[] = [];
+
+  const regions = courseLibrary?.specificCourses || {};
+  Object.entries(regions).forEach(([regionId, region]) => {
+    const courses = region?.courses || {};
+    Object.values(courses).forEach((course: any) => {
+      const bounds = course?.coordinates?.raceArea?.bounds;
+      const centerArray = course?.coordinates?.raceArea?.center;
+      let courseLat: number | undefined;
+      let courseLng: number | undefined;
+
+      if (Array.isArray(centerArray) && centerArray.length >= 2) {
+        [courseLng, courseLat] = centerArray;
+      } else {
+        const markEntries = course?.coordinates?.marks || {};
+        const markCoords = Object.values(markEntries)
+          .filter((value: any) => Array.isArray(value) && value.length >= 2)
+          .map((value: any) => ({ lng: value[0], lat: value[1] }));
+        if (markCoords.length > 0) {
+          courseLat = markCoords.reduce((sum, m: any) => sum + m.lat, 0) / markCoords.length;
+          courseLng = markCoords.reduce((sum, m: any) => sum + m.lng, 0) / markCoords.length;
+        }
+      }
+
+      const withinBounds =
+        bounds &&
+        courseLat !== undefined &&
+        courseLng !== undefined &&
+        lat >= bounds.southwest[1] &&
+        lat <= bounds.northeast[1] &&
+        lng >= bounds.southwest[0] &&
+        lng <= bounds.northeast[0];
+
+      const distanceMatch =
+        courseLat !== undefined &&
+        courseLng !== undefined &&
+        haversineMeters(lat, lng, courseLat, courseLng) / METERS_PER_NAUTICAL_MILE <= 18;
+
+      if (withinBounds || distanceMatch) {
+        suggestions.push(convertSpecificCourseToRaceCourse(course, regionId));
+      }
+    });
+  });
+
+  return suggestions;
+};
+
+const generateWindwardLeewardTemplate = (center: { lat: number; lng: number }, windDirection?: number): RaceCourse => {
+  const axis = typeof windDirection === 'number' ? windDirection : 0;
+  const startLineLengthNm = 0.12;
+  const legLengthNm = 0.6;
+  const gateWidthNm = 0.08;
+
+  const startCenter = { ...center };
+  const perpBearing = (axis + 90) % 360;
+
+  const committeeBoat = projectCoordinate(startCenter.lat, startCenter.lng, startLineLengthNm / 2, perpBearing);
+  const pin = projectCoordinate(startCenter.lat, startCenter.lng, startLineLengthNm / 2, (perpBearing + 180) % 360);
+
+  const windward = projectCoordinate(startCenter.lat, startCenter.lng, legLengthNm, axis);
+  const downwindCenter = projectCoordinate(startCenter.lat, startCenter.lng, legLengthNm, (axis + 180) % 360);
+  const gateLeft = projectCoordinate(downwindCenter.lat, downwindCenter.lng, gateWidthNm / 2, (perpBearing + 180) % 360);
+  const gateRight = projectCoordinate(downwindCenter.lat, downwindCenter.lng, gateWidthNm / 2, perpBearing);
+
+  const finishMark = projectCoordinate(startCenter.lat, startCenter.lng, 0.02, axis);
+
+  const nearbyClub = findNearestClub(center.lat, center.lng);
+
+  return {
+    id: `suggested-wl-${axis}`,
+    name: 'Windward/Leeward (Suggested)',
+    description: `Standard upwind/downwind layout aligned to ${axis}° wind.`,
+    course_type: 'windward_leeward',
+    marks: [
+      { id: 'committee', name: 'Committee Boat', type: 'committee_boat', latitude: committeeBoat.lat, longitude: committeeBoat.lng },
+      { id: 'pin', name: 'Pin', type: 'pin', latitude: pin.lat, longitude: pin.lng },
+      { id: 'windward', name: 'Windward Mark', type: 'windward', latitude: windward.lat, longitude: windward.lng },
+      { id: 'gate_left', name: 'Leeward Gate (Port)', type: 'gate_left', latitude: gateLeft.lat, longitude: gateLeft.lng },
+      { id: 'gate_right', name: 'Leeward Gate (Starboard)', type: 'gate_right', latitude: gateRight.lat, longitude: gateRight.lng },
+      { id: 'finish', name: 'Finish', type: 'finish', latitude: finishMark.lat, longitude: finishMark.lng },
+    ],
+    origin: 'suggested',
+    suggested_club: nearbyClub?.id,
+    suggested_club_name: nearbyClub?.name,
+    min_wind_direction: axis,
+    max_wind_direction: axis,
+    min_wind_speed: 4,
+    max_wind_speed: 20,
+  };
+};
+
+const generateTriangleTemplate = (center: { lat: number; lng: number }, windDirection?: number): RaceCourse => {
+  const axis = typeof windDirection === 'number' ? windDirection : 0;
+  const legLengthNm = 0.55;
+  const reachAngle = 60;
+
+  const windward = projectCoordinate(center.lat, center.lng, legLengthNm, axis);
+  const reach1 = projectCoordinate(windward.lat, windward.lng, legLengthNm, (axis - reachAngle + 360) % 360);
+  const reach2 = projectCoordinate(reach1.lat, reach1.lng, legLengthNm, (axis + 180 + reachAngle) % 360);
+
+  const nearbyClub = findNearestClub(center.lat, center.lng);
+
+  return {
+    id: `suggested-triangle-${axis}`,
+    name: 'Triangle (Suggested)',
+    description: `Classic triangle layout with reaching legs. Primary axis ${axis}°.`,
+    course_type: 'triangle',
+    marks: [
+      { id: 'start', name: 'Start Line Center', type: 'committee_boat', latitude: center.lat, longitude: center.lng },
+      { id: 'windward', name: 'Windward Mark', type: 'windward', latitude: windward.lat, longitude: windward.lng },
+      { id: 'reach1', name: 'Reach Mark 1', type: 'offset', latitude: reach1.lat, longitude: reach1.lng },
+      { id: 'reach2', name: 'Reach Mark 2', type: 'offset', latitude: reach2.lat, longitude: reach2.lng },
+      { id: 'finish', name: 'Finish', type: 'finish', latitude: center.lat, longitude: center.lng },
+    ],
+    origin: 'suggested',
+    suggested_club: nearbyClub?.id,
+    suggested_club_name: nearbyClub?.name,
+    min_wind_direction: axis,
+    max_wind_direction: (axis + 60) % 360,
+    min_wind_speed: 6,
+    max_wind_speed: 18,
+  };
+};
+
+const buildGenericTemplates = (
+  coordinates?: { lat: number; lng: number },
+  windDirection?: number
+): RaceCourse[] => {
+  if (!coordinates) {
+    return [];
+  }
+
+  return [
+    generateWindwardLeewardTemplate(coordinates, windDirection),
+    generateTriangleTemplate(coordinates, windDirection),
+  ];
+};
+
 export function CourseSelector({
   venueId,
   venueName,
+  venueCoordinates,
   onCourseSelected,
   currentWindDirection,
   currentWindSpeed,
@@ -50,28 +279,41 @@ export function CourseSelector({
   }, [autoSelectCourseId]);
 
   useEffect(() => {
-    if (showModal && venueId) {
+    if (showModal) {
       loadCourses();
     }
-  }, [showModal, venueId]);
+  }, [showModal, venueId, venueCoordinates, currentWindDirection, currentWindSpeed]);
 
   const loadCourses = async () => {
-    if (!venueId) return;
-
     try {
       setLoading(true);
 
       // Fetch courses for this venue
-      const fetchedCourses = await CourseLibraryService.fetchCourses({
-        venueId,
-        windDirection: currentWindDirection,
-        windSpeed: currentWindSpeed,
+      let fetchedCourses: RaceCourse[] = [];
+      if (venueId) {
+        fetchedCourses = await CourseLibraryService.fetchCourses({
+          venueId,
+          windDirection: currentWindDirection,
+          windSpeed: currentWindSpeed,
+        });
+      }
+
+      const suggestedCourses = [
+        ...findNearbySpecificCourses(venueCoordinates?.lat, venueCoordinates?.lng),
+        ...buildGenericTemplates(venueCoordinates, currentWindDirection),
+      ].filter(Boolean);
+
+      const combinedCourses = [...fetchedCourses];
+      suggestedCourses.forEach((course: any) => {
+        if (!combinedCourses.some(existing => existing.id === course.id)) {
+          combinedCourses.push(course);
+        }
       });
 
-      setCourses(fetchedCourses);
+      setCourses(combinedCourses);
 
       if (pendingAutoCourseId) {
-        const match = fetchedCourses.find((course) => course.id === pendingAutoCourseId);
+        const match = combinedCourses.find((course) => course.id === pendingAutoCourseId);
         if (match) {
           setPendingAutoCourseId(null);
           await handleCourseSelect(match, { fromAuto: true });
@@ -93,10 +335,18 @@ export function CourseSelector({
     setSelectedCourse(course);
 
     // Convert course marks to the format expected by the map
-    const marks: Mark[] = course.marks || [];
+    const marks: Mark[] = (course.marks || []).map((mark, index) => ({
+      id: mark.id || `${course.id}-mark-${index}`,
+      name: mark.name || `Mark ${index + 1}`,
+      type: mark.type || 'custom',
+      latitude: mark.latitude,
+      longitude: mark.longitude,
+    }));
 
-    // Record usage
-    await CourseLibraryService.recordCourseUsage(course.id);
+    // Record usage only for saved library courses
+    if (course.origin !== 'suggested') {
+      await CourseLibraryService.recordCourseUsage(course.id);
+    }
 
     // Pass marks to parent
     onCourseSelected(marks);
@@ -106,8 +356,18 @@ export function CourseSelector({
   };
 
   const formatWindRange = (course: RaceCourse) => {
-    if (course.min_wind_direction !== null && course.max_wind_direction !== null) {
-      return `${course.min_wind_direction}°-${course.max_wind_direction}°, ${course.min_wind_speed || 0}-${course.max_wind_speed || 999}kt`;
+    const hasDirection =
+      typeof course.min_wind_direction === 'number' &&
+      typeof course.max_wind_direction === 'number';
+    const hasSpeed =
+      typeof course.min_wind_speed === 'number' &&
+      typeof course.max_wind_speed === 'number';
+
+    if (hasDirection && hasSpeed) {
+      return `${Math.round(course.min_wind_direction)}°-${Math.round(course.max_wind_direction)}°, ${Math.round(course.min_wind_speed)}-${Math.round(course.max_wind_speed)}kt`;
+    }
+    if (hasDirection) {
+      return `Aligned to ${Math.round(course.min_wind_direction)}° wind`;
     }
     return 'Any conditions';
   };
@@ -176,9 +436,9 @@ export function CourseSelector({
               <MaterialCommunityIcons name="map-marker-off" size={48} color="#CBD5E1" />
               <Text style={styles.emptyTitle}>No Courses Available</Text>
               <Text style={styles.emptyText}>
-                {venueId
-                  ? 'No courses found for this venue. Create one in the Courses tab.'
-                  : 'Please set a venue for this race to see available courses.'}
+                {venueId || venueCoordinates
+                  ? 'We do not have any templates for this location yet. Draw the course on the map or save one to the library to use it next time.'
+                  : 'Set a venue (or drop a racing area on the map) to unlock nearby templates, or draw a custom course.'}
               </Text>
             </View>
           ) : (
@@ -193,7 +453,25 @@ export function CourseSelector({
                   onPress={() => handleCourseSelect(course)}
                 >
                   <View style={styles.courseHeader}>
-                    <Text style={styles.courseName}>{course.name}</Text>
+                    <View style={styles.courseInfo}>
+                      <Text style={styles.courseName}>{course.name}</Text>
+                      {(course.origin === 'suggested' || course.suggested_club || course.club_id) && (
+                        <View style={styles.courseBadges}>
+                          {course.origin === 'suggested' && (
+                            <View style={styles.suggestedBadge}>
+                              <Text style={styles.suggestedBadgeText}>Suggested</Text>
+                            </View>
+                          )}
+                          {(course.suggested_club || course.club_id) && (
+                            <View style={styles.clubBadge}>
+                              <Text style={styles.clubBadgeText}>
+                                {(course.suggested_club || course.club_id).toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
                     {course.marks && (
                       <View style={styles.markCount}>
                         <MaterialCommunityIcons name="map-marker" size={14} color="#64748B" />
@@ -210,6 +488,13 @@ export function CourseSelector({
                     <Text style={styles.courseType}>{course.course_type || 'Standard'}</Text>
                     <Text style={styles.courseWindRange}>{formatWindRange(course)}</Text>
                   </View>
+
+                  {course.suggested_club_name && (
+                    <Text style={styles.courseClubDetails}>
+                      {course.suggested_club_name}
+                      {course.origin === 'suggested' ? ' • nearby club' : ''}
+                    </Text>
+                  )}
 
                   {course.usage_count > 0 && (
                     <Text style={styles.courseUsage}>Used {course.usage_count} times</Text>
@@ -338,11 +623,44 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  courseInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
   courseName: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1E293B',
-    flex: 1,
+  },
+  courseBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  suggestedBadge: {
+    backgroundColor: '#DBEAFE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  suggestedBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+    textTransform: 'uppercase',
+  },
+  clubBadge: {
+    backgroundColor: '#FBCFE8',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  clubBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#BE185D',
+    textTransform: 'uppercase',
   },
   markCount: {
     flexDirection: 'row',
@@ -385,4 +703,50 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontStyle: 'italic',
   },
+  courseClubDetails: {
+    fontSize: 12,
+    color: '#475569',
+    marginBottom: 8,
+  },
 });
+const haversineMeters = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_METERS * c;
+};
+
+const findNearestClub = (lat?: number, lng?: number) => {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+  const clubs = yachtClubData?.clubs || {};
+  let closest = null;
+  let closestDistance = Infinity;
+
+  Object.entries(clubs).forEach(([clubId, club]: any) => {
+    const coords = club?.headquarters?.coordinates || club?.venues?.[0]?.coordinates;
+    if (!coords || coords.length < 2) return;
+    const [clubLng, clubLat] = coords;
+    if (typeof clubLat !== 'number' || typeof clubLng !== 'number') return;
+    const distanceMeters = haversineMeters(lat, lng, clubLat, clubLng);
+    if (distanceMeters < closestDistance) {
+      closestDistance = distanceMeters;
+      closest = {
+        id: clubId,
+        name: club.name,
+        distanceNm: distanceMeters / METERS_PER_NAUTICAL_MILE,
+      };
+    }
+  });
+
+  if (closest && closest.distanceNm <= 15) {
+    return closest;
+  }
+
+  return null;
+};

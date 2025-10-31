@@ -18,7 +18,7 @@ import {
   WaveData,
   TideState,
   ConfidenceLevel
-} from '../types/raceEvents';
+} from '@/types/environmental';
 
 // Regional weather provider configuration
 const REGIONAL_PROVIDERS = {
@@ -260,6 +260,34 @@ export class WeatherAggregationService {
       console.error('NOAA API error:', error);
       return null;
     }
+  }
+
+  private parseNOAAWindSpeed(speed: string | null | undefined): number {
+    if (!speed) return 0;
+    const match = speed.match(/(\d+)/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  private parseNOAAWindDirection(direction: string | null | undefined): number {
+    if (!direction) return 0;
+    const compassMap: Record<string, number> = {
+      N: 0,
+      NE: 45,
+      E: 90,
+      SE: 135,
+      S: 180,
+      SW: 225,
+      W: 270,
+      NW: 315
+    };
+
+    const trimmed = direction.trim().toUpperCase();
+    if (compassMap[trimmed] !== undefined) {
+      return compassMap[trimmed];
+    }
+
+    const match = trimmed.match(/(\d+)/);
+    return match ? Number(match[1]) : 0;
   }
 
   /**

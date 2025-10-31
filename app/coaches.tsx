@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { DollarSign, Film, MessageCircle, Play, TrendingUp, Trophy, Users } from 'lucide-react-native';
 import { cssInterop } from 'nativewind';
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { Dimensions, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from '@/components/ui';
 
@@ -141,7 +141,13 @@ description="Automated invoicing and payment collection for all coaching session
 );
 }
 
-function FeatureItem({ icon, title, description }) {
+type FeatureItemProps = {
+  icon: ReactNode;
+  title: string;
+  description: string;
+};
+
+function FeatureItem({ icon, title, description }: FeatureItemProps) {
 return (
 <View className="flex-row items-start gap-4 p-4 bg-white rounded-xl border border-gray-100">
 <View className="bg-blue-50 p-3 rounded-xl">

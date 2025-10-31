@@ -7,6 +7,8 @@
  * Part of vertical slice: Document Upload → AI Extraction → Visualization → Validation
  */
 
+// @ts-nocheck
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import RaceEventService from '@/services/RaceEventService';

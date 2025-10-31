@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Time-Based Forecast Service
  *

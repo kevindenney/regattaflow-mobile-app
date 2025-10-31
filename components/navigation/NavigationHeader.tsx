@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';

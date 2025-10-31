@@ -211,9 +211,15 @@ export class RaceCourseService {
     const course = this.courses.get(courseId);
     if (!course?.coordinates?.marks) return [];
 
-    const marks = [];
+    const marks: {
+      id: string;
+      name: string;
+      coordinates: [number, number];
+      type: 'start' | 'finish' | 'turning' | 'waypoint';
+      color?: string;
+    }[] = [];
 
-    Object.entries(course.coordinates.marks).forEach(([markName, coords]) => {
+    Object.entries(course.coordinates.marks as Record<string, [number, number]>).forEach(([markName, coords]) => {
       const markType =
         markName.includes('start') ? 'start' :
         markName.includes('finish') ? 'finish' :
@@ -227,7 +233,7 @@ export class RaceCourseService {
       marks.push({
         id: `${courseId}-${markName}`,
         name: markName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        coordinates: coords,
+        coordinates: [coords[0], coords[1]],
         type: markType,
         color
       });

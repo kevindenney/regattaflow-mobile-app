@@ -1,4 +1,5 @@
 import { tva } from '@gluestack-ui/nativewind-utils/tva';
+import type { VariantProps } from '@gluestack-ui/nativewind-utils';
 
 export const skeletonStyle = tva({
   base: 'w-full h-full',
@@ -33,3 +34,6 @@ export const skeletonTextStyle = tva({
     },
   },
 });
+
+export type SkeletonVariants = VariantProps<typeof skeletonStyle>;
+export type SkeletonTextVariants = VariantProps<typeof skeletonTextStyle>;

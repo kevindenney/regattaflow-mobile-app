@@ -18,6 +18,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
 
 interface CoachWithScore extends CoachProfile {
+  display_name?: string | null;
+  profile_photo_url?: string | null;
   compatibilityScore?: number;
   matchReasoning?: string;
   recommendations?: string[];
@@ -586,13 +588,20 @@ export default function CoachDiscoveryScreen() {
               : 'No coaches found. Try adjusting your filters.'}
           </Text>
         ) : (
-          coaches.map((coach, index) => (
-            <TouchableOpacity
-              key={coach.id}
-              style={[
-                styles.coachCard,
-                mode === 'ai' && styles.coachCardAI,
-              ]}
+          coaches.map((coach, index) => {
+            const displayName =
+              coach.display_name ||
+              coach.based_at ||
+              `Coach ${index + 1}`;
+            const avatarInitial = displayName.charAt(0).toUpperCase();
+
+            return (
+              <TouchableOpacity
+                key={coach.id}
+                style={[
+                  styles.coachCard,
+                  mode === 'ai' && styles.coachCardAI,
+                ]}
               onPress={() => handleSelectCoach(coach.id)}
             >
               {/* Compatibility Score Badge (AI Mode) */}
@@ -616,19 +625,19 @@ export default function CoachDiscoveryScreen() {
                     />
                   ) : (
                     <Text style={styles.avatarText}>
-                      {coach.display_name.charAt(0).toUpperCase()}
+                      {avatarInitial}
                     </Text>
                   )}
                 </View>
                 <View style={styles.coachInfo}>
-                  <Text style={styles.coachName}>{coach.display_name}</Text>
+                  <Text style={styles.coachName}>{displayName}</Text>
                   <View style={styles.ratingContainer}>
                     <Text style={styles.ratingStars}>★</Text>
                     <Text style={styles.ratingValue}>
                       {coach.average_rating?.toFixed(1) || '0.0'}
                     </Text>
                     <Text style={styles.sessionCount}>
-                      ({coach.total_sessions} sessions)
+                      ({coach.total_sessions ?? 0} sessions)
                     </Text>
                   </View>
                 </View>
@@ -783,8 +792,9 @@ export default function CoachDiscoveryScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-            </TouchableOpacity>
-          ))
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
     </View>

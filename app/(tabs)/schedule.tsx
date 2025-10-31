@@ -2,20 +2,20 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { RealtimeConnectionIndicator } from '@/components/ui/RealtimeConnectionIndicator';
 import { useBookingRequests, useCoachingSessions } from '@/hooks/useCoachingSessions';
-import { useAuth } from '@/providers/AuthProvider';
+import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ScheduleScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const { user } = useAuth();
+  const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
 
   // Real-time booking requests for coaches
-  const { requests, unreadCount, loading: requestsLoading } = useBookingRequests(user?.id);
+  const { requests, unreadCount, loading: requestsLoading } = useBookingRequests(coachId);
 
   // Real-time coaching sessions
-  const { sessions, loading: sessionsLoading } = useCoachingSessions(user?.id);
+  const { sessions, loading: sessionsLoading } = useCoachingSessions(coachId);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
@@ -78,6 +78,36 @@ export default function ScheduleScreen() {
     };
     return map[t] || t.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
   };
+
+  if (personaLoading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!coachId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="school-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Coach Workspace</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            Accept bookings and manage sessions after your coach workspace is linked. Refresh your connection or finish onboarding to continue.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <ThemedText style={styles.missingFooter}>
+            Need help? Contact support to finish verification.
+          </ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -187,6 +217,49 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  missingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  missingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 22,
+  },
+  retryButton: {
+    marginTop: 24,
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  missingFooter: {
+    marginTop: 16,
+    color: '#64748B',
+    fontSize: 14,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',

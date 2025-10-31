@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { ArrowLeft, AlertTriangle, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
@@ -87,7 +87,7 @@ export default function DeleteAccountScreen() {
                 [
                   {
                     text: 'OK',
-                    onPress: () => router.replace('/(auth)/signin')
+                    onPress: () => router.replace('/(auth)/login' as Href)
                   }
                 ]
               );

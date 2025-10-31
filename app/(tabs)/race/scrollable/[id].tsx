@@ -4,7 +4,7 @@
  * Phase 1: Core structure with map hero
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -217,6 +217,38 @@ export default function RaceDetailScrollable() {
     }
   };
 
+  const handleManageCrewNavigation = useCallback(() => {
+    if (!race) {
+      logger.warn('[RaceDetail] handleManageCrewNavigation called without race context');
+      return;
+    }
+
+    const params: Record<string, string> = {
+      fromRaceId: race.id,
+    };
+
+    const classId = race.boat_class?.id || race.class_id;
+    if (classId) {
+      params.classId = String(classId);
+    }
+    if (race.boat_class?.name) {
+      params.className = race.boat_class.name;
+    }
+
+    if (race.race_name) {
+      params.raceName = race.race_name;
+    }
+
+    if (race.start_time) {
+      params.raceDate = race.start_time;
+    }
+
+    router.push({
+      pathname: '/(tabs)/crew',
+      params,
+    });
+  }, [race]);
+
   const averageWindSpeed = weather?.wind
     ? (weather.wind.speedMin + weather.wind.speedMax) / 2
     : undefined;
@@ -227,9 +259,19 @@ export default function RaceDetailScrollable() {
     refresh: refreshTuning,
   } = useRaceTuningRecommendation({
     classId: race?.class_id,
+    className:
+      race?.boat_class?.name ||
+      (race as any)?.boat_class_name ||
+      race?.metadata?.class_name ||
+      undefined,
     averageWindSpeed,
     pointsOfSail: 'upwind',
-    enabled: !!race?.class_id,
+    enabled: !!(
+      race?.class_id ||
+      race?.boat_class?.name ||
+      (race as any)?.boat_class_name ||
+      race?.metadata?.class_name
+    ),
   });
 
   useEffect(() => {
@@ -736,10 +778,7 @@ export default function RaceDetailScrollable() {
             raceId={race.id}
             classId={race.boat_class?.id || race.class_id}
             raceDate={race.start_time}
-            onManageCrew={() => {
-              logger.debug('[RaceDetail] Manage crew tapped');
-              // TODO: Navigate to crew management
-            }}
+            onManageCrew={handleManageCrewNavigation}
           />
 
           <FleetRacersCard

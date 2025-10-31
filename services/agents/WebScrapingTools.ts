@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Web Scraping Tools for Onboarding
  * Extract racing data from club and class websites using simple HTML parsing

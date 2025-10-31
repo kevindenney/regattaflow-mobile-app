@@ -80,14 +80,31 @@ export function StartStrategyCard({
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError, status, statusText } = await supabase
         .from('race_strategies')
         .select('*')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        logger.warn('[StartStrategyCard] Supabase returned error when loading strategy', {
+          raceId,
+          userId: user.id,
+          status,
+          statusText,
+          code: fetchError.code,
+          details: fetchError.details
+        });
+        throw fetchError;
+      }
+
+      logger.debug('[StartStrategyCard] Supabase load response', {
+        raceId,
+        userId: user.id,
+        status,
+        hasData: Boolean(data)
+      });
 
       if (data && data.favored_end) {
         // Extract start strategy from database
@@ -108,11 +125,23 @@ export function StartStrategyCard({
   };
 
   const generateStrategy = async () => {
-    if (!user) return;
+    if (!user) {
+      logger.error('[generateStrategy] No user - cannot generate');
+      return;
+    }
 
     try {
       setLoading(true);
       setError(null);
+
+      logger.info('[generateStrategy] Starting strategy generation', {
+        raceId,
+        userId: user.id,
+        raceName,
+        venueId,
+        venueName,
+        hasWeather: !!weather
+      });
 
       // Prepare race conditions for AI
       const windDirectionDegrees = convertWindDirectionToDegrees(weather?.wind?.direction || 'SW');
@@ -141,7 +170,10 @@ export function StartStrategyCard({
         weatherRisk: 'low' as const
       };
 
+      logger.debug('[generateStrategy] Race conditions prepared', conditions);
+
       // Generate venue-based strategy using AI
+      logger.info('[generateStrategy] Calling AI strategy engine');
       const aiStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
         venueId || 'hong-kong', // Default to Hong Kong if no venue
         conditions,
@@ -155,6 +187,11 @@ export function StartStrategyCard({
         }
       );
 
+      logger.info('[generateStrategy] AI strategy received', {
+        hasStrategy: !!aiStrategy,
+        hasStartStrategy: !!aiStrategy?.strategy?.startStrategy
+      });
+
       // Extract start strategy from full AI strategy
       const startStrat = aiStrategy.strategy.startStrategy;
       const extractedStrategy: StartStrategyData = {
@@ -167,8 +204,11 @@ export function StartStrategyCard({
         currentDirection: conditions.current.direction,
       };
 
+      logger.debug('[generateStrategy] Extracted strategy', extractedStrategy);
+
       // Save to database
       // First, get existing strategy_content to preserve other data
+      logger.info('[generateStrategy] Fetching existing strategy from database');
       const { data: existingData } = await supabase
         .from('race_strategies')
         .select('strategy_content')
@@ -176,36 +216,66 @@ export function StartStrategyCard({
         .eq('user_id', user.id)
         .maybeSingle();
 
+      logger.debug('[generateStrategy] Existing data', { hasExisting: !!existingData });
+
       // Preserve existing strategy_content and add fullAIStrategy
       const strategyContent = existingData?.strategy_content || {};
       (strategyContent as any).fullAIStrategy = aiStrategy; // Save full AI strategy for other cards
       (strategyContent as any).startStrategy = extractedStrategy; // Also save extracted start strategy
 
+      // IMPORTANT: Preserve tacticalPlan if it exists (from TacticalPlanCard)
+      // This ensures multiple cards don't overwrite each other's data
+
+      const upsertData = {
+        regatta_id: raceId,
+        user_id: user.id,
+        strategy_type: 'pre_race',
+        favored_end: extractedStrategy.favoredEnd,
+        start_line_bias: extractedStrategy.lineBias.toString(),
+        layline_approach: extractedStrategy.approach,
+        wind_strategy: extractedStrategy.reasoning,
+        confidence_score: extractedStrategy.confidence,
+        strategy_content: strategyContent, // Include full AI strategy
+        ai_generated: true,
+        // Note: ai_model and generated_at columns don't exist yet - removed until migration runs
+      };
+
+      logger.info('[generateStrategy] Upserting to database', {
+        regatta_id: upsertData.regatta_id,
+        user_id: upsertData.user_id,
+        strategy_type: upsertData.strategy_type,
+        favored_end: upsertData.favored_end,
+        hasStrategyContent: !!upsertData.strategy_content
+      });
+
       const { error: upsertError } = await supabase
         .from('race_strategies')
-        .upsert({
-          regatta_id: raceId,
-          user_id: user.id,
-          strategy_type: 'pre_race',
-          favored_end: extractedStrategy.favoredEnd,
-          start_line_bias: extractedStrategy.lineBias.toString(),
-          layline_approach: extractedStrategy.approach,
-          wind_strategy: extractedStrategy.reasoning,
-          confidence_score: extractedStrategy.confidence,
-          strategy_content: strategyContent, // Include full AI strategy
-          ai_generated: true,
-          ai_model: raceStrategyEngine.isSkillReady() ? 'claude-skills' : 'claude-haiku',
-          generated_at: new Date().toISOString(),
-        }, {
+        .upsert(upsertData, {
           onConflict: 'regatta_id,user_id'
         });
 
-      if (upsertError) throw upsertError;
+      if (upsertError) {
+        logger.error('[generateStrategy] Database upsert error', {
+          error: upsertError,
+          message: upsertError.message,
+          details: upsertError.details,
+          hint: upsertError.hint,
+          code: upsertError.code
+        });
+        throw upsertError;
+      }
+
+      logger.info('[generateStrategy] Strategy saved successfully');
 
       setStrategy(extractedStrategy);
       onGenerate?.();
 
     } catch (err) {
+      logger.error('[StartStrategyCard] Generate error', {
+        error: err,
+        message: (err as Error)?.message,
+        stack: (err as Error)?.stack
+      });
       console.error('[StartStrategyCard] Generate error:', err);
       setError('Failed to generate strategy');
     } finally {
@@ -276,6 +346,25 @@ export function StartStrategyCard({
   };
 
   const renderStrategyContent = () => {
+    // Show error state
+    if (error) {
+      return (
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="alert-circle" size={48} color="#EF4444" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={generateStrategy}
+            disabled={loading}
+          >
+            <MaterialCommunityIcons name="refresh" size={20} color="#FFFFFF" />
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Show loading state
     if (!strategy) {
       return (
         <View style={styles.emptyState}>
@@ -414,6 +503,30 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 16,
     marginTop: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   strategyContent: {
     gap: 20,

@@ -195,7 +195,7 @@ export function TacticalPlanCard({
         confidence: Math.round(strategy.confidence * 100)
       };
 
-      // Save to database
+      // Save to database - preserve existing strategy_content to avoid overwriting other cards' data
       const existingData = await supabase
         .from('race_strategies')
         .select('strategy_content')
@@ -203,6 +203,7 @@ export function TacticalPlanCard({
         .eq('user_id', user.id)
         .maybeSingle();
 
+      // Preserve existing data (e.g., startStrategy from StartStrategyCard)
       const strategyContent = existingData.data?.strategy_content || {};
       (strategyContent as any).tacticalPlan = aiPlan;
       (strategyContent as any).fullAIStrategy = strategy; // Save full AI strategy for reference

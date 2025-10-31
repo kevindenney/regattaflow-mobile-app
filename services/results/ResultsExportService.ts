@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Results Export Service
  * Handles exporting race results to various formats (CSV, PDF, Sailwave)

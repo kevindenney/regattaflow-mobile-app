@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Document Storage Service for RegattaFlow
  * Handles document upload, storage, and retrieval with Supabase

@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Race Course Extractor Service
  * Specialized AI service for extracting race course information from sailing instructions

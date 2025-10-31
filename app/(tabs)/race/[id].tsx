@@ -22,7 +22,8 @@ import {
 } from 'react-native';
 import { RaceCourseExtractor } from '@/services/ai/RaceCourseExtractor';
 import { raceStrategyEngine, RaceStrategy, RaceConditions } from '@/services/ai/RaceStrategyEngine';
-import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
+import type { RaceCourseExtraction, TacticalRecommendation } from '@/lib/types/ai-knowledge';
+import type { CourseMark } from '@/types/raceEvents';
 import { RaceMapView } from '@/components/race-strategy/RaceMapView';
 import { QuickDrawMode } from '@/components/race-strategy/QuickDrawMode';
 import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryArea } from 'victory';
@@ -45,6 +46,169 @@ interface RaceDetails {
 }
 
 type TabType = 'overview' | 'details' | 'strategy' | 'documents' | 'crew' | 'equipment' | 'tracks' | 'results';
+
+type StrategySection = Partial<TacticalRecommendation>;
+type StrategyConditions = Partial<RaceConditions>;
+
+type StrategyContingencies = {
+  windShift: StrategySection[];
+  windDrop: StrategySection[];
+  windIncrease: StrategySection[];
+  currentChange: StrategySection[];
+  equipmentIssue: StrategySection[];
+};
+
+type RaceStrategyViewModel = {
+  overallApproach: string;
+  startStrategy: StrategySection | null;
+  beatStrategy: StrategySection[];
+  runStrategy: StrategySection[];
+  markRoundings: StrategySection[];
+  finishStrategy: StrategySection | null;
+  contingencies: StrategyContingencies;
+  conditions: StrategyConditions;
+  simulationResults?: RaceStrategy['simulationResults'];
+  confidence: number;
+  startLineSummary?: {
+    favoredEnd?: string;
+    approach?: string;
+  };
+  keyTacticalPoints: string[];
+};
+
+const extractStartLineSummary = (startStrategy?: StrategySection | null) => {
+  if (!startStrategy) return undefined;
+  const favoredEnd =
+    (startStrategy as any)?.favored_end ??
+    (startStrategy as any)?.favoredEnd;
+  const approach =
+    (startStrategy as any)?.approach ??
+    (typeof startStrategy.action === 'string' ? startStrategy.action : undefined);
+
+  if (!favoredEnd && !approach) {
+    return undefined;
+  }
+
+  return {
+    favoredEnd,
+    approach
+  };
+};
+
+const extractKeyTacticalPoints = (
+  strategy?: {
+    beatStrategy?: StrategySection[];
+    runStrategy?: StrategySection[];
+    markRoundings?: StrategySection[];
+  }
+): string[] => {
+  if (!strategy) return [];
+  const points: string[] = [];
+
+  const beatAction = strategy.beatStrategy?.[0]?.action;
+  if (beatAction) points.push(beatAction);
+
+  const runAction = strategy.runStrategy?.[0]?.action;
+  if (runAction) points.push(runAction);
+
+  const markAction = strategy.markRoundings?.[0]?.action;
+  if (markAction) points.push(markAction);
+
+  return points;
+};
+
+const mapGeneratedStrategyToView = (data: RaceStrategy): RaceStrategyViewModel => ({
+  overallApproach: data.strategy?.overallApproach ?? '',
+  startStrategy: data.strategy?.startStrategy ?? null,
+  beatStrategy: data.strategy?.beatStrategy ?? [],
+  runStrategy: data.strategy?.runStrategy ?? [],
+  markRoundings: data.strategy?.markRoundings ?? [],
+  finishStrategy: data.strategy?.finishStrategy ?? null,
+  contingencies: {
+    windShift: data.contingencies?.windShift ?? [],
+    windDrop: data.contingencies?.windDrop ?? [],
+    windIncrease: data.contingencies?.windIncrease ?? [],
+    currentChange: data.contingencies?.currentChange ?? [],
+    equipmentIssue: data.contingencies?.equipmentIssue ?? []
+  },
+  conditions: data.conditions ?? {},
+  simulationResults: data.simulationResults,
+  confidence: data.confidence ?? 0.5,
+  startLineSummary: extractStartLineSummary(data.strategy?.startStrategy),
+  keyTacticalPoints: extractKeyTacticalPoints(data.strategy)
+});
+
+const mergeConditionsFromRecord = (record: any): StrategyConditions => {
+  if (!record) return {};
+
+  return {
+    wind: {
+      speed: record?.wind_speed ?? record?.wind?.speed,
+      direction: record?.wind_direction ?? record?.wind?.direction,
+      forecast:
+        record?.wind_forecast ??
+        record?.wind?.forecast ??
+        {
+          nextHour: { speed: record?.wind_speed ?? 0, direction: record?.wind_direction ?? 0 },
+          nextThreeHours: { speed: record?.wind_speed ?? 0, direction: record?.wind_direction ?? 0 }
+        },
+      confidence: record?.wind_confidence ?? 0.6
+    },
+    current: {
+      speed: record?.current_speed ?? record?.current?.speed,
+      direction: record?.current_direction ?? record?.current?.direction,
+      tidePhase: record?.tide_phase ?? record?.current?.tidePhase ?? 'slack'
+    },
+    waves: {
+      height: record?.wave_height ?? record?.waves?.height ?? 0,
+      period: record?.wave_period ?? record?.waves?.period ?? 0,
+      direction: record?.wave_direction ?? record?.waves?.direction ?? 0
+    },
+    visibility: record?.visibility ?? record?.conditions?.visibility ?? 10,
+    temperature: record?.temperature ?? record?.conditions?.temperature ?? 24,
+    weatherRisk: record?.weatherRisk ?? record?.conditions?.weatherRisk ?? 'moderate'
+  };
+};
+
+const mapStrategyRecordToView = (data: any): RaceStrategyViewModel => {
+  const contingencies = data?.contingencies || {};
+  const beatStrategy = Array.isArray(data?.beat_strategy) ? data.beat_strategy : [];
+  const runStrategy = Array.isArray(data?.run_strategy) ? data.run_strategy : [];
+  const markRoundings = Array.isArray(data?.mark_roundings) ? data.mark_roundings : [];
+
+  const startStrategy = data?.start_strategy ?? null;
+  const finishStrategy = data?.finish_strategy ?? null;
+
+  const keyPoints =
+    Array.isArray(data?.key_tactical_points) && data.key_tactical_points.length > 0
+      ? data.key_tactical_points
+      : extractKeyTacticalPoints({
+          beatStrategy,
+          runStrategy,
+          markRoundings
+        });
+
+  return {
+    overallApproach: data?.overall_approach || data?.overallApproach || '',
+    startStrategy,
+    beatStrategy,
+    runStrategy,
+    markRoundings,
+    finishStrategy,
+    contingencies: {
+      windShift: contingencies?.windShift ?? contingencies?.wind_shift ?? [],
+      windDrop: contingencies?.windDrop ?? contingencies?.wind_drop ?? [],
+      windIncrease: contingencies?.windIncrease ?? contingencies?.wind_increase ?? [],
+      currentChange: contingencies?.currentChange ?? contingencies?.current_change ?? [],
+      equipmentIssue: contingencies?.equipmentIssue ?? contingencies?.equipment_issue ?? []
+    },
+    conditions: mergeConditionsFromRecord(data),
+    simulationResults: data?.simulation_results,
+    confidence: typeof data?.confidence === 'number' ? data.confidence : 0.5,
+    startLineSummary: extractStartLineSummary(startStrategy),
+    keyTacticalPoints: keyPoints
+  };
+};
 
 // Generate SHA-256 hash for document deduplication
 async function generateDocumentHash(content: string): Promise<string> {
@@ -117,7 +281,7 @@ export default function RaceDetailScreen() {
   // Removed global extracting state - now tracked per-document via extractionStatus
 
   // Strategy state
-  const [strategy, setStrategy] = useState<RaceStrategy | null>(null);
+  const [strategy, setStrategy] = useState<RaceStrategyViewModel | null>(null);
   const [generatingStrategy, setGeneratingStrategy] = useState(false);
   const [activeLayer, setActiveLayer] = useState<'course' | 'weather' | 'tide' | 'tactical' | 'bathymetry' | 'satellite'>('course');
   const [showLaylines, setShowLaylines] = useState(false);
@@ -385,38 +549,7 @@ export default function RaceDetailScreen() {
 
       // Process strategy data if it exists
       if (strategyData) {
-        // race_strategies table stores strategy components in separate JSONB fields
-        const loadedStrategy: RaceStrategy = {
-          overallApproach: strategyData.overall_approach || '',
-          strategy: {
-            overallApproach: strategyData.overall_approach || '',
-            startStrategy: strategyData.start_strategy || {},
-            beatStrategy: strategyData.beat_strategy || [],
-            runStrategy: strategyData.run_strategy || [],
-            finishStrategy: strategyData.finish_strategy || {},
-            markRoundings: strategyData.mark_roundings || [],
-          },
-          contingencies: strategyData.contingencies || { windShift: [], windDrop: [], currentChange: [] },
-          conditions: {
-            wind: {
-              speed: strategyData.wind_speed || 0,
-              direction: strategyData.wind_direction || 0,
-              forecast: { nextHour: { speed: 0, direction: 0 }, nextThreeHours: { speed: 0, direction: 0 } },
-              confidence: 0.8
-            },
-            current: {
-              speed: strategyData.current_speed || 0,
-              direction: strategyData.current_direction || 0,
-              tidePhase: 'flood'
-            },
-            waves: { height: strategyData.wave_height || 0, period: 4, direction: 90 },
-            visibility: 10,
-            temperature: 24,
-            weatherRisk: 'low'
-          },
-          simulationResults: strategyData.simulation_results || {},
-          confidence: strategyData.confidence || 0.5,
-        };
+        const loadedStrategy = mapStrategyRecordToView(strategyData);
         setStrategy(loadedStrategy);
       }
 
@@ -492,7 +625,7 @@ export default function RaceDetailScreen() {
       const file = result.assets[0];
 
       // Create document entry
-      const newDoc: UploadedDocument = {
+      const newDoc: Document = {
         id: Date.now().toString(),
         name: file.name,
         type: file.mimeType || 'unknown',
@@ -824,15 +957,20 @@ export default function RaceDetailScreen() {
         );
       }
 
-      setStrategy(generatedStrategy);
+      const generatedStrategyView = mapGeneratedStrategyToView(generatedStrategy);
+      setStrategy(generatedStrategyView);
       setRace(prev => prev ? { ...prev, hasStrategy: true } : null);
 
       // Save strategy to database so it persists
       let strategyText: string;
 
       try {
-        if (generatedStrategy?.startLineStrategy && generatedStrategy?.keyTacticalPoints?.[0]) {
-          strategyText = `${generatedStrategy.startLineStrategy.favored_end}: ${generatedStrategy.startLineStrategy.approach}. ${generatedStrategy.keyTacticalPoints[0]}`;
+        if (
+          generatedStrategyView?.startLineSummary?.approach &&
+          generatedStrategyView.keyTacticalPoints.length > 0
+        ) {
+          const favoredEnd = generatedStrategyView.startLineSummary.favoredEnd || 'Start line';
+          strategyText = `${favoredEnd}: ${generatedStrategyView.startLineSummary.approach}. ${generatedStrategyView.keyTacticalPoints[0]}`;
         } else {
           strategyText = 'Strategy generated - view full details in strategy tab';
         }
@@ -983,6 +1121,39 @@ export default function RaceDetailScreen() {
       {(() => {
         const docWithExtraction = documents.find(d => d.extraction);
         if (docWithExtraction && docWithExtraction.extraction?.marks && docWithExtraction.extraction.marks.length > 0) {
+          const visualizationMarks: CourseMark[] = docWithExtraction.extraction.marks.reduce<CourseMark[]>(
+            (acc, mark, index) => {
+              const latitude = mark.position?.latitude;
+              const longitude = mark.position?.longitude;
+
+              if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+                return acc;
+              }
+
+              acc.push({
+                id: `${docWithExtraction.id}_${index}`,
+                race_id: race?.id ?? 'preview',
+                mark_name: mark.name,
+                mark_type: mark.type,
+                latitude,
+                longitude,
+                rounding: null,
+                sequence: index,
+                metadata: {
+                  description: mark.position?.description,
+                  confidence: mark.position?.confidence
+                }
+              } as CourseMark);
+
+              return acc;
+            },
+            []
+          );
+
+          if (visualizationMarks.length === 0) {
+            return null;
+          }
+
           return (
             <View style={styles.courseSection}>
               <View style={styles.sectionHeader}>
@@ -993,7 +1164,7 @@ export default function RaceDetailScreen() {
               </View>
               <View style={styles.courseContainer}>
                 <CourseVisualization
-                  marks={docWithExtraction.extraction.marks}
+                  marks={visualizationMarks}
                   racingAreaBoundary={docWithExtraction.extraction.racing_area_boundary}
                   courseConfiguration={docWithExtraction.extraction.course_description}
                   height={300}
@@ -1038,8 +1209,8 @@ export default function RaceDetailScreen() {
       // Get extracted marks from documents or metadata
       const extractedMarks = docWithExtraction?.extraction?.marks?.map(m => ({
         name: m.name,
-        type: m.type as any || 'windward',
-        confidence: m.confidence || 0.8
+        type: (m.type as any) || 'windward',
+        confidence: m.position?.confidence || 0.8
       })) || [];
 
       const racingArea = raceFullData?.metadata?.start_area_name || race?.venue || 'Racing Area';
@@ -1275,7 +1446,7 @@ export default function RaceDetailScreen() {
               <Text style={styles.weatherTitle}>Weather Intelligence</Text>
               <View style={styles.weatherConfidenceBadge}>
                 <Text style={styles.weatherConfidenceText}>
-                  {Math.round((strategy?.conditions.wind.confidence || 0) * 100)}%
+                  {Math.round((strategy?.conditions?.wind?.confidence || 0) * 100)}%
                 </Text>
               </View>
             </View>
@@ -1289,7 +1460,7 @@ export default function RaceDetailScreen() {
                 <View style={styles.chartHeader}>
                   <MaterialCommunityIcons name="weather-windy" size={16} color="#3B82F6" />
                   <Text style={styles.chartTitle}>Wind Speed</Text>
-                  <Text style={styles.chartCurrentValue}>{strategy?.conditions.wind.speed} kts</Text>
+                  <Text style={styles.chartCurrentValue}>{strategy?.conditions?.wind?.speed} kts</Text>
                 </View>
                 <VictoryChart
                   theme={VictoryTheme.material}
@@ -1303,11 +1474,11 @@ export default function RaceDetailScreen() {
                     }}
                   />
                   <VictoryArea
-                    data={[
-                      { x: 'Now', y: strategy?.conditions.wind.speed || 15 },
-                      { x: '+1h', y: strategy?.conditions.wind.forecast.nextHour.speed || 16 },
-                      { x: '+3h', y: strategy?.conditions.wind.forecast.nextThreeHours.speed || 18 }
-                    ]}
+                  data={[
+                    { x: 'Now', y: strategy?.conditions?.wind?.speed || 15 },
+                    { x: '+1h', y: strategy?.conditions?.wind?.forecast?.nextHour?.speed || 16 },
+                    { x: '+3h', y: strategy?.conditions?.wind?.forecast?.nextThreeHours?.speed || 18 }
+                  ]}
                     style={{
                       data: { fill: '#3B82F6', fillOpacity: 0.3, stroke: '#3B82F6', strokeWidth: 2 }
                     }}
@@ -1320,7 +1491,7 @@ export default function RaceDetailScreen() {
                 <View style={styles.chartHeader}>
                   <MaterialCommunityIcons name="waves" size={16} color="#10B981" />
                   <Text style={styles.chartTitle}>Current & Tide</Text>
-                  <Text style={styles.chartCurrentValue}>{strategy?.conditions.current.speed} kts</Text>
+                  <Text style={styles.chartCurrentValue}>{strategy?.conditions?.current?.speed} kts</Text>
                 </View>
                 <VictoryChart
                   theme={VictoryTheme.material}
@@ -1334,8 +1505,8 @@ export default function RaceDetailScreen() {
                     }}
                   />
                   <VictoryLine
-                    data={[
-                      { x: 'Now', y: strategy?.conditions.current.speed || 0.8 },
+                  data={[
+                    { x: 'Now', y: strategy?.conditions?.current?.speed || 0.8 },
                       { x: '+1h', y: 0.9 },
                       { x: '+3h', y: 1.1 }
                     ]}
@@ -1351,7 +1522,7 @@ export default function RaceDetailScreen() {
                 <View style={styles.chartHeader}>
                   <MaterialCommunityIcons name="wave" size={16} color="#06B6D4" />
                   <Text style={styles.chartTitle}>Wave Height</Text>
-                  <Text style={styles.chartCurrentValue}>{strategy?.conditions.waves.height}m</Text>
+                  <Text style={styles.chartCurrentValue}>{strategy?.conditions?.waves?.height}m</Text>
                 </View>
                 <VictoryChart
                   theme={VictoryTheme.material}
@@ -1365,8 +1536,8 @@ export default function RaceDetailScreen() {
                     }}
                   />
                   <VictoryLine
-                    data={[
-                      { x: 'Now', y: strategy?.conditions.waves.height || 0.5 },
+                  data={[
+                    { x: 'Now', y: strategy?.conditions?.waves?.height || 0.5 },
                       { x: '+1h', y: 0.6 },
                       { x: '+3h', y: 0.7 }
                     ]}
@@ -1390,7 +1561,7 @@ export default function RaceDetailScreen() {
                   <View style={styles.forecastDataPoint}>
                     <MaterialCommunityIcons name="weather-windy" size={16} color="#3B82F6" />
                     <Text style={styles.forecastValue}>
-                      {strategy?.conditions.wind.speed} kts
+                      {strategy?.conditions?.wind?.speed} kts
                     </Text>
                   </View>
                 </View>
@@ -1403,12 +1574,12 @@ export default function RaceDetailScreen() {
                   <View style={styles.forecastDataPoint}>
                     <MaterialCommunityIcons name="weather-windy" size={16} color="#64748B" />
                     <Text style={styles.forecastValue}>
-                      {strategy?.conditions.wind.forecast.nextHour.speed} kts
+                      {strategy?.conditions?.wind?.forecast?.nextHour?.speed} kts
                     </Text>
                   </View>
                   <Text style={styles.forecastChange}>
-                    {strategy && strategy.conditions.wind.forecast.nextHour.speed > strategy.conditions.wind.speed ? '↑' : '↓'}
-                    {' '}{Math.abs((strategy?.conditions.wind.forecast.nextHour.speed || 0) - (strategy?.conditions.wind.speed || 0))} kts
+                    {strategy && (strategy.conditions?.wind?.forecast?.nextHour?.speed || 0) > (strategy.conditions?.wind?.speed || 0) ? '↑' : '↓'}
+                    {' '}{Math.abs((strategy?.conditions?.wind?.forecast?.nextHour?.speed || 0) - (strategy?.conditions?.wind?.speed || 0))} kts
                   </Text>
                 </View>
 
@@ -1420,32 +1591,32 @@ export default function RaceDetailScreen() {
                   <View style={styles.forecastDataPoint}>
                     <MaterialCommunityIcons name="weather-windy" size={16} color="#64748B" />
                     <Text style={styles.forecastValue}>
-                      {strategy?.conditions.wind.forecast.nextThreeHours.speed} kts
+                      {strategy?.conditions?.wind?.forecast?.nextThreeHours?.speed} kts
                     </Text>
                   </View>
                   <Text style={styles.forecastChange}>
-                    {strategy && strategy.conditions.wind.forecast.nextThreeHours.speed > strategy.conditions.wind.speed ? '↑' : '↓'}
-                    {' '}{Math.abs((strategy?.conditions.wind.forecast.nextThreeHours.speed || 0) - (strategy?.conditions.wind.speed || 0))} kts
+                    {strategy && (strategy.conditions?.wind?.forecast?.nextThreeHours?.speed || 0) > (strategy.conditions?.wind?.speed || 0) ? '↑' : '↓'}
+                    {' '}{Math.abs((strategy?.conditions?.wind?.forecast?.nextThreeHours?.speed || 0) - (strategy?.conditions?.wind?.speed || 0))} kts
                   </Text>
                 </View>
               </View>
 
               {/* Weather Risk Alert */}
-              {strategy?.conditions.weatherRisk !== 'low' && (
+              {strategy?.conditions?.weatherRisk !== 'low' && (
                 <View style={[
                   styles.weatherRiskAlert,
-                  strategy?.conditions.weatherRisk === 'high' && styles.weatherRiskAlertHigh
+                  strategy?.conditions?.weatherRisk === 'high' && styles.weatherRiskAlertHigh
                 ]}>
                   <MaterialCommunityIcons
                     name="alert"
                     size={16}
-                    color={strategy?.conditions.weatherRisk === 'high' ? '#EF4444' : '#F59E0B'}
+                    color={strategy?.conditions?.weatherRisk === 'high' ? '#EF4444' : '#F59E0B'}
                   />
                   <Text style={[
                     styles.weatherRiskText,
-                    strategy?.conditions.weatherRisk === 'high' && styles.weatherRiskTextHigh
+                    strategy?.conditions?.weatherRisk === 'high' && styles.weatherRiskTextHigh
                   ]}>
-                    {strategy?.conditions.weatherRisk === 'high' ? 'High' : 'Moderate'} weather risk - Monitor conditions closely
+                    {strategy?.conditions?.weatherRisk === 'high' ? 'High' : 'Moderate'} weather risk - Monitor conditions closely
                   </Text>
                 </View>
               )}
@@ -1468,7 +1639,7 @@ export default function RaceDetailScreen() {
               <Text style={styles.strategySectionTitle}>Overall Approach</Text>
             </View>
             <Text style={styles.strategySectionText}>
-              {strategy?.strategy.overallApproach}
+              {strategy?.overallApproach}
             </Text>
           </View>
 
@@ -1479,17 +1650,17 @@ export default function RaceDetailScreen() {
               <Text style={styles.strategySectionTitle}>Start Strategy</Text>
               <View style={[
                 styles.priorityBadge,
-                strategy?.strategy.startStrategy.priority === 'critical' && styles.priorityCritical
+                strategy?.startStrategy?.priority === 'critical' && styles.priorityCritical
               ]}>
-                <Text style={styles.priorityText}>{strategy?.strategy.startStrategy.priority}</Text>
+                <Text style={styles.priorityText}>{strategy?.startStrategy?.priority}</Text>
               </View>
             </View>
-            <Text style={styles.tacticalAction}>{strategy?.strategy.startStrategy.action}</Text>
-            <Text style={styles.tacticalRationale}>{strategy?.strategy.startStrategy.rationale}</Text>
-            {strategy?.strategy.startStrategy.alternatives && (
+            <Text style={styles.tacticalAction}>{strategy?.startStrategy?.action}</Text>
+            <Text style={styles.tacticalRationale}>{strategy?.startStrategy?.rationale}</Text>
+            {strategy?.startStrategy?.alternatives && (
               <View style={styles.alternativesContainer}>
                 <Text style={styles.alternativesTitle}>Alternatives:</Text>
-                {strategy.strategy.startStrategy.alternatives.map((alt, i) => (
+                {strategy.startStrategy.alternatives.map((alt, i) => (
                   <Text key={i} style={styles.alternativeText}>• {alt}</Text>
                 ))}
               </View>
@@ -1497,7 +1668,7 @@ export default function RaceDetailScreen() {
           </View>
 
           {/* Beat Strategy */}
-          {strategy?.strategy.beatStrategy.map((beat, index) => (
+          {strategy?.beatStrategy.map((beat, index) => (
             <View key={index} style={styles.strategySection}>
               <View style={styles.strategySectionHeader}>
                 <MaterialCommunityIcons name="arrow-up-bold" size={20} color="#F59E0B" />
@@ -1514,16 +1685,16 @@ export default function RaceDetailScreen() {
               <MaterialCommunityIcons name="alert-circle" size={20} color="#EF4444" />
               <Text style={styles.strategySectionTitle}>Contingencies</Text>
             </View>
-            {strategy?.contingencies.windShift.length! > 0 && (
+            {(strategy?.contingencies.windShift?.length ?? 0) > 0 && (
               <View style={styles.contingencyItem}>
                 <Text style={styles.contingencyTitle}>Wind Shift:</Text>
-                <Text style={styles.contingencyText}>{strategy?.contingencies.windShift[0].action}</Text>
+                <Text style={styles.contingencyText}>{strategy?.contingencies.windShift?.[0]?.action}</Text>
               </View>
             )}
-            {strategy?.contingencies.windDrop.length! > 0 && (
+            {(strategy?.contingencies.windDrop?.length ?? 0) > 0 && (
               <View style={styles.contingencyItem}>
                 <Text style={styles.contingencyTitle}>Wind Drop:</Text>
-                <Text style={styles.contingencyText}>{strategy?.contingencies.windDrop[0].action}</Text>
+                <Text style={styles.contingencyText}>{strategy?.contingencies.windDrop?.[0]?.action}</Text>
               </View>
             )}
           </View>

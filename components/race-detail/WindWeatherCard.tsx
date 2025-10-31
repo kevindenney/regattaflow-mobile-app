@@ -3,7 +3,7 @@
  * Shows current conditions and race-time forecast
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
@@ -58,6 +58,7 @@ export function WindWeatherCard({
   venue
 }: WindWeatherCardProps) {
   const [useMockData, setUseMockData] = useState(false);
+  const [hasAutoLoaded, setHasAutoLoaded] = useState(false);
 
   // Try to fetch REAL weather data first
   const { weather: realWeather, loading, error: weatherError, refetch: loadWeather } = useRaceWeather(
@@ -78,17 +79,7 @@ export function WindWeatherCard({
   const [mockWeather, setMockWeather] = useState<WeatherData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // If real weather fails or is unavailable, use mock data
-    if (weatherError || (!loading && !realWeather && venueCoordinates)) {
-      loadMockWeather();
-      setUseMockData(true);
-    } else if (realWeather) {
-      setUseMockData(false);
-    }
-  }, [weatherError, loading, realWeather, venueCoordinates]);
-
-  const loadMockWeather = () => {
+  const loadMockWeather = useCallback(() => {
     setUseMockData(true);
     const placeholderWeather: WeatherData = {
       current: {
@@ -114,7 +105,71 @@ export function WindWeatherCard({
       lastUpdated: new Date(),
     };
     setMockWeather(placeholderWeather);
-  };
+    setHasAutoLoaded(true);
+  }, []);
+
+  const hasValidCoordinates =
+    (venueCoordinates && (venueCoordinates.lat !== 0 || venueCoordinates.lng !== 0)) ||
+    (venue?.coordinates &&
+      (venue.coordinates.latitude !== 0 || venue.coordinates.longitude !== 0));
+
+  const handleRefresh = useCallback(() => {
+    setHasAutoLoaded(false);
+    setUseMockData(false);
+    setMockWeather(null);
+    setError(null);
+    loadWeather();
+  }, [loadWeather]);
+
+  useEffect(() => {
+    setHasAutoLoaded(false);
+    setUseMockData(false);
+    setMockWeather(null);
+    setError(null);
+  }, [raceId, raceTime, venue?.id, venueCoordinates?.lat, venueCoordinates?.lng]);
+
+  useEffect(() => {
+    if (realWeather) {
+      setUseMockData(false);
+      setHasAutoLoaded(true);
+      setError(null);
+    }
+  }, [realWeather]);
+
+  useEffect(() => {
+    if (hasAutoLoaded || useMockData) return;
+
+    if (weatherError) {
+      setError(weatherError.message || 'Unable to fetch live weather');
+      loadMockWeather();
+      return;
+    }
+
+    if (!loading && !realWeather) {
+      const timeout = setTimeout(() => {
+        if (!hasAutoLoaded && !realWeather && !useMockData) {
+          if (!hasValidCoordinates) {
+            setError(null);
+          }
+          loadMockWeather();
+        }
+      }, hasValidCoordinates ? 800 : 120);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [
+    loading,
+    realWeather,
+    weatherError,
+    hasAutoLoaded,
+    useMockData,
+    loadMockWeather,
+    hasValidCoordinates,
+    venueCoordinates?.lat,
+    venueCoordinates?.lng,
+    venue?.coordinates?.latitude,
+    venue?.coordinates?.longitude
+  ]);
 
   // Helper to convert cardinal to degrees for display
   const cardinalToDegrees = (cardinal: string): number => {
@@ -242,7 +297,7 @@ export function WindWeatherCard({
         <View style={styles.currentSection}>
           <View style={styles.currentHeader}>
             <Text style={styles.sectionTitle}>Current Conditions</Text>
-            <TouchableOpacity onPress={loadWeather} disabled={loading}>
+            <TouchableOpacity onPress={handleRefresh} disabled={loading}>
               <MaterialCommunityIcons name="refresh" size={20} color="#3B82F6" />
             </TouchableOpacity>
           </View>

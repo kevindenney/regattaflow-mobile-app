@@ -12,7 +12,8 @@
  * - Real-time weather integration via WeatherAggregationService
  */
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { MapboxOverlay } from '@deck.gl/mapbox';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createLogger } from '@/lib/utils/logger';
@@ -24,6 +25,8 @@ import type {
   TideData,
   WaveData
 } from '@/types/raceEvents';
+import type { ParticleData, VisualizationLayers } from '@/services/visualization/EnvironmentalVisualizationService';
+import { buildEnvironmentalDeckLayers } from '@/components/map/layers/buildEnvironmentalDeckLayers';
 
 const isWeb = Platform.OS === 'web';
 const logger = createLogger('TacticalRaceMap');
@@ -105,6 +108,7 @@ export default function TacticalRaceMap({
 }: TacticalRaceMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const deckOverlayRef = useRef<MapboxOverlay | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   const [is3D, setIs3D] = useState(false); // Default to 2D
@@ -245,6 +249,81 @@ export default function TacticalRaceMap({
     { id: 'strategy', name: 'Strategy', icon: 'analytics-outline', enabled: externalLayers?.strategy ?? false, category: 'tactical', description: 'Tactical analysis' },
   ]);
 
+  const updateDeckOverlay = useCallback(() => {
+    if (!isWeb || !mapLoaded || !mapRef.current) {
+      return;
+    }
+
+    const overlay = deckOverlayRef.current;
+    if (!overlay) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const transform = map?.transform || map?._tr;
+
+    if (!transform || !transform.width || !transform.height) {
+      try {
+        overlay.setProps({ layers: [] });
+      } catch (err) {
+        console.warn('Failed to clear deck.gl layers:', err);
+      }
+      return;
+    }
+
+    if (!environmental || !environmental.current) {
+      try {
+        overlay.setProps({ layers: [] });
+      } catch (err) {
+        console.warn('Failed to clear deck.gl layers:', err);
+      }
+      return;
+    }
+
+    const bounds = map.getBounds?.();
+    if (!bounds) {
+      try {
+        overlay.setProps({ layers: [] });
+      } catch (err) {
+        console.warn('Failed to clear deck.gl layers:', err);
+      }
+      return;
+    }
+
+    const windEnabled = layers.find((layer) => layer.id === 'wind')?.enabled ?? true;
+    const currentEnabled = layers.find((layer) => layer.id === 'current')?.enabled ?? true;
+
+    const windParticles = windEnabled
+      ? createWindParticles(bounds, environmental.current.wind)
+      : [];
+    const currentParticles = currentEnabled
+      ? createCurrentParticles(bounds, environmental.current.tide)
+      : [];
+
+    const vizLayers: VisualizationLayers = {
+      windParticles,
+      currentParticles,
+      windShadowZones: [],
+      windAccelerationZones: [],
+      currentAccelerationZones: [],
+      currentEddyZones: [],
+      buildings: { type: 'FeatureCollection', features: [] },
+    };
+
+    const deckLayers = buildEnvironmentalDeckLayers(vizLayers, {
+      wind: windEnabled,
+      windZones: windEnabled,
+      current: currentEnabled,
+      currentZones: currentEnabled,
+    });
+
+    try {
+      overlay.setProps({ layers: deckLayers });
+    } catch (err) {
+      console.warn('Failed to update deck.gl layers:', err);
+    }
+  }, [environmental, layers, mapLoaded]);
+
   // Sync with external layer changes
   useEffect(() => {
     if (externalLayers) {
@@ -297,7 +376,11 @@ export default function TacticalRaceMap({
         }
 
         // Calculate course center from marks
-        const center = getMapCenter(marks, raceEvent.venue);
+      const center = getMapCenter(
+        marks,
+        raceEvent.venue,
+        environmental?.current?.wind
+      );
 
         // Initialize map
         const map = new maplibregl.Map({
@@ -339,6 +422,16 @@ export default function TacticalRaceMap({
 
         // Map load handler
         map.on('load', async () => {
+          if (isWeb) {
+            // Wait a bit for the map viewport to fully initialize before adding deck.gl overlay
+            // This prevents "Cannot read properties of null (reading 'id')" errors
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const overlay = new MapboxOverlay({ interleaved: true, layers: [] });
+            deckOverlayRef.current = overlay;
+            map.addControl(overlay);
+          }
+
           setMapLoaded(true);
 
           // Create arrow icon for course direction indicators
@@ -361,9 +454,11 @@ export default function TacticalRaceMap({
           // Add all layers
           await addRaceCourse(map, marks);
 
-          if (environmental) {
+          if (!isWeb && environmental) {
             await addWindLayer(map, marks, environmental);
             await addCurrentLayer(map, marks, environmental);
+          } else if (isWeb) {
+            updateDeckOverlay();
           }
 
           // Fit to course
@@ -385,7 +480,14 @@ export default function TacticalRaceMap({
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
-      } else {
+      }
+
+      if (deckOverlayRef.current) {
+        try {
+          deckOverlayRef.current.setProps({ layers: [] });
+        } catch (err) {
+        }
+        deckOverlayRef.current = null;
       }
     };
   }, []);
@@ -420,6 +522,10 @@ export default function TacticalRaceMap({
   // ============================================================================
 
   useEffect(() => {
+    if (isWeb) {
+      updateDeckOverlay();
+    }
+
     if (!mapRef.current || !mapLoaded || !environmental) return;
 
     const map = mapRef.current;
@@ -431,12 +537,12 @@ export default function TacticalRaceMap({
 
       try {
         // Add wind layer if it doesn't exist and is enabled
-        if (windLayer?.enabled && !map.getLayer('wind')) {
+        if (!isWeb && windLayer?.enabled && !map.getLayer('wind')) {
           await addWindLayer(map, marks, environmental);
         }
 
         // Add current layer if it doesn't exist and is enabled
-        if (currentLayer?.enabled && !map.getLayer('current')) {
+        if (!isWeb && currentLayer?.enabled && !map.getLayer('current')) {
           await addCurrentLayer(map, marks, environmental);
         }
 
@@ -449,7 +555,26 @@ export default function TacticalRaceMap({
     };
 
     ensureEnvironmentalLayers();
-  }, [environmental, mapLoaded, layers]);
+  }, [environmental, mapLoaded, layers, updateDeckOverlay]);
+
+  useEffect(() => {
+    if (!isWeb || !mapLoaded || !mapRef.current) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const handler = () => updateDeckOverlay();
+
+    map.on('moveend', handler);
+    map.on('zoomend', handler);
+
+    return () => {
+      if (map.off) {
+        map.off('moveend', handler);
+        map.off('zoomend', handler);
+      }
+    };
+  }, [mapLoaded, updateDeckOverlay]);
 
   // ============================================================================
   // LAYER UPDATES - Toggle layer visibility
@@ -461,6 +586,11 @@ export default function TacticalRaceMap({
     const map = mapRef.current;
 
     layers.forEach(async (layer) => {
+      if (isWeb && (layer.id === 'wind' || layer.id === 'current')) {
+        updateDeckOverlay();
+        return;
+      }
+
       const visibility = layer.enabled ? 'visible' : 'none';
 
       try {
@@ -480,10 +610,14 @@ export default function TacticalRaceMap({
             // Recreate with current bounds
             switch (layer.id) {
               case 'wind':
-                await addWindLayer(map, marks, environmental);
+                if (!isWeb) {
+                  await addWindLayer(map, marks, environmental);
+                }
                 break;
               case 'current':
-                await addCurrentLayer(map, marks, environmental);
+                if (!isWeb) {
+                  await addCurrentLayer(map, marks, environmental);
+                }
                 break;
               case 'waves':
                 await addWaveLayer(map, marks, environmental);
@@ -497,10 +631,14 @@ export default function TacticalRaceMap({
           // Create layer if it doesn't exist but should be visible
           switch (layer.id) {
             case 'wind':
-              await addWindLayer(map, marks, environmental);
+              if (!isWeb) {
+                await addWindLayer(map, marks, environmental);
+              }
               break;
             case 'current':
-              await addCurrentLayer(map, marks, environmental);
+              if (!isWeb) {
+                await addCurrentLayer(map, marks, environmental);
+              }
               break;
             case 'waves':
               await addWaveLayer(map, marks, environmental);
@@ -519,7 +657,7 @@ export default function TacticalRaceMap({
       } catch (error) {
       }
     });
-  }, [layers, mapLoaded]);
+  }, [layers, mapLoaded, environmental, marks, updateDeckOverlay]);
 
   // ============================================================================
   // RACING AREA SELECTION
@@ -1516,6 +1654,7 @@ export default function TacticalRaceMap({
   // ============================================================================
 
   const addWindLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
+    if (isWeb) return;
     if (!env || !env.current.wind) return;
 
     const wind = env.current.wind;
@@ -1624,6 +1763,7 @@ export default function TacticalRaceMap({
   // ============================================================================
 
   const addCurrentLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
+    if (isWeb) return;
     if (!env || !env.current.tide?.current_speed) return;
 
     const tide = env.current.tide;
@@ -2055,12 +2195,92 @@ export default function TacticalRaceMap({
     return '#ef4444'; // Strong
   };
 
-  const getWaveColor = (height: number): string => {
-    if (height < 0.5) return '#22d3ee';
-    if (height < 1.0) return '#3b82f6';
-    if (height < 2.0) return '#f59e0b';
-    return '#ef4444';
-  };
+const getWaveColor = (height: number): string => {
+  if (height < 0.5) return '#22d3ee';
+  if (height < 1.0) return '#3b82f6';
+  if (height < 2.0) return '#f59e0b';
+  return '#ef4444';
+};
+
+function createWindParticles(bounds: any, wind?: WindData): ParticleData[] {
+  const area = normalizeBounds(bounds);
+  if (!area || !wind) {
+    return [];
+  }
+
+  const rows = 10;
+  const cols = 18;
+  const direction = ((wind.direction ?? 0) + 180) % 360;
+  const speed = Math.max(0, wind.speed ?? 0);
+  return createParticleGrid(area, rows, cols, direction, speed);
+}
+
+function createCurrentParticles(bounds: any, tide?: TideData): ParticleData[] {
+  const area = normalizeBounds(bounds);
+  if (!area || !tide || typeof tide.current_direction !== 'number') {
+    return [];
+  }
+
+  const rows = 8;
+  const cols = 14;
+  const direction = tide.current_direction ?? 0;
+  const speed = Math.max(0, tide.current_speed ?? 0);
+  return createParticleGrid(area, rows, cols, direction, speed);
+}
+
+function normalizeBounds(bounds: any) {
+  const sw = bounds?.getSouthWest?.();
+  const ne = bounds?.getNorthEast?.();
+
+  if (!sw || !ne) {
+    return null;
+  }
+
+  const { lat: south, lng: west } = sw;
+  const { lat: north, lng: east } = ne;
+
+  if (
+    !Number.isFinite(south) ||
+    !Number.isFinite(north) ||
+    !Number.isFinite(west) ||
+    !Number.isFinite(east) ||
+    south === north ||
+    west === east
+  ) {
+    return null;
+  }
+
+  return { south, north, west, east };
+}
+
+function createParticleGrid(
+  bounds: { south: number; north: number; west: number; east: number },
+  rows: number,
+  cols: number,
+  direction: number,
+  speed: number
+): ParticleData[] {
+  const particles: ParticleData[] = [];
+  const latStep = (bounds.north - bounds.south) / (rows + 1);
+  const lngStep = (bounds.east - bounds.west) / (cols + 1);
+
+  if (!Number.isFinite(latStep) || !Number.isFinite(lngStep) || latStep === 0 || lngStep === 0) {
+    return particles;
+  }
+
+  for (let i = 1; i <= rows; i++) {
+    for (let j = 1; j <= cols; j++) {
+      particles.push({
+        lat: bounds.south + i * latStep,
+        lng: bounds.west + j * lngStep,
+        direction,
+        speed,
+      });
+    }
+  }
+
+  return particles;
+}
 
   // ============================================================================
   // LAYER CONTROLS

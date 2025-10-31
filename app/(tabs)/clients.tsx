@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from '@/components/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useAuth } from '@/providers/AuthProvider';
+import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import { coachingService, CoachingClient, ClientStats } from '@/services/CoachingService';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ClientsScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clients, setClients] = useState<CoachingClient[]>([]);
@@ -23,18 +23,23 @@ export default function ClientsScreen() {
   });
 
   useEffect(() => {
-    if (user) {
-      loadData();
+    if (coachId) {
+      loadData(coachId);
+    } else if (!personaLoading) {
+      setLoading(false);
     }
-  }, [user]);
+  }, [coachId, personaLoading]);
 
-  const loadData = async () => {
-    if (!user) return;
+  const loadData = async (targetCoachId: string) => {
+    if (!targetCoachId) return;
 
     try {
+      if (!refreshing) {
+        setLoading(true);
+      }
       const [clientsData, statsData] = await Promise.all([
-        coachingService.getClients(user.id, 'active'),
-        coachingService.getCoachStats(user.id)
+        coachingService.getClients(targetCoachId, 'active'),
+        coachingService.getCoachStats(targetCoachId)
       ]);
 
       setClients(clientsData);
@@ -49,7 +54,11 @@ export default function ClientsScreen() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadData();
+    if (coachId) {
+      loadData(coachId);
+    } else {
+      setRefreshing(false);
+    }
   };
 
   const handleClientPress = (clientId: string) => {
@@ -61,11 +70,31 @@ export default function ClientsScreen() {
     return `Last session: ${formatDistanceToNow(new Date(date), { addSuffix: true })}`;
   };
 
-  if (loading) {
+  if (personaLoading || loading) {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!coachId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.missingContainer}>
+          <Ionicons name="school-outline" size={48} color="#94A3B8" />
+          <ThemedText style={styles.missingTitle}>Connect Your Coach Workspace</ThemedText>
+          <ThemedText style={styles.missingDescription}>
+            Client management becomes available after coach onboarding. Refresh your connection or finish onboarding to continue.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryLink} onPress={() => router.push('/(tabs)/profile')}>
+            <ThemedText style={styles.secondaryLinkText}>Back to Dashboard</ThemedText>
+          </TouchableOpacity>
         </View>
       </ThemedView>
     );
@@ -274,5 +303,45 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  missingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  missingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  missingDescription: {
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 22,
+  },
+  retryButton: {
+    marginTop: 24,
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    marginTop: 16,
+  },
+  secondaryLinkText: {
+    color: '#007AFF',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });

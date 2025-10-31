@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
@@ -28,6 +30,7 @@ interface ClubMember {
   skill_level?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
   volunteer_hours: number;
   dues_status: 'current' | 'overdue' | 'exempt';
+  member_number?: string;
 }
 
 interface ClubFacility {

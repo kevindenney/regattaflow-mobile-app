@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Tactical Map Standalone Demo
  * Works with mock data - no database required

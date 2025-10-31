@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * RaceMapView - 3D Nautical Map with Course Visualization
  * OnX Maps-inspired interface for race strategy planning

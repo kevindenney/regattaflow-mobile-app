@@ -6,6 +6,100 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ConversationalOnboardingAgent, ConversationalContext, StreamMessage } from '@/services/agents/ConversationalOnboardingAgent';
 
+type AssistantRole = 'assistant';
+type UserRole = 'user';
+
+type UserChatMessage = ChatMessage & { role: UserRole };
+type AssistantChatMessage = ChatMessage & { role: AssistantRole };
+
+type SavedBoat = NonNullable<CollectedData['boats']>[number];
+
+const VENUE_DETECTION_REGEX = /found you near \*\*([^*]+)\*\*/i;
+const SAIL_NUMBER_REGEX = /(?:sail\s*number|#|sail\s+|[a-z])(\d+)/i;
+const ABBREVIATION_REGEX = /\b([A-Z]{2,6})\b/g;
+const CLUB_FULL_NAME_REGEX = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Yacht|Sailing)\s+Club)\b/gi;
+const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+
+const CLUB_ABBREVIATION_EXCLUSIONS = new Set(['GPS', 'AI', 'OK', 'YES', 'NO', 'USA', 'UK']);
+
+const BOAT_CLASSES = [
+  'dragon',
+  'j/70',
+  'j70',
+  'j/105',
+  'j105',
+  'j/111',
+  'j111',
+  'j/122',
+  'j122',
+  'etchells',
+  'irc',
+  'melges 24',
+  'melges 32',
+  'melges',
+  'farr 40',
+  'farr',
+  'swan 42',
+  'swan 45',
+  'swan',
+  'tp52',
+  'tp 52',
+  'rc44',
+  'rc 44',
+  'laser',
+  'ilca',
+  '420',
+  '470',
+  '49er',
+  '505',
+  'finn',
+  'snipe',
+  'lightning',
+  'thistle',
+  'viper',
+  'x-boat',
+  'x boat',
+  'xboat',
+] as const;
+
+const BOAT_CLASS_REGEX_CACHE = new Map<string, RegExp>();
+
+const getBoatClassRegex = (boatClass: string): RegExp => {
+  const cached = BOAT_CLASS_REGEX_CACHE.get(boatClass);
+  if (cached) return cached;
+
+  const normalized = boatClass.toLowerCase().replace(/\//g, '\\/');
+  const regex = new RegExp(`\\b${normalized}\\b`);
+  BOAT_CLASS_REGEX_CACHE.set(boatClass, regex);
+  return regex;
+};
+
+const BOAT_NAME_PATTERNS = [
+  /(?:boat(?:'s)?\s+name\s+is|called|named)\s+["']?([A-Z][a-zA-Z\s'-]+)["']?/i,
+  /(?:my\s+boat\s+is\s+called)\s+["']?([A-Z][a-zA-Z\s'-]+)["']?/i,
+] as const;
+
+const toTitleCase = (value: string): string =>
+  value
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && typeof error.message === 'string') {
+    return error.message;
+  }
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return 'An unexpected error occurred';
+};
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -36,7 +130,18 @@ export interface CollectedData {
   items?: CollectedDataItem[];
 }
 
-export function useStreamingChat(sailorId: string) {
+type UseStreamingChatReturn = {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  context: ConversationalContext;
+  collectedData: CollectedData;
+  sendMessage: (userMessage: string) => Promise<void>;
+  updateContext: (updates: Partial<ConversationalContext>) => void;
+  resetConversation: () => void;
+  startOnboarding: (gpsCoordinates?: { lat: number; lng: number }) => Promise<void>;
+};
+
+export function useStreamingChat(sailorId: string): UseStreamingChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [collectedData, setCollectedData] = useState<CollectedData>({});
@@ -52,8 +157,7 @@ export function useStreamingChat(sailorId: string) {
     const newData: CollectedData = {};
     const chronologicalItems: CollectedDataItem[] = [];
 
-    // Parse venue from context AND from messages
-    if (context.detectedVenue) {
+    if (context.detectedVenue?.name) {
       newData.venue = context.detectedVenue.name;
       chronologicalItems.push({
         type: 'venue',
@@ -62,31 +166,31 @@ export function useStreamingChat(sailorId: string) {
         timestamp: Date.now(),
       });
     } else {
-      // Try to extract venue name from AI messages mentioning "Hong Kong - Victoria Harbor" or similar
-      const assistantMessages = messages.filter(m => m.role === 'assistant');
+      const assistantMessages = messages.filter(
+        (m): m is AssistantChatMessage => m.role === 'assistant'
+      );
       assistantMessages.forEach(msg => {
-        const venueMatch = msg.content.match(/found you near \*\*([^*]+)\*\*/i);
+        const venueMatch = msg.content.match(VENUE_DETECTION_REGEX);
         if (venueMatch && !newData.venue) {
-          newData.venue = venueMatch[1];
+          const venueName = venueMatch[1];
+          newData.venue = venueName;
           chronologicalItems.push({
             type: 'venue',
             label: 'Home Venue',
-            value: venueMatch[1],
+            value: venueName,
             timestamp: msg.timestamp.getTime(),
           });
         }
       });
     }
 
-    // Parse user messages for data
-    const userMessagesWithMeta = messages.filter((m): m is ChatMessage => m.role === 'user');
-    const userMessages = userMessagesWithMeta.map((m: ChatMessage) => m.content.toLowerCase());
-    const allText = userMessages.join(' ');
+    const userMessages = messages.filter(
+      (m): m is UserChatMessage => m.role === 'user'
+    );
 
-    // Extract role (owner, crew, both)
-    userMessagesWithMeta.forEach((msg) => {
+    userMessages.forEach(msg => {
       const content = msg.content.toLowerCase();
-      if (content.includes('owner') && !newData.role) {
+      if (!newData.role && content.includes('owner')) {
         newData.role = 'Owner';
         chronologicalItems.push({
           type: 'role',
@@ -94,7 +198,7 @@ export function useStreamingChat(sailorId: string) {
           value: 'Owner',
           timestamp: msg.timestamp.getTime(),
         });
-      } else if (content.includes('crew') && !newData.role) {
+      } else if (!newData.role && content.includes('crew')) {
         newData.role = 'Crew';
         chronologicalItems.push({
           type: 'role',
@@ -102,7 +206,7 @@ export function useStreamingChat(sailorId: string) {
           value: 'Crew',
           timestamp: msg.timestamp.getTime(),
         });
-      } else if (content.includes('both') && !newData.role) {
+      } else if (!newData.role && content.includes('both')) {
         newData.role = 'Owner & Crew';
         chronologicalItems.push({
           type: 'role',
@@ -113,30 +217,23 @@ export function useStreamingChat(sailorId: string) {
       }
     });
 
-    // Extract boat classes from user messages
-    const boats: Array<{ class: string; sailNumber?: string }> = [];
-    userMessagesWithMeta.forEach(msg => {
+    const boats: SavedBoat[] = [];
+    userMessages.forEach(msg => {
       const content = msg.content.toLowerCase();
-      // Common boat classes (keelboats, dinghies, sportboats)
-      // Only detect from USER messages (not AI responses)
-      const boatClasses = [
-        'dragon', 'j/70', 'j70', 'j/105', 'j105', 'j/111', 'j111', 'j/122', 'j122',
-        'etchells', 'irc', 'melges 24', 'melges 32', 'melges', 'farr 40', 'farr',
-        'swan 42', 'swan 45', 'swan', 'tp52', 'tp 52', 'rc44', 'rc 44',
-        'laser', 'ilca', '420', '470', '49er', '505', 'finn', 'snipe',
-        'lightning', 'thistle', 'viper', 'x-boat', 'x boat', 'xboat'
-      ];
 
-      // Important: Use word boundaries to avoid false matches
-      // "start" should not match "star", "melges" in "Melges 24" should work
-      boatClasses.forEach(boatClass => {
-        // Use regex with word boundaries to ensure exact matches
-        const regex = new RegExp(`\\b${boatClass.toLowerCase().replace(/[/]/g, '\\/')}\\b`);
+      BOAT_CLASSES.forEach(boatClass => {
+        const regex = getBoatClassRegex(boatClass);
         if (regex.test(content)) {
-          const className = boatClass.split(' ').map(w =>
-            w.charAt(0).toUpperCase() + w.slice(1)
-          ).join(' ');
-          if (!boats.find(b => b.class.toLowerCase() === boatClass.toLowerCase())) {
+          const className = boatClass
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+          const existing = boats.find(
+            boat => boat.class.toLowerCase() === boatClass.toLowerCase()
+          );
+
+          if (!existing) {
             boats.push({ class: className });
             chronologicalItems.push({
               type: 'boat',
@@ -148,49 +245,48 @@ export function useStreamingChat(sailorId: string) {
         }
       });
 
-      // Extract sail numbers (e.g., "#123", "sail 123", "number 123", "d59")
-      // Only match if we haven't already set a sail number for this boat
-      const sailNumberMatch = content.match(/(?:sail\s*number|#|sail\s+|[a-z])(\d+)/i);
-      if (sailNumberMatch && boats.length > 0 && !boats[boats.length - 1].sailNumber) {
-        boats[boats.length - 1].sailNumber = sailNumberMatch[1];
-        // Update the chronological item with sail number
-        const lastBoatItem = chronologicalItems.filter(item => item.type === 'boat').pop();
-        if (lastBoatItem && !lastBoatItem.value.includes('#')) {
-          lastBoatItem.value = `${lastBoatItem.value} #${sailNumberMatch[1]}`;
+      const sailNumberMatch = content.match(SAIL_NUMBER_REGEX);
+      if (sailNumberMatch && boats.length > 0) {
+        const [_, sailNumber] = sailNumberMatch;
+        const lastBoat = boats[boats.length - 1];
+        if (lastBoat && !lastBoat.sailNumber) {
+          lastBoat.sailNumber = sailNumber;
+          const lastBoatItem = [...chronologicalItems]
+            .reverse()
+            .find(item => item.type === 'boat');
+          if (lastBoatItem && !lastBoatItem.value.includes('#')) {
+            lastBoatItem.value = `${lastBoatItem.value} #${sailNumber}`;
+          }
         }
       }
     });
 
-    // Extract boat names from user messages
-    // Look for patterns like "boat name is...", "called...", "named..."
-    userMessagesWithMeta.forEach(msg => {
+    userMessages.forEach(msg => {
       const content = msg.content;
-      const boatNamePatterns = [
-        /(?:boat(?:'s)?\s+name\s+is|called|named)\s+["']?([A-Z][a-zA-Z\s'-]+)["']?/i,
-        /(?:my\s+boat\s+is\s+called)\s+["']?([A-Z][a-zA-Z\s'-]+)["']?/i,
-      ];
-
-      for (const pattern of boatNamePatterns) {
+      for (const pattern of BOAT_NAME_PATTERNS) {
         const match = content.match(pattern);
         if (match && boats.length > 0) {
           const boatName = match[1].trim();
-          boats[boats.length - 1].name = boatName;
-
-          // Add to chronological items
-          chronologicalItems.push({
-            type: 'boat',
-            label: 'Boat Name',
-            value: boatName,
-            timestamp: msg.timestamp.getTime(),
-          });
+          const lastBoat = boats[boats.length - 1];
+          if (lastBoat) {
+            lastBoat.name = boatName;
+            chronologicalItems.push({
+              type: 'boat',
+              label: 'Boat Name',
+              value: boatName,
+              timestamp: msg.timestamp.getTime(),
+            });
+          }
           break;
         }
       }
     });
-    if (boats.length > 0) newData.boats = boats;
 
-    // Extract clubs from context or messages
-    if (context.selectedClubs && context.selectedClubs.length > 0) {
+    if (boats.length > 0) {
+      newData.boats = boats;
+    }
+
+    if (Array.isArray(context.selectedClubs) && context.selectedClubs.length > 0) {
       newData.clubs = context.selectedClubs;
       context.selectedClubs.forEach(club => {
         chronologicalItems.push({
@@ -201,41 +297,30 @@ export function useStreamingChat(sailorId: string) {
         });
       });
     } else {
-      // Try to extract club names from user messages
       const clubs: string[] = [];
-      userMessagesWithMeta.forEach(msg => {
-        const content = msg.content;
-        // Common yacht club patterns:
-        // - Abbreviations: "RHKYC", "ABC", "RBYC", etc. (2-6 caps letters)
-        // - Full names with "Yacht Club" or "YC": "Hebe Haven Yacht Club"
-        // - Sailing club variants: "Hong Kong Sailing Club"
-
-        // Pattern 1: Abbreviations (2-6 capital letters)
-        const abbrevMatch = content.match(/\b([A-Z]{2,6})\b/g);
+      userMessages.forEach(msg => {
+        const abbrevMatch = msg.content.match(ABBREVIATION_REGEX);
         if (abbrevMatch) {
           abbrevMatch.forEach(abbrev => {
-            // Filter out common non-club abbreviations
-            if (!['GPS', 'AI', 'OK', 'YES', 'NO', 'USA', 'UK'].includes(abbrev)) {
-              if (!clubs.includes(abbrev)) {
-                clubs.push(abbrev);
-                chronologicalItems.push({
-                  type: 'club',
-                  label: 'Yacht Club',
-                  value: abbrev,
-                  timestamp: msg.timestamp.getTime(),
-                });
-              }
+            if (CLUB_ABBREVIATION_EXCLUSIONS.has(abbrev)) {
+              return;
+            }
+            if (!clubs.includes(abbrev)) {
+              clubs.push(abbrev);
+              chronologicalItems.push({
+                type: 'club',
+                label: 'Yacht Club',
+                value: abbrev,
+                timestamp: msg.timestamp.getTime(),
+              });
             }
           });
         }
 
-        // Pattern 2: Full club names (with "yacht club", "sailing club", "YC")
-        const fullNameMatch = content.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Yacht|Sailing)\s+Club)\b/gi);
+        const fullNameMatch = msg.content.match(CLUB_FULL_NAME_REGEX);
         if (fullNameMatch) {
           fullNameMatch.forEach(name => {
-            const formatted = name.split(' ').map(w =>
-              w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-            ).join(' ');
+            const formatted = toTitleCase(name);
             if (!clubs.includes(formatted)) {
               clubs.push(formatted);
               chronologicalItems.push({
@@ -254,8 +339,7 @@ export function useStreamingChat(sailorId: string) {
       }
     }
 
-    // Extract fleets from context
-    if (context.selectedFleets && context.selectedFleets.length > 0) {
+    if (Array.isArray(context.selectedFleets) && context.selectedFleets.length > 0) {
       newData.fleets = context.selectedFleets;
       context.selectedFleets.forEach(fleet => {
         chronologicalItems.push({
@@ -267,53 +351,48 @@ export function useStreamingChat(sailorId: string) {
       });
     }
 
-    // Extract URLs from user messages (club and class websites)
-    userMessagesWithMeta.forEach(msg => {
-      const content = msg.content;
-      // URL pattern matching
-      const urlRegex = /(https?:\/\/[^\s]+)/gi;
-      const urls = content.match(urlRegex);
-
-      if (urls) {
-        urls.forEach(url => {
-          // Determine if it's a club or class URL based on context
-          const lowerContent = content.toLowerCase();
-          const lowerUrl = url.toLowerCase();
-
-          let type: 'club' | 'fleet' = 'club';
-          let label = 'Website';
-
-          // Check if it's a class/association URL
-          if (lowerContent.includes('class') || lowerContent.includes('association') ||
-              lowerUrl.includes('dragon') || lowerUrl.includes('j70') ||
-              lowerUrl.includes('etchells') || lowerUrl.includes('sailing')) {
-            label = 'Class Website';
-          } else if (lowerContent.includes('club') || lowerUrl.includes('yacht') ||
-                     lowerUrl.includes('club')) {
-            label = 'Club Website';
-          }
-
-          chronologicalItems.push({
-            type: type,
-            label: label,
-            value: url,
-            timestamp: msg.timestamp.getTime(),
-          });
-        });
+    userMessages.forEach(msg => {
+      const urls = msg.content.match(URL_REGEX);
+      if (!urls) {
+        return;
       }
+
+      urls.forEach(url => {
+        const lowerContent = msg.content.toLowerCase();
+        const lowerUrl = url.toLowerCase();
+
+        let label: string = 'Website';
+        let itemType: Extract<CollectedDataItem['type'], 'club' | 'fleet'> = 'club';
+
+        const isClassLink =
+          lowerContent.includes('class') ||
+          lowerContent.includes('association') ||
+          lowerUrl.includes('dragon') ||
+          lowerUrl.includes('j70') ||
+          lowerUrl.includes('etchells') ||
+          lowerUrl.includes('sailing');
+
+        if (isClassLink) {
+          label = 'Class Website';
+          itemType = 'fleet';
+        } else if (lowerContent.includes('club') || lowerUrl.includes('yacht') || lowerUrl.includes('club')) {
+          label = 'Club Website';
+        }
+
+        chronologicalItems.push({
+          type: itemType,
+          label,
+          value: url,
+          timestamp: msg.timestamp.getTime(),
+        });
+      });
     });
 
-    // Sort chronological items by timestamp
     chronologicalItems.sort((a, b) => a.timestamp - b.timestamp);
     newData.items = chronologicalItems;
 
     setCollectedData(newData);
-
   }, [messages, context]);
-
-  // DEBUG: Log context changes
-  useEffect(() => {
-  }, [context]);
 
   // Initialize agent
   const getAgent = useCallback(() => {
@@ -327,7 +406,7 @@ export function useStreamingChat(sailorId: string) {
    * Send a message and stream the response
    */
   const sendMessage = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string): Promise<void> => {
       if (!userMessage.trim()) return;
 
       const agent = getAgent();
@@ -384,15 +463,15 @@ export function useStreamingChat(sailorId: string) {
           ...prev,
           conversationHistory: summary.messages,
         }));
-      } catch (error: any) {
-
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error);
         // Add error message
         setMessages(prev => [
           ...prev,
           {
             id: `error-${Date.now()}`,
             role: 'assistant',
-            content: `I apologize, but I encountered an error: ${error.message}`,
+            content: `I apologize, but I encountered an error: ${errorMessage}`,
             timestamp: new Date(),
           },
         ]);

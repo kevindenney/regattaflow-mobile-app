@@ -1,7 +1,7 @@
 /**
  * Race Coaching Service
  *
- * Analyzes post-race responses using Bill Gladstone's North U frameworks
+ * Analyzes post-race responses using Kevin Gladstone's North U frameworks
  * and provides personalized coaching feedback.
  *
  * Uses the race-strategy-analyst Claude Skill for expert tactical analysis.
@@ -44,7 +44,7 @@ export class RaceCoachingService {
     overall_assessment: string;
     next_race_priorities: string[];
   }> {
-    // Load Bill Gladstone frameworks if not already loaded
+    // Load Kevin Gladstone frameworks if not already loaded
     if (!this.billFrameworks) {
       await this.loadBillGladstoneFrameworks();
     }
@@ -98,7 +98,7 @@ export class RaceCoachingService {
       );
     }
 
-    // 6. Covering/Breaking Cover Tactics (Steve Colgate Specialty)
+    // 6. Covering/Breaking Cover Tactics (Kevin Colgate Specialty)
     const coveringFeedback = this.analyzeCoveringTactics(analysis);
     if (coveringFeedback) {
       feedback.push(coveringFeedback);
@@ -135,7 +135,7 @@ export class RaceCoachingService {
   }
 
   /**
-   * Analyze Puff Response (Bill's Signature: "TRIM response, not HELM response")
+   * Analyze Puff Response (Kevin's Signature: "TRIM response, not HELM response")
    */
   private analyzePuffResponse(analysis: RaceAnalysis): CoachingFeedback {
     const handling = analysis.upwind_puff_handling!;
@@ -220,13 +220,13 @@ export class RaceCoachingService {
         bill_framework: 'Delayed Tack',
         your_approach: 'You used the Delayed Tack in 1-on-1 situations',
         bill_recommendation:
-          '🏆 Outstanding! You used Bill\'s SIGNATURE MOVE. The Delayed Tack (cross opponent → sail SHORT distance <1 length → THEN tack) is his most reliable tactical tip. Keep refining the execution - the goal is turning a 1-length lead into 3-4 lengths at the windward mark.',
+          '🏆 Outstanding! You used Kevin\'s SIGNATURE MOVE. The Delayed Tack (cross opponent → sail SHORT distance <1 length → THEN tack) is his most reliable tactical tip. Keep refining the execution - the goal is turning a 1-length lead into 3-4 lengths at the windward mark.',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Tight Cover Timing (Colgate)',
         execution_score: 85,
         execution_feedback:
-          '🎯 Steve Colgate\'s tight cover technique: Tack at RIGHT location/moment so you\'re dead on opponent\'s wind by time momentum picked up. Timing errors: Too late = they get safe leeward. Too early = they get safe leeward when they tack. Your delayed tack execution shows good timing awareness. Refine: Practice tacking closer (<1 length) for maximum geometric advantage.',
+          '🎯 Kevin Colgate\'s tight cover technique: Tack at RIGHT location/moment so you\'re dead on opponent\'s wind by time momentum picked up. Timing errors: Too late = they get safe leeward. Too early = they get safe leeward when they tack. Your delayed tack execution shows good timing awareness. Refine: Practice tacking closer (<1 length) for maximum geometric advantage.',
         champion_story:
           'Colgate covering principle: "Best starting skippers have complete control - know turning radius, stopping ability, acceleration rate." Delayed tack + tight cover timing = dominant one-on-one racing.',
 
@@ -234,7 +234,7 @@ export class RaceCoachingService {
         impact: 'high',
         next_race_focus:
           'Focus on the SHORT distance (<1 length) and precise tack timing. Watch opponent\'s bow - tack when just past it.',
-        demo_reference: './bill-demo 2',
+        demo_reference: './Kevin-demo 2',
       };
     }
 
@@ -246,12 +246,12 @@ export class RaceCoachingService {
         bill_framework: 'Delayed Tack',
         your_approach: `You used: ${tactics.join(', ')}`,
         bill_recommendation:
-          '💡 Good tactical awareness! But consider Bill Gladstone\'s DELAYED TACK next time you cross an opponent. Instead of tacking immediately to cover, sail SHORT distance (<1 boat length), THEN tack. This creates better geometric advantage and can turn a 1-length lead into 3-4 lengths.',
+          '💡 Good tactical awareness! But consider Kevin Gladstone\'s DELAYED TACK next time you cross an opponent. Instead of tacking immediately to cover, sail SHORT distance (<1 boat length), THEN tack. This creates better geometric advantage and can turn a 1-length lead into 3-4 lengths.',
         confidence: 90,
         impact: 'high',
         next_race_focus:
           'Look for crossing situations where you can execute delayed tack',
-        demo_reference: './bill-demo 2',
+        demo_reference: './Kevin-demo 2',
       };
     }
 
@@ -260,11 +260,11 @@ export class RaceCoachingService {
       bill_framework: 'Delayed Tack',
       your_approach: `You used: ${tactics.join(', ')}`,
       bill_recommendation:
-        '🎯 Bill Gladstone\'s signature move is the DELAYED TACK. When you cross an opponent cleanly by 1 boat length: sail SHORT distance (less than 1 length), THEN tack to lee-bow position. This forces them into a no-win choice at the layline. Look for opportunities to practice this in your next race!',
+        '🎯 Kevin Gladstone\'s signature move is the DELAYED TACK. When you cross an opponent cleanly by 1 boat length: sail SHORT distance (less than 1 length), THEN tack to lee-bow position. This forces them into a no-win choice at the layline. Look for opportunities to practice this in your next race!',
       confidence: 90,
       impact: 'medium',
       next_race_focus: 'Watch for crossing opportunities to try delayed tack',
-      demo_reference: './bill-demo 2',
+      demo_reference: './Kevin-demo 2',
     };
   }
 
@@ -280,7 +280,7 @@ export class RaceCoachingService {
         bill_framework: 'Wind Shift Mathematics',
         your_approach: `You rated your shift awareness as ${awareness}/5`,
         bill_recommendation:
-          '✅ Excellent shift awareness! Bill Gladstone quantifies this: "10° shift = 25% of boat separation." If two boats split for 2 minutes at 6 knots, a 10° shift creates a 9-boat-length advantage. Your strong awareness is race-winning!',
+          '✅ Excellent shift awareness! Kevin Gladstone quantifies this: "10° shift = 25% of boat separation." If two boats split for 2 minutes at 6 knots, a 10° shift creates a 9-boat-length advantage. Your strong awareness is race-winning!',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Dick Stearns Shift Watching',
@@ -294,7 +294,7 @@ export class RaceCoachingService {
         impact: 'high',
         next_race_focus:
           'Track exact shift magnitudes and calculate the leverage you gained/lost. Practice Dick Stearns hull-angle watching when covered.',
-        demo_reference: './bill-demo 3',
+        demo_reference: './Kevin-demo 3',
       };
     }
 
@@ -304,7 +304,7 @@ export class RaceCoachingService {
         bill_framework: 'Wind Shift Mathematics',
         your_approach: `You rated your shift awareness as ${awareness}/5`,
         bill_recommendation:
-          '⚡ You have baseline awareness. Bill Gladstone teaches: "10° shift = 25% of boat separation." On a typical 2-minute split, that\'s 9 boat lengths! Focus on QUANTIFYING shifts - use compass on every tack. Small shifts (even 5°) have massive impact.',
+          '⚡ You have baseline awareness. Kevin Gladstone teaches: "10° shift = 25% of boat separation." On a typical 2-minute split, that\'s 9 boat lengths! Focus on QUANTIFYING shifts - use compass on every tack. Small shifts (even 5°) have massive impact.',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Dick Stearns Shift Watching + Compass Discipline',
@@ -318,7 +318,7 @@ export class RaceCoachingService {
         impact: 'high',
         next_race_focus:
           'Use compass religiously on every tack. Track shift patterns. Practice watching hull angles of boats ahead.',
-        demo_reference: './bill-demo 3',
+        demo_reference: './Kevin-demo 3',
       };
     }
 
@@ -327,13 +327,13 @@ export class RaceCoachingService {
       bill_framework: 'Wind Shift Mathematics',
       your_approach: `You rated your shift awareness as ${awareness}/5`,
       bill_recommendation:
-        '🎯 Shift awareness is CRITICAL. Bill Gladstone: "10° shift = 25% of boat separation" - that means a 2-minute split can create 9 boat lengths gain/loss from a single shift! Priority #1 for next race: use compass on EVERY tack. Write down your upwind numbers.',
+        '🎯 Shift awareness is CRITICAL. Kevin Gladstone: "10° shift = 25% of boat separation" - that means a 2-minute split can create 9 boat lengths gain/loss from a single shift! Priority #1 for next race: use compass on EVERY tack. Write down your upwind numbers.',
 
       // Colgate Execution Analysis - Teaching fundamentals
       colgate_execution_technique: 'Compass Discipline (Foundation for Shift Detection)',
       execution_score: 50,
       execution_feedback:
-        '📚 Start building shift awareness with compass discipline: Call out your upwind heading EVERY time you tack. This is the foundation. Steve Colgate emphasizes: "Championship sailors ALWAYS know their numbers." Once you track numbers consistently, you\'ll start recognizing shift patterns naturally. Write headings on deck if helpful.',
+        '📚 Start building shift awareness with compass discipline: Call out your upwind heading EVERY time you tack. This is the foundation. Kevin Colgate emphasizes: "Championship sailors ALWAYS know their numbers." Once you track numbers consistently, you\'ll start recognizing shift patterns naturally. Write headings on deck if helpful.',
       champion_story:
         'Every champion sailor from Dick Stearns to modern Olympic medalists started with compass discipline. No shortcuts - this is the foundation of tactical racing.',
 
@@ -341,7 +341,7 @@ export class RaceCoachingService {
       impact: 'high',
       next_race_focus:
         'Get compass on boat. Track numbers on every tack. Start learning shift patterns. Call headings out loud to build habit.',
-      demo_reference: './bill-demo 3',
+      demo_reference: './Kevin-demo 3',
     };
   }
 
@@ -358,13 +358,13 @@ export class RaceCoachingService {
           bill_framework: 'Downwind Shift Detection',
           your_approach: 'You used apparent wind feel to detect shifts downwind',
           bill_recommendation:
-            '🏆 Perfect! This is exactly Bill Gladstone\'s method! "Apparent wind goes AFT WITHOUT feeling stronger = TRUE LIFT → JIBE IMMEDIATELY." You\'re using championship-level shift detection. The key signature: velocity change would feel STRONGER, but a pure lift goes aft without strength change.',
+            '🏆 Perfect! This is exactly Kevin Gladstone\'s method! "Apparent wind goes AFT WITHOUT feeling stronger = TRUE LIFT → JIBE IMMEDIATELY." You\'re using championship-level shift detection. The key signature: velocity change would feel STRONGER, but a pure lift goes aft without strength change.',
 
           // Colgate Execution Analysis
           colgate_execution_technique: 'Rhythmic Jibing with Telltale Awareness',
           execution_score: 85,
           execution_feedback:
-            '🎯 Steve Colgate: Once you detect shift with apparent wind, execute smooth jibe maintaining speed. Championship technique: Keep telltales flowing through jibe, minimize rudder angle, crew weight movement synchronized. "Fast jibing = competitive downwind." Practice makes jibes automatic so you can focus on shift detection.',
+            '🎯 Kevin Colgate: Once you detect shift with apparent wind, execute smooth jibe maintaining speed. Championship technique: Keep telltales flowing through jibe, minimize rudder angle, crew weight movement synchronized. "Fast jibing = competitive downwind." Practice makes jibes automatic so you can focus on shift detection.',
           champion_story:
             'Colgate emphasizes: "Downwind shift detection paired with fast jibing separates good sailors from champions. Detect + Execute = Winning combination."',
 
@@ -372,7 +372,7 @@ export class RaceCoachingService {
           impact: 'high',
           next_race_focus:
             'Keep refining this feel. Practice distinguishing puff vs lift. Work on jibe speed and smoothness.',
-          demo_reference: './bill-demo 5',
+          demo_reference: './Kevin-demo 5',
         };
 
       case 'schooled_upwind_boats':
@@ -381,19 +381,19 @@ export class RaceCoachingService {
           bill_framework: 'Downwind Shift Detection',
           your_approach: 'You watched upwind boats to detect shifts',
           bill_recommendation:
-            '✅ Smart! Upwind boats can see shifts with compass. But Bill Gladstone teaches a MORE IMMEDIATE method: apparent wind feel. "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE." This lets you react instantly without waiting to see other boats.',
+            '✅ Smart! Upwind boats can see shifts with compass. But Kevin Gladstone teaches a MORE IMMEDIATE method: apparent wind feel. "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE." This lets you react instantly without waiting to see other boats.',
 
           // Colgate Execution Analysis
           colgate_execution_technique: 'Visual Shift Detection + Anticipatory Positioning',
           execution_score: 75,
           execution_feedback:
-            '🎯 Watching upwind boats is good tactical awareness. Steve Colgate teaches: Combine this with anticipatory positioning - when you see upwind boats lift, prepare for jibe BEFORE shift reaches you. Set crew, trim spinnaker, get ready. When shift arrives, execute immediately. This combines observation with proactive execution.',
+            '🎯 Watching upwind boats is good tactical awareness. Kevin Colgate teaches: Combine this with anticipatory positioning - when you see upwind boats lift, prepare for jibe BEFORE shift reaches you. Set crew, trim spinnaker, get ready. When shift arrives, execute immediately. This combines observation with proactive execution.',
 
           confidence: 85,
           impact: 'medium',
           next_race_focus:
             'Practice feeling apparent wind direction shifts while watching upwind boats as confirmation. Prepare crew before shifts arrive.',
-          demo_reference: './bill-demo 5',
+          demo_reference: './Kevin-demo 5',
         };
 
       case 'compass':
@@ -402,19 +402,19 @@ export class RaceCoachingService {
           bill_framework: 'Downwind Shift Detection',
           your_approach: 'You used compass to detect downwind shifts',
           bill_recommendation:
-            '⚡ Compass works, but Bill teaches it\'s HARDER downwind. Better method: "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE." This feel-based approach is faster and more reliable than watching compass downwind.',
+            '⚡ Compass works, but Kevin teaches it\'s HARDER downwind. Better method: "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE." This feel-based approach is faster and more reliable than watching compass downwind.',
 
           // Colgate Execution Analysis
           colgate_execution_technique: 'Transition from Compass to Feel-Based Detection',
           execution_score: 70,
           execution_feedback:
-            '📚 Compass discipline shows good fundamentals. Steve Colgate progression: Start with compass (you\'re here), then add telltale awareness, then develop apparent wind feel. Practice this sequence: (1) Check compass, (2) Look at telltales, (3) Feel wind on face/ears. Over time, steps 2-3 become automatic and you react before checking compass.',
+            '📚 Compass discipline shows good fundamentals. Kevin Colgate progression: Start with compass (you\'re here), then add telltale awareness, then develop apparent wind feel. Practice this sequence: (1) Check compass, (2) Look at telltales, (3) Feel wind on face/ears. Over time, steps 2-3 become automatic and you react before checking compass.',
 
           confidence: 85,
           impact: 'medium',
           next_race_focus:
             'Practice feeling apparent wind shifts - supplement compass with this tactile feedback. Watch telltales during jibes.',
-          demo_reference: './bill-demo 5',
+          demo_reference: './Kevin-demo 5',
         };
 
       case 'didnt_track':
@@ -424,19 +424,19 @@ export class RaceCoachingService {
           bill_framework: 'Downwind Shift Detection',
           your_approach: 'You didn\'t actively track downwind shifts',
           bill_recommendation:
-            '🎯 Bill Gladstone teaches: downwind sees 1-2 shifts per 15 minutes (upwind sees 3-4). Each shift is CRITICAL! His detection method: "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE IMMEDIATELY." Start practicing this feel!',
+            '🎯 Kevin Gladstone teaches: downwind sees 1-2 shifts per 15 minutes (upwind sees 3-4). Each shift is CRITICAL! His detection method: "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE IMMEDIATELY." Start practicing this feel!',
 
           // Colgate Execution Analysis
           colgate_execution_technique: 'Building Downwind Awareness (Foundation)',
           execution_score: 50,
           execution_feedback:
-            '📚 Steve Colgate: Start with basics - assign ONE crew to watch telltales continuously downwind. Call out when telltales change angle. This builds your team\'s awareness. Once telltale watching becomes habit, you\'ll naturally develop apparent wind feel. "Downwind shift detection is learnable skill, not magic."',
+            '📚 Kevin Colgate: Start with basics - assign ONE crew to watch telltales continuously downwind. Call out when telltales change angle. This builds your team\'s awareness. Once telltale watching becomes habit, you\'ll naturally develop apparent wind feel. "Downwind shift detection is learnable skill, not magic."',
 
           confidence: 85,
           impact: 'high',
           next_race_focus:
             'Next race: Focus on feeling apparent wind direction changes downwind. Assign crew to call telltale changes.',
-          demo_reference: './bill-demo 5',
+          demo_reference: './Kevin-demo 5',
         };
     }
   }
@@ -458,21 +458,21 @@ export class RaceCoachingService {
         your_approach:
           'You rounded on the lifted tack and felt in phase downwind',
         bill_recommendation:
-          '🏆 Textbook execution! Bill Gladstone: "Round windward mark on the LIFTED tack to set up entire downwind leg." You did exactly that and it paid off with good phase downwind. This is championship-level mark strategy!',
+          '🏆 Textbook execution! Kevin Gladstone: "Round windward mark on the LIFTED tack to set up entire downwind leg." You did exactly that and it paid off with good phase downwind. This is championship-level mark strategy!',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Smooth Mark Rounding Mechanics',
         execution_score: 90,
         execution_feedback:
-          '🏆 Excellent strategic rounding! Now refine execution mechanics from Steve Colgate: As you round, minimize rudder angle (wide smooth arc), keep boat speed up through turn, set spinnaker when stable (not mid-turn). If rounding close behind boat, consider Bill Cox delayed spinnaker technique - sail close reach on main/jib to blanket leader, then set chute in controlling position.',
+          '🏆 Excellent strategic rounding! Now refine execution mechanics from Kevin Colgate: As you round, minimize rudder angle (wide smooth arc), keep boat speed up through turn, set spinnaker when stable (not mid-turn). If rounding close behind boat, consider Kevin Cox delayed spinnaker technique - sail close reach on main/jib to blanket leader, then set chute in controlling position.',
         champion_story:
-          'Bill Cox (American Eagle 1968 America\'s Cup): Round weather mark close behind, delay spinnaker set, sail close reach with main/jib trimmed properly while boat ahead slows with crew bouncing around setting spinnaker. Get on their wind, making their spinnaker difficult to fly.',
+          'Kevin Cox (American Eagle 1968 America\'s Cup): Round weather mark close behind, delay spinnaker set, sail close reach with main/jib trimmed properly while boat ahead slows with crew bouncing around setting spinnaker. Get on their wind, making their spinnaker difficult to fly.',
 
         confidence: 90,
         impact: 'high',
         next_race_focus:
           'Keep this discipline - always check if you\'re lifted or headed approaching windward mark. Practice smooth rounding mechanics.',
-        demo_reference: './bill-demo 6',
+        demo_reference: './Kevin-demo 6',
       };
     }
 
@@ -483,13 +483,13 @@ export class RaceCoachingService {
         your_approach:
           'You rounded on lifted tack but felt out of phase downwind',
         bill_recommendation:
-          '⚡ You executed Bill\'s approach (round on lifted) but still felt out of phase. Possible causes: (1) wind shifted just after rounding, (2) fleet forced you off course. Focus on maintaining your chosen jibe after rounding - don\'t let fleet push you out of phase.',
+          '⚡ You executed Kevin\'s approach (round on lifted) but still felt out of phase. Possible causes: (1) wind shifted just after rounding, (2) fleet forced you off course. Focus on maintaining your chosen jibe after rounding - don\'t let fleet push you out of phase.',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Post-Rounding Commitment + Hans Fogh Reverse',
         execution_score: 75,
         execution_feedback:
-          '🎯 Strategic approach was correct, execution needs refinement. Steve Colgate: After rounding, COMMIT to your tactical plan. Hans Fogh reverse psychology: If you round and immediately jibe away from fleet (even if uncomfortable), others often follow thinking you have local knowledge. Use this to maintain your phase. "Confidence in execution creates tactical opportunities."',
+          '🎯 Strategic approach was correct, execution needs refinement. Kevin Colgate: After rounding, COMMIT to your tactical plan. Hans Fogh reverse psychology: If you round and immediately jibe away from fleet (even if uncomfortable), others often follow thinking you have local knowledge. Use this to maintain your phase. "Confidence in execution creates tactical opportunities."',
         champion_story:
           'Hans Fogh (Olympic Gold, Star World Champion): After mark rounding, confidently sail chosen direction even if fleet goes opposite way. Confidence convinces others you know something they don\'t. Often fleet follows, giving you tactical control.',
 
@@ -497,7 +497,7 @@ export class RaceCoachingService {
         impact: 'medium',
         next_race_focus:
           'After rounding on lifted, commit to the corresponding jibe with confidence. Resist fleet pressure. Practice Hans Fogh reverse.',
-        demo_reference: './bill-demo 6',
+        demo_reference: './Kevin-demo 6',
       };
     }
 
@@ -507,19 +507,19 @@ export class RaceCoachingService {
         bill_framework: 'Getting In Phase',
         your_approach: 'You rounded on the headed tack and felt out of phase',
         bill_recommendation:
-          '🎯 This is exactly what Bill warns about! "Round on the HEADED tack and you start downwind out of phase." Next race: as you approach windward mark, check your compass. If headed, consider tacking before mark to round on the LIFTED tack instead. Sets up entire downwind leg!',
+          '🎯 This is exactly what Kevin warns about! "Round on the HEADED tack and you start downwind out of phase." Next race: as you approach windward mark, check your compass. If headed, consider tacking before mark to round on the LIFTED tack instead. Sets up entire downwind leg!',
 
         // Colgate Execution Analysis
         colgate_execution_technique: 'Pre-Mark Tactical Decision Making',
         execution_score: 60,
         execution_feedback:
-          '📚 Steve Colgate: Championship sailors make mark approach decisions early, not at the mark. Starting 4-5 boat lengths away: (1) Check compass, (2) Assess tactical situation, (3) Decide tack or round as-is, (4) Execute decision smoothly. If headed and space available, tack away and re-approach on lifted. This prevents being forced into bad tactical position.',
+          '📚 Kevin Colgate: Championship sailors make mark approach decisions early, not at the mark. Starting 4-5 boat lengths away: (1) Check compass, (2) Assess tactical situation, (3) Decide tack or round as-is, (4) Execute decision smoothly. If headed and space available, tack away and re-approach on lifted. This prevents being forced into bad tactical position.',
 
         confidence: 90,
         impact: 'high',
         next_race_focus:
           'Check compass approaching windward mark 4-5 lengths away. Tack if needed to round on lifted. Practice early decision making.',
-        demo_reference: './bill-demo 6',
+        demo_reference: './Kevin-demo 6',
       };
     }
 
@@ -528,19 +528,19 @@ export class RaceCoachingService {
       bill_framework: 'Getting In Phase',
       your_approach: `You rounded on ${approach}${inPhase !== undefined ? ` and felt ${inPhase ? 'in' : 'out of'} phase` : ''}`,
       bill_recommendation:
-        '💡 Bill Gladstone teaches: "Round windward mark on the LIFTED tack." Check compass as you approach - if you\'re headed, consider tacking before the mark to round on the lifted tack. This sets you up "in phase" for the downwind leg.',
+        '💡 Kevin Gladstone teaches: "Round windward mark on the LIFTED tack." Check compass as you approach - if you\'re headed, consider tacking before the mark to round on the lifted tack. This sets you up "in phase" for the downwind leg.',
 
       // Colgate Execution Analysis
       colgate_execution_technique: 'Mark Approach Awareness (Foundation)',
       execution_score: 70,
       execution_feedback:
-        '📚 Steve Colgate: Build mark approach discipline starting now. Simple routine: 5 boat lengths from mark → check compass → assess if lifted/headed → decide tack or round → execute. This 4-step routine becomes automatic with practice. "Championship mark roundings start with early awareness, not last-second reactions."',
+        '📚 Kevin Colgate: Build mark approach discipline starting now. Simple routine: 5 boat lengths from mark → check compass → assess if lifted/headed → decide tack or round → execute. This 4-step routine becomes automatic with practice. "Championship mark roundings start with early awareness, not last-second reactions."',
 
       confidence: 90,
       impact: 'medium',
       next_race_focus:
         'Practice checking compass on windward mark approach 5 lengths away - tack if needed to round lifted. Build the routine.',
-      demo_reference: './bill-demo 6',
+      demo_reference: './Kevin-demo 6',
     };
   }
 
@@ -573,13 +573,13 @@ export class RaceCoachingService {
         bill_framework: 'Delayed Tack',
         your_approach: 'You were leading and covering opponents',
         bill_recommendation:
-          '🏆 Bill Gladstone: After crossing opponent, use DELAYED TACK to maximize geometric advantage. Cross → sail <1 length → tack.',
+          '🏆 Kevin Gladstone: After crossing opponent, use DELAYED TACK to maximize geometric advantage. Cross → sail <1 length → tack.',
 
         // Colgate Covering Execution
         colgate_execution_technique: 'Tight Cover Timing + Loose Cover Herding',
         execution_score: 80,
         execution_feedback:
-          '🎯 Steve Colgate covering mastery: TIGHT COVER when opponent sailing away from fleet - tack dead upwind after crossing with perfect timing (too late = safe leeward for them, too early = safe leeward when they tack). LOOSE COVER when going same direction as fleet - stay between opponent and finish but give clear air so they don\'t tack away. "Herding them where you want to go."',
+          '🎯 Kevin Colgate covering mastery: TIGHT COVER when opponent sailing away from fleet - tack dead upwind after crossing with perfect timing (too late = safe leeward for them, too early = safe leeward when they tack). LOOSE COVER when going same direction as fleet - stay between opponent and finish but give clear air so they don\'t tack away. "Herding them where you want to go."',
         champion_story:
           'Colgate principle: "Many races lost by NOT covering when chance exists. After crossing on starboard near finish, tack IMMEDIATELY to cover - splitting tacks very risky with wind shifts."',
 
@@ -602,7 +602,7 @@ export class RaceCoachingService {
           ? `You tacked ${tackCount}+ times trying to break cover`
           : 'You tried to break cover from opponent',
         bill_recommendation:
-          '💡 Bill: "10° shift = 25% leverage. Wind shifts hit windward boat first." Use shift advantage to break cover.',
+          '💡 Kevin: "10° shift = 25% leverage. Wind shifts hit windward boat first." Use shift advantage to break cover.',
 
         // Colgate Breaking Cover Execution
         colgate_execution_technique: multipleHitches
@@ -610,7 +610,7 @@ export class RaceCoachingService {
           : 'Dick Stearns Shift Watching',
         execution_score: multipleHitches ? 85 : 70,
         execution_feedback: multipleHitches
-          ? '🏆 Excellent persistence! Steve Colgate: "Never give up after 2 tacks. Usually break away after THIRD tack - magic number is THREE." Opponent decides tacking duel not worth distance to others. You showed championship-level determination!'
+          ? '🏆 Excellent persistence! Kevin Colgate: "Never give up after 2 tacks. Usually break away after THIRD tack - magic number is THREE." Opponent decides tacking duel not worth distance to others. You showed championship-level determination!'
           : '🎯 Dick Stearns technique for breaking cover: Watch covering boat\'s HULL ANGLE. When they appear LIFTED, tack immediately. When they tack to cover, they\'re in HEADER. Wind shift takes moments to travel down - you have heading advantage until reaches you. Practice this!',
         champion_story: multipleHitches
           ? 'Colgate: "Covered boat has choice of WHEN to tack, covering boat only reacts. By watching wave patterns, covered boat can choose smooth patch to accelerate rapidly. Covering boat tacks on reaction, often in worse conditions."'
@@ -628,7 +628,7 @@ export class RaceCoachingService {
   }
 
   /**
-   * Generate overall assessment using Claude with Bill's frameworks
+   * Generate overall assessment using Claude with Kevin's frameworks
    */
   private async generateOverallAssessment(
     analysis: RaceAnalysis,
@@ -639,7 +639,7 @@ export class RaceCoachingService {
     // Build context from analysis
     const context = this.buildAnalysisContext(analysis, race);
 
-    const prompt = `You are Bill Gladstone from North U, reviewing a sailor's post-race analysis.
+    const prompt = `You are Kevin Gladstone from North U, reviewing a sailor's post-race analysis.
 
 RACE CONTEXT:
 ${context}
@@ -650,12 +650,12 @@ ${JSON.stringify(scores, null, 2)}
 SPECIFIC FEEDBACK GIVEN:
 ${feedback.map((f) => `${f.phase}: ${f.bill_recommendation}`).join('\n')}
 
-Provide a 2-3 paragraph overall assessment in Bill's teaching style:
+Provide a 2-3 paragraph overall assessment in Kevin's teaching style:
 1. Recognize what they did well (specific frameworks they used correctly)
 2. Identify the #1 priority for improvement
-3. End with Bill's characteristic encouragement and specific next steps
+3. End with Kevin's characteristic encouragement and specific next steps
 
-Use Bill's voice: quantified, tactical, encouraging, with his signature phrases when appropriate.`;
+Use Kevin's voice: quantified, tactical, encouraging, with his signature phrases when appropriate.`;
 
     const response = await this.anthropic.messages.create({
       model: 'claude-3-5-sonnet-latest',
@@ -810,7 +810,7 @@ Use Bill's voice: quantified, tactical, encouraging, with his signature phrases 
   }
 
   /**
-   * Load Bill Gladstone frameworks from skill files
+   * Load Kevin Gladstone frameworks from skill files
    */
   private async loadBillGladstoneFrameworks(): Promise<void> {
     // In production, this would load from deployed Claude Skill

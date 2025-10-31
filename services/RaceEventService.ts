@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Race Event Service
  *

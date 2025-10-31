@@ -124,29 +124,50 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
         windPatterns: {
           typical: 'SW monsoon 10-20kt with building sea breeze',
           seasonal: 'Winter NE monsoon more consistent',
-          microclimate: 'Harbor wind bends and thermal effects'
+          localEffects: [
+            'Harbor skyscrapers bend wind near Central district',
+            'Thermal gradients create late-afternoon right shifts'
+          ]
         },
-        currentIntelligence: {
-          tidalRange: '2.1m spring tides',
-          currentStrength: 'Max 2kt during springs',
-          timing: 'Ebb current favors eastern approaches'
+        currentPatterns: {
+          tidalRange: 2.1,
+          currentStrength: 2,
+          keyTimings: [
+            'Ebb current favors eastern approaches',
+            'Flood relieves along Kowloon shoreline'
+          ]
         },
-        tacticalZones: {
-          favored: 'Right side typically favored in SW conditions',
-          windShadows: 'Hong Kong Island creates significant wind shadow',
-          startBias: 'Pin end often favored due to current'
-        }
+        tacticalConsiderations: [
+          'Right side gains leverage in prevailing SW monsoon',
+          'Manage wind shadows from Hong Kong Island skyline',
+          'Watch airport exclusion zone laylines on downwind'
+        ],
+        commonMistakes: [
+          'Overcommitting left during strong flood tide',
+          'Ignoring shipping channel traffic separation schemes'
+        ],
+        expertTips: [
+          'Time current relief along Kowloon shoreline during flood',
+          'Protect lanes of breeze that funnel between skyscraper corridors'
+        ]
       },
       culturalContext: {
-        languages: ['English', 'Cantonese', 'Mandarin'],
-        traditions: 'British colonial sailing customs with Asian efficiency',
-        protocols: 'RHKYC formal protocols, respectful competition'
+        racingStyle: 'Aggressive championship-level starts with professional boathandling',
+        protocols: [
+          'Respect Royal Hong Kong Yacht Club signals and sequencing',
+          'Monitor VHF 72 for race committee adjustments'
+        ],
+        language: 'English',
+        socialCustoms: [
+          'Post-race debrief at the main clubhouse',
+          'Congratulate race committee upon return to dock'
+        ]
       },
-      weatherSources: {
-        primary: 'Hong Kong Observatory',
-        marine: 'HKO Marine Weather',
-        local: 'RHKYC Weather Station'
-      }
+      safetyConsiderations: [
+        'Heavy commercial traffic transiting main fairway',
+        'Frequent helicopter operations near Central waterfront',
+        'Strong cross-harbour ferry wakes affecting small boats'
+      ]
     };
 
     setState(prev => ({
@@ -165,65 +186,35 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
     setState(prev => ({ ...prev, isGeneratingStrategy: true }));
 
     try {
-      // Simulate strategy generation (in real app, this would call the AI service)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const venueId = state.venueIntelligence?.id ?? 'hong_kong_victoria_harbour';
 
-      const strategy: RaceStrategy = {
-        id: `strategy_${Date.now()}`,
-        generatedAt: new Date(),
-        confidence: 0.87,
-        venue: state.venueIntelligence?.name || 'Unknown Venue',
-        conditions: state.currentConditions,
-        startStrategy: {
-          recommendation: 'Pin end start',
-          bias: 3, // degrees
-          timing: 'Cross line at +5 seconds',
-          approach: 'Port tack approach, tack to starboard 30 seconds before start',
-          confidence: 0.85
-        },
-        tacticalPlan: {
-          upwind: 'Favor right side for expected wind shift and current assistance',
-          downwind: 'Conservative approach, stay between boats and marks',
-          markApproach: 'Wide approach to weather mark, inside overlap at leeward mark'
-        },
-        equipmentRecommendations: {
-          sails: 'Full main, #2 jib for current conditions',
-          setup: 'Medium rig tension, ease for expected building breeze',
-          backup: 'Have #3 jib ready if wind builds above 20kt'
-        },
-        contingencyPlans: [
-          {
-            scenario: 'Wind increases to 20+ knots',
-            action: 'Change down to #3 jib, increase rig tension'
-          },
-          {
-            scenario: 'Major wind shift right',
-            action: 'Tack immediately to stay on lifted tack'
-          }
-        ],
-        keyFactors: [
-          'Current strength building with flood tide',
-          'Expected right wind shift in next hour',
-          'Fleet likely to favor left side - opportunity on right'
-        ]
+      const strategy = await raceStrategyEngine.generateVenueBasedStrategy(
+        venueId,
+        state.currentConditions,
+        {
+          raceName: 'Victoria Harbour Sprint',
+          raceDate: new Date(),
+          raceTime: '10:00',
+          boatType: 'J/80',
+          fleetSize: 24
+        }
+      );
+
+      const historyEntry: AnalysisEntry = {
+        id: `analysis_${Date.now()}`,
+        timestamp: new Date(),
+        type: 'strategy_generated',
+        title: 'AI Strategy Generated',
+        description: `AI strategy generated for ${strategy.venue.name}`,
+        data: strategy,
+        confidence: strategy.confidence
       };
 
       setState(prev => ({
         ...prev,
         activeStrategy: strategy,
         isGeneratingStrategy: false,
-        analysisHistory: [
-          {
-            id: `analysis_${Date.now()}`,
-            timestamp: new Date(),
-            type: 'strategy_generated',
-            title: 'AI Strategy Generated',
-            description: `87% confidence strategy for ${strategy.venue}`,
-            data: strategy,
-            confidence: strategy.confidence
-          },
-          ...prev.analysisHistory
-        ]
+        analysisHistory: [historyEntry, ...prev.analysisHistory]
       }));
 
       onStrategyGenerated?.(strategy);
@@ -237,21 +228,20 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
   };
 
   const handleVoiceInsight = (insights: TacticalInsight[]) => {
+    const historyEntry: AnalysisEntry = {
+      id: `voice_${Date.now()}`,
+      timestamp: new Date(),
+      type: 'voice_insight',
+      title: 'Voice Insight Captured',
+      description: insights.map(i => i.description).join(', '),
+      data: insights,
+      confidence: insights[0]?.confidence
+    };
+
     setState(prev => ({
       ...prev,
       recentInsights: [...insights, ...prev.recentInsights].slice(0, 10),
-      analysisHistory: [
-        {
-          id: `voice_${Date.now()}`,
-          timestamp: new Date(),
-          type: 'voice_insight',
-          title: 'Voice Insight Captured',
-          description: insights.map(i => i.description).join(', '),
-          data: insights,
-          confidence: insights[0]?.confidence
-        },
-        ...prev.analysisHistory
-      ].slice(0, 50)
+      analysisHistory: [historyEntry, ...prev.analysisHistory].slice(0, 50)
     }));
 
     insights.forEach(insight => {
@@ -276,79 +266,121 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
     setRefreshing(false);
   };
 
-  const renderStrategyTab = () => (
-    <View style={styles.tabContent}>
-      {state.activeStrategy ? (
-        <View style={styles.strategyContainer}>
-          <View style={styles.strategyHeader}>
-            <View style={styles.strategyTitleContainer}>
-              <Text style={styles.strategyTitle}>Active Race Strategy</Text>
-              <View style={styles.confidenceBadge}>
-                <Text style={styles.confidenceText}>
-                  {Math.round(state.activeStrategy.confidence * 100)}% confidence
-                </Text>
+  const renderStrategyTab = () => {
+    const activeStrategy = state.activeStrategy;
+    const strategyPlan = activeStrategy?.strategy;
+
+    return (
+      <View style={styles.tabContent}>
+        {activeStrategy && strategyPlan ? (
+          <View style={styles.strategyContainer}>
+            <View style={styles.strategyHeader}>
+              <View style={styles.strategyTitleContainer}>
+                <Text style={styles.strategyTitle}>Active Race Strategy</Text>
+                <View style={styles.confidenceBadge}>
+                  <Text style={styles.confidenceText}>
+                    {Math.round(activeStrategy.confidence * 100)}% confidence
+                  </Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.strategyVenue}>{state.activeStrategy.venue}</Text>
-          </View>
-
-          <ScrollView style={styles.strategyContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.strategySection}>
-              <Text style={styles.sectionTitle}>🏁 Start Strategy</Text>
-              <Text style={styles.sectionContent}>{state.activeStrategy.startStrategy.recommendation}</Text>
-              <Text style={styles.sectionDetails}>{state.activeStrategy.startStrategy.approach}</Text>
+              <Text style={styles.strategyVenue}>{activeStrategy.venue.name}</Text>
             </View>
 
-            <View style={styles.strategySection}>
-              <Text style={styles.sectionTitle}>⛵ Tactical Plan</Text>
-              <Text style={styles.sectionContent}>Upwind: {state.activeStrategy.tacticalPlan.upwind}</Text>
-              <Text style={styles.sectionContent}>Downwind: {state.activeStrategy.tacticalPlan.downwind}</Text>
-            </View>
+            <ScrollView style={styles.strategyContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.strategySection}>
+                <Text style={styles.sectionTitle}>🏁 Start Strategy</Text>
+                <Text style={styles.sectionContent}>{strategyPlan.startStrategy.action}</Text>
+                {strategyPlan.startStrategy.execution && (
+                  <Text style={styles.sectionDetails}>{strategyPlan.startStrategy.execution}</Text>
+                )}
+              </View>
 
-            <View style={styles.strategySection}>
-              <Text style={styles.sectionTitle}>🔧 Equipment Setup</Text>
-              <Text style={styles.sectionContent}>{state.activeStrategy.equipmentRecommendations.sails}</Text>
-              <Text style={styles.sectionDetails}>{state.activeStrategy.equipmentRecommendations.setup}</Text>
-            </View>
-
-            <View style={styles.strategySection}>
-              <Text style={styles.sectionTitle}>🎯 Key Factors</Text>
-              {state.activeStrategy.keyFactors.map((factor, index) => (
-                <Text key={index} style={styles.keyFactor}>• {factor}</Text>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      ) : (
-        <View style={styles.emptyState}>
-          <Ionicons name="brain" size={64} color="#CCC" />
-          <Text style={styles.emptyStateTitle}>No Strategy Generated</Text>
-          <Text style={styles.emptyStateText}>
-            Generate an AI-powered race strategy based on current conditions
-          </Text>
-          <TouchableOpacity
-            style={styles.generateButton}
-            onPress={generateRaceStrategy}
-            disabled={state.isGeneratingStrategy}
-          >
-            <LinearGradient
-              colors={['#0066CC', '#4A90E2']}
-              style={styles.generateButtonGradient}
-            >
-              {state.isGeneratingStrategy ? (
-                <Ionicons name="refresh" size={20} color="white" />
-              ) : (
-                <Ionicons name="brain" size={20} color="white" />
+              {!!strategyPlan.beatStrategy?.length && (
+                <View style={styles.strategySection}>
+                  <Text style={styles.sectionTitle}>⛵ Upwind Plan</Text>
+                  {strategyPlan.beatStrategy.map((recommendation, index) => (
+                    <Text key={`${recommendation.phase}-${index}`} style={styles.sectionContent}>
+                      {index + 1}. {recommendation.action}
+                    </Text>
+                  ))}
+                </View>
               )}
-              <Text style={styles.generateButtonText}>
-                {state.isGeneratingStrategy ? 'Generating...' : 'Generate Strategy'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+
+              {!!strategyPlan.runStrategy?.length && (
+                <View style={styles.strategySection}>
+                  <Text style={styles.sectionTitle}>🌬 Downwind Plan</Text>
+                  {strategyPlan.runStrategy.map((recommendation, index) => (
+                    <Text key={`${recommendation.phase}-${index}`} style={styles.sectionContent}>
+                      {index + 1}. {recommendation.action}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {!!activeStrategy.contingencies && (
+                <View style={styles.strategySection}>
+                  <Text style={styles.sectionTitle}>⚠️ Contingencies</Text>
+                  {Object.entries(activeStrategy.contingencies).map(([scenario, recommendations]) => (
+                    <View key={scenario} style={styles.contingencyGroup}>
+                      <Text style={styles.sectionDetails}>
+                        {scenario
+                          .replace(/([A-Z])/g, ' $1')
+                          .replace(/^./, (char) => char.toUpperCase())}
+                      </Text>
+                      {recommendations.map((recommendation, index) => (
+                        <Text key={`${scenario}-${index}`} style={styles.sectionContent}>
+                          • {recommendation.action}
+                        </Text>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {!!activeStrategy.insights?.length && (
+                <View style={styles.strategySection}>
+                  <Text style={styles.sectionTitle}>📚 Key Insights</Text>
+                  {activeStrategy.insights.map((insight, index) => (
+                    <View key={`${insight.title}-${index}`} style={styles.insightSummary}>
+                      <Text style={styles.sectionContent}>• {insight.title}</Text>
+                      <Text style={styles.sectionDetails}>{insight.description}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="bulb" size={64} color="#CCC" />
+            <Text style={styles.emptyStateTitle}>No Strategy Generated</Text>
+            <Text style={styles.emptyStateText}>
+              Generate an AI-powered race strategy based on current conditions
+            </Text>
+            <TouchableOpacity
+              style={styles.generateButton}
+              onPress={generateRaceStrategy}
+              disabled={state.isGeneratingStrategy}
+            >
+              <LinearGradient
+                colors={['#0066CC', '#4A90E2']}
+                style={styles.generateButtonGradient}
+              >
+                {state.isGeneratingStrategy ? (
+                  <Ionicons name="refresh" size={20} color="white" />
+                ) : (
+                  <Ionicons name="bulb" size={20} color="white" />
+                )}
+                <Text style={styles.generateButtonText}>
+                  {state.isGeneratingStrategy ? 'Generating...' : 'Generate Strategy'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderInsightsTab = () => (
     <View style={styles.tabContent}>
@@ -389,8 +421,8 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
     </View>
   );
 
-  const getInsightColor = (type: string): string => {
-    const colors: { [key: string]: string } = {
+  const getInsightColor = (type: TacticalInsight['type']): string => {
+    const colors: Record<TacticalInsight['type'], string> = {
       wind_shift: '#FF9500',
       current_observation: '#007AFF',
       fleet_position: '#34C759',
@@ -398,12 +430,12 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
       equipment_change: '#AF52DE',
       weather_change: '#FF2D92'
     };
-    return colors[type] || '#8E8E93';
+    return colors[type] ?? '#8E8E93';
   };
 
   const renderTabButton = (
     tab: typeof selectedTab,
-    icon: string,
+    icon: keyof typeof Ionicons.glyphMap,
     label: string,
     count?: number
   ) => (
@@ -412,7 +444,7 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
       onPress={() => setSelectedTab(tab)}
     >
       <Ionicons
-        name={icon as any}
+        name={icon}
         size={20}
         color={selectedTab === tab ? '#0066CC' : '#8E8E93'}
       />
@@ -456,7 +488,7 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
       </View>
 
       <View style={styles.tabBar}>
-        {renderTabButton('strategy', 'brain', 'Strategy')}
+        {renderTabButton('strategy', 'bulb', 'Strategy')}
         {renderTabButton('insights', 'mic', 'Voice Insights', state.recentInsights.length)}
         {renderTabButton('conditions', 'cloudy', 'Conditions')}
         {renderTabButton('history', 'time', 'History', state.analysisHistory.length)}
@@ -693,6 +725,12 @@ const styles = StyleSheet.create({
   },
   insightsContainer: {
     gap: 12,
+  },
+  contingencyGroup: {
+    marginTop: 8,
+  },
+  insightSummary: {
+    marginBottom: 12,
   },
   insightCard: {
     backgroundColor: 'white',

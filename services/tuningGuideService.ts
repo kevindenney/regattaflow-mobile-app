@@ -3,6 +3,7 @@
  * Manages tuning guides for boat classes including auto-scraping, uploads, and library management
  */
 
+import { getDefaultGuidesForClass, normalizeClassKey } from '@/data/default-tuning-guides';
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -56,19 +57,8 @@ class TuningGuideService {
   /**
    * Get tuning guides for a specific boat class
    */
-  async getGuidesForClass(classId: string): Promise<TuningGuide[]> {
-    const { data, error } = await supabase
-      .from('tuning_guides')
-      .select('*')
-      .eq('class_id', classId)
-      .order('year', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching tuning guides:', error);
-      throw error;
-    }
-
-    return this.mapGuides(data || []);
+  async getGuidesForClass(classId: string, className?: string | null): Promise<TuningGuide[]> {
+    return this.getGuidesByReference({ classId, className });
   }
 
   /**
@@ -402,6 +392,121 @@ class TuningGuideService {
   }
 
   // Helper methods
+  async getGuidesByReference(params: { classId?: string | null; className?: string | null }): Promise<TuningGuide[]> {
+    const { classId, className } = params;
+    let resolvedClassName = className ?? null;
+    let databaseGuides: TuningGuide[] = [];
+
+    if (classId) {
+      const { data, error } = await supabase
+        .from('tuning_guides')
+        .select('*')
+        .eq('class_id', classId)
+        .order('year', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching tuning guides:', error);
+        throw error;
+      }
+
+      databaseGuides = this.mapGuides(data || []);
+
+      if (!resolvedClassName) {
+        const { data: classData } = await supabase
+          .from('boat_classes')
+          .select('name')
+          .eq('id', classId)
+          .maybeSingle();
+
+        resolvedClassName = classData?.name ?? null;
+      }
+    }
+
+    if (databaseGuides.length > 0) {
+      return databaseGuides;
+    }
+
+    const fallbackGuides = await this.buildFallbackGuides({
+      classId,
+      className: resolvedClassName,
+    });
+
+    if (fallbackGuides.length > 0) {
+      logger.debug(
+        `Using built-in tuning guides for class reference ${classId || resolvedClassName || 'unknown'}`
+      );
+      return fallbackGuides;
+    }
+
+    return [];
+  }
+
+  private async buildFallbackGuides(params: {
+    classId?: string | null;
+    className?: string | null;
+  }): Promise<TuningGuide[]> {
+    const { classId, className } = params;
+    let resolvedClassName = className ?? null;
+
+    if (!resolvedClassName && classId) {
+      try {
+        const { data: classData } = await supabase
+          .from('boat_classes')
+          .select('name')
+          .eq('id', classId)
+          .maybeSingle();
+
+        resolvedClassName = classData?.name ?? null;
+      } catch (error) {
+        console.warn('Failed to resolve class name for fallback guides:', error);
+      }
+    }
+
+    const defaults = getDefaultGuidesForClass(resolvedClassName ?? classId ?? undefined);
+
+    if (defaults.length === 0) {
+      return [];
+    }
+
+    const fallbackClassId =
+      classId ?? `fallback-${normalizeClassKey(resolvedClassName ?? 'unknown')}`;
+    const timestamp = '2024-01-01T00:00:00.000Z';
+
+    return defaults.map((guide, index) => ({
+      id: `default-${fallbackClassId}-${index}`,
+      classId: fallbackClassId,
+      hull: guide.hull || null,
+      mast: guide.mast || null,
+      sailmaker: guide.sailmaker || null,
+      rig: guide.rig || null,
+      title: guide.title,
+      source: guide.source,
+      sourceUrl: guide.sourceUrl,
+      fileUrl: guide.sourceUrl,
+      fileType: guide.fileType || 'link',
+      description: guide.description,
+      year: guide.year,
+      tags: guide.tags || [],
+      autoScraped: false,
+      scrapeSuccessful: true,
+      lastScrapedAt: timestamp,
+      scrapeError: undefined,
+      uploadedBy: 'system-default',
+      isPublic: true,
+      downloads: 0,
+      rating: 5,
+      extractedContent: guide.sections
+        .map(section => `${section.title}\n${section.content}`)
+        .join('\n\n'),
+      extractedSections: guide.sections,
+      extractionStatus: 'completed',
+      extractionError: undefined,
+      extractedAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }));
+  }
+
   private mapGuide(data: any): TuningGuide {
     return {
       id: data.id,

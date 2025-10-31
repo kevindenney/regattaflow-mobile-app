@@ -193,7 +193,7 @@ export default function RaceControlScreen() {
         `)
         .eq('regatta_id', id)
         .eq('race_number', raceNumber)
-        .order('finish_position', { ascending: true, nullsLast: true });
+        .order('finish_position', { ascending: true });
 
       if (error) throw error;
 

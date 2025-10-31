@@ -12,12 +12,12 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 import { VenueMapView } from './VenueMapView';
+import { getShadowStyle } from '@/lib/styles/shadow';
 
 interface Venue {
   id: string;
@@ -475,8 +475,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    boxShadow: '0px 2px',
-    elevation: 4,
+    ...getShadowStyle('md'),
   },
   selectorContent: {
     flexDirection: 'row',
@@ -548,8 +547,7 @@ const styles = StyleSheet.create({
   },
   viewToggleButtonActive: {
     backgroundColor: '#fff',
-    boxShadow: '0px 1px',
-    elevation: 1,
+    ...getShadowStyle('xs'),
   },
   closeButton: {
     padding: 4,
@@ -654,8 +652,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 2,
     borderColor: '#007AFF30',
-    boxShadow: '0px 2px',
-    elevation: 2,
+    ...getShadowStyle('sm'),
   },
   venueItemActive: {
     borderColor: '#007AFF',

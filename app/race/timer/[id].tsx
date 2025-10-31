@@ -261,8 +261,8 @@ export default function RaceTimerScreen() {
           },
           {
             text: 'Save',
-            onPress: async (position) => {
-              const positionNum = parseInt(position || '0');
+            onPress: async (position?: string) => {
+              const positionNum = parseInt(position ?? '0', 10);
               await RaceTimerService.endSession(sessionId, positionNum > 0 ? positionNum : undefined);
               setSessionId(null);
 

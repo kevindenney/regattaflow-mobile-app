@@ -1,7 +1,7 @@
 /**
- * Bill Gladstone Coaching Display
+ * Kevin Gladstone Coaching Display
  *
- * Shows personalized coaching feedback based on Bill Gladstone's North U frameworks
+ * Shows personalized coaching feedback based on Kevin Gladstone's North U frameworks
  * after post-race analysis is completed.
  */
 
@@ -50,7 +50,7 @@ export function BillGladstoneCoaching({
   const handleDemoClick = (demoRef?: string) => {
     if (!demoRef) return;
 
-    // Extract demo number from "./bill-demo X"
+    // Extract demo number from "./Kevin-demo X"
     const match = demoRef.match(/(\d+)/);
     if (match && onDemoClick) {
       onDemoClick(parseInt(match[1], 10));
@@ -62,7 +62,7 @@ export function BillGladstoneCoaching({
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerEmoji}>🏆</Text>
-        <Text style={styles.headerTitle}>Bill Gladstone's Coaching</Text>
+        <Text style={styles.headerTitle}>Kevin Gladstone's Coaching</Text>
         <Text style={styles.headerSubtitle}>
           North U Performance Racing Tactics
         </Text>
@@ -91,10 +91,10 @@ export function BillGladstoneCoaching({
           </View>
           <Text style={styles.overallScoreDescription}>
             {frameworkScores.overall_framework_adoption >= 80
-              ? '✅ Excellent! You\'re applying Bill\'s frameworks consistently.'
+              ? '✅ Excellent! You\'re applying Kevin\'s frameworks consistently.'
               : frameworkScores.overall_framework_adoption >= 60
-              ? '⚡ Good progress! Keep integrating Bill\'s teachings.'
-              : '🎯 Focus area: Review Bill\'s frameworks and practice application.'}
+              ? '⚡ Good progress! Keep integrating Kevin\'s teachings.'
+              : '🎯 Focus area: Review Kevin\'s frameworks and practice application.'}
           </Text>
         </View>
       )}
@@ -130,7 +130,7 @@ export function BillGladstoneCoaching({
       {/* Attribution */}
       <View style={styles.attribution}>
         <Text style={styles.attributionText}>
-          💡 All coaching based on Bill Gladstone's North U Performance Racing
+          💡 All coaching based on Kevin Gladstone's North U Performance Racing
           Tactics
         </Text>
         <Text style={styles.attributionText}>
@@ -208,9 +208,9 @@ function CoachingFeedbackCard({
         <Text style={styles.feedbackSectionText}>{feedback.your_approach}</Text>
       </View>
 
-      {/* Bill's Recommendation */}
+      {/* Kevin's Recommendation */}
       <View style={styles.feedbackSection}>
-        <Text style={styles.feedbackSectionLabel}>Bill's Coaching:</Text>
+        <Text style={styles.feedbackSectionLabel}>Kevin's Coaching:</Text>
         <Text style={styles.billRecommendation}>
           {feedback.bill_recommendation}
         </Text>

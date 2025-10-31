@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -7,13 +7,27 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
 
 export default function SettingsScreen() {
-  const { user, userProfile, signOut } = useAuth();
+  const { user, userProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
+  const [claimVisible, setClaimVisible] = useState(false);
+  const [claimPassword, setClaimPassword] = useState('');
+  const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
+  const [claimLoading, setClaimLoading] = useState(false);
+
+  const isDemoProfile = useMemo(
+    () =>
+      isDemoSession || (userProfile?.onboarding_step ?? '').toString().startsWith('demo'),
+    [isDemoSession, userProfile?.onboarding_step]
+  );
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -36,6 +50,68 @@ export default function SettingsScreen() {
         },
       ]
     );
+  };
+
+  const handleClaimWorkspace = async () => {
+    if (claimPassword.length < 6) {
+      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      return;
+    }
+
+    if (claimPassword !== claimPasswordConfirm) {
+      Alert.alert('Mismatch', 'Passwords do not match.');
+      return;
+    }
+
+    const fallbackEmail =
+      userProfile?.email ||
+      user?.email ||
+      `regatta-${user?.id ?? 'demo'}@demo.regattaflow.app`;
+
+    setClaimLoading(true);
+    try {
+      const updatePayload: {
+        email?: string;
+        password: string;
+        data?: Record<string, unknown>;
+      } = {
+        password: claimPassword,
+        data: {
+          full_name: userProfile?.full_name || undefined,
+          name: userProfile?.full_name || undefined,
+        },
+      };
+
+      if (!user?.email && fallbackEmail) {
+        updatePayload.email = fallbackEmail;
+      }
+
+      const { error } = await supabase.auth.updateUser(updatePayload);
+      if (error) {
+        throw error;
+      }
+
+      await updateUserProfile({
+        onboarding_step: 'claimed',
+        demo_converted_at: new Date().toISOString(),
+      });
+
+      Alert.alert(
+        'Workspace claimed',
+        'Your password is set. Check your email for any verification requests.',
+        [{ text: 'Great!', onPress: () => setClaimVisible(false) }]
+      );
+    } catch (error: any) {
+      console.error('[Settings] Claim workspace error:', error);
+      Alert.alert(
+        'Unable to claim workspace',
+        error?.message || 'Please try again or contact support.'
+      );
+    } finally {
+      setClaimLoading(false);
+      setClaimPassword('');
+      setClaimPasswordConfirm('');
+    }
   };
 
   const SettingItem = ({
@@ -99,6 +175,14 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.settingsGroup}>
+            {isDemoProfile && (
+              <SettingItem
+                icon="flag-outline"
+                title="Claim Workspace"
+                subtitle="Set a password and keep your data"
+                onPress={() => setClaimVisible(true)}
+              />
+            )}
             <SettingItem
               icon="person-outline"
               title="Edit Profile"
@@ -191,6 +275,72 @@ export default function SettingsScreen() {
           <Text style={styles.appInfoText}>© 2024 RegattaFlow Inc.</Text>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={claimVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          if (!claimLoading) {
+            setClaimVisible(false);
+            setClaimPassword('');
+            setClaimPasswordConfirm('');
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Claim Your Workspace</Text>
+            <Text style={styles.modalSubtitle}>
+              Set a password so you can sign back in and keep the progress you’ve made in demo mode.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="New password (min 6 characters)"
+              secureTextEntry
+              value={claimPassword}
+              onChangeText={setClaimPassword}
+              editable={!claimLoading}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Confirm password"
+              secureTextEntry
+              value={claimPasswordConfirm}
+              onChangeText={setClaimPasswordConfirm}
+              editable={!claimLoading}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => {
+                  if (!claimLoading) {
+                    setClaimVisible(false);
+                    setClaimPassword('');
+                    setClaimPasswordConfirm('');
+                  }
+                }}
+                disabled={claimLoading}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={handleClaimWorkspace}
+                disabled={claimLoading}
+              >
+                {claimLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>Set Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -324,5 +474,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     marginBottom: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  modalInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#E2E8F0',
+  },
+  modalButtonSecondaryText: {
+    color: '#1E293B',
+    fontWeight: '600',
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#2563EB',
+  },
+  modalButtonPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

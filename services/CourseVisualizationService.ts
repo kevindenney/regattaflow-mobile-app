@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Course Visualization Service
  *

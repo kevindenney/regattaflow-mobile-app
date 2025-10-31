@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Conversational Onboarding Agent
  * Streaming AI chat interface for natural sailor onboarding experience

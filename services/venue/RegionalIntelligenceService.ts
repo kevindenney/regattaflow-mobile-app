@@ -9,7 +9,6 @@ import type {
   VenueCulturalProfile,
   WeatherSourceConfig,
   CulturalBriefing,
-  RegionalIntelligenceData,
 } from '@/lib/types/global-venues';
 
 // Extended type for complete regional intelligence
@@ -76,7 +75,7 @@ export interface LocalTactic {
 }
 
 export interface EquipmentRecommendation {
-  category: 'sails' | 'rigging' | 'electronics' | 'safety';
+  category: 'sails' | 'rigging' | 'electronics' | 'safety' | 'crew_gear';
   item: string;
   reasoning: string;
   priority: 'essential' | 'recommended' | 'optional';
@@ -183,7 +182,15 @@ export interface AccommodationOption {
 }
 
 export interface ServiceIntel {
-  category: 'rigging' | 'sail_repair' | 'boat_repair' | 'chandlery' | 'coaching';
+  category:
+    | 'rigging'
+    | 'sail_repair'
+    | 'boat_repair'
+    | 'chandlery'
+    | 'coaching'
+    | 'yacht_clubs'
+    | 'sailmakers'
+    | 'foul_weather_gear';
   providers: ServiceProvider[];
   recommendations: string[];
 }
@@ -195,6 +202,8 @@ export interface ServiceProvider {
   priceLevel: 'budget' | 'moderate' | 'premium';
   languages: string[];
   contact: string;
+  location?: string;
+  website?: string;
 }
 
 export interface CostEstimate {
@@ -214,14 +223,14 @@ export interface LogisticalTimeline {
 }
 
 export interface SailingServices {
-  yachtClubs?: YachtClub[];
+  yachtClubs?: RegionalYachtClub[];
   sailmakers?: Sailmaker[];
   chandleries?: Chandlery[];
   foulWeatherGear?: FoulWeatherGearStore[];
   riggingServices?: RiggingService[];
 }
 
-export interface YachtClub {
+export interface RegionalYachtClub {
   name: string;
   specialty: string;
   contact: string;
@@ -647,133 +656,143 @@ export class RegionalIntelligenceService {
           'Ask about sailor discounts at yacht clubs',
         ],
       },
-      services: venue.id === 'hong-kong' ? [
-        {
-          category: 'yacht_clubs',
-          providers: [
+      services: (() => {
+        if (venue.id === 'hong-kong') {
+          return [
             {
-              name: 'Hong Kong Yacht Club',
-              specialties: ['Racing', 'Dragon Class', 'Social events'],
-              reputation: 'premier',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese'],
-              contact: '+852 2832-2817',
-              website: 'hkyc.org.hk',
-              location: 'Kellett Island, Causeway Bay',
+              category: 'yacht_clubs',
+              providers: [
+                {
+                  name: 'Hong Kong Yacht Club',
+                  specialties: ['Racing', 'Dragon Class', 'Social events'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 2832-2817',
+                  website: 'hkyc.org.hk',
+                  location: 'Kellett Island, Causeway Bay',
+                },
+                {
+                  name: 'Royal Hong Kong Yacht Club',
+                  specialties: ['International racing', 'Corporate events'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 2832-2817',
+                  location: 'Causeway Bay',
+                },
+              ],
+              recommendations: ['Reciprocal club arrangements available', 'Advance booking recommended for racing events'],
             },
             {
-              name: 'Royal Hong Kong Yacht Club',
-              specialties: ['International racing', 'Corporate events'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese'],
-              contact: '+852 2832-2817',
-              location: 'Causeway Bay',
-            },
-          ],
-          recommendations: ['Reciprocal club arrangements available', 'Advance booking recommended for racing events'],
-        },
-        {
-          category: 'sailmakers',
-          providers: [
-            {
-              name: 'North Sails Hong Kong',
-              specialties: ['Racing sails', 'Dragon Class', 'Sail repair'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese'],
-              contact: '+852 2555-4430',
-              location: 'Aberdeen',
-            },
-            {
-              name: 'Doyle Sails Hong Kong',
-              specialties: ['Custom sails', 'Racing optimization'],
-              reputation: 'excellent',
-              priceLevel: 'moderate',
-              languages: ['English', 'Cantonese'],
-              location: 'Aberdeen Marina',
-            },
-          ],
-          recommendations: ['Book sail services well ahead of major regattas', 'Local knowledge of Hong Kong conditions valuable'],
-        },
-        {
-          category: 'chandleries',
-          providers: [
-            {
-              name: 'Simpson Marine',
-              specialties: ['Premium yacht equipment', 'Electronics', 'Safety gear'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese', 'Mandarin'],
-              contact: '+852 2555-8377',
-              location: 'Aberdeen Marina',
+              category: 'sailmakers',
+              providers: [
+                {
+                  name: 'North Sails Hong Kong',
+                  specialties: ['Racing sails', 'Dragon Class', 'Sail repair'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 2555-4430',
+                  location: 'Aberdeen',
+                },
+                {
+                  name: 'Doyle Sails Hong Kong',
+                  specialties: ['Custom sails', 'Racing optimization'],
+                  reputation: 'excellent',
+                  priceLevel: 'moderate',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 2234-5566',
+                  location: 'Aberdeen Marina',
+                },
+              ],
+              recommendations: ['Book sail services well ahead of major regattas', 'Local knowledge of Hong Kong conditions valuable'],
             },
             {
-              name: 'Asia Pacific Marine Supplies',
-              specialties: ['Hardware', 'Rigging', 'Engine parts'],
-              reputation: 'good',
-              priceLevel: 'moderate',
-              languages: ['English', 'Cantonese'],
-              location: 'Aberdeen',
+              category: 'chandlery',
+              providers: [
+                {
+                  name: 'Simpson Marine',
+                  specialties: ['Premium yacht equipment', 'Electronics', 'Safety gear'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese', 'Mandarin'],
+                  contact: '+852 2555-8377',
+                  location: 'Aberdeen Marina',
+                },
+                {
+                  name: 'Asia Pacific Marine Supplies',
+                  specialties: ['Hardware', 'Rigging', 'Engine parts'],
+                  reputation: 'good',
+                  priceLevel: 'moderate',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 2555-1234',
+                  location: 'Aberdeen',
+                },
+              ],
+              recommendations: ['Stock up before typhoon season', 'Good selection but premium pricing'],
             },
-          ],
-          recommendations: ['Stock up before typhoon season', 'Good selection but premium pricing'],
-        },
-        {
-          category: 'foul_weather_gear',
-          providers: [
             {
-              name: 'Musto Hong Kong',
-              specialties: ['Racing gear', 'Offshore equipment', 'Team orders'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese'],
-              location: 'Central, IFC Mall',
+              category: 'foul_weather_gear',
+              providers: [
+                {
+                  name: 'Musto Hong Kong',
+                  specialties: ['Racing gear', 'Offshore equipment', 'Team orders'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese'],
+                  location: 'Central, IFC Mall',
+                },
+                {
+                  name: 'Henri Lloyd at Simpson Marine',
+                  specialties: ['Professional sailing gear', 'Corporate outfitting'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 2555-8377',
+                  location: 'Aberdeen Marina',
+                },
+              ],
+              recommendations: ['Essential for monsoon season sailing', 'Try before buying - sizing can vary'],
             },
             {
-              name: 'Henri Lloyd at Simpson Marine',
-              specialties: ['Professional sailing gear', 'Corporate outfitting'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese'],
-              location: 'Aberdeen Marina',
+              category: 'rigging',
+              providers: [
+                {
+                  name: 'Composite Rigging HK',
+                  specialties: ['Carbon rigging', 'Racing optimization', 'Dragon Class'],
+                  reputation: 'excellent',
+                  priceLevel: 'premium',
+                  languages: ['English', 'Cantonese'],
+                  contact: '+852 9123-4567',
+                  location: 'Aberdeen',
+                },
+              ],
+              recommendations: ['Book rigging services well in advance', 'Excellent local knowledge of HK conditions'],
             },
-          ],
-          recommendations: ['Essential for monsoon season sailing', 'Try before buying - sizing can vary'],
-        },
-        {
-          category: 'rigging',
-          providers: [
-            {
-              name: 'Composite Rigging HK',
-              specialties: ['Carbon rigging', 'Racing optimization', 'Dragon Class'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English', 'Cantonese'],
-              location: 'Aberdeen',
-            },
-          ],
-          recommendations: ['Book rigging services well in advance', 'Excellent local knowledge of HK conditions'],
-        },
-      ] : [
-        {
-          category: 'rigging',
-          providers: [
-            {
-              name: 'Marchal Sailmakers',
-              specialties: ['Rigging', 'Sail repair'],
-              reputation: 'excellent',
-              priceLevel: 'premium',
-              languages: ['English'],
-              contact: '(415) 332-8020',
-            },
-          ],
-          recommendations: ['Book rigging services in advance', 'Bring backup equipment'],
-        },
-      ],
+          ];
+        }
+
+        return [
+          {
+            category: 'rigging',
+            providers: [
+              {
+                name: 'Marchal Sailmakers',
+                specialties: ['Rigging', 'Sail repair'],
+                reputation: 'excellent',
+                priceLevel: 'premium',
+                languages: ['English'],
+                contact: '(415) 332-8020',
+              },
+            ],
+            recommendations: ['Book rigging services in advance', 'Bring backup equipment'],
+          },
+        ];
+      })() as ServiceIntel[],
       sailingServices: (() => {
         if (venue.id === 'hong-kong') {
-          const hongKongServices = {
+          const hongKongServices: SailingServices = {
         yachtClubs: [
           {
             name: 'Royal Hong Kong Yacht Club',
@@ -955,7 +974,7 @@ export class RegionalIntelligenceService {
             pricing: 'moderate',
           },
         ],
-          };
+          } as SailingServices;
         }
 
         if (venue.id === 'newport-rhode-island') {
@@ -1061,7 +1080,7 @@ export class RegionalIntelligenceService {
             pricing: 'premium',
           },
         ],
-          };
+          } as SailingServices;
         }
 
         return undefined;

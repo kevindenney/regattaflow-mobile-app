@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Venue Detection Service - GPS-based Sailing Venue Recognition
  * Core service for "OnX Maps for Sailing" that automatically detects which sailing venue

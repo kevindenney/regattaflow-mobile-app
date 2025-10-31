@@ -6,7 +6,6 @@
 
 import React from 'react';
 import { View, Text, ScrollView } from 'react-native';
-import { Slider } from '@gluestack-ui/slider';
 import { Wrench, Anchor, Wind, Navigation2 } from 'lucide-react-native';
 
 interface RigTuning {

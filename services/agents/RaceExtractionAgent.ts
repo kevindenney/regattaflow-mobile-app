@@ -35,7 +35,7 @@ export interface ExtractedRaceData {
 export class RaceExtractionAgent extends BaseAgentService {
   constructor() {
     super({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-haiku-latest',
       maxTokens: 4096,
       temperature: 0.1, // Low temperature for precise extraction
       systemPrompt: `You are an expert sailing race document parser for RegattaFlow. Your role is to extract structured race information from unstructured text such as:

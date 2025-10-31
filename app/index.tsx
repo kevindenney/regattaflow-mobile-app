@@ -4,10 +4,10 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, SafeAreaView, Platform } from 'react-native';
+import { View, StyleSheet, SafeAreaView, Platform, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute } from '@/lib/utils/userTypeRouting';
+import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { HeroPhones } from '@/components/landing/HeroPhones';
 import { ScrollFix } from '@/components/landing/ScrollFix';
 
@@ -27,11 +27,9 @@ export default function LandingPage() {
         setIsRedirecting(true);
 
         // Check if onboarding is needed
-        if (shouldCompleteOnboarding(userProfile)) {
-          router.replace(getOnboardingRoute(userProfile));
-        } else {
-          router.replace(getDashboardRoute(userProfile?.user_type));
-        }
+        const destination = getDashboardRoute(userProfile?.user_type ?? null);
+
+        router.replace(destination);
       }
     }
   }, [signedIn, ready, userProfile, loading, isRedirecting]);
@@ -39,24 +37,30 @@ export default function LandingPage() {
   // Show landing page immediately - don't wait for auth
   // (Auth redirect will happen in useEffect once ready)
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
+  const containerStyle = Platform.OS === 'web'
+    ? [styles.container, styles.webContainer]
+    : styles.container;
+
   return (
-    <Container style={styles.container}>
+    <Container style={containerStyle}>
       <ScrollFix />
       <HeroPhones />
     </Container>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<{
+  container: ViewStyle;
+  webContainer: ViewStyle;
+  loadingContainer: ViewStyle;
+}>({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    ...Platform.select({
-      web: {
-        minHeight: '100vh',
-        width: '100%',
-      },
-    }),
+  },
+  webContainer: {
+    minHeight: '100vh' as any,
+    width: '100%',
   },
   loadingContainer: {
     flex: 1,

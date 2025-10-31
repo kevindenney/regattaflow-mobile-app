@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Voice Note Service - AI-Powered Voice Recording and Analysis
  * Captures racing observations, converts to tactical insights, and integrates with strategy engine

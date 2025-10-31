@@ -15,6 +15,7 @@ import {
     WindWeatherCard,
     RigTuningCard,
 } from '@/components/race-detail';
+import { CourseSelector } from '@/components/race-detail/CourseSelector';
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
@@ -37,6 +38,8 @@ import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent
 import { supabase } from '@/services/supabase';
 import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { CourseLibraryService } from '@/services/CourseLibraryService';
+import type { CourseScope, Mark } from '@/types/courses';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
     AlertTriangle,
@@ -52,19 +55,29 @@ import {
     Users,
     X
 } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, Platform, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 const logger = createLogger('RacesScreen');
 
 export default function RacesScreen() {
-  const { user, signedIn, ready } = useAuth();
+  const auth = useAuth();
+  const { user, signedIn, ready, isDemoSession } = auth;
+  const fetchUserProfileRef = useRef(auth.fetchUserProfile);
+  useEffect(() => {
+    fetchUserProfileRef.current = auth.fetchUserProfile;
+  }, [auth.fetchUserProfile]);
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ selected?: string }>();
   const [showCalendarImport, setShowCalendarImport] = useState(false);
   const mainScrollViewRef = useRef<ScrollView>(null); // Main vertical ScrollView
   const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
+  const hasAutoCenteredNextRace = useRef(false);
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  // Maintain card dimension constants in sync with RaceCard.tsx to keep scroll math accurate
+  const RACE_CARD_WIDTH = 170;
+  const RACE_CARD_TOTAL_WIDTH = RACE_CARD_WIDTH + 8; // width + combined horizontal margin (4px each side)
 
   // Post-race interview state
   const [showPostRaceInterview, setShowPostRaceInterview] = useState(false);
@@ -79,8 +92,55 @@ export default function RacesScreen() {
   const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
   const [isDeletingRace, setIsDeletingRace] = useState(false);
   const [hasManuallySelected, setHasManuallySelected] = useState(false);
+  const [isApplyingCourseTemplate, setIsApplyingCourseTemplate] = useState(false);
+  const [savingCourseTemplate, setSavingCourseTemplate] = useState(false);
+  const hasAssignedFallbackRole = useRef(false);
   const initialSelectedRaceParam = useRef<string | null>(
     typeof searchParams?.selected === 'string' ? searchParams.selected : null
+  );
+
+  const handleManageCrewNavigation = useCallback(
+    ({
+      raceId,
+      classId,
+      className,
+      raceName,
+      raceDate,
+    }: {
+      raceId: string;
+      classId?: string | null;
+      className?: string | null;
+      raceName?: string | null;
+      raceDate?: string | null;
+    }) => {
+      if (!raceId) {
+        logger.warn('handleManageCrewNavigation called without raceId');
+        return;
+      }
+
+      const params: Record<string, string> = {
+        fromRaceId: raceId,
+      };
+
+      if (classId) {
+        params.classId = String(classId);
+      }
+      if (className) {
+        params.className = String(className);
+      }
+      if (raceName) {
+        params.raceName = String(raceName);
+      }
+      if (raceDate) {
+        params.raceDate = String(raceDate);
+      }
+
+      router.push({
+        pathname: '/(tabs)/crew',
+        params,
+      });
+    },
+    [router]
   );
 
   // Racing area drawing state
@@ -91,6 +151,11 @@ export default function RacesScreen() {
     const checkAuthAndOnboarding = async () => {
       // Wait for auth to be ready
       if (!ready) return;
+
+      if (isDemoSession) {
+        logger.debug('Demo session detected, skipping Supabase onboarding checks');
+        return;
+      }
 
       // Redirect to login if not authenticated
       if (!signedIn) {
@@ -112,30 +177,30 @@ export default function RacesScreen() {
         logger.debug('User onboarding status:', userData);
 
         // If no user type selected, redirect to persona selection
-        if (!userData?.user_type) {
-          logger.debug('No user type, redirecting to persona selection');
-          router.replace('/(auth)/persona-selection');
-          return;
-        }
-
-        // If onboarding not completed, redirect to appropriate onboarding
-        if (!userData?.onboarding_completed) {
-          logger.debug('Onboarding not completed, redirecting');
-          if (userData.user_type === 'sailor') {
-            router.replace('/(auth)/onboarding-redesign' as any);
-          } else if (userData.user_type === 'coach') {
-            router.replace('/(auth)/coach-onboarding' as any);
-          } else if (userData.user_type === 'club') {
-            router.replace('/(auth)/club-onboarding-chat' as any);
+        if (!userData?.user_type && !hasAssignedFallbackRole.current) {
+          logger.debug('No user type, assigning sailor persona fallback');
+          hasAssignedFallbackRole.current = true;
+          try {
+            await supabase
+              .from('users')
+              .update({
+                user_type: 'sailor',
+                onboarding_completed: true,
+              })
+              .eq('id', user.id);
+            await fetchUserProfileRef.current?.(user.id);
+          } catch (assignError) {
+            logger.error('Unable to assign default persona:', assignError);
           }
         }
+
       } catch (error) {
         logger.error('Error checking onboarding:', error);
       }
     };
 
     checkAuthAndOnboarding();
-  }, [ready, signedIn, user?.id, router]);
+  }, [ready, signedIn, user?.id, router, isDemoSession]);
 
   // Fetch data from API
   const {
@@ -259,6 +324,7 @@ export default function RacesScreen() {
     }
 
     const raceName = selectedRaceData?.name || 'this race';
+    const confirmationMessage = `Are you sure you want to delete "${raceName}"? This action cannot be undone.`;
 
     const performDelete = async () => {
       setIsDeletingRace(true);
@@ -313,9 +379,21 @@ export default function RacesScreen() {
       }
     };
 
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof globalThis !== 'undefined' &&
+        typeof (globalThis as any).confirm === 'function'
+          ? (globalThis as any).confirm(confirmationMessage)
+          : false;
+      if (confirmed) {
+        void performDelete();
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete race?',
-      `Are you sure you want to delete "${raceName}"? This action cannot be undone.`,
+      confirmationMessage,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -374,6 +452,80 @@ export default function RacesScreen() {
     }
   }, [selectedRaceId, drawingRacingArea, refetch]);
 
+  const ensureRaceEventId = useCallback(async (): Promise<string | null> => {
+    if (!selectedRaceId) {
+      logger.warn('Attempted to ensure race event without selected race');
+      return null;
+    }
+
+    const { data: existingRaceEvent, error: existingRaceEventError } = await supabase
+      .from('race_events')
+      .select('id')
+      .eq('regatta_id', selectedRaceId)
+      .maybeSingle();
+
+    if (existingRaceEventError) {
+      throw existingRaceEventError;
+    }
+
+    if (existingRaceEvent?.id) {
+      return existingRaceEvent.id;
+    }
+
+    const startDateObj = selectedRaceData?.start_date
+      ? new Date(selectedRaceData.start_date)
+      : null;
+
+    const startTime = startDateObj && !Number.isNaN(startDateObj.getTime())
+      ? startDateObj.toISOString().split('T')[1]?.split('Z')[0]?.split('.')[0] || '00:00:00'
+      : '00:00:00';
+
+    const eventDate = startDateObj && !Number.isNaN(startDateObj.getTime())
+      ? startDateObj.toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+    const { data: newRaceEvent, error: createError } = await supabase
+      .from('race_events')
+      .insert({
+        regatta_id: selectedRaceId,
+        name: `${selectedRaceData?.name || 'Race'} - Event 1`,
+        start_time: startTime,
+        event_date: eventDate,
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+
+    return newRaceEvent.id;
+  }, [selectedRaceData?.name, selectedRaceData?.start_date, selectedRaceId]);
+
+  const normalizeCourseMarkType = (type?: string | null): string => {
+    if (!type) return 'custom';
+
+    switch (type) {
+      case 'start_pin':
+      case 'pin':
+        return 'pin';
+      case 'start_boat':
+      case 'committee':
+      case 'committee_boat':
+        return 'committee_boat';
+      case 'gate_port':
+      case 'gate_left':
+        return 'gate_left';
+      case 'gate_starboard':
+      case 'gate_right':
+        return 'gate_right';
+      case 'windward_mark':
+        return 'windward';
+      case 'leeward_mark':
+        return 'leeward';
+      default:
+        return type;
+    }
+  };
+
   // Handle adding a new mark
   const handleMarkAdded = useCallback(async (mark: Omit<any, 'id'>) => {
     if (!selectedRaceId) return;
@@ -381,43 +533,9 @@ export default function RacesScreen() {
     try {
       logger.debug('Adding new mark:', mark);
 
-      // First, get or create the race_event associated with this regatta
-      let raceEventId: string;
-
-      const { data: existingRaceEvent } = await supabase
-        .from('race_events')
-        .select('id')
-        .eq('regatta_id', selectedRaceId)
-        .maybeSingle();
-
-      if (existingRaceEvent) {
-        raceEventId = existingRaceEvent.id;
-      } else {
-        // Create a race_event if it doesn't exist
-        const startDateObj = selectedRaceData?.start_date
-          ? new Date(selectedRaceData.start_date)
-          : null;
-        const startTime = startDateObj && !Number.isNaN(startDateObj.getTime())
-          ? startDateObj.toISOString().split('T')[1]?.split('Z')[0]?.split('.')[0] || '00:00:00'
-          : '00:00:00';
-
-        const eventDate = startDateObj && !Number.isNaN(startDateObj.getTime())
-          ? startDateObj.toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0];
-
-        const { data: newRaceEvent, error: createError } = await supabase
-          .from('race_events')
-          .insert({
-            regatta_id: selectedRaceId,
-            name: `${selectedRaceData?.name || 'Race'} - Event 1`,
-            start_time: startTime,
-            event_date: eventDate,
-          })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        raceEventId = newRaceEvent.id;
+      const raceEventId = await ensureRaceEventId();
+      if (!raceEventId) {
+        throw new Error('Unable to resolve race event ID');
       }
 
       // Prepare insert payload using only supported columns
@@ -456,7 +574,7 @@ export default function RacesScreen() {
     } catch (error) {
       logger.error('Error adding mark:', error);
     }
-  }, [selectedRaceId, selectedRaceData]);
+  }, [ensureRaceEventId, selectedRaceId]);
 
   // Handle updating a mark's position
   const handleMarkUpdated = useCallback(async (mark: any) => {
@@ -512,6 +630,246 @@ export default function RacesScreen() {
       logger.error('Error deleting mark:', error);
     }
   }, []);
+
+  const handleBulkMarksUpdate = useCallback(async (updatedMarks: any[]) => {
+    if (!updatedMarks || updatedMarks.length === 0) {
+      return;
+    }
+
+    try {
+      logger.debug('Bulk updating marks:', updatedMarks.length);
+
+      const updates = updatedMarks.map((mark) => {
+        const lat = mark.latitude ?? mark.coordinates_lat;
+        const lng = mark.longitude ?? mark.coordinates_lng;
+        return supabase
+          .from('race_marks')
+          .update({
+            latitude: lat,
+            longitude: lng,
+          })
+          .eq('id', mark.id);
+      });
+
+      const results = await Promise.allSettled(updates);
+      const rejected = results.filter(result => result.status === 'rejected');
+      if (rejected.length > 0) {
+        throw new Error(`${rejected.length} mark updates failed`);
+      }
+
+      setSelectedRaceMarks(
+        updatedMarks.map((mark) => ({
+          ...mark,
+          latitude: mark.latitude ?? mark.coordinates_lat,
+          longitude: mark.longitude ?? mark.coordinates_lng,
+        }))
+      );
+    } catch (error) {
+      logger.error('Error bulk updating marks:', error);
+    }
+  }, []);
+
+  const handleCourseTemplateSelected = useCallback(async (courseMarks: Mark[]) => {
+    if (!selectedRaceId) {
+      Alert.alert('Select a race first', 'Choose a race before applying a course template.');
+      return;
+    }
+
+    setIsApplyingCourseTemplate(true);
+
+    try {
+      const raceEventId = await ensureRaceEventId();
+      if (!raceEventId) {
+        throw new Error('Missing race event ID');
+      }
+
+      // Clear any existing marks before applying the template
+      await supabase
+        .from('race_marks')
+        .delete()
+        .eq('race_id', raceEventId);
+
+      if (!courseMarks || courseMarks.length === 0) {
+        setSelectedRaceMarks([]);
+        Alert.alert('Course cleared', 'Existing course marks have been removed.');
+        return;
+      }
+
+      const insertPayload = courseMarks
+        .filter((mark) => typeof mark.latitude === 'number' && typeof mark.longitude === 'number')
+        .map((mark, index) => ({
+          race_id: raceEventId,
+          name: mark.name || `Mark ${index + 1}`,
+          mark_type: normalizeCourseMarkType(mark.type),
+          latitude: mark.latitude,
+          longitude: mark.longitude,
+          sequence_order: index,
+          is_custom: false,
+        }));
+
+      if (insertPayload.length === 0) {
+        setSelectedRaceMarks([]);
+        Alert.alert('No usable marks', 'That course does not have coordinates we can plot.');
+        return;
+      }
+
+      const { data: insertedMarks, error: insertError } = await supabase
+        .from('race_marks')
+        .insert(insertPayload)
+        .select();
+
+      if (insertError) throw insertError;
+
+      const mappedMarks = (insertedMarks || []).map((mark: any) => ({
+        id: mark.id,
+        mark_name: mark.name,
+        mark_type: mark.mark_type,
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        sequence_order: mark.sequence_order ?? 0,
+      }));
+
+      setSelectedRaceMarks(mappedMarks);
+      setDrawingRacingArea([]);
+      refetch?.();
+
+      Alert.alert('Course applied', 'The selected course has been laid onto the tactical map.');
+    } catch (error) {
+      logger.error('Error applying course template:', error);
+      Alert.alert('Unable to apply course', 'We could not load that course. Please try again.');
+    } finally {
+      setIsApplyingCourseTemplate(false);
+    }
+  }, [ensureRaceEventId, normalizeCourseMarkType, refetch, selectedRaceId]);
+
+  const handleSaveCourseTemplate = useCallback(async () => {
+    if (savingCourseTemplate) {
+      return;
+    }
+
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'You need to be signed in to save course templates.');
+      return;
+    }
+
+    if (!selectedRaceMarks || selectedRaceMarks.length === 0) {
+      Alert.alert('No marks to save', 'Add marks to the tactical map before saving a template.');
+      return;
+    }
+
+    const defaultName =
+      selectedRaceData?.name
+        ? `${selectedRaceData.name} Course`
+        : `Custom Course ${new Date().toLocaleDateString()}`;
+
+    let courseName = defaultName;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const response = window.prompt('Name your course template', defaultName);
+      if (!response) {
+        return;
+      }
+      courseName = response;
+    }
+
+    const scope: CourseScope =
+      selectedRaceData?.metadata?.club_id
+        ? 'club'
+        : selectedRaceData?.metadata?.venue_id
+          ? 'venue'
+          : 'personal';
+
+    const courseDescription =
+      selectedRaceData?.metadata?.venue_name
+        ? `Saved from ${selectedRaceData.metadata.venue_name}`
+        : 'Custom racing course';
+
+    const marksPayload = selectedRaceMarks
+      .filter((mark: any) => typeof mark.latitude === 'number' && typeof mark.longitude === 'number')
+      .map((mark: any, index: number) => ({
+        id: mark.id || `${courseName.replace(/\s+/g, '-').toLowerCase()}-${index}`,
+        name: mark.mark_name || mark.name || `Mark ${index + 1}`,
+        type: mark.mark_type || mark.type || 'custom',
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        sequence_order: index,
+      }));
+
+    if (marksPayload.length === 0) {
+      Alert.alert('Unable to save course', 'Could not detect mark positions to save.');
+      return;
+    }
+
+    setSavingCourseTemplate(true);
+
+    try {
+      const savedCourse = await CourseLibraryService.saveCourse(
+        {
+          name: courseName,
+          description: courseDescription,
+          course_type: 'custom',
+          marks: marksPayload,
+          typical_length_nm: null,
+          estimated_duration_minutes: null,
+          min_wind_direction: selectedRaceData?.metadata?.expected_wind_direction ?? null,
+          max_wind_direction: selectedRaceData?.metadata?.expected_wind_direction ?? null,
+          min_wind_speed: selectedRaceData?.metadata?.expected_wind_speed ?? null,
+          max_wind_speed: selectedRaceData?.metadata?.expected_wind_speed ?? null,
+          venue_id: selectedRaceData?.metadata?.venue_id ?? undefined,
+          club_id: selectedRaceData?.metadata?.club_id ?? undefined,
+        },
+        scope,
+        user.id
+      );
+
+      if (!savedCourse) {
+        throw new Error('Course could not be saved');
+      }
+
+      Alert.alert('Course saved', `${courseName} is now in your course library.`);
+    } catch (error: any) {
+      logger.error('Error saving course template:', error);
+      Alert.alert('Save failed', error?.message || 'Could not save this course. Please try again.');
+    } finally {
+      setSavingCourseTemplate(false);
+    }
+  }, [logger, savingCourseTemplate, selectedRaceData, selectedRaceMarks, user?.id]);
+
+  const selectedRaceVenueCoordinates = useMemo(() => {
+    if (selectedRaceData?.metadata?.venue_lat && selectedRaceData?.metadata?.venue_lng) {
+      return {
+        lat: selectedRaceData.metadata.venue_lat,
+        lng: selectedRaceData.metadata.venue_lng,
+      };
+    }
+
+    if (drawingRacingArea.length > 0) {
+      const lat = drawingRacingArea.reduce((sum, point) => sum + point.lat, 0) / drawingRacingArea.length;
+      const lng = drawingRacingArea.reduce((sum, point) => sum + point.lng, 0) / drawingRacingArea.length;
+      return { lat, lng };
+    }
+
+    const polygon = selectedRaceData?.racing_area_polygon?.coordinates?.[0];
+    if (Array.isArray(polygon) && polygon.length > 0) {
+      const coords = polygon
+        .filter((coord: any) => Array.isArray(coord) && coord.length >= 2)
+        .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }));
+      if (coords.length > 0) {
+        const lat = coords.reduce((sum, point) => sum + point.lat, 0) / coords.length;
+        const lng = coords.reduce((sum, point) => sum + point.lng, 0) / coords.length;
+        return { lat, lng };
+      }
+    }
+
+    if (selectedRaceData?.metadata?.venue_name) {
+      return {
+        lat: selectedRaceData?.metadata?.venue_lat ?? 22.2650,
+        lng: selectedRaceData?.metadata?.venue_lng ?? 114.2620,
+      };
+    }
+
+    return undefined;
+  }, [drawingRacingArea, selectedRaceData]);
 
   // Memoized navigation handlers
   const handleVenuePress = useCallback(() => {
@@ -738,16 +1096,25 @@ export default function RacesScreen() {
     fetchRaceDetail();
   }, [selectedRaceId]);
 
-  const selectedRaceClassId = useMemo(() => {
-    if (!selectedRaceData) return null;
-    return (
-      selectedRaceData.class_id ||
-      selectedRaceData.classId ||
-      selectedRaceData.metadata?.class_id ||
-      selectedRaceData.metadata?.classId ||
-      null
-    );
-  }, [selectedRaceData]);
+const selectedRaceClassId = useMemo(() => {
+  if (!selectedRaceData) return null;
+  return (
+    selectedRaceData.class_id ||
+    selectedRaceData.classId ||
+    selectedRaceData.metadata?.class_id ||
+    selectedRaceData.metadata?.classId ||
+    null
+  );
+}, [selectedRaceData]);
+
+const selectedRaceClassName = useMemo(() => {
+  if (!selectedRaceData) return undefined;
+  return (
+    selectedRaceData.metadata?.class_name ||
+    selectedRaceData.class_divisions?.[0]?.name ||
+    undefined
+  );
+}, [selectedRaceData]);
 
   const {
     recommendation: selectedRaceTuningRecommendation,
@@ -755,9 +1122,18 @@ export default function RacesScreen() {
     refresh: refreshSelectedRaceTuning,
   } = useRaceTuningRecommendation({
     classId: selectedRaceClassId,
+    className: selectedRaceClassName,
     pointsOfSail: 'upwind',
-    enabled: !!selectedRaceClassId,
+    enabled: !!(selectedRaceClassId || selectedRaceClassName),
   });
+
+  const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
+
+  const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
+
+  const handleClaimWorkspace = useCallback(() => {
+    router.push('/(tabs)/settings' as any);
+  }, [router]);
 
   // Clear old details immediately on selection change to avoid showing stale details
   React.useEffect(() => {
@@ -768,40 +1144,59 @@ export default function RacesScreen() {
 
   // Auto-scroll to center on next race
   useEffect(() => {
-    // Don't scroll while data is loading or if requirements aren't met
-    if (loading || !nextRace || safeRecentRaces.length === 0) {
+    // Skip auto-centering once the user has manually interacted or after the first center
+    if (
+      loading ||
+      !nextRace ||
+      safeRecentRaces.length === 0 ||
+      hasManuallySelected ||
+      hasAutoCenteredNextRace.current
+    ) {
       return;
     }
 
-    // Find index of next race in the array
     const nextRaceIndex = safeRecentRaces.findIndex((race: any) => race.id === nextRace.id);
-
     if (nextRaceIndex === -1) {
       return;
     }
 
-    // Card dimensions (same as RaceCard component)
-    const cardWidth = Math.min(SCREEN_WIDTH - 32, 375);
-    const cardMargin = 8; // marginHorizontal from RaceCard
-    const totalCardWidth = cardWidth + (cardMargin * 2);
+    const scrollX =
+      nextRaceIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
 
-    // Calculate scroll position to center the next race
-    const scrollX = (nextRaceIndex * totalCardWidth) - (SCREEN_WIDTH / 2) + (cardWidth / 2);
-
-    // Scroll to position with a delay to ensure layout is ready
     const timer = setTimeout(() => {
       if (raceCardsScrollViewRef.current) {
         raceCardsScrollViewRef.current.scrollTo({
-          x: Math.max(0, scrollX), // Don't scroll to negative values
+          x: Math.max(0, scrollX),
           y: 0,
-          animated: true
+          animated: true,
         });
+        hasAutoCenteredNextRace.current = true;
       }
-    }, 500);
+    }, 300);
 
-    // Cleanup timeout on unmount
     return () => clearTimeout(timer);
-  }, [nextRace, safeRecentRaces, SCREEN_WIDTH, loading]);
+  }, [nextRace, safeRecentRaces, loading, hasManuallySelected, SCREEN_WIDTH]);
+
+  // Keep the selected race visible by centering it when selection changes
+  useEffect(() => {
+    if (!selectedRaceId || !raceCardsScrollViewRef.current || safeRecentRaces.length === 0) {
+      return;
+    }
+
+    const selectedIndex = safeRecentRaces.findIndex((race: any) => race.id === selectedRaceId);
+    if (selectedIndex === -1) {
+      return;
+    }
+
+    const scrollX =
+      selectedIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
+
+    raceCardsScrollViewRef.current.scrollTo({
+      x: Math.max(0, scrollX),
+      y: 0,
+      animated: true,
+    });
+  }, [selectedRaceId, safeRecentRaces, SCREEN_WIDTH]);
 
   // Auth loading state - show while auth is being initialized
   if (!ready) {
@@ -889,6 +1284,23 @@ export default function RacesScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        {isDemoProfile && (
+          <View className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-4">
+            <Text className="text-indigo-900 text-sm font-semibold">
+              You’re exploring a demo workspace
+            </Text>
+            <Text className="text-indigo-700 text-xs mt-1 leading-4">
+              All races, boats, and analytics below are sample data. Add your own boat or claim your workspace to start syncing real results.
+            </Text>
+            <Button
+              size="sm"
+              className="mt-3 self-start"
+              onPress={handleClaimWorkspace}
+            >
+              <ButtonText>Claim my workspace</ButtonText>
+            </Button>
+          </View>
+        )}
         {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
         {hasRealRaces ? (
           // User has real races - show all upcoming races
@@ -989,6 +1401,58 @@ export default function RacesScreen() {
                   </Button>
                 </View>
 
+                {/* Course Template Selector */}
+                <View className="mt-3">
+                  <View className="flex-row items-center gap-2">
+                    <View style={{ flex: 1 }}>
+                      <CourseSelector
+                        venueId={selectedRaceData.metadata?.venue_id ?? undefined}
+                        venueName={selectedRaceData.metadata?.venue_name ?? undefined}
+                        venueCoordinates={selectedRaceVenueCoordinates}
+                        currentWindDirection={
+                          selectedRaceData.metadata?.expected_wind_direction ??
+                          selectedRaceData.metadata?.wind_direction ??
+                          undefined
+                        }
+                        currentWindSpeed={
+                          selectedRaceData.metadata?.expected_wind_speed ??
+                          selectedRaceData.metadata?.wind_speed ??
+                          undefined
+                        }
+                        onCourseSelected={handleCourseTemplateSelected}
+                      />
+                    </View>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-[48px]"
+                      disabled={
+                        savingCourseTemplate ||
+                        !selectedRaceMarks ||
+                        selectedRaceMarks.length === 0
+                      }
+                      onPress={handleSaveCourseTemplate}
+                    >
+                      <ButtonIcon as={Plus} />
+                      <ButtonText>
+                        {savingCourseTemplate ? 'Saving...' : 'Save Template'}
+                      </ButtonText>
+                    </Button>
+                  </View>
+
+                  {(isApplyingCourseTemplate || savingCourseTemplate) && (
+                    <View className="flex-row items-center gap-2 mt-2">
+                      <ActivityIndicator size="small" color="#2563EB" />
+                      <Text className="text-sm text-gray-600">
+                        {isApplyingCourseTemplate
+                          ? 'Applying course template...'
+                          : 'Saving course to your library...'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
                 {/* Tactical Race Map */}
                 <RaceDetailMapHero
                   race={{
@@ -1020,6 +1484,7 @@ export default function RacesScreen() {
                   onMarkAdded={handleMarkAdded}
                   onMarkUpdated={handleMarkUpdated}
                   onMarkDeleted={handleMarkDeleted}
+                  onMarksBulkUpdate={handleBulkMarksUpdate}
                 />
 
                 {/* ============================================ */}
@@ -1038,12 +1503,9 @@ export default function RacesScreen() {
                   raceId={selectedRaceData.id}
                   raceName={selectedRaceData.name}
                   startTime={selectedRaceData.start_date}
-                  venue={selectedRaceData.metadata?.venue_name ? {
-                    id: selectedRaceData.metadata.venue_id,
-                    name: selectedRaceData.metadata.venue_name,
-                    coordinates_lat: selectedRaceData.metadata?.venue_lat || 22.2650,
-                    coordinates_lng: selectedRaceData.metadata?.venue_lng || 114.2620,
-                  } : undefined}
+                  venue={selectedRaceData.metadata?.venue_name
+                    ? ({ name: selectedRaceData.metadata.venue_name } as { name?: string })
+                    : undefined}
                   boatClass={selectedRaceData.metadata?.class_name}
                 />
 
@@ -1098,9 +1560,25 @@ export default function RacesScreen() {
                   } : undefined}
                 />
 
+                {!selectedRaceClassId && (
+                  <View className="flex-row items-start gap-2 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
+                    <View className="flex-1">
+                      <Text className="text-xs font-semibold text-amber-700">Class not set yet</Text>
+                      <Text className="text-xs text-amber-600 mt-1">
+                        Select a boat class to unlock rig tuning checklists and class-based start sequences.
+                      </Text>
+                      <Pressable onPress={handleEditSelectedRace} className="flex-row items-center gap-1 mt-2">
+                        <MaterialCommunityIcons name="pencil" size={14} color="#b45309" />
+                        <Text className="text-xs font-semibold text-amber-700">Set class</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
                 <RigTuningCard
                   raceId={selectedRaceData.id}
-                  boatClassName={selectedRaceData.metadata?.class_name}
+                  boatClassName={selectedRaceClassName}
                   recommendation={selectedRaceTuningRecommendation}
                   loading={selectedRaceTuningLoading}
                   onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
@@ -1160,9 +1638,15 @@ export default function RacesScreen() {
                   raceId={selectedRaceData.id}
                   classId={selectedRaceData.class_id || selectedRaceData.metadata?.class_id}
                   raceDate={selectedRaceData.start_date}
-                  onManageCrew={() => {
-                    logger.debug('Manage crew tapped');
-                  }}
+                  onManageCrew={() =>
+                    handleManageCrewNavigation({
+                      raceId: selectedRaceData.id,
+                      classId: selectedRaceData.class_id || selectedRaceData.metadata?.class_id,
+                      className: selectedRaceClassName || selectedRaceData.metadata?.class_name,
+                      raceName: selectedRaceData.name || selectedRaceData.race_name,
+                      raceDate: selectedRaceData.start_date,
+                    })
+                  }
                 />
 
                 <FleetRacersCard

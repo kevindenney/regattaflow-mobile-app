@@ -163,11 +163,13 @@ export function useLiveRaces(userId?: string) {
       if (error) {
         logger.warn('Returning empty due to error:', error);
         setLiveRaces([]);
+        setLoading(false);
         return;
       }
       setLiveRaces((data as any[]) || []);
     } catch (err) {
       logger.error('Error loading races:', err);
+      setLiveRaces([]);
     } finally {
       setLoading(false);
     }
@@ -179,48 +181,62 @@ export function useLiveRaces(userId?: string) {
     loadLiveRaces();
 
     // Subscribe to regatta changes for the user (INSERT, UPDATE, DELETE)
+    // Only set up subscription if we successfully loaded races
     const channelName = createChannelName('user-regattas', userId);
-    realtimeService.subscribe(
-      channelName,
-      {
-        table: 'regattas',
-        // No event filter - listen to all events (INSERT, UPDATE, DELETE)
-      },
-      (payload) => {
-        if (payload.eventType === 'INSERT') {
-          // Add new race to the list
-          const newRace = payload.new as Race;
-          setLiveRaces((prev) => {
-            // Check if race already exists to avoid duplicates
-            if (prev.some((r) => r.id === newRace.id)) {
-              return prev;
+
+    try {
+      realtimeService.subscribe(
+        channelName,
+        {
+          table: 'regattas',
+          // No event filter - listen to all events (INSERT, UPDATE, DELETE)
+        },
+        (payload) => {
+          try {
+            if (payload.eventType === 'INSERT') {
+              // Add new race to the list
+              const newRace = payload.new as Race;
+              setLiveRaces((prev) => {
+                // Check if race already exists to avoid duplicates
+                if (prev.some((r) => r.id === newRace.id)) {
+                  return prev;
+                }
+                // Add and sort by start_date
+                return [...prev, newRace].sort((a: any, b: any) =>
+                  new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+                );
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              // Update existing race
+              const updatedRace = payload.new as Race;
+              setLiveRaces((prev) => {
+                const index = prev.findIndex((r) => r.id === updatedRace.id);
+                if (index >= 0) {
+                  const updated = [...prev];
+                  updated[index] = updatedRace;
+                  return updated;
+                }
+                return prev;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              // Remove deleted race
+              setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
             }
-            // Add and sort by start_date
-            return [...prev, newRace].sort((a: any, b: any) =>
-              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-            );
-          });
-        } else if (payload.eventType === 'UPDATE') {
-          // Update existing race
-          const updatedRace = payload.new as Race;
-          setLiveRaces((prev) => {
-            const index = prev.findIndex((r) => r.id === updatedRace.id);
-            if (index >= 0) {
-              const updated = [...prev];
-              updated[index] = updatedRace;
-              return updated;
-            }
-            return prev;
-          });
-        } else if (payload.eventType === 'DELETE') {
-          // Remove deleted race
-          setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
+          } catch (err) {
+            logger.error('Error handling realtime event:', err);
+          }
         }
-      }
-    );
+      );
+    } catch (err) {
+      logger.error('Error setting up realtime subscription:', err);
+    }
 
     return () => {
-      realtimeService.unsubscribe(channelName);
+      try {
+        realtimeService.unsubscribe(channelName);
+      } catch (err) {
+        logger.error('Error unsubscribing from realtime:', err);
+      }
     };
   }, [userId, loadLiveRaces]);
 

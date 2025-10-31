@@ -46,11 +46,13 @@ class AutoCourseGeneratorService {
     racingArea: RacingArea,
     windDirection: string | number, // Cardinal (e.g., 'SE') or degrees
     windSpeed: number, // knots
-    boatClass?: string
+    boatClass?: unknown
   ): CourseMark[] {
 
+    const normalizedBoatClass = this.normalizeBoatClass(boatClass);
+
     logger.debug('   Wind:', windDirection, '@', windSpeed, 'kt');
-    logger.debug('   Boat class:', boatClass || 'default');
+    logger.debug('   Boat class:', normalizedBoatClass || 'default');
     logger.debug('   Racing area center:', racingArea.center);
 
     // Convert wind direction to degrees if needed
@@ -62,7 +64,7 @@ class AutoCourseGeneratorService {
     const startLineBearing = (windDegrees + 90) % 360;
 
     // Calculate distances based on boat class and wind
-    const startLineLength = this.getStartLineLength(boatClass);
+    const startLineLength = this.getStartLineLength(normalizedBoatClass);
     const windwardDistance = this.getWindwardDistance(windSpeed);
 
     // Generate marks
@@ -244,7 +246,52 @@ class AutoCourseGeneratorService {
    * @param boatClass - Boat class name (e.g., 'Dragon', 'J/24')
    * @returns Start line length in nautical miles
    */
-  getStartLineLength(boatClass?: string): number {
+  private normalizeBoatClass(boatClass?: unknown): string {
+    if (!boatClass) return '';
+
+    if (typeof boatClass === 'string') {
+      return boatClass;
+    }
+
+    if (Array.isArray(boatClass)) {
+      return boatClass
+        .map(value => this.normalizeBoatClass(value))
+        .filter(Boolean)
+        .join(' ');
+    }
+
+    if (typeof boatClass === 'object') {
+      const candidate = boatClass as Record<string, unknown>;
+      const keys = [
+        'name',
+        'class',
+        'className',
+        'label',
+        'class_association',
+        'boat_class',
+        'value',
+        'title',
+      ];
+
+      for (const key of keys) {
+        const value = candidate[key];
+        if (typeof value === 'string' && value.trim()) {
+          return value;
+        }
+      }
+
+      if (typeof candidate.toString === 'function') {
+        const value = candidate.toString();
+        if (value && value !== '[object Object]') {
+          return value;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  getStartLineLength(boatClass?: unknown): number {
     // Standard start line lengths by boat class
     const lengths: Record<string, number> = {
       'dragon': 0.081, // 150m
@@ -253,7 +300,7 @@ class AutoCourseGeneratorService {
       'farr 40': 0.135, // 250m
     };
 
-    const normalizedClass = boatClass?.toLowerCase() || '';
+    const normalizedClass = this.normalizeBoatClass(boatClass).toLowerCase();
 
     // Look for partial matches
     for (const [key, length] of Object.entries(lengths)) {

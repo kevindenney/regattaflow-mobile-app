@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {router} from 'expo-router'
 import {supabase} from '@/services/supabase'
 import {logSession, dumpSbStorage} from '@/utils/authDebug'
-import {getDashboardRoute, shouldCompleteOnboarding, getOnboardingRoute} from '@/lib/utils/userTypeRouting'
+import {getDashboardRoute} from '@/lib/utils/userTypeRouting'
 import {ActivityIndicator, View, Text} from 'react-native'
 import {createLogger} from '@/lib/utils/logger'
 
@@ -21,7 +21,7 @@ export default function Callback(){
     // Safety timeout - if callback takes longer than 10s, force redirect
     const safetyTimeout = setTimeout(() => {
       logger.error('Safety timeout triggered after 10 seconds')
-      router.replace(getOnboardingRoute(undefined) as any)
+      router.replace(getDashboardRoute(null) as any)
     }, 10000)
 
     const run = async ()=>{
@@ -97,35 +97,25 @@ export default function Callback(){
         })
 
         if (profileError) {
-          logger.warn('Profile fetch error, assuming needs onboarding:', profileError)
+          logger.warn('Profile fetch error, routing to default dashboard:', profileError)
           setStatus('Setting up your account...')
-          const onboardingRoute = getOnboardingRoute(undefined)
-          setTimeout(() => router.replace(onboardingRoute as any), 100)
+          const destination = getDashboardRoute(null)
+          setTimeout(() => router.replace(destination as any), 100)
           clearTimeout(safetyTimeout)
           return
         }
 
-        const needsOnboarding = shouldCompleteOnboarding(profile)
-        logger.info('Onboarding check:', { needsOnboarding, profile })
-
-        if (needsOnboarding) {
-          setStatus('Setting up your account...')
-          const onboardingRoute = getOnboardingRoute(profile)
-          setTimeout(() => {
-            router.replace(onboardingRoute as any)
-          }, 100)
-        } else {
-          const dest = getDashboardRoute(profile?.user_type)
-          setStatus('Redirecting to dashboard...')
-          setTimeout(() => {
-            router.replace(dest as any)
-          }, 100)
-        }
+        const dest = getDashboardRoute(profile?.user_type ?? null)
+        logger.info('Redirecting to dashboard:', dest)
+        setStatus('Redirecting to dashboard...')
+        setTimeout(() => {
+          router.replace(dest as any)
+        }, 100)
       } catch (e) {
         logger.error('Profile fetch error:', e)
         setStatus('Setting up your account...')
-        const onboardingRoute = getOnboardingRoute(undefined)
-        setTimeout(() => router.replace(onboardingRoute as any), 100)
+        const destination = getDashboardRoute(null)
+        setTimeout(() => router.replace(destination as any), 100)
       } finally {
         clearTimeout(safetyTimeout)
       }

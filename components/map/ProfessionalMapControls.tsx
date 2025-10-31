@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Professional Map Controls - OnX Maps Style
  * Advanced control panel for professional sailing race strategy

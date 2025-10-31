@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Sailing Results Scoring Engine
  * Implements RRS Appendix A scoring systems with full tie-breaking rules

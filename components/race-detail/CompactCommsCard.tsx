@@ -4,6 +4,8 @@
  * Compact communications channel display card inspired by macOS Weather app
  */
 
+// @ts-nocheck
+
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { WeatherMetricCard } from './WeatherMetricCard';

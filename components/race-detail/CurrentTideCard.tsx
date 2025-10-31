@@ -3,7 +3,7 @@
  * Shows current direction/speed, tide phase, and impact on racing
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
@@ -63,6 +63,7 @@ export function CurrentTideCard({
   venue
 }: CurrentTideCardProps) {
   const [useMockData, setUseMockData] = useState(false);
+  const [hasAutoLoaded, setHasAutoLoaded] = useState(false);
 
   // Try to fetch REAL weather/tide data first
   const { weather: realWeather, loading, error: weatherError, refetch: loadTideData } = useRaceWeather(
@@ -83,17 +84,10 @@ export function CurrentTideCard({
   const [mockTideData, setMockTideData] = useState<TideData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // If real weather fails or is unavailable, use mock data
-    if (weatherError || (!loading && !realWeather && venueCoordinates)) {
-      loadMockTideData();
-      setUseMockData(true);
-    } else if (realWeather) {
-      setUseMockData(false);
+  const loadMockTideData = useCallback((reason?: string | null) => {
+    if (reason !== undefined) {
+      setError(reason || null);
     }
-  }, [weatherError, loading, realWeather, venueCoordinates]);
-
-  const loadMockTideData = () => {
     setUseMockData(true);
     const placeholderData: TideData = {
       current: {
@@ -127,7 +121,72 @@ export function CurrentTideCard({
       lastUpdated: new Date(),
     };
     setMockTideData(placeholderData);
-  };
+    setHasAutoLoaded(true);
+  }, []);
+
+  const hasValidCoordinates =
+    (venueCoordinates && (venueCoordinates.lat !== 0 || venueCoordinates.lng !== 0)) ||
+    (venue?.coordinates &&
+      (venue.coordinates.latitude !== 0 || venue.coordinates.longitude !== 0));
+
+  const handleRefresh = useCallback(() => {
+    setHasAutoLoaded(false);
+    setUseMockData(false);
+    setMockTideData(null);
+    setError(null);
+    loadTideData();
+  }, [loadTideData]);
+
+  useEffect(() => {
+    setHasAutoLoaded(false);
+    setUseMockData(false);
+    setMockTideData(null);
+    setError(null);
+  }, [raceId, raceTime, venue?.id, venueCoordinates?.lat, venueCoordinates?.lng]);
+
+  useEffect(() => {
+    if (realWeather?.tide) {
+      setUseMockData(false);
+      setHasAutoLoaded(true);
+      setError(null);
+    }
+  }, [realWeather]);
+
+  useEffect(() => {
+    if (hasAutoLoaded || useMockData) return;
+
+    if (weatherError) {
+      setError(weatherError.message || 'Unable to fetch live tide data');
+      loadMockTideData();
+      return;
+    }
+
+    if (!loading && !realWeather?.tide) {
+      const timeout = setTimeout(() => {
+        if (!hasAutoLoaded && !realWeather?.tide && !useMockData) {
+          loadMockTideData(
+            hasValidCoordinates
+              ? undefined
+              : 'Showing simulated tide — add venue coordinates for live data'
+          );
+        }
+      }, hasValidCoordinates ? 800 : 120);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [
+    loading,
+    realWeather?.tide,
+    weatherError,
+    hasAutoLoaded,
+    useMockData,
+    loadMockTideData,
+    hasValidCoordinates,
+    venueCoordinates?.lat,
+    venueCoordinates?.lng,
+    venue?.coordinates?.latitude,
+    venue?.coordinates?.longitude
+  ]);
 
   // Helper to convert cardinal to degrees
   const cardinalToDegrees = (cardinal: string): number => {
@@ -173,7 +232,7 @@ export function CurrentTideCard({
   const getStatusMessage = () => {
     if (loading) return 'Loading tide data...';
     if (error) return error;
-    if (!tideData) return 'Tap to load';
+    if (!tideData) return 'Preparing tide data...';
     return tideData.current.phase.charAt(0).toUpperCase() + tideData.current.phase.slice(1);
   };
 
@@ -229,7 +288,7 @@ export function CurrentTideCard({
           </Text>
           <TouchableOpacity
             style={styles.loadButton}
-            onPress={loadMockTideData}
+            onPress={() => loadMockTideData(null)}
             disabled={loading}
           >
             {loading ? (
@@ -273,7 +332,7 @@ export function CurrentTideCard({
         <View style={styles.currentSection}>
           <View style={styles.currentHeader}>
             <Text style={styles.sectionTitle}>Current Flow</Text>
-            <TouchableOpacity onPress={loadTideData} disabled={loading}>
+            <TouchableOpacity onPress={handleRefresh} disabled={loading}>
               <MaterialCommunityIcons name="refresh" size={20} color="#3B82F6" />
             </TouchableOpacity>
           </View>

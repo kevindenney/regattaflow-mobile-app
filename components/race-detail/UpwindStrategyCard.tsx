@@ -37,10 +37,67 @@ export function UpwindStrategyCard({
 
   useEffect(() => {
     loadUpwindStrategy();
-  }, [raceId]);
+
+    // Subscribe to realtime changes for this race's strategy
+    const subscription = supabase
+      .channel(`race_strategy_${raceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_strategies',
+          filter: `regatta_id=eq.${raceId}`,
+        },
+        (payload) => {
+          console.log('[UpwindStrategyCard] Realtime update received:', payload);
+          // Reload strategy when it changes
+          loadUpwindStrategy();
+        }
+      )
+      .subscribe();
+
+    // Poll for strategy updates every 3 seconds if no data yet
+    // This handles the case where strategy is generated after component mounts
+    const pollInterval = setInterval(() => {
+      if (beats.length === 0 && !loading) {
+        console.log('[UpwindStrategyCard] Polling for strategy updates...');
+        loadUpwindStrategy();
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [raceId, beats.length, loading]);
+
+  // Helper function to extract favored side from action text
+  const extractSideFromAction = (action: string): 'left' | 'right' | 'middle' | null => {
+    if (!action) return null;
+    const lowerAction = action.toLowerCase();
+    if (lowerAction.includes('right') || lowerAction.includes('starboard')) return 'right';
+    if (lowerAction.includes('left') || lowerAction.includes('port')) return 'left';
+    if (lowerAction.includes('middle') || lowerAction.includes('center')) return 'middle';
+    return null;
+  };
+
+  // Helper function to extract side from start line bias
+  const extractSideFromBias = (favoredEnd: string): 'left' | 'right' | 'middle' | null => {
+    if (!favoredEnd) return null;
+    const lower = favoredEnd.toLowerCase();
+    if (lower === 'pin' || lower === 'left') return 'left';
+    if (lower === 'boat' || lower === 'committee' || lower === 'right') return 'right';
+    if (lower === 'middle') return 'middle';
+    return null;
+  };
 
   const loadUpwindStrategy = async () => {
+    console.log('[UpwindStrategyCard] Loading strategy for raceId:', raceId);
+    console.log('[UpwindStrategyCard] Current user:', user?.id);
+
     if (!user) {
+      console.log('[UpwindStrategyCard] No user found, skipping load');
       setLoading(false);
       return;
     }
@@ -49,6 +106,11 @@ export function UpwindStrategyCard({
       setLoading(true);
       setError(null);
 
+      console.log('[UpwindStrategyCard] Querying race_strategies table with:', {
+        regatta_id: raceId,
+        user_id: user.id
+      });
+
       const { data, error: fetchError } = await supabase
         .from('race_strategies')
         .select('strategy_content')
@@ -56,21 +118,87 @@ export function UpwindStrategyCard({
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (fetchError) throw fetchError;
+      console.log('[UpwindStrategyCard] Query result:', {
+        data: data ? 'Data received' : 'No data',
+        error: fetchError,
+        hasStrategyContent: !!data?.strategy_content
+      });
+
+      if (fetchError) {
+        console.error('[UpwindStrategyCard] Fetch error:', fetchError);
+        throw fetchError;
+      }
 
       if (data && data.strategy_content) {
         const strategyContent = data.strategy_content as any;
+        console.log('[UpwindStrategyCard] Strategy content structure:', {
+          hasTacticalPlan: !!strategyContent.tacticalPlan,
+          hasRecommendations: !!strategyContent.tacticalPlan?.recommendations,
+          recommendationsCount: strategyContent.tacticalPlan?.recommendations?.length || 0,
+          hasFullAIStrategy: !!strategyContent.fullAIStrategy,
+          hasBeatStrategy: !!strategyContent.fullAIStrategy?.strategy?.beatStrategy
+        });
 
-        // Extract upwind beats from tacticalPlan
+        let upwindBeats: BeatRecommendation[] = [];
+
+        // Try new structure first: tacticalPlan.recommendations
         if (strategyContent.tacticalPlan?.recommendations) {
-          const upwindBeats = strategyContent.tacticalPlan.recommendations.filter(
+          upwindBeats = strategyContent.tacticalPlan.recommendations.filter(
             (rec: BeatRecommendation) => rec.leg.toLowerCase().includes('upwind')
           );
+          console.log('[UpwindStrategyCard] Found upwind beats from tacticalPlan:', upwindBeats.length);
+        }
+        // Fallback to old structure: fullAIStrategy.strategy.beatStrategy
+        else if (strategyContent.fullAIStrategy?.strategy?.beatStrategy) {
+          console.log('[UpwindStrategyCard] Using fullAIStrategy.strategy.beatStrategy (legacy format)');
+
+          // Transform beatStrategy to BeatRecommendation format
+          const beatStrategy = strategyContent.fullAIStrategy.strategy.beatStrategy;
+          upwindBeats = beatStrategy.map((beat: any, index: number) => ({
+            leg: `Upwind Leg ${index + 1}`,
+            favoredSide: extractSideFromAction(beat.action) || 'middle',
+            reasoning: beat.reasoning || beat.theory || '',
+            keyPoints: [
+              beat.execution,
+              beat.action,
+              `Confidence: ${beat.confidence}%`
+            ].filter(Boolean),
+            confidence: beat.confidence || 70,
+            theory: beat.theory,
+            execution: beat.execution
+          }));
+          console.log('[UpwindStrategyCard] Transformed beat strategy to upwind beats:', upwindBeats.length);
+        }
+        // Also check startStrategy as a fallback
+        else if (strategyContent.startStrategy) {
+          console.log('[UpwindStrategyCard] Only startStrategy found, creating single beat from start');
+
+          // Create a single beat recommendation from start strategy
+          upwindBeats = [{
+            leg: 'First Upwind Leg',
+            favoredSide: extractSideFromBias(strategyContent.startStrategy.favoredEnd) || 'middle',
+            reasoning: strategyContent.startStrategy.reasoning || '',
+            keyPoints: [
+              strategyContent.startStrategy.approach,
+              `Line bias: ${strategyContent.startStrategy.lineBias || 0}°`,
+              `Favored end: ${strategyContent.startStrategy.favoredEnd}`
+            ].filter(Boolean),
+            confidence: strategyContent.startStrategy.confidence || 70,
+            theory: strategyContent.startStrategy.reasoning,
+            execution: strategyContent.startStrategy.approach
+          }];
+          console.log('[UpwindStrategyCard] Created beat from startStrategy');
+        }
+
+        if (upwindBeats.length > 0) {
+          console.log('[UpwindStrategyCard] Final upwind beats:', upwindBeats);
           setBeats(upwindBeats);
         } else {
+          console.warn('[UpwindStrategyCard] No upwind strategy found in any format');
           setError('No upwind strategy found. Generate your tactical plan first.');
         }
       } else {
+        console.warn('[UpwindStrategyCard] No data or strategy_content found');
         setError('No strategy found. Generate your tactical plan first.');
       }
     } catch (err) {

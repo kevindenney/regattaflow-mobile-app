@@ -5,17 +5,17 @@ import { useAuth } from '../../providers/AuthProvider';
 
 export default function Login() {
   const { signIn, signInWithGoogle, loading } = useAuth();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
 
   const onEmailLogin = async () => {
 
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter your email and password');
+    if (!identifier || !password) {
+      Alert.alert('Error', 'Please enter your username (or email) and password');
       return;
     }
     try {
-      await signIn(email, password);
+      await signIn(identifier, password);
     } catch (e: any) {
       console.error('🔍 [LOGIN] Sign in failed:', e);
       Alert.alert('Sign in failed', e?.message || 'Please try again');
@@ -53,15 +53,15 @@ export default function Login() {
           <View style={styles.divider} />
         </View>
 
-        {/* Email */}
+        {/* Username or Email */}
         <TextInput
-          accessibilityLabel="email-input"
+          accessibilityLabel="identifier-input"
           style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
+          placeholder="Username or email"
+          value={identifier}
+          onChangeText={setIdentifier}
           autoCapitalize="none"
-          keyboardType="email-address"
+          keyboardType="default"
           editable={!loading}
         />
 

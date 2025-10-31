@@ -4,7 +4,7 @@ import { router, Stack, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 
 export default function AuthLayout() {
-  const { state, user, userType, userProfile } = useAuth();
+  const { state, userType } = useAuth();
   const segments = useSegments();
   const currentRoute = segments[segments.length - 1];
 
@@ -12,35 +12,20 @@ export default function AuthLayout() {
   // EXCEPT for login and signup pages
   useEffect(() => {
     const isAuthEntryPoint = currentRoute === 'login' || currentRoute === 'signup';
-    const isOnboardingRoute =
-      currentRoute === 'sailor-onboarding-chat' ||
-      currentRoute === 'sailor-onboarding-comprehensive' ||
-      currentRoute === 'club-onboarding-chat' ||
-      currentRoute === 'onboarding-redesign'; // NEW UNIFIED ONBOARDING
-    const needsOnboarding = userProfile && !userProfile.onboarding_completed;
 
     if (state === 'signed_out' && !isAuthEntryPoint) {
       router.replace('/');
-    } else if (state === 'needs_role' && currentRoute !== 'signup' && currentRoute !== 'onboarding-redesign') {
-      // Sailor-first launch: Skip persona selection, go directly to sailor onboarding
-      router.replace('/(auth)/onboarding-redesign');
     } else if (state === 'ready' && userType) {
-      // Don't redirect if currently on sailor onboarding route
-      if (isOnboardingRoute) {
-        return;
-      }
-
-      // Don't redirect if user needs onboarding
-      if (needsOnboarding) {
-        router.replace('/(auth)/onboarding-redesign');
-        return;
-      }
-
-      // Redirect to role home
       const destination = roleHome(userType);
+      const destinationSegment = destination.split('/').pop();
+
+      if (destinationSegment && destinationSegment === currentRoute) {
+        return;
+      }
+
       router.replace(destination);
     }
-  }, [state, userType, userProfile, currentRoute]);
+  }, [state, userType, currentRoute]);
 
   // Don't render anything while checking
   if (state === 'checking') {
@@ -56,19 +41,11 @@ export default function AuthLayout() {
   }
 
   // Don't render if user already has a role (will redirect above)
-  // UNLESS they're on any sailor onboarding screen
-  const isOnboardingRoute =
-    currentRoute === 'sailor-onboarding-chat' ||
-    currentRoute === 'sailor-onboarding-comprehensive' ||
-    currentRoute === 'club-onboarding-chat' ||
-    currentRoute === 'onboarding-redesign'; // NEW UNIFIED ONBOARDING
-  if (state === 'ready' && userType && !isOnboardingRoute) {
+  if (state === 'ready') {
     return null;
   }
 
-  // Render Stack for:
-  // - authenticated users in onboarding (state === 'needs_role')
-  // - signed-out users on login/signup pages
+  // Render Stack for signed-out users on login/signup pages
   return (
     <Stack
       screenOptions={{
@@ -79,11 +56,6 @@ export default function AuthLayout() {
     >
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
-      {/* Persona selection removed for sailor-first launch */}
-      <Stack.Screen name="onboarding-redesign" />
-      <Stack.Screen name="sailor-onboarding-chat" />
-      <Stack.Screen name="sailor-onboarding-comprehensive" />
-      <Stack.Screen name="club-onboarding-chat" />
     </Stack>
   );
 }
