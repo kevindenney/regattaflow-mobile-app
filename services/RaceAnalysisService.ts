@@ -195,17 +195,35 @@ export class RaceAnalysisService {
       throw new Error('You must be signed in to generate AI analysis.');
     }
 
-    // Call Supabase Edge Function instead of Vercel API
+    // Call Supabase Edge Function
+    // Note: Supabase client automatically adds auth headers when using invoke()
+    logger.debug('Calling race-analysis Edge Function for session:', timerSessionId);
+    logger.debug('Session token exists:', !!session.access_token);
+    logger.debug('Token preview:', session.access_token.substring(0, 20) + '...');
+
     const { data, error } = await supabase.functions.invoke('race-analysis', {
       body: { timerSessionId, force },
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
     });
 
     if (error) {
+      console.error('Edge Function error details:', JSON.stringify(error, null, 2));
+      console.error('Error message:', error.message);
+      console.error('Error context:', error.context);
+
+      // Try to get response body
+      if (error.context?.body) {
+        console.error('Response body:', error.context.body);
+      }
+
       throw new Error(error.message || 'Failed to trigger AI analysis');
     }
+
+    if (data?.error) {
+      console.error('Edge Function returned error in data:', data.error);
+      throw new Error(data.error);
+    }
+
+    console.log('Edge Function success, data:', data);
 
     return (data?.analysis ?? null) as AnalysisResult | null;
   }

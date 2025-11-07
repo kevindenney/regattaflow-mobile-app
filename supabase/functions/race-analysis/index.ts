@@ -18,52 +18,100 @@ interface RaceAnalysisRequest {
  * and triggers AI-powered race analysis using Claude with Skills.
  */
 Deno.serve(async (req: Request) => {
+  console.log('Race analysis request received');
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    console.log('=== Race Analysis Request ===');
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+
+    // Log all headers (sanitized)
+    const headers: Record<string, string> = {};
+    req.headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'authorization') {
+        headers[key] = value ? `Bearer ${value.substring(7, 27)}...` : 'missing';
+      } else {
+        headers[key] = value;
+      }
+    });
+    console.log('Headers:', JSON.stringify(headers, null, 2));
+
     // Extract authorization token
     const authHeader = req.headers.get('authorization');
+    console.log('Auth header present:', !!authHeader);
+    console.log('Auth header value (first 30 chars):', authHeader?.substring(0, 30));
+
     if (!authHeader) {
+      console.error('Missing authorization header');
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Extract JWT from "Bearer <token>"
-    const token = authHeader.replace('Bearer ', '');
+    // Create TWO Supabase clients:
+    // 1. Client with user context for auth verification
+    // 2. Service role client for database operations (bypasses RLS)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    // Create service role client for database operations
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    console.log('Supabase URL:', supabaseUrl);
+    console.log('Anon key present:', !!supabaseAnonKey);
+    console.log('Service key present:', !!supabaseServiceKey);
 
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+      console.error('Missing Supabase environment variables');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Client for auth verification (uses user's JWT)
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
+
+    // Client for database operations (bypasses RLS)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify user authentication using the JWT
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // Verify user authentication
+    console.log('Verifying user authentication...');
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
 
     if (authError || !user) {
       console.error('Auth error:', authError);
+      console.error('User present:', !!user);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Unauthorized', details: authError?.message }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log('User authenticated:', user.id);
+
     // Parse request body
     const { timerSessionId, force = false }: RaceAnalysisRequest = await req.json();
+    console.log('Request body parsed - timerSessionId:', timerSessionId, 'force:', force);
 
     if (!timerSessionId) {
+      console.error('Missing timerSessionId in request body');
       return new Response(
         JSON.stringify({ error: 'timerSessionId is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Fetch race session and verify ownership
+    // Fetch race session and verify ownership (use admin client to bypass RLS)
     const { data: session, error: sessionError } = await supabaseAdmin
       .from('race_timer_sessions')
       .select('id, sailor_id, end_time, auto_analyzed')
