@@ -4,7 +4,6 @@
  * Automatically triggers analysis when races complete
  */
 
-import { RaceAnalysisAgent } from './agents/RaceAnalysisAgent';
 import { RaceTimerService } from './RaceTimerService';
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
@@ -30,9 +29,8 @@ export class RaceAnalysisService {
   /**
    * Analyze a completed race session
    */
-  static async analyzeRaceSession(timerSessionId: string): Promise<AnalysisResult | null> {
+  static async analyzeRaceSession(timerSessionId: string, options: { force?: boolean } = {}): Promise<AnalysisResult | null> {
     try {
-      // Check if session exists and is completed
       const session = await RaceTimerService.getSession(timerSessionId);
       if (!session) {
         console.error('Race session not found');
@@ -44,29 +42,18 @@ export class RaceAnalysisService {
         return null;
       }
 
-      // Check if already analyzed
-      const isAnalyzed = await RaceTimerService.isAnalyzed(timerSessionId);
-      if (isAnalyzed) {
-        logger.debug('Session already analyzed, returning existing analysis');
-        return this.getAnalysis(timerSessionId);
+      const existing = await this.getAnalysis(timerSessionId);
+      if (existing && !options.force) {
+        return existing;
       }
 
-      // Trigger AI agent analysis
-      logger.debug('Starting AI race analysis for session:', timerSessionId);
-      const agent = new RaceAnalysisAgent();
-
-      const result = await agent.analyzeRace({
-        timerSessionId,
-      });
-
-      if (!result.success) {
-        console.error('Agent analysis failed:', result.error);
-        return null;
+      logger.debug('Requesting AI race analysis via API:', timerSessionId);
+      const analysis = await this.invokeAnalysisEndpoint(timerSessionId, options.force ?? false);
+      if (analysis) {
+        return analysis;
       }
 
-      logger.debug('AI race analysis completed successfully');
-
-      // Return the saved analysis
+      // Fallback to fetching directly in case API responded without payload
       return this.getAnalysis(timerSessionId);
     } catch (error) {
       console.error('Error in analyzeRaceSession:', error);
@@ -110,25 +97,16 @@ export class RaceAnalysisService {
         return null;
       }
 
-      // Check if full analysis exists
-      const analysis = await this.getAnalysis(timerSessionId);
-      if (analysis) {
-        // Extract first 2 sentences from overall summary
-        const sentences = analysis.overall_summary.match(/[^.!?]+[.!?]+/g) || [];
-        return sentences.slice(0, 2).join(' ');
+      const analysis =
+        (await this.getAnalysis(timerSessionId)) ??
+        (await this.analyzeRaceSession(timerSessionId));
+
+      if (!analysis) {
+        return null;
       }
 
-      // Generate quick summary using agent
-      const agent = new RaceAnalysisAgent();
-      const result = await agent.quickSummary({
-        timerSessionId,
-      });
-
-      if (result.success && result.result) {
-        return result.result;
-      }
-
-      return null;
+      const sentences = analysis.overall_summary.match(/[^.!?]+[.!?]+/g) || [];
+      return sentences.slice(0, 2).join(' ');
     } catch (error) {
       console.error('Error getting quick summary:', error);
       return null;
@@ -201,5 +179,34 @@ export class RaceAnalysisService {
       console.error('Error deleting race analysis:', error);
       return false;
     }
+  }
+
+  private static async invokeAnalysisEndpoint(timerSessionId: string, force: boolean): Promise<AnalysisResult | null> {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (!session?.access_token) {
+      throw new Error('You must be signed in to generate AI analysis.');
+    }
+
+    // Call Supabase Edge Function instead of Vercel API
+    const { data, error } = await supabase.functions.invoke('race-analysis', {
+      body: { timerSessionId, force },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to trigger AI analysis');
+    }
+
+    return (data?.analysis ?? null) as AnalysisResult | null;
   }
 }
