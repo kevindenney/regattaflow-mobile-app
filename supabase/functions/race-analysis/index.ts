@@ -33,18 +33,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Create service role client for auth verification
+    // Extract JWT from "Bearer <token>"
+    const token = authHeader.replace('Bearer ', '');
+
+    // Create service role client for database operations
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify user authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Verify user authentication using the JWT
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
       console.error('Auth error:', authError);
@@ -65,7 +64,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fetch race session and verify ownership
-    const { data: session, error: sessionError } = await supabase
+    const { data: session, error: sessionError } = await supabaseAdmin
       .from('race_timer_sessions')
       .select('id, sailor_id, end_time, auto_analyzed')
       .eq('id', timerSessionId)
@@ -94,7 +93,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Check for existing analysis
-    const { data: existingAnalysis } = await supabase
+    const { data: existingAnalysis } = await supabaseAdmin
       .from('ai_coach_analysis')
       .select('*')
       .eq('timer_session_id', timerSessionId)
@@ -112,7 +111,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fetch race data for analysis
-    const { data: raceData, error: raceError } = await supabase
+    const { data: raceData, error: raceError } = await supabaseAdmin
       .from('race_timer_sessions')
       .select(`
         *,
@@ -180,14 +179,14 @@ Deno.serve(async (req: Request) => {
 
     // Delete existing analysis if force regenerate
     if (existingAnalysis) {
-      await supabase
+      await supabaseAdmin
         .from('ai_coach_analysis')
         .delete()
         .eq('timer_session_id', timerSessionId);
     }
 
     // Insert new analysis
-    const { data: savedAnalysis, error: saveError } = await supabase
+    const { data: savedAnalysis, error: saveError } = await supabaseAdmin
       .from('ai_coach_analysis')
       .insert({
         timer_session_id: timerSessionId,
@@ -222,7 +221,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Mark session as analyzed
-    await supabase
+    await supabaseAdmin
       .from('race_timer_sessions')
       .update({ auto_analyzed: true })
       .eq('id', timerSessionId);
