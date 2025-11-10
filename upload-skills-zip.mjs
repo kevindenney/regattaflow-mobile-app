@@ -18,6 +18,13 @@ const __dirname = dirname(__filename);
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+if (!ANTHROPIC_API_KEY) {
+  console.error('❌ Error: ANTHROPIC_API_KEY environment variable is required');
+  process.exit(1);
+}
+
+// Removed line:
+
 const SKILLS_DIR = path.join(__dirname, 'skills');
 const TEMP_DIR = path.join(__dirname, '.skill-temp');
 

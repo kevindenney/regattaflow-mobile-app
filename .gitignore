@@ -41,3 +41,6 @@ yarn-error.*
 /android
 .env
 .chrome-devtools/
+logs/
+bugreport-*.txt
+bugreport-*.zip

@@ -2,8 +2,14 @@
 
 import fs from 'fs';
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ||
-  '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';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (!ANTHROPIC_API_KEY) {
+  console.error('❌ Error: ANTHROPIC_API_KEY environment variable is required');
+  process.exit(1);
+}
+
+// Removed line:
 
 async function uploadSkill() {
   console.log('🚀 Uploading race-learning-analyst skill...\n');
