@@ -42,19 +42,19 @@ export default function Login() {
         label: 'Demo Sailor',
         identifier:
           process.env.EXPO_PUBLIC_DEMO_SAILOR_IDENTIFIER ?? DEFAULT_DEMO_IDENTIFIERS.sailor,
-        password: process.env.EXPO_PUBLIC_DEMO_SAILOR_PASSWORD ?? '',
+        password: process.env.EXPO_PUBLIC_DEMO_SAILOR_PASSWORD ?? 'Demo123!',
       },
       club: {
         label: 'Demo Club Manager',
         identifier:
           process.env.EXPO_PUBLIC_DEMO_CLUB_IDENTIFIER ?? DEFAULT_DEMO_IDENTIFIERS.club,
-        password: process.env.EXPO_PUBLIC_DEMO_CLUB_PASSWORD ?? '',
+        password: process.env.EXPO_PUBLIC_DEMO_CLUB_PASSWORD ?? 'Demo123!',
       },
       coach: {
         label: 'Demo Coach',
         identifier:
           process.env.EXPO_PUBLIC_DEMO_COACH_IDENTIFIER ?? DEFAULT_DEMO_IDENTIFIERS.coach,
-        password: process.env.EXPO_PUBLIC_DEMO_COACH_PASSWORD ?? '',
+        password: process.env.EXPO_PUBLIC_DEMO_COACH_PASSWORD ?? 'Demo123!',
       },
       sarah: {
         label: 'Sarah Chen (RHKYC, Dragon/J70)',
