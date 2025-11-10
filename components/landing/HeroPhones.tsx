@@ -22,6 +22,9 @@ export function HeroPhones() {
   const { user, userProfile } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
+  const showDevControls =
+    (typeof __DEV__ !== 'undefined' && __DEV__) ||
+    process.env.EXPO_PUBLIC_SHOW_DEV_CONTROLS === 'true';
 
   // DEV: Logout function for testing
   const handleLogout = async () => {
@@ -61,7 +64,7 @@ export function HeroPhones() {
         style={styles.heroSection}
       >
         {/* DEV: Logout button (only show if logged in) */}
-        {user && (
+        {showDevControls && user && (
           <TouchableOpacity
             onPress={handleLogout}
             style={styles.logoutButton}
