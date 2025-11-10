@@ -45,3 +45,6 @@ yarn-error.*
 logs/
 bugreport-*.txt
 bugreport-*.zip
+
+# Vercel
+.vercel
