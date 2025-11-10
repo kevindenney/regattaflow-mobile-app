@@ -259,8 +259,76 @@ export function PostRaceAnalysisCard({
     }
   };
 
-  const handleViewCoaching = () => {
-    setShowCoaching(true);
+  const handleViewCoaching = async () => {
+    // If no coaching data exists, generate it first
+    if (!coachingData && existingAnalysis) {
+      try {
+        setSubmitting(true);
+
+        logger.debug('[PostRaceAnalysisCard] Generating missing coaching data...');
+
+        const { data: coaching, error: coachingError } = await supabase.functions.invoke(
+          'generate-race-coaching',
+          {
+            body: {
+              analysis: existingAnalysis,
+              race: {
+                id: raceId,
+                name: raceName,
+              },
+            },
+          }
+        );
+
+        if (coachingError) {
+          console.error('[PostRaceAnalysisCard] Coaching generation failed:', coachingError);
+          if (Platform.OS === 'web') {
+            alert(`Failed to generate coaching: ${coachingError.message}`);
+          } else {
+            Alert.alert('Error', `Failed to generate coaching: ${coachingError.message}`);
+          }
+          return;
+        }
+
+        if (!coaching) {
+          console.error('[PostRaceAnalysisCard] No coaching data returned');
+          if (Platform.OS === 'web') {
+            alert('No coaching data returned. Please try again.');
+          } else {
+            Alert.alert('Error', 'No coaching data returned. Please try again.');
+          }
+          return;
+        }
+
+        // Save coaching feedback to database
+        const { error: updateError } = await supabase
+          .from('race_analysis')
+          .update({
+            ai_coaching_feedback: coaching.coaching_feedback,
+            framework_scores: coaching.framework_scores,
+          })
+          .eq('id', existingAnalysis.id);
+
+        if (updateError) {
+          console.error('[PostRaceAnalysisCard] Error updating coaching:', updateError);
+        }
+
+        // Update local state
+        setCoachingData(coaching);
+        setShowCoaching(true);
+      } catch (error) {
+        console.error('[PostRaceAnalysisCard] Error generating coaching:', error);
+        if (Platform.OS === 'web') {
+          alert('Failed to generate coaching. Please try again.');
+        } else {
+          Alert.alert('Error', 'Failed to generate coaching. Please try again.');
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    } else {
+      setShowCoaching(true);
+    }
   };
 
   const handleEditAnalysis = () => {
