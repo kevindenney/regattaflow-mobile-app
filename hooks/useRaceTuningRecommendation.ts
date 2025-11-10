@@ -5,11 +5,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSetting } from '@/services/RaceTuningService';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface UseRaceTuningOptions {
   classId?: string | null;
   className?: string | null;
   averageWindSpeed?: number | null;
+  windMin?: number | null;
+  windMax?: number | null;
+  windDirection?: number | null;
+  gusts?: number | null;
+  waveHeight?: string | null;
+  currentSpeed?: number | null;
+  currentDirection?: number | null;
   pointsOfSail?: 'upwind' | 'downwind' | 'reach' | 'all';
   limit?: number;
   enabled?: boolean;
@@ -70,11 +78,20 @@ function selectTopSettings(settings: RaceTuningSetting[], limit: number): RigSet
   return selected;
 }
 
+const logger = createLogger('useRaceTuningRecommendation');
+
 export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseRaceTuningResult {
   const {
     classId,
     className,
     averageWindSpeed,
+    windMin,
+    windMax,
+    windDirection,
+    gusts,
+    waveHeight,
+    currentSpeed,
+    currentDirection,
     pointsOfSail = 'upwind',
     limit = 1,
     enabled = true,
@@ -85,7 +102,24 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const [error, setError] = useState<Error | null>(null);
 
   const fetchRecommendation = useCallback(async () => {
+    logger.debug('Fetch called with:', {
+      enabled,
+      classId,
+      className,
+      averageWindSpeed,
+      windMin,
+      windMax,
+      gusts,
+      pointsOfSail,
+      limit
+    });
+
     if (!enabled || (!classId && !className)) {
+      logger.debug('Skipping fetch:', {
+        enabled,
+        hasClassId: !!classId,
+        hasClassName: !!className
+      });
       setRecommendation(null);
       return;
     }
@@ -94,22 +128,31 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     setError(null);
 
     try {
+      logger.debug('Calling raceTuningService.getRecommendations...');
       const [result] = await raceTuningService.getRecommendations({
         classId,
         className,
         averageWindSpeed: averageWindSpeed ?? undefined,
+        windMin,
+        windMax,
+        windDirection,
+        gusts,
+        waveHeight,
+        currentSpeed,
+        currentDirection,
         pointsOfSail,
         limit,
       });
+      logger.debug('Got result summary:', result ? `Found recommendation: ${result.guideTitle}` : 'No recommendation returned');
       setRecommendation(result ?? null);
     } catch (err) {
-      console.error('[useRaceTuningRecommendation] Failed to load tuning recommendation:', err);
+      logger.error('Failed to load tuning recommendation:', err);
       setError(err as Error);
       setRecommendation(null);
     } finally {
       setLoading(false);
     }
-  }, [enabled, classId, className, averageWindSpeed, pointsOfSail, limit]);
+  }, [enabled, classId, className, averageWindSpeed, windMin, windMax, windDirection, gusts, waveHeight, currentSpeed, currentDirection, pointsOfSail, limit]);
 
   useEffect(() => {
     let cancelled = false;

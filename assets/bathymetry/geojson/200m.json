@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "depth": -200,
+        "label": "Shelf break"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [114.305, 22.290],
+            [114.340, 22.290],
+            [114.340, 22.245],
+            [114.305, 22.245],
+            [114.305, 22.290]
+          ]
+        ]
+      }
+    }
+  ]
+}

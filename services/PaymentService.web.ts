@@ -17,6 +17,26 @@ export interface PaymentResult {
 }
 
 const logger = createLogger('PaymentService.web');
+
+const derivePlatformFee = (session: {
+  platform_fee?: number | null;
+  total_amount?: number | null;
+  fee_amount?: number | null;
+  coach_payout?: number | null;
+}) => {
+  if (typeof session.platform_fee === 'number' && !Number.isNaN(session.platform_fee)) {
+    return session.platform_fee;
+  }
+  const total = typeof session.total_amount === 'number' && !Number.isNaN(session.total_amount)
+    ? session.total_amount
+    : (typeof session.fee_amount === 'number' && !Number.isNaN(session.fee_amount) ? session.fee_amount : 0);
+  const payout = typeof session.coach_payout === 'number' && !Number.isNaN(session.coach_payout)
+    ? session.coach_payout
+    : Math.round(total * 0.85);
+  const fee = total - payout;
+  return fee > 0 ? fee : 0;
+};
+
 export class PaymentService {
   /**
    * Create payment intent for coaching session
@@ -250,7 +270,7 @@ export class PaymentService {
         .select(`
           id,
           total_amount,
-          platform_fee,
+          fee_amount,
           coach_payout,
           payment_status,
           created_at,
@@ -262,11 +282,28 @@ export class PaymentService {
 
       if (error) throw error;
 
-      const totalRevenue = data.reduce((sum, session) => sum + session.total_amount, 0);
-      const totalCommissions = data.reduce((sum, session) => sum + session.platform_fee, 0);
-      const totalPayouts = data.reduce((sum, session) => sum + session.coach_payout, 0);
-      const sessionCount = data.length;
-      const uniqueCoaches = new Set(data.map(session => session.coach_id)).size;
+      const sessions = (data || []).map(session => {
+        const totalAmount = typeof session.total_amount === 'number' && !Number.isNaN(session.total_amount) ? session.total_amount : 0;
+        const coachPayout = typeof session.coach_payout === 'number' && !Number.isNaN(session.coach_payout) ? session.coach_payout : 0;
+        const platformFee = derivePlatformFee({
+          ...session,
+          total_amount: totalAmount,
+          coach_payout: coachPayout,
+        });
+
+        return {
+          ...session,
+          total_amount: totalAmount,
+          coach_payout: coachPayout,
+          platform_fee: platformFee,
+        };
+      });
+
+      const totalRevenue = sessions.reduce((sum, session) => sum + session.total_amount, 0);
+      const totalCommissions = sessions.reduce((sum, session) => sum + session.platform_fee, 0);
+      const totalPayouts = sessions.reduce((sum, session) => sum + session.coach_payout, 0);
+      const sessionCount = sessions.length;
+      const uniqueCoaches = new Set(sessions.map(session => session.coach_id)).size;
 
       return {
         totalRevenue,

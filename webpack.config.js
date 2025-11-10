@@ -5,7 +5,11 @@ module.exports = async function (env, argv) {
     {
       ...env,
       babel: {
-        dangerouslyAddModulePathsToTranspile: ['@gluestack-ui', 'nativewind'],
+        dangerouslyAddModulePathsToTranspile: [
+          '@gluestack-ui',
+          'nativewind',
+          'maplibre-gl', // Transform import.meta in maplibre-gl
+        ],
       },
     },
     argv
@@ -18,6 +22,23 @@ module.exports = async function (env, argv) {
     maxAssetSize: 1024 * 1024 * 5, // 5MB
     maxEntrypointSize: 1024 * 1024 * 5, // 5MB
   };
+
+  // Add custom loader to transform import.meta in maplibre-gl
+  config.module = config.module || {};
+  config.module.rules = config.module.rules || [];
+
+  config.module.rules.push({
+    test: /\.js$/,
+    include: /node_modules\/maplibre-gl/,
+    use: {
+      loader: 'string-replace-loader',
+      options: {
+        search: 'import.meta.url',
+        replace: '"file://placeholder"',
+        flags: 'g'
+      }
+    }
+  });
 
   return config;
 };

@@ -1,218 +1,437 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { format } from 'date-fns';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { RaceCommsModal } from '@/components/ai/RaceCommsModal';
+import { useRaceCommsDraft } from '@/hooks/ai/useRaceCommsDraft';
+
+const UPCOMING_RACES = [
+  {
+    id: 'race-1',
+    name: 'Spring Championship • Race 1',
+    start: '2024-03-15T10:00:00Z',
+    fleet: 'Dragon Class',
+    entries: 12,
+    status: 'Ready',
+  },
+  {
+    id: 'race-2',
+    name: 'Spring Championship • Race 2',
+    start: '2024-03-15T14:00:00Z',
+    fleet: 'Dragon Class',
+    entries: 12,
+    status: 'Pending',
+  },
+  {
+    id: 'race-3',
+    name: 'Junior Training Scrimmage',
+    start: '2024-03-22T11:00:00Z',
+    fleet: 'Optimist',
+    entries: 8,
+    status: 'Setup Required',
+  },
+];
+
+const ACTIVE_RACES = [
+  {
+    id: 'race-live',
+    name: 'Spring Championship • Race 1',
+    elapsed: '00:24:16',
+    course: 'Windward / Leeward',
+    checkIn: 11,
+  },
+];
+
+const COMPLETED_RACES = [
+  {
+    id: 'race-done-1',
+    name: 'Winter Series • Final',
+    finished: '2024-03-08T16:00:00Z',
+    winner: 'Sarah Johnson',
+    boats: 15,
+  },
+  {
+    id: 'race-done-2',
+    name: 'Training Race',
+    finished: '2024-03-01T16:00:00Z',
+    winner: 'Mike Chen',
+    boats: 8,
+  },
+];
+
+const STATUS_COLORS: Record<string, string> = {
+  Ready: '#10B981',
+  Pending: '#F59E0B',
+  'Setup Required': '#EF4444',
+};
+
+const QuickAction = ({
+  icon,
+  label,
+  subtitle,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  subtitle: string;
+  onPress: () => void;
+}) => (
+  <TouchableOpacity style={styles.quickAction} onPress={onPress}>
+    <View style={styles.quickIcon}>
+      <Ionicons name={icon} size={18} color="#2563EB" />
+    </View>
+    <View style={{ flex: 1 }}>
+      <ThemedText style={styles.quickLabel}>{label}</ThemedText>
+      <ThemedText style={styles.quickHelper}>{subtitle}</ThemedText>
+    </View>
+    <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+  </TouchableOpacity>
+);
 
 export default function RaceManagementScreen() {
-  const [activeTab, setActiveTab] = useState('upcoming');
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'active' | 'completed'>('upcoming');
+  const [commsModalVisible, setCommsModalVisible] = useState(false);
+  const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
+  const [selectedRaceName, setSelectedRaceName] = useState<string | null>(null);
+  const {
+    draft: commsDraft,
+    isGenerating: commsGenerating,
+    error: commsError,
+    generate: generateComms,
+    reset: resetComms,
+    lastGeneratedAt: commsGeneratedAt,
+  } = useRaceCommsDraft({
+    raceId: selectedRaceId,
+    enabled: commsModalVisible,
+  });
 
-  const TabButton = ({ id, title, isActive, onPress }: {
-    id: string;
-    title: string;
-    isActive: boolean;
-    onPress: () => void;
-  }) => (
-    <TouchableOpacity
-      style={[styles.tabButton, isActive && styles.tabButtonActive]}
-      onPress={onPress}
-    >
-      <ThemedText style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
-        {title}
-      </ThemedText>
-    </TouchableOpacity>
+  useEffect(() => {
+    if (commsModalVisible && selectedRaceId) {
+      generateComms();
+    }
+  }, [commsModalVisible, selectedRaceId, generateComms]);
+
+  const openCommsModal = (raceId: string, raceName: string) => {
+    setSelectedRaceId(raceId);
+    setSelectedRaceName(raceName);
+    setCommsModalVisible(true);
+  };
+
+  const closeCommsModal = () => {
+    setCommsModalVisible(false);
+    setSelectedRaceId(null);
+    setSelectedRaceName(null);
+    resetComms();
+  };
+
+  const metrics = useMemo(() => {
+    return [
+      {
+        key: 'upcoming',
+        label: 'Upcoming Races',
+        value: UPCOMING_RACES.length,
+        helper: 'Scheduled and ready to brief',
+        icon: 'calendar-outline',
+      },
+      {
+        key: 'active',
+        label: 'On the water',
+        value: ACTIVE_RACES.length,
+        helper: 'Running right now',
+        icon: 'speedometer-outline',
+      },
+      {
+        key: 'results',
+        label: 'Results posted',
+        value: COMPLETED_RACES.length,
+        helper: 'Awaiting publishing review',
+        icon: 'trophy-outline',
+      },
+    ];
+  }, []);
+
+  const quickActions = [
+    {
+      icon: 'flag-outline',
+      label: 'Launch start sequence',
+      subtitle: 'Signal timers & notify fleet',
+      onPress: () => Alert.alert('Start sequence', 'Race automation coming soon.'),
+    },
+    {
+      icon: 'document-text-outline',
+      label: 'Post course updates',
+      subtitle: 'Share mark changes instantly',
+      onPress: () => Alert.alert('Course updates', 'Course management coming soon.'),
+    },
+    {
+      icon: 'timer-outline',
+      label: 'Record finishes',
+      subtitle: 'Capture times & penalties',
+      onPress: () => Alert.alert('Record finishes', 'Finish recording is coming soon.'),
+    },
+  ] as const;
+
+  const renderUpcoming = () => (
+    <View style={styles.listColumn}>
+      {UPCOMING_RACES.map((race) => (
+        <View key={race.id} style={styles.upcomingCard}>
+          <View style={styles.cardHeader}>
+            <ThemedText style={styles.cardTitle}>{race.name}</ThemedText>
+            <View
+              style={[styles.statusBadge, { backgroundColor: `${(STATUS_COLORS[race.status] ?? '#64748B')}1A` }]}
+            >
+              <Ionicons name="ellipse" size={10} color={STATUS_COLORS[race.status] ?? '#64748B'} />
+              <ThemedText
+                style={[styles.statusText, { color: STATUS_COLORS[race.status] ?? '#64748B' }]}
+              >
+                {race.status}
+              </ThemedText>
+            </View>
+          </View>
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={16} color="#64748B" />
+              <ThemedText style={styles.metaText}>
+                {format(new Date(race.start), 'MMM d • h:mm a')}
+              </ThemedText>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="boat-outline" size={16} color="#64748B" />
+              <ThemedText style={styles.metaText}>{race.fleet}</ThemedText>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="people-outline" size={16} color="#64748B" />
+              <ThemedText style={styles.metaText}>{race.entries} entries</ThemedText>
+            </View>
+          </View>
+          <View style={styles.cardActions}>
+            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Assign PRO', 'Assign race team coming soon.')}>
+              <Ionicons name="people-circle-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.cardButtonText}>Assign team</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Documents', 'Document workflow coming soon.')}>
+              <Ionicons name="document-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.cardButtonText}>Docs</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardButton} onPress={() => openCommsModal(race.id, race.name)}>
+              <Ionicons name="sparkles-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.cardButtonText}>AI update</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => Alert.alert('Brief sailors', 'Sailor brief coming soon.')}>
+              <Ionicons name="megaphone-outline" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.cardButtonPrimaryText}>Brief sailors</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderActive = () => (
+    <View style={styles.listColumn}>
+      {ACTIVE_RACES.map((race) => (
+        <View key={race.id} style={styles.activeCard}>
+          <View style={styles.cardHeader}>
+            <ThemedText style={styles.cardTitle}>{race.name}</ThemedText>
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <ThemedText style={styles.liveText}>LIVE</ThemedText>
+            </View>
+          </View>
+          <View style={styles.activeBody}>
+            <View style={styles.activeMetric}>
+              <ThemedText style={styles.activeValue}>{race.elapsed}</ThemedText>
+              <ThemedText style={styles.activeLabel}>Elapsed</ThemedText>
+            </View>
+            <View style={styles.activeMetric}>
+              <ThemedText style={styles.activeValue}>{race.course}</ThemedText>
+              <ThemedText style={styles.activeLabel}>Course</ThemedText>
+            </View>
+            <View style={styles.activeMetric}>
+              <ThemedText style={styles.activeValue}>{race.checkIn}</ThemedText>
+              <ThemedText style={styles.activeLabel}>Checked in</ThemedText>
+            </View>
+          </View>
+          <View style={styles.activeActions}>
+            <TouchableOpacity style={styles.controlPrimary} onPress={() => Alert.alert('Finish race', 'Finish flow coming soon.')}>
+              <Ionicons name="flag-outline" size={20} color="#FFFFFF" />
+              <ThemedText style={styles.controlPrimaryText}>Finish race</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.controlSecondary} onPress={() => Alert.alert('Pause race', 'Pause control coming soon.')}>
+              <Ionicons name="pause-outline" size={20} color="#2563EB" />
+              <ThemedText style={styles.controlSecondaryText}>Pause</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.controlSecondary} onPress={() => Alert.alert('Send update', 'On-water messaging coming soon.')}>
+              <Ionicons name="chatbubble-outline" size={20} color="#2563EB" />
+              <ThemedText style={styles.controlSecondaryText}>Send update</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderCompleted = () => (
+    <View style={styles.listColumn}>
+      {COMPLETED_RACES.map((race) => (
+        <View key={race.id} style={styles.completedCard}>
+          <View style={styles.cardHeader}>
+            <ThemedText style={styles.cardTitle}>{race.name}</ThemedText>
+            <ThemedText style={styles.completedDate}>
+              {format(new Date(race.finished), 'MMM d, yyyy')}
+            </ThemedText>
+          </View>
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="trophy-outline" size={16} color="#64748B" />
+              <ThemedText style={styles.metaText}>Winner: {race.winner}</ThemedText>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="people-outline" size={16} color="#64748B" />
+              <ThemedText style={styles.metaText}>{race.boats} boats</ThemedText>
+            </View>
+          </View>
+          <View style={styles.cardActions}>
+            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Publish results', 'Result publishing coming soon.')}>
+              <Ionicons name="cloud-upload-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.cardButtonText}>Publish</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Send recap', 'Recap workflow coming soon.')}>
+              <Ionicons name="mail-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.cardButtonText}>Send recap</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => Alert.alert('View analytics', 'Analytics coming soon.')}>
+              <Ionicons name="analytics-outline" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.cardButtonPrimaryText}>Open analytics</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+    </View>
   );
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <ThemedText style={styles.title}>Race Management</ThemedText>
-          <TouchableOpacity style={styles.addButton}>
-            <Ionicons name="add-circle" size={32} color="#007AFF" />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroCopy}>
+            <ThemedText style={styles.heroTitle}>Race Command Center</ThemedText>
+            <ThemedText style={styles.heroSubtitle}>
+              Coordinate starts, documents, and scoring with one view for your race committee.
+            </ThemedText>
+          </View>
+          <TouchableOpacity
+            style={styles.heroButton}
+            onPress={() => Alert.alert('Create race', 'Race creation is coming soon.')}
+          >
+            <Ionicons name="add-circle" size={22} color="#FFFFFF" />
+            <ThemedText style={styles.heroButtonText}>Create Race</ThemedText>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionCard}>
-            <Ionicons name="flag-outline" size={28} color="#007AFF" />
-            <ThemedText style={styles.actionTitle}>Start Race</ThemedText>
-            <ThemedText style={styles.actionSubtitle}>Begin race sequence</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard}>
-            <Ionicons name="timer-outline" size={28} color="#10B981" />
-            <ThemedText style={styles.actionTitle}>Results</ThemedText>
-            <ThemedText style={styles.actionSubtitle}>Enter finish times</ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.tabContainer}>
-          <TabButton
-            id="upcoming"
-            title="Upcoming"
-            isActive={activeTab === 'upcoming'}
-            onPress={() => setActiveTab('upcoming')}
-          />
-          <TabButton
-            id="active"
-            title="Active"
-            isActive={activeTab === 'active'}
-            onPress={() => setActiveTab('active')}
-          />
-          <TabButton
-            id="completed"
-            title="Completed"
-            isActive={activeTab === 'completed'}
-            onPress={() => setActiveTab('completed')}
-          />
-        </View>
-
-        <View style={styles.section}>
-          {activeTab === 'upcoming' && (
-            <>
-              <ThemedText style={styles.sectionTitle}>Upcoming Races</ThemedText>
-              {[
-                {
-                  name: 'Spring Championship - Race 1',
-                  date: 'March 15, 2024',
-                  time: '10:00 AM',
-                  fleet: 'Dragon Class',
-                  entries: 12,
-                  status: 'Ready'
-                },
-                {
-                  name: 'Spring Championship - Race 2',
-                  date: 'March 15, 2024',
-                  time: '2:00 PM',
-                  fleet: 'Dragon Class',
-                  entries: 12,
-                  status: 'Pending'
-                },
-                {
-                  name: 'Junior Training Race',
-                  date: 'March 22, 2024',
-                  time: '11:00 AM',
-                  fleet: 'Optimist',
-                  entries: 8,
-                  status: 'Setup Required'
-                },
-              ].map((race, i) => (
-                <TouchableOpacity key={i} style={styles.raceCard}>
-                  <View style={styles.raceHeader}>
-                    <ThemedText style={styles.raceName}>{race.name}</ThemedText>
-                    <View style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: race.status === 'Ready' ? '#10B98120' :
-                                      race.status === 'Pending' ? '#F59E0B20' : '#EF444420'
-                      }
-                    ]}>
-                      <ThemedText style={[
-                        styles.statusText,
-                        {
-                          color: race.status === 'Ready' ? '#10B981' :
-                                race.status === 'Pending' ? '#F59E0B' : '#EF4444'
-                        }
-                      ]}>
-                        {race.status}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.raceInfo}>
-                    <View style={styles.raceInfoRow}>
-                      <Ionicons name="calendar-outline" size={16} color="#64748B" />
-                      <ThemedText style={styles.raceInfoText}>{race.date} at {race.time}</ThemedText>
-                    </View>
-                    <View style={styles.raceInfoRow}>
-                      <Ionicons name="boat" size={16} color="#64748B" />
-                      <ThemedText style={styles.raceInfoText}>{race.fleet}</ThemedText>
-                    </View>
-                    <View style={styles.raceInfoRow}>
-                      <Ionicons name="people-outline" size={16} color="#64748B" />
-                      <ThemedText style={styles.raceInfoText}>{race.entries} entries</ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.raceActions}>
-                    <TouchableOpacity style={styles.raceActionButton}>
-                      <Ionicons name="settings-outline" size={20} color="#007AFF" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.raceActionButton}>
-                      <Ionicons name="play-outline" size={20} color="#10B981" />
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </>
-          )}
-
-          {activeTab === 'active' && (
-            <>
-              <ThemedText style={styles.sectionTitle}>Active Races</ThemedText>
-              <View style={styles.activeRaceCard}>
-                <View style={styles.activeRaceHeader}>
-                  <ThemedText style={styles.activeRaceName}>Spring Championship - Race 1</ThemedText>
-                  <View style={styles.liveIndicator}>
-                    <View style={styles.liveDot} />
-                    <ThemedText style={styles.liveText}>LIVE</ThemedText>
-                  </View>
-                </View>
-                <View style={styles.raceTimer}>
-                  <ThemedText style={styles.timerText}>12:34</ThemedText>
-                  <ThemedText style={styles.timerLabel}>Race Time</ThemedText>
-                </View>
-                <View style={styles.raceControls}>
-                  <TouchableOpacity style={styles.controlButton}>
-                    <Ionicons name="flag-outline" size={24} color="#FFFFFF" />
-                    <ThemedText style={styles.controlButtonText}>Finish</ThemedText>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.controlButton, styles.controlButtonSecondary]}>
-                    <Ionicons name="pause-outline" size={24} color="#007AFF" />
-                    <ThemedText style={[styles.controlButtonText, styles.controlButtonTextSecondary]}>
-                      Pause
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
+        <View style={styles.metricsRow}>
+          {metrics.map((metric) => (
+            <View key={metric.key} style={styles.metricCard}>
+              <View style={styles.metricIcon}>
+                <Ionicons name={metric.icon as any} size={18} color="#2563EB" />
               </View>
-            </>
-          )}
+              <ThemedText style={styles.metricLabel}>{metric.label}</ThemedText>
+              <ThemedText style={styles.metricValue}>{metric.value}</ThemedText>
+              <ThemedText style={styles.metricHelper}>{metric.helper}</ThemedText>
+            </View>
+          ))}
+        </View>
 
-          {activeTab === 'completed' && (
-            <>
-              <ThemedText style={styles.sectionTitle}>Recent Results</ThemedText>
-              {[
-                {
-                  name: 'Winter Series - Final',
-                  date: 'March 8, 2024',
-                  winner: 'Sarah Johnson',
-                  participants: 15
-                },
-                {
-                  name: 'Training Race',
-                  date: 'March 1, 2024',
-                  winner: 'Mike Chen',
-                  participants: 8
-                },
-              ].map((race, i) => (
-                <TouchableOpacity key={i} style={styles.resultCard}>
-                  <View style={styles.resultInfo}>
-                    <ThemedText style={styles.resultName}>{race.name}</ThemedText>
-                    <ThemedText style={styles.resultDate}>{race.date}</ThemedText>
-                    <ThemedText style={styles.resultWinner}>Winner: {race.winner}</ThemedText>
-                  </View>
-                  <View style={styles.resultActions}>
-                    <TouchableOpacity style={styles.resultAction}>
-                      <Ionicons name="trophy-outline" size={20} color="#F59E0B" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.resultAction}>
-                      <Ionicons name="share-outline" size={20} color="#007AFF" />
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </>
-          )}
+        <View style={styles.quickColumn}>
+          {quickActions.map((action) => (
+            <QuickAction key={action.label} {...action} />
+          ))}
+        </View>
+
+        <View style={styles.tabRow}>
+          {(
+            [
+              { key: 'upcoming', label: 'Upcoming' },
+              { key: 'active', label: 'Active' },
+              { key: 'completed', label: 'Completed' },
+            ] as const
+          ).map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tabButton,
+                activeTab === tab.key && styles.tabButtonActive,
+              ]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <ThemedText
+                style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}
+              >
+                {tab.label}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {activeTab === 'upcoming' && renderUpcoming()}
+        {activeTab === 'active' && renderActive()}
+        {activeTab === 'completed' && renderCompleted()}
+
+        <View style={styles.operationsCard}>
+          <ThemedText style={styles.sectionTitle}>Operations toolkit</ThemedText>
+          <ThemedText style={styles.sectionHelper}>
+            Keep race documentation and safety plans current before teams leave the dock.
+          </ThemedText>
+          <View style={styles.operationsGrid}>
+            <TouchableOpacity
+              style={styles.operationTile}
+              onPress={() => Alert.alert('Safety checklist', 'Safety workflows coming soon.')}
+            >
+              <Ionicons name="medkit-outline" size={20} color="#2563EB" />
+              <ThemedText style={styles.operationLabel}>Safety checklist</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.operationTile}
+              onPress={() => Alert.alert('Weather briefing', 'Weather integrations coming soon.')}
+            >
+              <Ionicons name="cloudy-outline" size={20} color="#2563EB" />
+              <ThemedText style={styles.operationLabel}>Weather briefing</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.operationTile}
+              onPress={() => Alert.alert('Course library', 'Course management coming soon.')}
+            >
+              <Ionicons name="map-outline" size={20} color="#2563EB" />
+              <ThemedText style={styles.operationLabel}>Course library</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.operationTile}
+              onPress={() => Alert.alert('Result templates', 'Template management coming soon.')}
+            >
+              <Ionicons name="clipboard-outline" size={20} color="#2563EB" />
+              <ThemedText style={styles.operationLabel}>Result templates</ThemedText>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
+      <RaceCommsModal
+        visible={commsModalVisible}
+        onClose={closeCommsModal}
+        raceName={selectedRaceName ?? undefined}
+        draft={commsDraft}
+        isGenerating={commsGenerating}
+        error={commsError}
+        onGenerate={generateComms}
+        lastGeneratedAt={commsGeneratedAt ?? null}
+      />
     </ThemedView>
   );
 }
@@ -222,247 +441,350 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  header: {
+  scrollContent: {
+    padding: 20,
+    gap: 20,
+  },
+  heroCard: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
     padding: 20,
-    paddingTop: 10,
+    gap: 16,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  addButton: {
-    padding: 4,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 30,
-    gap: 15,
-  },
-  actionCard: {
+  heroCopy: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    gap: 8,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: 'rgba(255,255,255,0.78)',
+  },
+  heroButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    boxShadow: '0px 2px',
-    elevation: 4,
+    gap: 6,
+    backgroundColor: '#2563EB',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
-  actionTitle: {
-    fontSize: 16,
+  heroButtonText: {
+    color: '#FFFFFF',
     fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 8,
-    marginBottom: 4,
   },
-  actionSubtitle: {
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  metricCard: {
+    flex: 1,
+    minWidth: 180,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    gap: 10,
+  },
+  metricIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  metricHelper: {
     fontSize: 12,
     color: '#64748B',
-    textAlign: 'center',
   },
-  tabContainer: {
+  quickColumn: {
+    gap: 12,
+  },
+  quickAction: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+  },
+  quickIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  quickHelper: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
     padding: 4,
-    marginBottom: 20,
-    boxShadow: '0px 1px',
-    elevation: 2,
   },
   tabButton: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   tabButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#FFFFFF',
   },
   tabButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#475569',
   },
   tabButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
+  listColumn: {
+    gap: 12,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 15,
-  },
-  raceCard: {
+  upcomingCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     padding: 16,
-    marginBottom: 12,
-    boxShadow: '0px 1px',
-    elevation: 2,
+    gap: 12,
   },
-  raceHeader: {
+  cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  raceName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
+  cardTitle: {
     flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  raceInfo: {
-    marginBottom: 12,
+  metaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
   },
-  raceInfoRow: {
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    gap: 6,
   },
-  raceInfoText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginLeft: 8,
+  metaText: {
+    fontSize: 13,
+    color: '#475569',
   },
-  raceActions: {
+  cardActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
+    gap: 10,
+    flexWrap: 'wrap',
   },
-  raceActionButton: {
-    padding: 8,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-  },
-  activeRaceCard: {
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-  },
-  activeRaceHeader: {
+  cardButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#EFF6FF',
   },
-  activeRaceName: {
-    fontSize: 18,
+  cardButtonText: {
+    fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
-    flex: 1,
+    color: '#2563EB',
   },
-  liveIndicator: {
+  cardButtonPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#2563EB',
   },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-    marginRight: 6,
-  },
-  liveText: {
+  cardButtonPrimaryText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  raceTimer: {
-    alignItems: 'center',
-    marginBottom: 20,
+  activeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    gap: 16,
   },
-  timerText: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  timerLabel: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    opacity: 0.8,
-  },
-  raceControls: {
+  livePill: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FDE68A',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#EA580C',
+  },
+  liveText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  activeBody: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 12,
   },
-  controlButton: {
+  activeMetric: {
     flex: 1,
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
   },
-  controlButtonSecondary: {
-    backgroundColor: '#FFFFFF',
+  activeValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
   },
-  controlButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginLeft: 8,
-  },
-  controlButtonTextSecondary: {
-    color: '#007AFF',
-  },
-  resultCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    boxShadow: '0px 1px',
-    elevation: 2,
-  },
-  resultInfo: {
-    flex: 1,
-  },
-  resultName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  resultDate: {
-    fontSize: 14,
+  activeLabel: {
+    fontSize: 12,
     color: '#64748B',
-    marginBottom: 4,
   },
-  resultWinner: {
-    fontSize: 14,
-    color: '#10B981',
+  activeActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  controlPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: '#2563EB',
+  },
+  controlPrimaryText: {
+    color: '#FFFFFF',
     fontWeight: '600',
   },
-  resultActions: {
+  controlSecondary: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
   },
-  resultAction: {
-    padding: 8,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
+  controlSecondaryText: {
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  completedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    gap: 12,
+  },
+  completedDate: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  operationsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 18,
+    gap: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sectionHelper: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  operationsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  operationTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 160,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  operationLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
   },
 });

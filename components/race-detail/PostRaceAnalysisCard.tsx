@@ -5,7 +5,7 @@
  *
  * Appears in race detail scrollable view after race completion.
  * - Shows "Complete Analysis" prompt if not done
- * - Shows Kevin Gladstone coaching if analysis complete
+ * - Shows RegattaFlow Playbook coaching if analysis complete
  */
 
 import React, { useState, useEffect } from 'react';
@@ -22,7 +22,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
-import { PostRaceAnalysisForm, BillGladstoneCoaching } from '@/components/races';
+import { ExecutionEvaluationCard } from './ExecutionEvaluationCard';
+import { PostRaceAnalysisForm, RegattaFlowPlaybookCoaching } from '@/components/races';
 import { supabase } from '@/services/supabase';
 import { coachingService } from '@/services/CoachingService';
 import { useAuth } from '@/providers/AuthProvider';
@@ -47,6 +48,7 @@ export function PostRaceAnalysisCard({
   const [showCoaching, setShowCoaching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [sailorId, setSailorId] = useState<string | null>(null);
   const [coachingData, setCoachingData] = useState<{
     coaching_feedback: CoachingFeedback[];
     framework_scores: FrameworkScores;
@@ -89,6 +91,9 @@ export function PostRaceAnalysisCard({
         setLoading(false);
         return;
       }
+
+      // Store sailor ID for ExecutionEvaluationCard
+      setSailorId(sailorProfile.id);
 
       const { data, error } = await supabase
         .from('race_analysis')
@@ -179,7 +184,7 @@ export function PostRaceAnalysisCard({
         return;
       }
 
-      // Generate coaching feedback using Kevin Gladstone frameworks (via Edge Function)
+      // Generate coaching feedback using RegattaFlow Playbook frameworks (via Edge Function)
       logger.debug('[PostRaceAnalysisCard] Calling generate-race-coaching edge function...');
 
       const { data: coaching, error: coachingError } = await supabase.functions.invoke(
@@ -226,7 +231,7 @@ export function PostRaceAnalysisCard({
         ? (coaching.coaching_feedback as CoachingFeedback[])
             .map(
               feedback =>
-                feedback.bill_recommendation ||
+                feedback.playbook_recommendation ||
                 feedback.next_race_focus ||
                 feedback.execution_feedback ||
                 ''
@@ -263,44 +268,44 @@ export function PostRaceAnalysisCard({
   };
 
   /**
-   * Handle Kevin Gladstone framework demo clicks
+   * Handle RegattaFlow Playbook framework demo clicks
    */
   const handleDemoClick = (demoNumber: number) => {
     const demoContent: Record<number, { title: string; description: string; url?: string }> = {
       1: {
         title: 'Puff Response Framework',
         description: 'Kevin teaches: "This is a TRIM response, not a HELM response!"\n\nWhen a puff hits:\n✅ DO: Ease traveler down to reduce heel\n❌ DON\'T: Feather (turn boat into wind)\n\nWhy? Traveler maintains speed and pointing while managing heel. Feathering loses boatspeed.',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
       2: {
         title: 'Wind Shift Mathematics',
         description: 'Kevin\'s Formula: "10° shift = 25% of boat separation"\n\nExample: You\'re 4 boat lengths ahead\n• 10° shift = 1 boat length gained/lost\n• 20° shift = 2 boat lengths!\n\nThis is why shift awareness is THE most important upwind skill.',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
       3: {
         title: 'Delayed Tack (Signature Move)',
         description: 'Kevin\'s 1-on-1 Winning Move:\n\n1. Cross ahead of opponent\n2. DON\'T tack immediately\n3. Sail SHORT (2-3 boat lengths)\n4. THEN tack\n\nWhy? Forces them to overstand or sail in your bad air. They can\'t tack without losing.',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
       4: {
         title: 'Shift Frequency Formula',
         description: 'Kevin teaches closing speed on shifts:\n\nClosing Speed = Wind Speed ± VMG difference\n\nOn a lift: You gain 2× VMG difference\nOn a header: Opponent gains 2× VMG difference\n\nThis is why you MUST tack on headers!',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
       5: {
         title: 'Getting In Phase',
         description: 'Kevin: "Round the windward mark on the LIFTED tack"\n\nWhy?\n✅ Sets you up IN PHASE for downwind\n✅ First jibe takes you TOWARD next shift\n✅ You\'re on the inside of oscillations\n\n❌ Round on headed = OUT OF PHASE = Catch-up mode',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
       6: {
         title: 'Downwind Shift Detection',
         description: 'Kevin: "Apparent wind moves AFT WITHOUT getting STRONGER = you\'re being LIFTED → JIBE!"\n\nFeel the apparent wind on your body:\n• Moves forward = Header (don\'t jibe yet)\n• Moves aft + stronger = More wind (don\'t jibe)\n• Moves aft + NO stronger = LIFT = JIBE NOW!',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
       7: {
         title: 'Performance Pyramid',
         description: 'Kevin\'s Learning Order:\n\n1. BOAT HANDLING (must be second nature)\n2. BOAT SPEED (must be second to none)\n3. TACTICS (then tactics will win races)\n\nYou can\'t think tactically if you\'re fighting the boat. Master handling and speed FIRST.',
-        url: 'https://northu.com',
+        url: 'https://regattaflowplaybook.com',
       },
     };
 
@@ -325,7 +330,7 @@ export function PostRaceAnalysisCard({
       alert(message);
 
       if (demo.url) {
-        const shouldOpenUrl = confirm('Learn more at North U?');
+        const shouldOpenUrl = confirm('Learn more at RegattaFlow Playbook?');
         if (shouldOpenUrl) {
           window.open(demo.url, '_blank');
         }
@@ -339,7 +344,7 @@ export function PostRaceAnalysisCard({
           { text: 'Close', style: 'cancel' },
           demo.url
             ? {
-                text: 'Learn More at North U',
+                text: 'Learn More at RegattaFlow Playbook',
                 onPress: () => Linking.openURL(demo.url!),
               }
             : undefined,
@@ -372,7 +377,7 @@ export function PostRaceAnalysisCard({
         <StrategyCard
           icon="clipboard-text"
           title="Post-Race Analysis"
-          badge="🏆 Kevin Gladstone"
+          badge="🏆 RegattaFlow Playbook"
           expandable={false}
         >
           <View style={styles.promptContainer}>
@@ -385,7 +390,7 @@ export function PostRaceAnalysisCard({
             </View>
             <Text style={styles.promptTitle}>Complete Your Post-Race Analysis</Text>
             <Text style={styles.promptDescription}>
-              Get championship-level coaching from Kevin Gladstone's North U frameworks.
+              Get championship-level coaching from the RegattaFlow Playbook frameworks.
               Learn exactly what to improve for your next race.
             </Text>
             <TouchableOpacity
@@ -395,8 +400,8 @@ export function PostRaceAnalysisCard({
               <MaterialCommunityIcons name="rocket-launch" size={20} color="#fff" />
               <Text style={styles.startButtonText}>Start Analysis (12 min)</Text>
             </TouchableOpacity>
-            <Text style={styles.billNote}>
-              💡 Based on Kevin Gladstone's 40+ years of North U coaching
+            <Text style={styles.playbookNote}>
+              💡 Powered by the RegattaFlow Playbook's 40+ years of championship coaching
             </Text>
           </View>
         </StrategyCard>
@@ -494,6 +499,18 @@ export function PostRaceAnalysisCard({
         </View>
       </StrategyCard>
 
+      {/* Execution Evaluation - Compare plan vs actual */}
+      {sailorId && (
+        <ExecutionEvaluationCard
+          raceId={raceId}
+          sailorId={sailorId}
+          onEvaluationUpdated={() => {
+            // Optionally reload analysis to get updated execution data
+            loadExistingAnalysis();
+          }}
+        />
+      )}
+
       {/* Coaching Modal */}
       {coachingData && (
         <Modal
@@ -510,7 +527,7 @@ export function PostRaceAnalysisCard({
               <Text style={styles.coachingHeaderTitle}>Kevin's Coaching</Text>
               <View style={{ width: 28 }} />
             </View>
-            <BillGladstoneCoaching
+            <RegattaFlowPlaybookCoaching
               analysis={existingAnalysis}
               coachingFeedback={coachingData.coaching_feedback}
               frameworkScores={coachingData.framework_scores}
@@ -585,7 +602,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  billNote: {
+  playbookNote: {
     fontSize: 12,
     color: '#64748B',
     marginTop: 16,

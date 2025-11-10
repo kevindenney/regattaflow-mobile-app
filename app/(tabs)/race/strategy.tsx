@@ -31,6 +31,8 @@ import { DocumentProcessingAgent } from '@/services/agents/DocumentProcessingAge
 import { PDFExtractionService } from '@/services/PDFExtractionService';
 import { PDFExtractionProgress, PDFTextPreview } from '@/components/documents';
 import { TimeBasedEnvironmentalVisualization } from '@/components/race-strategy';
+import { SmartRaceCoach } from '@/components/coaching/SmartRaceCoach';
+import { QuickSkillButtons } from '@/components/coaching/QuickSkillButtons';
 
 const RaceStrategyScreen = () => {
   const [activeTab, setActiveTab] = useState('strategy');
@@ -334,6 +336,31 @@ const RaceStrategyScreen = () => {
                 />
               </View>
             )}
+
+            {/* AI Coach - Quick Skill Buttons */}
+            <View className="mb-4">
+              <QuickSkillButtons
+                raceData={{
+                  name: 'Next Race',
+                  startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+                }}
+                onSkillInvoked={(skillId, advice) => {
+                  console.log('Strategy screen - Skill invoked:', skillId, advice);
+                }}
+              />
+            </View>
+
+            {/* AI Coach - Smart Race Coach */}
+            <View className="mb-4">
+              <SmartRaceCoach
+                raceId="strategy-planning"
+                raceData={{
+                  name: 'Race Strategy Planning',
+                  startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+                }}
+                autoRefresh={true}
+              />
+            </View>
 
             {/* Strategy Overview */}
             <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">

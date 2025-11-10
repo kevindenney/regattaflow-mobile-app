@@ -1,0 +1,62 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "depth": -5,
+        "label": "Shoal water"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [114.2385, 22.2705],
+            [114.2535, 22.2705],
+            [114.2535, 22.2635],
+            [114.2385, 22.2635],
+            [114.2385, 22.2705]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "depth": -15,
+        "label": "Harbor channel"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [114.255, 22.275],
+            [114.272, 22.275],
+            [114.272, 22.2605],
+            [114.255, 22.2605],
+            [114.255, 22.275]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "depth": -35,
+        "label": "Mid-channel"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [114.272, 22.278],
+            [114.300, 22.278],
+            [114.300, 22.255],
+            [114.272, 22.255],
+            [114.272, 22.278]
+          ]
+        ]
+      }
+    }
+  ]
+}

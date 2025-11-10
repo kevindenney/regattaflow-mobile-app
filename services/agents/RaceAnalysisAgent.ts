@@ -5,11 +5,18 @@
  */
 
 import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { BaseAgentService, AgentTool } from './BaseAgentService';
-import { supabase } from '../supabase';
+import { supabase as defaultSupabase } from '../supabase';
+
+interface RaceAnalysisAgentOptions {
+  supabaseClient?: SupabaseClient;
+}
 
 export class RaceAnalysisAgent extends BaseAgentService {
-  constructor() {
+  private supabase: SupabaseClient;
+
+  constructor(options: RaceAnalysisAgentOptions = {}) {
     super({
       model: 'claude-3-5-haiku-latest',
       maxTokens: 8192, // More tokens for detailed analysis
@@ -39,6 +46,8 @@ Your feedback should be:
 Include a confidence score (0-100) based on GPS data quality and completeness.`,
     });
 
+    this.supabase = options.supabaseClient ?? defaultSupabase;
+
     // Register race analysis tools
     this.registerTool(this.createGetTimerSession());
     this.registerTool(this.createAnalyzeStartPerformance());
@@ -59,7 +68,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
       }),
       execute: async (input) => {
         try {
-          const { data: session, error } = await supabase
+          const { data: session, error } = await this.supabase
             .from('race_timer_sessions')
             .select(`
               *,
@@ -95,7 +104,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
             session,
             metrics,
             regatta: session.regattas,
-            user_race_description: session.user_race_description || 'No user description provided',
+            user_race_description: session.notes || 'No user description provided',
           };
         } catch (error: any) {
           return {
@@ -231,7 +240,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
       execute: async (input) => {
         try {
           // Get pre-race strategy
-          const { data: strategy } = await supabase
+          const { data: strategy } = await this.supabase
             .from('regattas')
             .select('upwind_strategy_summary, downwind_strategy_summary')
             .eq('id', input.regatta_id)
@@ -285,7 +294,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
       }),
       execute: async (input) => {
         try {
-          const { data: analysis, error } = await supabase
+          const { data: analysis, error } = await this.supabase
             .from('ai_coach_analysis')
             .insert({
               timer_session_id: input.timer_session_id,
@@ -306,7 +315,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
           if (error) throw error;
 
           // Mark session as analyzed
-          await supabase
+          await this.supabase
             .from('race_timer_sessions')
             .update({ auto_analyzed: true })
             .eq('id', input.timer_session_id);

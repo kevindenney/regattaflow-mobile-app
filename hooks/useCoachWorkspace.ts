@@ -1,15 +1,20 @@
-import { useAuth } from '@/providers/AuthProvider';
+import { useCoachWorkspace as useCoachWorkspaceContext } from '@/providers/CoachWorkspaceProvider';
 
 export function useCoachWorkspace() {
-  const { coachProfile, personaLoading, refreshPersonaContext } = useAuth();
-
-  const coachId = coachProfile?.id ?? null;
+  const {
+    coachId,
+    coachProfile,
+    isLoadingProfile,
+    stats,
+    refetchAll,
+  } = useCoachWorkspaceContext();
 
   return {
     coachId,
     coachProfile,
-    loading: personaLoading,
+    stats,
+    loading: isLoadingProfile,
     isConnected: !!coachId,
-    refresh: refreshPersonaContext,
+    refresh: refetchAll,
   };
 }

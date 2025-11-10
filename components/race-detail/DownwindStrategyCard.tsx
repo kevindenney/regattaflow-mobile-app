@@ -4,12 +4,16 @@
  * Shows favored sides, VMG optimization, shift detection for each run
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { strategicPlanningService } from '@/services/StrategicPlanningService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('DownwindStrategyCard');
 
 interface RunRecommendation {
   leg: string; // 'Downwind Leg 1', 'Downwind Leg 2', etc.
@@ -24,55 +28,37 @@ interface RunRecommendation {
 interface DownwindStrategyCardProps {
   raceId: string;
   raceName: string;
+  sailorId?: string;
+  raceEventId?: string;
 }
 
 export function DownwindStrategyCard({
   raceId,
-  raceName
+  raceName,
+  sailorId,
+  raceEventId
 }: DownwindStrategyCardProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [runs, setRuns] = useState<RunRecommendation[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [userStrategy, setUserStrategy] = useState('');
+  const [savingUserStrategy, setSavingUserStrategy] = useState(false);
+
+  // Use refs to track state for polling without triggering re-renders
+  const runsRef = useRef<RunRecommendation[]>([]);
+  const loadingRef = useRef(true);
+
+  // Update refs when state changes
+  useEffect(() => {
+    runsRef.current = runs;
+  }, [runs]);
 
   useEffect(() => {
-    loadDownwindStrategy();
+    loadingRef.current = loading;
+  }, [loading]);
 
-    // Subscribe to realtime changes for this race's strategy
-    const subscription = supabase
-      .channel(`race_strategy_downwind_${raceId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'race_strategies',
-          filter: `regatta_id=eq.${raceId}`,
-        },
-        (payload) => {
-          console.log('[DownwindStrategyCard] Realtime update received:', payload);
-          // Reload strategy when it changes
-          loadDownwindStrategy();
-        }
-      )
-      .subscribe();
-
-    // Poll for strategy updates every 3 seconds if no data yet
-    // This handles the case where strategy is generated after component mounts
-    const pollInterval = setInterval(() => {
-      if (runs.length === 0 && !loading) {
-        console.log('[DownwindStrategyCard] Polling for strategy updates...');
-        loadDownwindStrategy();
-      }
-    }, 3000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearInterval(pollInterval);
-    };
-  }, [raceId, runs.length, loading]);
-
-  const loadDownwindStrategy = async () => {
+  const loadDownwindStrategy = useCallback(async () => {
     console.log('[DownwindStrategyCard] Loading strategy for raceId:', raceId);
     console.log('[DownwindStrategyCard] Current user:', user?.id);
 
@@ -166,6 +152,84 @@ export function DownwindStrategyCard({
       setError('Failed to load downwind strategy');
     } finally {
       setLoading(false);
+    }
+  }, [user, raceId]);
+
+  useEffect(() => {
+    loadDownwindStrategy();
+
+    // Subscribe to realtime changes for this race's strategy
+    const subscription = supabase
+      .channel(`race_strategy_downwind_${raceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_strategies',
+          filter: `regatta_id=eq.${raceId}`,
+        },
+        (payload) => {
+          console.log('[DownwindStrategyCard] Realtime update received:', payload);
+          // Reload strategy when it changes
+          loadDownwindStrategy();
+        }
+      )
+      .subscribe();
+
+    // Poll for strategy updates every 3 seconds if no data yet
+    // This handles the case where strategy is generated after component mounts
+    const pollInterval = setInterval(() => {
+      if (runsRef.current.length === 0 && !loadingRef.current) {
+        console.log('[DownwindStrategyCard] Polling for strategy updates...');
+        loadDownwindStrategy();
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [raceId, loadDownwindStrategy]); // Only depend on raceId and loadDownwindStrategy
+
+  // Load user's manual strategy
+  useEffect(() => {
+    if (!sailorId || !raceEventId) return;
+
+    const loadUserStrategy = async () => {
+      try {
+        const prep = await strategicPlanningService.getPreparationWithStrategy(
+          raceEventId,
+          sailorId
+        );
+        if (prep?.downwind_strategy) {
+          setUserStrategy(prep.downwind_strategy);
+        }
+      } catch (err) {
+        logger.error('[DownwindStrategyCard] Error loading user strategy', err);
+      }
+    };
+
+    loadUserStrategy();
+  }, [sailorId, raceEventId]);
+
+  // Auto-save user's strategy on change
+  const handleUserStrategyChange = async (text: string) => {
+    setUserStrategy(text);
+    if (!sailorId || !raceEventId) return;
+
+    setSavingUserStrategy(true);
+    try {
+      await strategicPlanningService.updatePhaseStrategy(
+        raceEventId,
+        sailorId,
+        'downwindStrategy',
+        text
+      );
+    } catch (err) {
+      logger.error('[DownwindStrategyCard] Error saving user strategy', err);
+    } finally {
+      setSavingUserStrategy(false);
     }
   };
 
@@ -316,6 +380,28 @@ export function DownwindStrategyCard({
             </View>
           </View>
         ))}
+
+        {/* User Strategy Input Section */}
+        {sailorId && raceEventId && (
+          <View style={styles.userStrategySection}>
+            <View style={styles.userStrategyHeader}>
+              <Text style={styles.userStrategyLabel}>Your Strategy Notes</Text>
+              {savingUserStrategy && (
+                <ActivityIndicator size="small" color="#3B82F6" />
+              )}
+            </View>
+            <TextInput
+              style={styles.userStrategyInput}
+              value={userStrategy}
+              onChangeText={handleUserStrategyChange}
+              placeholder="Add your own strategy notes for downwind legs... (e.g., angles, gybing, pressure)"
+              placeholderTextColor="#94A3B8"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        )}
       </View>
     );
   };
@@ -483,5 +569,35 @@ const styles = StyleSheet.create({
     color: '#64748B',
     minWidth: 40,
     textAlign: 'right',
+  },
+  userStrategySection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  userStrategyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userStrategyLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userStrategyInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#0F172A',
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    lineHeight: 20,
   },
 });

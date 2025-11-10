@@ -426,7 +426,8 @@ export function VenueIntelligenceMapView({ style }: VenueIntelligenceMapViewProp
         onMarkPress={handleMarkPress}
         onMapPress={handleMapPress}
         apiKeys={{
-          'weatherapi': process.env.EXPO_PUBLIC_WEATHER_API_KEY || 'demo',
+          'stormglass': process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || 'demo',
+          'openweathermap': process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY || '',
           'aisstream-api': process.env.EXPO_PUBLIC_AIS_API_KEY || 'demo'
         }}
         professionalMode={true}

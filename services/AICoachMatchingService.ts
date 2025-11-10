@@ -2,6 +2,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from './supabase';
 import { CoachSearchResult, SailorProfile } from '../types/coach';
 
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const COACH_MATCH_FUNCTION_URL = SUPABASE_URL
+  ? `${SUPABASE_URL}/functions/v1/coach-matching`
+  : null;
+const COACH_MATCH_SKILL_ID = process.env.EXPO_PUBLIC_CLAUDE_SKILL_COACH_MATCH || null;
+const COACH_PLAN_SKILL_ID =
+  process.env.EXPO_PUBLIC_CLAUDE_SKILL_COACH_PLAN || COACH_MATCH_SKILL_ID;
+const COACH_LEARNING_SKILL_ID =
+  process.env.EXPO_PUBLIC_CLAUDE_SKILL_COACH_LEARNING || COACH_MATCH_SKILL_ID;
+
 interface MatchingCriteria {
   sailorProfile: SailorProfile;
   targetSkills: string[];
@@ -37,6 +47,77 @@ interface LearningStyleAnalysis {
 
 export class AICoachMatchingService {
   private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
+
+  private static resolveSkillId(kind: 'match' | 'plan' | 'learning'): string | null {
+    switch (kind) {
+      case 'plan':
+        return COACH_PLAN_SKILL_ID;
+      case 'learning':
+        return COACH_LEARNING_SKILL_ID;
+      default:
+        return COACH_MATCH_SKILL_ID;
+    }
+  }
+
+  private static extractTextFromResponse(message: any): string {
+    const blocks = Array.isArray(message?.content) ? message.content : [];
+    return blocks
+      .filter((block: any) => block?.type === 'text' && typeof block?.text === 'string')
+      .map((block: any) => (block.text as string).trim())
+      .filter((text: string) => text.length > 0)
+      .join('\n')
+      .trim();
+  }
+
+  private static async invokeSkill(prompt: string, kind: 'match' | 'plan' | 'learning', options?: {
+    maxTokens?: number;
+    temperature?: number;
+  }): Promise<string> {
+    const skillId = this.resolveSkillId(kind);
+    const maxTokens = options?.maxTokens ?? 2048;
+    const temperature = options?.temperature ?? 0.3;
+
+    if (COACH_MATCH_FUNCTION_URL) {
+      try {
+        const res = await fetch(COACH_MATCH_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt,
+            skillId,
+            max_tokens: maxTokens,
+            temperature,
+          }),
+        });
+
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload?.text) {
+            return payload.text as string;
+          }
+        } else {
+          const errorText = await res.text();
+          console.warn('[coach-matching edge] non-200 response:', errorText);
+        }
+      } catch (error) {
+        console.warn('[coach-matching edge] request failed, falling back to direct Anthropic call', error);
+      }
+    }
+
+    const message = await this.genAI.messages.create({
+      model: 'claude-3-5-haiku-latest',
+      max_tokens: maxTokens,
+      temperature,
+      messages: [{
+        role: 'user',
+        content: prompt,
+      }],
+    });
+
+    return this.extractTextFromResponse(message);
+  }
 
   /**
    * Analyze sailor's learning style from their profile and performance data
@@ -94,17 +175,10 @@ Provide your analysis in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 4096,
+      const response = await this.invokeSkill(prompt, 'learning', {
+        maxTokens: 4096,
         temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
       });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -204,17 +278,10 @@ Respond in this JSON format:
 }
 `;
 
-          const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+          const response = await this.invokeSkill(prompt, 'match', {
+            maxTokens: 4096,
+            temperature: 0.3,
+          });
 
           // Extract JSON from response
           const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -296,17 +363,10 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 4096,
+      const response = await this.invokeSkill(prompt, 'plan', {
+        maxTokens: 4096,
         temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
       });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -378,17 +438,10 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 4096,
+      const response = await this.invokeSkill(prompt, 'plan', {
+        maxTokens: 4096,
         temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
       });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);

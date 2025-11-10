@@ -1,7 +1,7 @@
 /**
  * Race Coaching Service
  *
- * Analyzes post-race responses using Advanced racing Advanced racing frameworks
+ * Analyzes post-race responses using the RegattaFlow Playbook frameworks
  * and provides personalized coaching feedback.
  *
  * Uses the race-strategy-analyst Claude Skill for expert tactical analysis.
@@ -14,14 +14,14 @@ import type {
   RaceAnalysis,
   CoachingFeedback,
   FrameworkScores,
-  BillGladstoneFramework,
+  RegattaFlowPlaybookFramework,
   RacePhase,
 } from '@/types/raceAnalysis';
 import type { Race } from '@/types';
 
 export class RaceCoachingService {
-    // private anthropic: Anthropic; // Disabled for web compatibility
-  private billFrameworks: BillGladstoneFrameworkData | null = null;
+  // private anthropic: Anthropic; // Disabled for web compatibility
+  private playbookFrameworks: RegattaFlowPlaybookFrameworkData | null = null;
 
   constructor(apiKey?: string) {
     // NOTE: Anthropic SDK disabled for web compatibility
@@ -49,8 +49,8 @@ export class RaceCoachingService {
     next_race_priorities: string[];
   }> {
     // Load Racing tactics frameworks if not already loaded
-    if (!this.billFrameworks) {
-      await this.loadBillGladstoneFrameworks();
+    if (!this.playbookFrameworks) {
+      await this.loadRegattaFlowPlaybookFrameworks();
     }
 
     const feedback: CoachingFeedback[] = [];
@@ -148,13 +148,13 @@ export class RaceCoachingService {
       case 'traveler':
         return {
           phase: 'upwind',
-          bill_framework: 'Puff Response Framework',
+          playbook_framework: 'Puff Response Framework',
           your_approach: 'You used traveler control to handle puffs',
-          bill_recommendation:
+          playbook_recommendation:
             '✅ Excellent! This is a TRIM response, not a HELM response. Traveler down when puff hits → boat accelerates → traveler back up. You\'re using championship-level technique!',
 
           // Execution Analysis
-          colgate_execution_technique: 'Boat Control Mastery',
+          coach_execution_technique: 'Boat Control Mastery',
           execution_score: 90,
           execution_feedback:
             '🏆 Boat control mastery is the foundation of racing. Championship sailors can hold position within 3 feet for minutes using traveler, weight, and centerboard. Your traveler control shows this awareness. Next level: Practice rapid traveler response - down BEFORE excessive heel, up AS boat accelerates.',
@@ -171,9 +171,9 @@ export class RaceCoachingService {
       case 'mainsheet':
         return {
           phase: 'upwind',
-          bill_framework: 'Puff Response Framework',
+          playbook_framework: 'Puff Response Framework',
           your_approach: 'You used mainsheet to ease and trim in puffs',
-          bill_recommendation:
+          playbook_recommendation:
             '⚡ Good instinct to use trim, but TRAVELER is more effective for moderate displacement keelboats. Mainsheet control works best for hot boats with tall rigs (J70, Melges). Traveler gives you better angle control while maintaining power.',
           confidence: 90,
           impact: 'medium',
@@ -184,9 +184,9 @@ export class RaceCoachingService {
       case 'feathered':
         return {
           phase: 'upwind',
-          bill_framework: 'Puff Response Framework',
+          playbook_framework: 'Puff Response Framework',
           your_approach: 'You feathered (turned toward wind) when puffs hit',
-          bill_recommendation:
+          playbook_recommendation:
             '🎯 This is a TRIM response, not a HELM response! Feathering is a helm response - it slows the boat. Instead, try TRAVELER DOWN when puff hits → let boat accelerate → TRAVELER UP. You\'ll maintain much higher boat speed through puffs.',
           confidence: 95,
           impact: 'high',
@@ -199,9 +199,9 @@ export class RaceCoachingService {
       default:
         return {
           phase: 'upwind',
-          bill_framework: 'Puff Response Framework',
+          playbook_framework: 'Puff Response Framework',
           your_approach: 'You weren\'t sure how you handled puffs',
-          bill_recommendation:
+          playbook_recommendation:
             '💡 Championship puff response system: When puff hits → TRAVELER DOWN → boat accelerates → TRAVELER UP. This is a "TRIM response, not a HELM response." Next race, focus on feeling each puff and consciously using traveler control.',
           confidence: 95,
           impact: 'high',
@@ -221,13 +221,13 @@ export class RaceCoachingService {
     if (usedDelayedTack) {
       return {
         phase: 'upwind',
-        bill_framework: 'Delayed Tack',
+        playbook_framework: 'Delayed Tack',
         your_approach: 'You used the Delayed Tack in 1-on-1 situations',
-        bill_recommendation:
-          '🏆 Outstanding! You used Kevin\'s SIGNATURE MOVE. The Delayed Tack (cross opponent → sail SHORT distance <1 length → THEN tack) is his most reliable tactical tip. Keep refining the execution - the goal is turning a 1-length lead into 3-4 lengths at the windward mark.',
+        playbook_recommendation:
+          '🏆 Outstanding! You executed the signature delayed-tack move. Cross your opponent, sail the short distance (<1 length), then tack. Keep refining the execution—the goal is turning a 1-length lead into 3-4 lengths at the windward mark.',
 
-        // Colgate Execution Analysis
-        colgate_execution_technique: 'Tight Cover Timing (Championship technique)',
+        // RegattaFlow Coach Execution Analysis
+        coach_execution_technique: 'Tight Cover Timing (Championship technique)',
         execution_score: 85,
         execution_feedback:
           '🎯 Championship racing\'s tight cover technique: Tack at RIGHT location/moment so you\'re dead on opponent\'s wind by time momentum picked up. Timing errors: Too late = they get safe leeward. Too early = they get safe leeward when they tack. Your delayed tack execution shows good timing awareness. Refine: Practice tacking closer (<1 length) for maximum geometric advantage.',
@@ -247,9 +247,9 @@ export class RaceCoachingService {
     if (usedCrossAndCover) {
       return {
         phase: 'upwind',
-        bill_framework: 'Delayed Tack',
+        playbook_framework: 'Delayed Tack',
         your_approach: `You used: ${tactics.join(', ')}`,
-        bill_recommendation:
+        playbook_recommendation:
           '💡 Good tactical awareness! But consider Racing tactics\'s DELAYED TACK next time you cross an opponent. Instead of tacking immediately to cover, sail SHORT distance (<1 boat length), THEN tack. This creates better geometric advantage and can turn a 1-length lead into 3-4 lengths.',
         confidence: 90,
         impact: 'high',
@@ -261,9 +261,9 @@ export class RaceCoachingService {
 
     return {
       phase: 'upwind',
-      bill_framework: 'Delayed Tack',
+      playbook_framework: 'Delayed Tack',
       your_approach: `You used: ${tactics.join(', ')}`,
-      bill_recommendation:
+      playbook_recommendation:
         '🎯 Racing tactics\'s signature move is the DELAYED TACK. When you cross an opponent cleanly by 1 boat length: sail SHORT distance (less than 1 length), THEN tack to lee-bow position. This forces them into a no-win choice at the layline. Look for opportunities to practice this in your next race!',
       confidence: 90,
       impact: 'medium',
@@ -281,13 +281,13 @@ export class RaceCoachingService {
     if (awareness >= 4) {
       return {
         phase: 'upwind',
-        bill_framework: 'Wind Shift Mathematics',
+        playbook_framework: 'Wind Shift Mathematics',
         your_approach: `You rated your shift awareness as ${awareness}/5`,
-        bill_recommendation:
+        playbook_recommendation:
           '✅ Excellent shift awareness! Racing tactics quantifies this: "10° shift = 25% of boat separation." If two boats split for 2 minutes at 6 knots, a 10° shift creates a 9-boat-length advantage. Your strong awareness is race-winning!',
 
-        // Colgate Execution Analysis
-        colgate_execution_technique: 'Dick Stearns Shift Watching',
+        // RegattaFlow Coach Execution Analysis
+        coach_execution_technique: 'Dick Stearns Shift Watching',
         execution_score: 85,
         execution_feedback:
           '🏆 With your strong shift awareness, you\'re ready for Dick Stearns\' championship technique: When being covered, WATCH the covering boat\'s hull angle closely. When they appear lifted (boat looks higher/more bow up), tack immediately. They\'re sailing in header. The wind shift takes moments to travel down to leeward - you have heading advantage until the new wind reaches you. Repeat this over and over to eat up their lead.',
@@ -305,13 +305,13 @@ export class RaceCoachingService {
     if (awareness === 3) {
       return {
         phase: 'upwind',
-        bill_framework: 'Wind Shift Mathematics',
+        playbook_framework: 'Wind Shift Mathematics',
         your_approach: `You rated your shift awareness as ${awareness}/5`,
-        bill_recommendation:
+        playbook_recommendation:
           '⚡ You have baseline awareness. Championship racing teaches: "10° shift = 25% of boat separation." On a typical 2-minute split, that\'s 9 boat lengths! Focus on QUANTIFYING shifts - use compass on every tack. Small shifts (even 5°) have massive impact.',
 
-        // Colgate Execution Analysis
-        colgate_execution_technique: 'Dick Stearns Shift Watching + Compass Discipline',
+        // RegattaFlow Coach Execution Analysis
+        coach_execution_technique: 'Dick Stearns Shift Watching + Compass Discipline',
         execution_score: 70,
         execution_feedback:
           '🎯 Build your shift awareness with Dick Stearns\' technique: Watch other boats\' hull angles - when they appear lifted, you\'re seeing a shift before it reaches you. Combine this with compass discipline: Call out your upwind heading on EVERY tack. Write it down if possible. Pattern recognition develops from repetition.',
@@ -328,13 +328,13 @@ export class RaceCoachingService {
 
     return {
       phase: 'upwind',
-      bill_framework: 'Wind Shift Mathematics',
+      playbook_framework: 'Wind Shift Mathematics',
       your_approach: `You rated your shift awareness as ${awareness}/5`,
-      bill_recommendation:
+      playbook_recommendation:
         '🎯 Shift awareness is CRITICAL. Advanced tactics: "10° shift = 25% of boat separation" - that means a 2-minute split can create 9 boat lengths gain/loss from a single shift! Priority #1 for next race: use compass on EVERY tack. Write down your upwind numbers.',
 
-      // Colgate Execution Analysis - Teaching fundamentals
-      colgate_execution_technique: 'Compass Discipline (Foundation for Shift Detection)',
+      // RegattaFlow Coach Execution Analysis - Teaching fundamentals
+      coach_execution_technique: 'Compass Discipline (Foundation for Shift Detection)',
       execution_score: 50,
       execution_feedback:
         '📚 Start building shift awareness with compass discipline: Call out your upwind heading EVERY time you tack. This is the foundation. Championship sailors emphasize: "Championship sailors ALWAYS know their numbers." Once you track numbers consistently, you\'ll start recognizing shift patterns naturally. Write headings on deck if helpful.',
@@ -359,13 +359,13 @@ export class RaceCoachingService {
       case 'apparent_wind':
         return {
           phase: 'downwind',
-          bill_framework: 'Downwind Shift Detection',
+          playbook_framework: 'Downwind Shift Detection',
           your_approach: 'You used apparent wind feel to detect shifts downwind',
-          bill_recommendation:
+          playbook_recommendation:
             '🏆 Perfect! This is exactly Racing tactics\'s method! "Apparent wind goes AFT WITHOUT feeling stronger = TRUE LIFT → JIBE IMMEDIATELY." You\'re using championship-level shift detection. The key signature: velocity change would feel STRONGER, but a pure lift goes aft without strength change.',
 
-          // Colgate Execution Analysis
-          colgate_execution_technique: 'Rhythmic Jibing with Telltale Awareness',
+          // RegattaFlow Coach Execution Analysis
+          coach_execution_technique: 'Rhythmic Jibing with Telltale Awareness',
           execution_score: 85,
           execution_feedback:
             '🎯 Advanced tactics: Once you detect shift with apparent wind, execute smooth jibe maintaining speed. Championship technique: Keep telltales flowing through jibe, minimize rudder angle, crew weight movement synchronized. "Fast jibing = competitive downwind." Practice makes jibes automatic so you can focus on shift detection.',
@@ -382,13 +382,13 @@ export class RaceCoachingService {
       case 'schooled_upwind_boats':
         return {
           phase: 'downwind',
-          bill_framework: 'Downwind Shift Detection',
+          playbook_framework: 'Downwind Shift Detection',
           your_approach: 'You watched upwind boats to detect shifts',
-          bill_recommendation:
+          playbook_recommendation:
             '✅ Smart! Upwind boats can see shifts with compass. But Championship racing teaches a MORE IMMEDIATE method: apparent wind feel. "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE." This lets you react instantly without waiting to see other boats.',
 
-          // Colgate Execution Analysis
-          colgate_execution_technique: 'Visual Shift Detection + Anticipatory Positioning',
+          // RegattaFlow Coach Execution Analysis
+          coach_execution_technique: 'Visual Shift Detection + Anticipatory Positioning',
           execution_score: 75,
           execution_feedback:
             '🎯 Watching upwind boats is good tactical awareness. Championship racing teaches: Combine this with anticipatory positioning - when you see upwind boats lift, prepare for jibe BEFORE shift reaches you. Set crew, trim spinnaker, get ready. When shift arrives, execute immediately. This combines observation with proactive execution.',
@@ -403,13 +403,13 @@ export class RaceCoachingService {
       case 'compass':
         return {
           phase: 'downwind',
-          bill_framework: 'Downwind Shift Detection',
+          playbook_framework: 'Downwind Shift Detection',
           your_approach: 'You used compass to detect downwind shifts',
-          bill_recommendation:
+          playbook_recommendation:
             '⚡ Compass works, but Racing tactics teach it\'s HARDER downwind. Better method: "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE." This feel-based approach is faster and more reliable than watching compass downwind.',
 
-          // Colgate Execution Analysis
-          colgate_execution_technique: 'Transition from Compass to Feel-Based Detection',
+          // RegattaFlow Coach Execution Analysis
+          coach_execution_technique: 'Transition from Compass to Feel-Based Detection',
           execution_score: 70,
           execution_feedback:
             '📚 Compass discipline shows good fundamentals. Championship racing progression: Start with compass (you\'re here), then add telltale awareness, then develop apparent wind feel. Practice this sequence: (1) Check compass, (2) Look at telltales, (3) Feel wind on face/ears. Over time, steps 2-3 become automatic and you react before checking compass.',
@@ -425,13 +425,13 @@ export class RaceCoachingService {
       default:
         return {
           phase: 'downwind',
-          bill_framework: 'Downwind Shift Detection',
+          playbook_framework: 'Downwind Shift Detection',
           your_approach: 'You didn\'t actively track downwind shifts',
-          bill_recommendation:
+          playbook_recommendation:
             '🎯 Championship racing teaches: downwind sees 1-2 shifts per 15 minutes (upwind sees 3-4). Each shift is CRITICAL! The detection method: "Apparent wind goes AFT WITHOUT getting stronger = LIFT → JIBE IMMEDIATELY." Start practicing this feel!',
 
-          // Colgate Execution Analysis
-          colgate_execution_technique: 'Building Downwind Awareness (Foundation)',
+          // RegattaFlow Coach Execution Analysis
+          coach_execution_technique: 'Building Downwind Awareness (Foundation)',
           execution_score: 50,
           execution_feedback:
             '📚 Advanced tactics: Start with basics - assign ONE crew to watch telltales continuously downwind. Call out when telltales change angle. This builds your team\'s awareness. Once telltale watching becomes habit, you\'ll naturally develop apparent wind feel. "Downwind shift detection is learnable skill, not magic."',
@@ -458,14 +458,14 @@ export class RaceCoachingService {
     if (isLifted && inPhase === true) {
       return {
         phase: 'windward_mark',
-        bill_framework: 'Getting In Phase',
+        playbook_framework: 'Getting In Phase',
         your_approach:
           'You rounded on the lifted tack and felt in phase downwind',
-        bill_recommendation:
+        playbook_recommendation:
           '🏆 Textbook execution! Advanced tactics: "Round windward mark on the LIFTED tack to set up entire downwind leg." You did exactly that and it paid off with good phase downwind. This is championship-level mark strategy!',
 
-        // Colgate Execution Analysis
-        colgate_execution_technique: 'Smooth Mark Rounding Mechanics',
+        // RegattaFlow Coach Execution Analysis
+        coach_execution_technique: 'Smooth Mark Rounding Mechanics',
         execution_score: 90,
         execution_feedback:
           '🏆 Excellent strategic rounding! Now refine execution mechanics from Advanced tactics: As you round, minimize rudder angle (wide smooth arc), keep boat speed up through turn, set spinnaker when stable (not mid-turn). If rounding close behind boat, consider Kevin Cox delayed spinnaker technique - sail close reach on main/jib to blanket leader, then set chute in controlling position.',
@@ -483,14 +483,14 @@ export class RaceCoachingService {
     if (isLifted && inPhase === false) {
       return {
         phase: 'windward_mark',
-        bill_framework: 'Getting In Phase',
+        playbook_framework: 'Getting In Phase',
         your_approach:
           'You rounded on lifted tack but felt out of phase downwind',
-        bill_recommendation:
-          '⚡ You executed Kevin\'s approach (round on lifted) but still felt out of phase. Possible causes: (1) wind shifted just after rounding, (2) fleet forced you off course. Focus on maintaining your chosen jibe after rounding - don\'t let fleet push you out of phase.',
+        playbook_recommendation:
+          '⚡ You followed the playbook approach (round on lifted) but still felt out of phase. Possible causes: (1) wind shifted just after rounding, (2) fleet forced you off course. Focus on maintaining your chosen jibe after rounding—don\'t let fleet push you out of phase.',
 
-        // Colgate Execution Analysis
-        colgate_execution_technique: 'Post-Rounding Commitment + Hans Fogh Reverse',
+        // RegattaFlow Coach Execution Analysis
+        coach_execution_technique: 'Post-Rounding Commitment + Hans Fogh Reverse',
         execution_score: 75,
         execution_feedback:
           '🎯 Strategic approach was correct, execution needs refinement. Advanced tactics: After rounding, COMMIT to your tactical plan. Hans Fogh reverse psychology: If you round and immediately jibe away from fleet (even if uncomfortable), others often follow thinking you have local knowledge. Use this to maintain your phase. "Confidence in execution creates tactical opportunities."',
@@ -508,13 +508,13 @@ export class RaceCoachingService {
     if (!isLifted && inPhase === false) {
       return {
         phase: 'windward_mark',
-        bill_framework: 'Getting In Phase',
+        playbook_framework: 'Getting In Phase',
         your_approach: 'You rounded on the headed tack and felt out of phase',
-        bill_recommendation:
+        playbook_recommendation:
           '🎯 This is exactly what racing tactics warns about! "Round on the HEADED tack and you start downwind out of phase." Next race: as you approach windward mark, check your compass. If headed, consider tacking before mark to round on the LIFTED tack instead. Sets up entire downwind leg!',
 
-        // Colgate Execution Analysis
-        colgate_execution_technique: 'Pre-Mark Tactical Decision Making',
+        // RegattaFlow Coach Execution Analysis
+        coach_execution_technique: 'Pre-Mark Tactical Decision Making',
         execution_score: 60,
         execution_feedback:
           '📚 Advanced tactics: Championship sailors make mark approach decisions early, not at the mark. Starting 4-5 boat lengths away: (1) Check compass, (2) Assess tactical situation, (3) Decide tack or round as-is, (4) Execute decision smoothly. If headed and space available, tack away and re-approach on lifted. This prevents being forced into bad tactical position.',
@@ -529,13 +529,13 @@ export class RaceCoachingService {
 
     return {
       phase: 'windward_mark',
-      bill_framework: 'Getting In Phase',
+      playbook_framework: 'Getting In Phase',
       your_approach: `You rounded on ${approach}${inPhase !== undefined ? ` and felt ${inPhase ? 'in' : 'out of'} phase` : ''}`,
-      bill_recommendation:
+      playbook_recommendation:
         '💡 Championship racing teaches: "Round windward mark on the LIFTED tack." Check compass as you approach - if you\'re headed, consider tacking before the mark to round on the lifted tack. This sets you up "in phase" for the downwind leg.',
 
-      // Colgate Execution Analysis
-      colgate_execution_technique: 'Mark Approach Awareness (Foundation)',
+      // RegattaFlow Coach Execution Analysis
+      coach_execution_technique: 'Mark Approach Awareness (Foundation)',
       execution_score: 70,
       execution_feedback:
         '📚 Advanced tactics: Build mark approach discipline starting now. Simple routine: 5 boat lengths from mark → check compass → assess if lifted/headed → decide tack or round → execute. This 4-step routine becomes automatic with practice. "Championship mark roundings start with early awareness, not last-second reactions."',
@@ -549,8 +549,8 @@ export class RaceCoachingService {
   }
 
   /**
-   * Analyze Covering/Breaking Cover Tactics (Colgate Specialty)
-   * NEW in Phase 3: Analyzes tactical situations using Colgate's champion techniques
+   * Analyze Covering/Breaking Cover Tactics (RegattaFlow Coach Specialty)
+   * NEW in Phase 3: Analyzes tactical situations using RegattaFlow Coach's champion techniques
    */
   private analyzeCoveringTactics(analysis: RaceAnalysis): CoachingFeedback | null {
     // Check if sailor described any covering or breaking cover situations
@@ -574,13 +574,13 @@ export class RaceCoachingService {
       // They were leading - analyze covering technique
       return {
         phase: 'upwind',
-        bill_framework: 'Delayed Tack',
+        playbook_framework: 'Delayed Tack',
         your_approach: 'You were leading and covering opponents',
-        bill_recommendation:
+        playbook_recommendation:
           '🏆 Advanced tactics: After crossing opponent, use DELAYED TACK to maximize geometric advantage. Cross → sail <1 length → tack.',
 
-        // Colgate Covering Execution
-        colgate_execution_technique: 'Tight Cover Timing + Loose Cover Herding',
+        // RegattaFlow Coach Covering Execution
+        coach_execution_technique: 'Tight Cover Timing + Loose Cover Herding',
         execution_score: 80,
         execution_feedback:
           '🎯 Championship racing covering mastery: TIGHT COVER when opponent sailing away from fleet - tack dead upwind after crossing with perfect timing (too late = safe leeward for them, too early = safe leeward when they tack). LOOSE COVER when going same direction as fleet - stay between opponent and finish but give clear air so they don\'t tack away. "Herding them where you want to go."',
@@ -601,15 +601,15 @@ export class RaceCoachingService {
 
       return {
         phase: 'upwind',
-        bill_framework: 'Wind Shift Mathematics',
+        playbook_framework: 'Wind Shift Mathematics',
         your_approach: multipleHitches
           ? `You tacked ${tackCount}+ times trying to break cover`
           : 'You tried to break cover from opponent',
-        bill_recommendation:
+        playbook_recommendation:
           '💡 Advanced tactics: "10° shift = 25% leverage. Wind shifts hit windward boat first." Use shift advantage to break cover.',
 
-        // Colgate Breaking Cover Execution
-        colgate_execution_technique: multipleHitches
+        // RegattaFlow Coach Breaking Cover Execution
+        coach_execution_technique: multipleHitches
           ? 'Three Tacks Rule (Championship technique) ✅'
           : 'Dick Stearns Shift Watching',
         execution_score: multipleHitches ? 85 : 70,
@@ -652,7 +652,7 @@ FRAMEWORK SCORES:
 ${JSON.stringify(scores, null, 2)}
 
 SPECIFIC FEEDBACK GIVEN:
-${feedback.map((f) => `${f.phase}: ${f.bill_recommendation}`).join('\n')}
+${feedback.map((f) => `${f.phase}: ${f.playbook_recommendation}`).join('\n')}
 
 Provide a 2-3 paragraph overall assessment in The teaching style:
 1. Recognize what they did well (specific frameworks they used correctly)
@@ -739,7 +739,7 @@ Use The voice: quantified, tactical, encouraging, with his signature phrases whe
     if (scoreEntries.length > 0 && priorities.length < 3) {
       const lowestFramework = scoreEntries[0][0];
       const correspondingFeedback = feedback.find((f) => {
-        const frameworkKey = this.frameworkToScoreKey(f.bill_framework);
+        const frameworkKey = this.frameworkToScoreKey(f.playbook_framework);
         return frameworkKey === lowestFramework;
       });
 
@@ -754,8 +754,8 @@ Use The voice: quantified, tactical, encouraging, with his signature phrases whe
   /**
    * Map framework name to score key
    */
-  private frameworkToScoreKey(framework: BillGladstoneFramework): keyof FrameworkScores {
-    const mapping: Record<BillGladstoneFramework, keyof FrameworkScores> = {
+  private frameworkToScoreKey(framework: RegattaFlowPlaybookFramework): keyof FrameworkScores {
+    const mapping: Record<RegattaFlowPlaybookFramework, keyof FrameworkScores> = {
       'Puff Response Framework': 'puff_response',
       'Delayed Tack': 'delayed_tack_usage',
       'Wind Shift Mathematics': 'shift_awareness',
@@ -816,11 +816,11 @@ Use The voice: quantified, tactical, encouraging, with his signature phrases whe
   /**
    * Load Racing tactics frameworks from skill files
    */
-  private async loadBillGladstoneFrameworks(): Promise<void> {
+  private async loadRegattaFlowPlaybookFrameworks(): Promise<void> {
     // In production, this would load from deployed Claude Skill
     // For now, we'll note that frameworks are loaded from skill files
 
-    this.billFrameworks = {
+    this.playbookFrameworks = {
       loaded: true,
       version: '1.0',
       frameworks: [
@@ -834,7 +834,7 @@ Use The voice: quantified, tactical, encouraging, with his signature phrases whe
   }
 }
 
-interface BillGladstoneFrameworkData {
+interface RegattaFlowPlaybookFrameworkData {
   loaded: boolean;
   version: string;
   frameworks: string[];

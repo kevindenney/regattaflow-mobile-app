@@ -120,9 +120,9 @@ export function ProfessionalMapScreen({
     weather: {
       sources: [
         {
-          id: 'weatherapi-pro',
-          name: 'WeatherAPI Pro',
-          url: 'https://api.weatherapi.com/v1',
+          id: 'stormglass',
+          name: 'Storm Glass',
+          url: 'https://api.stormglass.io/v2',
           priority: 1,
           updateInterval: 900 // 15 minutes
         }

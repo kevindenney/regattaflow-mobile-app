@@ -95,7 +95,7 @@ Expert sailing race strategist with championship tactics expertise.
 - Upwind tactics (layline discipline, current integration, fleet positioning)
 - Mark rounding excellence (wide entry/tight exit, traffic management)
 - Downwind strategy (VMG optimization, shift detection, wave riding)
-- Covering & split distance (loose cover, Gladstone's 1/3 rule)
+- Covering & split distance (loose cover, RegattaFlow Playbook's 1/3 rule)
 - Current & tidal strategy (timing legs, lee-bow technique)
 - Championship execution (risk management, consistency, psychology)
 
@@ -111,7 +111,7 @@ Always provide: THEORY (quantified framework), EXECUTION (step-by-step how), CON
 6. Current > Wind - in tidal areas, current outweighs shifts
 7. Conservative = Consistent - series racing rewards top-third finishes
 
-Expert frameworks from Kevin Gladstone, Kevin Colgate, Hans Fogh, Kevin Cox.`;
+Expert frameworks from RegattaFlow Playbook, RegattaFlow Coach, Hans Fogh, Kevin Cox.`;
 
     const raceStrategyBlob = new Blob([raceStrategyContent], { type: 'text/markdown' });
     const raceStrategyFile = new File([raceStrategyBlob], 'SKILL.md', { type: 'text/markdown' });
@@ -124,7 +124,7 @@ Expert frameworks from Kevin Gladstone, Kevin Colgate, Hans Fogh, Kevin Cox.`;
     try {
       const raceStrategyResponse = await anthropic.beta.skills.create({
         name: 'race-strategy-analyst',
-        description: 'Expert sailing race strategist combining Kevin Gladstone and Kevin Colgate frameworks with championship execution techniques',
+        description: 'Expert sailing race strategist combining RegattaFlow Playbook and RegattaFlow Coach frameworks with championship execution techniques',
         files: [raceStrategyFile],
         betas: ['skills-2025-10-02']
       } as any);

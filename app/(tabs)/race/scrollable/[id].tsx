@@ -4,7 +4,7 @@
  * Phase 1: Core structure with map hero
  */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   SafeAreaView,
   Platform,
   Animated,
+  ViewStyle,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ import {
   MarkRoundingCard,
   RigTuningCard,
 } from '@/components/race-detail';
+// import { StrategyPlanningCard } from '@/components/race-detail/StrategyPlanningCard'; // No longer used - strategy planning is integrated into individual strategy cards
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
@@ -61,6 +63,22 @@ interface RaceEvent {
     name?: string;
   };
   class_id?: string;
+  metadata?: {
+    wind?: {
+      direction: string;
+      speedMin: number;
+      speedMax: number;
+    };
+    tide?: {
+      state: 'flooding' | 'ebbing' | 'slack' | 'high' | 'low';
+      height: number;
+      direction?: string;
+    };
+    weather_provider?: string;
+    weather_fetched_at?: string;
+    weather_confidence?: number;
+    [key: string]: any;
+  };
 }
 
 interface CourseMark {
@@ -82,6 +100,7 @@ export default function RaceDetailScrollable() {
   const [showMenu, setShowMenu] = useState(false);
   const [drawingPolygon, setDrawingPolygon] = useState<Array<{lat: number, lng: number}>>([]);
   const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
+  const [sailorId, setSailorId] = useState<string | null>(null);
   const lastCourseParam = useRef<string | null>(null);
 
   // Get real weather for course filtering
@@ -98,6 +117,37 @@ export default function RaceDetailScrollable() {
 
   const { weather } = useRaceWeather(venueForWeather as any, race?.start_time);
 
+  const initialConditionsSnapshot = useMemo(() => {
+    if (!race && !weather) {
+      return null;
+    }
+
+    const metadata = (race?.metadata || {}) as Record<string, any>;
+    const wind =
+      weather?.wind ??
+      (race as any)?.wind ??
+      metadata?.wind ??
+      metadata?.weather?.wind ??
+      null;
+    const tide =
+      weather?.tide ??
+      (race as any)?.tide ??
+      metadata?.tide ??
+      metadata?.weather?.tide ??
+      null;
+
+    if (!wind && !tide) {
+      return null;
+    }
+
+    return {
+      wind: wind ?? undefined,
+      tide: tide ?? undefined,
+      fetchedAt: metadata?.weather_fetched_at ?? metadata?.weather?.fetched_at ?? undefined,
+      provider: metadata?.weather_provider ?? metadata?.weather?.provider ?? undefined,
+    };
+  }, [race, weather]);
+
   // Scroll animation for map resize
   const scrollY = useRef(new Animated.Value(0)).current;
   const [mapCompact, setMapCompact] = useState(false);
@@ -105,6 +155,34 @@ export default function RaceDetailScrollable() {
   useEffect(() => {
     loadRaceData();
   }, [id]);
+
+  // Fetch sailor profile ID
+  useEffect(() => {
+    const fetchSailorId = async () => {
+      if (!user) return;
+
+      try {
+        const { data: sailorProfile, error } = await supabase
+          .from('sailor_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[RaceDetailScrollable] Error fetching sailor profile:', error);
+          return;
+        }
+
+        if (sailorProfile) {
+          setSailorId(sailorProfile.id);
+        }
+      } catch (error) {
+        console.error('[RaceDetailScrollable] Failed to fetch sailor profile:', error);
+      }
+    };
+
+    fetchSailorId();
+  }, [user]);
 
   // Track scroll position for map resize
   useEffect(() => {
@@ -161,6 +239,7 @@ export default function RaceDetailScrollable() {
           name: raceData.metadata?.class_name || undefined
         } : undefined,
         class_id: classIdFromMetadata,
+        metadata: raceData.metadata,
       };
 
       // Look up actual venue ID from sailing_venues if we have a venue name
@@ -253,6 +332,30 @@ export default function RaceDetailScrollable() {
     ? (weather.wind.speedMin + weather.wind.speedMax) / 2
     : undefined;
 
+  // Extract additional weather data from raw forecast if available
+  const rawForecast = weather?.raw?.forecast?.[0];
+  const marineConditions = weather?.raw?.marineConditions;
+
+  // DEBUG: Log weather data structure
+  console.log('[RaceDetail] 🌤️ Weather data check:', {
+    hasWeather: !!weather,
+    hasRaw: !!weather?.raw,
+    hasForecast: !!weather?.raw?.forecast,
+    forecastLength: weather?.raw?.forecast?.length,
+    hasMarineConditions: !!weather?.raw?.marineConditions,
+    rawForecast: rawForecast ? {
+      windDirection: rawForecast.windDirection,
+      windGusts: rawForecast.windGusts,
+    } : null,
+    marineConditions: marineConditions ? {
+      waveHeight: marineConditions.significantWaveHeight,
+      currentSpeed: marineConditions.surfaceCurrents?.[0]?.speed,
+    } : null,
+    windMin: weather?.wind?.speedMin,
+    windMax: weather?.wind?.speedMax,
+    averageWindSpeed,
+  });
+
   const {
     recommendation: tuningRecommendation,
     loading: tuningLoading,
@@ -265,6 +368,15 @@ export default function RaceDetailScrollable() {
       race?.metadata?.class_name ||
       undefined,
     averageWindSpeed,
+    windMin: weather?.wind?.speedMin,
+    windMax: weather?.wind?.speedMax,
+    windDirection: rawForecast?.windDirection, // Use numeric direction from raw
+    gusts: rawForecast?.windGusts || weather?.wind?.speedMax, // Use gusts from raw or fallback to speedMax
+    waveHeight: marineConditions?.significantWaveHeight
+      ? `${Math.round(marineConditions.significantWaveHeight * 10) / 10}m`
+      : undefined,
+    currentSpeed: marineConditions?.surfaceCurrents?.[0]?.speed,
+    currentDirection: marineConditions?.surfaceCurrents?.[0]?.direction,
     pointsOfSail: 'upwind',
     enabled: !!(
       race?.class_id ||
@@ -633,6 +745,19 @@ export default function RaceDetailScrollable() {
             phase={getRaceStatus()}
           />
 
+          {/* Strategic Planning - Document your plan for each phase */}
+          {/* Note: Strategy planning is now integrated into individual strategy cards on /races tab */}
+          {/* {sailorId && (
+            <StrategyPlanningCard
+              raceEventId={race.id}
+              sailorId={sailorId}
+              onPlanUpdated={() => {
+                // Optional: Refresh any data that depends on the plan
+                console.log('Strategy plan updated');
+              }}
+            />
+          )} */}
+
           {/* Race Overview - Quick Stats & Confidence */}
           <RaceOverviewCard
             raceId={race.id}
@@ -662,6 +787,19 @@ export default function RaceDetailScrollable() {
               lat: race.venue.coordinates_lat || 0,
               lng: race.venue.coordinates_lng || 0
             } : undefined}
+            racingAreaPolygon={
+              drawingPolygon.length > 0
+                ? drawingPolygon
+                : Array.isArray(race.racing_area_polygon?.coordinates?.[0]) &&
+                  race.racing_area_polygon.coordinates[0].length >= 3
+                  ? race.racing_area_polygon.coordinates[0]
+                      .slice(
+                        0,
+                        race.racing_area_polygon.coordinates[0].length - 1
+                      )
+                      .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }))
+                  : undefined
+            }
             weather={weather ? {
               wind: weather.wind ? {
                 speed: (weather.wind.speedMin + weather.wind.speedMax) / 2,
@@ -709,6 +847,7 @@ export default function RaceDetailScrollable() {
               region: 'asia_pacific',
               country: 'HK'
             } : undefined}
+            initialWeather={initialConditionsSnapshot ?? undefined}
           />
 
           {/* Rig Tuning */}
@@ -737,6 +876,7 @@ export default function RaceDetailScrollable() {
               region: 'asia_pacific',
               country: 'HK'
             } : undefined}
+            initialTide={initialConditionsSnapshot ?? undefined}
           />
 
           {/* Contingency Plans */}
@@ -850,6 +990,13 @@ export default function RaceDetailScrollable() {
 }
 
 const logger = createLogger('[id]');
+type ShadowProps = Pick<ViewStyle, 'shadowColor' | 'shadowOffset' | 'shadowOpacity' | 'shadowRadius' | 'elevation'>;
+
+const getShadowStyle = (webShadow: string, nativeShadow: ShadowProps): ViewStyle =>
+  Platform.OS === 'web'
+    ? ({ boxShadow: webShadow } as ViewStyle)
+    : nativeShadow;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -952,11 +1099,13 @@ const styles = StyleSheet.create({
     right: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    ...getShadowStyle('0px 18px 35px rgba(15, 23, 42, 0.18)', {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+    }),
     minWidth: 200,
   },
   menuItem: {
@@ -1067,11 +1216,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     backgroundColor: '#10B981',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...getShadowStyle('0px 6px 18px rgba(16, 185, 129, 0.35)', {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    }),
   },
   saveRacingAreaButtonText: {
     fontSize: 15,

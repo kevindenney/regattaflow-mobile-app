@@ -180,7 +180,7 @@ class RaceParticipantService {
           *,
           profiles:user_id (
             id,
-            name,
+            full_name,
             avatar_url
           )
         `
@@ -214,7 +214,7 @@ class RaceParticipantService {
         profile: item.profiles
           ? {
               id: item.profiles.id,
-              name: item.profiles.name,
+              name: item.profiles.full_name || item.profiles.id,
               avatar: item.profiles.avatar_url,
             }
           : undefined,
@@ -233,6 +233,38 @@ class RaceParticipantService {
       fleetId,
       includePrivate: false,
     });
+  }
+
+  /**
+   * Get race competitors (excluding current user)
+   * Used for showing "who else is racing"
+   */
+  async getRaceCompetitors(
+    regattaId: string,
+    currentUserId: string,
+    isFleetMember: boolean = false
+  ): Promise<ParticipantWithProfile[]> {
+    try {
+      const participants = await this.getRaceParticipants(regattaId, {
+        includePrivate: false,
+        status: ['registered', 'confirmed', 'tentative'], // Exclude withdrawn
+      });
+
+      // Filter out current user and apply visibility rules
+      return participants.filter(p => {
+        // Don't show current user
+        if (p.userId === currentUserId) return false;
+
+        // Apply visibility rules
+        if (p.visibility === 'public') return true;
+        if (p.visibility === 'fleet' && isFleetMember) return true;
+
+        return false;
+      });
+    } catch (error) {
+      logger.error('Exception in getRaceCompetitors:', error);
+      return [];
+    }
   }
 
   /**

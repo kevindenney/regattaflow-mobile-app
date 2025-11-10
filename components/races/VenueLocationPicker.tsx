@@ -9,7 +9,7 @@
  * - Used for accurate weather forecasting
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,9 +21,10 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { MapPin, X } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface VenueLocation {
   name: string;
@@ -40,6 +41,9 @@ interface VenueLocationPickerProps {
 }
 
 const logger = createLogger('VenueLocationPicker');
+const VENUE_CACHE_KEY = 'regattaflow_venue_cache_v1';
+const VENUE_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
+
 export function VenueLocationPicker({
   value,
   onChangeText,
@@ -51,14 +55,162 @@ export function VenueLocationPicker({
   const [venueSuggestions, setVenueSuggestions] = useState<VenueLocation[]>([]);
   const [loadingVenues, setLoadingVenues] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [cachedVenues, setCachedVenues] = useState<VenueLocation[]>([]);
+  const [cacheLoaded, setCacheLoaded] = useState(false);
+  const cachedVenuesRef = useRef<VenueLocation[]>([]);
+
+  // Keep ref in sync with state without triggering effects
+  useEffect(() => {
+    cachedVenuesRef.current = cachedVenues;
+  }, [cachedVenues]);
+
+  // Helpers ------------------------------------------------------------------
+  const readCache = async (): Promise<VenueLocation[]> => {
+    try {
+      let raw: string | null = null;
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          raw = window.localStorage?.getItem(VENUE_CACHE_KEY) ?? null;
+        }
+      } else {
+        raw = await AsyncStorage.getItem(VENUE_CACHE_KEY);
+      }
+
+      if (!raw) {
+        return [];
+      }
+
+      const parsed = JSON.parse(raw) as { updatedAt?: number; venues?: VenueLocation[] };
+      if (!parsed?.venues || !Array.isArray(parsed.venues)) {
+        return [];
+      }
+
+      if (
+        parsed.updatedAt &&
+        Date.now() - parsed.updatedAt > VENUE_CACHE_TTL_MS
+      ) {
+        logger.debug('[VenueLocationPicker] Venue cache expired, will refresh in background');
+      }
+
+      return parsed.venues;
+    } catch (error) {
+      logger.warn('[VenueLocationPicker] Failed to read venue cache', error);
+      return [];
+    }
+  };
+
+  const persistCache = async (venues: VenueLocation[]) => {
+    try {
+      if (venues.length === 0) return;
+
+      const payload = JSON.stringify({
+        updatedAt: Date.now(),
+        venues,
+      });
+
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          window.localStorage?.setItem(VENUE_CACHE_KEY, payload);
+        }
+      } else {
+        await AsyncStorage.setItem(VENUE_CACHE_KEY, payload);
+      }
+    } catch (error) {
+      logger.warn('[VenueLocationPicker] Failed to persist venue cache', error);
+    }
+  };
+
+  const mergeVenues = (existing: VenueLocation[], incoming: VenueLocation[]) => {
+    if (incoming.length === 0) {
+      return existing;
+    }
+
+    const byName = new Map<string, VenueLocation>();
+    const normalize = (name: string) => name.trim().toLowerCase();
+
+    for (const venue of existing) {
+      if (!venue?.name) continue;
+      byName.set(normalize(venue.name), venue);
+    }
+
+    let changed = false;
+
+    for (const venue of incoming) {
+      if (!venue?.name) continue;
+      const key = normalize(venue.name);
+      const current = byName.get(key);
+      if (!current) {
+        byName.set(key, venue);
+        changed = true;
+        continue;
+      }
+
+      if (current.lat !== venue.lat || current.lng !== venue.lng) {
+        byName.set(key, venue);
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      return existing;
+    }
+
+    return Array.from(byName.values());
+  };
+
+  const filterCachedVenues = (search: string) => {
+    const query = search.trim().toLowerCase();
+    if (query.length < 2) {
+      return [];
+    }
+
+    return cachedVenuesRef.current
+      .filter((venue) => venue.name.toLowerCase().includes(query))
+      .slice(0, 5);
+  };
+
+  // Load cached venues on mount
+  useEffect(() => {
+    let cancelled = false;
+    const loadCache = async () => {
+      const venues = await readCache();
+      if (!cancelled && venues.length > 0) {
+        logger.debug(`[VenueLocationPicker] Loaded ${venues.length} venues from cache`);
+        setCachedVenues(venues);
+      }
+      if (!cancelled) {
+        setCacheLoaded(true);
+      }
+    };
+
+    loadCache();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch venue suggestions as user types
   useEffect(() => {
-    if (value.length < 2) {
+    const trimmed = value.trim();
+
+    if (trimmed.length < 2) {
       setVenueSuggestions([]);
       setShowSuggestions(false);
       return;
     }
+
+    // Immediately provide cached suggestions (if any)
+    if (cacheLoaded) {
+      const cachedMatches = filterCachedVenues(trimmed);
+      if (cachedMatches.length > 0) {
+        setVenueSuggestions(cachedMatches);
+        setShowSuggestions(true);
+      } else if (!loadingVenues) {
+        setShowSuggestions(false);
+      }
+    }
+
+    let cancelled = false;
 
     const fetchVenues = async () => {
       setLoadingVenues(true);
@@ -66,14 +218,13 @@ export function VenueLocationPicker({
         const { data, error } = await supabase
           .from('sailing_venues')
           .select('id, name, coordinates_lat, coordinates_lng')
-          .ilike('name', `%${value}%`)
+          .ilike('name', `%${trimmed}%`)
           .limit(5);
 
         if (error) {
-          console.error('[VenueLocationPicker] Database error:', error);
-          setVenueSuggestions([]);
-          setShowSuggestions(false);
-          setLoadingVenues(false);
+          if (!cancelled) {
+            console.error('[VenueLocationPicker] Database error:', error);
+          }
           return;
         }
 
@@ -83,21 +234,53 @@ export function VenueLocationPicker({
           lng: v.coordinates_lng,
         }));
 
-        logger.debug(`[VenueLocationPicker] Found ${suggestions.length} venues matching "${value}"`);
+        logger.debug(`[VenueLocationPicker] Found ${suggestions.length} venues matching "${trimmed}"`);
 
-        setVenueSuggestions(suggestions);
-        setShowSuggestions(suggestions.length > 0);
+        if (!cancelled && trimmed === value.trim()) {
+          if (suggestions.length > 0) {
+            setVenueSuggestions(suggestions);
+            setShowSuggestions(true);
+          }
+
+          let mergedForCache: VenueLocation[] | null = null;
+          setCachedVenues((prev) => {
+            const merged = mergeVenues(prev, suggestions);
+            if (merged === prev) {
+              return prev;
+            }
+            mergedForCache = merged;
+            return merged;
+          });
+
+          if (mergedForCache) {
+            persistCache(mergedForCache);
+          }
+        }
       } catch (error: any) {
-        console.error('[VenueLocationPicker] Error fetching venues:', error);
+        if (!cancelled) {
+          console.error('[VenueLocationPicker] Error fetching venues:', error);
+          if (!showSuggestions) {
+            const cachedMatches = filterCachedVenues(trimmed);
+            if (cachedMatches.length > 0) {
+              setVenueSuggestions(cachedMatches);
+              setShowSuggestions(true);
+            }
+          }
+        }
       } finally {
-        setLoadingVenues(false);
+        if (!cancelled) {
+          setLoadingVenues(false);
+        }
       }
     };
 
     // Debounce venue search
     const timeoutId = setTimeout(fetchVenues, 300);
-    return () => clearTimeout(timeoutId);
-  }, [value]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [value, cacheLoaded]);
 
   const handleSelectSuggestion = (suggestion: VenueLocation) => {
     onChangeText(suggestion.name);

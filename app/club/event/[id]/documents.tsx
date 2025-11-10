@@ -2,7 +2,7 @@
  * Event Document Publishing Screen
  * Upload and manage event documents (NOR, SIs, results, etc.)
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, ActivityIndicator, } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -10,8 +10,32 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { EventDocument, DocumentType } from '@/services/eventService';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
+import { useClaudeDraft, ClaudeDocumentType, ClaudeDocumentDraft } from '@/hooks/ai/useClaudeDraft';
+import { AiDraftModal } from '@/components/ai/AiDraftModal';
+import { supabase } from '@/services/supabase';
+import { copyToClipboard } from '@/utils/clipboard';
+
+type AiGeneratedDocument = {
+  id: string;
+  document_type: DocumentType | string;
+  draft_text: string;
+  status: string;
+  confidence: number | null;
+  created_at: string;
+  metadata?: Record<string, any> | null;
+};
+
+const SUPPORTED_CLAUDE_TYPES: ClaudeDocumentType[] = [
+  'nor',
+  'si',
+  'amendment',
+  'notice',
+  'course_map',
+  'results',
+  'other',
+];
 export default function EventDocumentsScreen() {
     const router = useRouter();
     const { id } = useLocalSearchParams();
@@ -20,11 +44,38 @@ export default function EventDocumentsScreen() {
     const [documents, setDocuments] = useState<EventDocument[]>([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
-    useEffect(() => {
+    const [aiDrafts, setAiDrafts] = useState<AiGeneratedDocument[]>([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [draftModalVisible, setDraftModalVisible] = useState(false);
+    const [overrideDraft, setOverrideDraft] = useState<ClaudeDocumentDraft | null>(null);
+    const [overrideGeneratedAt, setOverrideGeneratedAt] = useState<Date | null>(null);
+    const { draft, isGenerating, error: draftError, generate, reset, lastGeneratedAt, documentType, setDocumentType } = useClaudeDraft({
+        eventId,
+        enabled: !!clubId,
+    });
+    const loadAiDrafts = useCallback(async () => {
         if (!clubId)
             return;
-        loadDocuments();
-    }, [eventId, clubId]);
+        try {
+            setAiLoading(true);
+            const { data, error } = await supabase
+                .from('ai_generated_documents')
+                .select('id, document_type, draft_text, status, confidence, created_at, metadata')
+                .eq('club_id', clubId)
+                .eq('event_id', eventId)
+                .order('created_at', { ascending: false })
+                .limit(20);
+            if (error)
+                throw error;
+            setAiDrafts((data ?? []) as AiGeneratedDocument[]);
+        }
+        catch (error) {
+            console.error('Error loading AI drafts:', error);
+        }
+        finally {
+            setAiLoading(false);
+        }
+    }, [clubId, eventId]);
     const loadDocuments = async () => {
         if (!clubId)
             return;
@@ -41,6 +92,20 @@ export default function EventDocumentsScreen() {
             setLoading(false);
         }
     };
+    const handleGenerateDraft = useCallback(async (overrides?: { documentType?: ClaudeDocumentType }) => {
+        setOverrideDraft(null);
+        setOverrideGeneratedAt(null);
+        const generated = await generate(overrides);
+        if (generated) {
+            await loadAiDrafts();
+        }
+    }, [generate, loadAiDrafts]);
+    useEffect(() => {
+        if (!clubId)
+            return;
+        loadDocuments();
+        loadAiDrafts();
+    }, [eventId, clubId, loadAiDrafts]);
     const handleUpload = async (documentType: DocumentType) => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
@@ -101,6 +166,56 @@ export default function EventDocumentsScreen() {
         finally {
             setUploading(false);
         }
+    };
+    const handleCopyDraft = async (item: AiGeneratedDocument) => {
+        const copied = await copyToClipboard(item.draft_text);
+        if (copied) {
+            Alert.alert('Copied', 'Claude draft copied to your clipboard.');
+        }
+        else {
+            Alert.alert('Clipboard unavailable', 'Copy is not supported on this device yet.');
+        }
+    };
+    const extractSections = (value: any): Array<{ heading: string; body: string }> => {
+        if (!Array.isArray(value))
+            return [];
+        return value
+            .filter((section) => section && typeof section.heading === 'string' && typeof section.body === 'string')
+            .map((section) => ({
+            heading: section.heading,
+            body: section.body,
+        }));
+    };
+    const handlePreviewDraft = (item: AiGeneratedDocument) => {
+        const type = SUPPORTED_CLAUDE_TYPES.includes(item.document_type as ClaudeDocumentType)
+            ? (item.document_type as ClaudeDocumentType)
+            : 'nor';
+        const title = (item.metadata?.title as string) || getDocumentTypeName(type as DocumentType);
+        setOverrideDraft({
+            title,
+            markdown: item.draft_text,
+            sections: extractSections(item.metadata?.sections),
+            confidence: item.confidence,
+        });
+        setOverrideGeneratedAt(new Date(item.created_at));
+        setDocumentType(type);
+        setDraftModalVisible(true);
+    };
+    const openGenerateModal = () => {
+        setOverrideDraft(null);
+        setOverrideGeneratedAt(null);
+        setDraftModalVisible(true);
+    };
+    const handleCloseModal = () => {
+        setDraftModalVisible(false);
+        setOverrideDraft(null);
+        setOverrideGeneratedAt(null);
+        reset();
+    };
+    const handleDiscardDraft = () => {
+        reset();
+        setOverrideDraft(null);
+        setOverrideGeneratedAt(null);
     };
     const handlePublish = async (documentId: string) => {
         Alert.alert('Publish Document', 'Are you sure you want to make this document public?', [
@@ -227,6 +342,74 @@ export default function EventDocumentsScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
+          <View style={styles.aiHeader}>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.sectionTitle}>Claude drafting</ThemedText>
+              <ThemedText style={styles.sectionHelper}>
+                Generate NORs, SIs, notices, and amendments with your event data.
+              </ThemedText>
+            </View>
+            <TouchableOpacity style={styles.aiButton} onPress={openGenerateModal}>
+              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.aiButtonText}>Open Claude</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {aiLoading ? (
+            <View style={styles.aiLoadingRow}>
+              <ActivityIndicator size="small" color="#2563EB" />
+              <ThemedText style={styles.aiLoadingText}>Loading drafts…</ThemedText>
+            </View>
+          ) : aiDrafts.length === 0 ? (
+            <View style={styles.aiEmptyState}>
+              <ThemedText style={styles.aiEmptyTitle}>No AI drafts yet</ThemedText>
+              <ThemedText style={styles.aiEmptySubtitle}>
+                Claude will store each draft here for review before you publish.
+              </ThemedText>
+            </View>
+          ) : (
+            aiDrafts.map((item) => (
+              <View key={item.id} style={styles.aiDraftCard}>
+                <View style={styles.aiDraftHeader}>
+                  <View>
+                    <ThemedText style={styles.aiDraftTitle}>
+                      {getDocumentTypeName(item.document_type as DocumentType)}
+                    </ThemedText>
+                    <ThemedText style={styles.aiDraftMeta}>
+                      Created {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })} •{' '}
+                      {item.status}
+                    </ThemedText>
+                  </View>
+                  {typeof item.confidence === 'number' && (
+                    <View style={styles.aiConfidenceBadge}>
+                      <Ionicons name="shield-checkmark-outline" size={14} color="#0EA5E9" />
+                      <ThemedText style={styles.aiConfidenceText}>
+                        {(item.confidence * 100).toFixed(0)}%
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+
+                <ThemedText numberOfLines={4} style={styles.aiDraftExcerpt}>
+                  {item.draft_text}
+                </ThemedText>
+
+                <View style={styles.aiDraftActions}>
+                  <TouchableOpacity style={styles.aiActionButton} onPress={() => handlePreviewDraft(item)}>
+                    <Ionicons name="open-outline" size={16} color="#2563EB" />
+                    <ThemedText style={styles.aiActionText}>Review</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.aiActionButton} onPress={() => handleCopyDraft(item)}>
+                    <Ionicons name="copy-outline" size={16} color="#2563EB" />
+                    <ThemedText style={styles.aiActionText}>Copy</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Quick Upload</ThemedText>
           <View style={styles.uploadGrid}>
             <TouchableOpacity style={styles.uploadButton} onPress={() => handleUpload('nor')} disabled={uploading}>
@@ -327,6 +510,18 @@ export default function EventDocumentsScreen() {
             </ThemedText>
           </View>)}
       </ScrollView>
+      <AiDraftModal
+        visible={draftModalVisible}
+        onClose={handleCloseModal}
+        draft={overrideDraft ?? draft ?? null}
+        documentType={documentType}
+        isGenerating={isGenerating}
+        error={draftError}
+        onGenerate={handleGenerateDraft}
+        onDocumentTypeChange={setDocumentType}
+        onDiscard={handleDiscardDraft}
+        lastGeneratedAt={overrideGeneratedAt ?? lastGeneratedAt}
+      />
     </ThemedView>);
 }
 const styles = StyleSheet.create({
@@ -410,6 +605,123 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#1E293B',
         marginBottom: 16,
+    },
+    sectionHelper: {
+        fontSize: 13,
+        color: '#64748B',
+        marginTop: 4,
+    },
+    aiHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+        marginBottom: 16,
+    },
+    aiButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 18,
+        paddingVertical: 12,
+        borderRadius: 12,
+    },
+    aiButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    aiLoadingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: '#EFF6FF',
+        borderRadius: 12,
+        padding: 14,
+    },
+    aiLoadingText: {
+        fontSize: 13,
+        color: '#2563EB',
+    },
+    aiEmptyState: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        padding: 20,
+        gap: 4,
+    },
+    aiEmptyTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1E293B',
+    },
+    aiEmptySubtitle: {
+        fontSize: 13,
+        color: '#64748B',
+        lineHeight: 20,
+    },
+    aiDraftCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        padding: 20,
+        marginBottom: 12,
+        gap: 12,
+    },
+    aiDraftHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: 12,
+    },
+    aiDraftTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1E293B',
+    },
+    aiDraftMeta: {
+        fontSize: 12,
+        color: '#64748B',
+        marginTop: 4,
+    },
+    aiConfidenceBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#E0F2FE',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 999,
+    },
+    aiConfidenceText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#0369A1',
+    },
+    aiDraftExcerpt: {
+        fontSize: 13,
+        color: '#475569',
+        lineHeight: 18,
+    },
+    aiDraftActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    aiActionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        backgroundColor: '#EFF6FF',
+        borderRadius: 10,
+    },
+    aiActionText: {
+        color: '#2563EB',
+        fontSize: 13,
+        fontWeight: '600',
     },
     uploadGrid: {
         flexDirection: 'row',

@@ -150,6 +150,7 @@ export class SailorBoatService {
    * Get a specific boat by ID
    */
   async getBoat(boatId: string): Promise<SailorBoat | null> {
+    logger.debug('[SailorBoatService.getBoat] Fetching boat:', boatId);
 
     const { data, error } = await supabase
       .from('sailor_boats')
@@ -161,9 +162,24 @@ export class SailorBoatService {
       .single();
 
     if (error) {
-
+      logger.error('[SailorBoatService.getBoat] Error fetching boat:', {
+        boatId,
+        error,
+        errorCode: error.code,
+        errorMessage: error.message
+      });
       return null;
     }
+
+    logger.debug('[SailorBoatService.getBoat] Boat fetched successfully:', {
+      boatId: data?.id,
+      boatName: data?.name,
+      classId: data?.class_id,
+      boatClassExists: !!data?.boat_class,
+      boatClassId: data?.boat_class?.id,
+      boatClassName: data?.boat_class?.name,
+      boatClassIsArray: Array.isArray(data?.boat_class)
+    });
 
     return data;
   }
@@ -261,6 +277,34 @@ export class SailorBoatService {
       throw error;
     }
 
+    // Also register the class with the sailor in sailor_classes table
+    // This ensures the class appears in the Crew tab and other class-based features
+    try {
+      const { error: classError } = await supabase
+        .from('sailor_classes')
+        .upsert({
+          sailor_id: input.sailor_id,
+          class_id: input.class_id,
+          is_primary: input.is_primary ?? false,
+          boat_name: input.name,
+          sail_number: input.sail_number,
+        }, {
+          onConflict: 'sailor_id,class_id',
+          // Don't override if already exists
+          ignoreDuplicates: false,
+        });
+
+      if (classError) {
+        logger.warn('[SailorBoatService.createBoatDirect] Failed to register class, but boat was created:', classError);
+        // Don't throw here - boat was created successfully, class registration is secondary
+      } else {
+        logger.debug('[SailorBoatService.createBoatDirect] Successfully registered class for sailor');
+      }
+    } catch (classRegistrationError) {
+      logger.warn('[SailorBoatService.createBoatDirect] Error registering class:', classRegistrationError);
+      // Continue - boat creation succeeded
+    }
+
     return data;
   }
 
@@ -308,6 +352,28 @@ export class SailorBoatService {
     if (error) {
 
       throw error;
+    }
+
+    // Update sailor_classes if relevant fields changed
+    if (data && (input.name || input.sail_number !== undefined || input.is_primary !== undefined)) {
+      try {
+        const updateData: any = {};
+        if (input.name) updateData.boat_name = input.name;
+        if (input.sail_number !== undefined) updateData.sail_number = input.sail_number;
+        if (input.is_primary !== undefined) updateData.is_primary = input.is_primary;
+
+        const { error: classError } = await supabase
+          .from('sailor_classes')
+          .update(updateData)
+          .eq('sailor_id', data.sailor_id)
+          .eq('class_id', data.class_id);
+
+        if (classError) {
+          logger.warn('[SailorBoatService.updateBoatDirect] Failed to update sailor_classes:', classError);
+        }
+      } catch (updateError) {
+        logger.warn('[SailorBoatService.updateBoatDirect] Error updating sailor_classes:', updateError);
+      }
     }
 
     return data;
@@ -365,6 +431,29 @@ export class SailorBoatService {
     }
     logger.debug('⭐ [SailorBoatService] Primary boat updated successfully');
 
+    // Also update sailor_classes to sync primary status
+    try {
+      // Unset primary for all other boats in this class
+      await supabase
+        .from('sailor_classes')
+        .update({ is_primary: false })
+        .eq('sailor_id', boat.sailor_id)
+        .eq('class_id', boat.class_id);
+
+      // Set this boat's class as primary
+      const { error: classError } = await supabase
+        .from('sailor_classes')
+        .update({ is_primary: true })
+        .eq('sailor_id', boat.sailor_id)
+        .eq('class_id', boat.class_id);
+
+      if (classError) {
+        logger.warn('[SailorBoatService.setPrimaryBoat] Failed to update primary in sailor_classes:', classError);
+      }
+    } catch (classUpdateError) {
+      logger.warn('[SailorBoatService.setPrimaryBoat] Error updating sailor_classes:', classUpdateError);
+    }
+
   }
 
   /**
@@ -391,6 +480,18 @@ export class SailorBoatService {
   }
 
   async deleteBoatDirect(boatId: string): Promise<void> {
+    // First, get the boat info before deleting
+    const { data: boat, error: fetchError } = await supabase
+      .from('sailor_boats')
+      .select('sailor_id, class_id')
+      .eq('id', boatId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching boat before delete:', fetchError);
+      throw fetchError;
+    }
+
     const { error } = await supabase
       .from('sailor_boats')
       .delete()
@@ -399,6 +500,35 @@ export class SailorBoatService {
     if (error) {
       console.error('Error deleting boat:', error);
       throw error;
+    }
+
+    // Check if there are any other boats for this sailor in this class
+    if (boat) {
+      try {
+        const { data: remainingBoats, error: countError } = await supabase
+          .from('sailor_boats')
+          .select('id')
+          .eq('sailor_id', boat.sailor_id)
+          .eq('class_id', boat.class_id)
+          .limit(1);
+
+        // If no boats remain in this class, remove the sailor_classes entry
+        if (!countError && (!remainingBoats || remainingBoats.length === 0)) {
+          const { error: deleteClassError } = await supabase
+            .from('sailor_classes')
+            .delete()
+            .eq('sailor_id', boat.sailor_id)
+            .eq('class_id', boat.class_id);
+
+          if (deleteClassError) {
+            logger.warn('[SailorBoatService.deleteBoatDirect] Failed to remove class registration:', deleteClassError);
+          } else {
+            logger.debug('[SailorBoatService.deleteBoatDirect] Removed class registration (no boats left in class)');
+          }
+        }
+      } catch (cleanupError) {
+        logger.warn('[SailorBoatService.deleteBoatDirect] Error cleaning up sailor_classes:', cleanupError);
+      }
     }
   }
 

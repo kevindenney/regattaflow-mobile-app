@@ -17,18 +17,75 @@ import { ValidationSummary } from './ValidationSummary';
 import { EditableField } from './EditableField';
 
 export interface ExtractedData {
+  // === BASIC INFORMATION ===
   raceName?: string;
+  raceSeriesName?: string | null;
   raceDate?: string;
   venue?: string;
+  venueVariant?: string | null;
   description?: string;
+
+  // === TIMING & SCHEDULE ===
   warningSignalTime?: string;
+  racesPerDay?: number;
+  raceNumber?: number;
+  totalRacesInSeries?: number;
+
+  // === GOVERNING RULES ===
+  racingRulesSystem?: string;
+  prescriptions?: string;
+  classRules?: string;
+  ssiReference?: string;
+  courseAttachmentReference?: string;
+
+  // === ELIGIBILITY & ENTRY ===
+  eligibilityRequirements?: string;
+  entryFormUrl?: string;
+  entryDeadline?: string;
+  signOnRequirement?: string;
+  crewListRequirement?: string;
+  safetyBriefingRequired?: boolean;
+
+  // === CLASS & FLEET ===
+  boatClass?: string;
+  classDivisions?: Array<{ name: string; fleet_size: number }>;
+
+  // === SCORING ===
+  scoringSystem?: string;
+  seriesRacesRequired?: number;
+  discardsPolicy?: string;
+
+  // === COURSE & VENUE ===
+  courseArea?: string;
+  courseSelectionCriteria?: string;
+
+  // === SAFETY ===
+  safetyRequirements?: string;
+  safetyConsequences?: string;
+
+  // === INSURANCE ===
+  insuranceRequired?: boolean;
+  minimumInsuranceCoverage?: string;
+
+  // === PRIZES ===
+  prizesDescription?: string;
+
+  // === ADDITIONAL INFO ===
+  organizer?: string;
+  classSecretary?: string;
+  specialDesignations?: Array<string>;
+
+  // === COMMUNICATIONS ===
   vhfChannel?: string;
+  safetyChannel?: string;
   raceOfficer?: string;
+
+  // === WEATHER (legacy) ===
   expectedWindSpeedMin?: number;
   expectedWindSpeedMax?: number;
   startAreaName?: string;
-  scoringSystem?: string;
-  // GPS Marks & Course Layout
+
+  // === GPS MARKS & COURSE LAYOUT ===
   marks?: Array<{
     name: string;
     latitude: number;
@@ -46,8 +103,27 @@ export interface ExtractedData {
       west: number;
     };
   };
-  // Add more fields as needed
+
+  // === CONFIDENCE SCORES ===
+  confidenceScores?: {
+    raceName?: number;
+    raceDate?: number;
+    venue?: number;
+    overall?: number;
+    [key: string]: number | undefined;
+  };
+
+  // Allow additional fields
   [key: string]: any;
+}
+
+// Multi-race extraction response
+export interface MultiRaceExtractedData {
+  multipleRaces: boolean;
+  races: ExtractedData[];
+  documentType: 'NOR' | 'SI' | 'CALENDAR' | 'AMENDMENT' | 'OTHER';
+  organizingAuthority?: string | null;
+  overallConfidence: number;
 }
 
 export interface FieldConfidenceMap {

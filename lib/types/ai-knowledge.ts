@@ -193,9 +193,9 @@ export interface TacticalRecommendation {
   priority: 'critical' | 'important' | 'consider';
   action: string;
 
-  // Kevin Gladstone + Kevin Colgate Integration
-  theory?: string; // Kevin Gladstone framework (quantified what/why)
-  execution?: string; // Kevin Colgate technique (how to do it)
+  // RegattaFlow Playbook + RegattaFlow Coach Integration
+  theory?: string; // RegattaFlow Playbook framework (quantified what/why)
+  execution?: string; // RegattaFlow Coach technique (how to do it)
   championStory?: string; // Optional memorable example from championship racing
   confidence?: number; // 0-100 based on proven frameworks
 

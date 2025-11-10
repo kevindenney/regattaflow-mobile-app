@@ -3,7 +3,7 @@
  * Multi-step form for creating club events with validation
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,14 +21,30 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { EventType, EventVisibility, CreateEventInput } from '@/services/eventService';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CreateEventScreen');
 
 export default function CreateEventScreen() {
   const router = useRouter();
   const {
     clubId,
+    clubProfile,
     loading: personaLoading,
     refresh: refreshPersonaContext,
+    isConnected,
   } = useClubWorkspace();
+
+  useEffect(() => {
+    logger.debug('[CreateEventScreen] Workspace state:', {
+      clubId,
+      hasClubProfile: !!clubProfile,
+      clubProfileId: clubProfile?.id,
+      clubProfileName: clubProfile?.organization_name,
+      isConnected,
+      personaLoading
+    });
+  }, [clubId, clubProfile, isConnected, personaLoading]);
   const params = useLocalSearchParams();
   const defaultType = (params.type as EventType) || 'regatta';
 
@@ -117,6 +133,7 @@ export default function CreateEventScreen() {
   }
 
   if (!clubId) {
+    logger.warn('[CreateEventScreen] ❌ No clubId - showing connection screen');
     return (
       <ThemedView style={styles.missingContainer}>
         <Ionicons name="people-circle-outline" size={48} color="#94A3B8" />
@@ -124,14 +141,23 @@ export default function CreateEventScreen() {
         <ThemedText style={styles.missingDescription}>
           You need an active club profile before you can publish events. Complete club onboarding or retry your connection.
         </ThemedText>
-        <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            logger.debug('[CreateEventScreen] Retry button clicked - refreshing persona context');
+            refreshPersonaContext();
+          }}
+        >
           <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.secondaryLink}
-          onPress={() => router.push('/(auth)/club-onboarding-chat')}
+          onPress={() => {
+            logger.debug('[CreateEventScreen] Opening enhanced club onboarding');
+            router.push('/(auth)/club-onboarding-enhanced');
+          }}
         >
-          <ThemedText style={styles.secondaryLinkText}>Open Club Onboarding</ThemedText>
+          <ThemedText style={styles.secondaryLinkText}>Open Club Onboarding (Enhanced)</ThemedText>
         </TouchableOpacity>
       </ThemedView>
     );

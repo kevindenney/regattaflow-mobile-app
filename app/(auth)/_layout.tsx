@@ -3,10 +3,32 @@ import { useAuth } from '@/providers/AuthProvider';
 import { router, Stack, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 
+const ONBOARDING_ROUTES = new Set([
+  'club-onboarding-chat',
+  'club-onboarding-enhanced',
+  'club-onboarding-simple',
+  'club-onboarding-payment',
+  'club-onboarding-payment-confirmation',
+  'club-onboarding-website-verification',
+  'club-onboarding-complete',
+  'coach-onboarding-welcome',
+  'coach-onboarding-expertise',
+  'coach-onboarding-pricing',
+  'coach-onboarding-availability',
+  'coach-onboarding-profile-preview',
+  'coach-onboarding-stripe-callback',
+  'coach-onboarding-complete',
+  'sailor-onboarding-chat',
+  'sailor-onboarding-comprehensive',
+  'onboarding',
+  'onboarding-redesign',
+]);
+
 export default function AuthLayout() {
   const { state, userType } = useAuth();
   const segments = useSegments();
   const currentRoute = segments[segments.length - 1];
+  const onboardingRoutes = ONBOARDING_ROUTES;
 
   // Imperative redirect for signed_out to prevent any rendering
   // EXCEPT for login and signup pages
@@ -15,7 +37,11 @@ export default function AuthLayout() {
 
     if (state === 'signed_out' && !isAuthEntryPoint) {
       router.replace('/');
-    } else if (state === 'ready' && userType) {
+    } else if (
+      state === 'ready' &&
+      userType &&
+      !onboardingRoutes.has(currentRoute ?? '')
+    ) {
       const destination = roleHome(userType);
       const destinationSegment = destination.split('/').pop();
 
@@ -41,7 +67,9 @@ export default function AuthLayout() {
   }
 
   // Don't render if user already has a role (will redirect above)
-  if (state === 'ready') {
+  const isOnboardingRoute = onboardingRoutes.has(currentRoute ?? '');
+
+  if (state === 'ready' && !isOnboardingRoute) {
     return null;
   }
 
@@ -56,6 +84,24 @@ export default function AuthLayout() {
     >
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
-    </Stack>
+      <Stack.Screen name="club-onboarding-chat" />
+      <Stack.Screen name="club-onboarding-enhanced" />
+      <Stack.Screen name="club-onboarding-simple" />
+      <Stack.Screen name="club-onboarding-payment" />
+      <Stack.Screen name="club-onboarding-payment-confirmation" />
+      <Stack.Screen name="club-onboarding-website-verification" />
+      <Stack.Screen name="club-onboarding-complete" />
+      <Stack.Screen name="coach-onboarding-welcome" />
+      <Stack.Screen name="coach-onboarding-expertise" />
+      <Stack.Screen name="coach-onboarding-pricing" />
+      <Stack.Screen name="coach-onboarding-availability" />
+      <Stack.Screen name="coach-onboarding-profile-preview" />
+      <Stack.Screen name="coach-onboarding-stripe-callback" />
+      <Stack.Screen name="coach-onboarding-complete" />
+      <Stack.Screen name="sailor-onboarding-chat" />
+      <Stack.Screen name="sailor-onboarding-comprehensive" />
+      <Stack.Screen name="onboarding" />
+      <Stack.Screen name="onboarding-redesign" />
+  </Stack>
   );
 }

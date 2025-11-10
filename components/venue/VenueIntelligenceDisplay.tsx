@@ -9,6 +9,17 @@ import { ThemedText } from '@/components/themed-text';
 import { useVenueIntelligence } from '@/hooks/useVenueIntelligence';
 import type { RegionalIntelligenceData } from '@/services/venue/RegionalIntelligenceService';
 
+const isMissingTableError = (error: unknown) => {
+  if (!error || typeof error !== 'object') return false;
+
+  const message =
+    'message' in error && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : '';
+
+  return message.includes('does not exist') || message.includes('relation');
+};
+
 interface VenueIntelligenceDisplayProps {
   style?: any;
 }
@@ -684,7 +695,7 @@ function RacingIntelligence() {
 
         // Fetch documents
         const { data: docData, error: docError } = await supabase
-          .from('club_documents')
+          .from('club_ai_documents')
           .select(`
             id,
             title,
@@ -697,7 +708,9 @@ function RacingIntelligence() {
           .order('publish_date', { ascending: false })
           .limit(10);
 
-        if (docError) throw docError;
+        if (docError && !isMissingTableError(docError)) {
+          throw docError;
+        }
         setDocuments(docData || []);
       } catch (error) {
         // Silent error - data will be empty

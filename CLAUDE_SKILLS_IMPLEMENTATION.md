@@ -2,7 +2,7 @@
 
 ## 🎉 What We Just Did
 
-Successfully implemented Claude Skills API integration for RegattaFlow's race strategy engine, combining Kevin Gladstone's North U Performance Racing Tactics with Kevin Colgate's championship execution techniques.
+Successfully implemented Claude Skills API integration for RegattaFlow's race strategy engine, combining the RegattaFlow Playbook Performance Racing Tactics with RegattaFlow Coach's championship execution techniques.
 
 ## ✅ Completed Tasks
 
@@ -12,7 +12,7 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
 
 ### 2. Custom Skill Creation
 - ✅ Created `/skills/race-strategy-analyst/SKILL.md`
-- ✅ Documented all Kevin Gladstone frameworks:
+- ✅ Documented all RegattaFlow Playbook frameworks:
   - Wind Shift Mathematics ("10° shift = 25% of boat separation")
   - Puff Response (header+less=tack, lift+more=stay)
   - Delayed Tack (signature move for 3-4 length advantage)
@@ -20,7 +20,7 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
   - Getting In Phase (tack on headers, stay on lifts)
   - Start Line Bias (5° bias = ~2 boat-length advantage)
 
-- ✅ Documented all Kevin Colgate execution techniques:
+- ✅ Documented all RegattaFlow Coach execution techniques:
   - Tight Cover Timing
   - Rhythmic Jibing with Telltale Awareness
   - Compass Discipline
@@ -39,7 +39,7 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
 
 ### Cost Savings
 - **60% reduction in prompt tokens** when skill is uploaded
-- Gladstone + Colgate frameworks now loaded automatically
+- RegattaFlow Playbook + RegattaFlow Coach frameworks now loaded automatically
 - No need to include massive tactical knowledge in every prompt
 
 ### Performance Improvements
@@ -66,8 +66,8 @@ Successfully implemented Claude Skills API integration for RegattaFlow's race st
 
 ### Files Created
 1. `/skills/race-strategy-analyst/SKILL.md`
-   - Complete Kevin Gladstone frameworks (theory/what/why)
-   - Complete Kevin Colgate techniques (execution/how)
+   - Complete RegattaFlow Playbook frameworks (theory/what/why)
+   - Complete RegattaFlow Coach techniques (execution/how)
    - Confidence ratings (85-95% for physics-based tactics)
    - Champion examples and stories
    - Integration guidelines for AI
@@ -118,6 +118,25 @@ Update `StartStrategyCard.tsx` and other strategy cards to call `RaceStrategyEng
 - Check console for successful API calls
 - Validate strategy output quality
 
+### Skill Draft Automation
+
+Use the new helper script when importing fresh tactical material (e.g., PDFs like `RegattaFlowPlaybookTactics.pdf`):
+
+```bash
+node scripts/generate-skills-from-pdf.mjs \
+  --pdf /absolute/path/to/RegattaFlowPlaybookTactics.pdf \
+  --slug regattaflow-playbook-tactics \
+  --title "RegattaFlow Playbook Tactics Core Concepts" \
+  --description "Draft extracted from RegattaFlow Playbook Performance Racing Tactics"
+```
+
+This creates `skills/generated/<slug>/` with:
+- `source.txt` – raw extracted text for reference
+- `segment-XX.draft.md` – draft skill segments with conversion checklists
+- `outline.json` – headings + word counts to triage scope
+
+Review each draft, craft the final `SKILL.md`, then upload via `upload-skills-zip.mjs`.
+
 ## 📝 Current Status
 
 ### What Works Now ✅
@@ -156,12 +175,12 @@ const strategy = await engine.generateVenueBasedStrategy(
   }
 );
 
-// Strategy will include Gladstone + Colgate tactical recommendations!
+// Strategy will include RegattaFlow Playbook + RegattaFlow Coach tactical recommendations!
 console.log(strategy.strategy.startStrategy);
 // {
 //   action: "Start at pin end for 5° bias advantage",
-//   theory: "Gladstone: Each 5° bias = ~2 boat-length advantage",
-//   execution: "Colgate: Tight approach with full speed at gun",
+//   theory: "RegattaFlow Playbook: Each 5° bias = ~2 boat-length advantage",
+//   execution: "RegattaFlow Coach: Tight approach with full speed at gun",
 //   confidence: 90,
 //   ...
 // }
@@ -182,8 +201,8 @@ console.log(strategy.strategy.startStrategy);
 - [Anthropic Skills Documentation](https://docs.claude.com/en/api/skills-guide)
 - [Claude Skills GitHub](https://github.com/anthropics/skills)
 - [Skills API Quickstart](https://docs.claude.com/en/api/skills-guide)
-- Kevin Gladstone's North U Performance Racing Tactics
-- Kevin Colgate's Offshore Sailing School techniques
+- the RegattaFlow Playbook Performance Racing Tactics
+- RegattaFlow Coach's Offshore Sailing School techniques
 
 ## ⚠️ Important Notes
 

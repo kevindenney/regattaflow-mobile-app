@@ -67,7 +67,8 @@ module.exports = {
     },
     // Expose environment variables via Constants.expoConfig.extra
     extra: {
-      weatherApiKey: process.env.WEATHER_API_KEY,
+      stormglassApiKey: process.env.EXPO_PUBLIC_STORMGLASS_API_KEY,
+      openWeatherMapApiKey: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       anthropicApiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY,

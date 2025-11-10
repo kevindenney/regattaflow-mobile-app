@@ -9,14 +9,13 @@
     "lib/types/advanced-map.ts",
     "lib/types/map.ts",
     "services/visualization/EnvironmentalVisualizationService.ts",
-    "services/weather/WeatherAPIProService.ts",
     "services/weather/ProfessionalWeatherService.ts",
     "services/weather/RegionalWeatherService.ts",
     "services/weather/WeatherAggregationService.ts",
     "services/weather/**/*.ts",
     "services/TopographicWindService.ts",
     "services/BathymetricTidalService.ts",
-    "services/tides/WorldTidesProService.ts"
+    "services/tides/**/*.ts"
   ],
   "exclude": ["types/raceEvents.ts"]
 }

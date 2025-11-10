@@ -1,0 +1,1316 @@
+.
+├── ADD_RACE_REDESIGN_SUMMARY.md
+├── add-demo-sailor-to-phyloong.sql
+├── AI_RIG_TUNING_DEBUG_GUIDE.md
+├── AI_RIG_TUNING_FIX_COMPLETE.md
+├── AI_RIG_TUNING_IMPLEMENTATION.md
+├── AI_RIG_TUNING_UI_GUIDE.md
+├── api
+│   ├── ai
+│   │   ├── club
+│   │   ├── cron
+│   │   ├── events
+│   │   └── races
+│   └── club
+│       └── workspace.ts
+├── app
+│   ├── _layout.tsx
+│   ├── (auth)
+│   │   ├── _layout.tsx
+│   │   ├── callback.tsx
+│   │   ├── club-onboarding-chat.tsx
+│   │   ├── club-onboarding-complete.tsx
+│   │   ├── club-onboarding-enhanced.tsx
+│   │   ├── club-onboarding-payment-confirmation.tsx
+│   │   ├── club-onboarding-payment.tsx
+│   │   ├── club-onboarding-simple.tsx
+│   │   ├── club-onboarding-website-verification.tsx
+│   │   ├── coach-onboarding-availability.tsx
+│   │   ├── coach-onboarding-complete.tsx
+│   │   ├── coach-onboarding-expertise.tsx
+│   │   ├── coach-onboarding-pricing.tsx
+│   │   ├── coach-onboarding-profile-preview.tsx
+│   │   ├── coach-onboarding-stripe-callback.tsx
+│   │   ├── coach-onboarding-welcome.tsx
+│   │   ├── login.tsx
+│   │   ├── onboarding-redesign.tsx
+│   │   ├── onboarding-redesign.tsx.bak
+│   │   ├── onboarding.tsx
+│   │   ├── onboarding.tsx.bak
+│   │   ├── sailor-onboarding-chat.tsx
+│   │   ├── sailor-onboarding-comprehensive.tsx
+│   │   ├── sailor-onboarding-comprehensive.tsx.bak
+│   │   └── signup.tsx
+│   ├── (legacy)
+│   │   └── more.tsx
+│   ├── (tabs)
+│   │   ├── _layout.tsx
+│   │   ├── add-next-race.tsx
+│   │   ├── add-race-redesign.tsx
+│   │   ├── boat
+│   │   ├── boats.tsx
+│   │   ├── calendar.tsx
+│   │   ├── clients.tsx
+│   │   ├── clubs.tsx
+│   │   ├── coach
+│   │   ├── coaching.tsx
+│   │   ├── courses.tsx
+│   │   ├── crew.tsx
+│   │   ├── dashboard.tsx
+│   │   ├── earnings.tsx
+│   │   ├── events.tsx
+│   │   ├── fleet
+│   │   ├── fleets.tsx
+│   │   ├── map.tsx
+│   │   ├── members.tsx
+│   │   ├── more.tsx
+│   │   ├── my-learning.tsx
+│   │   ├── profile.tsx
+│   │   ├── race
+│   │   ├── race-detail-demo.tsx
+│   │   ├── race-management.tsx
+│   │   ├── race-session
+│   │   ├── races.tsx
+│   │   ├── races.tsx.backup
+│   │   ├── schedule.tsx
+│   │   ├── settings.tsx
+│   │   ├── strategy.tsx
+│   │   ├── tuning-guides.tsx
+│   │   └── venue.tsx
+│   ├── add-manual-entry.tsx
+│   ├── admin-users-verification.tsx
+│   ├── ai-strategy.tsx
+│   ├── analytics.tsx
+│   ├── boat-setup.tsx
+│   ├── boats.tsx
+│   ├── calendar
+│   │   └── circuit-planner.tsx
+│   ├── calendar.tsx
+│   ├── club
+│   │   ├── earnings.tsx
+│   │   ├── entries
+│   │   ├── event
+│   │   ├── race
+│   │   └── results
+│   ├── club-dashboard.tsx
+│   ├── clubs.tsx
+│   ├── coach
+│   │   ├── _layout.tsx
+│   │   ├── [id].tsx
+│   │   ├── book.tsx
+│   │   ├── client
+│   │   ├── confirmation.tsx
+│   │   ├── discover-enhanced.tsx
+│   │   ├── discover.tsx
+│   │   └── my-bookings.tsx
+│   ├── coaches.tsx
+│   ├── confirm-crew.tsx
+│   ├── course-view.tsx
+│   ├── crew.tsx
+│   ├── debug
+│   │   ├── modal.tsx
+│   │   └── weather-test.tsx
+│   ├── documents.tsx
+│   ├── entry-management.tsx
+│   ├── fleet-activity.tsx
+│   ├── fleet-verification.tsx
+│   ├── fleets.tsx
+│   ├── for-organizations.tsx
+│   ├── index.tsx
+│   ├── legacy.tsx
+│   ├── location.tsx
+│   ├── map-debug.tsx
+│   ├── map-fullscreen.tsx
+│   ├── members
+│   │   └── requests.tsx
+│   ├── messages.tsx
+│   ├── modal.tsx
+│   ├── more.tsx
+│   ├── post-update.tsx
+│   ├── pricing.tsx
+│   ├── profile.tsx
+│   ├── race
+│   │   ├── ai-coach-demo.tsx
+│   │   ├── analysis
+│   │   ├── edit
+│   │   ├── simulation
+│   │   ├── tactical.tsx
+│   │   ├── tactical.web.tsx
+│   │   ├── timer
+│   │   └── validate
+│   ├── race-analysis.tsx
+│   ├── race-committee-dashboard.tsx
+│   ├── race-control.tsx
+│   ├── race-in-progress.tsx
+│   ├── race-series-verification.tsx
+│   ├── race-strategy.tsx
+│   ├── race-timer-pro.tsx
+│   ├── racing-console-demo.tsx
+│   ├── racing-console-live-demo.tsx
+│   ├── recent-race-analysis.tsx
+│   ├── record-finishes.tsx
+│   ├── regatta-verification.tsx
+│   ├── results-scoring.tsx
+│   ├── results.tsx
+│   ├── review.tsx
+│   ├── score-races.tsx
+│   ├── series-race-config.tsx
+│   ├── series-standings.tsx
+│   ├── settings
+│   │   ├── change-password.tsx
+│   │   ├── delete-account.tsx
+│   │   ├── edit-profile.tsx
+│   │   ├── language.tsx
+│   │   └── notifications.tsx
+│   ├── settings.tsx
+│   ├── start-sequence.tsx
+│   ├── subscription.tsx
+│   ├── support.tsx
+│   ├── test-sections.tsx
+│   ├── upload-documents.tsx
+│   ├── venue-intelligence.tsx
+│   ├── venue-test.tsx
+│   ├── venue-verification-review.tsx
+│   └── venue-verification.tsx
+├── app.config.js
+├── app.json
+├── APPLY_NOR_MIGRATION.md
+├── assets
+│   ├── bathymetry
+│   │   └── geojson
+│   ├── fonts
+│   │   └── SpaceMono-Regular.ttf
+│   └── images
+│       ├── adaptive-icon.png
+│       ├── android-icon-background.png
+│       ├── android-icon-foreground.png
+│       ├── android-icon-monochrome.png
+│       ├── favicon.png
+│       ├── icon.png
+│       ├── partial-react-logo.png
+│       ├── react-logo.png
+│       ├── react-logo@2x.png
+│       ├── react-logo@3x.png
+│       └── splash-icon.png
+├── AUTO_STRATEGY_GENERATION_COMPLETE.md
+├── babel.config.js
+├── BOAT_TUNING_AI_GUIDE.md
+├── BOAT_TUNING_IMPLEMENTATION_COMPLETE.md
+├── BOAT_TUNING_QUICKSTART.md
+├── BOAT_TUNING_SKILL_IMPLEMENTATION.md
+├── CLAUDE_SKILLS_IMPLEMENTATION.md
+├── CLAUDE_SKILLS_INTEGRATION.md
+├── CLAUDE_SKILLS_QUICKSTART.md
+├── clean_all_emoji_logs.py
+├── clean_emoji_logs.py
+├── CLUB_AND_SAILOR_EXECUTION_BACKLOG.md
+├── CLUB_AND_SAILOR_PRODUCT_PLAYBOOK.md
+├── CLUBS_AND_FLEETS_SETUP_STATUS.md
+├── COACHING_INTEGRATION_COMPLETE.md
+├── COACHING_PROCESSING_SUMMARY.md
+├── COMPLETE_IMPLEMENTATION_SUMMARY.md
+├── COMPLETE_SETUP_SUMMARY.md
+├── components
+│   ├── admin
+│   │   ├── LocationGeocoder.tsx
+│   │   └── ResultsPollingDashboard.tsx
+│   ├── ai
+│   │   ├── AiDraftActions.tsx
+│   │   ├── AiDraftModal.tsx
+│   │   ├── AIRaceAnalysisDashboard.tsx
+│   │   ├── ClubAiAssistant.tsx
+│   │   ├── EducationalStrategyDemo.tsx
+│   │   ├── RaceCommsModal.tsx
+│   │   ├── StrategyChatInterface.tsx
+│   │   └── VoiceNoteRecorder.tsx
+│   ├── boats
+│   │   ├── Boat3DCard.tsx
+│   │   ├── Boat3DViewer.native.tsx
+│   │   ├── Boat3DViewer.tsx
+│   │   ├── BoatCard.tsx
+│   │   ├── BoatCrewList.tsx
+│   │   ├── BoatDetail.tsx
+│   │   ├── index.ts
+│   │   ├── MaintenanceSchedule.tsx
+│   │   ├── PerformanceAnalysis.tsx
+│   │   ├── QuickAddBoatForm.tsx
+│   │   ├── RiggingConfig.tsx
+│   │   ├── RigTuningControls.tsx
+│   │   ├── SailInventory.tsx
+│   │   └── TuningGuideList.tsx
+│   ├── calendar
+│   │   ├── MapView.tsx
+│   │   └── MapView.web.tsx
+│   ├── clubs
+│   │   ├── ClubCard.tsx
+│   │   ├── ClubDetail.tsx
+│   │   ├── EventsList.tsx
+│   │   └── FacilitiesList.tsx
+│   ├── coach
+│   │   ├── AdvancedAnalytics.tsx
+│   │   ├── AICoachMatchmaker.tsx
+│   │   ├── booking
+│   │   ├── CoachCard.tsx
+│   │   ├── CoachDashboard.tsx
+│   │   ├── CoachDiscovery.tsx
+│   │   ├── CoachFilters.tsx
+│   │   ├── CoachProfile.tsx
+│   │   ├── CoachRegistration.tsx
+│   │   ├── dashboard
+│   │   ├── LiveCoachingAssistant.tsx
+│   │   ├── onboarding
+│   │   ├── PaymentConfirmation.tsx
+│   │   ├── PaymentReceipt.tsx
+│   │   ├── registration
+│   │   ├── ReviewDisplay.tsx
+│   │   ├── SessionManagement.tsx
+│   │   └── SessionReview.tsx
+│   ├── coaching
+│   │   ├── CoachDashboard.tsx
+│   │   ├── CoachSelectionModal.tsx
+│   │   ├── QuickSkillButtons.tsx
+│   │   ├── skillInvocation.ts
+│   │   └── SmartRaceCoach.tsx
+│   ├── courses
+│   │   ├── CourseBuilder.tsx
+│   │   ├── CourseMapView.native.tsx
+│   │   ├── CourseMapView.tsx
+│   │   ├── CourseMapView.web.tsx
+│   │   └── index.ts
+│   ├── dashboard
+│   │   ├── AICoachCard.tsx
+│   │   ├── club
+│   │   ├── coach
+│   │   ├── CoursePredictor.tsx
+│   │   ├── index.ts
+│   │   ├── NextRaceCard.tsx
+│   │   ├── NextRaceStrategyCard.tsx
+│   │   ├── RaceCountdownTimer.tsx
+│   │   ├── RaceDashboard.tsx
+│   │   ├── RecentRaceAnalysis.tsx
+│   │   ├── sailor
+│   │   ├── SeasonStatsCard.tsx
+│   │   ├── shared
+│   │   ├── StrategyPreview.tsx
+│   │   └── WeatherIntelligence.tsx
+│   ├── developer
+│   │   └── DeveloperDocumentUploader.tsx
+│   ├── documents
+│   │   ├── DocumentUploadCard.tsx
+│   │   ├── DocumentViewer.tsx
+│   │   ├── index.ts
+│   │   ├── PDFExtractionProgress.tsx
+│   │   └── PDFTextPreview.tsx
+│   ├── fleets
+│   │   ├── AnnouncementComposer.tsx
+│   │   ├── FleetActivityFeed.tsx
+│   │   ├── FleetCard.tsx
+│   │   ├── FleetFeed.tsx
+│   │   ├── FleetNotificationPanel.tsx
+│   │   ├── index.ts
+│   │   ├── Leaderboard.tsx
+│   │   ├── MembersList.tsx
+│   │   ├── PostComposer.tsx
+│   │   ├── ResourceUploadComposer.tsx
+│   │   └── TuningLibrary.tsx
+│   ├── icons
+│   │   └── EmojiTabIcon.tsx
+│   ├── landing
+│   │   ├── HeroPhones.tsx
+│   │   ├── HeroTabs.tsx
+│   │   ├── maps
+│   │   ├── MiniClubDashboard.tsx
+│   │   ├── MiniCoachDashboard.tsx
+│   │   ├── MiniSailorDashboard.tsx
+│   │   ├── PricingSection.tsx
+│   │   └── ScrollFix.tsx
+│   ├── layout
+│   │   └── AppHeader.tsx
+│   ├── map
+│   │   ├── Bathymetry3DViewer.tsx
+│   │   ├── controls
+│   │   ├── engines
+│   │   ├── index.ts
+│   │   ├── layers
+│   │   ├── Map3DView.tsx
+│   │   ├── overlays
+│   │   ├── ProfessionalMap3DView.tsx
+│   │   ├── ProfessionalMapControls.tsx
+│   │   ├── ProfessionalMapScreen.tsx
+│   │   ├── RaceCourseVisualization.tsx
+│   │   ├── TacticalZoneRenderer.tsx
+│   │   ├── test
+│   │   ├── WeatherOverlay3D.tsx
+│   │   └── WebMapView.tsx
+│   ├── mapping
+│   │   └── Map3D.tsx
+│   ├── navigation
+│   │   └── NavigationHeader.tsx
+│   ├── onboarding
+│   │   ├── ChatOnboardingInterface.tsx
+│   │   ├── ClubFormSection.tsx
+│   │   ├── ClubOnboardingChat.tsx
+│   │   ├── EnhancedClubOnboarding.tsx
+│   │   ├── ExtractedDataPreview.tsx
+│   │   ├── FreeformInputField.tsx
+│   │   ├── index.ts
+│   │   ├── OnboardingCompletion.tsx
+│   │   ├── OnboardingDataTally.tsx
+│   │   ├── OnboardingFormFields.tsx
+│   │   ├── OnboardingProgress.tsx
+│   │   ├── OnboardingProgressBar.tsx
+│   │   ├── OnboardingSection.tsx
+│   │   ├── OnboardingSummary.tsx
+│   │   ├── PersonaTabBar.tsx
+│   │   ├── QuickPasteOptions.tsx
+│   │   └── SuggestionChip.tsx
+│   ├── race
+│   │   ├── CoachRaceInterface.tsx
+│   │   ├── CourseDesigner.tsx
+│   │   ├── CourseTemplateLibrary.tsx
+│   │   ├── CourseValidation.tsx
+│   │   ├── index.ts
+│   │   ├── RaceBuilder.tsx
+│   │   ├── SailorRaceInterface.tsx
+│   │   ├── shared
+│   │   ├── UserTypeAwareRaces.tsx
+│   │   ├── WeatherIntegration.tsx
+│   │   └── yacht-club
+│   ├── race-control
+│   │   ├── index.ts
+│   │   ├── ProtestModal.tsx
+│   │   └── RaceLeaderboard.tsx
+│   ├── race-detail
+│   │   ├── CommunicationsCard.tsx
+│   │   ├── CompactCommsCard.tsx
+│   │   ├── CompactCourseCard.tsx
+│   │   ├── CompactRaceInfoCard.tsx
+│   │   ├── CompactTideCard.tsx
+│   │   ├── CompactWaveCard.tsx
+│   │   ├── CompactWindCard.tsx
+│   │   ├── ContingencyPlansCard.tsx
+│   │   ├── CourseCard.tsx
+│   │   ├── CourseSelector.tsx
+│   │   ├── CrewEquipmentCard.tsx
+│   │   ├── CurrentTideCard.tsx
+│   │   ├── DownwindStrategyCard.tsx
+│   │   ├── ExecutionEvaluationCard.tsx
+│   │   ├── FleetRacersCard.tsx
+│   │   ├── index.ts
+│   │   ├── map
+│   │   ├── MarkManager.tsx
+│   │   ├── MarkRoundingCard.tsx
+│   │   ├── PostRaceAnalysisCard.tsx
+│   │   ├── RaceDetailMapHero.tsx
+│   │   ├── RaceDocumentsCard.tsx
+│   │   ├── RaceOverviewCard.tsx
+│   │   ├── RacePhaseHeader.tsx
+│   │   ├── RigTuningCard.tsx
+│   │   ├── StartStrategyCard.tsx
+│   │   ├── StrategyCard.tsx
+│   │   ├── StrategyPlanningCard.tsx
+│   │   ├── TacticalPlanCard.tsx
+│   │   ├── tide
+│   │   ├── TideCard.tsx
+│   │   ├── TimingCard.tsx
+│   │   ├── UpwindStrategyCard.tsx
+│   │   ├── weather
+│   │   ├── WeatherCard.tsx
+│   │   ├── WeatherMetricCard.tsx
+│   │   └── WindWeatherCard.tsx
+│   ├── race-strategy
+│   │   ├── AIValidationScreen.tsx
+│   │   ├── CourseMapVisualization.tsx
+│   │   ├── DocumentUploadScreen.tsx
+│   │   ├── index.ts
+│   │   ├── OnXMapsInterface.tsx
+│   │   ├── QuickDrawMode.tsx
+│   │   ├── RaceMapView.tsx
+│   │   ├── RaceStrategyFlow.tsx
+│   │   ├── TacticalMapDemo.tsx
+│   │   ├── TacticalMapStandalone.tsx
+│   │   ├── TacticalRaceMap.tsx
+│   │   ├── TimeBasedEnvironmentalMap.tsx
+│   │   └── TimeBasedEnvironmentalVisualization.tsx
+│   ├── race-ui
+│   │   ├── Badge.tsx
+│   │   ├── Card.tsx
+│   │   ├── CardHeader.tsx
+│   │   ├── Chip.tsx
+│   │   ├── EmptyState.tsx
+│   │   ├── index.ts
+│   │   └── InfoGrid.tsx
+│   ├── races
+│   │   ├── AddRaceBottomSheet.tsx
+│   │   ├── AddRaceModal.tsx
+│   │   ├── AIQuickEntry.tsx
+│   │   ├── AIRaceStrategy.tsx
+│   │   ├── AIValidationScreen.tsx
+│   │   ├── BoatSelector.tsx
+│   │   ├── CalendarImportFlow.tsx
+│   │   ├── ComprehensiveRaceEntry.tsx
+│   │   ├── ConditionBadge.tsx
+│   │   ├── CountdownTimer.tsx
+│   │   ├── CourseSelector.tsx
+│   │   ├── CourseSetupPrompt.tsx
+│   │   ├── CourseVisualization.tsx
+│   │   ├── CourseVisualizationNative.tsx
+│   │   ├── CourseVisualizationWeb.tsx
+│   │   ├── CreateRaceEventScreen.tsx
+│   │   ├── debrief
+│   │   ├── DemoRaceDetail.tsx
+│   │   ├── DocumentList.tsx
+│   │   ├── DocumentViewer.tsx
+│   │   ├── EditableField.tsx
+│   │   ├── EnhancedRaceCard.tsx
+│   │   ├── ExtractionProgress.tsx
+│   │   ├── ExtractionResults.tsx
+│   │   ├── ExtractionStatusBadge.tsx
+│   │   ├── FieldConfidenceBadge.tsx
+│   │   ├── FleetPostRaceInsights.tsx
+│   │   ├── GPSTrackMapView.native.tsx
+│   │   ├── GPSTrackMapView.types.ts
+│   │   ├── GPSTrackMapView.web.tsx
+│   │   ├── index.ts
+│   │   ├── LivePositionTracker.tsx
+│   │   ├── LiveRaceTimer.tsx
+│   │   ├── ManualRaceForm.tsx
+│   │   ├── modes
+│   │   ├── MultiRaceSelectionScreen.tsx
+│   │   ├── OnWaterTrackingView.tsx
+│   │   ├── PerformanceMetrics.tsx
+│   │   ├── PhaseHeader.tsx
+│   │   ├── PhaseSkillButtons.tsx
+│   │   ├── plan
+│   │   ├── PostRaceAnalysisForm.tsx
+│   │   ├── PostRaceInterview.tsx
+│   │   ├── PrimaryAICoach.tsx
+│   │   ├── QuickActionDrawer.tsx
+│   │   ├── RaceAnalysisView.tsx
+│   │   ├── RaceCard.tsx
+│   │   ├── RaceDetailCards.tsx
+│   │   ├── RaceDetailsView.tsx
+│   │   ├── RaceLearningInsights.tsx
+│   │   ├── RaceModeSelector.tsx
+│   │   ├── RaceSuggestionsDrawer.tsx
+│   │   ├── RaceTimer.tsx
+│   │   ├── RegattaFlowPlaybookCoaching.tsx
+│   │   ├── ResponsiveRaceLayout.tsx
+│   │   ├── SplitTimesAnalysis.tsx
+│   │   ├── StartSequenceTimer.tsx
+│   │   ├── StrategyPhaseSuggestion.tsx
+│   │   ├── TacticalCoaching.tsx
+│   │   ├── TacticalDataOverlay.tsx
+│   │   ├── TacticalInsights.tsx
+│   │   ├── TacticalPlaybook.tsx
+│   │   ├── tracking
+│   │   ├── TrackModeToggle.tsx
+│   │   ├── TrackStatsPanel.tsx
+│   │   ├── ValidationSummary.tsx
+│   │   └── VenueLocationPicker.tsx
+│   ├── racing
+│   │   └── RaceDayInterface.tsx
+│   ├── racing-console
+│   │   ├── AITacticalChips
+│   │   ├── DepthSafetyStrip
+│   │   ├── index.ts
+│   │   └── PreStartConsole
+│   ├── registration
+│   │   ├── DocumentChecklistComponent.tsx
+│   │   ├── index.ts
+│   │   ├── PaymentFlowComponent.tsx
+│   │   ├── PaymentFlowComponent.web.tsx
+│   │   ├── RaceRegistrationForm.tsx
+│   │   └── RaceRegistrationWithPayment.tsx
+│   ├── results
+│   │   ├── ExternalResultsMonitor.tsx
+│   │   ├── index.ts
+│   │   ├── ResultsApprovalPanel.tsx
+│   │   ├── ResultsCard.tsx
+│   │   ├── ResultsSearchInterface.tsx
+│   │   └── SeriesStandings.tsx
+│   ├── sailor
+│   │   ├── AddEquipmentForm.tsx
+│   │   ├── AlertSubscriptionModal.tsx
+│   │   ├── BoatActionMenu.tsx
+│   │   ├── BoatEquipmentInventory.tsx
+│   │   ├── ClassSelector.tsx
+│   │   ├── ClubsAssociationsSection.tsx
+│   │   ├── CreateTuningSetupForm.tsx
+│   │   ├── CrewAvailabilityCalendar.tsx
+│   │   ├── CrewManagement.tsx
+│   │   ├── CrewPerformanceCard.tsx
+│   │   ├── EquipmentAlerts.tsx
+│   │   ├── ExternalResultsCard.tsx
+│   │   ├── index.ts
+│   │   ├── LogMaintenanceForm.tsx
+│   │   ├── MaintenanceTimeline.tsx
+│   │   ├── TuningGuidesSection.tsx
+│   │   ├── TuningSettings.tsx
+│   │   └── UploadDocumentForm.tsx
+│   ├── shared
+│   │   ├── CardMenu.tsx
+│   │   ├── index.ts
+│   │   └── UniversalMapInterface.tsx
+│   ├── Splash.tsx
+│   ├── strategy
+│   │   └── RaceCourseVisualization3D.tsx
+│   ├── subscription
+│   │   └── SubscriptionManager.tsx
+│   ├── subscriptions
+│   │   └── PaywallModal.tsx
+│   ├── themed-text.tsx
+│   ├── themed-view.tsx
+│   ├── ui
+│   │   ├── AccessibleTouchTarget.tsx
+│   │   ├── accordion
+│   │   ├── actionsheet
+│   │   ├── alert
+│   │   ├── alert-dialog
+│   │   ├── avatar
+│   │   ├── badge
+│   │   ├── box
+│   │   ├── button
+│   │   ├── card
+│   │   ├── center
+│   │   ├── checkbox
+│   │   ├── divider
+│   │   ├── drawer
+│   │   ├── empty
+│   │   ├── error
+│   │   ├── fab
+│   │   ├── flat-list
+│   │   ├── form-control
+│   │   ├── gluestack-ui-provider
+│   │   ├── grid
+│   │   ├── heading
+│   │   ├── hstack
+│   │   ├── icon
+│   │   ├── image
+│   │   ├── image-background
+│   │   ├── index.ts
+│   │   ├── input
+│   │   ├── input-accessory-view
+│   │   ├── keyboard-avoiding-view
+│   │   ├── link
+│   │   ├── loading
+│   │   ├── menu
+│   │   ├── modal
+│   │   ├── network
+│   │   ├── OfflineIndicator.tsx
+│   │   ├── popover
+│   │   ├── portal
+│   │   ├── pressable
+│   │   ├── progress
+│   │   ├── radio
+│   │   ├── RealtimeConnectionIndicator.tsx
+│   │   ├── refresh-control
+│   │   ├── safe-area-view
+│   │   ├── ScreenReaderComponents.tsx
+│   │   ├── scroll-view
+│   │   ├── section-list
+│   │   ├── select
+│   │   ├── skeleton
+│   │   ├── slider
+│   │   ├── spinner
+│   │   ├── stat-card
+│   │   ├── status-bar
+│   │   ├── switch
+│   │   ├── table
+│   │   ├── text
+│   │   ├── textarea
+│   │   ├── toast
+│   │   ├── tooltip
+│   │   ├── utils
+│   │   ├── view
+│   │   ├── virtualized-list
+│   │   └── vstack
+│   ├── venue
+│   │   ├── DiscoverySection.tsx
+│   │   ├── FloatingPanel.tsx
+│   │   ├── GlobalVenueIntelligence.tsx
+│   │   ├── GlobalVenuesMapLayer.tsx
+│   │   ├── LocationSelector.tsx
+│   │   ├── MapControls.tsx
+│   │   ├── NetworkSidebar.tsx
+│   │   ├── SavedNetworkSection.tsx
+│   │   ├── TravelResourceChips.tsx
+│   │   ├── VenueDetailsSheet.tsx
+│   │   ├── VenueHeroCard.tsx
+│   │   ├── VenueIntelligenceDisplay.tsx
+│   │   ├── VenueIntelligenceMapView.tsx
+│   │   ├── VenueMapView.d.ts
+│   │   ├── VenueMapView.native.tsx
+│   │   ├── VenueMapView.web.tsx
+│   │   ├── VenueSelector.tsx
+│   │   └── VenueSidebar.tsx
+│   └── weather
+│       └── WeatherIntelligence.tsx
+├── COMPREHENSIVE_RACE_UX_REDESIGN.md
+├── constants
+│   ├── accessibleColors.ts
+│   ├── boatEquipment.ts
+│   ├── Colors.ts
+│   ├── designSystem.ts
+│   ├── mockData.ts
+│   ├── RacingDesignSystem.ts
+│   └── sailing-icons.ts
+├── COURSE_MANAGEMENT_PLAN.md
+├── cursor.json
+├── data
+│   ├── default-tuning-guides.ts
+│   ├── race-courses.json
+│   ├── sailing-locations.json
+│   ├── tacticalPlaybook.ts
+│   └── yacht-clubs.json
+├── database
+│   ├── create-venue-tables.sql
+│   └── venue-schema.sql
+├── DATABASE_SETUP_GUIDE.md
+├── database-setup.sql
+├── DEBUG_LOGS_ADDED.md
+├── DEBUG_SUGGESTIONS_CHECKLIST.md
+├── debug-console.html
+├── DEMO_USERS_QUICK_REF.md
+├── DEPLOYMENT.md
+├── depth-layer-test.png
+├── docs
+│   ├── AI_COACH_QUICKSTART.md
+│   ├── AI_INTEGRATION_GUIDE.md
+│   ├── chrome-console-capture.md
+│   ├── CLAUDE_SKILLS_SETUP.md
+│   ├── coach-experience-architecture.md
+│   ├── debugging
+│   │   ├── club-workspace-connection-issue.md
+│   │   └── fleet-save-navigation-issue-analysis.md
+│   ├── IMPLEMENTATION_COMPLETE.md
+│   ├── MCP_CLAUDE_SKILLS_INTEGRATION.md
+│   ├── RACE_ANALYSIS_EDGE_FUNCTION.md
+│   ├── RACE_PREPARATION_PERSISTENCE_IMPLEMENTATION.md
+│   ├── RACE_SUGGESTIONS_QUICKSTART.md
+│   ├── REAL_WEATHER_IMPLEMENTATION.md
+│   ├── signup-email-requirement-fix.md
+│   ├── SKILLS_SETUP.md
+│   ├── SKILLS_UX_INTEGRATION_GUIDE.md
+│   ├── SKILLS_UX_VISUAL_GUIDE.md
+│   ├── STORMGLASS_MIGRATION_PLAN.md
+│   ├── STRATEGY_INSIGHTS_IMPLEMENTATION.md
+│   └── WEATHER_STATUS_MESSAGES.md
+├── eas.json
+├── examples
+│   └── mcp-skills-integration-example.ts
+├── EXPO_AV_MIGRATION_PLAN.md
+├── expo-env.d.ts
+├── fix-phyloong-creator.sql
+├── fix-suggestions-insert-policy.sql
+├── FLEET_INSIGHTS_BUTTON_FIXES.md
+├── FLEET_INSIGHTS_DEBUG_SUMMARY.md
+├── FLEET_INSIGHTS_FINAL_STATUS.md
+├── FLEET_INSIGHTS_FIX_COMPLETE.md
+├── FLEET_INSIGHTS_NAMES_FIX.md
+├── FLEET_INSIGHTS_RLS_FIX.md
+├── fleet-insights-rls.sql
+├── GEBCO_VERIFICATION.md
+├── global.css
+├── hooks
+│   ├── ai
+│   │   ├── useAIChatSession.ts
+│   │   ├── useClaudeDraft.ts
+│   │   ├── useRaceBriefSync.ts
+│   │   └── useRaceCommsDraft.ts
+│   ├── index.ts
+│   ├── useApi.ts
+│   ├── useBoatPerformanceStats.ts
+│   ├── useClubDashboardData.ts
+│   ├── useClubEntries.ts
+│   ├── useClubIntegrationSnapshots.ts
+│   ├── useClubMembers.ts
+│   ├── useClubOnboardingState.ts
+│   ├── useClubSuggestions.ts
+│   ├── useClubWorkspace.ts
+│   ├── useCoachDashboardData.ts
+│   ├── useCoachData.ts
+│   ├── useCoachingSessions.ts
+│   ├── useCoachOnboardingState.ts
+│   ├── useCoachWorkspace.ts
+│   ├── useData.ts
+│   ├── useEnrichedRaces.ts
+│   ├── useFeatureAccess.tsx
+│   ├── useFleetData.ts
+│   ├── useFleetDiscovery.ts
+│   ├── useFleetNotifications.ts
+│   ├── useFleetResources.ts
+│   ├── useFleetSharedContent.ts
+│   ├── useFleetSocial.ts
+│   ├── useGlobalVenueIntelligence.ts
+│   ├── useGlobalVenues.ts
+│   ├── useGlobalVenues.ts.bak
+│   ├── useLocationContext.ts
+│   ├── useNetworkStatus.ts
+│   ├── useOffline.ts
+│   ├── useRacePhaseDetection.ts
+│   ├── useRacePreparation.ts
+│   ├── useRaceResults.ts
+│   ├── useRaces.ts
+│   ├── useRaceSuggestions.ts
+│   ├── useRaceTuningRecommendation.ts
+│   ├── useRaceWeather.ts
+│   ├── useRealtimeConnection.ts
+│   ├── useRegionalWeather.ts
+│   ├── useSailingDocuments.ts
+│   ├── useSailingEducation.ts
+│   ├── useSailorDashboardData.ts
+│   ├── useSailorOnboardingState.ts
+│   ├── useSavedVenues.ts
+│   ├── useStreamingChat.ts
+│   ├── useTacticalZones.ts
+│   ├── useThemeColor.ts
+│   ├── useTidalIntel.ts
+│   ├── useUnderwaterAnalysis.ts
+│   ├── useVenueDetection.ts
+│   └── useVenueIntelligence.ts
+├── HOW_TO_SEE_FINISHING_TACTICS.md
+├── IMPLEMENTATION_COMPLETE.md
+├── index.js
+├── INFINITE_LOOP_FIX_SUMMARY.md
+├── INFINITE_LOOP_FIX.md
+├── INTEGRATION_COMPLETE.md
+├── INTEGRATION_PREVIEW.md
+├── lib
+│   ├── auth
+│   │   ├── biometric.ts
+│   │   ├── oauth.ts
+│   │   ├── secureStorage.ts
+│   │   └── useOAuth.tsx
+│   ├── auth-actions.ts
+│   ├── clubs
+│   │   └── clubService.ts
+│   ├── config
+│   │   └── anthropic.ts
+│   ├── contexts
+│   │   ├── AuthContext.tsx
+│   │   ├── AuthContext.tsx.backup
+│   │   ├── AuthContextMock.tsx
+│   │   ├── ClubContext.tsx
+│   │   ├── RaceCourseContext.tsx
+│   │   └── SubscriptionContext.tsx
+│   ├── design-tokens.ts
+│   ├── gates.tsx
+│   ├── imageConfig.ts
+│   ├── navigation
+│   │   ├── __tests__
+│   │   ├── index.ts
+│   │   ├── MIGRATION_EXAMPLES.md
+│   │   ├── QUICK_REFERENCE.md
+│   │   ├── README.md
+│   │   └── routes.ts
+│   ├── styles
+│   │   └── shadow.ts
+│   ├── subscriptions
+│   │   └── subscriptionService.ts
+│   ├── types
+│   │   ├── advanced-map.ts
+│   │   ├── ai-knowledge.ts
+│   │   ├── auth.ts
+│   │   ├── global-venues.ts
+│   │   ├── map.ts
+│   │   ├── stormglass.ts
+│   │   └── venues.ts
+│   └── utils
+│       ├── courseConverter.ts
+│       ├── logger.ts
+│       └── userTypeRouting.ts
+├── list-skills.mjs
+├── LOGGING_CLEANUP_PHASE_2.md
+├── LOGGING_CLEANUP_PHASE_3.md
+├── LOGGING_CLEANUP_PHASE_4.md
+├── LOGGING_CLEANUP_SUMMARY.md
+├── logs
+│   ├── chrome-console.jsonl
+│   ├── chrome-console.log
+│   └── metro.log
+├── MAP_DEBUG_GUIDE.md
+├── MAP_FIX_SUMMARY.md
+├── MAP_INTEGRATION_COMPLETE.md
+├── mcp-server
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── README.md
+│   ├── src
+│   │   ├── index.ts
+│   │   ├── resources
+│   │   ├── tools
+│   │   └── utils
+│   └── tsconfig.json
+├── metro.config.js
+├── metro.loaders-null-loader.js
+├── MIGRATION_GUIDE.md
+├── migrations
+│   ├── 20251029_fix_regattas_fk_to_users.sql
+│   ├── 20251029_fix_remaining_fks.sql
+│   ├── 20251029_migrate_all_profiles_fk_to_users.sql
+│   ├── 20251030_add_club_role_enum_and_policies.sql
+│   ├── 20251030_add_missing_regatta_results_columns.sql
+│   ├── 20251030_complete_boat_seed.sql
+│   ├── 20251030_create_race_strategies_table.sql
+│   ├── 20251030_create_user_manual_clubs.sql
+│   ├── 20251030_seed_boat_test_data_fixed.sql
+│   ├── 20251030_seed_boat_test_data.sql
+│   └── README_CLUB_ROLES.md
+├── MOCK_USERS_AND_DATA_SETUP.md
+├── mocks
+│   └── stripe-react-native.web.ts
+├── NAVIGATE_TO_PHYLOONG.md
+├── NOR_IMPLEMENTATION_COMPLETE.md
+├── OFFLINE_SYNC_GUIDE.md
+├── ON_WATER_REDESIGN_COMPLETE.md
+├── package-lock.json
+├── package.json
+├── PHASE_1_PROGRESS.md
+├── PHASE_1.5_CONTENT_ORGANIZATION_PLAN.md
+├── PHASE_1.5_INTEGRATION_COMPLETE.md
+├── PHASE_1.5_INTEGRATION_GUIDE.md
+├── PHASE_1.5_SUMMARY.md
+├── PHASE_1.5_TEST_INSTRUCTIONS.md
+├── PHASE_2_COMPLETE.md
+├── PHASE_2_INTEGRATION_COMPLETE.md
+├── PHASE_2_PROGRESS.md
+├── PHASE_2_RACE_MODE_PLAN.md
+├── PHASE_2_TESTING.md
+├── PHASE_3_COMPLETE.md
+├── PHASE_3_DEBRIEF_PLAN.md
+├── PHASE_3_PROGRESS.md
+├── PLAYBOOK_SKILLS_DEPLOYED.md
+├── postcss.config.js
+├── PROFILES_TO_USERS_MIGRATION.md
+├── project_structure.txt
+├── providers
+│   ├── AuthProvider.tsx
+│   ├── CoachWorkspaceProvider.tsx
+│   ├── StripeProvider.native.tsx
+│   ├── StripeProvider.tsx
+│   ├── StripeProvider.tsx.old
+│   └── StripeProvider.web.tsx
+├── QUICK_FIX_MIGRATIONS.md
+├── QUICK_START.md
+├── QUICKSTART-DEPLOY.md
+├── RACE_DETAIL_ENHANCEMENT_SUMMARY.md
+├── RACE_LEARNING_INTEGRATION_GUIDE.md
+├── RACE_SUGGESTIONS_IMPLEMENTATION.md
+├── race-strategy-analyst
+│   └── SKILL.md
+├── RACES_UX_IMPLEMENTATION_TRACKER.md
+├── RACING_CONSOLE_IMPLEMENTATION.md
+├── raycast-expo-12gb.sh
+├── REAL_WEATHER_INTEGRATION.md
+├── REAL_WEATHER_NEXT_STEPS.md
+├── scripts
+│   ├── add-coach-feedback-columns.mjs
+│   ├── add-fleet-race-sessions.mjs
+│   ├── add-race-coordinates.mjs
+│   ├── add-race-coordinates.ts
+│   ├── apply-coach-rls.mjs
+│   ├── apply-race-suggestions-migration.mjs
+│   ├── apply-strategy-migrations.mjs
+│   ├── apply-strategy-migrations.sql
+│   ├── apply-users-rls-fix.mjs
+│   ├── browser-db-setup.ts
+│   ├── capture-chrome-console.mjs
+│   ├── check-bathymetry-playwright.mjs
+│   ├── check-chrome-bathymetry.mjs
+│   ├── check-chrome-console.mjs
+│   ├── check-existing-skills.ts
+│   ├── check-schema.mjs
+│   ├── cleanup_logs.py
+│   ├── cleanup-console-logs.ts
+│   ├── cleanup-duplicate-clubs.mjs
+│   ├── cleanup-duplicate-marks.ts
+│   ├── create-demo-sailor-races.mjs
+│   ├── export-boat-tuning-skill.js
+│   ├── fix-connection-pool.md
+│   ├── fix-demo-user-data.mjs
+│   ├── fix-demo-user-types.ts
+│   ├── fix-fleets-fkey.mjs
+│   ├── fix-node-modules-dirs.js
+│   ├── fix-peer-deps.js
+│   ├── generate-skills-from-pdf.mjs
+│   ├── generate-suggestions-for-sarah.mjs
+│   ├── get-table-columns.mjs
+│   ├── initialize-skills-node.ts
+│   ├── initialize-skills.ts
+│   ├── inject-console-logger.js
+│   ├── insert-demo-data-direct.mjs
+│   ├── insert-demo-data.sql
+│   ├── link-demo-sailor-to-race.mjs
+│   ├── seed-boat-data.ts
+│   ├── seed-complete-clubs-and-fleets.mjs
+│   ├── seed-complete-demo-data.mjs
+│   ├── seed-course-library.ts
+│   ├── seed-demo-race-analysis.mjs
+│   ├── seed-demo-race-analysis.ts
+│   ├── seed-demo-sailor-suggestions-correct.sql
+│   ├── seed-demo-sailor-suggestions-final.sql
+│   ├── seed-demo-sailor-suggestions-fixed.sql
+│   ├── seed-demo-sailor-suggestions.sql
+│   ├── seed-demo-users-simple.mjs
+│   ├── seed-fleet-members.mjs
+│   ├── seed-mock-coaches.mjs
+│   ├── seed-sarah-race-suggestions.mjs
+│   ├── seed-venues.ts
+│   ├── setup-demo-accounts.ts
+│   ├── setup-supabase-db.ts
+│   ├── test-boat-tuning-ai.ts
+│   ├── test-boat-tuning-simple.mjs
+│   ├── test-club-insert.mjs
+│   ├── test-edge-function.ts
+│   ├── test-fleet-insert.mjs
+│   ├── test-storm-glass-integration.mjs
+│   ├── test-stormglass.mjs
+│   ├── test-suggestion-service.mjs
+│   ├── upload-race-strategy-skill.ts
+│   ├── upload-skill-from-file.ts
+│   ├── upload-skills-direct.ts
+│   ├── upload-skills-with-temp-dirs.sh
+│   ├── verify-clubs.mjs
+│   └── verify-complete-setup.mjs
+├── services
+│   ├── agents
+│   │   ├── BaseAgentService.ts
+│   │   ├── ClubOnboardingAgent.ts
+│   │   ├── CoachMatchingAgent.ts
+│   │   ├── ComprehensiveOnboardingTools.ts
+│   │   ├── ComprehensiveRaceExtractionAgent.ts
+│   │   ├── ConversationalOnboardingAgent.ts
+│   │   ├── ConversationalOnboardingTools.ts
+│   │   ├── CoursePredictionAgent.ts
+│   │   ├── DocumentProcessingAgent.ts
+│   │   ├── EnhancedOnboardingTools.ts
+│   │   ├── index.ts
+│   │   ├── OnboardingAgent.ts
+│   │   ├── OnboardingEntityExtractor.ts
+│   │   ├── RaceAnalysisAgent.ts
+│   │   ├── RaceExtractionAgent.ts
+│   │   ├── README.md
+│   │   ├── SailNumberTools.ts
+│   │   ├── VenueIntelligenceAgent.ts
+│   │   ├── WebScrapingTools.ts
+│   │   └── WebSearchTools.ts
+│   ├── ai
+│   │   ├── __tests__
+│   │   ├── AIActivityLogger.ts
+│   │   ├── ClaudeClient.ts
+│   │   ├── ContextResolvers.ts
+│   │   ├── DocumentProcessingService.ts
+│   │   ├── DocumentProcessingService.ts.bak
+│   │   ├── EnhancedAIIntegrationService.ts
+│   │   ├── EnhancedClaudeClient.ts
+│   │   ├── index.ts
+│   │   ├── MCPClientService.ts.bak
+│   │   ├── OutputValidator.ts
+│   │   ├── PromptBuilder.ts
+│   │   ├── RaceCourseExtractor.ts
+│   │   ├── RaceStrategyEngine.ts
+│   │   ├── RaceTuningEngine.ts
+│   │   ├── SailingEducationService.ts
+│   │   ├── SkillManagementService.ts
+│   │   ├── types.ts
+│   │   └── VoiceNoteService.ts
+│   ├── AICoachingAssistant.ts
+│   ├── AICoachMatchingService.ts
+│   ├── ais
+│   │   ├── AISStreamService.ts
+│   │   └── MarineTrafficAISService.ts
+│   ├── aiService.ts
+│   ├── AISessionPlanningService.ts
+│   ├── apiService.ts
+│   ├── AutoCourseGeneratorService.ts
+│   ├── BasemapService.ts
+│   ├── BathymetricTidalService.ts
+│   ├── BathymetricVisualizationService.ts
+│   ├── bathymetry
+│   │   └── NOAABathymetryService.ts
+│   ├── BathymetryTileCacheService.ts
+│   ├── BathymetryTileService.ts
+│   ├── BulkRaceCreationService.ts
+│   ├── CalendarImportService.ts
+│   ├── CalendarService.ts
+│   ├── CircuitPlanningService.ts
+│   ├── ClubDiscoveryService.ts
+│   ├── ClubEntryAdminService.ts
+│   ├── ClubMemberService.ts
+│   ├── ClubOnboardingService.ts
+│   ├── ClubSubscriptionService.ts
+│   ├── ClubVerificationService.ts
+│   ├── CoachingService.ts
+│   ├── CoachService.ts
+│   ├── CoachStrategyService.ts
+│   ├── ComputerVisionService.ts
+│   ├── CourseLibraryService.ts
+│   ├── CourseTemplateService.ts
+│   ├── CourseVisualizationService.ts
+│   ├── crewManagementService.ts
+│   ├── CurrentVisualizationService.ts
+│   ├── demo
+│   │   └── demoWorkspace.ts
+│   ├── DocumentParsingService.ts
+│   ├── EmailService.ts
+│   ├── EnvironmentalAnalysisService.ts
+│   ├── equipmentAIService.ts
+│   ├── eventService.ts
+│   ├── ExecutionEvaluationService.ts
+│   ├── FleetDiscoveryService.ts
+│   ├── fleetService.ts
+│   ├── FleetSocialService.ts
+│   ├── GooglePlacesService.ts
+│   ├── gpsService.ts
+│   ├── GPSTracker.ts
+│   ├── index.ts
+│   ├── IoTSensorService.ts
+│   ├── location
+│   │   ├── GooglePlacesService.ts
+│   │   ├── NominatimService.ts
+│   │   ├── OverpassService.ts
+│   │   └── VenueDetectionService.ts
+│   ├── LocationDetectionService.ts
+│   ├── mapping
+│   │   └── MapLibreService.ts
+│   ├── MockRacingDataService.ts
+│   ├── monteCarloService.ts
+│   ├── MultiVenueVisualizationHelper.ts
+│   ├── MutationQueueService.ts
+│   ├── offlineService.ts
+│   ├── OfflineTileCacheService.ts
+│   ├── onboarding
+│   │   └── saveSailorProfile.ts
+│   ├── payments
+│   │   ├── StripeService.native.ts
+│   │   └── StripeService.web.ts
+│   ├── PaymentService.native.ts
+│   ├── PaymentService.ts.old
+│   ├── PaymentService.web.ts
+│   ├── PDFExtractionService.ts
+│   ├── PostRaceLearningService.ts
+│   ├── RaceAnalysisService.ts
+│   ├── RaceCoachingService.ts
+│   ├── RaceCourseVisualizationService.ts
+│   ├── raceDataDistribution.ts
+│   ├── RaceDocumentService.ts
+│   ├── RaceEventService.ts
+│   ├── RaceParticipantService.ts
+│   ├── RaceRegistrationService.ts
+│   ├── RaceReminderService.ts
+│   ├── RaceScrapingService.ts
+│   ├── RaceSuggestionService.ts
+│   ├── RaceTimerService.ts
+│   ├── RaceTuningService.ts
+│   ├── RaceWeatherService.ts
+│   ├── RealtimeService.ts
+│   ├── results
+│   │   ├── ExternalResultsService.ts
+│   │   └── ResultsExportService.ts
+│   ├── ResultsService.ts
+│   ├── SailingNetworkService.ts
+│   ├── SailorBoatService.ts
+│   ├── SailorRacePreparationService.ts
+│   ├── SavedVenueService.ts
+│   ├── scoring
+│   │   └── ScoringEngine.ts
+│   ├── storage
+│   │   ├── DeveloperDocumentService.ts
+│   │   ├── DocumentStorageService.ts
+│   │   └── SailingDocumentLibraryService.ts
+│   ├── StrategicPlanningService.ts
+│   ├── StripeConnectService.ts
+│   ├── supabase.ts
+│   ├── tactical
+│   │   └── AITacticalService.ts
+│   ├── TacticalAIService.ts
+│   ├── TacticalZoneGenerator.ts
+│   ├── TidalService.ts
+│   ├── tides
+│   │   └── TidalIntelService.ts
+│   ├── TimeBasedForecastService.ts
+│   ├── TopographicWindService.ts
+│   ├── TuningGuideExtractionService.ts
+│   ├── tuningGuideService.ts
+│   ├── userManualClubsService.ts
+│   ├── venue
+│   │   ├── __tests__
+│   │   ├── GlobalVenueDatabase.ts
+│   │   ├── RegionalIntelligenceService.ts
+│   │   ├── SupabaseVenueService.ts
+│   │   ├── SupabaseVenueService.ts.bak
+│   │   └── VenueDetectionService.ts
+│   ├── VenueAdaptiveMapService.ts
+│   ├── VenueIntelligenceService.ts
+│   ├── VenuePackageService.ts
+│   ├── venues
+│   │   ├── RaceCourseService.ts
+│   │   └── YachtClubService.ts
+│   ├── venueService.ts
+│   ├── visualization
+│   │   └── EnvironmentalVisualizationService.ts
+│   ├── voiceCommandService.ts
+│   ├── weather
+│   │   ├── deprecated
+│   │   ├── HKOWeatherProvider.ts
+│   │   ├── mockWeatherData.ts
+│   │   ├── OpenWeatherMapProvider.ts
+│   │   ├── ProfessionalWeatherService.ts
+│   │   ├── RegionalWeatherService.ts
+│   │   └── StormGlassService.ts
+│   ├── WeatherAggregationService.ts
+│   └── WindVisualizationService.ts
+├── SESSION_FIXES_SUMMARY.md
+├── SKILL_DUPLICATE_UPLOAD_FIX.md
+├── skills
+│   ├── boat-tuning-analyst
+│   │   └── SKILL.md
+│   ├── current-counterplay-advisor
+│   │   └── SKILL.md
+│   ├── current-counterplay-advisor.md
+│   ├── downwind-speed-and-position
+│   │   └── SKILL.md
+│   ├── execution-coach
+│   │   ├── SKILL.md
+│   │   └── skillContent.ts
+│   ├── finishing-line-tactics
+│   │   └── SKILL.md
+│   ├── generated
+│   │   ├── coach-execution-tactics
+│   │   └── playbook-tactics
+│   ├── mark-rounding-execution
+│   │   └── SKILL.md
+│   ├── race-learning-analyst
+│   │   ├── SKILL.md
+│   │   └── skillContent.ts
+│   ├── race-learning-analyst.zip
+│   ├── race-strategy-analyst
+│   │   └── SKILL.md
+│   ├── race-strategy-analyst.md
+│   ├── rig-tuning-analyst
+│   │   └── SKILL.md
+│   ├── slack-window-planner
+│   │   └── SKILL.md
+│   ├── slack-window-planner.md
+│   ├── starting-line-mastery
+│   │   └── SKILL.md
+│   ├── strategic-planning-assistant
+│   │   ├── SKILL.md
+│   │   └── skillContent.ts
+│   ├── tidal-opportunism-analyst
+│   │   └── SKILL.md
+│   ├── tidal-opportunism-analyst.md
+│   ├── tuning-guides
+│   │   └── boatTuningSkill.ts
+│   ├── upwind-strategic-positioning
+│   │   └── SKILL.md
+│   └── upwind-tactical-combat
+│       └── SKILL.md
+├── SKILLS_REFERENCE.md
+├── SKILLS_UPLOAD_SUMMARY.md
+├── stores
+│   └── raceConditionsStore.ts
+├── STORM_GLASS_MAP_ENHANCEMENTS.md
+├── STORMGLASS_IMPLEMENTATION_COMPLETE.md
+├── STORMGLASS_MOCK_DATA_IMPLEMENTATION.md
+├── SUGGESTIONS_FIX_APPLIED.md
+├── supabase
+│   ├── functions
+│   │   ├── _shared
+│   │   ├── anthropic-skills-proxy
+│   │   ├── club-onboarding
+│   │   ├── club-onboarding-complete
+│   │   ├── club-scrape
+│   │   ├── coach-matching
+│   │   ├── extract-race-details
+│   │   ├── pdf-proxy
+│   │   ├── race-analysis
+│   │   └── refresh-race-suggestions
+│   └── migrations
+│       ├── 20250426120000_create_ai_activity_schema.sql
+│       ├── 20251031080800_add_origin_and_metadata_to_race_courses.sql
+│       ├── 20251031163000_add_tuning_guide_extraction_columns.sql
+│       ├── 20251101063900_create_club_events_system.sql
+│       ├── 20251101070200_complete_coaching_schema.sql
+│       ├── 20251101070300_coaching_schema_with_type_fixes.sql
+│       ├── 20251101080000_create_ai_activity_schema.sql
+│       ├── 20251101090000_create_sailor_race_preparation.sql
+│       ├── 20251101100000_adapt_existing_coaching_schema.sql
+│       ├── 20251101110000_adapt_existing_coaching_schema_v2.sql
+│       ├── 20251101120000_adapt_existing_coaching_schema_v3.sql
+│       ├── 20251102000000_club_onboarding_state.sql
+│       ├── 20251102000100_fix_club_onboarding_reference.sql
+│       ├── 20251102010000_create_missing_coach_profiles.sql
+│       ├── 20251102120000_fix_fleet_members_schema.sql
+│       ├── 20251104110000_cleanup_all_duplicate_race_marks.sql
+│       ├── 20251104120000_cleanup_duplicate_race_events.sql
+│       ├── 20251104180000_fix_sailor_profiles_rls.sql
+│       ├── 20251105000000_seed_demo_race_analysis.sql
+│       ├── 20251106000000_add_strategy_planning_fields.sql
+│       ├── 20251106000100_add_execution_evaluation_fields.sql
+│       ├── 20251106120000_allow_fleet_insights_visibility.sql
+│       ├── 20251106121000_create_mock_coach_data.sql
+│       ├── 20251106130000_add_coach_feedback_columns.sql
+│       ├── 20251106131000_create_race_suggestions_system.sql
+│       ├── 20251106140000_add_coach_profiles_rls.sql
+│       ├── 20251106141000_fix_fleets_club_id_fkey.sql
+│       ├── 20251107000000_add_nor_document_fields.sql
+│       └── 20251107120000_allow_fleet_members_to_see_names.sql
+├── TACTICAL_ZONES_IMPLEMENTATION.md
+├── tailwind.config.js
+├── TECHNICAL_DEBT_REMEDIATION_PLAN.md
+├── TEST_BUILT_IN_SKILLS.md
+├── test-ai-rig-tuning.ts
+├── test-anthropic-key.ts
+├── test-bathymetry.html
+├── test-mock-weather.ts
+├── test-race-learning-detailed.mjs
+├── test-race-learning-fixed.mjs
+├── test-race-learning-skill.mjs
+├── test-skill-cache-fix.mjs
+├── test-skill-upload-simple.mjs
+├── test-skill-upload.ts
+├── test-skills-api.ts
+├── test-weather-api.mjs
+├── tmp_races_line3440.txt
+├── tsc.log
+├── tsconfig.json
+├── tsconfig.weather.json
+├── types
+│   ├── bathymetry.ts
+│   ├── club.ts
+│   ├── coach.ts
+│   ├── courses.ts
+│   ├── entries.ts
+│   ├── environmental.ts
+│   ├── modules.d.ts
+│   ├── norDocument.ts
+│   ├── raceAnalysis.ts
+│   ├── raceEvents.ts
+│   ├── raceLearning.ts
+│   └── wind.ts
+├── UI_INTEGRATION_SUMMARY.md
+├── upload-all-skills.mjs
+├── upload-final.mjs
+├── upload-proper-zip.mjs
+├── upload-race-learning-analyst.mjs
+├── upload-race-learning-zip.mjs
+├── upload-single-skill.mjs
+├── upload-skills-direct.mjs
+├── upload-skills-final.mjs
+├── upload-skills-simple.mjs
+├── upload-skills-with-tar.mjs
+├── upload-skills-zip.mjs
+├── upload-skills.sh
+├── utils
+│   ├── authDebug.ts
+│   ├── clipboard.ts
+│   └── errToText.ts
+├── vercel.json
+├── WEATHER_DATA_FIX.md
+├── WEATHER_FINAL_STATUS.md
+├── WEATHER_IMPLEMENTATION_STATUS.md
+└── webpack.config.js
+
+249 directories, 1065 files

@@ -3,7 +3,7 @@
  * Shows favored side, mark roundings, and tactical recommendations
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
@@ -47,19 +47,7 @@ export function TacticalPlanCard({
   const [plan, setPlan] = useState<TacticalPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadPlan();
-  }, [raceId]);
-
-  // Auto-generate plan if not exists
-  useEffect(() => {
-    if (!loading && !plan && !error && user) {
-      logger.debug('[TacticalPlanCard] Auto-generating tactical plan on mount');
-      generatePlan();
-    }
-  }, [loading, plan, error, user]);
-
-  const loadPlan = async () => {
+  const loadPlan = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -88,7 +76,19 @@ export function TacticalPlanCard({
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, raceId]);
+
+  useEffect(() => {
+    loadPlan();
+  }, [loadPlan]);
+
+  // Auto-generate plan if not exists
+  useEffect(() => {
+    if (!loading && !plan && !error && user) {
+      logger.debug('[TacticalPlanCard] Auto-generating tactical plan on mount');
+      generatePlan();
+    }
+  }, [loading, plan, error, user]);
 
   const generatePlan = async () => {
     if (!user) return;
@@ -136,6 +136,22 @@ export function TacticalPlanCard({
       };
 
       // Generate strategy using AI
+      const racingAreaPolygon = (() => {
+        const polygonCoords = raceData.racing_area_polygon?.coordinates?.[0];
+        if (!Array.isArray(polygonCoords) || polygonCoords.length < 3) {
+          return undefined;
+        }
+        const base = (polygonCoords as number[][]).map(([lng, lat]) => ({ lat, lng }));
+        if (base.length >= 2) {
+          const first = base[0];
+          const last = base[base.length - 1];
+          if (first.lat === last.lat && first.lng === last.lng) {
+            base.pop();
+          }
+        }
+        return base;
+      })();
+
       const strategy = await raceStrategyEngine.generateVenueBasedStrategy(
         raceData.venue_id || 'default',
         currentConditions,
@@ -145,7 +161,8 @@ export function TacticalPlanCard({
           raceTime: new Date(raceData.start_time).toLocaleTimeString(),
           boatType: 'Keelboat',
           fleetSize: 20,
-          importance: 'series'
+          importance: 'series',
+          racingAreaPolygon
         }
       );
 

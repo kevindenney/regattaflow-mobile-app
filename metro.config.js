@@ -16,6 +16,11 @@ config.resolver = {
 const defaultResolveRequest = config.resolver.resolveRequest;
 const nullLoaderShimPath = path.resolve(__dirname, 'metro.loaders-null-loader.js');
 
+const zustandCjsRedirects = {
+  'zustand/middleware': path.resolve(__dirname, 'node_modules', 'zustand', 'middleware.js'),
+  'zustand/middleware.js': path.resolve(__dirname, 'node_modules', 'zustand', 'middleware.js'),
+};
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (
     moduleName === './null-loader.js' &&
@@ -24,6 +29,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return {
       type: 'sourceFile',
       filePath: nullLoaderShimPath
+    };
+  }
+
+  if (moduleName in zustandCjsRedirects) {
+    return {
+      type: 'sourceFile',
+      filePath: zustandCjsRedirects[moduleName],
     };
   }
 

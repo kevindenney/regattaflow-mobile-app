@@ -2,7 +2,7 @@
 
 ## 🎉 What's Now Working
 
-Your RegattaFlow app now features **fully automated AI-powered race strategy generation** using Kevin Gladstone's North U frameworks and Kevin Colgate's championship execution techniques!
+Your RegattaFlow app now features **fully automated AI-powered race strategy generation** using the RegattaFlow Playbook frameworks and RegattaFlow Coach's championship execution techniques!
 
 ## 📊 Implementation Summary
 
@@ -10,7 +10,7 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
 
 1. **Claude Skills API Integration**
    - Installed `@anthropic-ai/sdk` v0.67.0 with Skills support
-   - Created custom `race-strategy-analyst` skill with complete Gladstone + Colgate frameworks
+   - Created custom `race-strategy-analyst` skill with complete RegattaFlow Playbook + RegattaFlow Coach frameworks
    - Enabled `beta.messages.create()` with Skills API in RaceStrategyEngine
    - Ready for 60% token cost reduction once skill is uploaded
 
@@ -48,8 +48,8 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
 
 4. **`/skills/race-strategy-analyst/SKILL.md`**
    - ✅ Created comprehensive Claude Skill definition
-   - ✅ Documented all Kevin Gladstone frameworks
-   - ✅ Documented all Kevin Colgate execution techniques
+   - ✅ Documented all RegattaFlow Playbook frameworks
+   - ✅ Documented all RegattaFlow Coach execution techniques
    - ✅ Added confidence ratings and usage guidelines
 
 5. **`/package.json`**
@@ -70,7 +70,7 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
    │  ├─ Venue intelligence (Hong Kong, San Francisco, etc.)
    │  ├─ Current conditions (wind, current, waves)
    │  ├─ Race context (name, time, boat type, fleet size)
-   │  └─ Kevin Gladstone + Kevin Colgate frameworks (via Skills API when uploaded)
+   │  └─ RegattaFlow Playbook + RegattaFlow Coach frameworks (via Skills API when uploaded)
    ├─ Extracts start strategy from full AI response
    └─ Saves to database
 5. Strategy displayed to sailor
@@ -83,7 +83,7 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
   "favoredEnd": "pin",
   "lineBias": 5,
   "approach": "Port tack approach maintaining speed, establish at pin with 2 lengths safety margin",
-  "reasoning": "Gladstone: 5° bias = ~2 boat-length advantage\n\nPin end favored due to SW wind at 225°. Current setting from boat end provides natural lift on port tack approach.",
+  "reasoning": "RegattaFlow Playbook: 5° bias = ~2 boat-length advantage\n\nPin end favored due to SW wind at 225°. Current setting from boat end provides natural lift on port tack approach.",
   "confidence": 90,
   "windDirection": 225,
   "currentDirection": 90
@@ -93,7 +93,7 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
 ## 💰 Cost Optimization (When Skill is Uploaded)
 
 ### Current State (Without Skill):
-- Prompt includes ~2000 tokens of Gladstone + Colgate frameworks
+- Prompt includes ~2000 tokens of RegattaFlow Playbook + RegattaFlow Coach frameworks
 - Every strategy generation = Full framework tokens
 
 ### After Skill Upload:
@@ -136,7 +136,7 @@ Your RegattaFlow app now features **fully automated AI-powered race strategy gen
    - Start strategy card shows favored end
    - Line bias displayed
    - Approach tactics shown
-   - Reasoning includes Gladstone frameworks
+   - Reasoning includes RegattaFlow Playbook frameworks
    - Confidence score displayed
 
 ## 📝 Database Schema
@@ -163,7 +163,7 @@ Strategies are saved to `race_strategies` table:
 
 Your AI strategy engine has complete knowledge of:
 
-### Kevin Gladstone's North U Frameworks:
+### the RegattaFlow Playbook Frameworks:
 - **Wind Shift Mathematics**: "10° shift = 25% of boat separation"
 - **Puff Response**: Header+less=tack, lift+more=stay
 - **Delayed Tack**: Signature move for 3-4 length advantage
@@ -171,7 +171,7 @@ Your AI strategy engine has complete knowledge of:
 - **Getting In Phase**: Tack on headers, stay on lifts
 - **Start Line Bias**: 5° bias = ~2 boat-length advantage
 
-### Kevin Colgate's Execution Techniques:
+### RegattaFlow Coach's Execution Techniques:
 - **Tight Cover Timing**: Tack at right moment for dead-on wind
 - **Rhythmic Jibing**: Smooth jibes maintaining boat speed
 - **Compass Discipline**: Foundation of shift awareness
@@ -231,9 +231,9 @@ EXPO_PUBLIC_ANTHROPIC_API_KEY=your-key-here
 3. See AI-powered recommendations:
    - Which end to start (pin/boat/middle)
    - Line bias with mathematical reasoning
-   - Tactical approach with Gladstone frameworks
+   - Tactical approach with RegattaFlow Playbook frameworks
    - Confidence score based on conditions
-   - Championship execution techniques from Colgate
+   - Championship execution techniques from RegattaFlow Coach
 
 **Example User Flow:**
 ```
@@ -244,10 +244,10 @@ Card displays:
 
    Approach: Port tack to pin with 2 lengths margin
 
-   Theory: Gladstone's 5° bias formula indicates ~2 boat-length
+   Theory: RegattaFlow Playbook's 5° bias formula indicates ~2 boat-length
    advantage at pin end
 
-   Execution: Colgate's tight approach technique - full speed
+   Execution: RegattaFlow Coach's tight approach technique - full speed
    at gun, establish position early
 
    Confidence: 90%"
@@ -265,8 +265,8 @@ Card displays:
 
 - ✅ Auto-generation: **WORKING**
 - ✅ Claude Skills: **READY** (upload pending)
-- ✅ Kevin Gladstone frameworks: **INTEGRATED**
-- ✅ Kevin Colgate techniques: **INTEGRATED**
+- ✅ RegattaFlow Playbook frameworks: **INTEGRATED**
+- ✅ RegattaFlow Coach techniques: **INTEGRATED**
 - ✅ Venue intelligence: **ACTIVE**
 - ✅ Weather integration: **LIVE**
 - ✅ Database persistence: **SAVING**

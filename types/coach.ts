@@ -114,7 +114,7 @@ export interface CoachingSession {
 
   // Payment information
   total_amount: number; // cents
-  platform_fee: number; // cents
+  platform_fee?: number | null; // cents
   coach_payout: number; // cents
   currency: string;
   payment_status: PaymentStatus;

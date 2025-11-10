@@ -20,7 +20,7 @@ import {
 import { X, Send } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
-import { RaceAnalysisAgent } from '@/services/agents/RaceAnalysisAgent';
+import { RaceAnalysisService } from '@/services/RaceAnalysisService';
 
 interface PostRaceInterviewProps {
   visible: boolean;
@@ -85,31 +85,31 @@ Violations/Penalties: ${description.violations || 'None'}
       const { error } = await supabase
         .from('race_timer_sessions')
         .update({
-          user_race_description: fullDescription,
+          notes: fullDescription,
         })
         .eq('id', sessionId);
 
       if (error) throw error;
 
       // Trigger AI analysis in background
-      const analysisAgent = new RaceAnalysisAgent();
-      analysisAgent.analyzeRace({ timerSessionId: sessionId })
-        .then((result) => {
+      RaceAnalysisService.analyzeRaceSession(sessionId).catch((error: any) => {
+        console.error('Error triggering AI analysis:', error);
+        Alert.alert(
+          'Analysis Pending',
+          'Your race notes were saved, but we could not start the AI analysis. Please try again later.'
+        );
+      });
 
-          if (!result.success) {
-            console.error('AI analysis error:', result.error);
-          }
-        })
-        .catch((error) => {
-          console.error('Error triggering AI analysis:', error);
-        });
+      // Show success message
+      Alert.alert(
+        'Success!',
+        'Your race notes have been saved and AI analysis has been queued.',
+        [{ text: 'OK', style: 'default' }]
+      );
 
       // Close and trigger completion callback
       onComplete();
       onClose();
-
-      // Navigate to race session detail to view analysis
-      router.push(`/(tabs)/race-session/${sessionId}`);
 
       // Reset form
       setDescription({

@@ -13,8 +13,9 @@ import type {
   LocalWeatherSource,
   WeatherParameter
 } from '@/lib/types/global-venues';
+import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 import { createLogger } from '@/lib/utils/logger';
-import { WeatherAPIProService } from './WeatherAPIProService';
+import { StormGlassService } from './StormGlassService';
 import Constants from 'expo-constants';
 
 // Weather forecast data types
@@ -106,30 +107,43 @@ export class RegionalWeatherService {
   private weatherModels: Map<string, RegionalWeatherModel> = new Map();
   private cache: Map<string, WeatherData> = new Map();
   private cacheTimeout = 30 * 60 * 1000; // 30 minutes
-  private weatherAPIService: WeatherAPIProService | null = null;
+  private stormGlassService: StormGlassService | null = null;
   private logger = createLogger('RegionalWeatherService');
 
   constructor() {
     this.initializeWeatherModels();
-    this.initializeWeatherAPI();
+    this.initializeStormGlass();
   }
 
   /**
-   * Initialize Weather API service if API key is available
+   * Initialize Storm Glass service if API key is available
    */
-  private initializeWeatherAPI(): void {
-    const apiKey = Constants.expoConfig?.extra?.weatherApiKey || process.env.WEATHER_API_KEY;
+  private initializeStormGlass(): void {
+    const apiKey = Constants.expoConfig?.extra?.stormglassApiKey || process.env.EXPO_PUBLIC_STORMGLASS_API_KEY;
 
     if (apiKey) {
-      this.weatherAPIService = new WeatherAPIProService({
+      this.stormGlassService = new StormGlassService({
         apiKey,
-        baseUrl: 'https://api.weatherapi.com/v1',
+        baseUrl: 'https://api.stormglass.io/v2',
         timeout: 10000,
         retryAttempts: 3
       });
-      this.logger.info('Real weather API initialized');
+      this.logger.info('Storm Glass marine weather API initialized');
+
+      const mockSettingEnv = process.env.EXPO_PUBLIC_USE_MOCK_WEATHER;
+      const mockSettingExtra = Constants.expoConfig?.extra?.useMockWeather;
+      const shouldEnableMock =
+        mockSettingEnv === 'true' ||
+        mockSettingEnv === '1' ||
+        mockSettingExtra === true ||
+        mockSettingExtra === 'true' ||
+        mockSettingExtra === 1;
+
+      if (shouldEnableMock) {
+        this.stormGlassService.enableMockMode('configuration override');
+      }
     } else {
-      console.warn('[RegionalWeatherService] No API key found - using simulated data. Set WEATHER_API_KEY in .env');
+      console.warn('[RegionalWeatherService] No Storm Glass API key found - using simulated data. Set EXPO_PUBLIC_STORMGLASS_API_KEY in .env');
     }
   }
 
@@ -335,14 +349,22 @@ export class RegionalWeatherService {
     const alerts: WeatherAlert[] = [];
     let marineConditions: MarineConditions = { seaState: 0 };
 
+    const stormGlassForecasts = await this.loadStormGlassForecasts(venue, hoursAhead);
+
     // Generate forecast points (every 3 hours)
     const now = new Date();
     for (let hour = 0; hour <= hoursAhead; hour += 3) {
       const timestamp = new Date(now.getTime() + hour * 60 * 60 * 1000);
 
-      // Simulate weather data based on venue's typical conditions
-      const forecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
-      forecasts.push(forecast);
+      const stormGlassMatch = this.findClosestStormGlassForecast(stormGlassForecasts, timestamp);
+
+      if (stormGlassMatch) {
+        forecasts.push(this.transformToWeatherForecast(stormGlassMatch));
+        continue;
+      }
+
+      const fallbackForecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
+      forecasts.push(fallbackForecast);
     }
 
     // Generate marine conditions
@@ -372,33 +394,26 @@ export class RegionalWeatherService {
 
   /**
    * Generate venue-specific forecast based on typical conditions
-   * Uses real Weather API if available, falls back to simulated data
+   * Uses Storm Glass API if available, falls back to simulated data
    */
   private async generateVenueSpecificForecast(
     venue: SailingVenue,
     timestamp: Date,
     model: RegionalWeatherModel
   ): Promise<WeatherForecast> {
-    // Try to use real weather API first
-    if (this.weatherAPIService) {
+    // Try to use Storm Glass first
+    if (this.stormGlassService) {
       try {
-        const location = {
-          latitude: venue.coordinates[1],
-          longitude: venue.coordinates[0],
-          name: venue.name
-        };
+        const location = this.resolveVenueLocation(venue);
 
-        // Get forecast from Weather API
-        const hoursAhead = Math.ceil((timestamp.getTime() - Date.now()) / (1000 * 60 * 60));
-        const days = Math.min(7, Math.ceil(hoursAhead / 24));
+        if (!location) {
+          console.warn(`[RegionalWeatherService] Invalid coordinates for ${venue.name}, falling back to simulated data`);
+          throw new Error('Invalid coordinates');
+        }
 
-        const forecast = await this.weatherAPIService.getAdvancedForecast(location, days);
+        const weatherData = await this.stormGlassService.getWeatherAtTime(location, timestamp);
 
-        // Find the forecast closest to our target timestamp
-        if (forecast && forecast.length > 0) {
-          // For now, use the first forecast entry and transform it
-          const weatherData = forecast[0];
-
+        if (weatherData) {
           return {
             timestamp,
             windSpeed: Math.round(weatherData.wind.speed),
@@ -407,19 +422,21 @@ export class RegionalWeatherService {
             waveHeight: weatherData.waves?.height || 0.5,
             wavePeriod: weatherData.waves?.period || 5,
             waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
+            currentSpeed: weatherData.tide?.speed || 0,
+            currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
             airTemperature: weatherData.temperature || 20,
-            waterTemperature: (weatherData.temperature || 20) - 2,
-            visibility: weatherData.visibility.horizontal / 1000, // Convert meters to km
+            waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
+            visibility: (weatherData.visibility.horizontal ?? 10000) / 1000,
             barometricPressure: weatherData.pressure.sealevel,
-            humidity: weatherData.humidity || 60,
-            precipitation: weatherData.precipitation || 0,
-            cloudCover: weatherData.cloudCover || 50,
+            humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
+            precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
+            cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
             weatherCondition: this.mapWeatherCondition(weatherData),
-            confidence: weatherData.forecast?.confidence || 0.85
+            confidence: weatherData.forecast?.confidence || model.reliability
           };
         }
       } catch (error) {
-        console.error('[RegionalWeatherService] Weather API error, falling back to simulated data:', error);
+        console.error('[RegionalWeatherService] Storm Glass API error, falling back to simulated data:', error);
         // Fall through to simulated data
       }
     }
@@ -506,6 +523,111 @@ export class RegionalWeatherService {
         direction: (forecast.windDirection + 15) % 360,
         reliability: 'moderate'
       }]
+    };
+  }
+
+  private async loadStormGlassForecasts(venue: SailingVenue, hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
+    if (!this.stormGlassService) {
+      return [];
+    }
+
+    const location = this.resolveVenueLocation(venue);
+    if (!location) {
+      return [];
+    }
+
+    const hours = Math.min(Math.max(hoursAhead, 6), 240);
+
+    try {
+      return await this.stormGlassService.getMarineWeather({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      }, hours);
+    } catch (error: any) {
+      // Check if it's a quota/payment error (402)
+      const isQuotaError = error.message?.includes('quota') || error.message?.includes('402');
+      if (isQuotaError) {
+        this.logger.warn('Storm Glass API quota exceeded, using mock data fallback');
+      } else {
+        this.logger.warn('Storm Glass marine forecast fetch failed, falling back to mock data', error);
+      }
+
+      // Use mock data as fallback
+      const { generateMockForecast } = require('./mockWeatherData');
+      return generateMockForecast(location.latitude, location.longitude, hours);
+    }
+  }
+
+  private resolveVenueLocation(venue: SailingVenue): { latitude: number; longitude: number } | null {
+    const coordinates = venue.coordinates as any;
+    if (!coordinates) {
+      return null;
+    }
+
+    if (Array.isArray(coordinates)) {
+      const [lng, lat] = coordinates;
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        return { latitude: lat, longitude: lng };
+      }
+      return null;
+    }
+
+    if (typeof coordinates === 'object') {
+      const lat = coordinates.lat ?? coordinates.latitude;
+      const lng = coordinates.lng ?? coordinates.longitude ?? coordinates.lon;
+      if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+        return { latitude: lat, longitude: lng };
+      }
+    }
+
+    return null;
+  }
+
+  private findClosestStormGlassForecast(forecasts: AdvancedWeatherConditions[], target: Date): AdvancedWeatherConditions | null {
+    if (!forecasts.length) {
+      return null;
+    }
+
+    let closest: AdvancedWeatherConditions | null = null;
+    let smallestDiff = Number.POSITIVE_INFINITY;
+
+    for (const forecast of forecasts) {
+      if (!forecast.timestamp) continue;
+      const diff = Math.abs(forecast.timestamp.getTime() - target.getTime());
+      if (diff < smallestDiff) {
+        smallestDiff = diff;
+        closest = forecast;
+      }
+    }
+
+    // Require the data point to be within 90 minutes of target to avoid stale matches
+    return smallestDiff <= 90 * 60 * 1000 ? closest : null;
+  }
+
+  private transformToWeatherForecast(weather: AdvancedWeatherConditions): WeatherForecast {
+    const visibilityMeters = weather.visibility?.horizontal ?? 10000;
+
+    return {
+      timestamp: weather.timestamp ?? new Date(),
+      windSpeed: Math.round(weather.wind?.speed ?? 0),
+      windDirection: Math.round(weather.wind?.direction ?? 0),
+      windGusts: weather.wind?.gusts ? Math.round(weather.wind.gusts) : undefined,
+      waveHeight: weather.waves?.height,
+      wavePeriod: weather.waves?.period,
+      waveDirection: weather.waves?.direction,
+      currentSpeed: weather.tide?.speed ? Math.round(weather.tide.speed * 10) / 10 : undefined,
+      currentDirection: weather.tide?.direction === 'flood' || weather.tide?.direction === 'ebb'
+        ? weather.wind?.direction ?? 0
+        : weather.waves?.direction,
+      airTemperature: weather.temperature ?? weather.temperatureProfile?.air ?? 20,
+      waterTemperature: weather.temperatureProfile?.water,
+      visibility: Math.round((visibilityMeters / 1000) * 10) / 10,
+      barometricPressure: weather.pressure?.sealevel ?? 1013,
+      humidity: weather.humidity ?? weather.humidityProfile?.relative ?? 60,
+      precipitation: weather.precipitation ?? weather.precipitationProfile?.rate,
+      cloudCover: weather.cloudCover ?? weather.cloudLayerProfile?.total,
+      weatherCondition: this.mapWeatherCondition(weather),
+      confidence: weather.forecast?.confidence ?? 0.9,
     };
   }
 

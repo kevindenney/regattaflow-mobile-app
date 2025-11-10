@@ -57,7 +57,7 @@ export class ClubDiscoveryService {
         .from('yacht_clubs')
         .select(`
           *,
-          sailing_venues(id, name, city, country)
+          sailing_venues(id, name)
         `)
         .eq('venue_id', venueId)
         .limit(limit);
@@ -88,7 +88,7 @@ export class ClubDiscoveryService {
         .from('yacht_clubs')
         .select(`
           *,
-          sailing_venues(id, name, city, country)
+          sailing_venues(id, name)
         `)
         .eq('id', fleet.club_id)
         .single();

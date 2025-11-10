@@ -328,7 +328,7 @@ export const boatsApi = {
         .from('sailor_profiles')
         .select('id')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (!profile) {
         return { data: [], error: null, loading: false };
@@ -559,64 +559,175 @@ export const fleetsApi = {
 // Clubs API
 // ============================================================================
 
+const isMissingRelation = (error: any) =>
+  typeof error?.message === 'string' &&
+  (error.message.includes('relation') || error.message.includes('does not exist'));
+
 export const clubsApi = {
   async getClubs(userId: string) {
     try {
+      console.log('🔍 [getClubs] Starting with userId:', userId);
+
+      // Check current auth session
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('🔐 [getClubs] Current session:', {
+        hasSession: !!session,
+        userId: session?.user?.id,
+        email: session?.user?.email,
+        matchesProvidedUserId: session?.user?.id === userId
+      });
+
+      // Try joining with the clubs table (UUID-based)
+      // Note: Using clubs(...) syntax instead of clubs!club_id to avoid foreign key requirement
+      console.log('🔍 [getClubs] Querying club_members with clubs join...');
       const { data, error } = await supabase
         .from('club_members')
         .select(`
           id,
           club_id,
-          membership_type,
-          status,
+          user_id,
           role,
-          member_number,
-          joined_date,
-          expiry_date,
-          payment_status,
-          total_volunteer_hours,
-          yacht_clubs:club_id (
+          membership_number,
+          membership_start,
+          membership_end,
+          is_active,
+          created_at,
+          updated_at,
+          clubs (
             id,
             name,
-            location,
-            country,
+            address,
             website,
-            contact_email,
-            description,
-            facilities,
-            metadata
+            email,
+            description
           )
         `)
         .eq('user_id', userId)
-        .order('joined_date', { ascending: false });
+        .order('created_at', { ascending: false, nullsFirst: false });
+
+      console.log('📊 [getClubs] clubs join result:', {
+        hasData: !!data,
+        dataLength: data?.length,
+        hasError: !!error,
+        errorMessage: error?.message,
+        errorDetails: error?.details,
+        errorHint: error?.hint
+      });
 
       if (error) {
-        if (error.message.includes('relation') || error.message.includes('does not exist')) {
-          console.warn('club_members table not available, falling back to legacy club_memberships');
+        console.warn('⚠️ [getClubs] Primary query failed, checking error type...');
+
+        // If clubs join fails, try yacht_clubs (string ID-based)
+        if (error.message.includes('foreign key') || error.message.includes('clubs')) {
+          console.warn('🔄 [getClubs] Trying yacht_clubs join instead of clubs');
+          const yachtResult = await supabase
+            .from('club_members')
+            .select(`
+              id,
+              club_id,
+              membership_type,
+              status,
+              role,
+              member_number,
+              joined_date,
+              joined_at,
+              expiry_date,
+              payment_status,
+              total_volunteer_hours,
+              yacht_clubs:club_id (
+                id,
+                name,
+                location,
+                country,
+                website,
+                contact_email,
+                description,
+                facilities,
+                metadata
+              )
+            `)
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false, nullsFirst: false });
+
+          console.log('📊 [getClubs] yacht_clubs join result:', {
+            hasData: !!yachtResult.data,
+            dataLength: yachtResult.data?.length,
+            hasError: !!yachtResult.error,
+            errorMessage: yachtResult.error?.message
+          });
+
+          if (!yachtResult.error) {
+            console.log('✅ [getClubs] Successfully returned data from yacht_clubs join');
+            return { data: yachtResult.data, error: null, loading: false };
+          }
+        }
+
+        if (isMissingRelation(error)) {
+          console.warn('🔄 [getClubs] club_members table not available, falling back to legacy club_memberships');
           const legacyResult = await supabase
             .from('club_memberships')
             .select('*, club:yacht_clubs(*)')
             .eq('user_id', userId)
             .order('joined_at', { ascending: false });
 
-          if (legacyResult.error && (legacyResult.error.message.includes('relation') || legacyResult.error.message.includes('does not exist'))) {
-            console.warn('Club membership tables not yet created, returning empty array');
+          console.log('📊 [getClubs] legacy club_memberships result:', {
+            hasData: !!legacyResult.data,
+            dataLength: legacyResult.data?.length,
+            hasError: !!legacyResult.error,
+            errorMessage: legacyResult.error?.message
+          });
+
+          if (
+            legacyResult.error &&
+            (legacyResult.error.message?.includes('relation') ||
+              legacyResult.error.message?.includes('does not exist'))
+          ) {
+            console.warn('⚠️ [getClubs] Club membership tables not yet created, returning empty array');
             return { data: [], error: null, loading: false };
           }
 
+          console.log('✅ [getClubs] Returning legacy club_memberships data');
           return { data: legacyResult.data, error: legacyResult.error, loading: false };
         }
 
+        console.error('❌ [getClubs] Returning error:', error.message);
         return { data: [], error, loading: false };
       }
 
+      console.log('✅ [getClubs] Successfully returning data from clubs join:', {
+        count: data?.length,
+        clubs: data?.map((m: any) => m.club?.name)
+      });
       return {
         data,
         error: null,
         loading: false,
       };
     } catch (error) {
-      console.error('Error in getClubs:', error);
+      console.error('❌ [getClubs] Exception caught:', error);
+      return { data: [], error: error as Error, loading: false };
+    }
+  },
+
+  async getClubDirectory() {
+    try {
+      console.log('[apiService] Fetching club directory...');
+      const { data, error } = await supabase
+        .from('clubs')
+        .select('*')
+        .order('name', { ascending: true });
+
+      console.log('[apiService] Club directory response:', {
+        hasData: !!data,
+        dataLength: data?.length,
+        error: error?.message,
+        errorCode: error?.code,
+        sampleClub: data?.[0],
+      });
+
+      return { data, error, loading: false };
+    } catch (error) {
+      console.error('[apiService] Exception in getClubDirectory:', error);
       return { data: [], error: error as Error, loading: false };
     }
   },
@@ -636,12 +747,37 @@ export const clubsApi = {
   },
 
   async joinClub(userId: string, clubId: string, membershipType: string) {
+    const payload = {
+      user_id: userId,
+      club_id: clubId,
+      membership_type: membershipType,
+      role: membershipType === 'admin' ? 'admin' : 'member',
+      status: 'pending',
+      is_active: true,
+      joined_date: new Date().toISOString(),
+    };
+
     try {
       const { data, error } = await supabase
-        .from('club_memberships')
-        .insert({ user_id: userId, club_id: clubId, membership_type: membershipType })
+        .from('club_members')
+        .insert(payload)
         .select()
         .single();
+
+      if (error) {
+        if (isMissingRelation(error)) {
+          console.warn('club_members table unavailable, inserting into legacy club_memberships instead');
+          const legacyResult = await supabase
+            .from('club_memberships')
+            .insert({ user_id: userId, club_id: clubId, membership_type: membershipType })
+            .select()
+            .single();
+
+          return { data: legacyResult.data, error: legacyResult.error, loading: false };
+        }
+
+        return { data: null, error, loading: false };
+      }
 
       return { data, error, loading: false };
     } catch (error) {

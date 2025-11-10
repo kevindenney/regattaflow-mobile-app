@@ -49,7 +49,9 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
-import { RaceAnalysisAgent } from '@/services/agents/RaceAnalysisAgent';
+import { RaceAnalysisService } from '@/services/RaceAnalysisService';
+import { SmartRaceCoach } from '@/components/coaching/SmartRaceCoach';
+import { QuickSkillButtons } from '@/components/coaching/QuickSkillButtons';
 
 const { width } = Dimensions.get('window');
 
@@ -336,19 +338,16 @@ const RaceTimerProScreen = () => {
     try {
       setAnalyzingRace(true);
 
-      const agent = new RaceAnalysisAgent();
-      const result = await agent.analyzeRace({
-        timerSessionId: sessionId,
-      });
+      const analysis = await RaceAnalysisService.analyzeRaceSession(sessionId);
 
-      if (result.success) {
+      if (analysis) {
         Alert.alert(
           'Analysis Complete',
           'AI Coach has analyzed your race! View the analysis in the Analysis tab.',
           [{ text: 'OK' }]
         );
       } else {
-        console.error('Race analysis failed:', result.error);
+        console.error('Race analysis failed: no analysis returned');
       }
     } catch (error: any) {
       console.error('Error triggering race analysis:', error);
@@ -549,7 +548,7 @@ const RaceTimerProScreen = () => {
   }, []);
 
   const renderTimer = () => (
-    <View className="flex-1 items-center justify-center px-4">
+    <ScrollView className="flex-1" contentContainerClassName="items-center px-4 py-6">
       {/* Timer Circle */}
       <View className="w-64 h-64 rounded-full bg-white shadow-lg items-center justify-center mb-6 border-4 border-blue-100">
         <Text className="text-gray-600 text-lg mb-1">Race Countdown</Text>
@@ -754,7 +753,39 @@ const RaceTimerProScreen = () => {
           </View>
         </View>
       </View>
-    </View>
+
+      {/* AI Coach - Quick Skill Buttons */}
+      <View className="w-11/12 mt-6">
+        <QuickSkillButtons
+          raceData={{
+            name: 'RHKYC Spring Series R1',
+            startTime: new Date(Date.now() + timer * 1000).toISOString(),
+            weather: windData,
+          }}
+          onSkillInvoked={(skillId, advice) => {
+            console.log('Timer screen - Skill invoked:', skillId, advice);
+          }}
+        />
+      </View>
+
+      {/* AI Coach - Smart Race Coach (Minimal Mode for Racing) */}
+      <View className="w-11/12 mt-4 mb-6">
+        <SmartRaceCoach
+          raceId="live-race-timer"
+          raceData={{
+            name: 'RHKYC Spring Series R1',
+            startTime: new Date(Date.now() + timer * 1000).toISOString(),
+            weather: windData,
+          }}
+          position={gpsTracking && gpsData.latitude !== 0 ? {
+            lat: gpsData.latitude,
+            lon: gpsData.longitude,
+          } : undefined}
+          minimal={true}
+          autoRefresh={true}
+        />
+      </View>
+    </ScrollView>
   );
 
   const renderRaceAnalysis = () => {

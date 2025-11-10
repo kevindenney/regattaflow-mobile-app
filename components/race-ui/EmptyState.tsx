@@ -26,7 +26,20 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     <Ionicons name={icon} size={48} color={colors.text.tertiary} />
     <Text style={styles.title}>{title}</Text>
     {description && <Text style={styles.description}>{description}</Text>}
-    {action && <View style={styles.action}>{action}</View>}
+    {action && (
+      <View style={styles.action}>
+        {React.Children.map(action, (child, index) => {
+          if (typeof child === 'string' || typeof child === 'number') {
+            return (
+              <Text key={`action-text-${index}`} style={Typography.body}>
+                {child}
+              </Text>
+            );
+          }
+          return child;
+        })}
+      </View>
+    )}
   </View>
 );
 

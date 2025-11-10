@@ -414,7 +414,11 @@ export function HeroTabs() {
   };
 
   const handleDemo = () => {
-    // TODO: Implement demo
+    if (activeTab === 'yacht-clubs') {
+      router.push('/club-solutions');
+      return;
+    }
+
     alert('Demo coming soon!');
   };
 

@@ -1,6 +1,6 @@
 /**
  * Post-Race Analysis Types
- * Structured analysis with Kevin Gladstone framework integration
+ * Structured analysis with RegattaFlow Playbook framework integration
  */
 
 export interface RaceTimerSessionSummary {
@@ -136,20 +136,20 @@ export type ShiftDetectionMethod =
 
 export interface CoachingFeedback {
   phase: RacePhase;
-  bill_framework: BillGladstoneFramework;
+  playbook_framework: RegattaFlowPlaybookFramework;
   your_approach: string;
-  bill_recommendation: string;
+  playbook_recommendation: string;
 
-  // Kevin Colgate Execution Analysis (Phase 3 Enhancement)
-  colgate_execution_technique?: string; // Champion execution technique that applies
+  // RegattaFlow Coach Execution Analysis (Phase 3 Enhancement)
+  coach_execution_technique?: string; // Champion execution technique that applies
   execution_score?: number; // 0-100: How well sailor executed the technique
-  execution_feedback?: string; // Specific execution coaching from Colgate's methods
+  execution_feedback?: string; // Specific execution coaching from RegattaFlow Coach's methods
   champion_story?: string; // Relevant champion story (Stearns, Fogh, Cox, etc.)
 
   confidence: number; // 0-100
   impact: 'high' | 'medium' | 'low';
   next_race_focus: string;
-  demo_reference?: string; // e.g., "./Kevin-demo 2"
+  demo_reference?: string; // e.g., "./playbook-demo 2"
 }
 
 export type RacePhase =
@@ -164,7 +164,7 @@ export type RacePhase =
   | 'finish'
   | 'overall';
 
-export type BillGladstoneFramework =
+export type RegattaFlowPlaybookFramework =
   | 'Puff Response Framework'
   | 'Delayed Tack'
   | 'Wind Shift Mathematics'
@@ -179,14 +179,14 @@ export interface FrameworkScores {
   delayed_tack_usage?: number; // 0-100
   downwind_detection?: number; // 0-100
   getting_in_phase?: number; // 0-100
-  covering_tactics?: number; // 0-100 (Colgate execution score)
+  covering_tactics?: number; // 0-100 (RegattaFlow Coach execution score)
   overall_framework_adoption?: number; // 0-100
 }
 
 // Framework Trend Analysis
 
 export interface FrameworkTrend {
-  framework: BillGladstoneFramework;
+  framework: RegattaFlowPlaybookFramework;
   races_analyzed: number;
   trend: 'improving' | 'stable' | 'declining';
   average_score: number;
@@ -195,7 +195,7 @@ export interface FrameworkTrend {
 }
 
 export interface PerformanceCorrelation {
-  framework: BillGladstoneFramework;
+  framework: RegattaFlowPlaybookFramework;
   races_using_framework: number;
   races_not_using_framework: number;
   average_finish_with: number;
@@ -211,7 +211,7 @@ export interface AnalysisStep {
   title: string;
   description?: string;
   questions: AnalysisQuestion[];
-  bill_context?: string; // Kevin Gladstone framework hint for this section
+  playbook_context?: string; // RegattaFlow Playbook framework hint for this section
 }
 
 export interface AnalysisQuestion {
@@ -219,7 +219,7 @@ export interface AnalysisQuestion {
   type: QuestionType;
   label: string;
   hint?: string;
-  bill_framework_reference?: BillGladstoneFramework;
+  playbook_framework_reference?: RegattaFlowPlaybookFramework;
   required?: boolean;
   options?: QuestionOption[];
   validation?: ValidationRule;
@@ -238,7 +238,7 @@ export type QuestionType =
 export interface QuestionOption {
   value: string;
   label: string;
-  bill_framework_note?: string; // "✅ Kevin's recommendation" or "⚠️ Consider Kevin's approach"
+  playbook_framework_note?: string; // "✅ Playbook recommendation" or "⚠️ Consider playbook adjustment"
 }
 
 export interface ValidationRule {
@@ -301,7 +301,7 @@ export interface TacticalCoachingProps {
 }
 
 /** @deprecated Use TacticalCoachingProps instead */
-export interface BillGladstoneCoachingProps {
+export interface RegattaFlowPlaybookCoachingProps {
   analysis: RaceAnalysis;
   coachingFeedback: CoachingFeedback[];
   frameworkScores: FrameworkScores;

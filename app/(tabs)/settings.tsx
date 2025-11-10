@@ -15,9 +15,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { ClubAiAssistant } from '@/components/ai/ClubAiAssistant';
 
 export default function SettingsScreen() {
-  const { user, userProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
+  const { user, userProfile, clubProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
@@ -204,6 +205,21 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* My Learning */}
+        {userProfile?.user_type === 'sailor' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Learning</Text>
+            <View style={styles.settingsGroup}>
+              <SettingItem
+                icon="analytics-outline"
+                title="Race Learning Insights"
+                subtitle="View personalized coaching and practice recommendations"
+                onPress={() => router.push('/my-learning')}
+              />
+            </View>
+          </View>
+        )}
+
         {/* App Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Settings</Text>
@@ -227,6 +243,19 @@ export default function SettingsScreen() {
               onPress={() => Alert.alert('Coming Soon', 'Dark mode will be available soon!')}
             />
           </View>
+        </View>
+
+        {/* Claude Assistant */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Claude Assistant</Text>
+          <Text style={styles.sectionHelper}>
+            Ask Claude to draft communications, plan events, or answer member questions using your club data.
+          </Text>
+          <ClubAiAssistant
+            clubId={clubProfile?.id ?? null}
+            compact
+            style={styles.aiAssistantContainer}
+          />
         </View>
 
         {/* Support */}
@@ -379,6 +408,16 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 12,
     paddingHorizontal: 4,
+  },
+  sectionHelper: {
+    fontSize: 13,
+    color: '#6B7280',
+    paddingHorizontal: 4,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  aiAssistantContainer: {
+    minHeight: 360,
   },
   profileCard: {
     backgroundColor: '#FFFFFF',

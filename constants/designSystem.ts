@@ -151,6 +151,20 @@ export const BorderRadius = {
  * Each color has a specific purpose in the application.
  * Use these semantic names instead of raw color values.
  */
+
+const dangerPalette = {
+  50: '#fef2f2',
+  100: '#fee2e2',  // Error badge background
+  200: '#fecaca',  // Error badge border
+  300: '#fca5a5',
+  400: '#f87171',
+  500: '#ef4444',
+  600: '#dc2626',  // Danger button background
+  700: '#b91c1c',  // Error badge text
+  800: '#991b1b',
+  900: '#7f1d1d',
+} as const;
+
 export const colors = {
   // PRIMARY - Core brand color (Blue)
   // Use for: Main navigation, primary CTAs, brand elements
@@ -215,18 +229,10 @@ export const colors = {
 
   // DANGER - Red
   // Use for: Destructive actions, errors, critical alerts
-  danger: {
-    50: '#fef2f2',
-    100: '#fee2e2',  // Error badge background
-    200: '#fecaca',  // Error badge border
-    300: '#fca5a5',
-    400: '#f87171',
-    500: '#ef4444',
-    600: '#dc2626',  // Danger button background
-    700: '#b91c1c',  // Error badge text
-    800: '#991b1b',
-    900: '#7f1d1d',
-  },
+  danger: dangerPalette,
+
+  // ERROR alias - some components still reference colors.error.*
+  error: dangerPalette,
 
   // INFO - Blue (lighter than primary)
   // Use for: Informational badges, tips, neutral highlights

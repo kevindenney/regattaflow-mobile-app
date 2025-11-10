@@ -7,7 +7,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback, type ReactEle
 import { StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
-import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
+import { MarkerClusterer, SuperClusterAlgorithm, MarkerUtils, type Marker as ClusterMarker } from '@googlemaps/markerclusterer';
 import Constants from 'expo-constants';
 import { GooglePlacesService, PlaceResult } from '@/services/GooglePlacesService';
 import type { ServiceType } from '@/services/SailingNetworkService';
@@ -95,6 +95,8 @@ interface Service {
   preferred_by_club?: boolean | string;
 }
 
+type MapMarker = ClusterMarker;
+
 // Professional SVG Icons
 const createMarkerIcon = (type: string, color: string, isSelected = false) => {
   const scale = isSelected ? 1.2 : 1;
@@ -151,10 +153,53 @@ function GoogleMapComponent({
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
+  const markersRef = useRef<MapMarker[]>([]);
   const markerClustererRef = useRef<MarkerClusterer | null>(null);
   const openInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const layers = mapLayers ?? DEFAULT_MAP_LAYERS;
+
+  const createMarkerContentFromIcon = useCallback((icon?: google.maps.Icon) => {
+    if (!icon?.url || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const container = document.createElement('div');
+    const width = icon.scaledSize?.width ?? 40;
+    const height = icon.scaledSize?.height ?? 40;
+    container.style.width = `${width}px`;
+    container.style.height = `${height}px`;
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+
+    const img = document.createElement('img');
+    img.src = icon.url;
+    img.alt = 'map marker';
+    img.style.width = '100%';
+    img.style.height = '100%';
+
+    container.appendChild(img);
+    return container;
+  }, []);
+
+  const createMapMarker = useCallback((options: google.maps.MarkerOptions): MapMarker => {
+    const AdvancedMarker = google.maps.marker?.AdvancedMarkerElement;
+    if (AdvancedMarker && options.position) {
+      const content = createMarkerContentFromIcon(options.icon);
+      return new AdvancedMarker({
+        map: (options.map as google.maps.Map | null) ?? null,
+        position: options.position,
+        title: options.title ?? undefined,
+        content: content ?? undefined,
+      });
+    }
+
+    return new google.maps.Marker(options);
+  }, [createMarkerContentFromIcon]);
+
+  const detachMarker = useCallback((marker: MapMarker) => {
+    MarkerUtils.setMap(marker, null);
+  }, []);
 
   // Helper: Create InfoWindow content lazily (only when marker is clicked)
   const createVenueInfoWindowContent = useCallback((venue: Venue) => {
@@ -275,7 +320,7 @@ function GoogleMapComponent({
   }, []);
 
   // Helper: Show InfoWindow lazily when marker is clicked
-  const showInfoWindow = useCallback((marker: google.maps.Marker, content: string) => {
+  const showInfoWindow = useCallback((marker: MapMarker, content: string) => {
     // Close any open InfoWindow
     if (openInfoWindowRef.current) {
       openInfoWindowRef.current.close();
@@ -283,7 +328,10 @@ function GoogleMapComponent({
 
     // Create and open new InfoWindow
     const infoWindow = new google.maps.InfoWindow({ content });
-    infoWindow.open(googleMapRef.current!, marker);
+    infoWindow.open({
+      map: googleMapRef.current ?? undefined,
+      anchor: marker,
+    });
     openInfoWindowRef.current = infoWindow;
   }, []);
 
@@ -317,7 +365,7 @@ function GoogleMapComponent({
       markerClustererRef.current.setMap(null);
       markerClustererRef.current = null;
     }
-    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current.forEach(detachMarker);
     markersRef.current = [];
 
     // Filter venues to display
@@ -337,7 +385,7 @@ function GoogleMapComponent({
       const isSelected = selectedVenue?.id === venue.id || currentVenue?.id === venue.id;
       const color = getMarkerColor(venue.venue_type);
 
-      const marker = new google.maps.Marker({
+      const marker = createMapMarker({
         position: { lat: venue.coordinates_lat, lng: venue.coordinates_lng },
         map: null, // Don't add to map yet - clusterer will handle it
         title: venue.name,
@@ -365,7 +413,7 @@ function GoogleMapComponent({
 
         const color = getYachtClubColor(club.prestige_level);
 
-        const marker = new google.maps.Marker({
+        const marker = createMapMarker({
           position: { lat: club.coordinates_lat, lng: club.coordinates_lng },
           map: null, // Don't add to map yet - clusterer will handle it
           title: club.short_name || club.name,
@@ -431,7 +479,7 @@ function GoogleMapComponent({
           const latOffset = servicesAtLocation.length > 1 ? Math.cos(angle) * offsetAmount : 0;
           const lngOffset = servicesAtLocation.length > 1 ? Math.sin(angle) * offsetAmount : 0;
 
-          const marker = new google.maps.Marker({
+          const marker = createMapMarker({
             position: {
               lat: service.coordinates_lat + latOffset,
               lng: service.coordinates_lng + lngOffset
@@ -480,6 +528,8 @@ function GoogleMapComponent({
     showOnlySavedVenues,
     savedVenueIds,
     showAllVenues,
+    createMapMarker,
+    detachMarker,
     createVenueInfoWindowContent,
     createYachtClubInfoWindowContent,
     createServiceInfoWindowContent,
@@ -938,6 +988,9 @@ export function VenueMapView({
     </div>
   );
 }
+
+export { VenueMapView };
+export default VenueMapView;
 
 const styles = StyleSheet.create({
   loadingContainer: {

@@ -3,7 +3,7 @@
  * Quick summary of race details, conditions, and AI strategy confidence
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
@@ -48,44 +48,7 @@ export function RaceOverviewCard({
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState<string>('');
 
-  useEffect(() => {
-    loadStrategyInfo();
-  }, [raceId]);
-
-  // Update countdown every minute
-  useEffect(() => {
-    if (!startTime) return;
-
-    const updateCountdown = () => {
-      const now = new Date();
-      const start = new Date(startTime);
-      const diff = start.getTime() - now.getTime();
-
-      if (diff <= 0) {
-        setCountdown('Race started');
-        return;
-      }
-
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-      if (hours > 24) {
-        const days = Math.floor(hours / 24);
-        setCountdown(`${days}d ${hours % 24}h`);
-      } else if (hours > 0) {
-        setCountdown(`${hours}h ${minutes}m`);
-      } else {
-        setCountdown(`${minutes}m`);
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 60000); // Update every minute
-
-    return () => clearInterval(interval);
-  }, [startTime]);
-
-  const loadStrategyInfo = async () => {
+  const loadStrategyInfo = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
@@ -125,7 +88,44 @@ export function RaceOverviewCard({
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, raceId]);
+
+  useEffect(() => {
+    loadStrategyInfo();
+  }, [loadStrategyInfo]);
+
+  // Update countdown every minute
+  useEffect(() => {
+    if (!startTime) return;
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const start = new Date(startTime);
+      const diff = start.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setCountdown('Race started');
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hours > 24) {
+        const days = Math.floor(hours / 24);
+        setCountdown(`${days}d ${hours % 24}h`);
+      } else if (hours > 0) {
+        setCountdown(`${hours}h ${minutes}m`);
+      } else {
+        setCountdown(`${minutes}m`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [startTime]);
 
   const getConfidenceColor = (conf: number) => {
     if (conf >= 80) return '#10B981'; // Green
@@ -187,7 +187,7 @@ export function RaceOverviewCard({
                       {weather.wind.speedMin && weather.wind.speedMax
                         ? `${Math.round(weather.wind.speedMin)}-${Math.round(weather.wind.speedMax)} kts`
                         : `${Math.round(weather.wind.speed)} kts`
-                      } {weather.wind.direction}
+                      }{weather.wind.direction ? ` ${weather.wind.direction}` : ''}
                     </Text>
                   </View>
                 </View>
@@ -198,7 +198,7 @@ export function RaceOverviewCard({
                   <View style={styles.conditionText}>
                     <Text style={styles.conditionLabel}>Current</Text>
                     <Text style={styles.conditionValue}>
-                      {weather.current.speed.toFixed(1)} kts
+                      {weather.current.speed != null ? weather.current.speed.toFixed(1) : '0.0'} kts
                     </Text>
                   </View>
                 </View>

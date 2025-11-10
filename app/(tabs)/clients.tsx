@@ -110,7 +110,10 @@ export default function ClientsScreen() {
       >
         <View style={styles.header}>
           <ThemedText style={styles.title}>My Clients</ThemedText>
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => router.push('/coach/client/new')}
+          >
             <Ionicons name="add-circle" size={32} color="#007AFF" />
           </TouchableOpacity>
         </View>

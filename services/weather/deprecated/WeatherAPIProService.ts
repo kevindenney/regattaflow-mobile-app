@@ -90,6 +90,97 @@ export class WeatherAPIProService {
     }
   }
 
+  async getForecastForTimestamp(location: GeoLocation, target: Date): Promise<AdvancedWeatherConditions | null> {
+    try {
+      const now = new Date();
+      const diffHours = (target.getTime() - now.getTime()) / (1000 * 60 * 60);
+      const aheadDays = Math.ceil(Math.abs(diffHours) / 24);
+
+      // Use standard forecast for +/-10 days
+      if (aheadDays <= 10) {
+        const daysToRequest = Math.min(10, Math.max(1, aheadDays + 1));
+        const response = await this.makeRequest('/forecast.json', {
+          q: `${location.latitude},${location.longitude}`,
+          days: daysToRequest,
+          aqi: 'yes',
+          alerts: 'yes'
+        });
+
+        const forecastDays = response.data?.forecast?.forecastday ?? [];
+        let closestHour: any | null = null;
+        let closestLocationMeta = response.data?.location;
+        let smallestDiff = Number.POSITIVE_INFINITY;
+
+        for (const day of forecastDays) {
+          for (const hour of day.hour ?? []) {
+            const hourDate = new Date(hour.time_epoch * 1000);
+            const diff = Math.abs(hourDate.getTime() - target.getTime());
+            if (diff < smallestDiff) {
+              smallestDiff = diff;
+              closestHour = hour;
+              closestLocationMeta = response.data?.location;
+            }
+          }
+        }
+
+        if (closestHour) {
+          return this.transformHourlyWeather(closestHour, closestLocationMeta, 0);
+        }
+      }
+
+      // Use long-range climatology fallback up to 300 days
+      if (aheadDays <= 300) {
+        const response = await this.makeRequest('/future.json', {
+          q: `${location.latitude},${location.longitude}`,
+          dt: target.toISOString().slice(0, 10)
+        });
+
+        const forecastDay = response.data?.forecast?.forecastday?.[0];
+        if (forecastDay?.hour && forecastDay.hour.length > 0) {
+          let closestHour: any | null = null;
+          let smallestDiff = Number.POSITIVE_INFINITY;
+          for (const hour of forecastDay.hour) {
+            const hourDate = new Date(hour.time_epoch * 1000);
+            const diff = Math.abs(hourDate.getTime() - target.getTime());
+            if (diff < smallestDiff) {
+              smallestDiff = diff;
+              closestHour = hour;
+            }
+          }
+          if (closestHour) {
+            return this.transformHourlyWeather(closestHour, response.data?.location ?? forecastDay, 0);
+          }
+        }
+
+        if (forecastDay?.day) {
+          // Fallback to midday snapshot if hourly data missing
+          const midday = forecastDay.day;
+          const syntheticHour = {
+            ...midday,
+            wind_kph: midday.maxwind_kph,
+            gust_kph: (midday.maxwind_kph ?? 0) * 1.2,
+            wind_degree: forecastDay?.hour?.[12]?.wind_degree ?? 0,
+            vis_km: midday.avgvis_km ?? 10,
+            precip_mm: midday.totalprecip_mm ?? 0,
+            condition: forecastDay?.hour?.[12]?.condition ?? forecastDay?.day?.condition,
+            temp_c: midday.avgtemp_c ?? 20,
+            humidity: forecastDay?.hour?.[12]?.humidity ?? 70,
+            cloud: forecastDay?.hour?.[12]?.cloud ?? 50,
+            pressure_mb: forecastDay?.hour?.[12]?.pressure_mb ?? 1013,
+            dewpoint_c: forecastDay?.hour?.[12]?.dewpoint_c ?? 0,
+            feelslike_c: forecastDay?.hour?.[12]?.feelslike_c ?? midday.avgtemp_c ?? 20,
+            time_epoch: target.getTime() / 1000
+          };
+          return this.transformHourlyWeather(syntheticHour, response.data?.location ?? forecastDay, 0);
+        }
+      }
+
+      return null;
+    } catch (error) {
+      throw new Error(`WeatherAPI Pro timestamp service error: ${error}`);
+    }
+  }
+
   private async makeRequest(endpoint: string, params: any, attempt: number = 1): Promise<any> {
     try {
       const response = await axios.get(`${this.config.baseUrl}${endpoint}`, {
@@ -97,10 +188,8 @@ export class WeatherAPIProService {
           ...params,
           key: this.config.apiKey
         },
-        timeout: this.config.timeout,
-        headers: {
-          'User-Agent': 'RegattaFlow Professional v2.0'
-        }
+        timeout: this.config.timeout
+        // Note: User-Agent header removed - browsers block this for security
       });
 
       return response;

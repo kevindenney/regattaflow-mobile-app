@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { createLogger } from '@/lib/utils/logger';
 import {
   ActivityIndicator,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -159,6 +160,18 @@ export default function BoatsScreen() {
 }
 
 const logger = createLogger('boats');
+const fabShadow = Platform.select({
+  web: {
+    boxShadow: '0px 4px 12px rgba(0,0,0,0.2)',
+  },
+  default: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+});
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -296,10 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
     elevation: 6,
+    ...(fabShadow || {}),
   },
 });

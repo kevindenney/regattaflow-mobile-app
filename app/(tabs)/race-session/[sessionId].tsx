@@ -23,10 +23,10 @@ interface RaceSession {
   end_time: string;
   duration_seconds: number;
   track_points: any[];
-  user_race_description: string;
+  notes: string;
   regattas: {
     name: string;
-    venue: string;
+    location: string | null;
   } | null;
 }
 
@@ -48,7 +48,7 @@ export default function RaceSessionDetailScreen() {
         .from('race_timer_sessions')
         .select(`
           *,
-          regattas(name, venue)
+          regattas(name, location)
         `)
         .eq('id', sessionId)
         .single();

@@ -5,19 +5,14 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
-import { ClubOnboardingAgent } from '@/services/agents/ClubOnboardingAgent';
+import { View, Text, TextInput, ScrollView, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-}
-
-interface ToolExecution {
-  name: string;
-  status: 'running' | 'completed' | 'failed';
 }
 
 export function ClubOnboardingChat() {
@@ -31,10 +26,50 @@ export function ClubOnboardingChat() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
-  const [toolsExecuted, setToolsExecuted] = useState<ToolExecution[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const onboardingSkillId = process.env.EXPO_PUBLIC_CLAUDE_SKILL_CLUB_ONBOARDING || null;
+  const scrapeSkillId = process.env.EXPO_PUBLIC_CLAUDE_SKILL_CLUB_SCRAPE || null;
 
-  const agent = new ClubOnboardingAgent();
+  const isLikelyUrl = (value: string) => {
+    if (!value) return false;
+    const trimmed = value.trim();
+    if (trimmed.length < 5) return false;
+    try {
+      const normalized = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+        ? trimmed
+        : `https://${trimmed}`;
+      const parsed = new URL(normalized);
+      return Boolean(parsed.hostname);
+    } catch {
+      return false;
+    }
+  };
+
+  const formatScrapeSummary = (url: string, data: any) => {
+    const summaryLines: string[] = [];
+    if (data?.summary) {
+      summaryLines.push(data.summary.trim());
+    } else {
+      summaryLines.push(`I scanned ${url} and pulled out a few highlights.`);
+    }
+
+    if (Array.isArray(data?.classes) && data.classes.length > 0) {
+      const classLines = data.classes.slice(0, 5).map((cls: any) => `• ${cls.name}${cls.description ? ` — ${cls.description}` : ''}`);
+      summaryLines.push('\nKey classes/fleets:\n' + classLines.join('\n'));
+    }
+
+    if (Array.isArray(data?.events) && data.events.length > 0) {
+      const eventLines = data.events.slice(0, 5).map((evt: any) => {
+        const pieces: string[] = [];
+        if (evt.name) pieces.push(evt.name);
+        if (evt.date) pieces.push(evt.date);
+        return `• ${pieces.join(' — ')}`;
+      });
+      summaryLines.push('\nUpcoming events mentioned:\n' + eventLines.join('\n'));
+    }
+
+    return summaryLines.join('\n\n').trim();
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -47,54 +82,94 @@ export function ClubOnboardingChat() {
     const userMessage = inputValue.trim();
     setInputValue('');
 
-    // Add user message
-    setMessages(prev => [...prev, {
+    const userEntry: Message = {
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
-    }]);
+    };
+
+    let conversation: Message[] = [...messages, userEntry];
+    setMessages(conversation);
 
     setLoading(true);
 
     try {
-      // Call agent with user message
-      const result = await agent.run({
-        userMessage,
-        context: {
-          messages,
-          userId: user.id,
+      if (isLikelyUrl(userMessage)) {
+        const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('club-scrape', {
+          body: {
+            url: userMessage,
+            skillId: scrapeSkillId,
+          },
+        });
+
+        if (scrapeError) {
+          console.error('Club scrape function error:', scrapeError);
+          throw new Error(scrapeError.message || 'Failed to scan that website');
+        }
+
+        if (scrapeData?.success && scrapeData?.data) {
+          const importMessage: Message = {
+            role: 'assistant',
+            content: formatScrapeSummary(userMessage, scrapeData.data),
+            timestamp: new Date(),
+          };
+
+          conversation = [...conversation, importMessage];
+          setMessages(conversation);
+        } else if (scrapeData?.error) {
+          const importMessage: Message = {
+            role: 'assistant',
+            content: `I attempted to scan ${userMessage}, but ran into an issue: ${scrapeData.error}. Try another page or provide key details manually.`,
+            timestamp: new Date(),
+          };
+          conversation = [...conversation, importMessage];
+          setMessages(conversation);
+        }
+      }
+
+      const payloadMessages = conversation.map(({ role, content }) => ({ role, content }));
+
+      const { data, error } = await supabase.functions.invoke('club-onboarding', {
+        body: {
+          messages: payloadMessages,
+          skillId: onboardingSkillId,
         },
-        maxIterations: 15,
       });
 
-      // Track tools that were used
-      if (result.toolsUsed && result.toolsUsed.length > 0) {
-        setToolsExecuted(prev => [
-          ...prev,
-          ...result.toolsUsed.map(name => ({ name, status: 'completed' as const })),
-        ]);
+      if (error) {
+        console.error('Club onboarding function error:', error);
+        throw new Error(error.message || 'Edge function error');
       }
 
-      if (result.success) {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: result.result as string,
-          timestamp: new Date(),
-        }]);
-      } else {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `I encountered an issue: ${result.error}\n\nLet's try again - what's your club name or location?`,
-          timestamp: new Date(),
-        }]);
+      if (!data?.success) {
+        throw new Error(data?.error || 'Unable to continue onboarding conversation');
       }
+
+      const responseText = typeof data.message === 'string' && data.message.length > 0
+        ? data.message
+        : 'Thanks! I captured that. Could you share a bit more about your club?';
+
+      const assistantEntry: Message = {
+        role: 'assistant',
+        content: responseText,
+        timestamp: new Date(),
+      };
+
+      conversation = [...conversation, assistantEntry];
+      setMessages(conversation);
     } catch (error: any) {
       console.error('Chat error:', error);
+      const fallback = error?.message
+        ? `I ran into an issue: ${error.message}. Let's try again — what's your club name or location?`
+        : 'Sorry, I had a technical issue. Please try again or contact support if this persists.';
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I had a technical issue. Please try again or contact support if this persists.',
+        content: fallback,
         timestamp: new Date(),
       }]);
+      if (Platform.OS === 'web') {
+        Alert.alert?.('Onboarding error', error?.message || 'Something went wrong');
+      }
     } finally {
       setLoading(false);
     }
@@ -108,7 +183,6 @@ export function ClubOnboardingChat() {
         timestamp: new Date(),
       },
     ]);
-    setToolsExecuted([]);
     setInputValue('');
   };
 
@@ -118,27 +192,24 @@ export function ClubOnboardingChat() {
       style={{ flex: 1, backgroundColor: '#F5F7FA' }}
     >
       <View style={{ flex: 1, padding: 16 }}>
-        {/* Progress Indicator */}
-        {toolsExecuted.length > 0 && (
-          <View style={{
-            backgroundColor: '#E3F2FD',
-            padding: 12,
-            borderRadius: 8,
-            marginBottom: 16,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <Text style={{ fontSize: 14, color: '#1976D2', fontWeight: '600' }}>
-              Setup Progress: {toolsExecuted.length}/8 steps
+        <View style={{
+          backgroundColor: '#E3F2FD',
+          padding: 12,
+          borderRadius: 8,
+          marginBottom: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <Text style={{ fontSize: 14, color: '#1976D2', fontWeight: '600' }}>
+            Chat with our onboarding specialist to set up your workspace.
+          </Text>
+          <TouchableOpacity onPress={handleStartOver}>
+            <Text style={{ fontSize: 14, color: '#1976D2', textDecorationLine: 'underline' }}>
+              Start Over
             </Text>
-            <TouchableOpacity onPress={handleStartOver}>
-              <Text style={{ fontSize: 14, color: '#1976D2', textDecorationLine: 'underline' }}>
-                Start Over
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          </TouchableOpacity>
+        </View>
 
         {/* Messages */}
         <ScrollView
@@ -262,14 +333,6 @@ export function ClubOnboardingChat() {
           </TouchableOpacity>
         </View>
 
-        {/* Tool Execution Status (optional debug info) */}
-        {toolsExecuted.length > 0 && (
-          <View style={{ marginTop: 8 }}>
-            <Text style={{ fontSize: 11, color: '#6B7280', textAlign: 'center' }}>
-              Completed: {toolsExecuted.map(t => t.name.replace('_', ' ')).join(', ')}
-            </Text>
-          </View>
-        )}
       </View>
     </KeyboardAvoidingView>
   );

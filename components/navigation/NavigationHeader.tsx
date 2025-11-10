@@ -5,14 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
-    Modal,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View
 } from 'react-native';
 
 interface NavigationHeaderProps {
@@ -27,8 +27,8 @@ export function NavigationHeader({
   borderBottom = true
 }: NavigationHeaderProps) {
   const { user, userProfile, signOut, userType } = useAuth();
-  const { width } = useWindowDimensions();
-  const isDesktop = width > 768;
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth > 768;
   const pathname = usePathname();
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [quickActionsVisible, setQuickActionsVisible] = useState(false);
@@ -40,15 +40,25 @@ export function NavigationHeader({
   const isLoginPage = pathname === '/(auth)/login' || pathname === '/login';
   const isSignupPage = pathname === '/(auth)/signup' || pathname === '/signup';
   const isOnboardingPage = pathname === '/(auth)/onboarding' || pathname === '/onboarding';
+  const isRacesTab =
+    pathname === '/(tabs)/races' ||
+    pathname === '/races' ||
+    pathname?.startsWith('/(tabs)/races/');
 
   const handleDropdownToggle = () => {
     if (dropdownVisible) {
       setDropdownVisible(false);
     } else {
       // Get button position for dropdown placement
-      buttonRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      buttonRef.current?.measure((x, y, buttonWidth, height, pageX, pageY) => {
+        const dropdownWidth = 240; // match dropdown min width for web alignment
+        const horizontalPadding = 16;
+        const targetLeft = pageX + buttonWidth - dropdownWidth;
+        const maxLeft = windowWidth - dropdownWidth - horizontalPadding;
+        const adjustedLeft = Math.min(Math.max(targetLeft, horizontalPadding), Math.max(maxLeft, horizontalPadding));
+
         setDropdownPosition({
-          x: pageX - 200 + width, // Position dropdown to the right edge of button
+          x: adjustedLeft,
           y: pageY + height + 5, // Position below button with small gap
         });
         setDropdownVisible(true);
@@ -137,8 +147,11 @@ export function NavigationHeader({
         >
           {/* Logo */}
           {showLogo && (
-            <TouchableOpacity style={styles.logoContainer} onPress={() => router.push('/')}>
-              <Text style={styles.logoText}>regattaflow</Text>
+            <TouchableOpacity
+              style={styles.logoContainer}
+              onPress={() => router.push('/')}
+            >
+              <Text style={styles.logoText}>RegattaFlow</Text>
             </TouchableOpacity>
           )}
 
@@ -386,18 +399,18 @@ const styles = StyleSheet.create({
   },
   navigationContentCentered: {
     maxWidth: 1200,
-    alignSelf: 'center',
     width: '100%',
+    alignSelf: 'center',
   },
   logoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
   logoText: {
     fontSize: 20,
     fontWeight: '700',
     color: '#3B82F6',
-    marginLeft: 8,
   },
   navigationActions: {
     flexDirection: 'row',

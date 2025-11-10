@@ -25,6 +25,19 @@ const authDebugLog = (...args: Parameters<typeof logger.debug>) => {
   logger.debug(...args)
 }
 
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  process.env.EXPO_PUBLIC_BASE_URL ||
+  process.env.EXPO_PUBLIC_WEB_BASE_URL ||
+  ''
+
+const buildApiUrl = (path: string) => {
+  if (!API_BASE) {
+    return path
+  }
+  return `${API_BASE.replace(/\/$/, '')}${path}`
+}
+
 type AuthState = 'checking' | 'signed_out' | 'ready'
 
 type AuthCtx = {
@@ -35,7 +48,7 @@ type AuthCtx = {
   loading: boolean
   personaLoading: boolean
   signIn: (identifier: string, password: string) => Promise<void>
-  signUp: (username: string, password: string, persona: PersonaRole) => Promise<any>
+  signUp: (email: string, username: string, password: string, persona: PersonaRole) => Promise<any>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
@@ -95,6 +108,43 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       return null
     }
 
+    const inferUserType = async (): Promise<PersonaRole> => {
+      // 1. Check coach profile
+      const { data: coachProfile, error: coachError } = await supabase
+        .from('coach_profiles')
+        .select('id')
+        .eq('user_id', uid)
+        .maybeSingle();
+
+      if (coachProfile && !coachError) {
+        authDebugLog('[fetchUserProfile] Inferred coach persona from coach_profiles');
+        return 'coach';
+      }
+
+      if (coachError && coachError.code !== 'PGRST116') {
+        authDebugLog('[fetchUserProfile] coach_profiles lookup error:', coachError.message);
+      }
+
+      // 2. Check club profile ownership
+      const { data: clubProfile, error: clubError } = await supabase
+        .from('club_profiles')
+        .select('id')
+        .eq('user_id', uid)
+        .maybeSingle();
+
+      if (clubProfile && !clubError) {
+        authDebugLog('[fetchUserProfile] Inferred club persona from club_profiles');
+        return 'club';
+      }
+
+      if (clubError && clubError.code !== 'PGRST116') {
+        authDebugLog('[fetchUserProfile] club_profiles lookup error:', clubError.message);
+      }
+
+      authDebugLog('[fetchUserProfile] Falling back to default persona');
+      return DEFAULT_PERSONA;
+    };
+
     try {
       authDebugLog('[fetchUserProfile] Querying database for user:', uid)
       const { data, error } = await supabase
@@ -124,7 +174,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       let resolvedProfile = data
       const userTypeWasMissing = !data?.user_type
       let resolvedUserType: PersonaRole = userTypeWasMissing
-        ? DEFAULT_PERSONA
+        ? await inferUserType()
         : (data.user_type as PersonaRole)
 
       if (userTypeWasMissing) {
@@ -231,14 +281,34 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }
 
   const loadPersonaContext = useCallback(async () => {
+    authDebugLog('[loadPersonaContext] Called with:', {
+      userId: user?.id,
+      userType,
+      isDemoSession,
+      clubId: userProfile?.club_id ?? null
+    })
+
     if (!user?.id || isDemoSession) {
+      authDebugLog('[loadPersonaContext] Early return - no user or demo session')
       setClubProfile(null)
       setCoachProfile(null)
       setPersonaLoading(false)
       return
     }
 
-    if (!userType || userType === 'sailor') {
+    const effectiveUserType =
+      userType ?? (userProfile?.club_id ? ('club' as UserType) : null)
+
+    if (!effectiveUserType) {
+      authDebugLog('[loadPersonaContext] Early return - no effective user type')
+      setClubProfile(null)
+      setCoachProfile(null)
+      setPersonaLoading(false)
+      return
+    }
+
+    if (effectiveUserType === 'sailor' && !userProfile?.club_id) {
+      authDebugLog('[loadPersonaContext] Early return - sailor without club context')
       setClubProfile(null)
       setCoachProfile(null)
       setPersonaLoading(false)
@@ -246,51 +316,105 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
 
     setPersonaLoading(true)
+    authDebugLog('[loadPersonaContext] Starting to load persona context for:', effectiveUserType)
+
+    const resolveClubWorkspace = async (ensure: boolean) => {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        throw sessionError
+      }
+
+      const accessToken = sessionData?.session?.access_token
+      if (!accessToken) {
+        throw new Error('Missing access token for workspace resolution')
+      }
+
+      const url = buildApiUrl(`/api/club/workspace${ensure ? '?ensure=1' : ''}`)
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to resolve club workspace')
+      }
+
+      return payload
+    }
 
     try {
-      if (userType === 'club') {
-        const { data, error } = await supabase
-          .from('club_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle()
+      if (effectiveUserType === 'club' || userProfile?.club_id) {
+        const ensureWorkspace = effectiveUserType === 'club'
+        authDebugLog('[loadPersonaContext] Resolving club workspace via API', {
+          ensureWorkspace,
+          userId: user?.id,
+        })
 
-        if (error && error.code !== 'PGRST116') {
-          throw error
+        const workspace = await resolveClubWorkspace(ensureWorkspace)
+
+        authDebugLog('[loadPersonaContext] Workspace response received:', {
+          hasClub: !!workspace?.club,
+          created: workspace?.created ?? false,
+          membershipSource: workspace?.membership?.source ?? null,
+          role: workspace?.membership?.role ?? null,
+          clubId: workspace?.club?.id ?? null,
+        })
+
+        if (workspace?.club) {
+          setClubProfile(workspace.club)
+          if (workspace.club.id) {
+            setUserProfile((prev: any) =>
+              prev ? { ...prev, club_id: workspace.club.id } : prev
+            )
+          }
+        } else {
+          setClubProfile(null)
         }
-
-        setClubProfile(data ?? null)
       } else {
         setClubProfile(null)
       }
 
-      if (userType === 'coach') {
+      if (effectiveUserType === 'coach') {
+        authDebugLog('[loadPersonaContext] Loading coach profile with user.id:', user.id)
+
         const { data, error } = await supabase
           .from('coach_profiles')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle()
 
+        authDebugLog('[loadPersonaContext] Coach profile query result:', {
+          hasData: !!data,
+          error: error?.message
+        })
+
         if (error && error.code !== 'PGRST116') {
           throw error
         }
 
         setCoachProfile(data ?? null)
+        authDebugLog('[loadPersonaContext] Coach profile set:', !!data)
       } else {
         setCoachProfile(null)
       }
     } catch (error) {
       console.error('[AuthProvider] Failed to load persona context:', error)
-      if (userType === 'club') {
+      authDebugLog('[loadPersonaContext] Exception caught:', error)
+      if (effectiveUserType === 'club' || userProfile?.club_id) {
         setClubProfile(null)
       }
-      if (userType === 'coach') {
+      if (effectiveUserType === 'coach') {
         setCoachProfile(null)
       }
     } finally {
       setPersonaLoading(false)
+      authDebugLog('[loadPersonaContext] Completed, personaLoading set to false')
     }
-  }, [user?.id, userType, isDemoSession])
+  }, [user?.id, userType, isDemoSession, userProfile?.club_id])
 
   // Initial auth state setup with proper session restoration
   useEffect(() => {
@@ -617,19 +741,39 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  const signUp = async (username: string, password: string, persona: PersonaRole) => {
+  const signUp = async (email: string, username: string, password: string, persona: PersonaRole) => {
+    const trimmedEmail = email.trim()
     const displayName = username.trim()
     const personaRole = persona
+
+    // Validate inputs
+    if (!trimmedEmail) {
+      throw new Error('Email is required')
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(trimmedEmail)) {
+      throw new Error('Invalid email address')
+    }
 
     if (!displayName) {
       throw new Error('Username is required')
     }
+
+    if (displayName.length < 3) {
+      throw new Error('Username must be at least 3 characters long')
+    }
+
     if (!personaRole) {
       throw new Error('A persona is required')
     }
 
-    const email = identifierToAuthEmail(displayName)
+    if (!password || password.length < 6) {
+      throw new Error('Password must be at least 6 characters long')
+    }
+
     authDebugLog('🚀 [AUTH] signUp called with:', {
+      email: trimmedEmail,
       username: displayName,
       persona: personaRole,
       hasPassword: !!password
@@ -638,7 +782,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     setLoading(true)
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: trimmedEmail,
         password,
         options: {
           data: {
@@ -662,25 +806,30 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       if (data.user?.id) {
         const profilePayload = {
           id: data.user.id,
-          email,
+          email: trimmedEmail,
           full_name: displayName,
           user_type: personaRole,
           onboarding_completed: true,
         }
+
+        authDebugLog('[AUTH] Upserting user profile:', profilePayload)
 
         const { error: profileError } = await supabase
           .from('users')
           .upsert(profilePayload, { onConflict: 'id' })
 
         if (profileError) {
+          console.error('[AUTH] ❌ Profile upsert failed during signUp:', profileError)
           logger.warn('[AUTH] Profile upsert failed during signUp:', profileError)
         } else {
+          authDebugLog('[AUTH] ✅ Profile upsert successful')
           setUserProfile((prev: any) => ({
             ...(prev ?? {}),
             ...profilePayload
           }))
         }
         setUserType(personaRole)
+        authDebugLog('[AUTH] userType set to:', personaRole)
 
         try {
           authDebugLog('🔍 [AUTH] Refreshing profile after signUp...')

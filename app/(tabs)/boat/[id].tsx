@@ -9,6 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -559,11 +560,18 @@ const styles = StyleSheet.create({
   },
   tabChipActive: {
     borderColor: '#BFDBFE',
-    shadowColor: '#1D4ED8',
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 6px 14px rgba(29, 78, 216, 0.18)',
+      },
+      default: {
+        shadowColor: '#1D4ED8',
+        shadowOpacity: 0.12,
+        shadowOffset: { width: 0, height: 6 },
+        shadowRadius: 12,
+        elevation: 4,
+      },
+    }),
   },
   tabChipIcon: {
     width: 32,
@@ -636,11 +644,18 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#1D4ED8',
-    shadowOpacity: 0.18,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 18,
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 8px 24px rgba(29, 78, 216, 0.22)',
+      },
+      default: {
+        shadowColor: '#1D4ED8',
+        shadowOpacity: 0.18,
+        shadowOffset: { width: 0, height: 8 },
+        shadowRadius: 18,
+        elevation: 6,
+      },
+    }),
   },
   heroHeaderRow: {
     flexDirection: 'row',

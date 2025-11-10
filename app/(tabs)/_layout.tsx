@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Tabs, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
@@ -6,6 +6,7 @@ import { BackHandler, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpa
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { useAuth } from '@/providers/AuthProvider';
+import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import { useBoats } from '@/hooks/useData';
 import { createLogger } from '@/lib/utils/logger';
@@ -38,8 +39,7 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
         { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
         { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
         { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
-        { name: 'profile', title: 'Profile', icon: 'person-outline', iconFocused: 'person' },
-        { name: 'settings', title: 'Settings', icon: 'settings-outline', iconFocused: 'settings' },
+        { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
       ];
 
     case 'club':
@@ -62,13 +62,22 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
   }
 };
 
-export default function TabLayout() {
-  const { userType, user } = useAuth();
+function TabLayoutInner() {
+  const { userType, user, clubProfile, personaLoading } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
   const tabs = getTabsForUserType(userType ?? null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [hasRedirected, setHasRedirected] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
+
+  // Redirect coaches to /clients on initial load
+  useEffect(() => {
+    if (userType === 'coach' && !hasRedirected && !personaLoading) {
+      setHasRedirected(true);
+      router.replace('/(tabs)/clients');
+    }
+  }, [userType, hasRedirected, personaLoading, router]);
 
   const isTabVisible = (name: string) => tabs.some(t => t.name === name);
   const findTab = (name: string) => tabs.find(tab => tab.name === name);
@@ -93,41 +102,64 @@ export default function TabLayout() {
     }, [navigation])
   );
 
-  // DEBUG LOGGING
+  // COMPREHENSIVE DEBUG LOGGING FOR CLUB USERS
+  logger.debug('[TabLayout] === TAB BAR RENDER DEBUG ===');
   logger.debug('[TabLayout] userType:', userType);
-  logger.debug('[TabLayout] tabs:', tabs);
+  logger.debug('[TabLayout] user.id:', user?.id);
+  logger.debug('[TabLayout] personaLoading:', personaLoading);
+  logger.debug('[TabLayout] clubProfile:', clubProfile ? 'loaded' : 'null');
+  logger.debug('[TabLayout] tabs config:', tabs);
   logger.debug('[TabLayout] Visible tabs:', tabs.map(t => t.name));
+  logger.debug('[TabLayout] isClubUser:', userType === 'club');
+  logger.debug('[TabLayout] Platform:', Platform.OS);
+  logger.debug('[TabLayout] ==============================');
 
-  const menuItems = useMemo(
-    () => {
-      const items = [];
+  const menuItems = useMemo(() => {
+    const items: Array<{ key: string; label: string; icon: string; route: string; isWarning?: boolean }> = [];
 
-      // Add profile completion item at the top if incomplete
-      if (isProfileIncomplete) {
-        items.push({
-          key: 'complete-profile',
-          label: 'Complete Profile',
-          icon: 'warning-outline',
-          route: '/(auth)/sailor-onboarding-chat',
-          isWarning: true,
-        });
-      }
-
-      // Add regular menu items
+    // Coach menu items (simplified)
+    if (userType === 'coach') {
       items.push(
-        { key: 'fleet', label: 'Fleets', icon: 'people-outline', route: '/(tabs)/fleet' },
-        { key: 'club', label: 'Clubs', icon: 'people-circle-outline', route: '/(tabs)/clubs' },
-        { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' },
-        { key: 'coaching', label: 'Coaching Marketplace', icon: 'school-outline', route: '/(tabs)/coaching' },
-        { key: 'tuning-guides', label: 'Tuning Guides', icon: 'book-outline', route: '/(tabs)/tuning-guides' },
         { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
         { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' }
       );
-
       return items;
-    },
-    [isProfileIncomplete]
-  );
+    }
+
+    // Sailor menu items (original)
+    if (isProfileIncomplete) {
+      items.push({
+        key: 'complete-profile',
+        label: 'Complete Profile',
+        icon: 'warning-outline',
+        route: '/(auth)/sailor-onboarding-chat',
+        isWarning: true,
+      });
+    }
+
+    items.push(
+      { key: 'fleet', label: 'Fleets', icon: 'people-outline', route: '/(tabs)/fleet' },
+      { key: 'club', label: 'Clubs', icon: 'people-circle-outline', route: '/(tabs)/clubs' },
+      { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' }
+    );
+
+    if (userType !== 'club') {
+      items.push({
+        key: 'coaching',
+        label: 'Coaching Marketplace',
+        icon: 'school-outline',
+        route: '/(tabs)/coaching',
+      });
+    }
+
+    items.push(
+      { key: 'tuning-guides', label: 'Tuning Guides', icon: 'book-outline', route: '/(tabs)/tuning-guides' },
+      { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
+      { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' }
+    );
+
+    return items;
+  }, [isProfileIncomplete, userType]);
 
   const handleMenuItemPress = (route: string) => {
     setMenuVisible(false);
@@ -159,6 +191,10 @@ export default function TabLayout() {
     );
   };
 
+  const isClubUser = userType === 'club';
+  const tabBarActiveColor = isClubUser ? '#60A5FA' : '#2563EB'; // Brighter blue for club users
+  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.85)' : '#9CA3AF'; // Better contrast
+
   const racesTab = findTab('races');
   const dashboardTab = findTab('dashboard'); // Legacy for non-sailor user types
   const calendarTab = findTab('calendar');
@@ -180,17 +216,42 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <NavigationHeader showLogo={false} backgroundColor="#F8FAFC" />
+      <NavigationHeader backgroundColor="#F8FAFC" />
       <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: '#007AFF',
-          tabBarStyle: {
-            backgroundColor: '#FFFFFF',
-            borderTopWidth: 1,
-            borderTopColor: '#E5E7EB',
-            height: 60,
-          },
+        screenOptions={({ route }) => {
+          const visible = isTabVisible(route.name);
+          const tab = findTab(route.name);
+          const labelText = tab?.title ?? tab?.name ?? route.name;
+
+          return {
+            headerShown: false,
+            tabBarShowLabel: true,
+            tabBarLabelPosition: 'below-icon',
+            tabBarActiveTintColor: tabBarActiveColor,
+            tabBarInactiveTintColor: tabBarInactiveColor,
+            tabBarStyle: [
+              styles.tabBarBase,
+              isClubUser ? styles.tabBarClub : styles.tabBarDefault,
+            ],
+            tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
+            tabBarLabel: ({ color }) => (
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.tabLabelBase,
+                  isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
+                  { color },
+                ]}
+              >
+                {labelText}
+              </Text>
+            ),
+            tabBarItemStyle: visible
+              ? isClubUser
+                ? styles.tabItemClub
+                : styles.tabItemDefault
+              : styles.hiddenTabItem,
+          };
         }}
       >
         {/* Tab 1: Races */}
@@ -201,7 +262,7 @@ export default function TabLayout() {
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
                 name={getIconName(racesTab, focused, racesTab?.iconFocused ?? 'flag', racesTab?.icon ?? 'flag-outline') as any}
-                size={size}
+                size={isClubUser ? 26 : size}
                 color={color}
               />
             ),
@@ -259,24 +320,6 @@ export default function TabLayout() {
             tabBarButton: isTabVisible('venue') ? undefined : () => null,
           }}
         />
-        {/* Tab 5: More - MUST BE LAST VISIBLE TAB */}
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: moreTab?.title ?? 'More',
-            tabBarButton: showMenuTrigger ? renderHamburgerButton : () => null,
-            tabBarIcon: ({ color, size, focused }) =>
-              moreTab?.emoji ? (
-                <EmojiTabIcon emoji={moreTab.emoji} focused={focused} size={size} />
-              ) : (
-                <Ionicons
-                  name={getIconName(moreTab, focused, moreTab?.iconFocused ?? 'menu', moreTab?.icon ?? 'menu') as any}
-                  size={size}
-                  color={color}
-                />
-              ),
-          }}
-        />
         {/* Hidden tabs - Use tabBarButton to actually hide them on web */}
         <Tabs.Screen
           name="calendar"
@@ -307,9 +350,58 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="events"
+          options={{
+            title: eventsTab?.title ?? 'Events',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(eventsTab, focused, eventsTab?.iconFocused ?? 'boat', eventsTab?.icon ?? 'boat') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('events') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="members"
+          options={{
+            title: membersTab?.title ?? 'Members',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(membersTab, focused, membersTab?.iconFocused ?? 'people-circle', membersTab?.icon ?? 'people-circle-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('members') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="race-management"
+          options={{
+            title: raceManagementTab?.title ?? 'Races',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(raceManagementTab, focused, raceManagementTab?.iconFocused ?? 'flag', raceManagementTab?.icon ?? 'flag-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('race-management') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
             title: profileTab?.title ?? 'Profile',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(profileTab, focused, profileTab?.iconFocused ?? 'person', profileTab?.icon ?? 'person-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
             tabBarButton: isTabVisible('profile') ? undefined : () => null,
           }}
         />
@@ -317,6 +409,13 @@ export default function TabLayout() {
           name="settings"
           options={{
             title: settingsTab?.title ?? 'Settings',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(settingsTab, focused, settingsTab?.iconFocused ?? 'settings', settingsTab?.icon ?? 'settings-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
             tabBarButton: isTabVisible('settings') ? undefined : () => null,
           }}
         />
@@ -332,48 +431,6 @@ export default function TabLayout() {
           options={{
             title: mapTab?.title ?? 'Map',
             tabBarButton: isTabVisible('map') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="clients"
-          options={{
-            title: clientsTab?.title ?? 'Clients',
-            tabBarButton: isTabVisible('clients') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="schedule"
-          options={{
-            title: scheduleTab?.title ?? 'Schedule',
-            tabBarButton: isTabVisible('schedule') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="earnings"
-          options={{
-            title: earningsTab?.title ?? 'Earnings',
-            tabBarButton: isTabVisible('earnings') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="events"
-          options={{
-            title: eventsTab?.title ?? 'Events',
-            tabBarButton: isTabVisible('events') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="members"
-          options={{
-            title: membersTab?.title ?? 'Members',
-            tabBarButton: isTabVisible('members') ? undefined : () => null,
-          }}
-        />
-        <Tabs.Screen
-          name="race-management"
-          options={{
-            title: raceManagementTab?.title ?? 'Races',
-            tabBarButton: isTabVisible('race-management') ? undefined : () => null,
           }}
         />
         <Tabs.Screen
@@ -504,6 +561,68 @@ export default function TabLayout() {
             href: null,
           }}
         />
+
+        {/* Coach Tabs */}
+        <Tabs.Screen
+          name="clients"
+          options={{
+            title: clientsTab?.title ?? 'Clients',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(clientsTab, focused, clientsTab?.iconFocused ?? 'people', clientsTab?.icon ?? 'people-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('clients') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="schedule"
+          options={{
+            title: scheduleTab?.title ?? 'Schedule',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(scheduleTab, focused, scheduleTab?.iconFocused ?? 'calendar', scheduleTab?.icon ?? 'calendar-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('schedule') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="earnings"
+          options={{
+            title: earningsTab?.title ?? 'Earnings',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(earningsTab, focused, earningsTab?.iconFocused ?? 'cash', earningsTab?.icon ?? 'cash-outline') as any}
+                size={isClubUser ? 26 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('earnings') ? undefined : () => null,
+          }}
+        />
+        {/* Tab 5: More - MUST BE LAST VISIBLE TAB */}
+        <Tabs.Screen
+          name="more"
+          options={{
+            title: moreTab?.title ?? 'More',
+            tabBarButton: showMenuTrigger ? renderHamburgerButton : () => null,
+            tabBarIcon: ({ color, size, focused }) =>
+              moreTab?.emoji ? (
+                <EmojiTabIcon emoji={moreTab.emoji} focused={focused} size={size} />
+              ) : (
+                <Ionicons
+                  name={getIconName(moreTab, focused, moreTab?.iconFocused ?? 'menu', moreTab?.icon ?? 'menu') as any}
+                  size={size}
+                  color={color}
+                />
+              ),
+          }}
+        />
       </Tabs>
 
       {showMenuTrigger && (
@@ -569,6 +688,75 @@ const getIconName = (
 };
 
 const styles = StyleSheet.create({
+  tabBarBase: {
+    borderTopWidth: 0,
+    elevation: 0,
+    ...Platform.select({
+      web: { boxShadow: 'none' },
+      default: { shadowOpacity: 0 },
+    }),
+  },
+  tabBarDefault: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    height: 60,
+    paddingTop: 4,
+    paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+  },
+  tabBarClub: {
+    backgroundColor: '#0F172A',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(51,65,85,0.5)',
+    height: 72,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 12,
+    paddingHorizontal: 28,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  tabLabelBase: {
+    textAlign: 'center',
+  },
+  tabLabelDefault: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginTop: 2,
+    marginBottom: 4,
+    letterSpacing: 0.15,
+  },
+  tabLabelClub: {
+    fontSize: 11,
+    fontWeight: '700', // Increased from 600
+    marginTop: 4,
+    marginBottom: 0,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase' as any,
+  },
+  tabIconDefault: {
+    marginTop: 6,
+  },
+  tabIconClub: {
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  tabItemDefault: {
+    paddingVertical: 4,
+  },
+  tabItemClub: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 4,
+    flex: 0,
+    width: 'auto',
+    marginRight: 24,
+    alignSelf: 'flex-start',
+  },
+  hiddenTabItem: {
+    display: 'none',
+  },
   hamburgerButton: {
     flex: 1,
     alignItems: 'center',
@@ -629,3 +817,12 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
 });
+
+// Wrap with CoachWorkspaceProvider for coach users
+export default function TabLayout() {
+  return (
+    <CoachWorkspaceProvider>
+      <TabLayoutInner />
+    </CoachWorkspaceProvider>
+  );
+}

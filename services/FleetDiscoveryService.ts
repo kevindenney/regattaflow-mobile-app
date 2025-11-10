@@ -6,6 +6,11 @@
 
 import { supabase } from './supabase';
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const isUuid = (value?: string) => !!value && UUID_REGEX.test(value);
+
 export interface Fleet {
   id: string;
   name: string;
@@ -175,6 +180,11 @@ export class FleetDiscoveryService {
     fleetId: string,
     notifyFleet: boolean = false
   ): Promise<FleetMembership | null> {
+    if (!isUuid(fleetId)) {
+      console.warn('Skipping joinFleet for non-UUID fleet id', { fleetId });
+      return null;
+    }
+
     try {
       const { data: membership, error } = await supabase
         .from('fleet_members')
@@ -201,6 +211,11 @@ export class FleetDiscoveryService {
    * Leave a fleet
    */
   static async leaveFleet(sailorId: string, fleetId: string): Promise<boolean> {
+    if (!isUuid(fleetId)) {
+      console.warn('Skipping leaveFleet for non-UUID fleet id', { fleetId });
+      return false;
+    }
+
     try {
       const { error } = await supabase
         .from('fleet_members')
@@ -332,6 +347,11 @@ export class FleetDiscoveryService {
    * Check if user is a member of a fleet
    */
   static async isMember(sailorId: string, fleetId: string): Promise<boolean> {
+    if (!isUuid(fleetId)) {
+      console.warn('Skipping isMember check for non-UUID fleet id', { fleetId });
+      return false;
+    }
+
     try {
       const { data, error } = await supabase
         .from('fleet_members')
@@ -349,6 +369,103 @@ export class FleetDiscoveryService {
     } catch (error) {
       console.error('Error checking fleet membership:', error);
       return false;
+    }
+  }
+
+  /**
+   * Discover fleets by club
+   */
+  static async discoverFleetsByClub(clubId: string, limit: number = 20): Promise<Fleet[]> {
+    try {
+      const { data: fleets, error } = await supabase
+        .from('fleets')
+        .select(`
+          *,
+          boat_classes(id, name, type)
+        `)
+        .eq('club_id', clubId)
+        .in('visibility', ['public', 'club'])
+        .limit(limit);
+
+      if (error) throw error;
+
+      // Get member counts for each fleet
+      const fleetsWithCounts = await Promise.all(
+        (fleets || []).map(async (fleet: any) => {
+          const { count } = await supabase
+            .from('fleet_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('fleet_id', fleet.id)
+            .eq('status', 'active');
+
+          return {
+            ...fleet,
+            member_count: count || 0,
+          };
+        })
+      );
+
+      // Sort by member count (popularity)
+      return fleetsWithCounts.sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
+    } catch (error) {
+      console.error('Error discovering fleets by club:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Discover fleets by venue
+   */
+  static async discoverFleetsByVenue(venueId: string, limit: number = 20): Promise<Fleet[]> {
+    try {
+      // Get clubs at this venue
+      const { data: clubs, error: clubsError } = await supabase
+        .from('yacht_clubs')
+        .select('id')
+        .eq('venue_id', venueId);
+
+      if (clubsError) throw clubsError;
+
+      const clubIds = (clubs || []).map((c: any) => c.id);
+
+      if (clubIds.length === 0) {
+        return [];
+      }
+
+      // Get fleets for these clubs
+      const { data: fleets, error } = await supabase
+        .from('fleets')
+        .select(`
+          *,
+          boat_classes(id, name, type)
+        `)
+        .in('club_id', clubIds)
+        .in('visibility', ['public', 'club'])
+        .limit(limit);
+
+      if (error) throw error;
+
+      // Get member counts for each fleet
+      const fleetsWithCounts = await Promise.all(
+        (fleets || []).map(async (fleet: any) => {
+          const { count } = await supabase
+            .from('fleet_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('fleet_id', fleet.id)
+            .eq('status', 'active');
+
+          return {
+            ...fleet,
+            member_count: count || 0,
+          };
+        })
+      );
+
+      // Sort by member count (popularity)
+      return fleetsWithCounts.sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
+    } catch (error) {
+      console.error('Error discovering fleets by venue:', error);
+      return [];
     }
   }
 }

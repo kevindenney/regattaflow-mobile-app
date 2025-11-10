@@ -237,7 +237,7 @@ This is the main data persistence tool.`,
           .from('sailor_profiles')
           .select('id')
           .eq('user_id', sailor_id)
-          .single();
+          .maybeSingle();
 
         const profileData: any = {
           user_id: sailor_id,

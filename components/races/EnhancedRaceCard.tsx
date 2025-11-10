@@ -84,18 +84,22 @@ export const EnhancedRaceCard: React.FC<EnhancedRaceCardProps> = ({
       ]}
       {...pressableProps}
     >
-      {/* Header: Name + Status */}
+      {/* Status Badge - Positioned at top right */}
+      <View style={styles.statusBadgeContainer}>
+        <Badge text={statusLabel} variant={statusVariant} />
+      </View>
+
+      {/* Header: Name */}
       <View style={styles.header}>
         <Text style={styles.raceName} numberOfLines={2}>
           {race.name}
         </Text>
-        <Badge text={statusLabel} variant={statusVariant} />
       </View>
 
       {/* Venue */}
       {race.venue && (
         <View style={styles.venueRow}>
-          <Ionicons name="location-outline" size={12} color={colors.text.secondary} />
+          <Ionicons name="location-outline" size={14} color={colors.text.secondary} />
           <Text style={styles.venueText} numberOfLines={1}>
             {race.venue}
           </Text>
@@ -105,42 +109,44 @@ export const EnhancedRaceCard: React.FC<EnhancedRaceCardProps> = ({
       {/* Countdown Timer */}
       {status === 'upcoming' && (
         <View style={styles.timerSection}>
-          <Text style={styles.timerLabel}>STARTS IN</Text>
           <CountdownTimer targetDate={race.startTime} compact />
-        </View>
-      )}
-
-      {/* Start Sequence Timer - Only for upcoming races */}
-      {status === 'upcoming' && (
-        <View style={styles.startSequenceSection}>
-          <StartSequenceTimer compact />
         </View>
       )}
 
       {/* Conditions */}
       {(race.windConditions || race.currentConditions) && (
-        <View style={styles.conditionsRow}>
+        <View style={styles.conditionsContainer}>
           {race.windConditions && (
-            <ConditionBadge
-              icon="cloudy-outline"
-              label={race.windConditions.summary}
-              color={colors.wind}
-            />
+            <View style={styles.conditionRow}>
+              <Ionicons name="wind" size={16} color={colors.primary[500]} />
+              <Text style={styles.conditionText} numberOfLines={1}>
+                {race.windConditions.summary}
+              </Text>
+            </View>
           )}
           {race.currentConditions && (
-            <ConditionBadge
-              icon="water-outline"
-              label={race.currentConditions.summary}
-              color={colors.current}
-            />
+            <View style={styles.conditionRow}>
+              <Ionicons name="water" size={16} color={colors.primary[400]} />
+              <Text style={styles.conditionText} numberOfLines={1}>
+                {race.currentConditions.summary}
+              </Text>
+            </View>
           )}
         </View>
       )}
 
-      {/* Date/Time */}
-      <Text style={styles.dateTime}>
-        {formatTime(race.startTime)} • {formatDate(race.startTime)}
-      </Text>
+      {/* Strategy Section */}
+      {status === 'upcoming' && (
+        <View style={styles.strategySection}>
+          <View style={styles.strategySectionHeader}>
+            <Ionicons name="map-outline" size={12} color={colors.text.tertiary} />
+            <Text style={styles.strategySectionLabel}>STRATEGY</Text>
+          </View>
+          <Text style={styles.strategySectionText} numberOfLines={2}>
+            Race strategy will be generated based on conditions
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 };
@@ -148,73 +154,108 @@ export const EnhancedRaceCard: React.FC<EnhancedRaceCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.background.primary,
-    borderRadius: BorderRadius.medium,
-    padding: Spacing.md,
+    borderRadius: BorderRadius.large,
+    padding: Spacing.lg,
     marginHorizontal: Spacing.sm,
-    width: 200,
-    ...Shadows.small,
+    width: 240,
+    minHeight: 280,
+    ...Shadows.medium,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    position: 'relative',
   },
   cardSelected: {
     borderWidth: 2,
     borderColor: colors.primary[600],
     backgroundColor: colors.primary[50],
+    ...Shadows.large,
   },
   cardPressed: {
-    opacity: 0.9,
+    opacity: 0.95,
     transform: [{ scale: 0.98 }],
   },
+  statusBadgeContainer: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    zIndex: 10,
+  },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.sm,
-    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+    paddingRight: 60, // Space for status badge
   },
   raceName: {
     ...Typography.h3,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '700',
     color: colors.text.primary,
-    flex: 1,
   },
   venueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    marginBottom: Spacing.sm,
+    gap: 4,
+    marginBottom: Spacing.md,
   },
   venueText: {
     ...Typography.body,
-    fontSize: 12,
+    fontSize: 13,
     color: colors.text.secondary,
     flex: 1,
   },
   timerSection: {
     alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    backgroundColor: colors.background.secondary,
+    borderRadius: BorderRadius.medium,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  conditionsContainer: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
     paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
     backgroundColor: colors.background.secondary,
     borderRadius: BorderRadius.small,
-    marginBottom: Spacing.sm,
   },
-  timerLabel: {
-    ...Typography.captionBold,
-    fontSize: 9,
-    color: colors.text.tertiary,
-    marginBottom: Spacing.xs,
-  },
-  conditionsRow: {
+  conditionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.xs,
+    alignItems: 'center',
+    gap: 8,
+  },
+  conditionText: {
+    ...Typography.body,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.primary,
+    flex: 1,
+  },
+  strategySection: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: BorderRadius.small,
+    padding: Spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary[500],
+  },
+  strategySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginBottom: Spacing.xs,
   },
-  dateTime: {
-    ...Typography.caption,
-    fontSize: 9,
+  strategySectionLabel: {
+    ...Typography.captionBold,
+    fontSize: 10,
     color: colors.text.tertiary,
-    textAlign: 'center',
+    letterSpacing: 0.5,
   },
-  startSequenceSection: {
-    marginBottom: Spacing.sm,
+  strategySectionText: {
+    ...Typography.body,
+    fontSize: 12,
+    color: colors.text.secondary,
+    lineHeight: 16,
   },
 });

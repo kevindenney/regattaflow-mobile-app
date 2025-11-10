@@ -3,38 +3,51 @@
  *
  * Usage:
  *   const logger = createLogger('ComponentName');
- *   logger.debug('Debug info', { data }); // Only in development
- *   logger.info('Info message');           // Only in development
- *   logger.warn('Warning message');        // Always logged
+ *   logger.debug('Debug info', { data }); // Only when LOG_LEVEL allows
+ *   logger.info('Info message');           // Only when LOG_LEVEL allows
+ *   logger.warn('Warning message');        // Respects LOG_LEVEL (defaults to warn)
  *   logger.error('Error occurred', error); // Always logged
  *
  * Verbosity Control:
- *   Set SHOW_VERBOSE_LOGS = false to hide noisy component logs
- *   Contexts in VERBOSE_CONTEXTS will only log when SHOW_VERBOSE_LOGS = true
+ *   Set EXPO_PUBLIC_LOG_LEVEL to one of: debug | info | warn | error
+ *   Defaults to `warn` when not set.
  */
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-const isDevelopment = __DEV__ || process.env.NODE_ENV === 'development';
+const reactNativeDevFlag = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
+const isDevelopment = reactNativeDevFlag || process.env.NODE_ENV === 'development';
 
-// Verbosity control - set to false to reduce console noise during development
-const SHOW_VERBOSE_LOGS = false; // Set to true when you need detailed debugging
+const LOG_LEVEL_ORDER: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
 
-// Contexts that are considered "verbose" (noisy during normal development)
-const VERBOSE_CONTEXTS = [
-  'RealtimeService',
-  'RacesScreen',
-  '_layout',
-  'AuthProvider',
-  'RaceDetailScrollable',
-  'FleetOverview',
-];
+const parseLogLevel = (value?: string | null): LogLevel | null => {
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+  if (normalized === 'debug' || normalized === 'info' || normalized === 'warn' || normalized === 'error') {
+    return normalized;
+  }
+  return null;
+};
+
+const envLogLevel = parseLogLevel(process.env.EXPO_PUBLIC_LOG_LEVEL as string | undefined);
+const DEFAULT_MIN_LEVEL: LogLevel = envLogLevel ?? 'warn';
 
 class Logger {
   private context: string;
+  private minLevel: LogLevel;
 
   constructor(context: string) {
     this.context = context;
+    this.minLevel = DEFAULT_MIN_LEVEL;
+  }
+
+  private shouldLog(level: LogLevel): boolean {
+    return LOG_LEVEL_ORDER[level] >= LOG_LEVEL_ORDER[this.minLevel];
   }
 
   /**
@@ -43,13 +56,9 @@ class Logger {
    * Respects verbosity settings for noisy contexts
    */
   debug(...args: any[]) {
-    if (isDevelopment) {
-      // Skip verbose contexts when verbosity is disabled
-      if (!SHOW_VERBOSE_LOGS && VERBOSE_CONTEXTS.includes(this.context)) {
-        return;
-      }
-      console.log(`[${this.context}]`, ...args);
-    }
+    if (!isDevelopment) return;
+    if (!this.shouldLog('debug')) return;
+    console.log(`[${this.context}]`, ...args);
   }
 
   /**
@@ -58,20 +67,17 @@ class Logger {
    * Respects verbosity settings for noisy contexts
    */
   info(...args: any[]) {
-    if (isDevelopment) {
-      // Skip verbose contexts when verbosity is disabled
-      if (!SHOW_VERBOSE_LOGS && VERBOSE_CONTEXTS.includes(this.context)) {
-        return;
-      }
-      console.info(`[${this.context}]`, ...args);
-    }
+    if (!isDevelopment) return;
+    if (!this.shouldLog('info')) return;
+    console.info(`[${this.context}]`, ...args);
   }
 
   /**
-   * Warning-level logging - always shown
+   * Warning-level logging - shown when LOG_LEVEL <= warn (defaults to warn)
    * Use for non-critical issues that should be addressed
    */
   warn(...args: any[]) {
+    if (!this.shouldLog('warn')) return;
     console.warn(`[${this.context}]`, ...args);
   }
 

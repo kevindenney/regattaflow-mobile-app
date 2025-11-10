@@ -1,10 +1,63 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import Anthropic from "npm:@anthropic-ai/sdk@^0.32.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const ANTHROPIC_API_BASE = 'https://api.anthropic.com/v1';
+
+/**
+ * Call Anthropic API directly using fetch
+ * The SDK doesn't support the Skills beta API in Deno yet
+ */
+async function callAnthropicAPI(
+  endpoint: string,
+  method: string,
+  body?: any,
+  isMultipart: boolean = false
+): Promise<any> {
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  console.log('API Key present:', !!apiKey);
+  console.log('API Key starts with:', apiKey?.substring(0, 10));
+
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+
+  const headers: Record<string, string> = {
+    'anthropic-version': '2023-06-01',
+    'anthropic-beta': 'code-execution-2025-08-25,skills-2025-10-02,files-api-2025-04-14',
+    'x-api-key': apiKey,
+  };
+
+  console.log('Calling Anthropic API:', method, endpoint);
+
+  if (!isMultipart) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const options: RequestInit = {
+    method,
+    headers,
+  };
+
+  if (body) {
+    options.body = isMultipart ? body : JSON.stringify(body);
+  }
+
+  const response = await fetch(`${ANTHROPIC_API_BASE}${endpoint}`, options);
+
+  console.log('Anthropic response status:', response.status);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    console.error('Anthropic API error:', JSON.stringify(errorData));
+    throw new Error(`Anthropic API error: ${JSON.stringify(errorData)}`);
+  }
+
+  return await response.json();
+}
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
@@ -13,57 +66,124 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    const anthropic = new Anthropic({ apiKey });
     const { action, ...params } = await req.json();
 
     let result;
 
     switch (action) {
       case 'list_skills':
-        result = await anthropic.beta.skills.list({
-          betas: ['skills-2025-10-02'],
-          ...params
-        } as any);
+        result = await callAnthropicAPI('/skills', 'GET');
         break;
 
       case 'get_skill':
         if (!params.skill_id) {
           throw new Error('skill_id required for get_skill action');
         }
-        result = await anthropic.beta.skills.retrieve(
-          params.skill_id,
-          { betas: ['skills-2025-10-02'] } as any
-        );
+        result = await callAnthropicAPI(`/skills/${params.skill_id}`, 'GET');
+        break;
+
+      case 'messages':
+        // Invoke Claude with a skill
+        if (!params.model || !params.messages) {
+          throw new Error('model and messages required for messages action');
+        }
+
+        const requestBody: any = {
+          model: params.model,
+          max_tokens: params.max_tokens || 1024,
+          messages: params.messages,
+        };
+
+        // Add container with skills if provided
+        if (params.skills && params.skills.length > 0) {
+          requestBody.container = {
+            skills: params.skills
+          };
+
+          // Skills require code_execution tool
+          requestBody.tools = [{
+            type: 'code_execution_20250825',
+            name: 'code_execution'
+          }];
+        }
+
+        result = await callAnthropicAPI('/messages', 'POST', requestBody);
         break;
 
       case 'create_skill':
-        if (!params.name || !params.description) {
-          throw new Error('name and description required for create_skill action');
+        if (!params.name || !params.description || !params.content) {
+          throw new Error('name, description, and content required for create_skill action');
         }
-        // Note: File upload requires special handling
-        // For now, this endpoint doesn't support creating skills with files
-        // Use the Anthropic CLI for uploading skills with files
-        return new Response(
-          JSON.stringify({
-            error: 'Creating skills with files not supported via proxy. Use Anthropic CLI instead.',
-            suggestion: 'Pre-upload your skills using the Anthropic CLI, then reference them by ID'
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          }
-        );
+
+        // Create SKILL.md file with proper YAML frontmatter
+        const skillContent = `---
+name: ${params.name}
+description: ${params.description}
+---
+
+${params.content}`;
+
+        // Generate display title from skill name
+        const displayTitle = params.name.split('-').map((word: string) =>
+          word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+
+        console.log('Creating ZIP archive for skill:', params.name);
+
+        // Import JSZip for creating ZIP files
+        // @deno-types="npm:@types/jszip"
+        const JSZip = (await import('npm:jszip@3.10.1')).default;
+
+        // Create a ZIP file with top-level folder containing SKILL.md
+        // Structure: skill.zip/skill-name/SKILL.md
+        const zip = new JSZip();
+        const skillFolder = zip.folder(params.name);
+        if (!skillFolder) {
+          throw new Error('Failed to create skill folder in ZIP');
+        }
+        skillFolder.file('SKILL.md', skillContent);
+
+        // Generate ZIP as Uint8Array
+        const zipBlob = await zip.generateAsync({ type: 'uint8array' });
+
+        console.log('ZIP size:', zipBlob.length, 'bytes');
+        console.log('ZIP structure: ', params.name, '/SKILL.md');
+
+        // Create multipart form data with ZIP file
+        const formData = new FormData();
+        formData.append('display_title', displayTitle);
+
+        // Add the ZIP file
+        const zipFile = new Blob([zipBlob], { type: 'application/zip' });
+        formData.append('files[]', zipFile, 'skill.zip');
+
+        console.log('Uploading skill ZIP for:', params.name);
+
+        // Call Anthropic API
+        const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+        if (!apiKey) {
+          throw new Error('ANTHROPIC_API_KEY not configured');
+        }
+
+        const response = await fetch(`${ANTHROPIC_API_BASE}/skills`, {
+          method: 'POST',
+          headers: {
+            'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'code-execution-2025-08-25,skills-2025-10-02,files-api-2025-04-14',
+            'x-api-key': apiKey,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('Anthropic API error:', JSON.stringify(errorData));
+          throw new Error(`Anthropic API error: ${JSON.stringify(errorData)}`);
+        }
+
+        result = await response.json();
+        console.log('✅ Skill uploaded successfully:', result.id);
+        break;
 
       default:
         return new Response(

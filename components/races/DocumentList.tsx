@@ -165,14 +165,6 @@ export function DocumentList({
       {doc.extraction && (
         <View style={styles.extractionDetails}>
           <Text style={styles.extractionDetailsTitle}>Extracted Information:</Text>
-          {doc.extraction.schedule.startTime && (
-            <View style={styles.detailRow}>
-              <MaterialCommunityIcons name="clock-outline" size={16} color="#6B7280" />
-              <Text style={styles.detailText}>
-                Start: {doc.extraction.schedule.startTime}
-              </Text>
-            </View>
-          )}
           {doc.extraction.communication.vhfChannel && (
             <View style={styles.detailRow}>
               <MaterialCommunityIcons name="radio" size={16} color="#6B7280" />

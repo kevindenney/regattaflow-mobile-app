@@ -23,6 +23,7 @@ export default function SignUp() {
     []
   );
 
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [persona, setPersona] = useState<PersonaRole>('sailor');
@@ -30,13 +31,33 @@ export default function SignUp() {
   const lastPersonaValue = personaOptions[personaOptions.length - 1]?.value;
 
   const handleSignUp = async () => {
+    const trimmedEmail = email.trim();
     const trimmedUsername = username.trim();
 
+    // Validate email
+    if (!trimmedEmail) {
+      Alert.alert('Missing email', 'Please enter your email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      Alert.alert('Invalid email', 'Please enter a valid email address.');
+      return;
+    }
+
+    // Validate username
     if (!trimmedUsername) {
       Alert.alert('Missing username', 'Choose a username to continue.');
       return;
     }
 
+    if (trimmedUsername.length < 3) {
+      Alert.alert('Username too short', 'Username must be at least 3 characters long.');
+      return;
+    }
+
+    // Validate password
     if (password.length < 6) {
       Alert.alert('Weak password', 'Password must be at least 6 characters long.');
       return;
@@ -44,15 +65,15 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      await signUp(trimmedUsername, password, persona);
+      await signUp(trimmedEmail, trimmedUsername, password, persona);
       router.replace(roleHome(persona));
     } catch (error: any) {
       console.error('[Signup] Account creation error:', error);
       const message = (error?.message ?? '').toString();
       const lower = message.toLowerCase();
 
-      if (lower.includes('registered') || lower.includes('duplicate')) {
-        Alert.alert('Username taken', 'That username is already registered. Try another one.');
+      if (lower.includes('registered') || lower.includes('duplicate') || lower.includes('already')) {
+        Alert.alert('Account exists', 'An account with this email or username already exists. Try signing in instead.');
       } else {
         Alert.alert('Signup error', message || 'Unable to create your account right now.');
       }
@@ -65,9 +86,22 @@ export default function SignUp() {
     <View style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>Pick a role, choose a username, and start sailing.</Text>
+        <Text style={styles.subtitle}>Pick a role, enter your details, and start sailing.</Text>
 
-        <Text style={styles.sectionLabel}>Username</Text>
+        <Text style={styles.sectionLabel}>Email *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="your.email@example.com"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          editable={!loading}
+        />
+
+        <Text style={styles.sectionLabel}>Username *</Text>
         <TextInput
           style={styles.input}
           placeholder="racecaptain"
@@ -75,10 +109,11 @@ export default function SignUp() {
           onChangeText={setUsername}
           autoCapitalize="none"
           autoCorrect={false}
+          textContentType="username"
           editable={!loading}
         />
 
-        <Text style={styles.sectionLabel}>Password</Text>
+        <Text style={styles.sectionLabel}>Password *</Text>
         <TextInput
           style={styles.input}
           placeholder="Minimum 6 characters"

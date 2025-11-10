@@ -1,0 +1,396 @@
+{
+  "club": {
+    "id": "rhkyc",
+    "name": "Royal Hong Kong Yacht Club",
+    "shortName": "RHKYC",
+    "venueId": "hong-kong-victoria-harbor",
+    "address": "Kellett Island, Causeway Bay, Hong Kong",
+    "city": "Hong Kong",
+    "country": "Hong Kong SAR",
+    "website": "https://www.rhkyc.org.hk",
+    "contactEmail": "sailing@rhkyc.org.hk",
+    "phone": "+852 2239 0300",
+    "founded": 1849,
+    "memberCount": 3650,
+    "description": "Since 1849 RHKYC has staged keelboat, dinghy, offshore and match racing from its harbour clubhouse on Kellett Island. Today it blends classic one-design fleets with foiling programs, a renowned volunteer corps, and Asia-Pacific's busiest regatta calendar.",
+    "facilities": [
+      "Kellett Island Clubhouse",
+      "Shelter Cove Harbour",
+      "Port Shelter Race Office",
+      "Foiling Dock",
+      "Workshops & Rigging Loft",
+      "Volunteer Ops Center"
+    ],
+    "metadata": {
+      "tagline": "Harbour-front racing heritage since 1849",
+      "heroImage": "https://images.unsplash.com/photo-1502904550040-7534597429ae?auto=format&fit=crop&w=1800&q=80",
+      "accentColor": "#08263a",
+      "spotlightVideo": "https://www.youtube.com/watch?v=6g7YsykNVjI",
+      "featuredStats": {
+        "members": 3650,
+        "fleets": 9,
+        "moorings": 240
+      },
+      "signatureSeries": [
+        {
+          "name": "China Coast Regatta",
+          "season": "October",
+          "blurb": "Four days of offshore and inshore racing across Lamma, Po Toi, and the Ninepins."
+        },
+        {
+          "name": "Around the Island Race",
+          "season": "November",
+          "blurb": "230+ boats circumnavigate Hong Kong Island in Asia's most iconic pursuit race."
+        },
+        {
+          "name": "Tommy Bahama Nations' Cup",
+          "season": "March",
+          "blurb": "Club-against-club team trophy for Etchells, J/80, and Big Boat divisions."
+        }
+      ],
+      "fleetSpotlights": [
+        {
+          "name": "Dragon Fleet",
+          "emoji": "🐉",
+          "boats": 28,
+          "captain": "Sarah Chen",
+          "recentResult": "2024 Asia Pacific Champions",
+          "practiceNight": "Wednesdays"
+        },
+        {
+          "name": "J/80 Match Squad",
+          "emoji": "⚔️",
+          "boats": 16,
+          "captain": "James Rodriguez",
+          "recentResult": "2025 Nations' Cup Finalists",
+          "practiceNight": "Fridays"
+        },
+        {
+          "name": "Foiling Dinghy Program",
+          "emoji": "🪁",
+          "boats": 12,
+          "captain": "Coach Anderson",
+          "recentResult": "6 sailors qualified for SailGP Inspire",
+          "practiceNight": "Weekends"
+        }
+      ],
+      "historyTimeline": [
+        {
+          "year": 1849,
+          "title": "Victoria Regatta Club opens",
+          "detail": "Fourteen founding members hosted the first harbour series off Pedder Street."
+        },
+        {
+          "year": 1894,
+          "title": "Royal charter granted",
+          "detail": "Queen Victoria approved the Royal title and burgee that still flies today."
+        },
+        {
+          "year": 1939,
+          "title": "Kellett Island clubhouse",
+          "detail": "The original power station was converted into the now-iconic RHKYC clubhouse."
+        },
+        {
+          "year": 1997,
+          "title": "Around the Island Race record",
+          "detail": "Neil Pryde's Hi-Fi set a course record that stood until the foiling era."
+        },
+        {
+          "year": 2023,
+          "title": "Foiling & data programs",
+          "detail": "Launched Moth, WASZP, and SailGP-inspired analytics for harbour training."
+        }
+      ],
+      "insightsOverrides": {
+        "openRegistrations": 4,
+        "volunteerNeeds": 7,
+        "newDocuments": 3,
+        "nextAction": "Confirm PRO + umpires for China Coast Regatta"
+      }
+    }
+  },
+  "memberships": [
+    {
+      "email": "demo-club@regattaflow.app",
+      "role": "admin",
+      "membershipType": "flag_officer",
+      "status": "active",
+      "memberNumber": "RHKYC-001",
+      "joinedDate": "2018-09-01",
+      "expiryDate": "2025-12-31",
+      "paymentStatus": "paid",
+      "volunteerHours": 86,
+      "notes": "Demo workspace owner"
+    },
+    {
+      "email": "sarah.chen@sailing.com",
+      "role": "race_officer",
+      "membershipType": "sailing",
+      "status": "active",
+      "memberNumber": "RHKYC-204",
+      "joinedDate": "2015-02-10",
+      "expiryDate": "2025-12-31",
+      "paymentStatus": "paid",
+      "volunteerHours": 42
+    },
+    {
+      "email": "coach.anderson@sailing.com",
+      "role": "sailing_manager",
+      "membershipType": "coach",
+      "status": "active",
+      "memberNumber": "RHKYC-318",
+      "joinedDate": "2019-07-22",
+      "expiryDate": "2025-12-31",
+      "paymentStatus": "paid",
+      "volunteerHours": 58
+    },
+    {
+      "email": "james.rodriguez@fleet.com",
+      "role": "membership_manager",
+      "membershipType": "member",
+      "status": "active",
+      "memberNumber": "RHKYC-512",
+      "joinedDate": "2021-04-12",
+      "expiryDate": "2025-12-31",
+      "paymentStatus": "due_soon",
+      "volunteerHours": 17
+    }
+  ],
+  "regattas": [
+    {
+      "slug": "china-coast-regatta-2025",
+      "name": "China Coast Regatta",
+      "eventType": "offshore",
+      "status": "registration_open",
+      "startDate": "2025-10-10T02:00:00.000Z",
+      "endDate": "2025-10-13T10:00:00.000Z",
+      "entryFee": 8200,
+      "currency": "HKD",
+      "norUrl": "https://www.rhkyc.org.hk/media/ccr-2025-nor.pdf",
+      "siUrl": "https://www.rhkyc.org.hk/media/ccr-2025-si.pdf",
+      "resultsUrl": "https://www.rhkyc.org.hk/chinacoast/results",
+      "venueId": "hong-kong-victoria-harbor"
+    },
+    {
+      "slug": "nations-cup-2025",
+      "name": "Tommy Bahama Nations' Cup",
+      "eventType": "team_race",
+      "status": "registration_open",
+      "startDate": "2025-03-14T02:00:00.000Z",
+      "endDate": "2025-03-16T10:00:00.000Z",
+      "entryFee": 4200,
+      "currency": "HKD",
+      "norUrl": "https://www.rhkyc.org.hk/media/nations-2025-nor.pdf",
+      "siUrl": "https://www.rhkyc.org.hk/media/nations-2025-si.pdf",
+      "resultsUrl": null,
+      "venueId": "hong-kong-victoria-harbor"
+    },
+    {
+      "slug": "around-the-island-2025",
+      "name": "Around the Island Race",
+      "eventType": "distance_race",
+      "status": "registration_open",
+      "startDate": "2025-11-16T00:30:00.000Z",
+      "endDate": "2025-11-16T10:00:00.000Z",
+      "entryFee": 1180,
+      "currency": "HKD",
+      "norUrl": "https://www.rhkyc.org.hk/media/atir-2025-nor.pdf",
+      "siUrl": "https://www.rhkyc.org.hk/media/atir-2025-si.pdf",
+      "resultsUrl": null,
+      "venueId": "hong-kong-victoria-harbor"
+    },
+    {
+      "slug": "foiling-harbour-series-02",
+      "name": "Foiling Harbour Series #2",
+      "eventType": "training_series",
+      "status": "registration_open",
+      "startDate": "2025-02-08T03:00:00.000Z",
+      "endDate": "2025-02-08T08:00:00.000Z",
+      "entryFee": 350,
+      "currency": "HKD",
+      "norUrl": null,
+      "siUrl": null,
+      "resultsUrl": null,
+      "venueId": "hong-kong-victoria-harbor"
+    }
+  ],
+  "events": [
+    {
+      "slug": "kellet-volunteer-briefing",
+      "title": "Kellett Island Volunteer Briefing",
+      "eventType": "volunteer",
+      "status": "upcoming",
+      "startDate": "2025-01-20T10:30:00.000Z",
+      "endDate": "2025-01-20T12:00:00.000Z",
+      "registrationOpens": "2024-12-20T02:00:00.000Z",
+      "registrationCloses": "2025-01-19T12:00:00.000Z",
+      "venueId": "hong-kong-victoria-harbor",
+      "locationName": "Signal Station",
+      "maxParticipants": 40
+    },
+    {
+      "slug": "dragon-wednesday-briefing",
+      "title": "Dragon Fleet Tactical Briefing",
+      "eventType": "training",
+      "status": "upcoming",
+      "startDate": "2025-01-22T11:00:00.000Z",
+      "endDate": "2025-01-22T13:00:00.000Z",
+      "registrationOpens": "2025-01-05T02:00:00.000Z",
+      "registrationCloses": "2025-01-21T12:00:00.000Z",
+      "venueId": "hong-kong-victoria-harbor",
+      "locationName": "Chart Room",
+      "maxParticipants": 25
+    },
+    {
+      "slug": "around-island-practice",
+      "title": "Around the Island Practice Start",
+      "eventType": "practice_race",
+      "status": "upcoming",
+      "startDate": "2025-11-09T01:00:00.000Z",
+      "endDate": "2025-11-09T05:00:00.000Z",
+      "registrationOpens": "2025-09-01T02:00:00.000Z",
+      "registrationCloses": "2025-11-06T12:00:00.000Z",
+      "venueId": "hong-kong-victoria-harbor",
+      "locationName": "Victoria Harbour",
+      "maxParticipants": 150
+    },
+    {
+      "slug": "women-at-the-helm",
+      "title": "Women at the Helm Social + Panel",
+      "eventType": "community",
+      "status": "upcoming",
+      "startDate": "2025-03-08T11:00:00.000Z",
+      "endDate": "2025-03-08T14:00:00.000Z",
+      "registrationOpens": "2025-01-15T02:00:00.000Z",
+      "registrationCloses": "2025-03-05T12:00:00.000Z",
+      "venueId": "hong-kong-victoria-harbor",
+      "locationName": "Harbour Lawn",
+      "maxParticipants": 120
+    }
+  ],
+  "documents": [
+    {
+      "slug": "2025-ccr-nor",
+      "title": "2025 China Coast Regatta NOR",
+      "documentType": "notice_of_race",
+      "publishDate": "2025-08-22",
+      "url": "https://www.rhkyc.org.hk/media/ccr-2025-nor.pdf",
+      "parsed": true
+    },
+    {
+      "slug": "2025-ccr-si",
+      "title": "2025 China Coast Regatta Sailing Instructions",
+      "documentType": "sailing_instructions",
+      "publishDate": "2025-09-15",
+      "url": "https://www.rhkyc.org.hk/media/ccr-2025-si.pdf",
+      "parsed": true
+    },
+    {
+      "slug": "2025-atir-notice",
+      "title": "Around the Island Race Competitor Advisory",
+      "documentType": "bulletin",
+      "publishDate": "2025-10-01",
+      "url": "https://www.rhkyc.org.hk/media/atir-bulletin.pdf",
+      "parsed": false
+    },
+    {
+      "slug": "2025-annual-report",
+      "title": "2025 Flag Officers Annual Report",
+      "documentType": "minutes",
+      "publishDate": "2025-01-05",
+      "url": "https://www.rhkyc.org.hk/media/annual-report-2025.pdf",
+      "parsed": false
+    }
+  ],
+  "services": [
+    {
+      "slug": "tam-tam-rigging",
+      "serviceType": "rigging",
+      "businessName": "Tam & Tam Rigging Loft",
+      "contactName": "Daniel Tam",
+      "email": "daniel@tamrigging.com",
+      "phone": "+852 5551 9982",
+      "website": "https://tamrigging.com",
+      "specialties": ["Standing rigging", "Emergencies", "Backstay tuning"],
+      "classesSupported": ["Big Boat", "TP52", "IRC"],
+      "preferredByClub": true
+    },
+    {
+      "slug": "loft-asia",
+      "serviceType": "sailmaker",
+      "businessName": "Loft Asia Sailmakers",
+      "contactName": "Amanda Lau",
+      "email": "amanda@loftasia.com",
+      "phone": "+852 5556 4412",
+      "website": "https://loftasia.com",
+      "specialties": ["J/80", "Etchells", "Dragon"],
+      "classesSupported": ["J/80", "Etchells", "Dragon"],
+      "preferredByClub": true
+    },
+    {
+      "slug": "harbour-race-media",
+      "serviceType": "media",
+      "businessName": "Harbour Race Media",
+      "contactName": "Leo Chau",
+      "email": "leo@harbourracemedia.com",
+      "phone": "+852 5559 7712",
+      "website": "https://harbourracemedia.com",
+      "specialties": ["Livestream", "Photography", "Drone"],
+      "classesSupported": ["Club events"],
+      "preferredByClub": false
+    }
+  ],
+  "fleets": [
+    {
+      "slug": "rhkyc-dragon",
+      "name": "Hong Kong Dragon Fleet",
+      "class": "Dragon",
+      "description": "Asia's largest active Dragon fleet with Wednesday evening racing and pre-season clinics.",
+      "region": "Hong Kong",
+      "visibility": "club",
+      "whatsappLink": "https://chat.whatsapp.com/RHKYCDragonFleet",
+      "metadata": {
+        "boats": 28,
+        "practiceNight": "Wednesday",
+        "recentHighlights": ["2024 APAC title", "2 teams to Gold Cup"]
+      },
+      "members": [
+        { "email": "sarah.chen@sailing.com", "role": "owner" },
+        { "email": "james.rodriguez@fleet.com", "role": "helm" }
+      ]
+    },
+    {
+      "slug": "rhkyc-j80",
+      "name": "RHKYC J/80 Match Squad",
+      "class": "J/80",
+      "description": "Club-owned J/80 squad for match racing and Nations' Cup training.",
+      "region": "Hong Kong",
+      "visibility": "club",
+      "metadata": {
+        "boats": 16,
+        "practiceNight": "Friday",
+        "recentHighlights": ["2025 Nations' Cup finalists"]
+      },
+      "members": [
+        { "email": "demo-club@regattaflow.app", "role": "owner" },
+        { "email": "coach.anderson@sailing.com", "role": "coach" }
+      ]
+    },
+    {
+      "slug": "rhkyc-foiling",
+      "name": "Harbour Foiling Program",
+      "class": "Foiling Dinghy",
+      "description": "WASZP + Moth program with SailGP Inspire selections and harbour analytics.",
+      "region": "Hong Kong",
+      "visibility": "public",
+      "metadata": {
+        "boats": 12,
+        "practiceNight": "Weekend",
+        "recentHighlights": ["6 Inspire qualifiers"]
+      },
+      "members": [
+        { "email": "coach.anderson@sailing.com", "role": "coach" }
+      ]
+    }
+  ]
+}

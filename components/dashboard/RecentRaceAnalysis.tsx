@@ -13,8 +13,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
-import { RaceAnalysisAgent } from '@/services/agents/RaceAnalysisAgent';
 import { RaceTimerService } from '@/services/RaceTimerService';
+import { RaceAnalysisService } from '@/services/RaceAnalysisService';
 import { useRouter } from 'expo-router';
 
 interface RaceAnalysis {
@@ -69,26 +69,15 @@ export function RecentRaceAnalysis() {
 
     setIsAnalyzing(true);
     try {
-      const agent = new RaceAnalysisAgent();
-      const result = await agent.analyzeRace({
-        timerSessionId: sessionId,
-      });
-
-      if (result.success) {
-        // Extract analysis from agent response
-        // The agent saves to database, we'd normally fetch from there
-        // For now, parse the result
+      const analysisResult = await RaceAnalysisService.analyzeRaceSession(sessionId);
+      if (analysisResult) {
         setAnalysis({
-          overall_summary: 'Strong performance overall. Good boat speed and tactical decisions.',
-          start_analysis: 'Solid start execution. 2 seconds early at the gun, middle of line.',
-          upwind_analysis: '4 tacks (fleet avg: 6). Favored right side, good layline approach.',
-          downwind_analysis: '3 gybes, maintained inside track. Good pressure awareness.',
-          recommendations: [
-            'Practice late-race pressure situations',
-            'Improve downwind gybe timing',
-            'Work on start timing consistency',
-          ],
-          confidence_score: 0.85,
+          overall_summary: analysisResult.overall_summary,
+          start_analysis: analysisResult.start_analysis,
+          upwind_analysis: analysisResult.upwind_analysis,
+          downwind_analysis: analysisResult.downwind_analysis,
+          recommendations: analysisResult.recommendations,
+          confidence_score: analysisResult.confidence_score,
         });
       }
     } catch (error) {

@@ -14,6 +14,14 @@ export default function EditRaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
+  logger.debug('[EditRaceScreen] Rendered with ID:', {
+    id,
+    idType: typeof id,
+    idLength: id?.length,
+    isString: typeof id === 'string',
+    isArray: Array.isArray(id)
+  });
+
   const handleSubmit = (raceId: string) => {
     logger.debug('[EditRaceScreen] Race updated:', raceId);
     if (router.canGoBack()) {
@@ -32,13 +40,25 @@ export default function EditRaceScreen() {
   };
 
   if (!id) {
+    logger.warn('[EditRaceScreen] No ID provided, returning null');
     return null;
+  }
+
+  // Validate UUID format (basic check)
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const actualId = Array.isArray(id) ? id[0] : id;
+
+  if (!uuidPattern.test(actualId)) {
+    logger.error('[EditRaceScreen] Invalid UUID format:', {
+      id: actualId,
+      length: actualId.length
+    });
   }
 
   return (
     <View style={{ flex: 1 }}>
       <ComprehensiveRaceEntry
-        existingRaceId={id}
+        existingRaceId={actualId}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
       />

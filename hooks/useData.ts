@@ -382,6 +382,10 @@ export function useClubs() {
   );
 }
 
+export function useClubDirectory() {
+  return useApi(() => api.clubs.getClubDirectory());
+}
+
 export function useClub(clubId: string) {
   return useApi(
     () => api.clubs.getClubById(clubId),
@@ -541,6 +545,7 @@ export function useDashboardData() {
   const recentSessions = useRecentTimerSessions(5);
 
   // Map liveRaces to expected format (same format as useRaces)
+  // Note: Don't apply placeholder wind/tide values - useEnrichedRaces will handle this
   const mappedRaces = (liveRaces || []).map((regatta: any) => ({
     id: regatta.id,
     name: regatta.name,
@@ -549,8 +554,10 @@ export function useDashboardData() {
     startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
     status: regatta.status || 'upcoming',
-    wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
-    tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
+    wind: regatta.metadata?.wind, // No fallback - let useEnrichedRaces handle it
+    tide: regatta.metadata?.tide, // No fallback - let useEnrichedRaces handle it
+    weatherStatus: regatta.metadata?.weatherStatus,
+    weatherError: regatta.metadata?.weatherError,
     strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
     critical_details: regatta.metadata?.critical_details
   }));

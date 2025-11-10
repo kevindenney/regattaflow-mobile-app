@@ -1,197 +1,155 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { StripeConnectService } from '@/services/StripeConnectService';
-import { supabase } from '@/services/supabase';
-import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
+import { useCoachEarningsSummary } from '@/hooks/useCoachData';
 
-type StripeTransaction = {
-  id: string;
-  amount: number;
-  currency: string;
-  created: number;
-  description?: string;
-  status?: string;
-  type?: string;
+type PeriodKey = 'week' | 'month' | 'year';
+
+const periodLabels: Record<PeriodKey, string> = {
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
 };
 
-type MonthlyStats = {
-  sessionsCompleted: number;
-  averagePerSession: number;
-  totalEarned: number;
-  platformFee: number;
-  currency: string;
+const sessionTypeLabels: Record<string, string> = {
+  on_water: 'On-Water',
+  video_review: 'Video Review',
+  strategy_session: 'Strategy Session',
+  race_support: 'Race Support',
+  boat_setup: 'Boat Setup',
+  fitness: 'Fitness',
+};
+
+const toTitleCase = (value: string) => value.replace(/\b\w/g, (char: string) => char.toUpperCase());
+
+const getStatusPillStyle = (status: string) => {
+  switch (status) {
+    case 'pending':
+      return { backgroundColor: '#FEF3C7', color: '#92400E' };
+    case 'paid':
+      return { backgroundColor: '#DCFCE7', color: '#166534' };
+    case 'refunded':
+      return { backgroundColor: '#FEE2E2', color: '#991B1B' };
+    case 'requires_action':
+      return { backgroundColor: '#FDE68A', color: '#92400E' };
+    default:
+      return { backgroundColor: '#E2E8F0', color: '#1E293B' };
+  }
+};
+
+const formatCurrency = (amount: number, currency: string = 'USD') => {
+  const dollars = amount / 100;
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(dollars);
+  } catch {
+    return `$${dollars.toFixed(2)}`;
+  }
+};
+
+const formatDate = (value?: string | null) => {
+  if (!value) return 'TBD';
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const formatPercentChange = (current: number, previous: number) => {
+  if (previous <= 0) return null;
+  const delta = ((current - previous) / previous) * 100;
+  return delta;
 };
 
 export default function EarningsScreen() {
   const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [connectStatus, setConnectStatus] = useState({
-    connected: false,
-    detailsSubmitted: false,
-    chargesEnabled: false,
-    payoutsEnabled: false,
-  });
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
-  const [balance, setBalance] = useState<{ available: number; pending: number; currency?: string }>({ available: 0, pending: 0, currency: 'usd' });
-  const [transactions, setTransactions] = useState<StripeTransaction[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [monthlyStats, setMonthlyStats] = useState<MonthlyStats>({
-    sessionsCompleted: 0,
-    averagePerSession: 0,
-    totalEarned: 0,
-    platformFee: 0,
-    currency: 'usd',
-  });
+  const earningsQuery = useCoachEarningsSummary();
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>('month');
 
-  useEffect(() => {
-    if (coachId) {
-      loadStripeStatus(coachId);
-    } else if (!personaLoading) {
-      setLoading(false);
-    }
-  }, [coachId, personaLoading]);
+  const summary = earningsQuery.data;
+  const isLoading = personaLoading || (!summary && (earningsQuery.isLoading || earningsQuery.isFetching));
+  const isConnected = !!coachId;
 
-  const loadStripeStatus = async (profileId: string) => {
-    if (!profileId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const status = await StripeConnectService.getConnectStatus(profileId);
-      setConnectStatus({
-        connected: status.connected,
-        detailsSubmitted: status.detailsSubmitted || false,
-        chargesEnabled: status.chargesEnabled || false,
-        payoutsEnabled: status.payoutsEnabled || false,
-      });
-      if (status.connected && status.chargesEnabled) {
-        await Promise.all([loadFinancials(profileId), loadMonthlyStats()]);
-      }
-    } catch (error) {
-      console.error('Error loading Stripe status:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleRequestPayout = () => {
+    Alert.alert('Payout request received', 'We will notify you as soon as the transfer is on the way.');
   };
 
-  const loadFinancials = useCallback(async (profileId: string) => {
-    if (!profileId) return;
-    setLoadError(null);
-    try {
-      const [bal, tx] = await Promise.all([
-        StripeConnectService.getBalance(profileId),
-        StripeConnectService.getTransactions(profileId, { limit: 25 })
-      ]);
-      setBalance(bal);
-      setTransactions(tx);
-    } catch (e: any) {
-      console.error('Error loading financials:', e);
-      setLoadError(e?.message || 'Failed to load earnings');
-    }
-  }, []);
+  const changeStats = useMemo(() => {
+    if (!summary) return { current: 0, previous: 0, sessions: 0, average: 0 };
+    const periodData = summary.period[selectedPeriod];
+    return {
+      current: periodData.current.total,
+      previous: periodData.previous.total,
+      sessions: periodData.current.sessions,
+      average: periodData.current.averagePerSession,
+    };
+  }, [selectedPeriod, summary]);
 
-  const loadMonthlyStats = useCallback(async () => {
-    if (!coachId) return;
+  const changePercent = formatPercentChange(changeStats.current, changeStats.previous);
+  const defaultCurrency = summary?.transactions[0]?.currency || 'USD';
 
-    try {
-      // Get current month's date range
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  const breakdownEntries = useMemo(() => {
+    if (!summary) return [] as Array<{ label: string; value: number }>;
+    const entries = Object.entries(summary.breakdown || {})
+      .filter(([, value]) => value > 0)
+      .map(([key, value]) => ({
+        label: sessionTypeLabels[key] || toTitleCase(key.replace(/_/g, ' ')),
+        value,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 4);
+    return entries;
+  }, [summary]);
 
-      // Query coaching sessions for current month
-      const { data: sessions, error } = await supabase
-        .from('coaching_sessions')
-        .select('fee_amount, currency, paid, status')
-        .eq('coach_id', coachId)
-        .eq('status', 'completed')
-        .gte('completed_at', startOfMonth.toISOString())
-        .lte('completed_at', endOfMonth.toISOString());
+  const renderConnectState = () => (
+    <View style={styles.missingContainer}>
+      <Ionicons name="wallet-outline" size={48} color="#94A3B8" />
+      <ThemedText style={styles.missingTitle}>Connect Your Coach Workspace</ThemedText>
+      <ThemedText style={styles.missingDescription}>
+        Earnings unlock after we confirm your coach profile. Refresh the connection or finish onboarding to continue.
+      </ThemedText>
+      <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
+        <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
 
-      if (error) {
-        console.error('Error loading monthly stats:', error);
-        return;
-      }
+  const renderErrorState = () => (
+    <View style={styles.errorContainer}>
+      <Ionicons name="alert-circle" size={40} color="#EF4444" />
+      <ThemedText style={styles.errorTitle}>Unable to load earnings</ThemedText>
+      <ThemedText style={styles.errorDescription}>
+        {earningsQuery.error instanceof Error ? earningsQuery.error.message : 'Please try again in a moment.'}
+      </ThemedText>
+      <TouchableOpacity style={styles.retryButton} onPress={() => earningsQuery.refetch()}>
+        <ThemedText style={styles.retryButtonText}>Try Again</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
 
-      if (sessions && sessions.length > 0) {
-        const totalEarned = sessions.reduce((sum: number, s: any) => sum + (Number(s.fee_amount) || 0), 0);
-        const sessionsCompleted = sessions.length;
-        const averagePerSession = sessionsCompleted > 0 ? totalEarned / sessionsCompleted : 0;
-        const platformFee = totalEarned * 0.15; // 15% platform fee
-        const currency = sessions[0]?.currency?.toLowerCase() || 'usd';
+  if (!isConnected && !personaLoading) {
+    return <ThemedView style={styles.container}>{renderConnectState()}</ThemedView>;
+  }
 
-        setMonthlyStats({
-          sessionsCompleted,
-          averagePerSession,
-          totalEarned,
-          platformFee,
-          currency,
-        });
-      }
-    } catch (e: any) {
-      console.error('Error loading monthly stats:', e);
-    }
-  }, [coachId]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      if (coachId) {
-        await Promise.all([loadStripeStatus(coachId), loadFinancials(coachId), loadMonthlyStats()]);
-      }
-    } finally {
-      setRefreshing(false);
-    }
-  }, [coachId, loadFinancials, loadMonthlyStats]);
-
-  const handleOpenDashboard = async () => {
-    if (!coachId) return;
-
-    setLoadingDashboard(true);
-    try {
-      const result = await StripeConnectService.getDashboardLink(coachId);
-      if (result.success && result.url) {
-        await Linking.openURL(result.url);
-      } else {
-        Alert.alert('Error', result.error || 'Failed to open Stripe dashboard');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to open dashboard');
-    } finally {
-      setLoadingDashboard(false);
-    }
-  };
-
-  const handleSetupStripe = async () => {
-    if (!coachId) return;
-
-    try {
-      const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const result = await StripeConnectService.startOnboarding(
-        coachId,
-        `${appUrl}/(tabs)/earnings`,
-        `${appUrl}/(tabs)/earnings`
-      );
-
-      if (result.success && result.url) {
-        await Linking.openURL(result.url);
-      } else {
-        Alert.alert('Error', result.error || 'Failed to start Stripe onboarding');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to setup payments');
-    }
-  };
-
-  if (personaLoading || loading) {
+  if (isLoading) {
     return (
       <ThemedView style={styles.container}>
-        <View style={[styles.container, styles.centered]}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
           <ThemedText style={styles.loadingText}>Loading earnings...</ThemedText>
         </View>
@@ -199,195 +157,215 @@ export default function EarningsScreen() {
     );
   }
 
-  if (!coachId) {
-    return (
-      <ThemedView style={styles.container}>
-        <View style={styles.missingContainer}>
-          <Ionicons name="school-outline" size={48} color="#94A3B8" />
-          <ThemedText style={styles.missingTitle}>Connect Your Coach Workspace</ThemedText>
-          <ThemedText style={styles.missingDescription}>
-            Earnings data appears once your coach profile is active. Finish onboarding or refresh your connection to continue.
-          </ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={refreshPersonaContext}>
-            <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryLink}
-            onPress={() => Linking.openURL('https://regattaflow.com/coach-onboarding')}
-          >
-            <ThemedText style={styles.secondaryLinkText}>Open Coach Onboarding</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </ThemedView>
-    );
+  if (earningsQuery.isError) {
+    return <ThemedView style={styles.container}>{renderErrorState()}</ThemedView>;
   }
 
-  if (!connectStatus.connected || !connectStatus.chargesEnabled) {
-    return (
-      <ThemedView style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <ThemedText style={styles.title}>Earnings</ThemedText>
-          </View>
-
-          <View style={styles.setupCard}>
-            <Ionicons name="card-outline" size={64} color="#007AFF" />
-            <ThemedText style={styles.setupTitle}>Payment Setup Required</ThemedText>
-            <ThemedText style={styles.setupDescription}>
-              Connect your bank account with Stripe to start receiving payments from coaching sessions.
-            </ThemedText>
-            <TouchableOpacity
-              style={styles.setupButton}
-              onPress={handleSetupStripe}
-            >
-              <ThemedText style={styles.setupButtonText}>Setup Payments</ThemedText>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.featuresList}>
-            <ThemedText style={styles.featuresTitle}>What you'll get:</ThemedText>
-            <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-              <ThemedText style={styles.featureText}>Secure payments via Stripe</ThemedText>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-              <ThemedText style={styles.featureText}>Automatic payouts to your bank</ThemedText>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-              <ThemedText style={styles.featureText}>Transaction history and analytics</ThemedText>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-              <ThemedText style={styles.featureText}>Tax documentation and reporting</ThemedText>
-            </View>
-          </View>
-        </ScrollView>
-      </ThemedView>
-    );
-  }
   return (
     <ThemedView style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={earningsQuery.isRefetching} onRefresh={earningsQuery.refetch} />
+        }
       >
         <View style={styles.header}>
-          <ThemedText style={styles.title}>Earnings</ThemedText>
-          <TouchableOpacity style={styles.withdrawButton}>
-            <ThemedText style={styles.withdrawButtonText}>Withdraw</ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.balanceCard}>
-          <ThemedText style={styles.balanceLabel}>Available Balance</ThemedText>
-          <ThemedText style={styles.balanceAmount}>
-            {formatCurrency(balance.available, balance.currency)}
-          </ThemedText>
-          <View style={styles.balanceStats}>
-            <View style={styles.balanceStat}>
-              <ThemedText style={styles.balanceStatLabel}>Pending</ThemedText>
-              <ThemedText style={styles.balanceStatValue}>{formatCurrency(balance.pending, balance.currency)}</ThemedText>
-            </View>
+          <View>
+            <ThemedText style={styles.title}>Earnings</ThemedText>
+            <ThemedText style={styles.subtitle}>Track payouts, income, and recent sessions</ThemedText>
           </View>
-          {balance.available === 0 && balance.pending === 0 && (
-            <View style={styles.apiNotice}>
-              <Ionicons name="information-circle-outline" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.apiNoticeText}>
-                Stripe balance requires backend API setup
-              </ThemedText>
-            </View>
+          {summary && summary.totals.pendingPayouts > 0 && (
+            <TouchableOpacity style={styles.payoutButton} onPress={handleRequestPayout}>
+              <Ionicons name="cash-outline" size={18} color="#fff" />
+              <ThemedText style={styles.payoutButtonText}>Request payout</ThemedText>
+            </TouchableOpacity>
           )}
         </View>
 
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Recent Transactions</ThemedText>
-          {loadError && (
-            <ThemedText style={styles.transactionDate}>{loadError}</ThemedText>
-          )}
-          {transactions.length === 0 && !loadError && (
-            <ThemedText style={styles.transactionDate}>No recent transactions</ThemedText>
-          )}
-          {transactions.map((t: StripeTransaction) => (
-            <View key={t.id} style={styles.transactionCard}>
-              <View style={styles.transactionIcon}>
-                <Ionicons
-                  name={t.status === 'paid' || t.type === 'transfer' ? 'checkmark-circle' : 'time-outline'}
-                  size={32}
-                  color={t.status === 'paid' || t.type === 'transfer' ? '#10B981' : '#F59E0B'}
-                />
-              </View>
-              <View style={styles.transactionInfo}>
-                <ThemedText style={styles.transactionClient}>{t.description || (t.type ? t.type.toUpperCase() : 'Transaction')}</ThemedText>
-                <ThemedText style={styles.transactionDate}>{formatDate(t.created)}</ThemedText>
-              </View>
-              <ThemedText style={[styles.transactionAmount]}>
-                {formatCurrency(t.amount, t.currency)}
+        <View style={styles.periodSelector}>
+          {(Object.keys(periodLabels) as PeriodKey[]).map(period => (
+            <TouchableOpacity
+              key={period}
+              style={[styles.periodButton, selectedPeriod === period && styles.periodButtonActive]}
+              onPress={() => setSelectedPeriod(period)}
+            >
+              <ThemedText
+                style={[styles.periodButtonText, selectedPeriod === period && styles.periodButtonTextActive]}
+              >
+                {periodLabels[period]}
               </ThemedText>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Monthly Overview</ThemedText>
-          <View style={styles.overviewCard}>
-            <View style={styles.overviewRow}>
-              <ThemedText style={styles.overviewLabel}>Sessions Completed</ThemedText>
-              <ThemedText style={styles.overviewValue}>{monthlyStats.sessionsCompleted}</ThemedText>
+        {summary && (
+          <>
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryHeader}>
+                <View>
+                  <ThemedText style={styles.summaryLabel}>Earnings {periodLabels[selectedPeriod].toLowerCase()}</ThemedText>
+                  <ThemedText style={styles.summaryValue}>
+                    {formatCurrency(changeStats.current, defaultCurrency)}
+                  </ThemedText>
+                </View>
+                <View style={styles.summaryIcon}>
+                  <Ionicons name="trending-up" size={22} color="#10B981" />
+                </View>
+              </View>
+              <View style={styles.summaryMetaRow}>
+                <View>
+                  <ThemedText style={styles.summaryMetaLabel}>Sessions</ThemedText>
+                  <ThemedText style={styles.summaryMetaValue}>{changeStats.sessions}</ThemedText>
+                </View>
+                <View>
+                  <ThemedText style={styles.summaryMetaLabel}>Avg / session</ThemedText>
+                  <ThemedText style={styles.summaryMetaValue}>
+                    {formatCurrency(changeStats.average, defaultCurrency)}
+                  </ThemedText>
+                </View>
+                <View>
+                  <ThemedText style={styles.summaryMetaLabel}>Change</ThemedText>
+                  <ThemedText
+                    style={[
+                      styles.trendValue,
+                      changePercent === null
+                        ? styles.trendNeutral
+                        : changePercent >= 0
+                        ? styles.trendPositive
+                        : styles.trendNegative,
+                    ]}
+                  >
+                    {changePercent === null ? '—' : `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%`}
+                  </ThemedText>
+                </View>
+              </View>
             </View>
-            <View style={styles.overviewRow}>
-              <ThemedText style={styles.overviewLabel}>Average per Session</ThemedText>
-              <ThemedText style={styles.overviewValue}>
-                {formatCurrency(monthlyStats.averagePerSession * 100, monthlyStats.currency)}
-              </ThemedText>
-            </View>
-            <View style={styles.overviewRow}>
-              <ThemedText style={styles.overviewLabel}>Total Earned</ThemedText>
-              <ThemedText style={styles.overviewValue}>
-                {formatCurrency(monthlyStats.totalEarned * 100, monthlyStats.currency)}
-              </ThemedText>
-            </View>
-            <View style={styles.overviewRow}>
-              <ThemedText style={styles.overviewLabel}>Platform Fee (15%)</ThemedText>
-              <ThemedText style={styles.overviewValue}>
-                -{formatCurrency(monthlyStats.platformFee * 100, monthlyStats.currency)}
-              </ThemedText>
-            </View>
-          </View>
-        </View>
 
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.payoutSettingsButton}
-            onPress={handleOpenDashboard}
-            disabled={loadingDashboard}
-          >
-            {loadingDashboard ? (
-              <ActivityIndicator size="small" color="#007AFF" />
-            ) : (
-              <Ionicons name="settings-outline" size={24} color="#007AFF" />
-            )}
-            <ThemedText style={styles.payoutSettingsText}>
-              {loadingDashboard ? 'Opening...' : 'Stripe Dashboard'}
-            </ThemedText>
-            <Ionicons name="open-outline" size={24} color="#CBD5E1" />
-          </TouchableOpacity>
+            <View style={styles.quickStatsContainer}>
+              <View style={styles.quickStatCard}>
+                <Ionicons name="hourglass-outline" size={18} color="#F97316" />
+                <ThemedText style={styles.quickStatLabel}>Pending payouts</ThemedText>
+                <ThemedText style={styles.quickStatValue}>
+                  {formatCurrency(summary.totals.pendingPayouts, defaultCurrency)}
+                </ThemedText>
+              </View>
+              <View style={styles.quickStatCard}>
+                <Ionicons name="wallet-outline" size={18} color="#0EA5E9" />
+                <ThemedText style={styles.quickStatLabel}>Lifetime</ThemedText>
+                <ThemedText style={styles.quickStatValue}>
+                  {formatCurrency(summary.totals.lifetime, defaultCurrency)}
+                </ThemedText>
+              </View>
+              <View style={styles.quickStatCard}>
+                <Ionicons name="people-outline" size={18} color="#10B981" />
+                <ThemedText style={styles.quickStatLabel}>Sessions</ThemedText>
+                <ThemedText style={styles.quickStatValue}>{summary.totals.sessions}</ThemedText>
+              </View>
+            </View>
 
-          <View style={styles.verificationBadge}>
-            {connectStatus.payoutsEnabled ? (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <ThemedText style={styles.verifiedText}>Verified & Ready for Payouts</ThemedText>
-              </>
-            ) : (
-              <>
-                <Ionicons name="time-outline" size={20} color="#F59E0B" />
-                <ThemedText style={styles.pendingText}>Verification Pending</ThemedText>
-              </>
-            )}
-          </View>
-        </View>
+            <View style={styles.breakdownCard}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <ThemedText style={styles.sectionTitle}>Revenue breakdown</ThemedText>
+                  <ThemedText style={styles.sectionSubtitle}>Top services driving payouts</ThemedText>
+                </View>
+              </View>
+              {breakdownEntries.length === 0 ? (
+                <ThemedText style={styles.emptyText}>No paid sessions yet</ThemedText>
+              ) : (
+                breakdownEntries.map((entry, index) => {
+                  const maxValue = breakdownEntries[0]?.value || 1;
+                  const widthPercent = maxValue > 0 ? Math.min(100, (entry.value / maxValue) * 100) : 0;
+                  return (
+                    <View key={`${entry.label}-${index}`} style={styles.breakdownRow}>
+                      <View style={styles.breakdownRowHeader}>
+                        <ThemedText style={styles.breakdownLabel}>{entry.label}</ThemedText>
+                        <ThemedText style={styles.breakdownValue}>
+                          {formatCurrency(entry.value, defaultCurrency)}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.breakdownBarTrack}>
+                        <View
+                          style={[styles.breakdownBar, { width: `${widthPercent}%` }]}
+                        />
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <ThemedText style={styles.sectionTitle}>Pending payouts</ThemedText>
+                  <ThemedText style={styles.sectionSubtitle}>
+                    Next transfer ETA {formatDate(summary.totals.nextPayoutDate)}
+                  </ThemedText>
+                </View>
+              </View>
+              {summary.pendingTransactions.length === 0 ? (
+                <ThemedText style={styles.emptyText}>Nothing waiting on payouts right now.</ThemedText>
+              ) : (
+                summary.pendingTransactions.map(txn => (
+                  <View key={txn.id} style={styles.transactionRow}>
+                    <View style={styles.transactionIconPending}>
+                      <Ionicons name="time-outline" size={18} color="#F97316" />
+                    </View>
+                    <View style={styles.transactionContent}>
+                      <ThemedText style={styles.transactionTitle}>{txn.clientName}</ThemedText>
+                      <ThemedText style={styles.transactionSubtitle}>{txn.sessionType}</ThemedText>
+                    </View>
+                    <View style={styles.transactionMeta}>
+                      <ThemedText style={styles.transactionAmount}>
+                        {formatCurrency(txn.amount, txn.currency || defaultCurrency)}
+                      </ThemedText>
+                      <ThemedText style={styles.transactionDate}>Payout {formatDate(txn.payoutDate)}</ThemedText>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <ThemedText style={styles.sectionTitle}>Recent transactions</ThemedText>
+                  <ThemedText style={styles.sectionSubtitle}>Latest 30 coaching sessions</ThemedText>
+                </View>
+              </View>
+              {summary.transactions.length === 0 ? (
+                <ThemedText style={styles.emptyText}>No transactions yet.</ThemedText>
+              ) : (
+                summary.transactions.map(txn => {
+                  const pill = getStatusPillStyle(txn.status);
+                  return (
+                    <View key={txn.id} style={styles.transactionRow}>
+                      <View style={styles.transactionIcon}>
+                        <Ionicons name="receipt-outline" size={18} color="#2563EB" />
+                      </View>
+                      <View style={styles.transactionContent}>
+                        <ThemedText style={styles.transactionTitle}>{txn.clientName}</ThemedText>
+                        <ThemedText style={styles.transactionSubtitle}>{txn.sessionType}</ThemedText>
+                      </View>
+                      <View style={styles.transactionMeta}>
+                        <ThemedText style={styles.transactionAmount}>
+                          {formatCurrency(txn.amount, txn.currency || defaultCurrency)}
+                        </ThemedText>
+                        <ThemedText style={styles.transactionDate}>{formatDate(txn.date)}</ThemedText>
+                      </View>
+                      <View style={[styles.statusPillBase, { backgroundColor: pill.backgroundColor }]}>
+                        <ThemedText style={[styles.statusPillLabel, { color: pill.color }]}>
+                          {txn.status.replace('_', ' ')}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -396,308 +374,327 @@ export default function EarningsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+  },
+  header: {
+    padding: 20,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#64748B',
+  },
+  payoutButton: {
+    flexDirection: 'row',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: 'center',
+    gap: 6,
+  },
+  payoutButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  periodSelector: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  periodButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  periodButtonActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  periodButtonText: {
+    fontWeight: '600',
+    color: '#475569',
+  },
+  periodButtonTextActive: {
+    color: '#4338CA',
+  },
+  summaryCard: {
+    margin: 16,
+    marginTop: 20,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginBottom: 6,
+  },
+  summaryValue: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  summaryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  summaryMetaLabel: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  summaryMetaValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginTop: 4,
+  },
+  trendValue: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  trendPositive: {
+    color: '#16A34A',
+  },
+  trendNegative: {
+    color: '#DC2626',
+  },
+  trendNeutral: {
+    color: '#94A3B8',
+  },
+  quickStatsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  quickStatCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    gap: 6,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.03,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  quickStatLabel: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  quickStatValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  breakdownCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    gap: 12,
+  },
+  section: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  breakdownRow: {
+    marginTop: 12,
+  },
+  breakdownRowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '500',
+  },
+  breakdownValue: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  breakdownBarTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  breakdownBar: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#6366F1',
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#E0F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transactionIconPending: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#FFEDD5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transactionContent: {
+    flex: 1,
+  },
+  transactionMeta: {
+    alignItems: 'flex-end',
+  },
+  transactionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  transactionSubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  transactionAmount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  transactionDate: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#475569',
   },
   missingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    padding: 32,
+    gap: 16,
   },
   missingTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#0F172A',
   },
   missingDescription: {
     fontSize: 14,
-    color: '#64748B',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
+    color: '#94A3B8',
   },
   retryButton: {
-    marginTop: 8,
-    paddingHorizontal: 24,
+    backgroundColor: '#1D4ED8',
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#0EA5E9',
+    borderRadius: 999,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontWeight: '600',
   },
-  secondaryLink: {
-    marginTop: 16,
-  },
-  secondaryLinkText: {
-    color: '#0EA5E9',
-    fontWeight: '600',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 10,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  withdrawButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  withdrawButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  balanceCard: {
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
-    padding: 24,
-    marginHorizontal: 20,
-    marginBottom: 30,
-    boxShadow: '0px 4px',
-    elevation: 4,
-  },
-  balanceLabel: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    opacity: 0.9,
-    marginBottom: 8,
-  },
-  balanceAmount: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 20,
-  },
-  balanceStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  balanceStat: {
+  errorContainer: {
     flex: 1,
-  },
-  balanceStatLabel: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    opacity: 0.8,
-    marginBottom: 4,
-  },
-  balanceStatValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  apiNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    padding: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 6,
-  },
-  apiNoticeText: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    marginLeft: 6,
-    opacity: 0.9,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 15,
-  },
-  transactionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    boxShadow: '0px 1px',
-    elevation: 2,
-  },
-  transactionIcon: {
-    marginRight: 15,
-  },
-  transactionInfo: {
-    flex: 1,
-  },
-  transactionClient: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  transactionDate: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  transactionAmount: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#10B981',
-  },
-  pendingAmount: {
-    color: '#F59E0B',
-  },
-  overviewCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    boxShadow: '0px 1px',
-    elevation: 2,
-  },
-  overviewRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  overviewLabel: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  overviewValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  payoutSettingsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    boxShadow: '0px 1px',
-    elevation: 2,
-  },
-  payoutSettingsText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginLeft: 12,
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#64748B',
-  },
-  setupCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
     padding: 32,
-    marginHorizontal: 20,
-    marginBottom: 30,
-    alignItems: 'center',
-    boxShadow: '0px 4px',
-    elevation: 4,
-  },
-  setupTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  setupDescription: {
-    fontSize: 16,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
-  },
-  setupButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-  },
-  setupButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  featuresList: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  featuresTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 16,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureText: {
-    fontSize: 16,
-    color: '#64748B',
-    marginLeft: 12,
-  },
-  verificationBadge: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
+    gap: 12,
   },
-  verifiedText: {
-    fontSize: 14,
+  errorTitle: {
+    fontSize: 18,
     fontWeight: '600',
-    color: '#10B981',
-    marginLeft: 8,
+    color: '#0F172A',
   },
-  pendingText: {
+  errorDescription: {
     fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+  },
+  statusPillBase: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillLabel: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#F59E0B',
-    marginLeft: 8,
+    textTransform: 'capitalize',
+    color: '#0F172A',
   },
 });
-
-function formatCurrency(amountCents: number, currency: string = 'usd'): string {
-  try {
-    const value = (amountCents || 0) / 100;
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency.toUpperCase() }).format(value);
-  } catch {
-    return `$${((amountCents || 0) / 100).toFixed(2)}`;
-  }
-}
-
-function formatDate(epochSeconds: number): string {
-  try {
-    const d = new Date(epochSeconds * 1000);
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}

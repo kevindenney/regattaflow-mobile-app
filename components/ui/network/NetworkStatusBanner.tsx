@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Animated } from 'react-native';
+import { View, Text, Animated, Platform } from 'react-native';
 import { WifiOff, Wifi } from 'lucide-react-native';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
@@ -8,17 +8,19 @@ export const NetworkStatusBanner = () => {
   const [slideAnim] = React.useState(new Animated.Value(-60));
 
   React.useEffect(() => {
+    const shouldUseNativeDriver = Platform.OS !== 'web';
+
     if (!isOnline) {
       // Slide down
       Animated.spring(slideAnim, {
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: shouldUseNativeDriver,
       }).start();
     } else {
       // Slide up
       Animated.spring(slideAnim, {
         toValue: -60,
-        useNativeDriver: true,
+        useNativeDriver: shouldUseNativeDriver,
       }).start();
     }
   }, [isOnline, slideAnim]);

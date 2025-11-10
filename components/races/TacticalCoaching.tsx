@@ -243,7 +243,7 @@ function CoachingFeedbackCard({
       {/* Framework Tag */}
       <View style={styles.frameworkTag}>
         <Text style={styles.frameworkTagText}>
-          📚 {feedback.bill_framework}
+          📚 {feedback.playbook_framework}
         </Text>
       </View>
 
@@ -257,7 +257,7 @@ function CoachingFeedbackCard({
       <View style={styles.feedbackSection}>
         <Text style={styles.feedbackSectionLabel}>Tactical Analysis:</Text>
         <Text style={styles.tacticalRecommendation}>
-          {feedback.bill_recommendation}
+          {feedback.playbook_recommendation}
         </Text>
       </View>
 
@@ -265,7 +265,7 @@ function CoachingFeedbackCard({
       {feedback.execution_feedback && (
         <View style={[styles.feedbackSection, styles.executionSection]}>
           <Text style={styles.executionSectionLabel}>
-            ⚙️ Execution: {feedback.colgate_execution_technique}
+            ⚙️ Execution Guidance
           </Text>
           <Text style={styles.executionFeedbackText}>
             {feedback.execution_feedback}

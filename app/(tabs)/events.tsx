@@ -1,11 +1,55 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { format, formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { ClubEvent, EventRegistrationStats } from '@/services/eventService';
-import { format } from 'date-fns';
+
+type Metric = {
+  key: string;
+  label: string;
+  value: string;
+  helper?: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+
+const QUICK_ACTIONS = [
+  {
+    key: 'regatta',
+    icon: 'boat',
+    label: 'New Regatta',
+    route: '/club/event/create?type=regatta',
+  },
+  {
+    key: 'training',
+    icon: 'school-outline',
+    label: 'Training Session',
+    route: '/club/event/create?type=training',
+  },
+  {
+    key: 'social',
+    icon: 'people-outline',
+    label: 'Social Night',
+    route: '/club/event/create?type=social',
+  },
+  {
+    key: 'document',
+    icon: 'document-outline',
+    label: 'Upload NOR / SI',
+    route: '/club/event/create',
+    disabled: true,
+  },
+] as const;
 
 export default function EventsScreen() {
   const router = useRouter();
@@ -24,7 +68,6 @@ export default function EventsScreen() {
       const data = await EventService.getUpcomingEvents(20);
       setEvents(data);
 
-      // Load stats for each event
       const statsPromises = data.map(async (event) => {
         try {
           const stats = await EventService.getRegistrationStats(event.id);
@@ -54,13 +97,13 @@ export default function EventsScreen() {
         return '#10B981';
       case 'registration_closed':
       case 'in_progress':
-        return '#007AFF';
+        return '#2563EB';
       case 'completed':
         return '#64748B';
       case 'cancelled':
         return '#EF4444';
       default:
-        return '#F59E0B';
+        return '#6366F1';
     }
   };
 
@@ -83,7 +126,7 @@ export default function EventsScreen() {
     }
   };
 
-  const formatEventDate = (startDate: string, endDate: string) => {
+  const formatEventDateRange = (startDate: string, endDate: string) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -91,66 +134,192 @@ export default function EventsScreen() {
       return format(start, 'MMM dd, yyyy');
     }
 
-    return `${format(start, 'MMM dd')}-${format(end, 'dd, yyyy')}`;
+    return `${format(start, 'MMM dd')} – ${format(end, 'MMM dd, yyyy')}`;
   };
+
+  const now = new Date();
+  const upcomingEvents = useMemo(
+    () =>
+      events
+        .filter((event) => new Date(event.start_date) >= now)
+        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()),
+    [events, now]
+  );
+
+  const highlightEvent = upcomingEvents[0];
+
+  const metrics = useMemo<Metric[]>(() => {
+    if (!events.length) {
+      return [
+        {
+          key: 'launch',
+          label: 'Next Step',
+          value: 'Create your first regatta',
+          helper: 'Open registration, invite members, and publish docs.',
+          icon: 'rocket-outline',
+        },
+        {
+          key: 'payments',
+          label: 'Payments',
+          value: 'Connect Stripe',
+          helper: 'Enable entry fees and automate payouts.',
+          icon: 'card-outline',
+        },
+        {
+          key: 'documents',
+          label: 'Documents',
+          value: 'Centralize NOR / SI',
+          helper: 'Keep notices in one place for sailors.',
+          icon: 'document-text-outline',
+        },
+      ];
+    }
+
+    const totalRegistrations = events.reduce((sum, event) => {
+      const stats = eventStats[event.id];
+      return sum + (stats?.approved_count ?? 0);
+    }, 0);
+
+    const openRegistration = events.filter((event) => event.status === 'registration_open').length;
+    const publishedEvents = events.filter((event) => event.status === 'published').length;
+
+    return [
+      {
+        key: 'upcoming',
+        label: 'Upcoming',
+        value: `${upcomingEvents.length}`,
+        helper: 'Events scheduled for the next 60 days.',
+        icon: 'calendar-outline',
+      },
+      {
+        key: 'entries',
+        label: 'Confirmed Entries',
+        value: `${totalRegistrations}`,
+        helper: 'Approved registrations across all events.',
+        icon: 'people-outline',
+      },
+      {
+        key: 'status',
+        label: 'Live Status',
+        value: `${openRegistration} open • ${publishedEvents} published`,
+        helper: 'Keep registration momentum going.',
+        icon: 'flag-outline',
+      },
+    ];
+  }, [eventStats, events, upcomingEvents.length]);
+
+  const operationsChecklist = [
+    { key: 'collect-fees', label: 'Connect payouts & set entry fees' },
+    { key: 'invite-team', label: 'Invite PRO / scorer to collaborate' },
+    { key: 'publish-docs', label: 'Upload latest NOR & SIs' },
+    { key: 'notify-sailors', label: 'Send kickoff email to entrants' },
+  ];
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <ThemedText style={styles.title}>Events</ThemedText>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.heroCard}>
+          <View style={styles.heroCopy}>
+            <ThemedText style={styles.heroTitle}>Club Operations HQ</ThemedText>
+            <ThemedText style={styles.heroSubtitle}>
+              {highlightEvent
+                ? `Next up: ${highlightEvent.title} ${formatDistanceToNow(
+                    new Date(highlightEvent.start_date),
+                    { addSuffix: true }
+                  )}`
+                : 'Launch your next regatta, publish documents, and track registrations in one place.'}
+            </ThemedText>
+          </View>
           <TouchableOpacity
-            style={styles.addButton}
+            style={styles.heroButton}
             onPress={() => router.push('/club/event/create')}
           >
-            <Ionicons name="add-circle" size={32} color="#007AFF" />
+            <Ionicons name="add-circle" size={24} color="#FFFFFF" />
+            <ThemedText style={styles.heroButtonText}>Create Event</ThemedText>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/club/event/create?type=regatta')}
-          >
-            <Ionicons name="boat" size={24} color="#007AFF" />
-            <ThemedText style={styles.actionText}>New Regatta</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/club/event/create?type=training')}
-          >
-            <Ionicons name="school-outline" size={24} color="#007AFF" />
-            <ThemedText style={styles.actionText}>Training</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/club/event/create?type=social')}
-          >
-            <Ionicons name="people-outline" size={24} color="#007AFF" />
-            <ThemedText style={styles.actionText}>Social</ThemedText>
-          </TouchableOpacity>
+        <View style={styles.metricsRow}>
+          {metrics.map((metric) => (
+            <View key={metric.key} style={styles.metricCard}>
+              <View style={styles.metricIcon}>
+                <Ionicons name={metric.icon as any} size={18} color="#2563EB" />
+              </View>
+              <ThemedText style={styles.metricLabel}>{metric.label}</ThemedText>
+              <ThemedText style={styles.metricValue}>{metric.value}</ThemedText>
+              {metric.helper ? (
+                <ThemedText style={styles.metricHelper}>{metric.helper}</ThemedText>
+              ) : null}
+            </View>
+          ))}
         </View>
 
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Upcoming Events</ThemedText>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Quick actions</ThemedText>
+            <ThemedText style={styles.sectionHelper}>Jump straight into common tasks</ThemedText>
+          </View>
+          <View style={styles.quickGrid}>
+            {QUICK_ACTIONS.map((action) => (
+              <TouchableOpacity
+                key={action.key}
+                style={[styles.quickTile, action.disabled && styles.quickTileDisabled]}
+                disabled={action.disabled}
+                onPress={() => router.push(action.route)}
+              >
+                <Ionicons
+                  name={action.icon as any}
+                  size={22}
+                  color={action.disabled ? '#94A3B8' : '#2563EB'}
+                />
+                <ThemedText
+                  style={[styles.quickTileLabel, action.disabled && styles.quickTileLabelDisabled]}
+                >
+                  {action.label}
+                </ThemedText>
+                {action.disabled ? (
+                  <ThemedText style={styles.quickTileHint}>Coming soon</ThemedText>
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Upcoming events</ThemedText>
+            <TouchableOpacity onPress={loadEvents} style={styles.inlineLink}>
+              <Ionicons name="refresh" size={16} color="#2563EB" />
+              <ThemedText style={styles.inlineLinkText}>Refresh</ThemedText>
+            </TouchableOpacity>
+          </View>
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="small" color="#2563EB" />
+              <ThemedText style={styles.loadingText}>Syncing with RegattaFlow…</ThemedText>
             </View>
-          ) : events.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="calendar-outline" size={48} color="#CBD5E1" />
-              <ThemedText style={styles.emptyText}>No upcoming events</ThemedText>
+          ) : upcomingEvents.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="calendar-outline" size={40} color="#2563EB" />
+              </View>
+              <ThemedText style={styles.emptyTitle}>No events on the horizon</ThemedText>
+              <ThemedText style={styles.emptyBody}>
+                Start a regatta or training block to populate your calendar and notify sailors.
+              </ThemedText>
               <TouchableOpacity
-                style={styles.createButton}
+                style={styles.primaryButton}
                 onPress={() => router.push('/club/event/create')}
               >
-                <ThemedText style={styles.createButtonText}>Create Event</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>Plan an Event</ThemedText>
               </TouchableOpacity>
             </View>
           ) : (
-            events.map((event) => {
+            upcomingEvents.map((event) => {
               const stats = eventStats[event.id];
               const statusColor = getStatusColor(event.status);
 
@@ -161,81 +330,107 @@ export default function EventsScreen() {
                   onPress={() => router.push(`/club/event/${event.id}`)}
                 >
                   <View style={[styles.eventStatus, { backgroundColor: statusColor }]} />
-                  <View style={styles.eventInfo}>
-                    <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
+                  <View style={styles.eventContent}>
+                    <View style={styles.eventHeader}>
+                      <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
+                      <View style={[styles.statusBadge, { backgroundColor: `${statusColor}1A` }]}
+                      >
+                        <Ionicons name="ellipse" size={10} color={statusColor} style={{ marginRight: 4 }} />
+                        <ThemedText style={[styles.statusText, { color: statusColor }]}
+                        >
+                          {getStatusLabel(event.status)}
+                        </ThemedText>
+                      </View>
+                    </View>
                     <ThemedText style={styles.eventDate}>
-                      {formatEventDate(event.start_date, event.end_date)}
+                      {formatEventDateRange(event.start_date, event.end_date)}
                     </ThemedText>
                     <View style={styles.eventMeta}>
                       <View style={styles.eventMetaItem}>
                         <Ionicons name="people-outline" size={16} color="#64748B" />
                         <ThemedText style={styles.eventMetaText}>
-                          {stats?.approved_count || 0} registered
-                          {event.max_participants && ` / ${event.max_participants}`}
+                          {stats?.approved_count ?? 0} confirmed
+                          {event.max_participants ? ` • Cap ${event.max_participants}` : ''}
                         </ThemedText>
                       </View>
-                      <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
-                        <ThemedText style={[styles.statusText, { color: statusColor }]}>
-                          {getStatusLabel(event.status)}
-                        </ThemedText>
-                      </View>
+                      {event.registration_closes ? (
+                        <View style={styles.eventMetaItem}>
+                          <Ionicons name="time-outline" size={16} color="#64748B" />
+                          <ThemedText style={styles.eventMetaText}>
+                            Reg closes {format(new Date(event.registration_closes), 'MMM d')}
+                          </ThemedText>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={24} color="#CBD5E1" />
+                  <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
                 </TouchableOpacity>
               );
             })
           )}
         </View>
 
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Event Calendar</ThemedText>
-          <View style={styles.calendarCard}>
-            <View style={styles.calendarHeader}>
-              <TouchableOpacity style={styles.calendarNav}>
-                <Ionicons name="chevron-back" size={24} color="#007AFF" />
-              </TouchableOpacity>
-              <ThemedText style={styles.calendarMonth}>March 2024</ThemedText>
-              <TouchableOpacity style={styles.calendarNav}>
-                <Ionicons name="chevron-forward" size={24} color="#007AFF" />
-              </TouchableOpacity>
+        <View style={styles.splitRow}>
+          <View style={[styles.sectionCard, styles.splitCard]}>
+            <View style={styles.sectionHeader}>
+              <ThemedText style={styles.sectionTitle}>Calendar</ThemedText>
+              <ThemedText style={styles.sectionHelper}>Preview the month at a glance</ThemedText>
             </View>
-            <View style={styles.calendarGrid}>
-              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                <ThemedText key={i} style={styles.calendarDayHeader}>{day}</ThemedText>
-              ))}
-              {Array.from({ length: 35 }, (_, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={[
-                    styles.calendarDay,
-                    (i === 14 || i === 21 || i === 29) && styles.calendarDayWithEvent
-                  ]}
-                >
-                  <ThemedText style={[
-                    styles.calendarDayText,
-                    i < 7 && styles.calendarDayTextFaded,
-                    (i === 14 || i === 21 || i === 29) && styles.calendarDayTextEvent
-                  ]}>
-                    {i < 7 ? 25 + i : i - 6}
+            <View style={styles.calendarShell}>
+              <View style={styles.calendarRow}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <ThemedText key={day} style={styles.calendarDayLabel}>
+                    {day}
                   </ThemedText>
-                </TouchableOpacity>
-              ))}
+                ))}
+              </View>
+              <View style={styles.calendarGrid}>
+                {Array.from({ length: 35 }).map((_, index) => {
+                  const day = (index % 30) + 1;
+                  const hasEvent = upcomingEvents.some(
+                    (event) => new Date(event.start_date).getDate() === day
+                  );
+                  return (
+                    <View
+                      key={`${index}-${day}`}
+                      style={[styles.calendarCell, hasEvent && styles.calendarCellActive]}
+                    >
+                      <ThemedText style={[styles.calendarDay, hasEvent && styles.calendarDayActive]}>
+                        {day}
+                      </ThemedText>
+                    </View>
+                  );
+                })}
+              </View>
+              <TouchableOpacity style={styles.calendarFooter}>
+                <ThemedText style={styles.calendarLink}>Open full calendar</ThemedText>
+                <Ionicons name="open-outline" size={16} color="#2563EB" />
+              </TouchableOpacity>
             </View>
           </View>
-        </View>
 
-        <View style={styles.statsSection}>
-          <ThemedText style={styles.sectionTitle}>Event Statistics</ThemedText>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <ThemedText style={styles.statValue}>12</ThemedText>
-              <ThemedText style={styles.statLabel}>Events This Year</ThemedText>
+          <View style={[styles.sectionCard, styles.splitCard]}>
+            <View style={styles.sectionHeader}>
+              <ThemedText style={styles.sectionTitle}>Operations checklist</ThemedText>
+              <ThemedText style={styles.sectionHelper}>
+                Keep race committee and members aligned
+              </ThemedText>
             </View>
-            <View style={styles.statCard}>
-              <ThemedText style={styles.statValue}>248</ThemedText>
-              <ThemedText style={styles.statLabel}>Total Participants</ThemedText>
-            </View>
+            {operationsChecklist.map((item, index) => (
+              <View key={item.key} style={styles.checklistItem}>
+                <View style={styles.checklistBadge}>
+                  <ThemedText style={styles.checklistNumber}>{index + 1}</ThemedText>
+                </View>
+                <ThemedText style={styles.checklistLabel}>{item.label}</ThemedText>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => router.push('/club/event/create')}
+            >
+              <Ionicons name="sparkles-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.secondaryButtonText}>View onboarding guide</ThemedText>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -248,216 +443,367 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 10,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  addButton: {
-    padding: 4,
-  },
-  quickActions: {
-    flexDirection: 'row',
+  scrollContent: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    paddingVertical: 24,
+    gap: 20,
+  },
+  heroCard: {
+    backgroundColor: '#1E3A8A',
+    borderRadius: 20,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#1E3A8A',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  heroCopy: {
+    flex: 1,
+    marginRight: 16,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.78)',
+    lineHeight: 20,
+  },
+  heroButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
-  actionButton: {
+  metricCard: {
     flex: 1,
-    alignItems: 'center',
+    minWidth: 180,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 18,
     padding: 16,
-    boxShadow: '0px 1px',
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  actionText: {
-    fontSize: 12,
+  metricIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  metricLabel: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#007AFF',
-    marginTop: 8,
-    textAlign: 'center',
+    color: '#1F2937',
   },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginVertical: 4,
+  },
+  metricHelper: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sectionHelper: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  quickTile: {
+    flex: 1,
+    minWidth: 150,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  quickTileDisabled: {
+    backgroundColor: '#F1F5F9',
+  },
+  quickTileLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 15,
+    color: '#0F172A',
+  },
+  quickTileLabelDisabled: {
+    color: '#94A3B8',
+  },
+  quickTileHint: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  inlineLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  inlineLinkText: {
+    color: '#2563EB',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  emptyCard: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  emptyBody: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  primaryButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
   },
   eventCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 0,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginBottom: 12,
-    boxShadow: '0px 1px',
-    elevation: 2,
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    gap: 14,
   },
   eventStatus: {
-    width: 4,
-    height: '100%',
-    position: 'absolute',
-    left: 0,
+    width: 3,
+    borderRadius: 2,
+    alignSelf: 'stretch',
   },
-  eventInfo: {
+  eventContent: {
     flex: 1,
-    padding: 16,
-    paddingLeft: 20,
+  },
+  eventHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   eventTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
+    fontWeight: '700',
+    color: '#111827',
   },
   eventDate: {
-    fontSize: 14,
-    color: '#64748B',
+    fontSize: 13,
+    color: '#475569',
     marginBottom: 8,
   },
   eventMeta: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   eventMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
   eventMetaText: {
-    fontSize: 12,
-    color: '#64748B',
-    marginLeft: 4,
+    color: '#475569',
+    fontSize: 13,
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  calendarCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    boxShadow: '0px 1px',
-    elevation: 2,
-  },
-  calendarHeader: {
+  splitRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+  splitCard: {
+    flex: 1,
+    minWidth: 260,
+  },
+  calendarShell: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  calendarRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
   },
-  calendarNav: {
-    padding: 4,
-  },
-  calendarMonth: {
-    fontSize: 18,
+  calendarDayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#475569',
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  calendarDayHeader: {
-    width: '14.28%',
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    marginBottom: 8,
+  calendarCell: {
+    width: `${100 / 7}%`,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarCellActive: {
+    backgroundColor: '#DBEAFE',
   },
   calendarDay: {
-    width: '14.28%',
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  calendarDayWithEvent: {
-    backgroundColor: '#007AFF',
-  },
-  calendarDayText: {
     fontSize: 14,
-    color: '#1E293B',
+    color: '#1F2937',
   },
-  calendarDayTextFaded: {
-    color: '#CBD5E1',
-  },
-  calendarDayTextEvent: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  statsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    boxShadow: '0px 1px',
-    elevation: 2,
-  },
-  statValue: {
-    fontSize: 28,
+  calendarDayActive: {
     fontWeight: '700',
-    color: '#007AFF',
-    marginBottom: 4,
+    color: '#1D4ED8',
   },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
+  calendarFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
-  loadingContainer: {
-    padding: 40,
+  calendarLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  checklistBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#DBEAFE',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyContainer: {
-    padding: 40,
+  checklistNumber: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  checklistLabel: {
+    fontSize: 14,
+    color: '#1F2937',
+    flex: 1,
+    fontWeight: '500',
+  },
+  secondaryButton: {
+    marginTop: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  emptyText: {
-    fontSize: 16,
-    color: '#64748B',
-    marginTop: 12,
-    marginBottom: 20,
-  },
-  createButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  secondaryButtonText: {
+    color: '#2563EB',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

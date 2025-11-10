@@ -3,7 +3,7 @@
  * Expandable container for each onboarding step with progress indicator
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { ChevronDown, ChevronUp, CheckCircle2, Circle } from 'lucide-react-native';
 
@@ -70,7 +70,20 @@ export function OnboardingSection({
       </TouchableOpacity>
 
       {/* Section Content */}
-      {isExpanded && <View className="p-4">{children}</View>}
+      {isExpanded && (
+        <View className="p-4">
+          {React.Children.map(children, (child, index) => {
+            if (typeof child === 'string' || typeof child === 'number') {
+              return (
+                <Text key={`child-text-${index}`}>
+                  {child}
+                </Text>
+              );
+            }
+            return child;
+          })}
+        </View>
+      )}
     </View>
   );
 }

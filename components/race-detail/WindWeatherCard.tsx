@@ -3,7 +3,7 @@
  * Shows current conditions and race-time forecast
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
@@ -32,6 +32,21 @@ interface WeatherData {
   lastUpdated: Date;
 }
 
+interface InitialWeather {
+  wind?: {
+    direction: string;
+    speedMin: number;
+    speedMax: number;
+  };
+  tide?: {
+    state: 'flooding' | 'ebbing' | 'slack' | 'high' | 'low';
+    height: number;
+    direction?: string;
+  };
+  fetchedAt?: string;
+  provider?: string;
+}
+
 interface WindWeatherCardProps {
   raceId: string;
   raceTime?: string;
@@ -49,16 +64,19 @@ interface WindWeatherCardProps {
     region: string;
     country: string;
   };
+  initialWeather?: InitialWeather;
 }
 
 export function WindWeatherCard({
   raceId,
   raceTime,
   venueCoordinates,
-  venue
+  venue,
+  initialWeather
 }: WindWeatherCardProps) {
   const [useMockData, setUseMockData] = useState(false);
   const [hasAutoLoaded, setHasAutoLoaded] = useState(false);
+  const [showLiveConditions, setShowLiveConditions] = useState(false);
 
   // Try to fetch REAL weather data first
   const { weather: realWeather, loading, error: weatherError, refetch: loadWeather } = useRaceWeather(
@@ -78,6 +96,43 @@ export function WindWeatherCard({
   // Fallback to mock data if real data fails
   const [mockWeather, setMockWeather] = useState<WeatherData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const metadataWeather = useMemo<WeatherData | null>(() => {
+    if (!initialWeather?.wind) {
+      return null;
+    }
+
+    const averageWind = Math.round(
+      (initialWeather.wind.speedMin + initialWeather.wind.speedMax) / 2
+    );
+
+    const directionDegrees = cardinalToDegrees(initialWeather.wind.direction);
+
+    return {
+      current: {
+        windSpeed: averageWind,
+        windDirection: directionDegrees,
+        gusts: initialWeather.wind.speedMax,
+        temperature: 24,
+        pressure: 1013,
+      },
+      forecast: [],
+      raceTimeConditions: {
+        windSpeed: averageWind,
+        windDirection: directionDegrees,
+        gusts: initialWeather.wind.speedMax,
+        shifts: [],
+      },
+      lastUpdated: initialWeather.fetchedAt
+        ? new Date(initialWeather.fetchedAt)
+        : new Date(),
+    };
+  }, [
+    initialWeather?.wind?.direction,
+    initialWeather?.wind?.speedMin,
+    initialWeather?.wind?.speedMax,
+    initialWeather?.fetchedAt,
+  ]);
 
   const loadMockWeather = useCallback(() => {
     setUseMockData(true);
@@ -121,12 +176,33 @@ export function WindWeatherCard({
     loadWeather();
   }, [loadWeather]);
 
+  const handleShowLiveConditions = useCallback(() => {
+    setShowLiveConditions(true);
+    handleRefresh();
+  }, [handleRefresh]);
+
+  const handleShowRecordedSnapshot = useCallback(() => {
+    setShowLiveConditions(false);
+    setUseMockData(false);
+    setMockWeather(null);
+    setError(null);
+  }, []);
+
   useEffect(() => {
     setHasAutoLoaded(false);
     setUseMockData(false);
     setMockWeather(null);
     setError(null);
   }, [raceId, raceTime, venue?.id, venueCoordinates?.lat, venueCoordinates?.lng]);
+
+  const isPastRace = useMemo(() => {
+    if (!raceTime) return false;
+    return new Date(raceTime).getTime() < Date.now();
+  }, [raceTime]);
+
+  useEffect(() => {
+    setShowLiveConditions(false);
+  }, [raceId, raceTime]);
 
   useEffect(() => {
     if (realWeather) {
@@ -137,7 +213,15 @@ export function WindWeatherCard({
   }, [realWeather]);
 
   useEffect(() => {
-    if (hasAutoLoaded || useMockData) return;
+    if (metadataWeather) {
+      setUseMockData(false);
+      setHasAutoLoaded(true);
+      setError(null);
+    }
+  }, [metadataWeather]);
+
+  useEffect(() => {
+    if (hasAutoLoaded || useMockData || metadataWeather) return;
 
     if (weatherError) {
       setError(weatherError.message || 'Unable to fetch live weather');
@@ -168,50 +252,55 @@ export function WindWeatherCard({
     venueCoordinates?.lat,
     venueCoordinates?.lng,
     venue?.coordinates?.latitude,
-    venue?.coordinates?.longitude
+    venue?.coordinates?.longitude,
+    metadataWeather
   ]);
 
-  // Helper to convert cardinal to degrees for display
-  const cardinalToDegrees = (cardinal: string): number => {
-    const directions: { [key: string]: number } = {
-      'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
-      'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
-      'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
-      'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5
-    };
-    return directions[cardinal] || 0;
-  };
+  const liveWeather: WeatherData | null = useMockData
+    ? mockWeather
+    : realWeather
+      ? {
+        current: {
+          windSpeed: Math.round((realWeather.wind.speedMin + realWeather.wind.speedMax) / 2),
+          windDirection: cardinalToDegrees(realWeather.wind.direction),
+          gusts: realWeather.wind.speedMax,
+          temperature: 24, // Not available from API yet
+          pressure: 1013, // Not available from API yet
+        },
+        forecast: [],
+        raceTimeConditions: {
+          windSpeed: Math.round((realWeather.wind.speedMin + realWeather.wind.speedMax) / 2),
+          windDirection: cardinalToDegrees(realWeather.wind.direction),
+          gusts: realWeather.wind.speedMax,
+          shifts: [],
+        },
+        lastUpdated: new Date(),
+      }
+      : null;
 
-  // Convert real weather to display format
-  const weather: WeatherData | null = useMockData ? mockWeather : (realWeather ? {
-    current: {
-      windSpeed: (realWeather.wind.speedMin + realWeather.wind.speedMax) / 2,
-      windDirection: cardinalToDegrees(realWeather.wind.direction),
-      gusts: realWeather.wind.speedMax,
-      temperature: 24, // Not available from API yet
-      pressure: 1013, // Not available from API yet
-    },
-    forecast: [], // Not yet implemented
-    raceTimeConditions: {
-      windSpeed: (realWeather.wind.speedMin + realWeather.wind.speedMax) / 2,
-      windDirection: cardinalToDegrees(realWeather.wind.direction),
-      gusts: realWeather.wind.speedMax,
-      shifts: [],
-    },
-    lastUpdated: new Date(),
-  } : null);
+  const recordedWeather = metadataWeather;
+
+  const showingRecordedSnapshot = isPastRace && !showLiveConditions && !!recordedWeather;
+
+  const weather: WeatherData | null =
+    showingRecordedSnapshot ? recordedWeather ?? liveWeather : liveWeather ?? recordedWeather;
+
+  const shouldShowLiveLoading = !isPastRace || showLiveConditions || !recordedWeather;
 
   const getCardStatus = () => {
-    if (loading) return 'generating';
-    if (error) return 'error';
+    if (shouldShowLiveLoading && loading) return 'generating';
+    if (shouldShowLiveLoading && error) return 'error';
     if (!weather) return 'not_set';
     return 'ready';
   };
 
   const getStatusMessage = () => {
-    if (loading) return 'Loading forecast...';
-    if (error) return error;
-    if (!weather) return 'Tap to load';
+    if (shouldShowLiveLoading && loading) return 'Loading forecast...';
+    if (shouldShowLiveLoading && error) return error;
+    if (!weather) return isPastRace ? 'No recorded weather saved' : 'Tap to load';
+    if (showingRecordedSnapshot && recordedWeather) {
+      return `Recorded ${formatRecordedTimestamp(recordedWeather.lastUpdated, raceTime)}`;
+    }
     return `Updated ${getTimeAgo(weather.lastUpdated)}`;
   };
 
@@ -268,38 +357,136 @@ export function WindWeatherCard({
     }
 
     const beaufort = getBeaufortScale(weather.current.windSpeed);
+    const recordedTimestampLabel = formatRecordedTimestamp(recordedWeather?.lastUpdated, raceTime);
+    const dataSourceMode = showingRecordedSnapshot
+      ? 'recorded'
+      : useMockData
+        ? 'mock'
+        : realWeather
+          ? 'live'
+          : 'saved';
+
+    const badgeIcon =
+      dataSourceMode === 'recorded'
+        ? 'flag-checkered'
+        : dataSourceMode === 'mock'
+          ? 'flask-outline'
+          : dataSourceMode === 'live'
+            ? 'wifi'
+            : 'content-save';
+
+    const badgeLabel =
+      dataSourceMode === 'recorded'
+        ? 'RECORDED SNAPSHOT'
+        : dataSourceMode === 'mock'
+          ? 'MOCK DATA'
+          : dataSourceMode === 'live'
+            ? 'LIVE DATA'
+            : 'SAVED FORECAST';
 
     return (
       <View style={styles.weatherContent}>
         {/* Data Source Indicator Badge */}
         <View style={[
           styles.dataSourceBadge,
-          useMockData ? styles.dataSourceBadgeMock : styles.dataSourceBadgeLive
+          dataSourceMode === 'recorded'
+            ? styles.dataSourceBadgeRecorded
+            : dataSourceMode === 'mock'
+              ? styles.dataSourceBadgeMock
+              : dataSourceMode === 'live'
+                ? styles.dataSourceBadgeLive
+                : styles.dataSourceBadgeSaved
         ]}>
           <MaterialCommunityIcons
-            name={useMockData ? "flask-outline" : "wifi"}
+            name={badgeIcon}
             size={14}
-            color={useMockData ? "#D97706" : "#10B981"}
+            color={
+              dataSourceMode === 'recorded'
+                ? '#0F172A'
+                : dataSourceMode === 'mock'
+                  ? '#D97706'
+                  : dataSourceMode === 'live'
+                    ? '#10B981'
+                    : '#6366F1'
+            }
           />
           <Text style={[
             styles.dataSourceText,
-            useMockData ? styles.dataSourceTextMock : styles.dataSourceTextLive
+            dataSourceMode === 'recorded'
+              ? styles.dataSourceTextRecorded
+              : dataSourceMode === 'mock'
+                ? styles.dataSourceTextMock
+                : dataSourceMode === 'live'
+                  ? styles.dataSourceTextLive
+                  : styles.dataSourceTextSaved
           ]}>
-            {useMockData ? "MOCK DATA" : "LIVE DATA"}
+            {badgeLabel}
           </Text>
         </View>
-        {useMockData && (
+        {useMockData && !showingRecordedSnapshot && (
           <Text style={styles.mockDataNotice}>
             Using mock data — add venue coordinates to fetch live conditions.
+          </Text>
+        )}
+        {showingRecordedSnapshot && (
+          <View style={styles.recordedBanner}>
+            <View style={styles.recordedBannerIcon}>
+              <MaterialCommunityIcons name="history" size={18} color="#0F172A" />
+            </View>
+            <View style={styles.recordedBannerCopy}>
+              <Text style={styles.recordedBannerTitle}>Race completed</Text>
+              <Text style={styles.recordedBannerText}>
+                Showing weather captured {recordedTimestampLabel}.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.recordedBannerAction}
+              onPress={handleShowLiveConditions}
+            >
+              <Text style={styles.recordedBannerActionText}>View live</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {isPastRace && showLiveConditions && recordedWeather && (
+          <View style={styles.recordedBanner}>
+            <View style={styles.recordedBannerIcon}>
+              <MaterialCommunityIcons name="radar" size={18} color="#0F172A" />
+            </View>
+            <View style={styles.recordedBannerCopy}>
+              <Text style={styles.recordedBannerTitle}>Live preview</Text>
+              <Text style={styles.recordedBannerText}>
+                Comparing against snapshot from {recordedTimestampLabel}.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.recordedBannerAction}
+              onPress={handleShowRecordedSnapshot}
+            >
+              <Text style={styles.recordedBannerActionText}>View snapshot</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {dataSourceMode === 'recorded' && initialWeather?.provider && (
+          <Text style={styles.recordedDataNotice}>
+            Snapshot from {initialWeather.provider}{initialWeather.fetchedAt ? ` • Captured ${recordedTimestampLabel}` : ''}.
+          </Text>
+        )}
+        {dataSourceMode === 'saved' && initialWeather?.provider && !showingRecordedSnapshot && (
+          <Text style={styles.savedDataNotice}>
+            Latest forecast from {initialWeather.provider}{initialWeather.fetchedAt ? ` • Fetched ${getTimeAgo(new Date(initialWeather.fetchedAt))}` : ''}.
           </Text>
         )}
         {/* Current Conditions */}
         <View style={styles.currentSection}>
           <View style={styles.currentHeader}>
-            <Text style={styles.sectionTitle}>Current Conditions</Text>
-            <TouchableOpacity onPress={handleRefresh} disabled={loading}>
-              <MaterialCommunityIcons name="refresh" size={20} color="#3B82F6" />
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>
+              {showingRecordedSnapshot ? 'Recorded at Start' : 'Current Conditions'}
+            </Text>
+            {!showingRecordedSnapshot && (
+              <TouchableOpacity onPress={handleRefresh} disabled={loading}>
+                <MaterialCommunityIcons name="refresh" size={20} color="#3B82F6" />
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.currentDisplay}>
@@ -352,7 +539,9 @@ export function WindWeatherCard({
         {/* Race Time Forecast */}
         {weather.raceTimeConditions && raceTime && (
           <View style={styles.raceTimeSection}>
-            <Text style={styles.sectionTitle}>Race Time Forecast</Text>
+            <Text style={styles.sectionTitle}>
+              {showingRecordedSnapshot ? 'Race-Time Snapshot' : 'Race Time Forecast'}
+            </Text>
             <View style={styles.raceTimeForecast}>
               <View style={styles.forecastRow}>
                 <MaterialCommunityIcons name="weather-windy" size={20} color="#10B981" />
@@ -391,25 +580,27 @@ export function WindWeatherCard({
         )}
 
         {/* Hourly Forecast */}
-        <View style={styles.forecastSection}>
-          <Text style={styles.sectionTitle}>Hourly Forecast</Text>
-          <View style={styles.forecastGrid}>
-            {weather.forecast.map((hour, index) => (
-              <View key={index} style={styles.forecastItem}>
-                <Text style={styles.forecastTime}>{hour.time}</Text>
-                <MaterialCommunityIcons
-                  name="navigation"
-                  size={16}
-                  color="#64748B"
-                  style={{
-                    transform: [{ rotate: `${hour.windDirection}deg` }]
-                  }}
-                />
-                <Text style={styles.forecastWind}>{hour.windSpeed} kts</Text>
-              </View>
-            ))}
+        {weather.forecast.length > 0 && !showingRecordedSnapshot && (
+          <View style={styles.forecastSection}>
+            <Text style={styles.sectionTitle}>Hourly Forecast</Text>
+            <View style={styles.forecastGrid}>
+              {weather.forecast.map((hour, index) => (
+                <View key={index} style={styles.forecastItem}>
+                  <Text style={styles.forecastTime}>{hour.time}</Text>
+                  <MaterialCommunityIcons
+                    name="navigation"
+                    size={16}
+                    color="#64748B"
+                    style={{
+                      transform: [{ rotate: `${hour.windDirection}deg` }]
+                    }}
+                  />
+                  <Text style={styles.forecastWind}>{hour.windSpeed} kts</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
       </View>
     );
   };
@@ -623,10 +814,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#6EE7B7',
   },
+  dataSourceBadgeSaved: {
+    backgroundColor: '#E0E7FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
   dataSourceBadgeMock: {
     backgroundColor: '#FEF3C7',
     borderWidth: 1,
     borderColor: '#FCD34D',
+  },
+  dataSourceBadgeRecorded: {
+    backgroundColor: '#E2E8F0',
+    borderWidth: 1,
+    borderColor: '#CBD5F5',
   },
   dataSourceText: {
     fontSize: 11,
@@ -636,12 +837,108 @@ const styles = StyleSheet.create({
   dataSourceTextLive: {
     color: '#059669',
   },
+  dataSourceTextSaved: {
+    color: '#4F46E5',
+  },
   dataSourceTextMock: {
     color: '#D97706',
+  },
+  dataSourceTextRecorded: {
+    color: '#0F172A',
   },
   mockDataNotice: {
     fontSize: 12,
     color: '#B45309',
     marginBottom: 16,
   },
+  savedDataNotice: {
+    fontSize: 12,
+    color: '#4338CA',
+    marginBottom: 16,
+  },
+  recordedDataNotice: {
+    fontSize: 12,
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  recordedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  recordedBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordedBannerCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  recordedBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  recordedBannerText: {
+    fontSize: 12,
+    color: '#1E293B',
+  },
+  recordedBannerAction: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#1D4ED8',
+  },
+  recordedBannerActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
 });
+
+function cardinalToDegrees(cardinal: string): number {
+  const directions: Record<string, number> = {
+    N: 0,
+    NNE: 22.5,
+    NE: 45,
+    ENE: 67.5,
+    E: 90,
+    ESE: 112.5,
+    SE: 135,
+    SSE: 157.5,
+    S: 180,
+    SSW: 202.5,
+    SW: 225,
+    WSW: 247.5,
+    W: 270,
+    WNW: 292.5,
+    NW: 315,
+    NNW: 337.5,
+  };
+  const key = cardinal?.toUpperCase() || '';
+  return directions[key] ?? 0;
+}
+
+function formatRecordedTimestamp(recordedDate?: Date, raceTime?: string): string {
+  const snapshot = recordedDate ?? (raceTime ? new Date(raceTime) : null);
+  if (!snapshot || Number.isNaN(snapshot.getTime())) {
+    return 'at race start';
+  }
+
+  return snapshot.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

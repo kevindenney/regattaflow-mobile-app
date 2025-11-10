@@ -25,7 +25,7 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
-import { RaceAnalysisAgent } from '@/services/agents/RaceAnalysisAgent';
+import { RaceAnalysisService } from '@/services/RaceAnalysisService';
 import { createLogger } from '@/lib/utils/logger';
 
 interface RaceAnalysisViewProps {
@@ -96,27 +96,26 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
             try {
               setRegenerating(true);
 
-              // Delete old analysis
               if (analysis) {
-                await supabase
-                  .from('ai_coach_analysis')
-                  .delete()
-                  .eq('id', analysis.id);
+                const deleted = await RaceAnalysisService.deleteAnalysis(sessionId);
+                if (!deleted) {
+                  Alert.alert('Error', 'Failed to clear previous analysis.');
+                  setRegenerating(false);
+                  return;
+                }
               }
 
-              // Trigger new analysis
-              const analysisAgent = new RaceAnalysisAgent();
-              const result = await analysisAgent.analyzeRace({ timerSessionId: sessionId });
+              const result = await RaceAnalysisService.analyzeRaceSession(sessionId, { force: true });
 
-              if (result.success) {
+              if (result) {
                 Alert.alert('Success', 'New analysis generated!');
                 loadAnalysis();
               } else {
-                Alert.alert('Error', result.error || 'Failed to generate analysis');
+                Alert.alert('Error', 'Failed to generate analysis');
               }
             } catch (error: any) {
               console.error('Error regenerating analysis:', error);
-              Alert.alert('Error', 'Failed to regenerate analysis');
+              Alert.alert('Error', error?.message || 'Failed to regenerate analysis');
             } finally {
               setRegenerating(false);
             }
@@ -142,14 +141,48 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
         <Text className="text-gray-600 text-lg font-semibold mt-4">
           No Analysis Available
         </Text>
-        <Text className="text-gray-500 text-center mt-2">
-          AI analysis is still processing or hasn't been generated yet.
+        <Text className="text-gray-500 text-center mt-2 mb-6">
+          AI analysis hasn't been generated for this race yet.
         </Text>
+
+        <TouchableOpacity
+          onPress={async () => {
+            try {
+              setRegenerating(true);
+              const result = await RaceAnalysisService.analyzeRaceSession(sessionId);
+
+              if (result) {
+                Alert.alert('Success', 'Race analysis generated successfully!');
+                loadAnalysis();
+              } else {
+                Alert.alert('Error', 'Failed to generate analysis');
+              }
+            } catch (error: any) {
+              console.error('Error generating analysis:', error);
+              Alert.alert('Error', error?.message || 'Failed to generate analysis. Please try again.');
+            } finally {
+              setRegenerating(false);
+            }
+          }}
+          disabled={regenerating}
+          className="bg-sky-600 rounded-lg px-6 py-3 mb-3 flex-row items-center"
+        >
+          {regenerating ? (
+            <>
+              <ActivityIndicator size="small" color="white" />
+              <Text className="text-white font-semibold ml-2">Generating...</Text>
+            </>
+          ) : (
+            <Text className="text-white font-semibold">Generate AI Analysis</Text>
+          )}
+        </TouchableOpacity>
+
         <TouchableOpacity
           onPress={loadAnalysis}
-          className="bg-sky-600 rounded-lg px-6 py-3 mt-6"
+          disabled={regenerating}
+          className="border border-sky-600 rounded-lg px-6 py-3"
         >
-          <Text className="text-white font-semibold">Check Again</Text>
+          <Text className="text-sky-600 font-semibold">Check Again</Text>
         </TouchableOpacity>
       </View>
     );

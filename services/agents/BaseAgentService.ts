@@ -13,7 +13,6 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { Platform } from 'react-native';
 
 // Tool definition using Zod schemas for type safety
 export interface AgentTool {
@@ -49,16 +48,9 @@ export interface AgentRunResult {
  * Detect if code is running in a browser environment
  */
 function isBrowserEnvironment(): boolean {
-  // Check for web platform
-  if (Platform.OS === 'web') {
-    return true;
-  }
-
-  // Additional browser detection
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     return true;
   }
-
   return false;
 }
 

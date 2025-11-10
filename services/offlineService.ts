@@ -189,7 +189,7 @@ class OfflineService {
         .from('sailor_profiles')
         .select('id')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (sailorProfile) {
         const { data: boat } = await supabase
@@ -197,7 +197,7 @@ class OfflineService {
           .select('class_id')
           .eq('sailor_id', sailorProfile.id)
           .eq('is_primary', true)
-          .single();
+          .maybeSingle();
 
         if (boat) {
           const { data: tuningGuides } = await supabase

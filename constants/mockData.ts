@@ -315,25 +315,117 @@ export const MOCK_COURSES: MockCourse[] = [
 /**
  * Calculate countdown from current time to race date
  */
-export function calculateCountdown(raceDate: string): { days: number; hours: number; minutes: number } {
+const DEFAULT_RACE_TIME = '10:00';
+
+function normalizeRaceTime(time?: string | null): string | null {
+  if (!time) return null;
+
+  const trimmed = time.trim();
+  const sanitized = trimmed.replace(/([+-]\d{2}:?\d{2}|Z)$/i, '');
+
+  const twentyFourHourMatch = sanitized.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (twentyFourHourMatch) {
+    const hours = Number.parseInt(twentyFourHourMatch[1], 10);
+    const minutes = Number.parseInt(twentyFourHourMatch[2], 10);
+    const seconds = twentyFourHourMatch[3] ? Number.parseInt(twentyFourHourMatch[3], 10) : 0;
+
+    if ([hours, minutes, seconds].some((value) => Number.isNaN(value))) {
+      return null;
+    }
+
+    if (hours === 0 && minutes === 0 && seconds === 0) {
+      return DEFAULT_RACE_TIME;
+    }
+
+    return [hours, minutes, seconds]
+      .map((value, index) => (index === 2 && value === 0 ? null : value.toString().padStart(2, '0')))
+      .filter(Boolean)
+      .join(':');
+  }
+
+  const amPmMatch = sanitized.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (amPmMatch) {
+    let hours = Number.parseInt(amPmMatch[1], 10);
+    const minutes = amPmMatch[2] ? Number.parseInt(amPmMatch[2], 10) : 0;
+    const meridiem = amPmMatch[3].toUpperCase();
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return null;
+    }
+
+    if (meridiem === 'PM' && hours < 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+function buildRaceDate(raceDate: string, raceTime?: string | null): Date | null {
+  if (!raceDate) return null;
+
+  const normalizedTime = normalizeRaceTime(raceTime) || DEFAULT_RACE_TIME;
+
+  // Start with whatever the backend stored; if it's invalid we'll rebuild from the date portion.
+  let date = new Date(raceDate);
+  if (Number.isNaN(date.getTime())) {
+    const base = raceDate.includes('T') ? raceDate : `${raceDate}T00:00:00`;
+    date = new Date(base.replace(' ', 'T'));
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  // Apply explicit start time from metadata when provided. This prevents defaulting to 00:00 which would
+  // immediately zero out the countdown once the race day begins.
+  if (normalizedTime) {
+    const [hours, minutes] = normalizedTime.split(':').map((value) => Number.parseInt(value, 10));
+    const timeMatch = raceDate.match(/T(\d{2}):(\d{2})/);
+    const isoHours = timeMatch ? Number.parseInt(timeMatch[1], 10) : null;
+    const isoMinutes = timeMatch ? Number.parseInt(timeMatch[2], 10) : null;
+    const hasExplicitTime = isoHours !== null && isoMinutes !== null && !Number.isNaN(isoHours) && !Number.isNaN(isoMinutes);
+    const isoIsMidnight = hasExplicitTime && isoHours === 0 && isoMinutes === 0;
+    const currentHours = date.getHours();
+    const currentMinutes = date.getMinutes();
+    const shouldOverride =
+      !hasExplicitTime ||
+      isoIsMidnight ||
+      (currentHours === 0 && currentMinutes === 0) ||
+      Number.isNaN(currentHours) ||
+      Number.isNaN(currentMinutes);
+
+    if (shouldOverride && !Number.isNaN(hours) && !Number.isNaN(minutes)) {
+      date.setHours(hours, minutes, 0, 0);
+    }
+  }
+
+  return date;
+}
+
+export function calculateCountdown(
+  raceDate: string,
+  raceTime?: string | null
+): { days: number; hours: number; minutes: number } {
   // Validate input
   if (!raceDate) {
     console.warn('[calculateCountdown] Invalid race date: null/undefined');
     return { days: 0, hours: 0, minutes: 0 };
   }
 
-  const now = new Date();
-  const race = new Date(raceDate);
+  const raceDateTime = buildRaceDate(raceDate, raceTime);
 
-  // Check if date is valid
-  if (isNaN(race.getTime())) {
-    console.warn('[calculateCountdown] Invalid race date:', raceDate);
+  if (!raceDateTime) {
+    console.warn('[calculateCountdown] Invalid race date:', raceDate, raceTime);
     return { days: 0, hours: 0, minutes: 0 };
   }
 
-  const diff = race.getTime() - now.getTime();
+  const now = new Date();
+  const diff = raceDateTime.getTime() - now.getTime();
 
   if (diff <= 0) {
+    // Race has passed - silently return zeros to avoid log spam
     return { days: 0, hours: 0, minutes: 0 };
   }
 

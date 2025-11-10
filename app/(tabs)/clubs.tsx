@@ -8,10 +8,13 @@ import {
   Alert,
   TextInput,
   Linking,
+  ActivityIndicator,
+  ImageBackground,
+  Platform,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { useRouter } from 'expo-router';
-import { useClubs } from '@/hooks/useData';
+import { useClubs, useJoinClub, useClubDirectory } from '@/hooks/useData';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   ClubIntegrationSnapshot,
@@ -25,6 +28,7 @@ import {
   fetchUserManualClubs,
   upsertUserManualClub,
 } from '@/services/userManualClubsService';
+import MutationQueueService from '@/services/MutationQueueService';
 import {
   ClubRole,
   getClubRoleDefinition,
@@ -32,6 +36,8 @@ import {
   isManagementRole,
   normalizeClubRole,
 } from '@/types/club';
+import { ensureUuid, generateUuid } from '@/utils/uuid';
+import rhkycClubData from '@/data/demo/rhkycClubData.json';
 
 type ManualClub = {
   id: string;
@@ -41,7 +47,59 @@ type ManualClub = {
   addedAt: string;
 };
 
+type SignatureSeries = {
+  name: string;
+  season?: string;
+  blurb?: string;
+};
+
+type FleetSpotlight = {
+  name: string;
+  emoji?: string;
+  boats?: number;
+  captain?: string;
+  recentResult?: string;
+  practiceNight?: string;
+};
+
+type HistoryEntry = {
+  year: number | string;
+  title?: string;
+  detail?: string;
+};
+
+type ClubMetadataExtras = {
+  tagline?: string;
+  heroImage?: string;
+  accentColor?: string;
+  featuredStats?: Record<string, number>;
+  signatureSeries?: SignatureSeries[];
+  fleetSpotlights?: FleetSpotlight[];
+  historyTimeline?: HistoryEntry[];
+  insightsOverrides?: Partial<ClubInsightSnapshot>;
+  [key: string]: any;
+};
+
 const MANUAL_STORAGE_KEY = '@regattaflow/manual_clubs_tracker';
+const MANUAL_CLUB_COLLECTION = 'user_manual_clubs';
+
+const demoClubMetadataById: Record<string, ClubMetadataExtras> = {};
+if (rhkycClubData?.club?.id && rhkycClubData?.club?.metadata) {
+  demoClubMetadataById[rhkycClubData.club.id] = rhkycClubData.club.metadata as ClubMetadataExtras;
+}
+
+const normalizeManualClubRecords = (records: ManualClub[]) => {
+  let changed = false;
+  const clubs = records.map((club) => {
+    const normalizedId = ensureUuid(club.id);
+    if (normalizedId !== club.id) {
+      changed = true;
+      return { ...club, id: normalizedId };
+    }
+    return club;
+  });
+  return { clubs, changed };
+};
 
 const formatDate = (iso?: string | null) => {
   if (!iso) return 'TBD';
@@ -77,6 +135,40 @@ const directoryClubs = Object.values((yachtClubsDirectory as any).clubs || {}).m
     reciprocal: club.membership?.reciprocal || [],
   })
 );
+
+const inferRegionFromCountry = (country?: string, fallback?: string) => {
+  const value = (country || fallback || '').toLowerCase();
+  if (!value) return 'other';
+  if (
+    value.includes('hong kong') ||
+    value.includes('singapore') ||
+    value.includes('asia') ||
+    value.includes('australia') ||
+    value.includes('new zealand')
+  ) {
+    return 'asia-pacific';
+  }
+  if (
+    value.includes('united states') ||
+    value.includes('canada') ||
+    value.includes('america') ||
+    value.includes('brazil')
+  ) {
+    return 'americas';
+  }
+  if (
+    value.includes('united kingdom') ||
+    value.includes('uk') ||
+    value.includes('europe') ||
+    value.includes('france') ||
+    value.includes('germany') ||
+    value.includes('spain') ||
+    value.includes('italy')
+  ) {
+    return 'europe';
+  }
+  return 'other';
+};
 
 type AdminActionConfig = {
   id: string;
@@ -153,6 +245,23 @@ export default function ClubsScreen() {
   const { user } = useAuth();
   const { data: memberships, loading: membershipsLoading, error, refetch } = useClubs();
   const {
+    data: clubDirectory,
+    loading: directoryLoading,
+    error: directoryError,
+    refetch: refetchDirectory,
+  } = useClubDirectory();
+
+  // DEBUG: Log club directory state
+  useEffect(() => {
+    console.log('[ClubsScreen] Club Directory Debug:', {
+      loading: directoryLoading,
+      error: directoryError?.message,
+      dataLength: clubDirectory?.length,
+      data: clubDirectory,
+    });
+  }, [clubDirectory, directoryLoading, directoryError]);
+  const { mutateAsync: joinClub } = useJoinClub();
+  const {
     snapshots,
     loading: integrationLoading,
     error: integrationError,
@@ -165,7 +274,19 @@ export default function ClubsScreen() {
   const [manualForm, setManualForm] = useState({ name: '', relationship: '', notes: '' });
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [regionFilter, setRegionFilter] = useState<'all' | 'asia-pacific' | 'americas' | 'europe' | 'other'>('all');
+  const [connectingClubId, setConnectingClubId] = useState<string | null>(null);
   const manualClubsRef = useRef<ManualClub[]>([]);
+
+  const persistManualClubs = useCallback(async (records: ManualClub[]) => {
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(records));
+    } catch (storageError) {
+      console.warn('[ClubsScreen] Failed to persist manual clubs', storageError);
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -177,7 +298,18 @@ export default function ClubsScreen() {
         if (stored && isMounted) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) {
-            setManualClubs(parsed);
+            const { clubs, changed } = normalizeManualClubRecords(parsed);
+            if (isMounted) {
+              setManualClubs(clubs);
+            }
+            if (changed) {
+              await persistManualClubs(clubs);
+              try {
+                await MutationQueueService.clearCollection(MANUAL_CLUB_COLLECTION);
+              } catch (queueError) {
+                console.warn('[ClubsScreen] Failed to reset manual club queue', queueError);
+              }
+            }
           }
         }
       } catch (storageError) {
@@ -188,20 +320,116 @@ export default function ClubsScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [persistManualClubs]);
 
   useEffect(() => {
     manualClubsRef.current = manualClubs;
   }, [manualClubs]);
 
-  const persistManualClubs = useCallback(async (records: ManualClub[]) => {
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      await AsyncStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(records));
-    } catch (storageError) {
-      console.warn('[ClubsScreen] Failed to persist manual clubs', storageError);
-    }
+  const directoryMetaIndex = useMemo(() => {
+    const map = new Map<string, (typeof directoryClubs)[number]>();
+    directoryClubs.forEach((club) => {
+      const keys = [
+        String(club.id || '').toLowerCase(),
+        club.name?.toLowerCase(),
+        club.headquarters?.toLowerCase(),
+      ].filter(Boolean) as string[];
+      keys.forEach((key) => map.set(key, club));
+    });
+    return map;
   }, []);
+
+  const membershipByClubId = useMemo(() => {
+    const map = new Map<string, any>();
+    (memberships || []).forEach((membership: any) => {
+      const id =
+        membership?.club_id ||
+        membership?.clubs?.id ||
+        membership?.club?.id ||
+        membership?.yacht_clubs?.id ||
+        membership?.club?.club_id;
+      if (id) {
+        map.set(id, membership);
+      }
+    });
+    return map;
+  }, [memberships]);
+
+  const regionFilters = useMemo(
+    () => [
+      { id: 'all' as const, label: 'All' },
+      { id: 'asia-pacific' as const, label: 'Asia Pacific' },
+      { id: 'americas' as const, label: 'Americas' },
+      { id: 'europe' as const, label: 'Europe' },
+      { id: 'other' as const, label: 'Global' },
+    ],
+    []
+  );
+
+  const enrichedDirectory = useMemo(() => {
+    console.log('[ClubsScreen] Enriching directory:', {
+      hasClubDirectory: !!clubDirectory,
+      clubDirectoryLength: clubDirectory?.length,
+      clubDirectorySample: clubDirectory?.[0],
+    });
+
+    if (!clubDirectory) return [];
+
+    return (clubDirectory as any[]).map((club) => {
+      const keyCandidates = [
+        String(club.id || '').toLowerCase(),
+        String(club.short_name || '').toLowerCase(),
+        String(club.name || '').toLowerCase(),
+      ].filter(Boolean) as string[];
+
+      let meta: (typeof directoryClubs)[number] | undefined;
+      for (const key of keyCandidates) {
+        if (directoryMetaIndex.has(key)) {
+          meta = directoryMetaIndex.get(key);
+          break;
+        }
+      }
+
+      const region = meta?.country
+        ? inferRegionFromCountry(meta.country, meta.region)
+        : inferRegionFromCountry(club.country, meta?.region);
+
+      return {
+        ...club,
+        meta,
+        region: region || 'other',
+        country: club.country || meta?.country || '',
+        website: club.website || meta?.website || '',
+      };
+    });
+  }, [clubDirectory, directoryMetaIndex]);
+
+  const filteredDirectory = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = enrichedDirectory.filter((club: any) => {
+      const matchesQuery =
+        !query ||
+        [club.name, club.short_name, club.country, club.meta?.headquarters, club.meta?.tagline]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(query));
+
+      const matchesRegion = regionFilter === 'all' || club.region === regionFilter;
+
+      return matchesQuery && matchesRegion;
+    });
+
+    console.log('[ClubsScreen] Filtered directory:', {
+      enrichedLength: enrichedDirectory.length,
+      filteredLength: filtered.length,
+      searchQuery,
+      regionFilter,
+      sampleFiltered: filtered[0],
+    });
+
+    return filtered;
+  }, [enrichedDirectory, searchQuery, regionFilter]);
+
+  const displayedDirectory = useMemo(() => filteredDirectory.slice(0, 10), [filteredDirectory]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -240,7 +468,22 @@ export default function ClubsScreen() {
         await persistManualClubs(remoteClubs);
       } else if (manualClubsRef.current.length > 0) {
         const syncResult = await bulkUpsertUserManualClubs(user.id, manualClubsRef.current);
-        if (syncResult.error && !syncResult.missingTable) {
+        if (syncResult.failedIds?.length) {
+          const remaining = manualClubsRef.current.filter(
+            (club) => !syncResult.failedIds?.includes(club.id)
+          );
+          setManualClubs(remaining);
+          await persistManualClubs(remaining);
+          try {
+            await MutationQueueService.clearCollection(MANUAL_CLUB_COLLECTION);
+          } catch (queueError) {
+            console.warn('[ClubsScreen] Failed to clear manual club queue after RLS violation', queueError);
+          }
+          Alert.alert(
+            'Cleaned up personal clubs',
+            'Some locally stored clubs could not be synced and were removed because they belonged to a different account.'
+          );
+        } else if (syncResult.error && !syncResult.missingTable) {
           console.warn('[ClubsScreen] Failed to push local manual clubs to Supabase', syncResult.error);
         }
       }
@@ -290,6 +533,25 @@ export default function ClubsScreen() {
   const roleDefinition = selectedRole ? getClubRoleDefinition(selectedRole) : null;
   const hasAdminPrivileges = selectedRole ? hasAdminAccess(selectedRole) : false;
   const hasManagementPrivileges = selectedRole ? isManagementRole(selectedRole) : false;
+  const resolvedClubMetadata = useMemo<ClubMetadataExtras | null>(() => {
+    if (!selectedSnapshot) return null;
+    const providedMeta = (selectedSnapshot.club.metadata || null) as ClubMetadataExtras | null;
+    if (providedMeta && Object.keys(providedMeta).length > 0) {
+      return providedMeta;
+    }
+    return demoClubMetadataById[selectedSnapshot.clubId] || null;
+  }, [selectedSnapshot]);
+  const resolvedInsights = useMemo<ClubInsightSnapshot | null>(() => {
+    if (!selectedSnapshot) return null;
+    const overrides = resolvedClubMetadata?.insightsOverrides;
+    if (!overrides) {
+      return selectedSnapshot.insights;
+    }
+    return {
+      ...selectedSnapshot.insights,
+      ...overrides,
+    };
+  }, [resolvedClubMetadata, selectedSnapshot]);
 
   const upcomingVolunteers = useMemo(() => {
     if (!selectedSnapshot) return [];
@@ -311,9 +573,9 @@ export default function ClubsScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.allSettled([refetch?.(), refetchSnapshots()]);
+    await Promise.allSettled([refetch?.(), refetchSnapshots(), refetchDirectory()]);
     setRefreshing(false);
-  }, [refetch, refetchSnapshots]);
+  }, [refetch, refetchSnapshots, refetchDirectory]);
 
   const handleManualAdd = useCallback(async () => {
     const name = manualForm.name.trim();
@@ -338,7 +600,7 @@ export default function ClubsScreen() {
 
     try {
       const newClub: ManualClub = {
-        id: `${Date.now()}`,
+        id: generateUuid(),
         name,
         relationship,
         notes: notes || undefined,
@@ -392,7 +654,7 @@ export default function ClubsScreen() {
       const next: ManualClub[] = [
         ...manualClubs,
         {
-          id: `${Date.now()}`,
+          id: generateUuid(),
           name,
           relationship: 'Interested',
           addedAt: new Date().toISOString(),
@@ -412,6 +674,31 @@ export default function ClubsScreen() {
       Alert.alert('Tracked', `${name} was added to your personal club list.`);
     },
     [manualClubs, persistManualClubs, user?.id]
+  );
+
+  const handleConnectClub = useCallback(
+    async (clubId: string, clubName: string) => {
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Sign in to connect with clubs and sync their schedules.');
+        return;
+      }
+
+      try {
+        setConnectingClubId(clubId);
+        await joinClub({ clubId, membershipType: 'member' });
+        Alert.alert(
+          'Connection requested',
+          `We've notified ${clubName}. Their calendars will appear once the club accepts your connection.`
+        );
+        await Promise.allSettled([refetch?.(), refetchSnapshots()]);
+      } catch (err: any) {
+        console.error('[ClubsScreen] Failed to connect to club:', err);
+        Alert.alert('Unable to connect', err?.message || 'Please try again later.');
+      } finally {
+        setConnectingClubId(null);
+      }
+    },
+    [joinClub, refetch, refetchSnapshots, user?.id]
   );
 
   const openWebsite = useCallback(async (url: string) => {
@@ -498,6 +785,7 @@ export default function ClubsScreen() {
       return null;
     }
 
+    const insights = resolvedInsights ?? selectedSnapshot.insights;
     const actions = ADMIN_ACTIONS.filter((action) => {
       if (!action.roles || action.roles.length === 0) {
         return true;
@@ -514,17 +802,17 @@ export default function ClubsScreen() {
       {
         id: 'open-entries',
         label: 'Open entries',
-        value: selectedSnapshot.insights.openRegistrations ?? 0,
+        value: insights.openRegistrations ?? 0,
       },
       {
         id: 'volunteer-needs',
         label: 'Volunteer shifts',
-        value: selectedSnapshot.insights.volunteerNeeds ?? 0,
+        value: insights.volunteerNeeds ?? 0,
       },
       {
         id: 'docs',
         label: 'New documents',
-        value: selectedSnapshot.insights.newDocuments ?? 0,
+        value: insights.newDocuments ?? 0,
       },
     ];
 
@@ -539,18 +827,21 @@ export default function ClubsScreen() {
         </View>
 
         <View style={styles.adminStatsRow}>
-          {adminStats.map((stat, index) => (
-            <View
-              key={stat.id}
-              style={[
-                styles.adminStatCard,
-                index === adminStats.length - 1 && { marginRight: 0 },
-              ]}
-            >
-              <Text style={styles.adminStatValue}>{stat.value}</Text>
-              <Text style={styles.adminStatLabel}>{stat.label}</Text>
-            </View>
-          ))}
+          {adminStats.map((stat, index) => {
+            const cardStyle = StyleSheet.flatten([
+              styles.adminStatCard,
+              index === adminStats.length - 1 ? { marginRight: 0 } : null,
+            ]);
+            return (
+              <View
+                key={stat.id}
+                style={cardStyle}
+              >
+                <Text style={styles.adminStatValue}>{stat.value}</Text>
+                <Text style={styles.adminStatLabel}>{stat.label}</Text>
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.adminActionGrid}>
@@ -573,10 +864,11 @@ export default function ClubsScreen() {
   const renderInsightCards = () => {
     if (!selectedSnapshot) return null;
 
+    const insights = resolvedInsights ?? selectedSnapshot.insights;
     const cards = [
       {
         id: 'next-action',
-        title: selectedSnapshot.insights.nextAction || 'All caught up',
+        title: insights.nextAction || 'All caught up',
         subtitle: selectedSnapshot.membership.membershipType
           ? `Membership: ${selectedSnapshot.membership.membershipType}`
           : 'Stay active with your club',
@@ -585,21 +877,21 @@ export default function ClubsScreen() {
       },
       {
         id: 'open-registrations',
-        title: `${selectedSnapshot.insights.openRegistrations} open registrations`,
+        title: `${insights.openRegistrations} open registrations`,
         subtitle: 'Upcoming race entries ready for you',
         accent: '#34C759',
         emoji: '🏁',
       },
       {
         id: 'volunteer-needs',
-        title: `${selectedSnapshot.insights.volunteerNeeds} volunteer shifts`,
+        title: `${insights.volunteerNeeds} volunteer shifts`,
         subtitle: 'Help keep the club running smoothly',
         accent: '#FF9F0A',
         emoji: '🛠️',
       },
       {
         id: 'documents',
-        title: `${selectedSnapshot.insights.newDocuments} new documents`,
+        title: `${insights.newDocuments} new documents`,
         subtitle: 'NORs, SIs, and club bulletins',
         accent: '#AF52DE',
         emoji: '📄',
@@ -609,12 +901,183 @@ export default function ClubsScreen() {
     return (
       <View style={styles.insightGrid}>
         {cards.map((card) => (
-          <View key={card.id} style={[styles.insightCard, { borderColor: card.accent }]}>
+          <View
+            key={card.id}
+            style={StyleSheet.flatten([styles.insightCard, { borderColor: card.accent }])}
+          >
             <Text style={styles.insightEmoji}>{card.emoji}</Text>
             <Text style={styles.insightTitle}>{card.title}</Text>
             <Text style={styles.insightSubtitle}>{card.subtitle}</Text>
           </View>
         ))}
+      </View>
+    );
+  };
+
+  const renderClubHero = () => {
+    if (!selectedSnapshot) return null;
+    const meta = resolvedClubMetadata;
+    const insights = resolvedInsights ?? selectedSnapshot.insights;
+    const stats: { id: string; label: string; value: string }[] = [];
+
+    if (meta?.featuredStats) {
+      Object.entries(meta.featuredStats).forEach(([label, value]) => {
+        if (stats.length >= 3) return;
+        const prettyLabel = label.replace(/_/g, ' ');
+        stats.push({
+          id: label,
+          label: prettyLabel.charAt(0).toUpperCase() + prettyLabel.slice(1),
+          value: typeof value === 'number' ? value.toLocaleString() : String(value),
+        });
+      });
+    }
+
+    if (!stats.some((stat) => stat.id === 'regattas')) {
+      stats.push({
+        id: 'regattas',
+        label: 'Upcoming regattas',
+        value: `${selectedSnapshot.regattas.length}`,
+      });
+    }
+
+    if (!stats.some((stat) => stat.id === 'volunteers')) {
+      stats.push({
+        id: 'volunteers',
+        label: 'Volunteer shifts',
+        value: `${insights.volunteerNeeds ?? 0}`,
+      });
+    }
+
+    const statsToDisplay = stats.slice(0, 3);
+    const locationLabel =
+      selectedSnapshot.club.location ||
+      selectedSnapshot.club.country ||
+      'RegattaFlow club';
+    const website = selectedSnapshot.club.website;
+
+    return (
+      <View style={[styles.section, styles.heroSection]}>
+        <View style={styles.heroCard}>
+          {meta?.heroImage ? (
+            <ImageBackground
+              source={{ uri: meta.heroImage }}
+              style={styles.heroImage}
+              imageStyle={styles.heroImageInner}
+            >
+              <View style={styles.heroOverlay} />
+            </ImageBackground>
+          ) : (
+            <View style={[styles.heroImage, styles.heroImageFallback]} />
+          )}
+          <View style={styles.heroContent}>
+            <Text style={styles.heroEyebrow}>{locationLabel}</Text>
+            <Text style={styles.heroTitle}>{selectedSnapshot.club.name}</Text>
+            <Text style={styles.heroTagline}>
+              {meta?.tagline || 'Connected via RegattaFlow'}
+            </Text>
+            {statsToDisplay.length > 0 && (
+              <View style={styles.heroStatsRow}>
+                {statsToDisplay.map((stat) => (
+                  <View key={stat.id} style={styles.heroStatCard}>
+                    <Text style={styles.heroStatValue}>{stat.value}</Text>
+                    <Text style={styles.heroStatLabel}>{stat.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {website && (
+              <TouchableOpacity
+                style={styles.heroLinkButton}
+                onPress={() => openWebsite(website)}
+              >
+                <Text style={styles.heroLinkText}>Visit club site →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderSignatureSeries = () => {
+    if (!selectedSnapshot || !resolvedClubMetadata?.signatureSeries?.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Signature regattas</Text>
+          <Text style={styles.sectionHeaderMeta}>Club calendar highlights</Text>
+        </View>
+        <View style={styles.signatureGrid}>
+          {resolvedClubMetadata.signatureSeries.map((series) => (
+            <View key={series.name} style={styles.signatureCard}>
+              <Text style={styles.signatureTitle}>{series.name}</Text>
+              {series.season && <Text style={styles.signatureMeta}>{series.season}</Text>}
+              {series.blurb && <Text style={styles.signatureBlurb}>{series.blurb}</Text>}
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  const renderFleetSpotlights = () => {
+    if (!selectedSnapshot || !resolvedClubMetadata?.fleetSpotlights?.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Fleet spotlights</Text>
+          <Text style={styles.sectionHeaderMeta}>Programs featured by the club</Text>
+        </View>
+        <View style={styles.spotlightGrid}>
+          {resolvedClubMetadata.fleetSpotlights.map((fleet) => {
+            const metaPieces = [];
+            if (fleet.boats) metaPieces.push(`${fleet.boats} boats`);
+            if (fleet.practiceNight) metaPieces.push(fleet.practiceNight);
+            return (
+              <View key={fleet.name} style={styles.spotlightCard}>
+                <Text style={styles.spotlightEmoji}>{fleet.emoji || '⛵️'}</Text>
+                <Text style={styles.spotlightTitle}>{fleet.name}</Text>
+                {metaPieces.length > 0 && <Text style={styles.spotlightMeta}>{metaPieces.join(' • ')}</Text>}
+                {fleet.recentResult && <Text style={styles.spotlightDetail}>{fleet.recentResult}</Text>}
+                {fleet.captain && <Text style={styles.spotlightDetail}>Lead: {fleet.captain}</Text>}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderHistoryTimeline = () => {
+    if (!selectedSnapshot || !resolvedClubMetadata?.historyTimeline?.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Harbour history</Text>
+          <Text style={styles.sectionHeaderMeta}>Moments shaping the clubhouse</Text>
+        </View>
+        <View style={styles.timelineCard}>
+          {resolvedClubMetadata.historyTimeline.map((entry, index) => (
+            <View key={`${entry.year}-${index}`} style={styles.timelineItem}>
+              <View style={styles.timelineYearBubble}>
+                <Text style={styles.timelineYearText}>{entry.year}</Text>
+              </View>
+              <View style={styles.timelineContent}>
+                {entry.title && <Text style={styles.timelineTitle}>{entry.title}</Text>}
+                {entry.detail && <Text style={styles.timelineDetail}>{entry.detail}</Text>}
+              </View>
+            </View>
+          ))}
+        </View>
       </View>
     );
   };
@@ -634,7 +1097,7 @@ export default function ClubsScreen() {
           <Text style={styles.listItemTitle}>{regatta.name}</Text>
           <Text style={styles.listItemMeta}>
             {formatDate(regatta.startDate)}
-            {regatta.endDate ? ` • Ends ${formatDate(regatta.endDate)}` : ''}
+            {regatta.endDate && ` • Ends ${formatDate(regatta.endDate)}`}
           </Text>
           {regatta.eventType && (
             <Text style={styles.listItemTag}>{regatta.eventType.replace(/_/g, ' ')}</Text>
@@ -794,19 +1257,20 @@ export default function ClubsScreen() {
             >
               {snapshots.map((snapshot) => {
                 const isSelected = snapshot.clubId === selectedClubId;
+                const chipStyle = StyleSheet.flatten([
+                  styles.clubChip,
+                  isSelected ? { backgroundColor: '#0A84FF' } : null,
+                ]);
                 return (
                   <TouchableOpacity
                     key={snapshot.clubId}
-                    style={[
-                      styles.clubChip,
-                      isSelected && { backgroundColor: '#0A84FF' },
-                    ]}
+                    style={chipStyle}
                     onPress={() => setSelectedClubId(snapshot.clubId)}
                   >
-                    <Text style={[styles.clubChipName, isSelected && { color: '#fff' }]}>
+                    <Text style={isSelected ? styles.clubChipNameSelected : styles.clubChipName}>
                       {snapshot.club.name}
                     </Text>
-                    <Text style={[styles.clubChipMeta, isSelected && { color: '#E5F0FF' }]}>
+                    <Text style={isSelected ? styles.clubChipMetaSelected : styles.clubChipMeta}>
                       {snapshot.membership.membershipType || 'Member'}
                     </Text>
                   </TouchableOpacity>
@@ -835,29 +1299,39 @@ export default function ClubsScreen() {
                     </Text>
                   )}
                 </View>
-                <TouchableOpacity
-                  style={[
+                {(() => {
+                  const workspaceButtonStyle = StyleSheet.flatten([
                     styles.primaryButton,
-                    !selectedSnapshot && { opacity: 0.6 },
-                    !hasManagementPrivileges && { backgroundColor: '#1f5fbf' },
-                  ]}
-                  onPress={() => {
-                    if (!selectedSnapshot) return;
-                    router.push({
-                      pathname: '/club-dashboard',
-                      params: { clubId: selectedSnapshot.clubId },
-                    });
-                  }}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    {hasManagementPrivileges ? 'Open Club Workspace' : 'View Club Workspace'}
-                  </Text>
-                </TouchableOpacity>
+                    !selectedSnapshot ? { opacity: 0.6 } : null,
+                    !hasManagementPrivileges ? { backgroundColor: '#1f5fbf' } : null,
+                  ]);
+                  return (
+                    <TouchableOpacity
+                      style={workspaceButtonStyle}
+                      onPress={() => {
+                        if (!selectedSnapshot) return;
+                        router.push({
+                          pathname: '/club-dashboard',
+                          params: { clubId: selectedSnapshot.clubId },
+                        });
+                      }}
+                    >
+                      <Text style={styles.primaryButtonText}>
+                        {hasManagementPrivileges ? 'Open Club Workspace' : 'View Club Workspace'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             )}
 
+            {hasConnectedClub && selectedSnapshot && (<>
+              {renderClubHero()}
+              {renderSignatureSeries()}
+              {renderFleetSpotlights()}
+              {renderHistoryTimeline()}
+            </>)}
             {renderAdminPanel()}
-
             {renderInsightCards()}
           </View>
         )}
@@ -928,7 +1402,7 @@ export default function ClubsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              Personal Club Tracker {manualClubs.length > 0 ? `(${manualClubs.length})` : ''}
+              Personal Club Tracker {manualClubs.length > 0 && `(${manualClubs.length})`}
             </Text>
             <TouchableOpacity onPress={() => setShowManualForm((visible) => !visible)}>
               <Text style={styles.sectionLink}>{showManualForm ? 'Cancel' : 'Add club +'}</Text>
@@ -952,7 +1426,7 @@ export default function ClubsScreen() {
                 placeholderTextColor="#999"
               />
               <TextInput
-                style={[styles.textInput, styles.textArea]}
+                style={StyleSheet.flatten([styles.textInput, styles.textArea])}
                 placeholder="Key details (locker combo, upcoming visit, gate code...)"
                 multiline
                 value={manualForm.notes}
@@ -960,7 +1434,10 @@ export default function ClubsScreen() {
                 placeholderTextColor="#999"
               />
               <TouchableOpacity
-                style={[styles.primaryButton, manualSaving && { opacity: 0.6 }]}
+                style={StyleSheet.flatten([
+                  styles.primaryButton,
+                  manualSaving ? { opacity: 0.6 } : null,
+                ])}
                 onPress={handleManualAdd}
                 disabled={manualSaving}
               >
@@ -999,57 +1476,144 @@ export default function ClubsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Browse Clubs & Associations</Text>
-            <TouchableOpacity onPress={() => router.push('/clubs')}>
-              <Text style={styles.sectionLink}>Full directory →</Text>
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Discover Yacht Clubs</Text>
+            {directoryLoading && <ActivityIndicator size="small" color="#0284c7" />}
           </View>
+          <Text style={styles.sectionCopy}>
+            Connect with clubs you sail with to sync their race calendars, fleets, and volunteer
+            opportunities into your Add Race workflow.
+          </Text>
 
-          {directoryClubs.slice(0, 6).map((club) => (
-            <View key={club.id} style={styles.directoryCard}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.directoryName}>{club.name}</Text>
-                <Text style={styles.directoryMeta}>
-                  {club.headquarters ? `${club.headquarters}` : club.country}
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by club name, initials, or country"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#94a3b8"
+          />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {regionFilters.map((filter) => (
+              <TouchableOpacity
+                key={filter.id}
+                style={StyleSheet.flatten([
+                  styles.filterChip,
+                  regionFilter === filter.id ? styles.filterChipActive : null,
+                ])}
+                onPress={() => setRegionFilter(filter.id)}
+              >
+                <Text
+                  style={StyleSheet.flatten([
+                    styles.filterChipText,
+                    regionFilter === filter.id ? styles.filterChipTextActive : null,
+                  ])}
+                >
+                  {filter.label}
                 </Text>
-                {club.founded && (
-                  <Text style={styles.directoryMeta}>Founded {club.founded}</Text>
-                )}
-                {club.tagline && <Text style={styles.directoryNotes}>{club.tagline}</Text>}
-                {club.membershipTotal && (
-                  <Text style={styles.directoryMeta}>
-                    {club.membershipTotal.toLocaleString()} members
-                  </Text>
-                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {directoryError && (
+            <Text style={styles.errorText}>
+              We couldn't load the club directory. Pull to refresh or try again shortly.
+            </Text>
+          )}
+
+          {displayedDirectory.length === 0 ? (
+            directoryLoading ? (
+              <ActivityIndicator style={{ marginTop: 16 }} color="#0284c7" />
+            ) : (
+              <View style={styles.emptyList}>
+                <Text style={styles.emptyListText}>
+                  No clubs match your search yet. Try a different name or region.
+                </Text>
               </View>
-              <View style={styles.directoryActions}>
-                <TouchableOpacity style={styles.secondaryButton} onPress={() => handleQuickTrack(club.name)}>
-                  <Text style={styles.secondaryButtonText}>Track</Text>
-                </TouchableOpacity>
-                {club.website && (
+            )
+          ) : (
+            displayedDirectory.map((club: any) => {
+              const membership = membershipByClubId.get(club.id);
+              const isConnected = Boolean(membership);
+              const isPending = isConnected && membership?.status && membership.status !== 'active';
+              const buttonLabel = isConnected
+                ? isPending
+                  ? 'Pending'
+                  : 'Connected'
+                : connectingClubId === club.id
+                ? 'Connecting…'
+                : 'Connect';
+              return (
+                <View key={club.id} style={styles.discoveryCard}>
+                  {[
+                    <View key="details" style={styles.discoveryDetails}>
+                      <View style={styles.discoveryHeader}>
+                        <Text style={styles.directoryName}>{club.name}</Text>
+                        {club.region && club.region !== 'other' && (
+                          <View style={styles.regionPill}>
+                            <Text style={styles.regionPillText}>
+                              {
+                                {
+                                  'asia-pacific': 'Asia Pacific',
+                                  americas: 'Americas',
+                                  europe: 'Europe',
+                                  other: 'Global',
+                                }[club.region] || 'Global'
+                              }
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.directoryMeta}>
+                        {club.meta?.headquarters || club.address || club.country || 'Location TBD'}
+                      </Text>
+                      {club.meta?.tagline && (
+                        <Text style={styles.directoryNotes}>{club.meta.tagline}</Text>
+                      )}
+                      {club.meta?.membershipTotal && (
+                        <Text style={styles.directoryMeta}>
+                          {club.meta.membershipTotal.toLocaleString()} members
+                        </Text>
+                      )}
+                    </View>,
+                    <View key="actions" style={styles.discoveryActions}>
+                      <TouchableOpacity
+                        style={StyleSheet.flatten([
+                          styles.connectButton,
+                          isConnected || connectingClubId === club.id ? styles.connectButtonDisabled : null,
+                        ])}
+                    disabled={isConnected || connectingClubId === club.id}
+                    onPress={() => handleConnectClub(club.id, club.name)}
+                  >
+                    {connectingClubId === club.id ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.connectButtonText}>{buttonLabel}</Text>
+                    )}
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.secondaryButton}
-                    onPress={() => openWebsite(club.website)}
+                    onPress={() => handleQuickTrack(club.name)}
                   >
-                    <Text style={styles.secondaryButtonText}>Website</Text>
+                    <Text style={styles.secondaryButtonText}>Track</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ))}
-
-          <View style={styles.directoryFooter}>
-            <Text style={styles.directoryFooterText}>
-              Can't find your club? Tap below and we'll generate an invite packet for the race
-              officers.
-            </Text>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => router.push('/support')}
-            >
-              <Text style={styles.primaryButtonText}>Invite my club</Text>
-            </TouchableOpacity>
-          </View>
+                      {(club.website || club.meta?.website) && (
+                        <TouchableOpacity
+                          style={styles.secondaryButton}
+                          onPress={() => openWebsite(club.website || club.meta?.website)}
+                        >
+                          <Text style={styles.secondaryButtonText}>Website</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>,
+                  ]}
+                </View>
+              );
+            })
+          )}
         </View>
 
         {__DEV__ && error && (
@@ -1095,11 +1659,95 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 8px 20px rgba(15, 23, 42, 0.08)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 6,
+          elevation: 2,
+        }),
+  },
+  heroSection: {
+    padding: 0,
+    backgroundColor: 'transparent',
+    elevation: 0,
+  },
+  heroCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#081423',
+  },
+  heroImage: {
+    width: '100%',
+    height: 180,
+  },
+  heroImageInner: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  heroImageFallback: {
+    backgroundColor: '#0A2540',
+  },
+  heroOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  heroContent: {
+    padding: 20,
+    gap: 6,
+  },
+  heroEyebrow: {
+    color: '#9cc9ff',
+    fontSize: 13,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: '700',
+  },
+  heroTagline: {
+    color: '#d7e8ff',
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  heroStatCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  heroStatValue: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  heroStatLabel: {
+    color: '#d7e8ff',
+    fontSize: 12,
+    marginTop: 4,
+    textTransform: 'capitalize',
+  },
+  heroLinkButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  heroLinkText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1116,10 +1764,116 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#222',
   },
+  sectionCopy: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
   sectionLink: {
     fontSize: 14,
     color: '#0A84FF',
     fontWeight: '500',
+  },
+  signatureGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  signatureCard: {
+    flexBasis: '48%',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+  },
+  signatureTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  signatureMeta: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  signatureBlurb: {
+    fontSize: 13,
+    color: '#475569',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  spotlightGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  spotlightCard: {
+    flexBasis: '48%',
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#051933',
+  },
+  spotlightEmoji: {
+    fontSize: 28,
+    color: '#fff',
+  },
+  spotlightTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  spotlightMeta: {
+    color: '#c3ddff',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  spotlightDetail: {
+    color: '#f1f5f9',
+    fontSize: 13,
+    marginTop: 6,
+  },
+  timelineCard: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 12,
+  },
+  timelineYearBubble: {
+    backgroundColor: '#0F172A',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  timelineYearText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  timelineContent: {
+    flex: 1,
+  },
+  timelineTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  timelineDetail: {
+    fontSize: 13,
+    color: '#475569',
+    marginTop: 4,
+    lineHeight: 18,
   },
   selectorStrip: {
     gap: 12,
@@ -1136,10 +1890,60 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#222',
   },
+  clubChipNameSelected: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
   clubChipMeta: {
     fontSize: 12,
     color: '#666',
     marginTop: 4,
+  },
+  clubChipMetaSelected: {
+    fontSize: 12,
+    color: '#E5F0FF',
+    marginTop: 4,
+  },
+  searchInput: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0f172a',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#fff',
+  },
+  filterChipActive: {
+    backgroundColor: '#0A84FF',
+    borderColor: '#0A84FF',
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#B91C1C',
+    marginBottom: 8,
   },
   membershipCard: {
     flexDirection: 'row',
@@ -1370,6 +2174,30 @@ const styles = StyleSheet.create({
     minHeight: 88,
     textAlignVertical: 'top',
   },
+  discoveryCard: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  discoveryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  regionPill: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  regionPillText: {
+    fontSize: 11,
+    color: '#0369A1',
+    fontWeight: '600',
+  },
   directoryCard: {
     flexDirection: 'row',
     gap: 12,
@@ -1397,6 +2225,27 @@ const styles = StyleSheet.create({
   directoryActions: {
     justifyContent: 'center',
     gap: 8,
+  },
+  discoveryDetails: {
+    flex: 1,
+  },
+  discoveryActions: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  connectButton: {
+    backgroundColor: '#0A84FF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  connectButtonDisabled: {
+    backgroundColor: '#94A3B8',
+  },
+  connectButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   directoryFooter: {
     marginTop: 12,

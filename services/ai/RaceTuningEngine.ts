@@ -97,25 +97,19 @@ class RaceTuningEngine {
    * NEW: Generate AI-only recommendations without any tuning guides
    */
   async generateAIOnlyRecommendations(request: RaceTuningRequest): Promise<RaceTuningRecommendation[]> {
-    console.log('╔═════════════════════════════════════════════════════╗');
-    console.log('║ RaceTuningEngine.generateAIOnlyRecommendations     ║');
-    console.log('╚═════════════════════════════════════════════════════╝');
-
-    console.log('[RaceTuningEngine] 🔑 hasValidApiKey:', this.hasValidApiKey);
+    logger.debug('generateAIOnlyRecommendations invoked', {
+      hasValidApiKey: this.hasValidApiKey,
+    });
 
     if (!this.hasValidApiKey) {
-      console.error('[RaceTuningEngine] ❌ NO API KEY - Returning empty array');
       logger.warn('AI rig tuning unavailable: No Anthropic API key configured');
       return [];
     }
 
-    console.log('[RaceTuningEngine] ✅ API key is valid');
-    console.log('[RaceTuningEngine] 🔄 Ensuring skill initialized...');
-
-    logger.debug('Starting AI-only rig tuning generation');
+    logger.debug('Starting AI-only rig tuning generation; ensuring skill is initialized');
     await this.ensureSkillInitialized();
 
-    console.log('[RaceTuningEngine] ✅ Skill initialization complete');
+    logger.debug('Skill initialization complete');
 
     const {
       classId,
@@ -143,9 +137,11 @@ class RaceTuningEngine {
       currentDirection
     };
 
-    console.log('[RaceTuningEngine] 📊 Weather Context:', weatherContext);
-    console.log('[RaceTuningEngine] 🏆 Boat Class:', className || classId);
-    console.log('[RaceTuningEngine] 🧭 Point of Sail:', pointsOfSail);
+    logger.debug('Weather context for AI-only tuning', weatherContext);
+    logger.debug('AI-only tuning metadata', {
+      boatClass: className || classId,
+      pointsOfSail,
+    });
 
     const instruction = `You are the Rig Tuning Analyst skill with deep expertise in boat-specific sail trim and rig setup.
 
@@ -220,8 +216,9 @@ Rules:
 
 Generate the recommendation now:`;
 
-    console.log('[RaceTuningEngine] 📡 Calling Anthropic API...');
-    console.log('[RaceTuningEngine] 🎯 Model: claude-3-5-haiku-20241022');
+    logger.debug('Calling Anthropic API for AI-only recommendations', {
+      model: 'claude-3-5-haiku-20241022',
+    });
 
     try {
       const response = await this.anthropic.beta.messages.create({
@@ -239,12 +236,11 @@ Generate the recommendation now:`;
         }]
       });
 
-      console.log('[RaceTuningEngine] ✅ API call successful');
-      console.log('[RaceTuningEngine] 📦 Response received:', {
+      logger.debug('Anthropic API call successful', {
         id: response.id,
         model: response.model,
         stopReason: response.stop_reason,
-        contentBlocks: response.content?.length || 0
+        contentBlocks: response.content?.length || 0,
       });
 
       const textBlocks = (response.content as Array<{ type: string; text?: string }>)
@@ -252,57 +248,49 @@ Generate the recommendation now:`;
         .map(block => block.text!.trim())
         .filter(Boolean);
 
-      console.log('[RaceTuningEngine] 📝 Text blocks found:', textBlocks.length);
-
       const combinedText = textBlocks.join('\n').trim();
-      console.log('[RaceTuningEngine] 📄 Combined text length:', combinedText.length);
-      console.log('[RaceTuningEngine] 📄 Combined text preview:', combinedText.substring(0, 200) + '...');
+      logger.debug('Anthropic response text summary', {
+        blockCount: textBlocks.length,
+        combinedLength: combinedText.length,
+        preview: combinedText.substring(0, 200) + '...',
+      });
 
       if (!combinedText) {
-        console.error('[RaceTuningEngine] ❌ No content in response');
+        logger.error('Anthropic response contained no content');
         throw new Error('AI rig tuning returned no content');
       }
 
-      console.log('[RaceTuningEngine] 🔍 Searching for JSON array...');
+      logger.debug('Searching Anthropic response for JSON array');
       const jsonMatch = combinedText.match(/\[[\s\S]*\]/);
 
       if (!jsonMatch) {
-        console.error('[RaceTuningEngine] ❌ No JSON array found in response');
-        console.error('[RaceTuningEngine] 📄 Full text:', combinedText);
+        logger.error('Unable to locate JSON array in Anthropic response', { combinedText });
         throw new Error('Unable to parse JSON from AI rig tuning response');
       }
 
-      console.log('[RaceTuningEngine] ✅ JSON array found, parsing...');
+      logger.debug('JSON array located; parsing response');
       const parsed = JSON.parse(jsonMatch[0]);
 
-      console.log('[RaceTuningEngine] 📊 Parsed result:', {
+      logger.debug('Parsed Anthropic payload', {
         isArray: Array.isArray(parsed),
         length: Array.isArray(parsed) ? parsed.length : 0,
-        firstItem: Array.isArray(parsed) ? parsed[0] : null
+        firstItem: Array.isArray(parsed) ? parsed[0] : null,
       });
 
       if (!Array.isArray(parsed)) {
-        console.error('[RaceTuningEngine] ❌ Parsed result is not an array');
+        logger.error('Parsed Anthropic result is not an array');
         throw new Error('AI rig tuning response was not an array');
       }
 
-      console.log('[RaceTuningEngine] 🔄 Transforming recommendations...');
+      logger.debug('Transforming AI-only recommendations');
       const recommendations = parsed.map(item => this.transformAIOnlyRecommendation(item));
 
-      console.log('[RaceTuningEngine] ✅ Transformation complete');
-      console.log('[RaceTuningEngine] 📋 Returning', recommendations.length, 'recommendation(s)');
+      logger.debug('AI-only recommendation transformation complete', {
+        count: recommendations.length,
+      });
 
       return recommendations;
     } catch (error) {
-      console.error('╔═════════════════════════════════════════════════════╗');
-      console.error('║ ANTHROPIC API ERROR                                ║');
-      console.error('╚═════════════════════════════════════════════════════╝');
-      console.error('[RaceTuningEngine] ❌ Error:', error);
-      console.error('[RaceTuningEngine] 📋 Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown',
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined
-      });
       logger.error('AI-only rig tuning generation failed', error);
       throw error;
     }

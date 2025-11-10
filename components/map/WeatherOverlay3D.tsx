@@ -1,12 +1,11 @@
 /**
- * Professional 3D Weather Overlay System - OnX Maps Style
- * Advanced weather visualization for sailing race strategy
+ * Simplified Weather Overlay System
+ * Static, single arrows for wind, tide, and waves - no animations
  */
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Points, Text, Billboard } from '@react-three/drei';
+import { Text, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type {
   GeoLocation,
@@ -40,11 +39,14 @@ export function WeatherOverlay3D({
   onWeatherUpdate
 }: WeatherOverlay3DProps) {
   const [currentWeather, setCurrentWeather] = useState<AdvancedWeatherConditions | null>(weatherData || null);
-  const [windField, setWindField] = useState<WindFieldData[]>([]);
   const [tidalCurrents, setTidalCurrents] = useState<TidalCurrent[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const weatherService = useRef(new ProfessionalWeatherService());
+  const weatherService = useRef(new ProfessionalWeatherService({
+    stormglass: process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || 'demo-key',
+    openweathermap: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY || '',
+    meteomatics: process.env.EXPO_PUBLIC_METEOMATICS_API_KEY || 'demo-key',
+  }));
 
   useEffect(() => {
     loadWeatherData();
@@ -59,54 +61,77 @@ export function WeatherOverlay3D({
       setLoading(true);
 
       // Get comprehensive weather data
-      const weather = await weatherService.current.getAdvancedWeatherData(
-        bounds.northeast.latitude + (bounds.northeast.latitude - bounds.southwest.latitude) / 2, // Center latitude
-        bounds.southwest.longitude + (bounds.northeast.longitude - bounds.southwest.longitude) / 2,    // Center longitude
-        venue
-      );
+      const centerLat = bounds.southwest.latitude + ((bounds.northeast.latitude - bounds.southwest.latitude) / 2);
+      const centerLng = bounds.southwest.longitude + ((bounds.northeast.longitude - bounds.southwest.longitude) / 2);
+
+      const weather = await weatherService.current.getAdvancedWeatherData(centerLat, centerLng, venue);
 
       setCurrentWeather(weather);
       onWeatherUpdate?.(weather);
-
-      // Generate wind field grid
-      const windGrid = generateWindField(bounds, weather);
-      setWindField(windGrid);
 
       // Get tidal current data
       const currents = await weatherService.current.getTidalCurrents(bounds);
       setTidalCurrents(currents);
 
     } catch (error) {
-
+      // Silent fail - keep existing data
     } finally {
       setLoading(false);
     }
   };
 
+  // Calculate average tidal current
+  const averageTide = useMemo(() => {
+    if (tidalCurrents.length === 0) return null;
+
+    const avgSpeed = tidalCurrents.reduce((sum, c) => sum + c.speed, 0) / tidalCurrents.length;
+    const avgDirection = tidalCurrents.reduce((sum, c) => sum + c.direction, 0) / tidalCurrents.length;
+    const mostCommonType = tidalCurrents.reduce((acc, c) => {
+      acc[c.type] = (acc[c.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const type = Object.keys(mostCommonType).reduce((a, b) =>
+      mostCommonType[a] > mostCommonType[b] ? a : b
+    ) as 'flood' | 'ebb' | 'slack';
+
+    return { speed: avgSpeed, direction: avgDirection, type };
+  }, [tidalCurrents]);
+
   return (
     <group>
-      {/* 3D Wind Particles */}
-      {showWindField && windField.length > 0 && (
-        <WindParticleSystem
-          windField={windField}
-          bounds={bounds}
-          intensity={currentWeather?.wind.speed || 0}
+      {/* Single Wind Arrow */}
+      {(showWindField || showWindBarbs) && currentWeather && (
+        <SimpleWeatherArrow
+          position={[-15, 15, -15]}
+          speed={currentWeather.wind.speed}
+          direction={currentWeather.wind.direction}
+          color="#FF6B35"
+          label="Wind"
+          unit="kt"
         />
       )}
 
-      {/* Wind Barbs (3D Floating) */}
-      {showWindBarbs && currentWeather && (
-        <WindBarbs3D
-          weather={currentWeather}
-          bounds={bounds}
+      {/* Single Tide/Current Arrow */}
+      {showCurrentArrows && averageTide && (
+        <SimpleWeatherArrow
+          position={[15, 15, -15]}
+          speed={averageTide.speed}
+          direction={averageTide.direction}
+          color={averageTide.type === 'flood' ? '#00A651' : averageTide.type === 'ebb' ? '#FF6B35' : '#666666'}
+          label="Tide"
+          unit="kt"
         />
       )}
 
-      {/* Tidal Current Arrows */}
-      {showCurrentArrows && tidalCurrents.length > 0 && (
-        <TidalCurrentArrows3D
-          currents={tidalCurrents}
-          bounds={bounds}
+      {/* Single Wave Arrow */}
+      {showWaveHeight && currentWeather?.waves && (
+        <SimpleWeatherArrow
+          position={[0, 15, -20]}
+          speed={currentWeather.waves.height || 0}
+          direction={currentWeather.waves.direction || 0}
+          color="#87CEEB"
+          label="Waves"
+          unit="m"
         />
       )}
 
@@ -117,327 +142,81 @@ export function WeatherOverlay3D({
           bounds={bounds}
         />
       )}
-
-      {/* Wave Height Visualization */}
-      {showWaveHeight && currentWeather && (
-        <WaveHeightField3D
-          weather={currentWeather}
-          bounds={bounds}
-        />
-      )}
     </group>
   );
 }
 
-// Wind Field Data Structure
-interface WindFieldData {
-  position: GeoLocation;
-  velocity: {
-    u: number; // East-West component (m/s)
-    v: number; // North-South component (m/s)
-    speed: number; // Total speed (knots)
-    direction: number; // Direction (degrees)
-  };
-}
-
-// Generate wind field grid from weather data
-function generateWindField(bounds: BoundingBox, weather: AdvancedWeatherConditions): WindFieldData[] {
-  const gridPoints: WindFieldData[] = [];
-  const gridSpacing = 0.01; // Degrees (roughly 1km)
-
-  for (let lat = bounds.southwest.latitude; lat <= bounds.northeast.latitude; lat += gridSpacing) {
-    for (let lng = bounds.southwest.longitude; lng <= bounds.northeast.longitude; lng += gridSpacing) {
-      // Add some realistic wind variation
-      const windVariation = (Math.random() - 0.5) * 0.2; // ±10% variation
-      const directionVariation = (Math.random() - 0.5) * 20; // ±10° variation
-
-      const speed = weather.wind.speed * (1 + windVariation);
-      const direction = weather.wind.direction + directionVariation;
-
-      // Convert to u/v components
-      const radians = (direction * Math.PI) / 180;
-      const u = speed * Math.sin(radians) * 0.51444; // Convert knots to m/s
-      const v = speed * Math.cos(radians) * 0.51444;
-
-      gridPoints.push({
-        position: { latitude: lat, longitude: lng },
-        velocity: { u, v, speed, direction }
-      });
-    }
-  }
-
-  return gridPoints;
-}
-
-// 3D Wind Particle System Component
-function WindParticleSystem({
-  windField,
-  bounds,
-  intensity
-}: {
-  windField: WindFieldData[];
-  bounds: BoundingBox;
-  intensity: number;
-}) {
-  const particlesRef = useRef<THREE.Points>();
-  const [particles] = useState(() => new Float32Array(windField.length * 3));
-  const [velocities] = useState(() => new Float32Array(windField.length * 3));
-  const [colors] = useState(() => new Float32Array(windField.length * 3));
-
-  // Initialize particles
-  useEffect(() => {
-    windField.forEach((point, i) => {
-      const x = ((point.position.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
-      const z = ((bounds.northeast.latitude - point.position.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
-      const y = 5 + Math.random() * 15; // Height variation
-
-      particles[i * 3] = x;
-      particles[i * 3 + 1] = y;
-      particles[i * 3 + 2] = z;
-
-      // Store velocity
-      velocities[i * 3] = point.velocity.u * 0.1;
-      velocities[i * 3 + 1] = 0;
-      velocities[i * 3 + 2] = -point.velocity.v * 0.1;
-
-      // Color based on wind speed
-      const normalizedSpeed = Math.min(point.velocity.speed / 25, 1);
-      colors[i * 3] = normalizedSpeed; // Red
-      colors[i * 3 + 1] = 0.5; // Green
-      colors[i * 3 + 2] = 1 - normalizedSpeed; // Blue
-    });
-  }, [windField, bounds]);
-
-  // Animate particles
-  useFrame((state, delta) => {
-    if (!particlesRef.current) return;
-
-    const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
-
-    for (let i = 0; i < positions.length; i += 3) {
-      // Update position based on velocity
-      positions[i] += velocities[i] * delta;
-      positions[i + 2] += velocities[i + 2] * delta;
-
-      // Wrap around boundaries
-      if (positions[i] > 50) positions[i] = -50;
-      if (positions[i] < -50) positions[i] = 50;
-      if (positions[i + 2] > 50) positions[i + 2] = -50;
-      if (positions[i + 2] < -50) positions[i + 2] = 50;
-    }
-
-    particlesRef.current.geometry.attributes.position.needsUpdate = true;
-  });
-
-  const particleGeometry = useMemo(() => {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(particles, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    return geometry;
-  }, [particles, colors]);
-
-  return (
-    <points ref={particlesRef} geometry={particleGeometry}>
-      <pointsMaterial
-        size={1.5}
-        vertexColors
-        transparent
-        opacity={Math.min(intensity / 20, 0.8)}
-        sizeAttenuation={true}
-      />
-    </points>
-  );
-}
-
-// 3D Wind Barbs Component
-function WindBarbs3D({
-  weather,
-  bounds
-}: {
-  weather: AdvancedWeatherConditions;
-  bounds: BoundingBox;
-}) {
-  const windBarbs = useMemo(() => {
-    const barbs = [];
-    const spacing = 10; // Grid spacing in local coordinates
-
-    for (let x = -40; x <= 40; x += spacing) {
-      for (let z = -40; z <= 40; z += spacing) {
-        barbs.push({
-          position: [x, 15, z] as [number, number, number],
-          speed: weather.wind.speed,
-          direction: weather.wind.direction
-        });
-      }
-    }
-
-    return barbs;
-  }, [weather.wind, bounds]);
-
-  return (
-    <group>
-      {windBarbs.map((barb, index) => (
-        <WindBarb3D
-          key={index}
-          position={barb.position}
-          speed={barb.speed}
-          direction={barb.direction}
-        />
-      ))}
-    </group>
-  );
-}
-
-// Individual 3D Wind Barb Component
-function WindBarb3D({
-  position,
-  speed,
-  direction
-}: {
-  position: [number, number, number];
-  speed: number;
-  direction: number;
-}) {
-  const groupRef = useRef<THREE.Group>();
-
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = (direction * Math.PI) / 180;
-    }
-  });
-
-  // Create wind barb geometry
-  const barbGeometry = useMemo(() => {
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-
-    // Main shaft
-    vertices.push(0, 0, 0, 0, 0, 2);
-
-    // Add barbs based on wind speed
-    const fullBarbs = Math.floor(speed / 10);
-    const halfBarb = (speed % 10) >= 5;
-
-    for (let i = 0; i < fullBarbs; i++) {
-      const y = 1.5 - i * 0.3;
-      vertices.push(0, 0, y, 0.5, 0, y + 0.3);
-    }
-
-    if (halfBarb) {
-      const y = 1.5 - fullBarbs * 0.3;
-      vertices.push(0, 0, y, 0.25, 0, y + 0.15);
-    }
-
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    return geometry;
-  }, [speed]);
-
-  return (
-    <group ref={groupRef} position={position}>
-      <line geometry={barbGeometry}>
-        <lineBasicMaterial color="#FF6B35" linewidth={2} />
-      </line>
-
-      {/* Wind speed label */}
-      <Billboard position={[0, 1, 0]}>
-        <Text
-          fontSize={0.8}
-          color="#FF6B35"
-          anchorX="center"
-          anchorY="middle"
-        >
-          {speed.toFixed(0)}kt
-        </Text>
-      </Billboard>
-    </group>
-  );
-}
-
-// Tidal Current Arrows 3D Component
-function TidalCurrentArrows3D({
-  currents,
-  bounds
-}: {
-  currents: TidalCurrent[];
-  bounds: BoundingBox;
-}) {
-  return (
-    <group>
-      {currents.map((current, index) => {
-        const x = ((current.location.longitude - bounds.southwest.longitude) / (bounds.northeast.longitude - bounds.southwest.longitude)) * 100 - 50;
-        const z = ((bounds.northeast.latitude - current.location.latitude) / (bounds.northeast.latitude - bounds.southwest.latitude)) * 100 - 50;
-
-        return (
-          <TidalCurrentArrow3D
-            key={index}
-            position={[x, 2, z]}
-            speed={current.speed}
-            direction={current.direction}
-            type={current.type}
-          />
-        );
-      })}
-    </group>
-  );
-}
-
-// Individual Tidal Current Arrow Component
-function TidalCurrentArrow3D({
+// Simple Weather Arrow Component - Static, no animations
+function SimpleWeatherArrow({
   position,
   speed,
   direction,
-  type
+  color,
+  label,
+  unit
 }: {
   position: [number, number, number];
   speed: number;
   direction: number;
-  type: 'flood' | 'ebb' | 'slack';
+  color: string;
+  label: string;
+  unit: string;
 }) {
-  const arrowRef = useRef<THREE.Group>();
+  // Arrow size scales with strength (min 2, max 8)
+  const arrowLength = Math.max(2, Math.min(8, speed * 0.5));
+  const arrowWidth = arrowLength * 0.15;
 
-  const color = useMemo(() => {
-    switch (type) {
-      case 'flood': return '#00A651'; // Green for flooding tide
-      case 'ebb': return '#FF6B35';   // Orange for ebbing tide
-      case 'slack': return '#666666'; // Gray for slack water
-      default: return '#0066CC';
-    }
-  }, [type]);
+  // Convert direction to rotation (static - no useFrame!)
+  const rotation = useMemo(() => {
+    return [0, (direction * Math.PI) / 180, 0] as [number, number, number];
+  }, [direction]);
 
-  useFrame(() => {
-    if (arrowRef.current) {
-      arrowRef.current.rotation.y = (direction * Math.PI) / 180;
-    }
-  });
-
+  // Create arrow geometry
   const arrowGeometry = useMemo(() => {
-    const length = Math.max(speed * 2, 0.5);
-    const geometry = new THREE.ConeGeometry(0.3, length, 8);
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+
+    // Arrow shaft (line)
+    vertices.push(0, 0, 0, 0, 0, arrowLength);
+
+    // Arrowhead (triangle at tip)
+    const headSize = arrowWidth * 2;
+    vertices.push(
+      0, 0, arrowLength,
+      -headSize, 0, arrowLength - headSize,
+      0, 0, arrowLength,
+      headSize, 0, arrowLength - headSize
+    );
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     return geometry;
-  }, [speed]);
+  }, [arrowLength, arrowWidth]);
 
   return (
-    <group ref={arrowRef} position={position}>
-      <mesh geometry={arrowGeometry} rotation={[Math.PI / 2, 0, 0]}>
-        <meshLambertMaterial color={color} transparent opacity={0.8} />
-      </mesh>
+    <group position={position} rotation={rotation}>
+      {/* Arrow */}
+      <line geometry={arrowGeometry}>
+        <lineBasicMaterial color={color} linewidth={3} />
+      </line>
 
-      {/* Current speed label */}
+      {/* Label and value */}
       <Billboard position={[0, 2, 0]}>
         <Text
-          fontSize={0.6}
+          fontSize={1.2}
           color={color}
           anchorX="center"
           anchorY="middle"
+          outlineWidth={0.1}
+          outlineColor="#000000"
         >
-          {speed.toFixed(1)}kt
+          {label}: {speed.toFixed(1)}{unit}
         </Text>
       </Billboard>
     </group>
   );
 }
 
-// Pressure Field 3D Component
+// Pressure Field 3D Component (static)
 function PressureField3D({
   weather,
   bounds
@@ -463,45 +242,6 @@ function PressureField3D({
         transparent
         opacity={0.3}
         side={THREE.DoubleSide}
-      />
-    </mesh>
-  );
-}
-
-// Wave Height Field 3D Component
-function WaveHeightField3D({
-  weather,
-  bounds
-}: {
-  weather: AdvancedWeatherConditions;
-  bounds: BoundingBox;
-}) {
-  const waveGeometry = useMemo(() => {
-    const geometry = new THREE.PlaneGeometry(100, 100, 50, 50);
-    const positions = geometry.attributes.position.array as Float32Array;
-    const waveHeight = weather.waves?.height || 0;
-
-    // Create wave pattern
-    for (let i = 0; i < positions.length; i += 3) {
-      const x = positions[i];
-      const z = positions[i + 2];
-
-      // Generate realistic wave pattern
-      const wave = Math.sin(x * 0.1) * Math.cos(z * 0.1) * waveHeight;
-      positions[i + 1] = wave;
-    }
-
-    geometry.computeVertexNormals();
-    return geometry;
-  }, [weather.waves, bounds]);
-
-  return (
-    <mesh geometry={waveGeometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-      <meshLambertMaterial
-        color="#87CEEB"
-        transparent
-        opacity={0.6}
-        wireframe={true}
       />
     </mesh>
   );

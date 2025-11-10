@@ -20,6 +20,9 @@ export { StartSequenceTimer } from './StartSequenceTimer';
 export { ConditionBadge } from './ConditionBadge';
 export { AddRaceBottomSheet } from './AddRaceBottomSheet';
 export { RaceDetailCards } from './RaceDetailCards';
+export { PhaseHeader } from './PhaseHeader';
+export { PhaseSkillButtons } from './PhaseSkillButtons';
+export { PrimaryAICoach } from './PrimaryAICoach';
 
 // AI-First Add Race Components
 export { AIQuickEntry } from './AIQuickEntry';
@@ -33,6 +36,7 @@ export type { ManualRaceFormData } from './ManualRaceForm';
 
 // AI Validation Components (Phase 3)
 export { AIValidationScreen } from './AIValidationScreen';
+export { MultiRaceSelectionScreen } from './MultiRaceSelectionScreen';
 export { FieldConfidenceBadge } from './FieldConfidenceBadge';
 export { EditableField } from './EditableField';
 export { ValidationSummary } from './ValidationSummary';
@@ -45,12 +49,17 @@ export { CourseSelector } from './CourseSelector';
 export { PostRaceAnalysisForm } from './PostRaceAnalysisForm';
 export { TacticalCoaching } from './TacticalCoaching';
 export { TacticalPlaybook } from './TacticalPlaybook';
-// Deprecated: Use TacticalCoaching instead
-export { BillGladstoneCoaching } from './BillGladstoneCoaching';
+export { FleetPostRaceInsights } from './FleetPostRaceInsights';
+export { AIPatternDetection } from './debrief/AIPatternDetection';
+export { RegattaFlowPlaybookCoaching } from './RegattaFlowPlaybookCoaching';
+
+// Race Learning & Insights Components
+export { RaceLearningInsights, PreRaceReminderCard } from './RaceLearningInsights';
+export { StrategyPhaseSuggestion } from './StrategyPhaseSuggestion';
 
 // Re-export types
 export type { Document } from './DocumentList';
-export type { ExtractedData, FieldConfidenceMap } from './AIValidationScreen';
+export type { ExtractedData, FieldConfidenceMap, MultiRaceExtractedData } from './AIValidationScreen';
 export type { ExtractionMetadata } from './ComprehensiveRaceEntry';
 export type { TacticalTactic, TacticalPlaybookProps } from './TacticalPlaybook';
 export type { TacticalCoachingProps } from '@/types/raceAnalysis';

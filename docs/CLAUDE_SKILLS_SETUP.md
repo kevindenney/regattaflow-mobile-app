@@ -18,8 +18,8 @@ Claude Skills allow you to pre-upload domain expertise that Claude can reference
 ## Current Status
 
 The RaceStrategyEngine is designed to work with the `race-strategy-analyst` skill, which includes:
-- Kevin Gladstone's shift mathematics frameworks
-- Kevin Colgate's racing techniques
+- RegattaFlow Playbook's shift mathematics frameworks
+- RegattaFlow Coach's racing techniques
 - Hans Fogh's mark rounding excellence
 - Championship execution principles
 
@@ -110,7 +110,7 @@ Expert sailing race strategist with championship tactics expertise.
 - Upwind tactics (layline discipline, current integration, fleet positioning)
 - Mark rounding excellence (wide entry/tight exit, traffic management)
 - Downwind strategy (VMG optimization, shift detection, wave riding)
-- Covering & split distance (loose cover, Gladstone's 1/3 rule)
+- Covering & split distance (loose cover, RegattaFlow Playbook's 1/3 rule)
 - Current & tidal strategy (timing legs, lee-bow technique)
 - Championship execution (risk management, consistency, psychology)
 
@@ -126,7 +126,7 @@ Always provide: THEORY (quantified framework), EXECUTION (step-by-step how), CON
 6. Current > Wind - in tidal areas, current outweighs shifts
 7. Conservative = Consistent - series racing rewards top-third finishes
 
-Expert frameworks from Kevin Gladstone, Kevin Colgate, Hans Fogh, Kevin Cox.
+Expert frameworks from RegattaFlow Playbook, RegattaFlow Coach, Hans Fogh, Kevin Cox.
 ```
 
 ## Troubleshooting

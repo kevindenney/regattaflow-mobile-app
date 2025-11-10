@@ -40,7 +40,7 @@ export class RaceEventService {
 
       const eventData: RaceEventInsert = {
         user_id: user.id,
-        race_name: params.race_name,
+        name: params.race_name,
         race_series: params.race_series,
         boat_class: params.boat_class,
         start_time: params.start_time,
@@ -485,7 +485,7 @@ export class RaceEventService {
         .from('race_events')
         .select('*')
         .eq('user_id', user.id)
-        .or(`race_name.ilike.%${searchTerm}%,race_series.ilike.%${searchTerm}%`)
+        .or(`name.ilike.%${searchTerm}%,race_series.ilike.%${searchTerm}%`)
         .order('start_time', { ascending: false })
         .limit(20);
 

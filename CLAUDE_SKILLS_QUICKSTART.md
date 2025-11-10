@@ -2,7 +2,7 @@
 
 ## What You Got
 
-Your **race tactical plan** is now powered by **Claude Skills AI** with expert sailing knowledge from Kevin Gladstone & Kevin Colgate! 🎉⛵️
+Your **race tactical plan** is now powered by **Claude Skills AI** with expert sailing knowledge from RegattaFlow Playbook & RegattaFlow Coach! 🎉⛵️
 
 ## Features
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createLogger } from '@/lib/utils/logger';
 
 type ApiEnvelope<T> = {
   data: T | null;
@@ -43,6 +44,8 @@ export interface UseApiReturn<T> {
   mutate: (optimisticData?: T | null) => Promise<void>;
 }
 
+const logger = createLogger('useApi');
+
 export function useApi<T>(
   apiFunction: () => Promise<ApiResult<T>>,
   options: UseApiOptions<T> = {}
@@ -59,7 +62,10 @@ export function useApi<T>(
   }, [apiFunction]);
 
   const fetchData = useCallback(async () => {
+    logger.debug('fetchData called', { enabled });
+
     if (!enabled) {
+      logger.debug('Skipping fetch - not enabled');
       return;
     }
 
@@ -67,11 +73,15 @@ export function useApi<T>(
     setError(null);
 
     try {
+      logger.debug('Calling API function...');
       const result = await apiRef.current();
+      logger.debug('API result metadata:', { hasResult: !!result });
+
       const normalized = normalizeApiResult<T>(result);
+      logger.debug('Normalized result:', { hasData: !!normalized.data, hasError: !!normalized.error });
 
       if (normalized.error) {
-        console.error('[useApi] Error in result:', normalized.error);
+        logger.error('Error in result:', normalized.error);
         setError(normalized.error);
         onError?.(normalized.error);
       }
@@ -80,7 +90,7 @@ export function useApi<T>(
       onSuccess?.(normalized.data);
     } catch (err) {
       const typedError = err as Error;
-      console.error('[useApi] Exception caught:', typedError);
+      logger.error('Exception caught:', typedError);
       setError(typedError);
       onError?.(typedError);
     } finally {
@@ -89,8 +99,12 @@ export function useApi<T>(
   }, [enabled, onError, onSuccess]);
 
   useEffect(() => {
+    logger.debug('useEffect triggered', { enabled });
     if (enabled) {
+      logger.debug('Triggering fetchData from useEffect');
       fetchData();
+    } else {
+      logger.debug('Skipping fetchData - not enabled');
     }
   }, [enabled, fetchData]);
 

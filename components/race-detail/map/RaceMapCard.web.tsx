@@ -5,14 +5,17 @@
  * Uses TacticalRaceMap (existing working implementation)
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/race-ui/Card';
 import { Typography, Spacing, BorderRadius, colors } from '@/constants/designSystem';
 import { LayerToggle } from './LayerToggle';
 import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
 import { createLogger } from '@/lib/utils/logger';
+import { useUnderwaterAnalysis } from '@/hooks/useUnderwaterAnalysis';
+import type { SailingVenue } from '@/lib/types/global-venues';
+import type { Polygon as GeoJSONPolygon } from 'geojson';
 
 interface Region {
   latitude: number;
@@ -75,6 +78,150 @@ const convertCourseToMarks = (course?: Course): any[] => {
   return marks;
 };
 
+const inferRegionFromCoordinates = (lat: number, lng: number): string => {
+  if (lat >= 22 && lat <= 23 && lng >= 113.5 && lng <= 114.5) {
+    return 'asia-pacific';
+  }
+  if (lat >= 25 && lat <= 50 && lng >= -130 && lng <= -65) {
+    return 'north-america';
+  }
+  if (lat >= 35 && lat <= 70 && lng >= -10 && lng <= 40) {
+    return 'europe';
+  }
+  if (lat >= 30 && lat <= 46 && lng >= 129 && lng <= 146) {
+    return 'asia-pacific';
+  }
+  if (lat >= -45 && lat <= -10 && lng >= 110 && lng <= 180) {
+    return 'asia-pacific';
+  }
+  return 'global';
+};
+
+const buildPlaceholderVenue = (lat: number, lng: number, name: string): SailingVenue => {
+  const now = new Date();
+  return {
+    id: `synthetic-${lat.toFixed(3)}-${lng.toFixed(3)}`,
+    name,
+    coordinates: [lng, lat],
+    country: 'Unknown',
+    region: inferRegionFromCoordinates(lat, lng),
+    venueType: 'regional',
+    timeZone: 'UTC',
+    primaryClubs: [{
+      id: 'synthetic-club',
+      name: `${name} YC`,
+      facilities: [],
+      prestigeLevel: 'regional',
+      membershipType: 'private'
+    }],
+    sailingConditions: {
+      windPatterns: [],
+      currentData: [],
+      tidalInformation: undefined,
+      typicalConditions: {
+        windSpeed: { min: 5, max: 25, average: 12 },
+        windDirection: { primary: 180 },
+        waveHeight: { typical: 0.5, maximum: 2 },
+        visibility: { typical: 10, minimum: 1 }
+      },
+      seasonalVariations: [],
+      hazards: [],
+      racingAreas: []
+    },
+    culturalContext: {
+      primaryLanguages: [],
+      sailingCulture: {
+        tradition: 'modern',
+        competitiveness: 'regional',
+        formality: 'semi_formal',
+        inclusivity: 'open',
+        characteristics: []
+      },
+      racingCustoms: [],
+      socialProtocols: [],
+      economicFactors: {
+        currency: 'USD',
+        costLevel: 'high',
+        entryFees: { typical: 0, range: { min: 0, max: 0 } },
+        accommodation: { budget: 0, moderate: 0, luxury: 0 },
+        dining: { budget: 0, moderate: 0, upscale: 0 },
+        services: { rigger: 0, sail_repair: 0, chandlery: 'moderate' },
+        tipping: { expected: false, contexts: [] }
+      },
+      regulatoryEnvironment: {
+        racingRules: { authority: 'World Sailing', variations: [] },
+        safetyRequirements: [],
+        environmentalRestrictions: [],
+        entryRequirements: []
+      }
+    },
+    weatherSources: {
+      primary: {
+        name: 'Local Forecast',
+        type: 'regional_model',
+        region: 'local',
+        accuracy: 'moderate',
+        forecastHorizon: 48,
+        updateFrequency: 6,
+        specialties: []
+      },
+      updateFrequency: 6,
+      reliability: 0.6
+    },
+    localServices: [],
+    createdAt: now,
+    updatedAt: now,
+    dataQuality: 'estimated'
+  };
+};
+
+const toRacingAreaPolygon = (
+  areaPoints: Array<{ lat: number; lng: number }>,
+  mapRegion: Region
+): GeoJSONPolygon | null => {
+  if (areaPoints.length >= 3) {
+    const coordinates = areaPoints.map((point) => [point.lng, point.lat]);
+    const first = coordinates[0];
+    const closed = [...coordinates, first];
+    return {
+      type: 'Polygon',
+      coordinates: [closed]
+    };
+  }
+
+  const latDelta = mapRegion.latitudeDelta || 0.02;
+  const lngDelta = mapRegion.longitudeDelta || 0.02;
+
+  const halfLat = latDelta / 2;
+  const halfLng = lngDelta / 2;
+
+  const north = mapRegion.latitude + halfLat;
+  const south = mapRegion.latitude - halfLat;
+  const east = mapRegion.longitude + halfLng;
+  const west = mapRegion.longitude - halfLng;
+
+  return {
+    type: 'Polygon',
+    coordinates: [[
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south]
+    ]]
+  };
+};
+
+const bearingToCardinal = (direction?: number): string => {
+  if (direction == null || Number.isNaN(direction)) {
+    return 'variable';
+  }
+  const normalized = ((direction % 360) + 360) % 360;
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(normalized / 45) % 8;
+  return dirs[(index + 8) % 8];
+};
+
 // Helper function to fetch environmental data based on coordinates
 const fetchEnvironmentalData = async (lat: number, lng: number) => {
   // TODO: Replace with actual weather API call
@@ -132,6 +279,28 @@ export const RaceMapCard: React.FC<RaceMapCardProps> = ({
   // Environmental data state - fetched based on racing area or map region
   const [liveEnvironmentalData, setLiveEnvironmentalData] = useState<any>(null);
 
+  const raceAreaPolygon = useMemo(
+    () => toRacingAreaPolygon(racingArea, mapRegion),
+    [racingArea, mapRegion]
+  );
+
+  const venueContext = useMemo(
+    () => buildPlaceholderVenue(mapRegion.latitude, mapRegion.longitude, 'Race Venue'),
+    [mapRegion.latitude, mapRegion.longitude]
+  );
+
+  const {
+    analysis: waterAnalysis,
+    loading: waterAnalysisLoading,
+    error: waterAnalysisError
+  } = useUnderwaterAnalysis({
+    racingArea: raceAreaPolygon,
+    venue: venueContext,
+    raceTime: new Date(),
+    raceDurationMinutes: 90,
+    enabled: Boolean(raceAreaPolygon && venueContext)
+  });
+
   const handleLayerToggle = (layer: keyof typeof mapLayers) => {
     setMapLayers(prev => ({
       ...prev,
@@ -188,7 +357,7 @@ export const RaceMapCard: React.FC<RaceMapCardProps> = ({
     fetchData();
   }, [racingArea, mapRegion]);
 
-  const handleRacingAreaSelected = (coordinates: [number, number][]) => {
+  const handleRacingAreaSelected = useCallback((coordinates: [number, number][]) => {
     // Convert to format expected by component
     const area = coordinates.map(([lng, lat]) => ({ lat, lng }));
     setRacingArea(area);
@@ -198,7 +367,7 @@ export const RaceMapCard: React.FC<RaceMapCardProps> = ({
       localStorage.setItem('demo-racing-area', JSON.stringify(area));
 
     }
-  };
+  }, []);
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded);
@@ -266,6 +435,28 @@ export const RaceMapCard: React.FC<RaceMapCardProps> = ({
     racing_area_bounds: course?.path,
   };
 
+  const currentSnapshot = waterAnalysis?.tidal.currentSnapshot;
+  const accelerationHighlights = useMemo(() => {
+    if (!waterAnalysis?.strategicFeatures?.accelerationZones) return [] as string[];
+    return waterAnalysis.strategicFeatures.accelerationZones
+      .map((zone) => zone.estimatedCurrent)
+      .filter((speed): speed is number => typeof speed === 'number')
+      .map((speed) => speed.toFixed(1))
+      .slice(0, 3)
+      .map((speed) => `Current seam ~${speed}kt`);
+  }, [waterAnalysis?.strategicFeatures?.accelerationZones]);
+
+  const analysisBullets = useMemo(() => {
+    if (!waterAnalysis?.analysis) {
+      return [] as string[];
+    }
+    return waterAnalysis.analysis
+      .split('\n')
+      .map((line) => line.replace(/^[-•]\s*/, '').trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  }, [waterAnalysis?.analysis]);
+
   return (
     <Card style={styles.container} size="medium">
       {/* Header */}
@@ -291,7 +482,7 @@ export const RaceMapCard: React.FC<RaceMapCardProps> = ({
           isExpanded && styles.mapContainerExpanded,
         ]}
       >
-        <TacticalRaceMap
+      <TacticalRaceMap
           raceEvent={raceEvent}
           marks={marks}
           environmental={environmentalData}
@@ -301,7 +492,36 @@ export const RaceMapCard: React.FC<RaceMapCardProps> = ({
           initialRacingArea={racingArea}
           externalLayers={mapLayers}
           onLayersChange={handleLayersChange}
+          waterAnalysis={waterAnalysis ?? undefined}
         />
+      </View>
+
+      <View style={styles.intelSection}>
+        <Text style={styles.sectionTitle}>CURRENT STRATEGY</Text>
+        {waterAnalysisLoading ? (
+          <View style={styles.intelLoading}>
+            <ActivityIndicator size="small" color={colors.current} />
+            <Text style={styles.intelLoadingText}>Analyzing depth and tidal flow…</Text>
+          </View>
+        ) : waterAnalysisError ? (
+          <Text style={styles.intelError}>Unable to generate water analysis: {waterAnalysisError.message}</Text>
+        ) : waterAnalysis ? (
+          <View style={styles.intelContent}>
+            <Text style={styles.intelLine}>
+              <Text style={styles.intelLabel}>Prevailing:</Text>{' '}
+              {currentSnapshot?.speed?.toFixed(1) ?? '—'} kt {bearingToCardinal(currentSnapshot?.direction)} ({currentSnapshot?.phase ?? 'slack'})
+            </Text>
+            {accelerationHighlights.map((line, index) => (
+              <Text key={`acc-${index}`} style={styles.intelLine}>• {line}</Text>
+            ))}
+            {analysisBullets.map((line, index) => (
+              <Text key={`analysis-${index}`} style={styles.intelLine}>• {line}</Text>
+            ))}
+            <Text style={styles.intelCue}>{waterAnalysis.recommendations.startStrategy}</Text>
+          </View>
+        ) : (
+          <Text style={styles.intelEmpty}>Enable the depth layer and define a race area to surface current insights.</Text>
+        )}
       </View>
 
       {/* Map Layers Section */}
@@ -397,6 +617,45 @@ const styles = StyleSheet.create({
   },
   mapContainerExpanded: {
     height: 600,
+  },
+  intelSection: {
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  intelLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  intelLoadingText: {
+    ...Typography.bodySmall,
+    color: colors.text.tertiary,
+  },
+  intelError: {
+    ...Typography.bodySmall,
+    color: colors.danger[600],
+  },
+  intelContent: {
+    gap: 4,
+  },
+  intelLine: {
+    ...Typography.bodySmall,
+    color: colors.text.secondary,
+  },
+  intelLabel: {
+    ...Typography.bodySmall,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  intelCue: {
+    ...Typography.bodySmall,
+    marginTop: Spacing.xs,
+    color: colors.primary[600],
+  },
+  intelEmpty: {
+    ...Typography.bodySmall,
+    color: colors.text.tertiary,
   },
   layersSection: {
     paddingHorizontal: Spacing.lg,

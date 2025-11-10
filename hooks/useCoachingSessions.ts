@@ -1,5 +1,6 @@
 import { createChannelName, realtimeService } from '@/services/RealtimeService';
 import { supabase } from '@/services/supabase';
+import { coachingService } from '@/services/CoachingService';
 import { useCallback, useEffect, useState } from 'react';
 
 export interface CoachingSession {
@@ -42,16 +43,20 @@ export interface CoachingSession {
 
 export interface BookingRequest {
   id: string;
-  session_id: string;
+  session_id?: string | null;
   coach_id: string;
   sailor_id: string;
-  requested_date: string;
-  requested_time: string;
-  status: 'pending' | 'accepted' | 'declined';
-  message?: string;
-  created_at: string;
-  updated_at: string;
-  session?: CoachingSession;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  requested_start_time?: string | null;
+  requested_end_time?: string | null;
+  session_type?: string | null;
+  sailor_message?: string | null;
+  coach_response?: string | null;
+  total_amount_cents?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  message?: string | null; // legacy field fallback
+  session?: CoachingSession | null;
 }
 
 /**
@@ -75,17 +80,8 @@ export function useCoachingSessions(coachId?: string) {
     try {
       const { data, error: queryError } = await supabase
         .from('coaching_sessions')
-        .select(`
-          *,
-          sailor:sailor_id (
-            id,
-            email,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('coach_id', coachId)
-        // Prefer current schema order fields; fallback-compatible if missing
         .order('scheduled_at', { ascending: true, nullsFirst: false });
 
       if (queryError) throw queryError;
@@ -159,22 +155,18 @@ export function useBookingRequests(coachId?: string) {
 
     try {
       const { data, error: queryError } = await supabase
-        .from('booking_requests')
-        .select(`
-          *,
-          session:coaching_sessions(*)
-        `)
+        .from('session_bookings')
+        .select('*')
         .eq('coach_id', coachId)
-        .order('created_at', { ascending: false });
+        .order('requested_start_time', { ascending: true });
 
       if (queryError) throw queryError;
 
-      const bookingRequests = data || [];
+      const bookingRequests = (data as BookingRequest[]) || [];
       setRequests(bookingRequests);
 
       // Count unread/pending requests
-      const pending = bookingRequests.filter((r: BookingRequest) => r.status === 'pending');
-      setUnreadCount(pending.length);
+      setUnreadCount(bookingRequests.filter((r) => r.status === 'pending').length);
     } catch (err) {
       console.error('[useBookingRequests] Error loading requests:', err);
       setError(err as Error);
@@ -194,33 +186,28 @@ export function useBookingRequests(coachId?: string) {
     realtimeService.subscribe(
       channelName,
       {
-        table: 'booking_requests',
+        table: 'session_bookings',
         filter: `coach_id=eq.${coachId}`,
       },
       (payload) => {
         if (payload.eventType === 'INSERT') {
           const newRequest = payload.new as BookingRequest;
-          setRequests((prev) => [newRequest, ...prev]);
-          if (newRequest.status === 'pending') {
-            setUnreadCount((prev) => prev + 1);
-          }
+          setRequests((prev) => {
+            const updated = [newRequest, ...prev];
+            setUnreadCount(updated.filter((r) => r.status === 'pending').length);
+            return updated;
+          });
         } else if (payload.eventType === 'UPDATE') {
           const updatedRequest = payload.new as BookingRequest;
-          setRequests((prev) =>
-            prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
-          );
-
-          // Recalculate unread count
-          setRequests((currentRequests) => {
-            const pending = currentRequests.filter((r) => r.status === 'pending');
-            setUnreadCount(pending.length);
-            return currentRequests;
+          setRequests((prev) => {
+            const updated = prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r));
+            setUnreadCount(updated.filter((r) => r.status === 'pending').length);
+            return updated;
           });
         } else if (payload.eventType === 'DELETE') {
           setRequests((prev) => {
             const filtered = prev.filter((r) => r.id !== payload.old.id);
-            const pending = filtered.filter((r) => r.status === 'pending');
-            setUnreadCount(pending.length);
+            setUnreadCount(filtered.filter((r) => r.status === 'pending').length);
             return filtered;
           });
         }
@@ -234,12 +221,7 @@ export function useBookingRequests(coachId?: string) {
 
   const acceptRequest = useCallback(async (requestId: string) => {
     try {
-      const { error } = await supabase
-        .from('booking_requests')
-        .update({ status: 'accepted' })
-        .eq('id', requestId);
-
-      if (error) throw error;
+      await coachingService.acceptBookingRequest(requestId);
     } catch (err) {
       console.error('[useBookingRequests] Error accepting request:', err);
       throw err;
@@ -248,15 +230,7 @@ export function useBookingRequests(coachId?: string) {
 
   const declineRequest = useCallback(async (requestId: string, message?: string) => {
     try {
-      const { error } = await supabase
-        .from('booking_requests')
-        .update({
-          status: 'declined',
-          message: message || 'Request declined'
-        })
-        .eq('id', requestId);
-
-      if (error) throw error;
+      await coachingService.rejectBookingRequest(requestId, message || 'Request declined by coach');
     } catch (err) {
       console.error('[useBookingRequests] Error declining request:', err);
       throw err;
@@ -302,13 +276,10 @@ export function useSailorSessions(sailorId?: string) {
 
       // Load booking requests
       const { data: requestsData } = await supabase
-        .from('booking_requests')
-        .select(`
-          *,
-          session:coaching_sessions(*)
-        `)
+        .from('session_bookings')
+        .select('*')
         .eq('sailor_id', sailorId)
-        .order('created_at', { ascending: false });
+        .order('requested_start_time', { ascending: true });
 
       setMyRequests(requestsData || []);
     } catch (err) {
@@ -349,7 +320,7 @@ export function useSailorSessions(sailorId?: string) {
     realtimeService.subscribe(
       requestsChannel,
       {
-        table: 'booking_requests',
+        table: 'session_bookings',
         filter: `sailor_id=eq.${sailorId}`,
       },
       (payload) => {

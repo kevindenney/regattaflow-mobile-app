@@ -1,0 +1,33 @@
+-- Insert demo race analysis data directly
+INSERT INTO race_analysis (
+  sailor_id,
+  race_id,
+  equipment_rating,
+  planning_rating,
+  crew_rating,
+  prestart_rating,
+  start_rating,
+  upwind_rating,
+  upwind_shift_awareness,
+  windward_mark_rating,
+  downwind_rating,
+  leeward_mark_rating,
+  finish_rating,
+  overall_satisfaction,
+  start_notes,
+  upwind_notes,
+  windward_mark_notes,
+  leeward_mark_notes,
+  downwind_notes,
+  finish_notes,
+  key_learnings,
+  framework_scores
+) VALUES
+('4ef0d350-a582-4ca8-beab-cf3d8c112589', '718e0559-b9e0-482b-be7e-3af671bcfac3', 4, 4, 4, 5, 5, 4, 4, 3, 4, 2, 4, 4, 'Perfect timing on favored pin end, clean air', 'Good speed, read the shifts well', 'Overstanding layline, lost 2 boat lengths', 'Late gybe, came in too high', NULL, NULL, ARRAY['Nail start execution', 'Improve mark approach timing'], '{"puff_response": 82, "shift_awareness": 78, "delayed_tack_usage": 65, "downwind_detection": 70, "getting_in_phase": 75, "covering_tactics": 60, "overall_framework_adoption": 72}'),
+('4ef0d350-a582-4ca8-beab-cf3d8c112589', '3d12a4bb-21fc-42ed-848f-437e6b3e984f', 4, 4, 4, 4, 4, 4, 4, 3, 4, 3, 3, 4, 'Good start, mid-line with clear air', 'Solid beat, could have tacked sooner on headers', 'Late to layline again', NULL, 'Good VMG, stayed in pressure', NULL, ARRAY['Start consistency good', 'Mark rounding needs work'], '{"puff_response": 80, "shift_awareness": 75, "delayed_tack_usage": 62, "downwind_detection": 68, "getting_in_phase": 73, "covering_tactics": 58, "overall_framework_adoption": 70}'),
+('4ef0d350-a582-4ca8-beab-cf3d8c112589', 'a663dbd8-203d-4751-a083-7a8dcd55b0df', 3, 4, 4, 4, 4, 3, 3, 2, 3, 2, 3, 3, 'Port end favored, executed well', 'Got stuck in bad air mid-beat', 'Way overstanding, lost 3 lengths', 'Traffic at mark, poor exit', NULL, NULL, ARRAY['Keep working on starts', 'Practice layline calls'], '{"puff_response": 76, "shift_awareness": 72, "delayed_tack_usage": 60, "downwind_detection": 65, "getting_in_phase": 70, "covering_tactics": 55, "overall_framework_adoption": 68}'),
+('4ef0d350-a582-4ca8-beab-cf3d8c112589', '3738ebaf-3ac4-442d-8726-339ba1a297f3', 4, 3, 4, 4, 4, 3, 3, 3, 3, 3, 4, 3, 'Clean start but conservative', 'OK speed, missed a big right shift', 'Rounded OK but could have been tighter', NULL, NULL, 'Good finish, ducked boats for favored end', ARRAY['Start line bias reading improving', 'Need more confidence'], '{"puff_response": 74, "shift_awareness": 70, "delayed_tack_usage": 58, "downwind_detection": 63, "getting_in_phase": 68, "covering_tactics": 52, "overall_framework_adoption": 65}'),
+('4ef0d350-a582-4ca8-beab-cf3d8c112589', '8801f16a-b4a2-4428-80a9-8d54a432e7f8', 3, 3, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 'Decent start, mid-pack', 'Learning the boat speed', 'Followed the fleet', NULL, NULL, NULL, ARRAY['First race, baseline performance'], '{"puff_response": 70, "shift_awareness": 68, "delayed_tack_usage": 55, "downwind_detection": 60, "getting_in_phase": 65, "covering_tactics": 50, "overall_framework_adoption": 62}')
+ON CONFLICT (sailor_id, race_id) DO NOTHING;
+
+SELECT COUNT(*) as inserted_count FROM race_analysis WHERE sailor_id = '4ef0d350-a582-4ca8-beab-cf3d8c112589';

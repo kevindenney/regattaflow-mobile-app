@@ -3,8 +3,8 @@
  * Shows favored end, line bias, and recommended approach
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
@@ -12,6 +12,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { raceStrategyEngine } from '@/services/ai/RaceStrategyEngine';
 import type { RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import { createLogger } from '@/lib/utils/logger';
+import { strategicPlanningService } from '@/services/StrategicPlanningService';
 
 interface StartStrategyData {
   favoredEnd: 'pin' | 'boat' | 'middle';
@@ -30,6 +31,7 @@ interface StartStrategyCardProps {
   venueId?: string;
   venueName?: string;
   venueCoordinates?: { lat: number; lng: number };
+  racingAreaPolygon?: Array<{ lat: number; lng: number }>;
   weather?: {
     wind?: {
       speed: number;
@@ -43,6 +45,8 @@ interface StartStrategyCardProps {
     };
   };
   onGenerate?: () => void;
+  sailorId?: string;
+  raceEventId?: string;
 }
 
 const logger = createLogger('StartStrategyCard');
@@ -53,27 +57,20 @@ export function StartStrategyCard({
   venueId,
   venueName,
   venueCoordinates,
+  racingAreaPolygon,
   weather,
-  onGenerate
+  onGenerate,
+  sailorId,
+  raceEventId
 }: StartStrategyCardProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [strategy, setStrategy] = useState<StartStrategyData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [userStrategy, setUserStrategy] = useState('');
+  const [savingUserStrategy, setSavingUserStrategy] = useState(false);
 
-  useEffect(() => {
-    loadStrategy();
-  }, [raceId]);
-
-  // Auto-generate strategy if not exists
-  useEffect(() => {
-    if (!loading && !strategy && !error && user) {
-      logger.debug('[StartStrategyCard] Auto-generating strategy on mount');
-      generateStrategy();
-    }
-  }, [loading, strategy, error, user]);
-
-  const loadStrategy = async () => {
+  const loadStrategy = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -122,7 +119,60 @@ export function StartStrategyCard({
     } finally {
       setLoading(false);
     }
+  }, [user, raceId]);
+
+  useEffect(() => {
+    loadStrategy();
+  }, [loadStrategy]);
+
+  // Load user's manual strategy
+  useEffect(() => {
+    if (!sailorId || !raceEventId) return;
+
+    const loadUserStrategy = async () => {
+      try {
+        const prep = await strategicPlanningService.getPreparationWithStrategy(
+          raceEventId,
+          sailorId
+        );
+        if (prep?.start_strategy) {
+          setUserStrategy(prep.start_strategy);
+        }
+      } catch (err) {
+        logger.error('[StartStrategyCard] Error loading user strategy', err);
+      }
+    };
+
+    loadUserStrategy();
+  }, [sailorId, raceEventId]);
+
+  // Auto-save user's strategy on change
+  const handleUserStrategyChange = async (text: string) => {
+    setUserStrategy(text);
+    if (!sailorId || !raceEventId) return;
+
+    setSavingUserStrategy(true);
+    try {
+      await strategicPlanningService.updatePhaseStrategy(
+        raceEventId,
+        sailorId,
+        'startStrategy',
+        text
+      );
+    } catch (err) {
+      logger.error('[StartStrategyCard] Error saving user strategy', err);
+    } finally {
+      setSavingUserStrategy(false);
+    }
   };
+
+  // Auto-generate strategy if not exists
+  useEffect(() => {
+    if (!loading && !strategy && !error && user) {
+      logger.debug('[StartStrategyCard] Auto-generating strategy on mount');
+      generateStrategy();
+    }
+  }, [loading, strategy, error, user]);
 
   const generateStrategy = async () => {
     if (!user) {
@@ -183,7 +233,8 @@ export function StartStrategyCard({
           raceTime: raceStartTime ? new Date(raceStartTime).toTimeString().split(' ')[0] : '11:00:00',
           boatType: 'Keelboat',
           fleetSize: 20,
-          importance: 'series'
+          importance: 'series',
+          racingAreaPolygon
         }
       );
 
@@ -473,6 +524,28 @@ export function StartStrategyCard({
             />
           </View>
         </View>
+
+        {/* User Strategy Input Section */}
+        {sailorId && raceEventId && (
+          <View style={styles.userStrategySection}>
+            <View style={styles.userStrategyHeader}>
+              <Text style={styles.userStrategyLabel}>Your Strategy Notes</Text>
+              {savingUserStrategy && (
+                <ActivityIndicator size="small" color="#3B82F6" />
+              )}
+            </View>
+            <TextInput
+              style={styles.userStrategyInput}
+              value={userStrategy}
+              onChangeText={handleUserStrategyChange}
+              placeholder="Add your own strategy notes for the start... (e.g., favored end, timing, positioning)"
+              placeholderTextColor="#94A3B8"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        )}
       </View>
     );
   };
@@ -663,5 +736,35 @@ const styles = StyleSheet.create({
   confidenceFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  userStrategySection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  userStrategyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userStrategyLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userStrategyInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#0F172A',
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    lineHeight: 20,
   },
 });

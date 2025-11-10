@@ -4,12 +4,96 @@
  * Tapping the countdown starts the timer and GPS tracking
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { Play, Square, Navigation } from 'lucide-react-native';
 import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+
+const DEFAULT_RACE_TIME = '10:00';
+
+function normalizeRaceTime(time: string): string | null {
+  if (!time) return null;
+
+  const trimmed = time.trim();
+  const sanitized = trimmed.replace(/([+-]\d{2}:?\d{2}|Z)$/i, '');
+
+  const twentyFourHourMatch = sanitized.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (twentyFourHourMatch) {
+    const hours = Number.parseInt(twentyFourHourMatch[1], 10);
+    const minutes = Number.parseInt(twentyFourHourMatch[2], 10);
+    const seconds = twentyFourHourMatch[3] ? Number.parseInt(twentyFourHourMatch[3], 10) : 0;
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes) || Number.isNaN(seconds)) {
+      return null;
+    }
+
+    return [hours, minutes, seconds]
+      .map((value, index) => (index === 2 && value === 0 ? null : value.toString().padStart(2, '0')))
+      .filter(Boolean)
+      .join(':');
+  }
+
+  const amPmMatch = sanitized.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (amPmMatch) {
+    let hours = Number.parseInt(amPmMatch[1], 10);
+    const minutes = amPmMatch[2] ? Number.parseInt(amPmMatch[2], 10) : 0;
+    const meridiem = amPmMatch[3].toUpperCase();
+
+    if (meridiem === 'PM' && hours < 12) {
+      hours += 12;
+    }
+    if (meridiem === 'AM' && hours === 12) {
+      hours = 0;
+    }
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return null;
+    }
+
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+function getRaceDateTime(raceDate: string, raceTime: string): Date | null {
+  if (!raceDate) return null;
+
+  const normalizedTime = normalizeRaceTime(raceTime) || DEFAULT_RACE_TIME;
+
+  let date = new Date(raceDate);
+  if (Number.isNaN(date.getTime())) {
+    const base = raceDate.includes('T') ? raceDate : `${raceDate}T00:00:00`;
+    date = new Date(base.replace(' ', 'T'));
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const [hours, minutes] = normalizedTime.split(':').map((value) => Number.parseInt(value, 10));
+  const timeMatch = raceDate.match(/T(\d{2}):(\d{2})/);
+  const isoHours = timeMatch ? Number.parseInt(timeMatch[1], 10) : null;
+  const isoMinutes = timeMatch ? Number.parseInt(timeMatch[2], 10) : null;
+  const hasExplicitTime = isoHours !== null && isoMinutes !== null && !Number.isNaN(isoHours) && !Number.isNaN(isoMinutes);
+  const isoIsMidnight = hasExplicitTime && isoHours === 0 && isoMinutes === 0;
+  const currentHours = date.getHours();
+  const currentMinutes = date.getMinutes();
+  const shouldOverride =
+    !hasExplicitTime ||
+    isoIsMidnight ||
+    (currentHours === 0 && currentMinutes === 0) ||
+    Number.isNaN(currentHours) ||
+    Number.isNaN(currentMinutes);
+
+  if (!Number.isNaN(hours) && !Number.isNaN(minutes) && shouldOverride) {
+    date.setHours(hours, minutes, 0, 0);
+  }
+
+  return date;
+}
 
 interface RaceTimerProps {
   raceId: string;
@@ -38,37 +122,28 @@ export function RaceTimer({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gpsPointCount, setGpsPointCount] = useState(0);
 
+  // Memoize race date time to prevent recalculation on every render
+  const raceDateTimeMs = useMemo(() => {
+    if (!raceDate || !raceTime) return null;
+    const dt = getRaceDateTime(raceDate, raceTime);
+    return dt ? dt.getTime() : null;
+  }, [raceDate, raceTime]);
+
   // Calculate countdown
   useEffect(() => {
+    if (raceDateTimeMs === null) {
+      setTimeUntilRace((prev) => {
+        if (prev && prev.days === 0 && prev.hours === 0 && prev.minutes === 0 && prev.seconds === 0) {
+          return prev;
+        }
+        return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+      });
+      return;
+    }
+
     const calculateCountdown = () => {
-      // Validate inputs
-      if (!raceDate || !raceTime) {
-        console.warn('[RaceTimer] Missing race date or time:', { raceDate, raceTime });
-        setTimeUntilRace({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-        return;
-      }
-
-      // Parse the race date and time
-      // Handle both ISO format times (10:00:00) and date concatenation
-      let raceDateTime: Date;
-
-      // If raceDate already includes time, use it directly
-      if (raceDate.includes('T')) {
-        raceDateTime = new Date(raceDate);
-      } else {
-        // Concatenate date and time
-        raceDateTime = new Date(`${raceDate}T${raceTime}`);
-      }
-
-      // Validate the resulting date
-      if (isNaN(raceDateTime.getTime())) {
-        console.warn('[RaceTimer] Invalid race date/time:', { raceDate, raceTime });
-        setTimeUntilRace({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-        return;
-      }
-
-      const now = new Date();
-      const diff = raceDateTime.getTime() - now.getTime();
+      const now = Date.now();
+      const diff = raceDateTimeMs - now;
 
       if (diff <= 0) {
         setTimeUntilRace({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -87,7 +162,7 @@ export function RaceTimer({
     const interval = setInterval(calculateCountdown, 1000);
 
     return () => clearInterval(interval);
-  }, [raceDate, raceTime]);
+  }, [raceDateTimeMs]);
 
   // Update elapsed time and GPS point count during tracking
   useEffect(() => {
@@ -236,21 +311,21 @@ export function RaceTimer({
         {days > 0 && (
           <View className="items-center">
             <Text className="text-white text-3xl font-bold">{days}</Text>
-            <Text className="text-white/80 text-sm">days</Text>
+            <Text className="text-white/80 text-sm">{days === 1 ? 'day' : 'days'}</Text>
           </View>
         )}
         <View className="items-center">
           <Text className="text-white text-3xl font-bold">{hours}</Text>
-          <Text className="text-white/80 text-sm">hours</Text>
+          <Text className="text-white/80 text-sm">{hours === 1 ? 'hour' : 'hours'}</Text>
         </View>
         <View className="items-center">
           <Text className="text-white text-3xl font-bold">{minutes}</Text>
-          <Text className="text-white/80 text-sm">mins</Text>
+          <Text className="text-white/80 text-sm">{minutes === 1 ? 'min' : 'mins'}</Text>
         </View>
         {isRaceDay && (
           <View className="items-center">
             <Text className="text-white text-3xl font-bold">{seconds}</Text>
-            <Text className="text-white/80 text-sm">secs</Text>
+            <Text className="text-white/80 text-sm">{seconds === 1 ? 'sec' : 'secs'}</Text>
           </View>
         )}
       </View>

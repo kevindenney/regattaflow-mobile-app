@@ -7,6 +7,12 @@
 
 import type { SailingVenue } from '@/lib/types/global-venues';
 
+// Local fallback assets bundled with the client
+const shallowBathymetry = require('@/assets/bathymetry/geojson/shallow-bathymetry-combined.json');
+const seaLevelBathymetry = require('@/assets/bathymetry/geojson/sea-level.json');
+const depth200Bathymetry = require('@/assets/bathymetry/geojson/200m.json');
+const depth1000Bathymetry = require('@/assets/bathymetry/geojson/1000m.json');
+
 /**
  * Bathymetry raster source configuration
  */
@@ -42,6 +48,11 @@ export interface BathymetrySources {
     showContours: boolean;
     rasterOpacity: number;
     contourOpacity: number;
+    showLabels?: boolean;
+    labelSize?: number;
+    labelColor?: string;
+    labelHaloColor?: string;
+    labelHaloWidth?: number;
   };
 }
 
@@ -79,13 +90,14 @@ export class BathymetryTileService {
       },
       contours: {
         type: 'geojson',
-        data: '/assets/bathymetry/geojson/shallow-bathymetry-combined.geojson'
+        data: shallowBathymetry
       },
       recommendation: {
         showRaster: true,
         showContours: true,
         rasterOpacity: 0.5,
-        contourOpacity: 0.3
+        contourOpacity: 0.45,
+        showLabels: false
       }
     };
   }
@@ -107,13 +119,14 @@ export class BathymetryTileService {
       },
       contours: {
         type: 'geojson',
-        data: '/assets/bathymetry/geojson/shallow-bathymetry-combined.geojson'
+        data: shallowBathymetry
       },
       recommendation: {
         showRaster: true,
         showContours: true,
-        rasterOpacity: 0.6, // Higher opacity for European waters (better data)
-        contourOpacity: 0.3
+        rasterOpacity: 0.6, // Higher opacity kept for future live data
+        contourOpacity: 0.45,
+        showLabels: false
       }
     };
   }
@@ -124,7 +137,7 @@ export class BathymetryTileService {
   getDepthContours(): BathymetryVectorSource {
     return {
       type: 'geojson',
-      data: '/assets/bathymetry/geojson/shallow-bathymetry-combined.geojson'
+      data: shallowBathymetry
     };
   }
 
@@ -132,15 +145,11 @@ export class BathymetryTileService {
    * Get specific depth layer
    */
   getDepthLayer(depth: 0 | 200 | 1000): BathymetryVectorSource {
-    const fileMap = {
-      0: 'sea-level.geojson',
-      200: '200m.geojson',
-      1000: '1000m.geojson'
-    };
+    const dataset = depth === 0 ? seaLevelBathymetry : depth === 200 ? depth200Bathymetry : depth1000Bathymetry;
 
     return {
       type: 'geojson',
-      data: `/assets/bathymetry/geojson/${fileMap[depth]}`
+      data: dataset
     };
   }
 

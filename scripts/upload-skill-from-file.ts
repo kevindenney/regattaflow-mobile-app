@@ -1,7 +1,7 @@
 /**
  * Upload the existing race-strategy-analyst skill from skills/ directory
  *
- * This uses the comprehensive Kevin Gladstone + Kevin Colgate skill file
+ * This uses the comprehensive RegattaFlow Playbook + RegattaFlow Coach skill file
  * that already exists in: skills/race-strategy-analyst/SKILL.md
  *
  * Run with: npx tsx scripts/upload-skill-from-file.ts
@@ -72,7 +72,7 @@ async function uploadExistingSkill() {
     const formData = new FormData();
 
     formData.append('name', 'race-strategy-analyst');
-    formData.append('description', 'Expert sailing race strategy analyst combining Kevin Gladstone\'s North U Performance Racing Tactics with Kevin Colgate\'s championship execution techniques');
+    formData.append('description', 'Expert sailing race strategy analyst combining RegattaFlow Playbook\'s RegattaFlow Playbook Performance Racing Tactics with RegattaFlow Coach\'s championship execution techniques');
 
     // Append the file - this should work with the proper relative path
     formData.append('files[]', fs.createReadStream(skillFilePath), {
@@ -125,7 +125,7 @@ async function uploadExistingSkill() {
     console.error('   2. Navigate to Skills section');
     console.error('   3. Create new skill:');
     console.error('      - Name: race-strategy-analyst');
-    console.error('      - Description: Expert sailing race strategy analyst combining Kevin Gladstone\'s North U Performance Racing Tactics with Kevin Colgate\'s championship execution techniques');
+    console.error('      - Description: Expert sailing race strategy analyst combining RegattaFlow Playbook\'s RegattaFlow Playbook Performance Racing Tactics with RegattaFlow Coach\'s championship execution techniques');
     console.error('   4. Copy content from: skills/race-strategy-analyst/SKILL.md');
     console.error('   5. Paste and save\n');
 

@@ -4,14 +4,17 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
+  Dimensions,
   Modal,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   Platform,
+  type GestureResponderEvent,
 } from 'react-native';
 
 export interface CardMenuItem {
@@ -29,63 +32,114 @@ interface CardMenuProps {
 
 export function CardMenu({ items, iconSize = 20, iconColor = '#64748B' }: CardMenuProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const buttonRef = useRef<TouchableOpacity | null>(null);
+  const { width: screenWidth } = Dimensions.get('window');
+  const menuWidth = 220;
+  const horizontalPadding = 16;
+
+  const placementStyle = useMemo(() => {
+    if (!menuPosition) {
+      return {};
+    }
+
+    const top = Math.max(16, menuPosition.y + menuPosition.height + 8);
+    let left = menuPosition.x + menuPosition.width - menuWidth;
+    if (left < horizontalPadding) {
+      left = horizontalPadding;
+    }
+    const maxLeft = screenWidth - menuWidth - horizontalPadding;
+    if (left > maxLeft) {
+      left = maxLeft;
+    }
+
+    return {
+      top,
+      left,
+      width: menuWidth,
+    };
+  }, [menuPosition, screenWidth]);
+
+  const openMenu = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+
+    if (buttonRef.current?.measureInWindow) {
+      buttonRef.current.measureInWindow((x, y, width, height) => {
+        setMenuPosition({ x, y, width, height });
+        setShowMenu(true);
+      });
+      return;
+    }
+
+    const { pageX = 0, pageY = 0 } = event.nativeEvent as any;
+    setMenuPosition({ x: pageX, y: pageY, width: 0, height: 0 });
+    setShowMenu(true);
+  };
+
+  const closeMenu = () => {
+    setShowMenu(false);
+    setMenuPosition(null);
+  };
 
   return (
     <View style={styles.container}>
       <TouchableOpacity
+        ref={buttonRef}
         style={styles.menuButton}
-        onPress={() => setShowMenu(true)}
+        onPress={openMenu}
         activeOpacity={0.7}
       >
         <Ionicons name="ellipsis-vertical" size={iconSize} color={iconColor} />
       </TouchableOpacity>
 
       {showMenu && (
-        <>
-          <Modal
-            visible={showMenu}
-            transparent
-            animationType="none"
-            onRequestClose={() => setShowMenu(false)}
-          >
-            <TouchableOpacity
+        <Modal
+          visible={showMenu}
+          transparent
+          animationType="none"
+          onRequestClose={closeMenu}
+        >
+          <View style={styles.modalRoot}>
+            <Pressable
               style={styles.modalOverlay}
-              activeOpacity={1}
-              onPress={() => setShowMenu(false)}
+              onPress={(event: GestureResponderEvent) => {
+                event.stopPropagation();
+                closeMenu();
+              }}
             />
-          </Modal>
-
-          <View style={styles.menuContainer}>
-            {items.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.menuItem,
-                  index === items.length - 1 && styles.menuItemLast,
-                ]}
-                onPress={() => {
-                  setShowMenu(false);
-                  item.onPress();
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={item.icon as any}
-                  size={20}
-                  color={item.variant === 'destructive' ? '#EF4444' : '#3B82F6'}
-                />
-                <Text
+            <View style={[styles.menuContainer, placementStyle]}>
+              {items.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
                   style={[
-                    styles.menuItemText,
-                    item.variant === 'destructive' && styles.menuItemTextDestructive,
+                    styles.menuItem,
+                    index === items.length - 1 && styles.menuItemLast,
                   ]}
+                  onPress={(event: GestureResponderEvent) => {
+                    event.stopPropagation();
+                    closeMenu();
+                    item.onPress();
+                  }}
+                  activeOpacity={0.7}
                 >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Ionicons
+                    name={item.icon as any}
+                    size={20}
+                    color={item.variant === 'destructive' ? '#EF4444' : '#3B82F6'}
+                  />
+                  <Text
+                    style={[
+                      styles.menuItemText,
+                      item.variant === 'destructive' && styles.menuItemTextDestructive,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </>
+        </Modal>
       )}
     </View>
   );
@@ -100,14 +154,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'transparent',
   },
-  modalOverlay: {
+  modalRoot: {
     flex: 1,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   menuContainer: {
     position: 'absolute',
-    top: 40,
-    right: 0,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     minWidth: 200,

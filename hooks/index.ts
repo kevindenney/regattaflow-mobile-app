@@ -7,6 +7,13 @@ export { useFleetResources } from './useFleetResources';
 export { useFleetSharedContent } from './useFleetSharedContent';
 export { useRaces } from './useRaces';
 export { useRaceTuningRecommendation } from './useRaceTuningRecommendation';
+export { useEnrichedRaces } from './useEnrichedRaces';
+export { useTidalIntel } from './useTidalIntel';
+export { useUnderwaterAnalysis } from './useUnderwaterAnalysis';
+export { useTacticalZones, useTacticalZoneLayerConfig } from './useTacticalZones';
+export { useClaudeDraft } from './ai/useClaudeDraft';
+export { useAIChatSession } from './ai/useAIChatSession';
+export { useRaceCommsDraft } from './ai/useRaceCommsDraft';
 
 export type {
   SailorDashboardData,

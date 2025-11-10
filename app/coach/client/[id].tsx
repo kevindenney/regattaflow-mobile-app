@@ -6,7 +6,7 @@
  * - Notes and feedback
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -35,6 +35,11 @@ import { Dimensions } from 'react-native';
 
 const screenWidth = Dimensions.get('window').width;
 
+const isUuid = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value);
+};
+
 export default function ClientDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -46,17 +51,25 @@ export default function ClientDetailScreen() {
   const [notes, setNotes] = useState('');
   const [selectedTab, setSelectedTab] = useState<'sessions' | 'progress' | 'notes'>('sessions');
 
+  const isCreateRoute = typeof id === 'string' && id === 'new';
+  const clientId = useMemo(() => (isUuid(id) ? id : null), [id]);
+
   useEffect(() => {
-    if (coachId && id) {
+    if (isCreateRoute) {
+      router.replace('/coach/client/new');
+      return;
+    }
+
+    if (coachId && clientId) {
       loadClientDetails();
     }
-  }, [coachId, id]);
+  }, [coachId, clientId, isCreateRoute, router]);
 
   const loadClientDetails = async () => {
-    if (!coachId || !id || typeof id !== 'string') return;
+    if (!coachId || !clientId) return;
 
     try {
-      const details = await coachingService.getClientDetails(id);
+      const details = await coachingService.getClientDetails(clientId);
       setClientDetails(details);
       setNotes(details?.coach_notes || '');
     } catch (error) {
@@ -70,7 +83,9 @@ export default function ClientDetailScreen() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadClientDetails();
+    if (clientId) {
+      loadClientDetails();
+    }
   };
 
   const handleSaveNotes = async () => {
@@ -270,7 +285,7 @@ export default function ClientDetailScreen() {
                           {feedback.phase.toUpperCase()}
                         </ThemedText>
                         <ThemedText style={styles.analysisFeedbackSummary}>
-                          {feedback.bill_recommendation}
+                          {feedback.playbook_recommendation}
                         </ThemedText>
                       </View>
                     ))}
@@ -351,6 +366,24 @@ export default function ClientDetailScreen() {
       </View>
     );
   };
+
+  if (isCreateRoute) {
+    return null;
+  }
+
+  if (!clientId) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
+          <ThemedText style={styles.errorText}>Invalid client id</ThemedText>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
 
   if (personaLoading || loading) {
     return (

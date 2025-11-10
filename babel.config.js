@@ -17,6 +17,8 @@ module.exports = function (api) {
           },
         },
       ],
+      // Transform import.meta for compatibility with Metro bundler
+      "babel-plugin-transform-import-meta",
       // 👇 Must be last
       "react-native-reanimated/plugin",
     ],

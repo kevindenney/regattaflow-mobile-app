@@ -4,7 +4,7 @@
  * Inspired by Apple Weather's card design
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -46,6 +46,36 @@ export function StrategyCard({
 }: StrategyCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [animation] = useState(new Animated.Value(defaultExpanded ? 1 : 0));
+
+  const normalizedChildren = useMemo(() => (
+    React.Children.map(children, (child, index) => {
+      if (child == null) {
+        return null;
+      }
+
+      if (typeof child === 'string') {
+        if (child.trim().length === 0) {
+          return null;
+        }
+
+        return (
+          <Text key={`text-child-${index}`} style={styles.fallbackText}>
+            {child}
+          </Text>
+        );
+      }
+
+      if (typeof child === 'number') {
+        return (
+          <Text key={`number-child-${index}`} style={styles.fallbackText}>
+            {child}
+          </Text>
+        );
+      }
+
+      return child;
+    })
+  ), [children]);
 
   const toggleExpand = () => {
     const newExpanded = !expanded;
@@ -199,7 +229,7 @@ export function StrategyCard({
             },
           ]}
         >
-          {children}
+          {normalizedChildren}
         </Animated.View>
       )}
     </View>
@@ -303,5 +333,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     overflow: 'hidden',
+  },
+  fallbackText: {
+    fontSize: 14,
+    color: '#0F172A',
   },
 });

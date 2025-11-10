@@ -88,6 +88,9 @@ export interface CreateCommentParams {
 }
 
 class FleetSocialService {
+  private fleetSocialEnabled = true;
+  private fleetSocialWarningLogged = false;
+
   // ==========================================
   // POSTS
   // ==========================================
@@ -98,6 +101,10 @@ class FleetSocialService {
     postType?: PostType;
     userId?: string;
   }): Promise<FleetPost[]> {
+    if (!this.ensureFleetSocialAvailable()) {
+      return [];
+    }
+
     const userId = options?.userId;
 
     let query = supabase
@@ -128,6 +135,9 @@ class FleetSocialService {
     const { data, error } = await query;
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'loading fleet posts')) {
+        return [];
+      }
       console.error('Error fetching feed posts:', error);
       throw error;
     }
@@ -181,6 +191,10 @@ class FleetSocialService {
   }
 
   async createPost(params: CreatePostParams): Promise<FleetPost> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -201,6 +215,9 @@ class FleetSocialService {
       .single();
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'creating a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error creating post:', error);
       throw error;
     }
@@ -216,6 +233,10 @@ class FleetSocialService {
     metadata?: Record<string, any>;
     visibility?: PostVisibility;
   }): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { error } = await supabase
       .from('fleet_posts')
       .update({
@@ -227,18 +248,28 @@ class FleetSocialService {
       .eq('id', postId);
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'updating a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error updating post:', error);
       throw error;
     }
   }
 
   async deletePost(postId: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { error } = await supabase
       .from('fleet_posts')
       .delete()
       .eq('id', postId);
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'deleting a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error deleting post:', error);
       throw error;
     }
@@ -249,6 +280,10 @@ class FleetSocialService {
   // ==========================================
 
   async likePost(postId: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -259,13 +294,23 @@ class FleetSocialService {
         user_id: userData.user.id,
       });
 
-    if (error && error.code !== '23505') { // Ignore duplicate key errors
+    if (error) {
+      if (error.code === '23505') {
+        return; // Ignore duplicate key errors
+      }
+      if (this.handleFleetSocialTableError(error, 'liking a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error liking post:', error);
       throw error;
     }
   }
 
   async unlikePost(postId: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -276,6 +321,9 @@ class FleetSocialService {
       .eq('user_id', userData.user.id);
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'unliking a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error unliking post:', error);
       throw error;
     }
@@ -286,6 +334,10 @@ class FleetSocialService {
   // ==========================================
 
   async getComments(postId: string): Promise<PostComment[]> {
+    if (!this.ensureFleetSocialAvailable()) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('fleet_post_comments')
       .select(`
@@ -296,6 +348,9 @@ class FleetSocialService {
       .order('created_at', { ascending: true });
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'loading comments')) {
+        return [];
+      }
       console.error('Error fetching comments:', error);
       throw error;
     }
@@ -317,6 +372,10 @@ class FleetSocialService {
   }
 
   async createComment(params: CreateCommentParams): Promise<PostComment> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -335,6 +394,9 @@ class FleetSocialService {
       .single();
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'creating a comment')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error creating comment:', error);
       throw error;
     }
@@ -356,12 +418,19 @@ class FleetSocialService {
   }
 
   async deleteComment(commentId: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { error } = await supabase
       .from('fleet_post_comments')
       .delete()
       .eq('id', commentId);
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'deleting a comment')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error deleting comment:', error);
       throw error;
     }
@@ -372,6 +441,10 @@ class FleetSocialService {
   // ==========================================
 
   async bookmarkPost(postId: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -382,13 +455,23 @@ class FleetSocialService {
         user_id: userData.user.id,
       });
 
-    if (error && error.code !== '23505') {
+    if (error) {
+      if (error.code === '23505') {
+        return;
+      }
+      if (this.handleFleetSocialTableError(error, 'bookmarking a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error bookmarking post:', error);
       throw error;
     }
   }
 
   async unbookmarkPost(postId: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -399,12 +482,19 @@ class FleetSocialService {
       .eq('user_id', userData.user.id);
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'removing a bookmark')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error removing bookmark:', error);
       throw error;
     }
   }
 
   async getBookmarkedPosts(userId: string): Promise<FleetPost[]> {
+    if (!this.ensureFleetSocialAvailable()) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('fleet_post_bookmarks')
       .select(`
@@ -417,6 +507,9 @@ class FleetSocialService {
       .order('created_at', { ascending: false });
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'loading bookmarked posts')) {
+        return [];
+      }
       console.error('Error fetching bookmarked posts:', error);
       throw error;
     }
@@ -431,6 +524,10 @@ class FleetSocialService {
   // ==========================================
 
   async sharePost(postId: string, targetFleetId: string, message?: string): Promise<void> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error('Not authenticated');
 
@@ -444,6 +541,9 @@ class FleetSocialService {
       });
 
     if (error) {
+      if (this.handleFleetSocialTableError(error, 'sharing a post')) {
+        throw this.fleetSocialDisabledError();
+      }
       console.error('Error sharing post:', error);
       throw error;
     }
@@ -633,6 +733,40 @@ class FleetSocialService {
   // ==========================================
   // PRIVATE HELPERS
   // ==========================================
+
+  private ensureFleetSocialAvailable(): boolean {
+    return this.fleetSocialEnabled;
+  }
+
+  private isFleetSocialTableMissing(error: any): boolean {
+    if (!error) return false;
+    const code = error.code;
+    const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+    return (
+      code === 'PGRST205' ||
+      code === '42P01' ||
+      message.includes('fleet_posts') ||
+      message.includes('fleet_post_')
+    );
+  }
+
+  private handleFleetSocialTableError(error: any, context: string): boolean {
+    if (this.isFleetSocialTableMissing(error)) {
+      if (!this.fleetSocialWarningLogged) {
+        console.warn(
+          `[FleetSocialService] fleet social tables missing while ${context}. Disabling fleet feed features for this session.`
+        );
+        this.fleetSocialWarningLogged = true;
+      }
+      this.fleetSocialEnabled = false;
+      return true;
+    }
+    return false;
+  }
+
+  private fleetSocialDisabledError() {
+    return new Error('Fleet social feed is not available in this environment yet.');
+  }
 
   private mapPost(data: any): FleetPost {
     return {

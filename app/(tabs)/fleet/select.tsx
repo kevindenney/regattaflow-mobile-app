@@ -148,20 +148,31 @@ export default function FleetSelectionScreen() {
 
   const saveSelections = async () => {
     if (!user?.id) {
-      console.error('No user ID available');
+      console.error('[FleetSelect] No user ID available');
       return;
     }
 
-    logger.debug('Starting save with user:', user.id);
+    const saveStartTime = Date.now();
+    logger.debug(`[FleetSelect] ========== SAVE STARTED at ${new Date().toISOString()} ==========`);
+    logger.debug('[FleetSelect] User ID:', user.id);
+    logger.debug('[FleetSelect] Save start timestamp:', saveStartTime);
+
     setSaving(true);
     try {
       const selectedFleetIds = Array.from(selectedFleets);
       const selectedFleetsList = hongKongFleets.filter(f => selectedFleets.has(f.id));
-      logger.debug('Selected fleets:', selectedFleetsList.map(f => f.name));
+      logger.debug('[FleetSelect] Selected fleet count:', selectedFleetIds.length);
+      logger.debug('[FleetSelect] Selected fleet IDs:', selectedFleetIds);
+      logger.debug('[FleetSelect] Selected fleet names:', selectedFleetsList.map(f => f.name));
 
       // Add user to selected fleets
-      for (const fleetId of selectedFleetIds) {
-        await supabase
+      logger.debug('[FleetSelect] Starting upsert operations...');
+      for (let i = 0; i < selectedFleetIds.length; i++) {
+        const fleetId = selectedFleetIds[i];
+        const upsertStartTime = Date.now();
+        logger.debug(`[FleetSelect] Upserting fleet ${i + 1}/${selectedFleetIds.length}: ${fleetId}`);
+
+        const { data, error } = await supabase
           .from('fleet_members')
           .upsert({
             fleet_id: fleetId,
@@ -170,7 +181,17 @@ export default function FleetSelectionScreen() {
             status: 'active',
           }, {
             onConflict: 'fleet_id,user_id',
-          });
+          })
+          .select();
+
+        const upsertEndTime = Date.now();
+        const upsertDuration = upsertEndTime - upsertStartTime;
+
+        if (error) {
+          logger.error(`[FleetSelect] Upsert error for fleet ${fleetId}:`, error);
+        } else {
+          logger.debug(`[FleetSelect] Upsert success for fleet ${fleetId} (took ${upsertDuration}ms):`, data);
+        }
       }
 
       // Remove user from unselected fleets
@@ -179,22 +200,47 @@ export default function FleetSelectionScreen() {
         .map(f => f.id);
 
       if (unselectedFleetIds.length > 0) {
-        await supabase
+        logger.debug('[FleetSelect] Deleting unselected fleets:', unselectedFleetIds);
+        const deleteStartTime = Date.now();
+
+        const { error: deleteError } = await supabase
           .from('fleet_members')
           .delete()
           .in('fleet_id', unselectedFleetIds)
           .eq('user_id', user.id);
+
+        const deleteEndTime = Date.now();
+        const deleteDuration = deleteEndTime - deleteStartTime;
+
+        if (deleteError) {
+          logger.error('[FleetSelect] Delete error:', deleteError);
+        } else {
+          logger.debug(`[FleetSelect] Delete success (took ${deleteDuration}ms)`);
+        }
       }
 
-      logger.debug('Save completed successfully');
-      logger.debug('Selected fleets saved:', selectedFleetsList.map(f => f.name));
+      const saveEndTime = Date.now();
+      const totalDuration = saveEndTime - saveStartTime;
+      logger.debug('[FleetSelect] ========== SAVE COMPLETED ==========');
+      logger.debug('[FleetSelect] Save end timestamp:', saveEndTime);
+      logger.debug('[FleetSelect] Total save duration:', totalDuration, 'ms');
+      logger.debug('[FleetSelect] Selected fleets saved:', selectedFleetsList.map(f => f.name));
 
       // Wait a moment for database to sync, then navigate back
+      logger.debug('[FleetSelect] Waiting 300ms before navigation...');
       setTimeout(() => {
+        const navigateTime = Date.now();
+        logger.debug('[FleetSelect] ========== NAVIGATING BACK ==========');
+        logger.debug('[FleetSelect] Navigate timestamp:', navigateTime);
+        logger.debug('[FleetSelect] Time since save completed:', navigateTime - saveEndTime, 'ms');
+        logger.debug('[FleetSelect] Total time since save started:', navigateTime - saveStartTime, 'ms');
         router.back();
       }, 300);
     } catch (error) {
-      console.error('Error saving fleet selections:', error);
+      const errorTime = Date.now();
+      logger.error('[FleetSelect] ========== SAVE FAILED ==========');
+      logger.error('[FleetSelect] Error timestamp:', errorTime);
+      logger.error('[FleetSelect] Error saving fleet selections:', error);
       alert('Failed to save fleet selections. Check console for details.');
     } finally {
       setSaving(false);

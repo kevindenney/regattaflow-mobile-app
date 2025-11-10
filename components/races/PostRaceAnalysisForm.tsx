@@ -1,7 +1,7 @@
 /**
  * Post-Race Analysis Form
  *
- * Multi-step form for structured post-race analysis with Kevin Gladstone framework integration.
+ * Multi-step form for structured post-race analysis with RegattaFlow Playbook framework integration.
  * Works on iOS, Android, and Web (React Native Universal).
  */
 
@@ -22,14 +22,14 @@ import type {
   PostRaceAnalysisFormProps,
 } from '@/types/raceAnalysis';
 
-// Step definitions with Kevin's framework hints
+// Step definitions with playbook framework hints
 const ANALYSIS_STEPS: AnalysisStep[] = [
   {
     id: 'equipment_planning',
     title: 'Equipment & Planning',
     description: 'How prepared were you for this race?',
-    bill_context:
-      '💡 Kevin Gladstone: "Boat handling must be second nature, boat speed second to none, THEN tactics will win races."',
+    playbook_context:
+      '💡 RegattaFlow Playbook: "Boat handling must be second nature, boat speed second to none, THEN tactics will win races."',
     questions: [
       {
         id: 'equipment_rating',
@@ -88,7 +88,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         label: 'Start line speed',
         required: true,
         options: [
-          { value: 'full_speed', label: 'Full Speed', bill_framework_note: '✅ Ideal' },
+          { value: 'full_speed', label: 'Full Speed', playbook_framework_note: '✅ Ideal' },
           { value: 'moderate', label: 'Moderate' },
           { value: 'slow', label: 'Slow' },
         ],
@@ -130,8 +130,8 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
     id: 'upwind',
     title: 'Upwind Leg',
     description: 'How did you perform sailing to windward?',
-    bill_context:
-      '💡 Kevin: "10° shift = 25% of boat separation. Small shifts have massive impact!"',
+    playbook_context:
+      '💡 Playbook insight: "10° shift = 25% of boat separation. Small shifts have massive impact!"',
     questions: [
       {
         id: 'upwind_rating',
@@ -143,19 +143,19 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         id: 'upwind_puff_handling',
         type: 'select',
         label: 'How did you handle puffs?',
-        hint: '💡 Kevin teaches: "TRIM response, not HELM response"',
+        hint: '💡 The playbook teaches: "TRIM response, not HELM response"',
         required: true,
-        bill_framework_reference: 'Puff Response Framework',
+        playbook_framework_reference: 'Puff Response Framework',
         options: [
           {
             value: 'traveler',
             label: 'Traveler down/up',
-            bill_framework_note: '✅ Kevin\'s recommendation for moderate keelboats',
+            playbook_framework_note: '✅ Playbook\'s recommendation for moderate keelboats',
           },
           {
             value: 'mainsheet',
             label: 'Mainsheet ease/trim',
-            bill_framework_note: '⚡ Better for hot boats with tall rigs',
+            playbook_framework_note: '⚡ Better for hot boats with tall rigs',
           },
           { value: 'feathered', label: 'Feathered (turned toward wind)' },
           { value: 'not_sure', label: 'Not sure' },
@@ -167,18 +167,18 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         label: 'Wind Shift Awareness',
         hint: 'How well did you track and respond to wind shifts?',
         required: true,
-        bill_framework_reference: 'Wind Shift Mathematics',
+        playbook_framework_reference: 'Wind Shift Mathematics',
       },
       {
         id: 'upwind_tactics_used',
         type: 'multi-select',
         label: 'Tactics used in 1-on-1 situations',
-        bill_framework_reference: 'Delayed Tack',
+        playbook_framework_reference: 'Delayed Tack',
         options: [
           {
             value: 'delayed_tack',
             label: 'Delayed Tack',
-            bill_framework_note: '🏆 Kevin\'s signature move!',
+            playbook_framework_note: '🏆 Playbook\'s signature move!',
           },
           { value: 'cross_and_cover', label: 'Cross & Cover' },
           { value: 'slam_dunk', label: 'Slam Dunk' },
@@ -199,7 +199,7 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
     id: 'windward_mark',
     title: 'Windward Mark',
     description: 'How was your windward mark rounding?',
-    bill_context: '💡 Kevin: "Round on the LIFTED tack to set up downwind leg"',
+    playbook_context: '💡 Playbook insight: "Round on the LIFTED tack to set up downwind leg"',
     questions: [
       {
         id: 'windward_mark_rating',
@@ -211,20 +211,20 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         id: 'windward_mark_approach_tack',
         type: 'select',
         label: 'Which tack did you round on?',
-        hint: '💡 Kevin recommends rounding on the LIFTED tack',
+        hint: '💡 The playbook recommends rounding on the LIFTED tack',
         required: true,
-        bill_framework_reference: 'Getting In Phase',
+        playbook_framework_reference: 'Getting In Phase',
         options: [
           {
             value: 'starboard_lifted',
             label: 'Starboard (Lifted)',
-            bill_framework_note: '✅ Sets up downwind leg',
+            playbook_framework_note: '✅ Sets up downwind leg',
           },
           { value: 'starboard_headed', label: 'Starboard (Headed)' },
           {
             value: 'port_lifted',
             label: 'Port (Lifted)',
-            bill_framework_note: '✅ Sets up downwind leg',
+            playbook_framework_note: '✅ Sets up downwind leg',
           },
           { value: 'port_headed', label: 'Port (Headed)' },
           { value: 'not_sure', label: 'Not sure' },
@@ -241,8 +241,8 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
     id: 'downwind',
     title: 'Downwind Leg',
     description: 'How did you sail the run?',
-    bill_context:
-      '💡 Kevin: "Apparent wind aft WITHOUT stronger = lift → JIBE immediately"',
+    playbook_context:
+      '💡 Playbook insight: "Apparent wind aft WITHOUT stronger = lift → JIBE immediately"',
     questions: [
       {
         id: 'downwind_rating',
@@ -254,14 +254,14 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         id: 'downwind_shift_detection',
         type: 'select',
         label: 'How did you detect shifts downwind?',
-        hint: '💡 Kevin teaches apparent wind feel method',
+        hint: '💡 The playbook teaches apparent wind feel method',
         required: true,
-        bill_framework_reference: 'Downwind Shift Detection',
+        playbook_framework_reference: 'Downwind Shift Detection',
         options: [
           {
             value: 'apparent_wind',
             label: 'Apparent wind feel',
-            bill_framework_note: '✅ Kevin\'s method!',
+            playbook_framework_note: '✅ Playbook\'s method!',
           },
           { value: 'compass', label: 'Compass' },
           { value: 'schooled_upwind_boats', label: 'Watched upwind boats' },
@@ -444,7 +444,7 @@ export function PostRaceAnalysisForm({
 
   /**
    * Fill with test data (development only)
-   * Fills realistic data that triggers Kevin's coaching scenarios
+   * Fills realistic data that triggers Playbook's coaching scenarios
    */
   const fillTestData = () => {
     const testData: Partial<RaceAnalysis> = {
@@ -466,7 +466,7 @@ export function PostRaceAnalysisForm({
 
       // Upwind - Mix of good and needs-improvement responses
       upwind_rating: 3,
-      upwind_puff_handling: 'feathered', // ❌ Will trigger Kevin's coaching!
+      upwind_puff_handling: 'feathered', // ❌ Will trigger Playbook's coaching!
       upwind_shift_awareness: 2, // ❌ Low - high priority coaching
       upwind_tactics_used: ['cross_and_cover', 'tack_on_header'], // ❌ Missing delayed_tack
       upwind_notes: 'Lost distance to fleet on right side. Didn\'t see the shift coming.',
@@ -478,7 +478,7 @@ export function PostRaceAnalysisForm({
 
       // Downwind
       downwind_rating: 3,
-      downwind_shift_detection: 'compass', // 🎯 Good but not Kevin's method
+      downwind_shift_detection: 'compass', // 🎯 Good but not playbook method
       downwind_jibe_count: 8,
       downwind_in_phase: false, // ❌ Because rounded on headed tack
       downwind_notes: 'Felt like I was jibing reactively instead of proactively.',
@@ -531,9 +531,9 @@ export function PostRaceAnalysisForm({
         {currentStepData.description && (
           <Text style={styles.description}>{currentStepData.description}</Text>
         )}
-        {currentStepData.bill_context && (
-          <View style={styles.billContext}>
-            <Text style={styles.billContextText}>{currentStepData.bill_context}</Text>
+        {currentStepData.playbook_context && (
+          <View style={styles.playbookContext}>
+            <Text style={styles.playbookContextText}>{currentStepData.playbook_context}</Text>
           </View>
         )}
       </View>
@@ -679,9 +679,9 @@ function QuestionField({
 
       {question.hint && <Text style={styles.hint}>{question.hint}</Text>}
 
-      {question.bill_framework_reference && (
+      {question.playbook_framework_reference && (
         <Text style={styles.frameworkBadge}>
-          📚 {question.bill_framework_reference}
+          📚 {question.playbook_framework_reference}
         </Text>
       )}
 
@@ -748,8 +748,8 @@ function SelectInput({
           >
             {option.label}
           </Text>
-          {option.bill_framework_note && (
-            <Text style={styles.frameworkNote}>{option.bill_framework_note}</Text>
+          {option.playbook_framework_note && (
+            <Text style={styles.frameworkNote}>{option.playbook_framework_note}</Text>
           )}
         </TouchableOpacity>
       ))}
@@ -796,8 +796,8 @@ function MultiSelectInput({
           >
             {option.label}
           </Text>
-          {option.bill_framework_note && (
-            <Text style={styles.frameworkNote}>{option.bill_framework_note}</Text>
+          {option.playbook_framework_note && (
+            <Text style={styles.frameworkNote}>{option.playbook_framework_note}</Text>
           )}
         </TouchableOpacity>
       ))}
@@ -964,14 +964,14 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 12,
   },
-  billContext: {
+  playbookContext: {
     backgroundColor: '#FFF3CD',
     padding: 12,
     borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#FFA500',
   },
-  billContextText: {
+  playbookContextText: {
     fontSize: 14,
     color: '#856404',
   },

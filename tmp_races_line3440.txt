@@ -1,0 +1,199 @@
+
+    const timer = setTimeout(() => {
+      if (raceCardsScrollViewRef.current) {
+        raceCardsScrollViewRef.current.scrollTo({
+          x: Math.max(0, scrollX),
+          y: 0,
+          animated: true,
+        });
+        hasAutoCenteredNextRace.current = true;
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [nextRace, safeRecentRaces, loading, hasManuallySelected, SCREEN_WIDTH]);
+
+  // Keep the selected race visible by centering it when selection changes
+  useEffect(() => {
+    if (!selectedRaceId || !raceCardsScrollViewRef.current || safeRecentRaces.length === 0) {
+      return;
+    }
+
+    const selectedIndex = safeRecentRaces.findIndex((race: any) => race.id === selectedRaceId);
+    if (selectedIndex === -1) {
+      return;
+    }
+
+    const scrollX =
+      selectedIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
+
+    raceCardsScrollViewRef.current.scrollTo({
+      x: Math.max(0, scrollX),
+      y: 0,
+      animated: true,
+    });
+  }, [selectedRaceId, safeRecentRaces, SCREEN_WIDTH]);
+
+  // Auth loading state - show while auth is being initialized
+  if (!ready) {
+    logger.debug('Waiting for auth to be ready');
+    return <DashboardSkeleton />;
+  }
+
+  // Loading state - AFTER all hooks
+  if (loading && !profile) {
+    logger.debug('Loading skeleton');
+    return <DashboardSkeleton />;
+  }
+
+  // Error state
+  if (error && !profile) {
+    logger.error('Top-level error', error);
+    return (
+      <View className="flex-1 bg-background-0 items-center justify-center">
+        <ErrorMessage
+          title="Unable to load dashboard"
+          message={error.message || 'Please check your connection and try again'}
+          type="network"
+          onRetry={onRefresh}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-gray-50">
+      <PlanModeLayout
+        raceId={selectedRaceId}
+        raceData={selectedRaceData}
+      >
+            {/* Header */}
+            <View className="bg-primary-500 pt-10 pb-2 px-4">
+        <View className="flex-row justify-between items-center mb-1">
+          <Text className="text-white text-lg font-bold">Races</Text>
+          <View className="flex-row gap-2 items-center">
+            {!isOnline && <OfflineIndicator />}
+            <AccessibleTouchTarget
+              onPress={() => router.push('/notifications' as any)}
+              accessibilityLabel="Notifications"
+              accessibilityHint="View your notifications and alerts"
+              className="bg-primary-600 rounded-full p-1"
+            >
+              <Bell color="white" size={18} />
+            </AccessibleTouchTarget>
+          </View>
+        </View>
+
+        {/* Venue Display */}
+        {currentVenue && (
+          <TouchableOpacity
+            className="flex-row items-center"
+            onPress={handleVenuePress}
+            accessibilityLabel={`Current venue: ${currentVenue.name}`}
+            accessibilityHint="Tap to view venue details or change venue"
+            accessibilityRole="button"
+            style={{ minHeight: 32 }}
+          >
+            <MapPin color="white" size={12} />
+            <View className="flex-row items-center flex-1">
+              <Text className="text-white text-xs ml-1">{currentVenue.name}</Text>
+              {(loadingInsights || weatherLoading) && (
+                <ActivityIndicator size="small" color="white" className="ml-1" />
+              )}
+              {!weatherLoading && raceWeather && (
+                <Text className="text-white/70 text-[10px] ml-1">
+                  (HKO)
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
+
+
+      {/* Main Content */}
+      <ScrollView
+        ref={mainScrollViewRef}
+        className="px-4 py-4"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#2563EB"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {isDemoProfile && (
+          <View className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-4">
+            <Text className="text-indigo-900 text-sm font-semibold">
+              You’re exploring a demo workspace
+            </Text>
+            <Text className="text-indigo-700 text-xs mt-1 leading-4">
+              All races, boats, and analytics below are sample data. Add your own boat or claim your workspace to start syncing real results.
+            </Text>
+            <Button
+              size="sm"
+              className="mt-3 self-start"
+              onPress={handleClaimWorkspace}
+            >
+              <ButtonText>Claim my workspace</ButtonText>
+            </Button>
+          </View>
+        )}
+        {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
+        {hasRealRaces ? (
+          // User has real races - show all upcoming races
+          <>
+            <View className="mb-3 flex-row items-center justify-between">
+              <View>
+                <Text className="text-base font-bold text-gray-800">All Races</Text>
+                <Text className="text-xs text-gray-500">Swipe to view all races chronologically</Text>
+              </View>
+              <View className="bg-blue-100 px-3 py-1 rounded-full">
+                <Text className="text-blue-800 font-semibold text-sm">
+                  {safeRecentRaces.length} races
+                </Text>
+              </View>
+            </View>
+            <ScrollView
+              ref={raceCardsScrollViewRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-4"
+              contentContainerStyle={{ paddingRight: 16 }}
+              nestedScrollEnabled={true}
+              scrollEventThrottle={16}
+            >
+              {/* All races in chronological order */}
+              {safeRecentRaces.map((race: any, index: number) => {
+                const isNextRace = !!(nextRace && race.id === nextRace.id);
+                const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
+                return (
+                  <RaceCard
+                    key={race.id || index}
+                    id={race.id}
+                    name={race.name}
+                    venue={race.venue || 'Unknown Venue'}
+                    date={race.date || new Date().toISOString()}
+                    startTime={race.startTime || '10:00'}
+                    wind={race.wind}
+                    tide={race.tide}
+                    weatherStatus={race.weatherStatus}
+                    weatherError={race.weatherError}
+                    strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
+                    critical_details={race.critical_details}
+                    isPrimary={isNextRace}
+                    raceStatus={raceStatus}
+                    onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name)}
+                    isSelected={selectedRaceId === race.id}
+                    onSelect={() => {
+                      setHasManuallySelected(true);
+                      setSelectedRaceId(race.id);
+                    }}
+                    onEdit={() => handleEditRace(race.id)}
+                    onDelete={() => handleDeleteRace(race.id, race.name)}
+                  />
+                );
+              })}
+            </ScrollView>

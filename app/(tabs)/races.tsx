@@ -15,31 +15,58 @@ import {
     WindWeatherCard,
     RigTuningCard,
 } from '@/components/race-detail';
-import { CourseSelector } from '@/components/race-detail/CourseSelector';
+import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/race-detail/RaceDocumentsCard';
+import { PlanModeLayout } from '@/components/races/modes';
+import { PerformanceMetrics, calculatePerformanceMetrics } from '@/components/races/PerformanceMetrics';
+import { SplitTimesAnalysis } from '@/components/races/SplitTimesAnalysis';
+import { TacticalInsights } from '@/components/races/TacticalInsights';
+import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
+import { LiveRaceTimer } from '@/components/races/LiveRaceTimer';
+import { LivePositionTracker } from '@/components/races/LivePositionTracker';
+import { TacticalDataOverlay, TacticalCalculations } from '@/components/races/TacticalDataOverlay';
+import { QuickActionDrawer } from '@/components/races/QuickActionDrawer';
+import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
+import { PhaseHeader, PhaseSkillButtons, PrimaryAICoach } from '@/components/races';
+import { PreStartConsole } from '@/components/racing-console/PreStartConsole';
+import { PlanModeContent } from '@/components/races/plan';
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
+import { FleetPostRaceInsights } from '@/components/races/FleetPostRaceInsights';
 import { RaceCard } from '@/components/races/RaceCard';
+import { SmartRaceCoach } from '@/components/coaching/SmartRaceCoach';
+import { QuickSkillButtons } from '@/components/coaching/QuickSkillButtons';
+import { CoachSelectionModal } from '@/components/coaching/CoachSelectionModal';
 import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
-import { MOCK_RACES } from '@/constants/mockData';
+import { MOCK_RACES, calculateCountdown } from '@/constants/mockData';
 import { useDashboardData } from '@/hooks/useData';
 import { useOffline } from '@/hooks/useOffline';
 import { useLiveRaces } from '@/hooks/useRaceResults';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
+import { useEnrichedRaces } from '@/hooks/useEnrichedRaces';
 import { useVenueDetection } from '@/hooks/useVenueDetection';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
 import { supabase } from '@/services/supabase';
 import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
+import { strategicPlanningService } from '@/services/StrategicPlanningService';
+import { TacticalZoneGenerator } from '@/services/TacticalZoneGenerator';
+import { raceDocumentService } from '@/services/RaceDocumentService';
+import type { RaceDocumentWithDetails, RaceDocumentType } from '@/services/RaceDocumentService';
+import { documentStorageService } from '@/services/storage/DocumentStorageService';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
-import { CourseLibraryService } from '@/services/CourseLibraryService';
-import type { CourseScope, Mark } from '@/types/courses';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
+import type { Mark } from '@/types/courses';
+import { useRaceConditions } from '@/stores/raceConditionsStore';
+import { useRacePhaseDetection } from '@/hooks/useRacePhaseDetection';
+import type { Course } from '@/stores/raceConditionsStore';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
     AlertTriangle,
@@ -48,18 +75,499 @@ import {
     ChevronRight,
     MapPin,
     Navigation,
-    Pencil,
     Plus,
-    Trash2,
     TrendingUp,
     Users,
     X
 } from 'lucide-react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
 const logger = createLogger('RacesScreen');
+
+// Destructure tactical calculations for easy access
+const { calculateDistance, calculateBearing } = TacticalCalculations;
+
+const DOCUMENT_TYPE_OPTIONS: Array<{ label: string; description: string; value: RaceDocumentType }> = [
+  {
+    label: 'Sailing Instructions',
+    description: 'Standard SI packets and updates',
+    value: 'sailing_instructions',
+  },
+  {
+    label: 'Notice of Race',
+    description: 'NORs or addenda',
+    value: 'nor',
+  },
+  {
+    label: 'Course Diagram',
+    description: 'Course charts or layouts',
+    value: 'course_diagram',
+  },
+  {
+    label: 'Amendment',
+    description: 'Rule changes after publication',
+    value: 'amendment',
+  },
+  {
+    label: 'NOTAM',
+    description: 'Notices to mariners / harbor ops',
+    value: 'notam',
+  },
+  {
+    label: 'Other',
+    description: 'Anything else worth sharing',
+    value: 'other',
+  },
+];
+
+interface ActiveRaceSummary {
+  id: string;
+  name: string;
+  series?: string;
+  venue?: string;
+  startTime?: string;
+  warningSignal?: string;
+  cleanRegatta?: boolean;
+  lastUpdated?: string | null;
+}
+
+interface RaceBriefData extends ActiveRaceSummary {
+  countdown?: {
+    days: number;
+    hours: number;
+    minutes: number;
+  };
+  weatherSummary?: string;
+  tideSummary?: string;
+}
+
+interface RigPreset {
+  id: string;
+  label: string;
+  windRange: string;
+  uppers: string;
+  lowers: string;
+  runners: string;
+  ram: string;
+  notes: string;
+}
+
+interface RegulatoryDigestData {
+  seriesName: string;
+  venueArea: string;
+  cleanRegatta: boolean;
+  signOnWindow: string;
+  entryNotes: string[];
+  courseSelection: string;
+  safetyNotes: string[];
+  reference: string;
+}
+
+interface RegulatoryAcknowledgements {
+  cleanRegatta: boolean;
+  signOn: boolean;
+  safetyBriefing: boolean;
+}
+
+interface CourseOutlineGroup {
+  group: string;
+  description: string;
+  courses: Array<{
+    name: string;
+    sequence: string;
+  }>;
+}
+
+interface TacticalWindSnapshot {
+  speed: number;
+  direction: number;
+  gust?: number;
+}
+
+interface TacticalCurrentSnapshot {
+  speed: number;
+  direction: number;
+  type?: 'flood' | 'ebb' | 'slack';
+}
+
+const CARDINAL_TO_DEGREES: Record<string, number> = {
+  N: 0,
+  NNE: 22.5,
+  NE: 45,
+  ENE: 67.5,
+  E: 90,
+  ESE: 112.5,
+  SE: 135,
+  SSE: 157.5,
+  S: 180,
+  SSW: 202.5,
+  SW: 225,
+  WSW: 247.5,
+  W: 270,
+  WNW: 292.5,
+  NW: 315,
+  NNW: 337.5,
+};
+
+const DEGREE_PATTERN = /(-?\d+(?:\.\d+)?)/;
+
+function normalizeDirection(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = value % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const degreeMatch = trimmed.match(DEGREE_PATTERN);
+    if (degreeMatch) {
+      const parsed = Number.parseFloat(degreeMatch[1]);
+      if (!Number.isNaN(parsed)) {
+        const normalized = parsed % 360;
+        return normalized < 0 ? normalized + 360 : normalized;
+      }
+    }
+
+    const lettersOnly = trimmed.replace(/[^A-Za-z]/g, '').toUpperCase();
+    if (lettersOnly && CARDINAL_TO_DEGREES[lettersOnly] !== undefined) {
+      return CARDINAL_TO_DEGREES[lettersOnly];
+    }
+  }
+
+  return null;
+}
+
+const normalizeDocumentType = (
+  type: RaceDocumentWithDetails['documentType']
+): RaceDocumentsCardDocument['type'] => {
+  switch (type) {
+    case 'sailing_instructions':
+    case 'nor':
+    case 'course_diagram':
+    case 'amendment':
+    case 'notam':
+      return type;
+    default:
+      return 'other';
+  }
+};
+
+function pickNumeric(values: Array<unknown>): number | null {
+  for (const candidate of values) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function normalizeCurrentType(value: unknown): 'flood' | 'ebb' | 'slack' | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const lower = value.toLowerCase();
+  if (lower.includes('flood')) {
+    return 'flood';
+  }
+  if (lower.includes('ebb')) {
+    return 'ebb';
+  }
+  if (lower.includes('slack')) {
+    return 'slack';
+  }
+  return undefined;
+}
+
+function extractWindSnapshot(source: any): TacticalWindSnapshot | null {
+  if (!source) {
+    return null;
+  }
+
+  const direction = normalizeDirection(
+    source.direction ??
+      source.directionDegrees ??
+      source.direction_degrees ??
+      source.directionCardinal ??
+      source.direction_cardinal ??
+      source.heading ??
+      source.bearing
+  );
+
+  let speed = pickNumeric([
+    source.speed,
+    source.speedAvg,
+    source.average,
+    source.knots,
+    source.value,
+    source.mean,
+  ]);
+
+  const min = pickNumeric([source.speedMin, source.speed_min, source.min]);
+  const max = pickNumeric([source.speedMax, source.speed_max, source.max, source.gust, source.gusts]);
+
+  if (speed === null) {
+    if (min !== null && max !== null) {
+      speed = (min + max) / 2;
+    } else if (min !== null) {
+      speed = min;
+    } else if (max !== null) {
+      speed = max;
+    }
+  }
+
+  const gust = pickNumeric([source.gust, source.gusts, source.speedMax, source.speed_max]);
+
+  if (direction === null || speed === null) {
+    return null;
+  }
+
+  return {
+    speed,
+    direction,
+    ...(gust !== null ? { gust } : {}),
+  };
+}
+
+function extractCurrentSnapshot(source: any): TacticalCurrentSnapshot | null {
+  if (!source) {
+    return null;
+  }
+
+  const direction = normalizeDirection(
+    source.direction ??
+      source.directionDegrees ??
+      source.direction_degrees ??
+      source.heading ??
+      source.bearing ??
+      source.cardinal ??
+      source.flow
+  );
+
+  const speed = pickNumeric([
+    source.speed,
+    source.speedKnots,
+    source.knots,
+    source.rate,
+    source.velocity,
+    source.strength,
+  ]);
+
+  if (direction === null || speed === null) {
+    return null;
+  }
+
+  const type =
+    normalizeCurrentType(source.type) ??
+    normalizeCurrentType(source.state) ??
+    normalizeCurrentType(source.flow);
+
+  return {
+    speed,
+    direction,
+    ...(type ? { type } : {}),
+  };
+}
+
+function parseGpsTrack(rawTrack: unknown): GPSPoint[] | null {
+  if (!Array.isArray(rawTrack)) {
+    return null;
+  }
+
+  const parsed: GPSPoint[] = [];
+
+  for (const point of rawTrack) {
+    if (typeof point !== 'object' || point === null) {
+      continue;
+    }
+
+    const latitude = typeof (point as any).latitude === 'number'
+      ? (point as any).latitude
+      : typeof (point as any).lat === 'number'
+        ? (point as any).lat
+        : null;
+
+    const longitude = typeof (point as any).longitude === 'number'
+      ? (point as any).longitude
+      : typeof (point as any).lng === 'number'
+        ? (point as any).lng
+        : null;
+
+    const timestampValue = (point as any).timestamp ?? (point as any).time ?? (point as any).recorded_at;
+    const timestamp = timestampValue ? new Date(timestampValue) : null;
+
+    if (
+      latitude === null ||
+      longitude === null ||
+      !(timestamp instanceof Date) ||
+      Number.isNaN(timestamp.valueOf())
+    ) {
+      continue;
+    }
+
+    const speed = typeof (point as any).speed === 'number'
+      ? (point as any).speed
+      : typeof (point as any).sog === 'number'
+        ? (point as any).sog
+        : 0;
+
+    const heading = typeof (point as any).heading === 'number'
+      ? (point as any).heading
+      : typeof (point as any).cog === 'number'
+        ? (point as any).cog
+        : 0;
+
+    const accuracy = typeof (point as any).accuracy === 'number'
+      ? (point as any).accuracy
+      : undefined;
+
+    parsed.push({
+      latitude,
+      longitude,
+      timestamp,
+      speed,
+      heading,
+      accuracy,
+    });
+  }
+
+  return parsed.length > 0 ? parsed : null;
+}
+
+function parseSplitTimes(rawSplits: unknown): DebriefSplitTime[] | null {
+  if (!Array.isArray(rawSplits)) {
+    return null;
+  }
+
+  const parsed: DebriefSplitTime[] = [];
+
+  for (const split of rawSplits) {
+    if (typeof split !== 'object' || split === null) {
+      continue;
+    }
+
+    const markId = typeof (split as any).markId === 'string'
+      ? (split as any).markId
+      : typeof (split as any).mark_id === 'string'
+        ? (split as any).mark_id
+        : null;
+
+    const markName = typeof (split as any).markName === 'string'
+      ? (split as any).markName
+      : typeof (split as any).mark_name === 'string'
+        ? (split as any).mark_name
+        : null;
+
+    const timestampValue = (split as any).time ?? (split as any).timestamp ?? (split as any).recorded_at;
+    const time = timestampValue ? new Date(timestampValue) : null;
+
+    const position = typeof (split as any).position === 'number'
+      ? (split as any).position
+      : typeof (split as any).fleet_position === 'number'
+        ? (split as any).fleet_position
+        : null;
+
+    const roundingRaw = (split as any).roundingType ?? (split as any).rounding_type ?? (split as any).rounding;
+    const roundingType = roundingRaw === 'starboard' || roundingRaw === 'port'
+      ? roundingRaw
+      : roundingRaw === 'stbd'
+        ? 'starboard'
+        : roundingRaw === 'prt'
+          ? 'port'
+          : 'port';
+
+    const roundingTime = typeof (split as any).roundingTime === 'number'
+      ? (split as any).roundingTime
+      : typeof (split as any).rounding_time === 'number'
+        ? (split as any).rounding_time
+        : 0;
+
+    if (
+      !markId ||
+      !markName ||
+      !(time instanceof Date) ||
+      Number.isNaN(time.valueOf()) ||
+      typeof position !== 'number'
+    ) {
+      continue;
+    }
+
+    parsed.push({
+      markId,
+      markName,
+      time,
+      position,
+      roundingType: roundingType as DebriefSplitTime['roundingType'],
+      roundingTime,
+    });
+  }
+
+  return parsed.length > 0 ? parsed : null;
+}
+
+// Mock GPS track data for DEBRIEF mode testing
+const MOCK_GPS_TRACK = Array.from({ length: 100 }, (_, i) => {
+  const t = i / 100;
+  const baseTime = new Date('2024-06-15T14:00:00Z');
+
+  return {
+    latitude: 37.8 + Math.sin(t * Math.PI * 4) * 0.01 + t * 0.02,
+    longitude: -122.4 + Math.cos(t * Math.PI * 4) * 0.01 + t * 0.015,
+    timestamp: new Date(baseTime.getTime() + i * 30000), // 30 seconds apart
+    speed: 5 + Math.random() * 3 + Math.sin(t * Math.PI * 2) * 2,
+    heading: (t * 360) % 360,
+    accuracy: 5 + Math.random() * 3,
+  };
+});
+
+// Mock split times data for DEBRIEF mode testing
+const MOCK_SPLIT_TIMES = [
+  {
+    markId: 'start',
+    markName: 'Start Line',
+    time: new Date('2024-06-15T14:00:00Z'),
+    position: 8,
+    roundingType: 'port' as const,
+    roundingTime: 0,
+  },
+  {
+    markId: 'mark1',
+    markName: 'Windward Mark',
+    time: new Date('2024-06-15T14:12:30Z'),
+    position: 5,
+    roundingType: 'port' as const,
+    roundingTime: 4.2,
+  },
+  {
+    markId: 'mark2',
+    markName: 'Leeward Gate',
+    time: new Date('2024-06-15T14:22:15Z'),
+    position: 4,
+    roundingType: 'starboard' as const,
+    roundingTime: 6.8,
+  },
+  {
+    markId: 'mark3',
+    markName: 'Windward Mark',
+    time: new Date('2024-06-15T14:34:45Z'),
+    position: 3,
+    roundingType: 'port' as const,
+    roundingTime: 3.9,
+  },
+  {
+    markId: 'finish',
+    markName: 'Finish Line',
+    time: new Date('2024-06-15T14:45:00Z'),
+    position: 3,
+    roundingType: 'port' as const,
+    roundingTime: 0,
+  },
+];
 
 export default function RacesScreen() {
   const auth = useAuth();
@@ -79,25 +587,127 @@ export default function RacesScreen() {
   const RACE_CARD_WIDTH = 170;
   const RACE_CARD_TOTAL_WIDTH = RACE_CARD_WIDTH + 8; // width + combined horizontal margin (4px each side)
 
+  const [regulatorySectionY, setRegulatorySectionY] = useState(0);
+  const [logisticsSectionY, setLogisticsSectionY] = useState(0);
+
   // Post-race interview state
   const [showPostRaceInterview, setShowPostRaceInterview] = useState(false);
   const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
   const [completedRaceName, setCompletedRaceName] = useState<string>('');
+  const [userPostRaceSession, setUserPostRaceSession] = useState<any | null>(null);
+  const [loadingUserPostRaceSession, setLoadingUserPostRaceSession] = useState(false);
 
   // Selected race detail state
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
+  const hasActiveRace = selectedRaceId !== null;
   const [selectedRaceData, setSelectedRaceData] = useState<any>(null);
   const [selectedRaceMarks, setSelectedRaceMarks] = useState<any[]>([]);
   const [loadingRaceDetail, setLoadingRaceDetail] = useState(false);
+  const [raceDocuments, setRaceDocuments] = useState<RaceDocumentWithDetails[]>([]);
+  const [loadingRaceDocuments, setLoadingRaceDocuments] = useState(false);
+  const [raceDocumentsError, setRaceDocumentsError] = useState<string | null>(null);
+  const [raceDocumentsReloadKey, setRaceDocumentsReloadKey] = useState(0);
+  const [isUploadingRaceDocument, setIsUploadingRaceDocument] = useState(false);
+  const [documentTypePickerVisible, setDocumentTypePickerVisible] = useState(false);
+  const documentTypeResolverRef = useRef<((type: RaceDocumentType | null) => void) | null>(null);
   const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
-  const [isDeletingRace, setIsDeletingRace] = useState(false);
+  const [deletingRaceId, setDeletingRaceId] = useState<string | null>(null);
+  const isDeletingRace = deletingRaceId !== null;
+  const [raceDetailReloadKey, setRaceDetailReloadKey] = useState(0);
+  const triggerRaceDetailReload = useCallback(() => {
+    setRaceDetailReloadKey((prev) => prev + 1);
+  }, []);
   const [hasManuallySelected, setHasManuallySelected] = useState(false);
-  const [isApplyingCourseTemplate, setIsApplyingCourseTemplate] = useState(false);
-  const [savingCourseTemplate, setSavingCourseTemplate] = useState(false);
   const hasAssignedFallbackRole = useRef(false);
   const initialSelectedRaceParam = useRef<string | null>(
     typeof searchParams?.selected === 'string' ? searchParams.selected : null
   );
+
+  // Live race execution state
+  const [gpsPosition, setGpsPosition] = useState<any>(null);
+  const [gpsTrail, setGpsTrail] = useState<any[]>([]);
+  const [drawerExpanded, setDrawerExpanded] = useState(false);
+  const [isGPSTracking, setIsGPSTracking] = useState(false);
+  const [gpsTrackSessionId, setGpsTrackSessionId] = useState<string | null>(null);
+  const [sailorId, setSailorId] = useState<string | null>(null);
+  const [showCoachSelectionModal, setShowCoachSelectionModal] = useState(false);
+  const [sharingStrategy, setSharingStrategy] = useState(false);
+  const updateRacePosition = useRaceConditions(state => state.updatePosition);
+  const updateEnvironment = useRaceConditions(state => state.updateEnvironment);
+  const updateCourse = useRaceConditions(state => state.updateCourse);
+  const setTacticalZones = useRaceConditions(state => state.setTacticalZones);
+  const resetRaceConditions = useRaceConditions(state => state.reset);
+  const setDraft = useRaceConditions(state => state.setDraft);
+  const currentDraft = useRaceConditions(state => state.draft);
+  const lastHeadingRef = useRef<number | null>(null);
+  const fallbackPositionInitializedRef = useRef(false);
+  const previousCourseKeyRef = useRef<string | null>(null);
+  const previousEnvironmentKeyRef = useRef<string | null>(null);
+  const previousZonesKeyRef = useRef<string | null>(null);
+
+  // Clear any stuck loading states on mount
+
+  useEffect(() => {
+    resetRaceConditions();
+    setTacticalZones([]);
+  }, [selectedRaceId]);
+
+  useEffect(() => {
+    return () => {
+      if (documentTypeResolverRef.current) {
+        documentTypeResolverRef.current(null);
+        documentTypeResolverRef.current = null;
+      }
+    };
+  }, []);
+
+  // Use race preparation hook for persistent storage
+  const {
+    rigNotes,
+    setRigNotes,
+    selectedRigPresetId: selectedRigBand,
+    setSelectedRigPresetId: setSelectedRigBand,
+    acknowledgements: regattaAcknowledgements,
+    setAcknowledgements: setRegattaAcknowledgements,
+    toggleAcknowledgement,
+    updateRaceBrief,
+    isLoading: isLoadingPreparation,
+    isSaving: isSavingPreparation,
+  } = useRacePreparation({
+    raceEventId: selectedRaceData?.id || null,
+    autoSave: true,
+    debounceMs: 1000,
+  });
+
+  const scrollToPosition = useCallback((position: number) => {
+    if (!mainScrollViewRef.current) {
+      return;
+    }
+
+    const target = position > 0 ? Math.max(position - 24, 0) : 0;
+
+    try {
+      mainScrollViewRef.current.scrollTo?.({ y: target, animated: true });
+    } catch (error) {
+      logger.warn('Unable to scroll to position', { position, error });
+    }
+  }, [logger]);
+
+  const handleShowRegulatoryDigest = useCallback(() => {
+    scrollToPosition(regulatorySectionY);
+  }, [regulatorySectionY, scrollToPosition]);
+
+  const handleShowRigPlanner = useCallback(() => {
+    scrollToPosition(logisticsSectionY);
+  }, [logisticsSectionY, scrollToPosition]);
+
+  const handleAddRaceNavigation = useCallback(() => {
+    router.push('/(tabs)/race/add');
+  }, [router]);
+
+  const handleOpenCalendarImport = useCallback(() => {
+    setShowCalendarImport(true);
+  }, []);
 
   const handleManageCrewNavigation = useCallback(
     ({
@@ -142,6 +752,175 @@ export default function RacesScreen() {
     },
     [router]
   );
+
+  const loadUserPostRaceSession = useCallback(async () => {
+    if (!selectedRaceId || !user?.id) {
+      setUserPostRaceSession(null);
+      return;
+    }
+
+    setLoadingUserPostRaceSession(true);
+    try {
+      const { data, error } = await supabase
+        .from('race_timer_sessions')
+        .select('*')
+        .eq('regatta_id', selectedRaceId)
+        .eq('sailor_id', user.id)
+        .order('end_time', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        logger.warn('[races.tsx] Unable to load user race session', {
+          error,
+          selectedRaceId,
+        });
+        setUserPostRaceSession(null);
+        return;
+      }
+
+      setUserPostRaceSession(data && data.length > 0 ? data[0] : null);
+    } catch (error) {
+      logger.warn('[races.tsx] Unexpected error loading user race session', error);
+      setUserPostRaceSession(null);
+    } finally {
+      setLoadingUserPostRaceSession(false);
+    }
+  }, [logger, selectedRaceId, user?.id]);
+
+  useEffect(() => {
+    loadUserPostRaceSession();
+  }, [loadUserPostRaceSession]);
+
+  // Fetch sailor profile ID for strategy cards
+  useEffect(() => {
+    const fetchSailorId = async () => {
+      if (!user?.id) {
+        setSailorId(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('sailor_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          logger.warn('[races.tsx] Error fetching sailor profile', error);
+          setSailorId(null);
+          return;
+        }
+
+        setSailorId(data?.id || null);
+      } catch (error) {
+        logger.warn('[races.tsx] Unexpected error fetching sailor profile', error);
+        setSailorId(null);
+      }
+    };
+
+    fetchSailorId();
+  }, [user?.id, logger]);
+
+  const handleOpenPostRaceInterviewManually = useCallback(async () => {
+    if (!user?.id) {
+      Alert.alert('Post-Race Interview', 'You need to be signed in to add post-race notes.');
+      return;
+    }
+
+    if (!selectedRaceId || !selectedRaceData) {
+      Alert.alert('Post-Race Interview', 'Select a race first to add your post-race interview.');
+      return;
+    }
+
+    setLoadingUserPostRaceSession(true);
+    try {
+      let session = userPostRaceSession;
+
+      if (!session) {
+        const nowIso = new Date().toISOString();
+        const startTime = selectedRaceData.start_date || nowIso;
+
+        const { data: createdSession, error } = await supabase
+          .from('race_timer_sessions')
+          .insert({
+            sailor_id: user.id,
+            regatta_id: selectedRaceId,
+            start_time: startTime,
+            end_time: nowIso,
+            duration_seconds: 0,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        session = createdSession;
+        setUserPostRaceSession(createdSession);
+      }
+
+      if (!session?.id) {
+        throw new Error('Missing race timer session');
+      }
+
+      setCompletedSessionId(session.id);
+      setCompletedRaceName(selectedRaceData.name ?? 'Race');
+      setShowPostRaceInterview(true);
+    } catch (error: any) {
+      logger.error('[races.tsx] Failed to open post-race interview manually', error);
+      Alert.alert(
+        'Post-Race Interview',
+        error?.message
+          ? `Unable to open interview: ${error.message}`
+          : 'We could not open the post-race interview. Please try again.'
+      );
+    } finally {
+      setLoadingUserPostRaceSession(false);
+    }
+  }, [
+    logger,
+    selectedRaceData,
+    selectedRaceId,
+    setCompletedRaceName,
+    setShowPostRaceInterview,
+    user?.id,
+    userPostRaceSession,
+  ]);
+
+  // Handle coach selection and share strategy
+  const handleShareWithCoach = useCallback(async (coachId: string, coachName: string) => {
+    if (!sailorId || !selectedRaceData?.id) {
+      Alert.alert('Error', 'Cannot share strategy at this time');
+      return;
+    }
+
+    setSharingStrategy(true);
+    try {
+      const success = await strategicPlanningService.shareWithCoach(
+        selectedRaceData.id,
+        sailorId,
+        coachId
+      );
+
+      if (success) {
+        Alert.alert(
+          'Strategy Shared',
+          `Your pre-race strategy has been shared with ${coachName}. They will be able to review your notes and provide feedback.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to share strategy. Please try again.');
+      }
+    } catch (error) {
+      logger.error('[races.tsx] Failed to share strategy with coach', error);
+      Alert.alert('Error', 'An error occurred while sharing your strategy.');
+    } finally {
+      setSharingStrategy(false);
+    }
+  }, [sailorId, selectedRaceData?.id, logger]);
 
   // Racing area drawing state
   const [drawingRacingArea, setDrawingRacingArea] = useState<Array<{lat: number, lng: number}>>([]);
@@ -193,14 +972,472 @@ export default function RacesScreen() {
             logger.error('Unable to assign default persona:', assignError);
           }
         }
-
       } catch (error) {
-        logger.error('Error checking onboarding:', error);
+        logger.error('Error checking onboarding status:', error);
       }
     };
 
     checkAuthAndOnboarding();
   }, [ready, signedIn, user?.id, router, isDemoSession]);
+
+const addRaceTimelineStyles = StyleSheet.create({
+  wrapper: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    height: 400,
+    marginRight: 16,
+  },
+  timelineColumn: {
+    width: 22,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+  },
+  timelineBadge: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  timelineBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#047857',
+    letterSpacing: 0.5,
+  },
+  timelineBar: {
+    width: 6,
+    flex: 1,
+    borderRadius: 999,
+    backgroundColor: '#10B981',
+    shadowColor: '#059669',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  card: {
+    width: 240,
+    height: '100%',
+    backgroundColor: '#F8FFFB',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    borderRadius: 28,
+    padding: 20,
+    marginLeft: 12,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 12,
+    elevation: 4,
+    justifyContent: 'space-between',
+  },
+  eyebrow: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F766E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#042F2E',
+    marginTop: 6,
+  },
+  copy: {
+    fontSize: 13,
+    color: '#0F172A',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 16,
+  },
+  chip: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#047857',
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    borderRadius: 999,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    paddingVertical: 11,
+    marginTop: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryButtonText: {
+    color: '#047857',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+});
+
+const documentTypePickerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'flex-end',
+    padding: 24,
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#475467',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  option: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  lastOption: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+    marginBottom: 8,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  optionDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  cancelButton: {
+    marginTop: 6,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+});
+
+interface AddRaceTimelineCardProps {
+  onAddRace: () => void;
+  onImportCalendar: () => void;
+  hasRealRaces: boolean;
+}
+
+function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces }: AddRaceTimelineCardProps) {
+  return (
+    <View style={addRaceTimelineStyles.wrapper}>
+      <View style={addRaceTimelineStyles.timelineColumn}>
+        <View style={addRaceTimelineStyles.timelineBadge}>
+          <Text style={addRaceTimelineStyles.timelineBadgeText}>
+            {hasRealRaces ? 'NOW' : 'START'}
+          </Text>
+        </View>
+        <View style={addRaceTimelineStyles.timelineBar} />
+      </View>
+      <View style={addRaceTimelineStyles.card}>
+        <View>
+          <Text style={addRaceTimelineStyles.eyebrow}>Race timeline</Text>
+          <Text style={addRaceTimelineStyles.title}>Add your next race</Text>
+          <Text style={addRaceTimelineStyles.copy}>
+            Drop NOR / SI files, draw a racing box, and unlock tactical overlays instantly.
+          </Text>
+          <View style={addRaceTimelineStyles.chipsRow}>
+            <View style={addRaceTimelineStyles.chip}>
+              <Text style={addRaceTimelineStyles.chipText}>Auto-plan docs</Text>
+            </View>
+            <View style={addRaceTimelineStyles.chip}>
+              <Text style={addRaceTimelineStyles.chipText}>Draw race area</Text>
+            </View>
+            <View style={addRaceTimelineStyles.chip}>
+              <Text style={addRaceTimelineStyles.chipText}>Share with crew</Text>
+            </View>
+          </View>
+        </View>
+        <View>
+          <TouchableOpacity
+            style={addRaceTimelineStyles.primaryButton}
+            onPress={onAddRace}
+            accessibilityRole="button"
+            accessibilityLabel="Add a new race"
+            activeOpacity={0.9}
+          >
+            <Plus color="#FFFFFF" size={18} />
+            <Text style={addRaceTimelineStyles.primaryButtonText}>Add race</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={addRaceTimelineStyles.secondaryButton}
+            onPress={onImportCalendar}
+            accessibilityRole="button"
+            accessibilityLabel="Import race calendar"
+            activeOpacity={0.85}
+          >
+            <Calendar color="#047857" size={18} />
+            <Text style={addRaceTimelineStyles.secondaryButtonText}>Import calendar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+interface RigPlannerCardProps {
+  presets: RigPreset[];
+  selectedBand: string | null;
+  onSelectBand: (bandId: string) => void;
+  notes: string;
+  onChangeNotes: (value: string) => void;
+  onOpenChat: () => void;
+}
+
+function RigPlannerCard({ presets, selectedBand, onSelectBand, notes, onChangeNotes, onOpenChat }: RigPlannerCardProps) {
+  if (!presets || presets.length === 0) {
+    return null;
+  }
+
+  const activePreset = presets.find((preset) => preset.id === selectedBand) ?? presets[0];
+
+  return (
+    <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+      <View className="flex-row items-center justify-between mb-3">
+        <Text className="text-base font-semibold text-slate-900">Rig &amp; Sail Planner</Text>
+        <TouchableOpacity
+          onPress={onOpenChat}
+          accessibilityRole="button"
+          className="flex-row items-center"
+        >
+          <MaterialCommunityIcons name="chat-processing-outline" size={16} color="#2563EB" />
+          <Text className="text-xs font-semibold text-blue-600 ml-1">Review chat</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View className="flex-row flex-wrap gap-2 mb-3">
+        {presets.map((preset) => {
+          const isActive = preset.id === activePreset.id;
+          return (
+            <TouchableOpacity
+              key={preset.id}
+              onPress={() => onSelectBand(preset.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+              className={`px-3 py-2 rounded-full border ${isActive ? 'bg-blue-600 border-blue-600' : 'bg-blue-50 border-blue-200'}`}
+            >
+              <Text className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-blue-700'}`}>
+                {preset.label} • {preset.windRange}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View className="bg-blue-50 border border-blue-100 rounded-2xl p-3 mb-3">
+        <RigPlannerDetailRow label="Uppers" value={activePreset.uppers} />
+        <RigPlannerDetailRow label="Lowers" value={activePreset.lowers} />
+        <RigPlannerDetailRow label="Runners" value={activePreset.runners} />
+        <RigPlannerDetailRow label="Mast Ram" value={activePreset.ram} />
+        <Text className="text-[11px] text-blue-900 mt-2">{activePreset.notes}</Text>
+      </View>
+
+      <TextInput
+        value={notes}
+        onChangeText={onChangeNotes}
+        placeholder="Notes or adjustments (e.g., traveller +1 cm, jib lead aft ½ hole)"
+        multiline
+        numberOfLines={3}
+        className="border border-slate-200 rounded-2xl px-3 py-2 text-sm text-slate-700"
+        placeholderTextColor="#94A3B8"
+      />
+      <Text className="text-[11px] text-slate-500 mt-2">
+        Track tweaks made dockside so the crew can sync after racing.
+      </Text>
+    </View>
+  );
+}
+
+function RigPlannerDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-row items-start justify-between mt-1">
+      <Text className="text-xs font-semibold text-blue-900">{label}</Text>
+      <Text className="text-xs text-blue-800 text-right ml-3 flex-1">{value}</Text>
+    </View>
+  );
+}
+
+interface RegulatoryDigestCardProps {
+  digest: RegulatoryDigestData;
+  acknowledgements: RegulatoryAcknowledgements;
+  onToggle: (key: keyof RegulatoryAcknowledgements) => void;
+}
+
+function RegulatoryDigestCard({ digest, acknowledgements, onToggle }: RegulatoryDigestCardProps) {
+  const ackItems: Array<{ key: keyof RegulatoryAcknowledgements; label: string; description: string }> = [
+    {
+      key: 'cleanRegatta',
+      label: 'Clean Regatta commitments noted',
+      description: digest.cleanRegatta ? 'Event flagged as Sailors for the Sea Clean Regatta.' : 'Not designated Clean Regatta.',
+    },
+    {
+      key: 'signOn',
+      label: 'Sign-on window understood',
+      description: digest.signOnWindow,
+    },
+    {
+      key: 'safetyBriefing',
+      label: 'Safety briefing complete',
+      description: 'Required video briefing and quiz submitted in SailSys.',
+    },
+  ];
+
+  return (
+    <View className="bg-white border border-purple-200 rounded-2xl p-4 mb-4">
+      <View className="flex-row items-start justify-between">
+        <View className="flex-1 pr-4">
+          <Text className="text-base font-semibold text-purple-900">Notice of Race Digest</Text>
+          <Text className="text-xs text-purple-600 mt-1">
+            {digest.seriesName} • {digest.venueArea}
+          </Text>
+        </View>
+        <Text className="text-[10px] font-semibold text-purple-500">{digest.reference}</Text>
+      </View>
+
+      <View className="mt-3">
+        <Text className="text-sm font-semibold text-slate-900">Entry &amp; Compliance</Text>
+        {digest.entryNotes.map((note, index) => (
+          <View key={`${note}-${index}`} className="flex-row items-start gap-2 mt-2">
+            <View className="w-1.5 h-1.5 rounded-full bg-purple-400 mt-1" />
+            <Text className="text-xs text-slate-700 flex-1">{note}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View className="mt-3">
+        <Text className="text-sm font-semibold text-slate-900">Acknowledgements</Text>
+        {ackItems.map((item) => (
+          <AcknowledgementRow
+            key={item.key}
+            label={item.label}
+            description={item.description}
+            checked={acknowledgements[item.key]}
+            onPress={() => onToggle(item.key)}
+          />
+        ))}
+      </View>
+
+      <View className="mt-4">
+        <Text className="text-sm font-semibold text-slate-900">Course Selection</Text>
+        <Text className="text-xs text-slate-600 mt-1">{digest.courseSelection}</Text>
+      </View>
+
+      <View className="mt-4">
+        <Text className="text-sm font-semibold text-slate-900">Safety Notes</Text>
+        {digest.safetyNotes.map((note, index) => (
+          <View key={`${note}-${index}`} className="flex-row items-start gap-2 mt-2">
+            <MaterialCommunityIcons name="shield-alert-outline" size={16} color="#F97316" />
+            <Text className="text-xs text-slate-700 flex-1">{note}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function AcknowledgementRow({
+  label,
+  description,
+  checked,
+  onPress,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      className="flex-row items-start gap-3 mt-3"
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+    >
+      <MaterialCommunityIcons
+        name={checked ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+        size={20}
+        color={checked ? '#2563EB' : '#CBD5F5'}
+      />
+      <View className="flex-1">
+        <Text className="text-xs font-semibold text-slate-800">{label}</Text>
+        <Text className="text-[11px] text-slate-500 mt-1">{description}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
+  if (!groups || groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+      <Text className="text-base font-semibold text-slate-900">Course Outlines</Text>
+      {groups.map((group) => (
+        <View key={group.group} className="mt-4">
+          <Text className="text-sm font-semibold text-slate-800">{group.group}</Text>
+          <Text className="text-xs text-slate-500 mt-1">{group.description}</Text>
+          <View className="mt-2">
+            {group.courses.map((course) => (
+              <View key={course.name} className="flex-row items-start gap-3 mt-1">
+                <Text className="text-[11px] font-semibold text-slate-700 w-20">{course.name}</Text>
+                <Text className="flex-1 text-[11px] text-slate-600">{course.sequence}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
   // Fetch data from API
   const {
@@ -229,7 +1466,11 @@ export default function RacesScreen() {
       }
       logger.debug('Screen focused - refetching races');
       refetch?.();
-    }, [refetch])
+      if (selectedRaceId) {
+        logger.debug('Screen focused - refreshing selected race detail');
+        triggerRaceDetailReload();
+      }
+    }, [refetch, selectedRaceId, triggerRaceDetailReload])
   );
 
   // GPS Venue Detection
@@ -240,6 +1481,43 @@ export default function RacesScreen() {
 
   // Real-time race updates
   const { liveRaces, loading: liveRacesLoading } = useLiveRaces(user?.id);
+
+  // Enrich races with real weather data
+  const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
+  const normalizedLiveRaces = useMemo(
+    () => {
+      if (!liveRaces || liveRaces.length === 0) {
+        return [];
+      }
+
+      return liveRaces.map((regatta: any) => {
+        const metadata = regatta?.metadata ?? {};
+        const derivedStartTime =
+          regatta?.startTime ??
+          regatta?.warning_signal_time ??
+          (regatta?.start_date
+            ? new Date(regatta.start_date).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : undefined);
+
+        return {
+          ...regatta,
+          venue: regatta?.venue ?? metadata?.venue_name ?? 'Venue TBD',
+          date: regatta?.date ?? regatta?.start_date,
+          startTime: derivedStartTime,
+          wind: regatta?.wind ?? metadata?.wind,
+          tide: regatta?.tide ?? metadata?.tide,
+          weatherStatus: regatta?.weatherStatus ?? metadata?.weatherStatus,
+          weatherError: regatta?.weatherError ?? metadata?.weatherError,
+          strategy: regatta?.strategy ?? metadata?.strategy,
+          critical_details: regatta?.critical_details ?? metadata?.critical_details,
+        };
+      });
+    },
+    [liveRaces]
+  );
 
   // Real-time weather for next race
   const { weather: raceWeather, loading: weatherLoading, error: weatherError } = useRaceWeather(
@@ -258,16 +1536,406 @@ export default function RacesScreen() {
   // Get first recent race if available - MOVED UP before conditional returns
   const safeNextRace: any = (nextRace as any) || {};
   // Memoize safeRecentRaces to prevent unnecessary re-renders and effect triggers
-  const safeRecentRaces: any[] = useMemo(
-    () => Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [],
-    [recentRaces]
-  );
+  // Use enriched races with real weather data when available, fall back to recentRaces
+  const safeRecentRaces: any[] = useMemo(() => {
+    if (enrichedRaces && enrichedRaces.length > 0) {
+      return enrichedRaces;
+    }
+    if (normalizedLiveRaces.length > 0) {
+      return normalizedLiveRaces;
+    }
+    return Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [];
+  }, [enrichedRaces, normalizedLiveRaces, recentRaces]);
   const recentRace = safeRecentRaces.length > 0 ? safeRecentRaces[0] : null;
   const hasRealRaces = safeRecentRaces.length > 0 || !!nextRace;
   const selectedDemoRace = useMemo(
     () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
     [selectedDemoRaceId]
   );
+
+  const activeRace = useMemo<ActiveRaceSummary | null>(() => {
+    if (selectedRaceData) {
+      const metadata = selectedRaceData.metadata || {};
+      const startTime = selectedRaceData.start_date || selectedRaceData.date || metadata?.start_time;
+      return {
+        id: selectedRaceData.id,
+        name: selectedRaceData.name || metadata?.race_name || 'Upcoming Race',
+        series: metadata?.series_name || metadata?.series || metadata?.event_name || 'Corinthian Series',
+        venue: metadata?.venue_name || selectedRaceData.venue_name || currentVenue?.name || 'Port Shelter',
+        startTime: typeof startTime === 'string' ? startTime : startTime ? new Date(startTime).toISOString() : undefined,
+        warningSignal: metadata?.warning_signal || metadata?.first_warning || metadata?.signal_time || nextRace?.startTime || '13:36',
+        cleanRegatta: metadata?.clean_regatta !== false,
+        lastUpdated: metadata?.updated_at || selectedRaceData.updated_at || null,
+      };
+    }
+
+    if (nextRace) {
+      const nextRaceAny = nextRace as any;
+      return {
+        id: nextRaceAny.id || 'next-race',
+        name: nextRaceAny.name || nextRaceAny.title || 'Upcoming Race',
+        series: nextRaceAny.series || nextRaceAny.event || 'Corinthian Series',
+        venue: nextRaceAny.venue || currentVenue?.name || 'Port Shelter',
+        startTime: nextRaceAny.date || nextRaceAny.startTime,
+        warningSignal: nextRaceAny.warningSignal || nextRaceAny.startTime || '13:36',
+        cleanRegatta: nextRaceAny.cleanRegatta ?? true,
+        lastUpdated: nextRaceAny.updated_at || null,
+      };
+    }
+
+    if (selectedDemoRace) {
+      return {
+        id: selectedDemoRace.id,
+        name: selectedDemoRace.name,
+        series: 'Demo Series',
+        venue: selectedDemoRace.venue,
+        startTime: selectedDemoRace.date,
+        warningSignal: selectedDemoRace.critical_details?.warning_signal || selectedDemoRace.startTime,
+        cleanRegatta: true,
+        lastUpdated: null,
+      };
+    }
+
+    return null;
+  }, [
+    // Only depend on specific fields used in calculation, not entire objects
+    selectedRaceData?.id,
+    selectedRaceData?.name,
+    selectedRaceData?.start_date,
+    selectedRaceData?.date,
+    selectedRaceData?.venue_name,
+    selectedRaceData?.updated_at,
+    // Extract only specific metadata fields to prevent unnecessary re-renders
+    selectedRaceData?.metadata?.race_name,
+    selectedRaceData?.metadata?.series_name,
+    selectedRaceData?.metadata?.series,
+    selectedRaceData?.metadata?.event_name,
+    selectedRaceData?.metadata?.venue_name,
+    selectedRaceData?.metadata?.warning_signal,
+    selectedRaceData?.metadata?.first_warning,
+    selectedRaceData?.metadata?.signal_time,
+    selectedRaceData?.metadata?.clean_regatta,
+    selectedRaceData?.metadata?.updated_at,
+    selectedRaceData?.metadata?.start_time,
+    // Next race fallbacks
+    nextRace?.id,
+    nextRace?.name,
+    nextRace?.title,
+    nextRace?.series,
+    nextRace?.event,
+    nextRace?.venue,
+    nextRace?.date,
+    nextRace?.startTime,
+    nextRace?.warningSignal,
+    nextRace?.cleanRegatta,
+    nextRace?.updated_at,
+    // Demo race fallbacks
+    selectedDemoRace?.id,
+    selectedDemoRace?.name,
+    selectedDemoRace?.venue,
+    selectedDemoRace?.date,
+    selectedDemoRace?.startTime,
+    selectedDemoRace?.critical_details?.warning_signal,
+    currentVenue?.name
+  ]);
+
+  // Stabilize countdown - only update every minute to prevent constant re-renders
+  const [currentMinute, setCurrentMinute] = useState(() => Math.floor(Date.now() / 60000));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentMinute(Math.floor(Date.now() / 60000));
+    }, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const lastRaceBriefRef = useRef<RaceBriefData | null>(null);
+  const lastRaceBriefKeyRef = useRef<string | null>(null);
+
+  const raceBrief = useMemo<RaceBriefData | null>(() => {
+    if (!activeRace) {
+      return null;
+    }
+
+    const startISO = activeRace.startTime;
+    const countdown = startISO ? calculateCountdown(startISO) : undefined;
+
+    const weatherSummary = (() => {
+      if (raceWeather?.wind) {
+        const min = raceWeather.wind.speedMin ?? raceWeather.wind.speed ?? 0;
+        const max = raceWeather.wind.speedMax ?? raceWeather.wind.speed ?? min;
+        const direction = raceWeather.wind.direction ?? raceWeather.wind.directionCardinal;
+        if (min && max) {
+          return `${direction ?? ''} ${Math.round(min)}-${Math.round(max)} kt`.trim();
+        }
+        if (direction) {
+          return `${direction}`;
+        }
+      }
+
+      const metadata = (selectedRaceData?.metadata || nextRace as any || {}) as Record<string, any>;
+      if (metadata?.wind_summary) {
+        return metadata.wind_summary;
+      }
+      if (metadata?.wind_direction && metadata?.wind_speed) {
+        return `${metadata.wind_direction} ${metadata.wind_speed}`;
+      }
+
+      if (selectedDemoRace) {
+        return `${selectedDemoRace.wind.direction} ${selectedDemoRace.wind.speedMin}-${selectedDemoRace.wind.speedMax} kt`;
+      }
+
+      return undefined;
+    })();
+
+    const tideSummary = (() => {
+      if (raceWeather?.tide) {
+        const state = raceWeather.tide.state || raceWeather.tide.phase;
+        const height = raceWeather.tide.height;
+        if (state || height) {
+          return `${state ? state.replace(/_/g, ' ') : ''}${height ? ` • ${height.toFixed(1)} m` : ''}`.trim();
+        }
+      }
+      const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+      if (metadata?.tide_summary) {
+        return metadata.tide_summary;
+      }
+      if (selectedDemoRace) {
+        return `${selectedDemoRace.tide.state} • ${selectedDemoRace.tide.height} m`;
+      }
+      return undefined;
+    })();
+
+    const nextBrief: RaceBriefData = {
+      ...activeRace,
+      countdown,
+      weatherSummary,
+      tideSummary,
+    };
+
+    const briefKey = JSON.stringify(nextBrief);
+    if (lastRaceBriefKeyRef.current === briefKey && lastRaceBriefRef.current) {
+      return lastRaceBriefRef.current;
+    }
+
+    lastRaceBriefKeyRef.current = briefKey;
+    lastRaceBriefRef.current = nextBrief;
+    return nextBrief;
+  }, [
+    // Depend on specific activeRace fields, not the whole object
+    activeRace?.id,
+    activeRace?.name,
+    activeRace?.series,
+    activeRace?.venue,
+    activeRace?.startTime,
+    activeRace?.warningSignal,
+    activeRace?.cleanRegatta,
+    activeRace?.lastUpdated,
+    currentMinute,
+    // Only depend on specific weather values, not the entire object
+    raceWeather?.wind?.direction,
+    raceWeather?.wind?.speedMin,
+    raceWeather?.wind?.speedMax,
+    raceWeather?.wind?.directionCardinal,
+    raceWeather?.wind?.speed,
+    raceWeather?.tide?.state,
+    raceWeather?.tide?.height,
+    raceWeather?.tide?.phase,
+    // Only specific metadata fields used in weatherSummary and tideSummary
+    selectedRaceData?.metadata?.wind_summary,
+    selectedRaceData?.metadata?.wind_direction,
+    selectedRaceData?.metadata?.wind_speed,
+    selectedRaceData?.metadata?.tide_summary,
+    // Demo race fallbacks
+    selectedDemoRace?.wind?.direction,
+    selectedDemoRace?.wind?.speedMin,
+    selectedDemoRace?.wind?.speedMax,
+    selectedDemoRace?.tide?.state,
+    selectedDemoRace?.tide?.height,
+    // Next race fallbacks
+    nextRace?.wind_summary,
+    nextRace?.wind_direction,
+    nextRace?.wind_speed,
+    nextRace?.tide_summary
+  ]);
+
+  // Sync race brief data to preparation service for AI context
+  useEffect(() => {
+    if (raceBrief && selectedRaceData?.id) {
+      updateRaceBrief(raceBrief);
+    }
+  }, [raceBrief, selectedRaceData?.id]);
+
+  // Use race brief sync for AI chat integration
+  const { getAIContext, isStale: isRaceBriefStale, refreshContext } = useRaceBriefSync({
+    raceEventId: selectedRaceData?.id || null,
+    raceBrief,
+    enabled: true,
+  });
+
+  const rigPresets = useMemo<RigPreset[]>(() => {
+    const metadataPresets = selectedRaceData?.metadata?.rig_presets as RigPreset[] | undefined;
+    if (Array.isArray(metadataPresets) && metadataPresets.length > 0) {
+      return metadataPresets;
+    }
+
+    return [
+      {
+        id: 'light',
+        label: 'Light Air',
+        windRange: '< 8 kn',
+        uppers: '12–13 Loos',
+        lowers: 'Slack (0–1 turn off)',
+        runners: 'Ease for visible sag',
+        ram: '+2 cm forward',
+        notes: 'Power on: ease lowers and runners to maintain depth and acceleration.',
+      },
+      {
+        id: 'medium',
+        label: 'Today',
+        windRange: '8–14 kn',
+        uppers: '14–16 Loos',
+        lowers: 'Mast straight athwartships',
+        runners: '≈30 Loos – stay just taut',
+        ram: 'Neutral to +1 cm',
+        notes: 'Baseline Port Shelter tune; traveller slightly weather, maintain twist in chop.',
+      },
+      {
+        id: 'fresh',
+        label: 'Fresh Breeze',
+        windRange: '15–20 kn',
+        uppers: '17–18 Loos',
+        lowers: '+½ turn',
+        runners: '35–40 Loos',
+        ram: '+3 cm forward',
+        notes: 'Flatten sails, move lead aft ½ hole, ease traveller down in gusts.',
+      },
+    ];
+  }, [selectedRaceData]);
+
+  const regulatoryDigest = useMemo<RegulatoryDigestData>(() => {
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+    return {
+      seriesName: metadata.series_name || metadata.event_name || activeRace?.series || 'Corinthian Series',
+      venueArea: metadata.venue_area || 'Port Shelter / Clearwater Bay',
+      cleanRegatta: metadata.clean_regatta !== false,
+      signOnWindow: metadata.sign_on_window || 'Sign-on via SailSys ≥10 minutes before warning signal',
+      entryNotes: metadata.entry_requirements || [
+        'Single season entry through SailSys for Dragon class',
+        'Complete mandatory safety briefing video and quiz',
+        'Acknowledge boat safety responsibilities and Club Bye-Laws',
+      ],
+      courseSelection: metadata.course_reference || 'Courses selected from RHKYC Attachment B (Geometric Courses)',
+      safetyNotes: metadata.safety_notes || [
+        'Keep clear of commercial traffic; breaches may result in DSQ without hearing',
+        'Race Committee may bar future entry for serious safety violations',
+      ],
+      reference: metadata.nor_reference || 'RHKYC Dragon Class NoR 2025–2026',
+    };
+  }, [selectedRaceData, activeRace]);
+
+  const courseOutlineGroups = useMemo<CourseOutlineGroup[]>(() => {
+    const metadataCourses = selectedRaceData?.metadata?.course_outline as CourseOutlineGroup[] | undefined;
+    if (Array.isArray(metadataCourses) && metadataCourses.length > 0) {
+      return metadataCourses;
+    }
+
+    return [
+      {
+        group: 'Group 1',
+        description: 'All marks rounded to port',
+        courses: [
+          { name: 'Course 1', sequence: 'Start – A – C – A – C – Finish at A' },
+          { name: 'Course 2', sequence: 'Start – A – C – A – B – C – Finish at A' },
+          { name: 'Course 3', sequence: 'Start – A – C – A – C – A – C – Finish at A' },
+          { name: 'Course 4', sequence: 'Start – A – B – C – A – C – A – C – Finish at A' },
+          { name: 'Course 5', sequence: 'Start – A – B – C – A – C – A – B – C – Finish at A' },
+          { name: 'Course 6', sequence: 'Start – A – B – C – A – B – C – A – B – C – Finish at A' },
+          { name: 'Course 7', sequence: 'Start – A – Finish at C' },
+          { name: 'Course 8', sequence: 'Start – A – C – A – Finish at C' },
+          { name: 'Course 9', sequence: 'Start – A – B – C – A – Finish at C' },
+          { name: 'Course 10', sequence: 'Start – A – C – A – C – A – Finish at C' },
+          { name: 'Course 11', sequence: 'Start – A – C – A – B – C – A – Finish at C' },
+        ],
+      },
+      {
+        group: 'Group 2',
+        description: 'Gate C1/C2 (if replaced by single mark, round to port)',
+        courses: [
+          { name: 'Course 12', sequence: 'Start – A – Finish' },
+          { name: 'Course 13', sequence: 'Start – A – C1/C2 – A – Finish' },
+          { name: 'Course 14', sequence: 'Start – A – C1/C2 – A – C1/C2 – A – Finish' },
+          { name: 'Course 15', sequence: 'Start – A – C1/C2 – A – B – Finish' },
+          { name: 'Course 16', sequence: 'Start – A – C1/C2 – A – B – C2 – A – Finish' },
+        ],
+      },
+    ];
+  }, [selectedRaceData]);
+
+  useEffect(() => {
+    if (!selectedRaceData) {
+      setSelectedRigBand(null);
+      setRigNotes('');
+      setRegattaAcknowledgements({
+        cleanRegatta: false,
+        signOn: false,
+        safetyBriefing: false,
+      });
+      return;
+    }
+
+    const metadata = (selectedRaceData.metadata || {}) as Record<string, any>;
+    if (metadata.selected_rig_band) {
+      setSelectedRigBand(metadata.selected_rig_band);
+    } else {
+      setSelectedRigBand(null);
+    }
+    if (typeof metadata.rig_notes === 'string') {
+      setRigNotes(metadata.rig_notes);
+    } else {
+      setRigNotes('');
+    }
+
+    setRegattaAcknowledgements({
+      cleanRegatta: metadata.clean_regatta_ack === true,
+      signOn: metadata.sign_on_ack === true,
+      safetyBriefing: metadata.safety_briefing_ack === true,
+    });
+  }, [selectedRaceData]);
+
+  useEffect(() => {
+    if (!rigPresets.length) {
+      return;
+    }
+
+    if (selectedRigBand && rigPresets.some((preset) => preset.id === selectedRigBand)) {
+      return;
+    }
+
+    const fallback = rigPresets.find((preset) => preset.id === 'medium') || rigPresets[0];
+    setSelectedRigBand(fallback.id);
+  }, [rigPresets, selectedRigBand]);
+
+  const hasStrategyGenerated = Boolean(
+    selectedRaceData?.metadata?.strategy_generated_at ||
+    selectedRaceData?.metadata?.ai_strategy_ready ||
+    selectedRaceData?.metadata?.start_strategy_summary
+  );
+
+  const hasPostAnalysis = Boolean(
+    selectedRaceData?.metadata?.post_race_notes ||
+    selectedRaceData?.metadata?.analysis_completed_at
+  );
+
+  const hasCrewReady = Boolean(
+    selectedRaceData?.metadata?.crew_ready ||
+    selectedRaceMarks.length > 0
+  );
+
+  const hasRegulatoryAcknowledged =
+    regattaAcknowledgements.cleanRegatta &&
+    regattaAcknowledgements.signOn &&
+    regattaAcknowledgements.safetyBriefing;
 
   // Determine race status (past, next, future)
   const getRaceStatus = (raceDate: string, isNextRace: boolean): 'past' | 'next' | 'future' => {
@@ -298,42 +1966,64 @@ export default function RacesScreen() {
     setShowPostRaceInterview(false);
     setCompletedSessionId(null);
     setCompletedRaceName('');
+    loadUserPostRaceSession();
     // Refresh races data to show updated analysis
     refetch?.();
-  }, [refetch]);
+  }, [loadUserPostRaceSession, refetch]);
 
-  const handleAddRaceNavigation = useCallback(() => {
-    router.push('/(tabs)/race/add');
-  }, [router]);
+  const handleOpenChatFromRigPlanner = useCallback(async () => {
+    try {
+      // Get AI context with race preparation data before opening chat
+      const context = await getAIContext('rig_planning');
+
+      // TODO: Pass context to chat/messages screen via route params or global state
+      // For now, just navigate to messages - the chat will use useRaceBriefSync to get context
+      router.push('/messages' as any);
+
+      logger.info('Opened chat with race context', {
+        hasContext: !!context,
+        isStale: isRaceBriefStale,
+      });
+    } catch (error) {
+      logger.warn('Unable to navigate to chat from rig planner', error);
+    }
+  }, [router, getAIContext, isRaceBriefStale]);
+
+  const handleToggleAcknowledgement = useCallback((key: keyof RegulatoryAcknowledgements) => {
+    toggleAcknowledgement(key);
+  }, [toggleAcknowledgement]);
+
+  const handleEditRace = useCallback((raceId: string) => {
+    if (!raceId) return;
+
+    try {
+      router.push(`/race/edit/${raceId}`);
+    } catch (error) {
+      logger.error('Error navigating to edit race:', error);
+    }
+  }, [logger, router]);
 
   // Navigate to the comprehensive edit flow for the selected race
   const handleEditSelectedRace = useCallback(() => {
     if (!selectedRaceId) return;
+    handleEditRace(selectedRaceId);
+  }, [handleEditRace, selectedRaceId]);
 
-    try {
-      router.push(`/race/edit/${selectedRaceId}`);
-    } catch (error) {
-      logger.error('Error navigating to edit race:', error);
-    }
-  }, [logger, router, selectedRaceId]);
-
-  // Delete the currently selected race with confirmation
-  const handleDeleteSelectedRace = useCallback(() => {
-    if (!selectedRaceId || isDeletingRace) {
+  const handleDeleteRace = useCallback((raceId: string, raceName?: string) => {
+    if (!raceId || isDeletingRace) {
       return;
     }
 
-    const raceName = selectedRaceData?.name || 'this race';
-    const confirmationMessage = `Are you sure you want to delete "${raceName}"? This action cannot be undone.`;
+    const friendlyName = raceName || 'this race';
+    const confirmationMessage = `Are you sure you want to delete "${friendlyName}"? This action cannot be undone.`;
 
     const performDelete = async () => {
-      setIsDeletingRace(true);
+      setDeletingRaceId(raceId);
       try {
-        // Remove any race events associated with this regatta first to avoid FK conflicts
         const { data: raceEvents, error: raceEventsError } = await supabase
           .from('race_events')
           .select('id')
-          .eq('regatta_id', selectedRaceId);
+          .eq('regatta_id', raceId);
 
         if (raceEventsError) {
           throw raceEventsError;
@@ -352,30 +2042,31 @@ export default function RacesScreen() {
           }
         }
 
-        // Delete the regatta itself
         const { error: deleteRegattaError } = await supabase
           .from('regattas')
           .delete()
-          .eq('id', selectedRaceId);
+          .eq('id', raceId);
 
         if (deleteRegattaError) {
           throw deleteRegattaError;
         }
 
-        // Clear local selection and refresh dashboard data
-        setSelectedRaceId(null);
-        setSelectedRaceData(null);
-        setSelectedRaceMarks([]);
-        setHasManuallySelected(false);
+        if (selectedRaceId === raceId) {
+          setSelectedRaceId(null);
+          setSelectedRaceData(null);
+          setSelectedRaceMarks([]);
+          setHasManuallySelected(false);
+        }
+
         await refetch?.();
 
-        Alert.alert('Race deleted', `"${raceName}" has been removed.`);
+        Alert.alert('Race deleted', `"${friendlyName}" has been removed.`);
       } catch (error: any) {
         logger.error('Error deleting race:', error);
         const message = error?.message || 'Unable to delete race. Please try again.';
         Alert.alert('Error', message);
       } finally {
-        setIsDeletingRace(false);
+        setDeletingRaceId(prev => (prev === raceId ? null : prev));
       }
     };
 
@@ -405,7 +2096,16 @@ export default function RacesScreen() {
         },
       ],
     );
-  }, [isDeletingRace, logger, refetch, selectedRaceData, selectedRaceId]);
+  }, [isDeletingRace, logger, refetch, selectedRaceId]);
+
+  // Delete the currently selected race with confirmation
+  const handleDeleteSelectedRace = useCallback(() => {
+    if (!selectedRaceId) {
+      return;
+    }
+
+    handleDeleteRace(selectedRaceId, selectedRaceData?.name);
+  }, [handleDeleteRace, selectedRaceData?.name, selectedRaceId]);
 
   // Handle racing area drawing
   const handleRacingAreaChange = useCallback((polygon: Array<{lat: number, lng: number}>) => {
@@ -453,24 +2153,39 @@ export default function RacesScreen() {
   }, [selectedRaceId, drawingRacingArea, refetch]);
 
   const ensureRaceEventId = useCallback(async (): Promise<string | null> => {
+    logger.debug('[ensureRaceEventId] START', { selectedRaceId });
+
     if (!selectedRaceId) {
-      logger.warn('Attempted to ensure race event without selected race');
+      logger.warn('[ensureRaceEventId] Attempted to ensure race event without selected race');
       return null;
     }
 
-    const { data: existingRaceEvent, error: existingRaceEventError } = await supabase
+    logger.debug('[ensureRaceEventId] Querying for existing race_event...');
+    // Use .limit(1) to handle potential duplicates gracefully
+    const { data: existingRaceEvents, error: existingRaceEventError } = await supabase
       .from('race_events')
       .select('id')
       .eq('regatta_id', selectedRaceId)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    logger.debug('[ensureRaceEventId] Query result', { existingRaceEvents, existingRaceEventError });
 
     if (existingRaceEventError) {
+      logger.error('[ensureRaceEventId] Error querying existing race_event:', existingRaceEventError);
       throw existingRaceEventError;
     }
 
-    if (existingRaceEvent?.id) {
+    if (existingRaceEvents && existingRaceEvents.length > 0) {
+      const existingRaceEvent = existingRaceEvents[0];
+      logger.debug('[ensureRaceEventId] Found existing race_event', { raceEventId: existingRaceEvent.id });
       return existingRaceEvent.id;
     }
+
+    logger.debug('[ensureRaceEventId] No existing race_event found, creating new one', {
+      selectedRaceId,
+      raceName: selectedRaceData?.name,
+    });
 
     const startDateObj = selectedRaceData?.start_date
       ? new Date(selectedRaceData.start_date)
@@ -484,19 +2199,29 @@ export default function RacesScreen() {
       ? startDateObj.toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];
 
+    const insertPayload = {
+      regatta_id: selectedRaceId,
+      name: `${selectedRaceData?.name || 'Race'} - Event 1`,
+      start_time: startTime,
+      event_date: eventDate,
+    };
+    logger.debug('[ensureRaceEventId] Insert payload prepared', insertPayload);
+
+    logger.debug('[ensureRaceEventId] Executing insert');
     const { data: newRaceEvent, error: createError } = await supabase
       .from('race_events')
-      .insert({
-        regatta_id: selectedRaceId,
-        name: `${selectedRaceData?.name || 'Race'} - Event 1`,
-        start_time: startTime,
-        event_date: eventDate,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
-    if (createError) throw createError;
+    logger.debug('[ensureRaceEventId] Insert result', { newRaceEvent, createError });
 
+    if (createError) {
+      logger.error('[ensureRaceEventId] Error creating race_event:', createError);
+      throw createError;
+    }
+
+    logger.debug('[ensureRaceEventId] Created new race_event', { raceEventId: newRaceEvent.id });
     return newRaceEvent.id;
   }, [selectedRaceData?.name, selectedRaceData?.start_date, selectedRaceId]);
 
@@ -538,11 +2263,28 @@ export default function RacesScreen() {
         throw new Error('Unable to resolve race event ID');
       }
 
+      const markName = mark.name || mark.mark_name || 'Custom Mark';
+      const markType = mark.mark_type || 'custom';
+
+      // Check if mark already exists to prevent duplicates
+      const { data: existingMarks } = await supabase
+        .from('race_marks')
+        .select('id')
+        .eq('race_id', raceEventId)
+        .eq('name', markName)
+        .eq('mark_type', markType)
+        .limit(1);
+
+      if (existingMarks && existingMarks.length > 0) {
+        logger.debug('Mark already exists, skipping insert:', markName);
+        return;
+      }
+
       // Prepare insert payload using only supported columns
       const insertPayload: any = {
         race_id: raceEventId,
-        name: mark.name || mark.mark_name || 'Custom Mark',
-        mark_type: mark.mark_type || 'custom',
+        name: markName,
+        mark_type: markType,
         latitude: mark.latitude,
         longitude: mark.longitude,
         sequence_order: typeof mark.sequence_order === 'number' ? mark.sequence_order : 0,
@@ -555,7 +2297,14 @@ export default function RacesScreen() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // If it's a duplicate key error, silently ignore it
+        if (error.code === '23505') {
+          logger.debug('Mark already exists (race condition), ignoring:', markName);
+          return;
+        }
+        throw error;
+      }
 
       logger.debug('Mark added successfully:', newMark);
 
@@ -668,172 +2417,6 @@ export default function RacesScreen() {
       logger.error('Error bulk updating marks:', error);
     }
   }, []);
-
-  const handleCourseTemplateSelected = useCallback(async (courseMarks: Mark[]) => {
-    if (!selectedRaceId) {
-      Alert.alert('Select a race first', 'Choose a race before applying a course template.');
-      return;
-    }
-
-    setIsApplyingCourseTemplate(true);
-
-    try {
-      const raceEventId = await ensureRaceEventId();
-      if (!raceEventId) {
-        throw new Error('Missing race event ID');
-      }
-
-      // Clear any existing marks before applying the template
-      await supabase
-        .from('race_marks')
-        .delete()
-        .eq('race_id', raceEventId);
-
-      if (!courseMarks || courseMarks.length === 0) {
-        setSelectedRaceMarks([]);
-        Alert.alert('Course cleared', 'Existing course marks have been removed.');
-        return;
-      }
-
-      const insertPayload = courseMarks
-        .filter((mark) => typeof mark.latitude === 'number' && typeof mark.longitude === 'number')
-        .map((mark, index) => ({
-          race_id: raceEventId,
-          name: mark.name || `Mark ${index + 1}`,
-          mark_type: normalizeCourseMarkType(mark.type),
-          latitude: mark.latitude,
-          longitude: mark.longitude,
-          sequence_order: index,
-          is_custom: false,
-        }));
-
-      if (insertPayload.length === 0) {
-        setSelectedRaceMarks([]);
-        Alert.alert('No usable marks', 'That course does not have coordinates we can plot.');
-        return;
-      }
-
-      const { data: insertedMarks, error: insertError } = await supabase
-        .from('race_marks')
-        .insert(insertPayload)
-        .select();
-
-      if (insertError) throw insertError;
-
-      const mappedMarks = (insertedMarks || []).map((mark: any) => ({
-        id: mark.id,
-        mark_name: mark.name,
-        mark_type: mark.mark_type,
-        latitude: mark.latitude,
-        longitude: mark.longitude,
-        sequence_order: mark.sequence_order ?? 0,
-      }));
-
-      setSelectedRaceMarks(mappedMarks);
-      setDrawingRacingArea([]);
-      refetch?.();
-
-      Alert.alert('Course applied', 'The selected course has been laid onto the tactical map.');
-    } catch (error) {
-      logger.error('Error applying course template:', error);
-      Alert.alert('Unable to apply course', 'We could not load that course. Please try again.');
-    } finally {
-      setIsApplyingCourseTemplate(false);
-    }
-  }, [ensureRaceEventId, normalizeCourseMarkType, refetch, selectedRaceId]);
-
-  const handleSaveCourseTemplate = useCallback(async () => {
-    if (savingCourseTemplate) {
-      return;
-    }
-
-    if (!user?.id) {
-      Alert.alert('Sign in required', 'You need to be signed in to save course templates.');
-      return;
-    }
-
-    if (!selectedRaceMarks || selectedRaceMarks.length === 0) {
-      Alert.alert('No marks to save', 'Add marks to the tactical map before saving a template.');
-      return;
-    }
-
-    const defaultName =
-      selectedRaceData?.name
-        ? `${selectedRaceData.name} Course`
-        : `Custom Course ${new Date().toLocaleDateString()}`;
-
-    let courseName = defaultName;
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const response = window.prompt('Name your course template', defaultName);
-      if (!response) {
-        return;
-      }
-      courseName = response;
-    }
-
-    const scope: CourseScope =
-      selectedRaceData?.metadata?.club_id
-        ? 'club'
-        : selectedRaceData?.metadata?.venue_id
-          ? 'venue'
-          : 'personal';
-
-    const courseDescription =
-      selectedRaceData?.metadata?.venue_name
-        ? `Saved from ${selectedRaceData.metadata.venue_name}`
-        : 'Custom racing course';
-
-    const marksPayload = selectedRaceMarks
-      .filter((mark: any) => typeof mark.latitude === 'number' && typeof mark.longitude === 'number')
-      .map((mark: any, index: number) => ({
-        id: mark.id || `${courseName.replace(/\s+/g, '-').toLowerCase()}-${index}`,
-        name: mark.mark_name || mark.name || `Mark ${index + 1}`,
-        type: mark.mark_type || mark.type || 'custom',
-        latitude: mark.latitude,
-        longitude: mark.longitude,
-        sequence_order: index,
-      }));
-
-    if (marksPayload.length === 0) {
-      Alert.alert('Unable to save course', 'Could not detect mark positions to save.');
-      return;
-    }
-
-    setSavingCourseTemplate(true);
-
-    try {
-      const savedCourse = await CourseLibraryService.saveCourse(
-        {
-          name: courseName,
-          description: courseDescription,
-          course_type: 'custom',
-          marks: marksPayload,
-          typical_length_nm: null,
-          estimated_duration_minutes: null,
-          min_wind_direction: selectedRaceData?.metadata?.expected_wind_direction ?? null,
-          max_wind_direction: selectedRaceData?.metadata?.expected_wind_direction ?? null,
-          min_wind_speed: selectedRaceData?.metadata?.expected_wind_speed ?? null,
-          max_wind_speed: selectedRaceData?.metadata?.expected_wind_speed ?? null,
-          venue_id: selectedRaceData?.metadata?.venue_id ?? undefined,
-          club_id: selectedRaceData?.metadata?.club_id ?? undefined,
-        },
-        scope,
-        user.id
-      );
-
-      if (!savedCourse) {
-        throw new Error('Course could not be saved');
-      }
-
-      Alert.alert('Course saved', `${courseName} is now in your course library.`);
-    } catch (error: any) {
-      logger.error('Error saving course template:', error);
-      Alert.alert('Save failed', error?.message || 'Could not save this course. Please try again.');
-    } finally {
-      setSavingCourseTemplate(false);
-    }
-  }, [logger, savingCourseTemplate, selectedRaceData, selectedRaceMarks, user?.id]);
 
   const selectedRaceVenueCoordinates = useMemo(() => {
     if (selectedRaceData?.metadata?.venue_lat && selectedRaceData?.metadata?.venue_lng) {
@@ -950,16 +2533,62 @@ export default function RacesScreen() {
 
   // Auto-select first race when races load (only runs once when loading completes)
   // Using useRef to track if auto-selection has happened to prevent re-running
-  const hasAutoSelected = useRef(false);
+  const autoSelectDatasetKeyRef = useRef<string | null>(null);
+  const autoSelectLastAppliedIdRef = useRef<string | null>(null);
   React.useEffect(() => {
-    if (!loading && safeRecentRaces.length > 0 && !hasAutoSelected.current) {
-      // Select next race if available, otherwise first race
-      const raceToSelect = nextRace || safeRecentRaces[0];
-      logger.debug('[races.tsx] Auto-selecting race:', raceToSelect?.name, raceToSelect?.id);
-      setSelectedRaceId(raceToSelect.id);
-      hasAutoSelected.current = true;
+    if (loading || safeRecentRaces.length === 0) {
+      return;
     }
-  }, [loading, safeRecentRaces, nextRace]); // Removed selectedRaceId from dependencies
+
+    const datasetKey = safeRecentRaces.map((race: any) => race?.id ?? 'unknown').join('|');
+    const datasetChanged = autoSelectDatasetKeyRef.current !== datasetKey;
+    if (datasetChanged) {
+      autoSelectDatasetKeyRef.current = datasetKey;
+    }
+
+    // Keep current selection if it is still present in the latest dataset
+    const selectionStillValid = selectedRaceId
+      ? safeRecentRaces.some((race: any) => race?.id === selectedRaceId)
+      : false;
+
+    if (!datasetChanged && selectionStillValid) {
+      return;
+    }
+
+    const routeTargetId = initialSelectedRaceParam.current;
+    const raceToSelect =
+      (routeTargetId && safeRecentRaces.find((race: any) => race?.id === routeTargetId)) ||
+      (nextRace && safeRecentRaces.find((race: any) => race?.id === nextRace.id)) ||
+      safeRecentRaces[0];
+
+    const targetId = raceToSelect?.id ?? null;
+    if (!targetId) {
+      return;
+    }
+
+    if (!datasetChanged && autoSelectLastAppliedIdRef.current === targetId) {
+      return;
+    }
+
+    if (targetId === selectedRaceId) {
+      autoSelectLastAppliedIdRef.current = targetId;
+      return;
+    }
+
+    logger.debug('[races.tsx] Auto-selecting race:', raceToSelect?.name, targetId, {
+      datasetChanged,
+      selectionStillValid,
+      previousKey: autoSelectDatasetKeyRef.current,
+    });
+    autoSelectLastAppliedIdRef.current = targetId;
+    setSelectedRaceId(targetId);
+  }, [loading, safeRecentRaces, nextRace, selectedRaceId]);
+
+  useEffect(() => {
+    if (selectedRaceId) {
+      autoSelectLastAppliedIdRef.current = selectedRaceId;
+    }
+  }, [selectedRaceId]);
 
   // Handle deep links that request a specific race selection (e.g., after creation)
   useEffect(() => {
@@ -974,7 +2603,6 @@ export default function RacesScreen() {
     }
 
     logger.debug('[races.tsx] Selecting race from route params:', targetId);
-    hasAutoSelected.current = true;
     setSelectedRaceId(targetId);
     setHasManuallySelected(true);
     initialSelectedRaceParam.current = null;
@@ -1029,6 +2657,17 @@ export default function RacesScreen() {
         return;
       }
 
+      // First check if this race is in our local safeRecentRaces (might be fallback data)
+      const localRace = safeRecentRaces.find((r: any) => r.id === selectedRaceId);
+      if (localRace && !localRace.id?.includes('-')) {
+        // If we have local race data and it's likely a fallback race (not a UUID)
+        logger.debug('[races.tsx] 📦 Using local race data (fallback):', localRace.name);
+        setLoadingRaceDetail(false);
+        setSelectedRaceData(localRace);
+        setSelectedRaceMarks([]);
+        return;
+      }
+
       setLoadingRaceDetail(true);
       try {
         logger.debug('[races.tsx] Querying database for race ID:', selectedRaceId);
@@ -1038,8 +2677,18 @@ export default function RacesScreen() {
           .eq('id', selectedRaceId)
           .single();
 
-        if (error) throw error;
-        logger.debug('[races.tsx] ✅ Race data fetched:', data?.name);
+        if (error) {
+          logger.warn('[races.tsx] ⚠️ Database fetch failed, checking local data');
+          // If database fetch fails, try to use local race data as fallback
+          if (localRace) {
+            logger.debug('[races.tsx] 📦 Using local race data as fallback:', localRace.name);
+            setLoadingRaceDetail(false);
+            setSelectedRaceData(localRace);
+            setSelectedRaceMarks([]);
+            return;
+          }
+          throw error;
+        }
         // If the selection changed during the fetch, ignore this result
         if (selectionAtStart !== selectedRaceId) {
           logger.debug(
@@ -1077,12 +2726,27 @@ export default function RacesScreen() {
               longitude: mark.longitude,
               sequence_order: 0,
             }));
-            setSelectedRaceMarks(convertedMarks);
-            logger.debug('[races.tsx] Marks loaded:', convertedMarks.length);
+
+            // Deduplicate marks: Keep only unique combinations of name + mark_type
+            // This prevents rendering duplicate courses if the database has duplicates
+            const uniqueMarks = convertedMarks.filter((mark, index, self) => {
+              const markKey = `${mark.mark_name}:${mark.mark_type}`;
+              return index === self.findIndex(m =>
+                `${m.mark_name}:${m.mark_type}` === markKey
+              );
+            });
+
+            if (uniqueMarks.length < convertedMarks.length) {
+              logger.warn(
+                `[races.tsx] ⚠️ Deduplicated marks: ${convertedMarks.length} -> ${uniqueMarks.length}`
+              );
+            }
+
+            setSelectedRaceMarks(uniqueMarks);
+            logger.debug('[races.tsx] Marks loaded:', uniqueMarks.length);
           }
         }
       } catch (error) {
-        console.error('[races.tsx] ❌ Error fetching race detail:', error);
         logger.error('[races.tsx] ❌ Error fetching race detail:', error);
         setSelectedRaceData(null);
         setSelectedRaceMarks([]);
@@ -1094,27 +2758,1378 @@ export default function RacesScreen() {
     };
 
     fetchRaceDetail();
-  }, [selectedRaceId]);
+  }, [selectedRaceId, raceDetailReloadKey]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!selectedRaceData?.id || isDemoSession) {
+      setRaceDocuments([]);
+      setRaceDocumentsError(null);
+      setLoadingRaceDocuments(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    const loadRaceDocuments = async () => {
+      setLoadingRaceDocuments(true);
+      setRaceDocumentsError(null);
+
+      try {
+        const documents = await raceDocumentService.getRaceDocuments(selectedRaceData.id);
+        if (!isActive) {
+          return;
+        }
+        setRaceDocuments(documents);
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+        logger.warn('[races.tsx] Unable to load race documents', {
+          error,
+          raceId: selectedRaceData.id,
+        });
+        setRaceDocuments([]);
+        setRaceDocumentsError('Unable to load race documents');
+      } finally {
+        if (isActive) {
+          setLoadingRaceDocuments(false);
+        }
+      }
+    };
+
+    loadRaceDocuments();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedRaceData?.id, raceDetailReloadKey, raceDocumentsReloadKey, isDemoSession]);
+
+  const handleRefreshRaceDocuments = useCallback(() => {
+    setRaceDocumentsReloadKey((prev) => prev + 1);
+  }, []);
+
+  const requestDocumentTypeSelection = useCallback(() => {
+    return new Promise<RaceDocumentType | null>((resolve) => {
+      documentTypeResolverRef.current = resolve;
+      setDocumentTypePickerVisible(true);
+    });
+  }, []);
+
+  const handleDocumentTypeOptionSelect = useCallback((type: RaceDocumentType) => {
+    documentTypeResolverRef.current?.(type);
+    documentTypeResolverRef.current = null;
+    setDocumentTypePickerVisible(false);
+  }, []);
+
+  const handleDismissDocumentTypePicker = useCallback(() => {
+    documentTypeResolverRef.current?.(null);
+    documentTypeResolverRef.current = null;
+    setDocumentTypePickerVisible(false);
+  }, []);
+
+  const handleUploadRaceDocument = useCallback(async () => {
+    if (isUploadingRaceDocument) {
+      return;
+    }
+
+    if (isDemoSession) {
+      Alert.alert('Unavailable in demo mode', 'Sign in to upload race documents.');
+      return;
+    }
+
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in to upload documents.');
+      return;
+    }
+
+    if (!selectedRaceData?.id) {
+      Alert.alert('Select a race', 'Choose a race to attach documents to.');
+      return;
+    }
+
+    const documentType = await requestDocumentTypeSelection();
+    if (!documentType) {
+      logger.debug('[races.tsx] Document upload cancelled before selecting type');
+      return;
+    }
+
+    setIsUploadingRaceDocument(true);
+    try {
+      const uploadResult = await documentStorageService.pickAndUploadDocument(user.id);
+
+      if (!uploadResult.success || !uploadResult.document) {
+        const errorMessage = uploadResult.error || 'Unable to upload document. Please try again.';
+        const isUserCancel = errorMessage.toLowerCase().includes('cancel');
+
+        if (isUserCancel) {
+          logger.debug('[races.tsx] Document picker cancelled by user');
+        } else {
+          Alert.alert('Upload failed', errorMessage);
+        }
+        return;
+      }
+
+      const linked = await raceDocumentService.linkDocumentToRace({
+        regattaId: selectedRaceData.id,
+        documentId: uploadResult.document.id,
+        userId: user.id,
+        documentType,
+      });
+
+      if (!linked) {
+        Alert.alert('Upload failed', 'We uploaded the file but could not attach it to this race.');
+        return;
+      }
+
+      Alert.alert('Document uploaded', 'Your document is now attached to this race.');
+      handleRefreshRaceDocuments();
+    } catch (error) {
+      logger.error('[races.tsx] Document upload failed', error);
+      Alert.alert('Upload failed', 'We could not upload that document. Please try again.');
+    } finally {
+      setIsUploadingRaceDocument(false);
+    }
+  }, [
+    handleRefreshRaceDocuments,
+    isDemoSession,
+    isUploadingRaceDocument,
+    logger,
+    requestDocumentTypeSelection,
+    selectedRaceData?.id,
+    user?.id,
+  ]);
 
 const selectedRaceClassId = useMemo(() => {
   if (!selectedRaceData) return null;
-  return (
+  const classId = (
     selectedRaceData.class_id ||
     selectedRaceData.classId ||
     selectedRaceData.metadata?.class_id ||
     selectedRaceData.metadata?.classId ||
     null
   );
+  logger.debug('[races.tsx] Computed selectedRaceClassId', { classId, hasRaceData: !!selectedRaceData });
+  return classId;
 }, [selectedRaceData]);
 
 const selectedRaceClassName = useMemo(() => {
   if (!selectedRaceData) return undefined;
-  return (
+  const className = (
     selectedRaceData.metadata?.class_name ||
     selectedRaceData.class_divisions?.[0]?.name ||
     undefined
   );
+  logger.debug('[races.tsx] Computed selectedRaceClassName', { className });
+  return className;
 }, [selectedRaceData]);
+
+const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
+  if (!raceDocuments.length) {
+    return [];
+  }
+
+  return raceDocuments.map((doc) => {
+    const mergedMetadata = ((doc.document?.metadata || doc.metadata) ?? {}) as Record<string, any>;
+
+    const deriveName = (): string => {
+      const candidates = [mergedMetadata.displayName, mergedMetadata.title, doc.document?.filename];
+      const found = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+      return found ? (found as string) : 'Document';
+    };
+
+    const deriveSize = (): number => {
+      const sizeCandidate =
+        doc.document?.file_size ?? mergedMetadata.file_size ?? mergedMetadata.size ?? mergedMetadata.fileSize;
+      return typeof sizeCandidate === 'number' && Number.isFinite(sizeCandidate) ? sizeCandidate : 0;
+    };
+
+    const uploadedTimestamp = (doc.document?.created_at as string) ?? doc.createdAt;
+
+    return {
+      id: doc.id,
+      name: deriveName(),
+      type: normalizeDocumentType(doc.documentType),
+      size: deriveSize(),
+      uploadedAt: uploadedTimestamp,
+      uploadedBy: (doc.document?.user_id as string) ?? doc.userId,
+      aiProcessed: Boolean(
+        mergedMetadata.aiProcessed ??
+          mergedMetadata.ai_processed ??
+          mergedMetadata.course_extract_id ??
+          mergedMetadata.course_extracted ??
+          mergedMetadata.ai_ready
+      ),
+      hasExtractedCourse: Boolean(mergedMetadata.course_extract_id ?? mergedMetadata.course_extracted),
+    } satisfies RaceDocumentsCardDocument;
+  });
+}, [raceDocuments]);
+
+  const matchedEnrichedRace = useMemo(() => {
+    if (!selectedRaceId || !Array.isArray(enrichedRaces)) {
+      return null;
+    }
+    return enrichedRaces.find((race: any) => race.id === selectedRaceId) ?? null;
+  }, [selectedRaceId, enrichedRaces]);
+
+  const initialConditionsSnapshot = useMemo(() => {
+    if (!selectedRaceData && !matchedEnrichedRace) {
+      return null;
+    }
+
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+    const enrichedWind =
+      matchedEnrichedRace?.wind ??
+      (selectedRaceData as any)?.wind ??
+      metadata?.wind ??
+      metadata?.weather?.wind ??
+      null;
+    const enrichedTide =
+      matchedEnrichedRace?.tide ??
+      (selectedRaceData as any)?.tide ??
+      metadata?.tide ??
+      metadata?.weather?.tide ??
+      null;
+
+    if (!enrichedWind && !enrichedTide) {
+      return null;
+    }
+
+    return {
+      wind: enrichedWind ?? undefined,
+      tide: enrichedTide ?? undefined,
+      fetchedAt: metadata?.weather_fetched_at ?? metadata?.weather?.fetched_at ?? undefined,
+      provider: metadata?.weather_provider ?? metadata?.weather?.provider ?? undefined,
+    };
+  }, [matchedEnrichedRace, selectedRaceData]);
+
+  const selectedRaceWeather = useMemo(() => {
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+
+    const windCandidates: any[] = [];
+    const currentCandidates: any[] = [];
+    const tideCandidates: any[] = [];
+
+    if (metadata.weather?.wind) windCandidates.push(metadata.weather.wind);
+    if (metadata.wind) windCandidates.push(metadata.wind);
+    if (metadata.expected_wind_direction || metadata.expected_wind_speed) {
+      windCandidates.push({
+        direction: metadata.expected_wind_direction,
+        speed: metadata.expected_wind_speed,
+        speedMin:
+          metadata.expected_wind_speed_min ??
+          metadata.expected_wind_min ??
+          metadata.wind_speed_min,
+        speedMax:
+          metadata.expected_wind_speed_max ??
+          metadata.expected_wind_max ??
+          metadata.wind_speed_max,
+        gust: metadata.expected_wind_gust ?? metadata.wind_gust,
+      });
+    }
+    if ((selectedRaceData as any)?.wind) windCandidates.push((selectedRaceData as any).wind);
+    if (matchedEnrichedRace?.wind) windCandidates.push(matchedEnrichedRace.wind);
+    if (raceWeather?.wind) {
+      windCandidates.push({
+        direction: raceWeather.wind.direction,
+        speedMin: raceWeather.wind.speedMin,
+        speedMax: raceWeather.wind.speedMax,
+      });
+    }
+    if (!selectedRaceData && selectedDemoRace?.wind) {
+      windCandidates.push(selectedDemoRace.wind);
+    }
+
+    if (metadata.weather?.current) currentCandidates.push(metadata.weather.current);
+    if (metadata.current) currentCandidates.push(metadata.current);
+    if (metadata.current_conditions) currentCandidates.push(metadata.current_conditions);
+    if ((selectedRaceData as any)?.current) currentCandidates.push((selectedRaceData as any).current);
+    if (matchedEnrichedRace?.current) currentCandidates.push(matchedEnrichedRace.current);
+    if (!selectedRaceData && selectedDemoRace?.current) {
+      currentCandidates.push(selectedDemoRace.current);
+    }
+    if (metadata.expected_current_direction || metadata.expected_current_speed) {
+      currentCandidates.push({
+        direction: metadata.expected_current_direction,
+        speed: metadata.expected_current_speed,
+        type: metadata.expected_current_state,
+      });
+    }
+
+    if (metadata.weather?.tide) tideCandidates.push(metadata.weather.tide);
+    if (metadata.tide) tideCandidates.push(metadata.tide);
+    if (matchedEnrichedRace?.tide) tideCandidates.push(matchedEnrichedRace.tide);
+    if (raceWeather?.tide) {
+      tideCandidates.push({
+        direction: raceWeather.tide.direction,
+        state: raceWeather.tide.state,
+      });
+    }
+    if (!selectedRaceData && selectedDemoRace?.tide) {
+      tideCandidates.push(selectedDemoRace.tide);
+    }
+    if (metadata.expected_tide_direction || metadata.expected_tide_state) {
+      tideCandidates.push({
+        direction: metadata.expected_tide_direction,
+        state: metadata.expected_tide_state,
+      });
+    }
+
+    // Allow tide metadata to act as a fallback current reference
+    tideCandidates.forEach((tide) => {
+      if (!tide) return;
+      currentCandidates.push({
+        direction: tide.direction,
+        type: tide.type ?? tide.state,
+        speed: tide.speed ?? tide.knots ?? tide.rate,
+      });
+    });
+
+    let windSnapshot: TacticalWindSnapshot | undefined;
+    for (const candidate of windCandidates) {
+      const snapshot = extractWindSnapshot(candidate);
+      if (snapshot) {
+        windSnapshot = snapshot;
+        break;
+      }
+    }
+
+    let currentSnapshot: TacticalCurrentSnapshot | undefined;
+    for (const candidate of currentCandidates) {
+      const snapshot = extractCurrentSnapshot(candidate);
+      if (snapshot) {
+        currentSnapshot = snapshot;
+        break;
+      }
+    }
+
+    if (!windSnapshot && !currentSnapshot) {
+      return null;
+    }
+
+    return {
+      wind: windSnapshot,
+      current: currentSnapshot,
+    };
+  }, [
+    matchedEnrichedRace,
+    raceWeather?.wind,
+    raceWeather?.tide,
+    selectedDemoRace,
+    selectedRaceData,
+  ]);
+
+  const windSnapshot = useMemo(() => {
+    if (!selectedRaceWeather?.wind) {
+      return null;
+    }
+
+    const speed = pickNumeric([
+      selectedRaceWeather.wind.speed,
+      (selectedRaceWeather.wind as any).speedMin,
+      (selectedRaceWeather.wind as any).speedMax,
+    ]);
+    const direction = normalizeDirection(selectedRaceWeather.wind.direction);
+
+    if (speed === null || direction === null) {
+      return null;
+    }
+
+    return {
+      speed,
+      direction,
+      gust: pickNumeric([
+        selectedRaceWeather.wind.gust,
+        (selectedRaceWeather.wind as any).gustMax,
+        (selectedRaceWeather.wind as any).speedMax,
+      ]) ?? undefined,
+      forecast: (selectedRaceWeather.wind as any).forecast,
+    };
+  }, [selectedRaceWeather]);
+
+  const currentSnapshot = useMemo(() => {
+    if (!selectedRaceWeather?.current) {
+      return null;
+    }
+
+    const speed = pickNumeric([
+      selectedRaceWeather.current.speed,
+      (selectedRaceWeather.current as any).knots,
+      (selectedRaceWeather.current as any).speedMin,
+      (selectedRaceWeather.current as any).speedMax,
+    ]);
+    const direction = normalizeDirection(selectedRaceWeather.current.direction);
+
+    if (speed === null || direction === null) {
+      return null;
+    }
+
+    return {
+      speed,
+      direction,
+      type: normalizeCurrentType(selectedRaceWeather.current.type),
+    };
+  }, [selectedRaceWeather]);
+
+  const boatDraftValue = useMemo(() => {
+    const metadata = selectedRaceData?.metadata;
+    if (!metadata) return null;
+
+    return pickNumeric([
+      metadata.boat_draft,
+      metadata.draft,
+      metadata.keel_depth,
+      metadata.draft_meters,
+    ]);
+  }, [selectedRaceData]);
+
+  const boatLengthValue = useMemo(() => {
+    const metadata = selectedRaceData?.metadata;
+    if (!metadata) return null;
+
+    return pickNumeric([
+      metadata.boat_length,
+      metadata.loa,
+      metadata.length_overall,
+      metadata.lwl,
+    ]);
+  }, [selectedRaceData]);
+
+  const timeToStartMinutes = useMemo(() => {
+    if (!selectedRaceData?.start_date) return null;
+    const startTime = new Date(selectedRaceData.start_date).getTime();
+    if (!Number.isFinite(startTime)) {
+      return null;
+    }
+    const diffMinutes = (startTime - Date.now()) / (1000 * 60);
+    return Number.isFinite(diffMinutes) ? diffMinutes : null;
+  }, [selectedRaceData?.start_date]);
+
+  const boatSpeedKnots = useMemo(() => {
+    if (!gpsPosition || typeof gpsPosition.speed !== 'number') {
+      return undefined;
+    }
+    return gpsPosition.speed;
+  }, [gpsPosition]);
+
+  const venueCenter = useMemo(() => {
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+
+    const lat = pickNumeric([
+      metadata.venue_lat,
+      metadata.latitude,
+      metadata.venue?.lat,
+      metadata.start_line?.center_lat,
+      metadata.center_lat,
+    ]);
+    const lng = pickNumeric([
+      metadata.venue_lng,
+      metadata.longitude,
+      metadata.venue?.lng,
+      metadata.start_line?.center_lng,
+      metadata.center_lng,
+    ]);
+
+    if (lat !== null && lng !== null) {
+      return { latitude: lat, longitude: lng };
+    }
+
+    const markWithCoords = selectedRaceMarks.find((mark) => {
+      const markLat = mark.latitude ?? mark.coordinates?.lat ?? mark.position?.lat;
+      const markLng = mark.longitude ?? mark.coordinates?.lng ?? mark.position?.lng;
+      return typeof markLat === 'number' && typeof markLng === 'number';
+    });
+
+    if (markWithCoords) {
+      const markLat = markWithCoords.latitude ?? markWithCoords.coordinates?.lat ?? markWithCoords.position?.lat;
+      const markLng = markWithCoords.longitude ?? markWithCoords.coordinates?.lng ?? markWithCoords.position?.lng;
+      if (typeof markLat === 'number' && typeof markLng === 'number') {
+        return { latitude: markLat, longitude: markLng };
+      }
+    }
+
+    return null;
+  }, [selectedRaceData, selectedRaceMarks]);
+
+  const raceCourseForConsole = useMemo(() => {
+    if (!selectedRaceData && (!selectedRaceMarks || selectedRaceMarks.length === 0)) {
+      return null;
+    }
+
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+
+    const marks = (selectedRaceMarks || [])
+      .map((mark, index) => {
+        const lat = mark.latitude ?? mark.coordinates?.lat ?? mark.position?.lat;
+        const lng = mark.longitude ?? mark.coordinates?.lng ?? mark.position?.lng;
+
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          return null;
+        }
+
+        const rawType = (mark.mark_type || mark.type || mark.markType || '') as string;
+        const lowerType = rawType.toLowerCase();
+        const lowerName = (mark.mark_name || mark.name || '').toLowerCase();
+
+        let normalizedType: 'start-pin' | 'start-boat' | 'windward' | 'leeward' | 'offset' | 'finish' = 'windward';
+
+        if (lowerType.includes('start') && (lowerType.includes('pin') || lowerName.includes('pin'))) {
+          normalizedType = 'start-pin';
+        } else if (
+          lowerType.includes('start') &&
+          (lowerType.includes('boat') || lowerType.includes('committee') || lowerName.includes('committee'))
+        ) {
+          normalizedType = 'start-boat';
+        } else if (lowerType.includes('leeward') || lowerType.includes('gate')) {
+          normalizedType = 'leeward';
+        } else if (lowerType.includes('offset')) {
+          normalizedType = 'offset';
+        } else if (lowerType.includes('finish')) {
+          normalizedType = 'finish';
+        } else if (lowerType.includes('windward') || lowerName.includes('weather')) {
+          normalizedType = 'windward';
+        }
+
+        const rounding = (mark.rounding || mark.rounding_type || mark.roundingType) as 'port' | 'starboard' | undefined;
+
+        return {
+          id: mark.id ?? `mark-${index}`,
+          name: mark.mark_name || mark.name || `Mark ${index + 1}`,
+          position: { lat, lng },
+          type: normalizedType,
+          rounding,
+        };
+      })
+      .filter(Boolean) as Array<{
+        id: string;
+        name: string;
+        position: { lat: number; lng: number };
+        type: 'start-pin' | 'start-boat' | 'windward' | 'leeward' | 'offset' | 'finish';
+        rounding?: 'port' | 'starboard';
+      }>;
+
+    if (marks.length === 0) {
+      return null;
+    }
+
+    let startLine: Course['startLine'] | undefined;
+    const startLineMeta = (metadata.start_line || metadata.startLine) as Record<string, any> | undefined;
+
+    const resolveCoordinate = (value: unknown) => {
+      const candidate = value as any;
+      return pickNumeric([
+        candidate,
+        candidate?.lat,
+        candidate?.lng,
+        candidate?.latitude,
+        candidate?.longitude,
+      ]);
+    };
+
+    if (startLineMeta && typeof startLineMeta === 'object') {
+      const portLat = resolveCoordinate(startLineMeta.port_lat ?? startLineMeta.port?.lat ?? startLineMeta.port?.latitude);
+      const portLng = resolveCoordinate(startLineMeta.port_lng ?? startLineMeta.port?.lng ?? startLineMeta.port?.longitude);
+      const starboardLat = resolveCoordinate(
+        startLineMeta.starboard_lat ?? startLineMeta.starboard?.lat ?? startLineMeta.starboard?.latitude
+      );
+      const starboardLng = resolveCoordinate(
+        startLineMeta.starboard_lng ?? startLineMeta.starboard?.lng ?? startLineMeta.starboard?.longitude
+      );
+
+      if (
+        portLat !== null &&
+        portLng !== null &&
+        starboardLat !== null &&
+        starboardLng !== null
+      ) {
+        const heading = TacticalCalculations.calculateBearing(
+          portLat,
+          portLng,
+          starboardLat,
+          starboardLng
+        );
+        const lengthMeters = TacticalCalculations.calculateDistance(
+          portLat,
+          portLng,
+          starboardLat,
+          starboardLng
+        );
+        startLine = {
+          port: { latitude: portLat, longitude: portLng },
+          starboard: { latitude: starboardLat, longitude: starboardLng },
+          centerLat: (portLat + starboardLat) / 2,
+          centerLon: (portLng + starboardLng) / 2,
+          heading,
+          length: lengthMeters,
+        };
+      }
+    }
+
+    if (!startLine) {
+      const portMark = marks.find(mark => mark.type === 'start-pin');
+      const starboardMark = marks.find(mark => mark.type === 'start-boat');
+
+      if (portMark && starboardMark) {
+        const heading = TacticalCalculations.calculateBearing(
+          portMark.position.lat,
+          portMark.position.lng,
+          starboardMark.position.lat,
+          starboardMark.position.lng
+        );
+        const lengthMeters = TacticalCalculations.calculateDistance(
+          portMark.position.lat,
+          portMark.position.lng,
+          starboardMark.position.lat,
+          starboardMark.position.lng
+        );
+
+        startLine = {
+          port: { latitude: portMark.position.lat, longitude: portMark.position.lng },
+          starboard: { latitude: starboardMark.position.lat, longitude: starboardMark.position.lng },
+          centerLat: (portMark.position.lat + starboardMark.position.lat) / 2,
+          centerLon: (portMark.position.lng + starboardMark.position.lng) / 2,
+          heading,
+          length: lengthMeters,
+        };
+      }
+    }
+
+    const legs = marks.slice(0, -1).map((mark, index) => {
+      const next = marks[index + 1];
+      const heading = TacticalCalculations.calculateBearing(
+        mark.position.lat,
+        mark.position.lng,
+        next.position.lat,
+        next.position.lng
+      );
+      const distanceMeters = TacticalCalculations.calculateDistance(
+        mark.position.lat,
+        mark.position.lng,
+        next.position.lat,
+        next.position.lng
+      );
+      const distanceNm = distanceMeters / 1852;
+
+      let type: 'upwind' | 'downwind' | 'reach' = 'reach';
+      if (windSnapshot?.direction !== undefined && windSnapshot?.direction !== null) {
+        const angleDiff = Math.abs((heading - windSnapshot.direction + 360) % 360);
+        if (angleDiff < 60 || angleDiff > 300) {
+          type = 'upwind';
+        } else if (angleDiff > 120 && angleDiff < 240) {
+          type = 'downwind';
+        }
+      } else if (index === 0) {
+        type = 'upwind';
+      } else if (index % 2 === 1) {
+        type = 'downwind';
+      }
+
+      return {
+        id: `leg-${index}`,
+        name: `${mark.name} → ${next.name}`,
+        from: mark.id,
+        to: next.id,
+        type,
+        distance: Number.isFinite(distanceNm) ? distanceNm : 0,
+        heading,
+        estimatedTime: undefined,
+      };
+    });
+
+    const totalDistance = legs.reduce((sum, leg) => sum + (leg.distance ?? 0), 0);
+    const laps = pickNumeric([metadata.laps, metadata.course_laps, metadata.race_laps]) ?? undefined;
+
+    return {
+      id: selectedRaceId ?? 'race-course',
+      name: selectedRaceData?.name ?? 'Race Course',
+      marks,
+      legs,
+      startTime: selectedRaceData?.start_date ? new Date(selectedRaceData.start_date) : undefined,
+      startLine,
+      distance: totalDistance,
+      laps,
+    } as Course;
+  }, [selectedRaceData, selectedRaceMarks, selectedRaceId, windSnapshot]);
+
+  const courseHeading = useMemo(() => {
+    if (!raceCourseForConsole) return undefined;
+    if (raceCourseForConsole.legs && raceCourseForConsole.legs.length > 0) {
+      return raceCourseForConsole.legs[0].heading;
+    }
+    return raceCourseForConsole.startLine?.heading;
+  }, [raceCourseForConsole]);
+
+  const layoutWindData = useMemo(() => {
+    if (!windSnapshot) return undefined;
+    return {
+      speed: windSnapshot.speed,
+      direction: windSnapshot.direction,
+      gust: windSnapshot.gust,
+    };
+  }, [windSnapshot]);
+
+  const layoutCurrentData = useMemo(() => {
+    if (!currentSnapshot) return undefined;
+    return {
+      speed: currentSnapshot.speed,
+      direction: currentSnapshot.direction,
+      type: currentSnapshot.type,
+    };
+  }, [currentSnapshot]);
+
+  const nextMarkForCalculations = useMemo(() => {
+    if (!selectedRaceMarks || selectedRaceMarks.length === 0) {
+      return null;
+    }
+
+    const mark = selectedRaceMarks[0];
+    const lat = mark.latitude ?? mark.coordinates?.lat ?? mark.position?.lat;
+    const lng = mark.longitude ?? mark.coordinates?.lng ?? mark.position?.lng;
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return null;
+    }
+
+    return {
+      name: mark.name || mark.mark_name || 'Mark 1',
+      latitude: lat,
+      longitude: lng,
+    };
+  }, [selectedRaceMarks]);
+
+  const overlayNextMark = useMemo(() => {
+    if (!nextMarkForCalculations) return undefined;
+    return {
+      latitude: nextMarkForCalculations.latitude,
+      longitude: nextMarkForCalculations.longitude,
+      name: nextMarkForCalculations.name,
+    };
+  }, [nextMarkForCalculations]);
+
+  const quickActionNextMark = useMemo(() => {
+    if (!nextMarkForCalculations) {
+      return undefined;
+    }
+
+    if (!gpsPosition || typeof gpsPosition.latitude !== 'number' || typeof gpsPosition.longitude !== 'number') {
+      return {
+        name: nextMarkForCalculations.name,
+        distance: 0,
+        bearing: 0,
+      };
+    }
+
+    const distanceMeters = calculateDistance(
+      gpsPosition.latitude,
+      gpsPosition.longitude,
+      nextMarkForCalculations.latitude,
+      nextMarkForCalculations.longitude
+    );
+
+    const bearing = calculateBearing(
+      gpsPosition.latitude,
+      gpsPosition.longitude,
+      nextMarkForCalculations.latitude,
+      nextMarkForCalculations.longitude
+    );
+
+    return {
+      name: nextMarkForCalculations.name,
+      distance: distanceMeters / 1852,
+      bearing,
+    };
+  }, [gpsPosition, nextMarkForCalculations]);
+
+  const vhfChannel = useMemo(() => {
+    const metadata = selectedRaceData?.metadata as Record<string, any> | undefined;
+    return (
+      selectedRaceData?.vhf_channel ??
+      selectedRaceData?.critical_details?.vhf_channel ??
+      metadata?.vhf_channel ??
+      metadata?.vhfChannel ??
+      metadata?.communications?.vhf ??
+      metadata?.critical_details?.vhf_channel ??
+      null
+    );
+  }, [selectedRaceData]);
+
+  const effectiveDraft = useMemo(() => boatDraftValue ?? currentDraft ?? 2.5, [boatDraftValue, currentDraft]);
+
+  const tideSnapshot = useMemo(() => {
+    const metadata = selectedRaceData?.metadata as Record<string, any> | undefined;
+    if (!metadata) return null;
+
+    const height = pickNumeric([
+      metadata.tide_height,
+      metadata.tide?.height,
+      metadata.tideHeight,
+    ]) ?? 0;
+
+    const range = pickNumeric([
+      metadata.tide_range,
+      metadata.tide?.range,
+    ]) ?? 0;
+
+    const trendRaw = metadata.tide_trend ?? metadata.tide?.trend ?? metadata.tide_state;
+    const trend = typeof trendRaw === 'string'
+      ? trendRaw.toLowerCase().includes('rise')
+        ? 'rising'
+        : trendRaw.toLowerCase().includes('fall')
+          ? 'falling'
+          : 'slack'
+      : 'slack';
+
+    return {
+      height,
+      trend,
+      rate: 0,
+      range,
+    };
+  }, [selectedRaceData]);
+
+  const depthSnapshot = useMemo(() => {
+    const metadata = selectedRaceData?.metadata as Record<string, any> | undefined;
+    const draft = boatDraftValue ?? currentDraft ?? 2.5;
+
+    const depthCurrent = pickNumeric([
+      metadata?.depth_current,
+      metadata?.depth,
+      metadata?.water_depth,
+      metadata?.bathymetry_depth,
+    ]);
+
+    if (depthCurrent === null) {
+      return null;
+    }
+
+    const depthMinimum = pickNumeric([
+      metadata?.depth_minimum,
+      metadata?.depth_min,
+      metadata?.shoal_depth,
+    ]) ?? depthCurrent - 1;
+
+    return {
+      current: depthCurrent,
+      minimum: depthMinimum,
+      trend: 0,
+      clearance: depthCurrent - draft,
+    };
+  }, [selectedRaceData, boatDraftValue, currentDraft]);
+
+  const coachContext = useMemo(() => {
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+    return {
+      race_id: selectedRaceId ?? undefined,
+      date_time: selectedRaceData?.start_date,
+      startTime: selectedRaceData?.start_date,
+      fleet_size:
+        metadata.fleet_size ??
+        metadata.fleetSize ??
+        selectedRaceData?.fleet_size ??
+        selectedRaceData?.fleetSize,
+      course: raceCourseForConsole,
+      marks: raceCourseForConsole?.marks,
+      weather: selectedRaceWeather,
+      wind: selectedRaceWeather?.wind,
+      current: selectedRaceWeather?.current,
+      tidal: tideSnapshot,
+      tidalIntel: tideSnapshot,
+      location: venueCenter
+        ? {
+            name:
+              metadata?.venue_name ??
+              selectedRaceData?.venue_name ??
+              selectedRaceData?.metadata?.venue_name ??
+              'Race Venue',
+            ...venueCenter,
+          }
+        : undefined,
+      position: gpsPosition
+        ? {
+            lat: gpsPosition.latitude,
+            lon: gpsPosition.longitude,
+            speed: typeof gpsPosition.speed === 'number' ? gpsPosition.speed : undefined,
+            heading:
+              typeof gpsPosition.heading === 'number' ? gpsPosition.heading : undefined,
+          }
+        : undefined,
+      boat: {
+        length: boatLengthValue ?? undefined,
+        draft: effectiveDraft,
+      },
+    };
+  }, [
+    selectedRaceId,
+    selectedRaceData,
+    raceCourseForConsole,
+    selectedRaceWeather,
+    tideSnapshot,
+    venueCenter,
+    gpsPosition,
+    boatLengthValue,
+    effectiveDraft,
+  ]);
+
+  const fallbackPosition = useMemo(() => {
+    if (venueCenter) {
+      return {
+        latitude: venueCenter.latitude,
+        longitude: venueCenter.longitude,
+        heading: raceCourseForConsole?.startLine?.heading,
+      };
+    }
+    return null;
+  }, [venueCenter, raceCourseForConsole]);
+
+  useEffect(() => {
+    fallbackPositionInitializedRef.current = false;
+  }, [fallbackPosition?.latitude, fallbackPosition?.longitude, hasActiveRace]);
+
+  const phaseDetectionMarks = useMemo(() => {
+    const marks: Array<{
+      name: string;
+      type: 'start' | 'windward' | 'leeward' | 'jibe' | 'finish';
+      coordinates: { lat: number; lon: number };
+    }> = [];
+
+    if (raceCourseForConsole?.startLine) {
+      marks.push({
+        name: 'Start Line',
+        type: 'start',
+        coordinates: {
+          lat: raceCourseForConsole.startLine.centerLat,
+          lon: raceCourseForConsole.startLine.centerLon,
+        },
+      });
+    }
+
+    for (const mark of raceCourseForConsole?.marks ?? []) {
+      const lat = mark.position?.lat;
+      const lon = mark.position?.lng;
+      if (typeof lat !== 'number' || typeof lon !== 'number') {
+        continue;
+      }
+
+      let type: 'start' | 'windward' | 'leeward' | 'jibe' | 'finish' = 'windward';
+      switch (mark.type) {
+        case 'start-boat':
+        case 'start-pin':
+          type = 'start';
+          break;
+        case 'leeward':
+          type = 'leeward';
+          break;
+        case 'offset':
+          type = 'jibe';
+          break;
+        case 'finish':
+          type = 'finish';
+          break;
+        default:
+          type = 'windward';
+      }
+
+      marks.push({
+        name: mark.name,
+        type,
+        coordinates: { lat, lon },
+      });
+    }
+
+    return marks;
+  }, [raceCourseForConsole]);
+
+  const racePhaseInput = useMemo(() => {
+    const currentPosition = gpsPosition
+      ? {
+          lat: gpsPosition.latitude,
+          lon: gpsPosition.longitude,
+        }
+      : fallbackPosition
+        ? {
+            lat: fallbackPosition.latitude,
+            lon: fallbackPosition.longitude,
+          }
+        : undefined;
+
+    return {
+      startTime: selectedRaceData?.start_date,
+      currentPosition,
+      course: raceCourseForConsole,
+      marks: phaseDetectionMarks,
+      heading: gpsPosition?.heading ?? lastHeadingRef.current ?? undefined,
+      speed: boatSpeedKnots,
+    };
+  }, [
+    selectedRaceData?.start_date,
+    gpsPosition,
+    fallbackPosition,
+    raceCourseForConsole,
+    phaseDetectionMarks,
+    boatSpeedKnots,
+  ]);
+
+  const racePhaseContext = useRacePhaseDetection(racePhaseInput);
+
+  const timeToStartSeconds = useMemo(() => {
+    if (timeToStartMinutes === null || timeToStartMinutes === undefined) {
+      return null;
+    }
+    return Math.round(timeToStartMinutes * 60);
+  }, [timeToStartMinutes]);
+
+  const currentGpsTrack: GPSPoint[] = useMemo(() => {
+    const metadataTrack = selectedRaceData?.metadata?.gps_track ?? selectedRaceData?.gps_track;
+    const parsed = parseGpsTrack(metadataTrack);
+    return parsed ?? MOCK_GPS_TRACK;
+  }, [selectedRaceData]);
+
+  const currentSplitTimes: DebriefSplitTime[] = useMemo(() => {
+    const metadataSplits = selectedRaceData?.metadata?.split_times ?? selectedRaceData?.split_times;
+    const parsed = parseSplitTimes(metadataSplits);
+    return parsed ?? MOCK_SPLIT_TIMES;
+  }, [selectedRaceData]);
+
+  useEffect(() => {
+    if (typeof boatDraftValue === 'number' && Math.abs(boatDraftValue - currentDraft) > 0.01) {
+      setDraft(boatDraftValue);
+    }
+  }, [boatDraftValue, currentDraft]);
+
+  useEffect(() => {
+    if (!hasActiveRace) {
+      return;
+    }
+
+    const envUpdateBase: Record<string, any> = {};
+
+    if (windSnapshot) {
+      envUpdateBase.wind = {
+        trueSpeed: windSnapshot.speed,
+        trueDirection: windSnapshot.direction,
+        apparentSpeed: windSnapshot.speed,
+        apparentAngle: 0,
+        speed: windSnapshot.speed,
+        direction: windSnapshot.direction,
+        gust: windSnapshot.gust,
+        forecast: windSnapshot.forecast,
+      };
+    }
+
+    if (currentSnapshot) {
+      const strength = currentSnapshot.speed >= 1.5 ? 'strong' : currentSnapshot.speed >= 0.7 ? 'moderate' : 'weak';
+      envUpdateBase.current = {
+        speed: currentSnapshot.speed,
+        direction: currentSnapshot.direction,
+        phase: currentSnapshot.type ?? 'slack',
+        strength,
+        trend: 'slack',
+        type: currentSnapshot.type,
+      };
+    }
+
+    if (tideSnapshot) {
+      envUpdateBase.tide = { ...tideSnapshot };
+    }
+
+    const depthPayload = depthSnapshot ?? {
+      current: effectiveDraft + 3,
+      minimum: effectiveDraft + 1,
+      trend: 0,
+      clearance: 3,
+    };
+
+    envUpdateBase.depth = {
+      ...depthPayload,
+      clearance:
+        (depthPayload.current ?? depthPayload.minimum ?? (effectiveDraft + 3)) -
+        effectiveDraft,
+    };
+
+    if (Object.keys(envUpdateBase).length > 0) {
+      try {
+        const serialized = JSON.stringify(envUpdateBase);
+        if (previousEnvironmentKeyRef.current === serialized) {
+          return;
+        }
+        previousEnvironmentKeyRef.current = serialized;
+      } catch (error) {
+        logger.warn('Failed to serialize environment update', error);
+      }
+      updateEnvironment(envUpdateBase);
+    }
+  }, [
+    hasActiveRace,
+    windSnapshot,
+    currentSnapshot,
+    tideSnapshot,
+    depthSnapshot,
+    effectiveDraft,
+    updateEnvironment,
+  ]);
+
+  useEffect(() => {
+    if (!hasActiveRace || !raceCourseForConsole) {
+      return;
+    }
+    try {
+      const serialized = JSON.stringify({
+        id: raceCourseForConsole.id,
+        marks: raceCourseForConsole.marks,
+        legs: raceCourseForConsole.legs,
+        startLine: raceCourseForConsole.startLine,
+        laps: raceCourseForConsole.laps,
+      });
+      if (previousCourseKeyRef.current === serialized) {
+        return;
+      }
+      previousCourseKeyRef.current = serialized;
+    } catch (error) {
+      logger.warn('Failed to serialize course for cache comparison', error);
+    }
+    updateCourse(raceCourseForConsole);
+  }, [hasActiveRace, raceCourseForConsole, updateCourse]);
+
+  useEffect(() => {
+    if (!hasActiveRace) {
+      return;
+    }
+
+    if (!windSnapshot || !currentSnapshot || !raceCourseForConsole || !venueCenter) {
+      setTacticalZones([]);
+      return;
+    }
+
+    const venueFeaturesRaw = (selectedRaceData?.metadata as Record<string, any> | undefined)?.venue_features;
+    const venueFeatures = Array.isArray(venueFeaturesRaw)
+      ? venueFeaturesRaw.map((feature: any) => String(feature))
+      : typeof venueFeaturesRaw === 'string'
+        ? venueFeaturesRaw.split(',').map((item: string) => item.trim()).filter(Boolean)
+        : undefined;
+
+    const zones = TacticalZoneGenerator.generateZones({
+      wind: {
+        speed: windSnapshot.speed,
+        direction: windSnapshot.direction,
+      } as any,
+      current: {
+        speed: currentSnapshot.speed,
+        direction: currentSnapshot.direction,
+        phase: currentSnapshot.type ?? 'slack',
+      } as any,
+      tide: tideSnapshot ?? undefined,
+      depth: depthSnapshot ?? undefined,
+      course: raceCourseForConsole as any,
+      venue: venueCenter
+        ? {
+            center: venueCenter,
+            features: venueFeatures,
+          }
+        : undefined,
+    });
+
+    try {
+      const serialized = JSON.stringify(zones);
+      if (previousZonesKeyRef.current === serialized) {
+        return;
+      }
+      previousZonesKeyRef.current = serialized;
+    } catch (error) {
+      logger.warn('Failed to serialize tactical zones', error);
+    }
+
+    setTacticalZones(zones);
+  }, [
+    hasActiveRace,
+    windSnapshot,
+    currentSnapshot,
+    tideSnapshot,
+    depthSnapshot,
+    raceCourseForConsole,
+    venueCenter,
+    selectedRaceData,
+    setTacticalZones,
+  ]);
+
+  useEffect(() => {
+    if (!hasActiveRace) return;
+    if (Platform.OS !== 'web') return;
+    if (gpsPosition) return;
+    if (!fallbackPosition) return;
+    if (fallbackPositionInitializedRef.current) return;
+
+    updateRacePosition({
+      latitude: fallbackPosition.latitude,
+      longitude: fallbackPosition.longitude,
+      speed: 0,
+      heading: fallbackPosition.heading ?? 0,
+      timestamp: new Date(),
+    });
+    fallbackPositionInitializedRef.current = true;
+  }, [hasActiveRace, fallbackPosition, gpsPosition]);
+
+  const handleShareRaceAnalysis = useCallback(async () => {
+    const raceName =
+      selectedRaceData?.name ||
+      selectedRaceData?.metadata?.race_name ||
+      selectedDemoRace?.name ||
+      'Race Analysis';
+
+    const raceStartIso = selectedRaceData?.start_date || selectedDemoRace?.date;
+    const raceDate =
+      raceStartIso && !Number.isNaN(new Date(raceStartIso).valueOf())
+        ? new Date(raceStartIso)
+        : null;
+    const raceDateLabel = raceDate
+      ? raceDate.toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })
+      : null;
+
+    const venueName =
+      selectedRaceData?.metadata?.venue_name ||
+      selectedRaceData?.venue_name ||
+      selectedDemoRace?.venue ||
+      currentVenue?.name ||
+      null;
+
+    const metrics = calculatePerformanceMetrics(
+      currentGpsTrack,
+      selectedRaceWeather?.wind?.direction
+    );
+
+    const finishSplit =
+      currentSplitTimes.length > 0
+        ? currentSplitTimes[currentSplitTimes.length - 1]
+        : null;
+    const startSplit = currentSplitTimes.length > 0 ? currentSplitTimes[0] : null;
+    const positionsDelta =
+      finishSplit && startSplit ? startSplit.position - finishSplit.position : null;
+
+    let windLine: string | null = null;
+    if (selectedRaceWeather?.wind) {
+      const baseSpeed =
+        typeof selectedRaceWeather.wind.speed === 'number'
+          ? selectedRaceWeather.wind.speed.toFixed(1)
+          : selectedRaceWeather.wind.speed?.toString?.() ?? '';
+      const gustPart =
+        typeof selectedRaceWeather.wind.gust === 'number'
+          ? ` (gusts ${selectedRaceWeather.wind.gust.toFixed(1)} kts)`
+          : '';
+      windLine = baseSpeed
+        ? `Wind: ${baseSpeed} kts${gustPart} @ ${Math.round(selectedRaceWeather.wind.direction)}°`
+        : null;
+    }
+
+    const lines = [
+      `${raceName} – Race Debrief`,
+      raceDateLabel ? `When: ${raceDateLabel}` : null,
+      venueName ? `Venue: ${venueName}` : null,
+      `Duration: ${metrics.totalTime}`,
+      `Average Speed: ${metrics.avgSpeed} kts (max ${metrics.maxSpeed} kts)`,
+      `Distance Sailed: ${metrics.totalDistance} nm`,
+      `VMG Efficiency: ${metrics.vmgEfficiency}%`,
+      positionsDelta !== null
+        ? `Positions gained: ${positionsDelta > 0 ? `+${positionsDelta}` : positionsDelta}`
+        : null,
+      finishSplit ? `Finish Position: ${finishSplit.position}` : null,
+      windLine,
+    ].filter(Boolean) as string[];
+
+    if (lines.length === 0) {
+      Alert.alert('Share', 'Nothing to share yet—run a race first!');
+      return;
+    }
+
+    const message = lines.join('\n');
+    const shareTitle = `${raceName} – Race Debrief`;
+
+    try {
+      if (Platform.OS === 'web') {
+        const nav: any = typeof navigator !== 'undefined' ? navigator : undefined;
+        const shareUrl =
+          typeof window !== 'undefined' && window.location
+            ? window.location.href
+            : undefined;
+
+        if (nav?.share) {
+          await nav.share({
+            title: shareTitle,
+            text: message,
+            url: shareUrl,
+          });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(message);
+          Alert.alert('Copied', 'Race summary copied to your clipboard for easy sharing.');
+        } else {
+          Alert.alert('Race Debrief', message);
+        }
+      } else {
+        await Share.share({
+          title: shareTitle,
+          message,
+        });
+      }
+
+      logger.info('[races.tsx] Race analysis shared');
+    } catch (error) {
+      logger.error('[races.tsx] Failed to share race analysis', error);
+      Alert.alert('Share failed', 'Unable to share race analysis right now. Please try again later.');
+    }
+  }, [
+    selectedRaceData,
+    selectedDemoRace,
+    currentVenue?.name,
+    currentGpsTrack,
+    currentSplitTimes,
+    selectedRaceWeather,
+  ]);
+
+  const handlePositionUpdate = useCallback((position: any) => {
+    const speedKnots =
+      typeof position.speed === 'number'
+        ? position.speed * 1.94384
+        : null;
+
+    setGpsPosition({
+      ...position,
+      speed: speedKnots !== null && Number.isFinite(speedKnots) ? speedKnots : null,
+    });
+
+    if (!hasActiveRace) {
+      return;
+    }
+
+    const heading =
+      typeof position.heading === 'number'
+        ? position.heading
+        : lastHeadingRef.current ?? 0;
+
+    if (typeof position.heading === 'number') {
+      lastHeadingRef.current = position.heading;
+    }
+
+    updateRacePosition({
+      latitude: position.latitude,
+      longitude: position.longitude,
+      speed: speedKnots !== null && Number.isFinite(speedKnots) ? speedKnots : 0,
+      heading,
+      timestamp: position.timestamp ? new Date(position.timestamp) : new Date(),
+    });
+  }, [hasActiveRace, updateRacePosition]);
+
+  // Extract weather data for rig tuning
+  // selectedRaceWeather has a different structure: { wind: { speed, direction, gust }, current: {...} }
+  const wind = selectedRaceWeather?.wind;
+  const current = selectedRaceWeather?.current;
+
+  // Calculate wind range - if we have speed and gust, use those as min/max
+  const windSpeed = wind?.speed;
+  const windGust = wind?.gust;
+  const windMin = windSpeed ? Math.round(windSpeed * 0.9) : undefined; // Estimate min as 90% of speed
+  const windMax = windGust || (windSpeed ? Math.round(windSpeed * 1.1) : undefined); // Use gust or 110% of speed
+  const averageWindSpeed = windSpeed;
 
   const {
     recommendation: selectedRaceTuningRecommendation,
@@ -1123,6 +4138,13 @@ const selectedRaceClassName = useMemo(() => {
   } = useRaceTuningRecommendation({
     classId: selectedRaceClassId,
     className: selectedRaceClassName,
+    averageWindSpeed,
+    windMin,
+    windMax,
+    windDirection: wind?.direction,
+    gusts: windGust,
+    currentSpeed: current?.speed,
+    currentDirection: current?.direction,
     pointsOfSail: 'upwind',
     enabled: !!(selectedRaceClassId || selectedRaceClassName),
   });
@@ -1227,8 +4249,12 @@ const selectedRaceClassName = useMemo(() => {
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-primary-500 pt-10 pb-2 px-4">
+      <PlanModeLayout
+        raceId={selectedRaceId}
+        raceData={selectedRaceData}
+      >
+            {/* Header */}
+            <View className="bg-primary-500 pt-10 pb-2 px-4">
         <View className="flex-row justify-between items-center mb-1">
           <Text className="text-white text-lg font-bold">Races</Text>
           <View className="flex-row gap-2 items-center">
@@ -1309,12 +4335,6 @@ const selectedRaceClassName = useMemo(() => {
               <View>
                 <Text className="text-base font-bold text-gray-800">All Races</Text>
                 <Text className="text-xs text-gray-500">Swipe to view all races chronologically</Text>
-                {/* DEBUG: Show selected race */}
-                {selectedRaceData && (
-                  <Text className="text-xs text-purple-600 font-bold mt-1">
-                    🔍 Selected: {selectedRaceData.name} (ID: {selectedRaceId?.slice(0, 8)}...)
-                  </Text>
-                )}
               </View>
               <View className="bg-blue-100 px-3 py-1 rounded-full">
                 <Text className="text-blue-800 font-semibold text-sm">
@@ -1331,40 +4351,69 @@ const selectedRaceClassName = useMemo(() => {
               nestedScrollEnabled={true}
               scrollEventThrottle={16}
             >
-              {/* All races in chronological order */}
-              {safeRecentRaces.map((race: any, index: number) => {
-                const isNextRace = !!(nextRace && race.id === nextRace.id);
-                const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
-                return (
-                  <RaceCard
-                    key={race.id || index}
-                    id={race.id}
-                    name={race.name}
-                    venue={race.venue || 'Unknown Venue'}
-                    date={race.date || new Date().toISOString()}
-                    startTime={race.startTime || '10:00'}
-                    wind={race.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 }}
-                    tide={race.tide || { state: 'slack' as const, height: 1.0 }}
-                    strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
-                    critical_details={race.critical_details}
-                    isPrimary={isNextRace}
-                    raceStatus={raceStatus}
-                    onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name)}
-                    isSelected={selectedRaceId === race.id}
-                    onSelect={() => {
-                      logger.debug('=====================================');
-                      logger.debug('[RacesScreen] 🎯 RACE CARD CLICKED');
-                      logger.debug('[RacesScreen] Race name:', race.name);
-                      logger.debug('[RacesScreen] Race ID:', race.id);
-                      logger.debug('[RacesScreen] Previous selectedRaceId:', selectedRaceId);
-                      logger.debug('[RacesScreen] Will set selectedRaceId to:', race.id);
-                      logger.debug('=====================================');
-                      setHasManuallySelected(true);
-                      setSelectedRaceId(race.id);
-                    }}
-                  />
-                );
-              })}
+              {(() => {
+                let addRaceCardInserted = false;
+                const cardElements: React.ReactNode[] = [];
+
+                safeRecentRaces.forEach((race: any, index: number) => {
+                  const isNextRace = !!(nextRace && race.id === nextRace.id);
+                  const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
+                  const shouldInsertAddCardBefore = !addRaceCardInserted && isNextRace;
+
+                  if (shouldInsertAddCardBefore) {
+                    cardElements.push(
+                      <AddRaceTimelineCard
+                        key="add-race-cta"
+                        onAddRace={handleAddRaceNavigation}
+                        onImportCalendar={handleOpenCalendarImport}
+                        hasRealRaces={hasRealRaces}
+                      />,
+                    );
+                    addRaceCardInserted = true;
+                  }
+
+                  cardElements.push(
+                    <RaceCard
+                      key={race.id || index}
+                      id={race.id}
+                      name={race.name}
+                      venue={race.venue || 'Unknown Venue'}
+                      date={race.date || new Date().toISOString()}
+                      startTime={race.startTime || '10:00'}
+                      wind={race.wind}
+                      tide={race.tide}
+                      weatherStatus={race.weatherStatus}
+                      weatherError={race.weatherError}
+                      strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
+                      critical_details={race.critical_details}
+                      isPrimary={isNextRace}
+                      raceStatus={raceStatus}
+                      onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name)}
+                      isSelected={selectedRaceId === race.id}
+                      onSelect={() => {
+                        setHasManuallySelected(true);
+                        setSelectedRaceId(race.id);
+                      }}
+                      onEdit={() => handleEditRace(race.id)}
+                      onDelete={() => handleDeleteRace(race.id, race.name)}
+                      isDimmed={hasActiveRace && selectedRaceId !== race.id}
+                    />,
+                  );
+                });
+
+                if (!addRaceCardInserted) {
+                  cardElements.unshift(
+                    <AddRaceTimelineCard
+                      key="add-race-cta"
+                      onAddRace={handleAddRaceNavigation}
+                      onImportCalendar={handleOpenCalendarImport}
+                      hasRealRaces={hasRealRaces}
+                    />,
+                  );
+                }
+
+                return cardElements;
+              })()}
             </ScrollView>
 
             {/* Inline Comprehensive Race Detail Section */}
@@ -1376,82 +4425,13 @@ const selectedRaceClassName = useMemo(() => {
             )}
 
             {selectedRaceData && (
-              <View className="mt-2 gap-4">
-                <View className="flex-row gap-3">
-                  <Button
-                    action="secondary"
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onPress={handleEditSelectedRace}
-                  >
-                    <ButtonIcon as={Pencil} />
-                    <ButtonText>Edit Race</ButtonText>
-                  </Button>
-                  <Button
-                    action="negative"
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onPress={handleDeleteSelectedRace}
-                    disabled={isDeletingRace}
-                  >
-                    <ButtonIcon as={Trash2} />
-                    <ButtonText>{isDeletingRace ? 'Deleting...' : 'Delete Race'}</ButtonText>
-                  </Button>
-                </View>
-
-                {/* Course Template Selector */}
-                <View className="mt-3">
-                  <View className="flex-row items-center gap-2">
-                    <View style={{ flex: 1 }}>
-                      <CourseSelector
-                        venueId={selectedRaceData.metadata?.venue_id ?? undefined}
-                        venueName={selectedRaceData.metadata?.venue_name ?? undefined}
-                        venueCoordinates={selectedRaceVenueCoordinates}
-                        currentWindDirection={
-                          selectedRaceData.metadata?.expected_wind_direction ??
-                          selectedRaceData.metadata?.wind_direction ??
-                          undefined
-                        }
-                        currentWindSpeed={
-                          selectedRaceData.metadata?.expected_wind_speed ??
-                          selectedRaceData.metadata?.wind_speed ??
-                          undefined
-                        }
-                        onCourseSelected={handleCourseTemplateSelected}
-                      />
-                    </View>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-[48px]"
-                      disabled={
-                        savingCourseTemplate ||
-                        !selectedRaceMarks ||
-                        selectedRaceMarks.length === 0
-                      }
-                      onPress={handleSaveCourseTemplate}
-                    >
-                      <ButtonIcon as={Plus} />
-                      <ButtonText>
-                        {savingCourseTemplate ? 'Saving...' : 'Save Template'}
-                      </ButtonText>
-                    </Button>
-                  </View>
-
-                  {(isApplyingCourseTemplate || savingCourseTemplate) && (
-                    <View className="flex-row items-center gap-2 mt-2">
-                      <ActivityIndicator size="small" color="#2563EB" />
-                      <Text className="text-sm text-gray-600">
-                        {isApplyingCourseTemplate
-                          ? 'Applying course template...'
-                          : 'Saving course to your library...'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+              <PlanModeContent
+                raceData={selectedRaceData}
+                raceId={selectedRaceData.id}
+                hasPostRaceData={true}
+                sections={{
+                  courseAndStrategy: (
+                    <>
 
                 {/* Tactical Race Map */}
                 <RaceDetailMapHero
@@ -1498,6 +4478,39 @@ const selectedRaceClassName = useMemo(() => {
                   phase="upcoming"
                 />
 
+                {/* AI Coach - Quick Skill Access */}
+                <View className="mb-4">
+                  <QuickSkillButtons
+                    raceData={selectedRaceData}
+                    onSkillInvoked={(skillId, advice) => {
+                      logger.info('AI Skill invoked:', skillId, advice);
+                    }}
+                  />
+                </View>
+
+                {/* AI Coach - Context-Aware Tactical Guidance */}
+                <View className="mb-4 px-4">
+                  <SmartRaceCoach
+                    raceId={selectedRaceData.id}
+                    raceData={{
+                      startTime: selectedRaceData.start_date,
+                      fleetSize: selectedRaceData.metadata?.fleet_size,
+                      course: selectedRaceData.metadata?.course_type,
+                      marks: selectedRaceMarks,
+                      weather: {
+                        windSpeed: selectedRaceData.metadata?.expected_wind_speed,
+                        windDirection: selectedRaceData.metadata?.expected_wind_direction,
+                      },
+                      location: selectedRaceData.metadata?.venue_name ? {
+                        name: selectedRaceData.metadata.venue_name,
+                        lat: selectedRaceData.metadata.venue_lat,
+                        lon: selectedRaceData.metadata.venue_lng,
+                      } : undefined,
+                    }}
+                    autoRefresh={true}
+                  />
+                </View>
+
                 {/* Race Overview - Quick Stats & Confidence */}
                 <RaceOverviewCard
                   raceId={selectedRaceData.id}
@@ -1520,157 +4533,334 @@ const selectedRaceClassName = useMemo(() => {
                     lat: selectedRaceData.metadata.venue_lat,
                     lng: selectedRaceData.metadata.venue_lng
                   } : undefined}
+                  racingAreaPolygon={
+                    Array.isArray(selectedRaceData.racing_area_polygon?.coordinates?.[0]) &&
+                    selectedRaceData.racing_area_polygon.coordinates[0].length >= 3
+                      ? selectedRaceData.racing_area_polygon.coordinates[0]
+                          .slice(
+                            0,
+                            selectedRaceData.racing_area_polygon.coordinates[0].length - 1
+                          )
+                          .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }))
+                      : undefined
+                  }
+                  sailorId={sailorId}
+                  raceEventId={selectedRaceData.id}
                 />
 
                 {/* Upwind Strategy - Dedicated Beats Card */}
                 <UpwindStrategyCard
                   raceId={selectedRaceData.id}
                   raceName={selectedRaceData.name}
+                  sailorId={sailorId}
+                  raceEventId={selectedRaceData.id}
                 />
 
                 {/* Downwind Strategy - Dedicated Runs Card */}
                 <DownwindStrategyCard
                   raceId={selectedRaceData.id}
                   raceName={selectedRaceData.name}
+                  sailorId={sailorId}
+                  raceEventId={selectedRaceData.id}
                 />
 
-                {/* Mark Rounding Strategy */}
-                <MarkRoundingCard
-                  raceId={selectedRaceData.id}
-                  raceName={selectedRaceData.name}
-                />
+                      {/* Mark Rounding Strategy */}
+                      <MarkRoundingCard
+                        raceId={selectedRaceData.id}
+                        raceName={selectedRaceData.name}
+                        sailorId={sailorId}
+                        raceEventId={selectedRaceData.id}
+                      />
 
-                {/* Weather & Conditions */}
-                <WindWeatherCard
-                  raceId={selectedRaceData.id}
-                  raceTime={selectedRaceData.start_date}
-                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
-                    lat: selectedRaceData.metadata.venue_lat,
-                    lng: selectedRaceData.metadata.venue_lng
-                  } : undefined}
-                  venue={selectedRaceData.metadata?.venue_lat ? {
-                    id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
-                    name: selectedRaceData.metadata?.venue_name || 'Race Venue',
-                    coordinates: {
-                      latitude: selectedRaceData.metadata.venue_lat,
-                      longitude: selectedRaceData.metadata.venue_lng
-                    },
-                    region: 'asia_pacific',
-                    country: 'HK'
-                  } : undefined}
-                />
+                      {/* Share Strategy with Coach */}
+                      {sailorId && selectedRaceData?.id && (
+                        <View style={{ marginTop: 16, marginBottom: 8 }}>
+                          <TouchableOpacity
+                            style={{
+                              backgroundColor: '#3B82F6',
+                              paddingVertical: 14,
+                              paddingHorizontal: 20,
+                              borderRadius: 12,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 8,
+                            }}
+                            onPress={() => setShowCoachSelectionModal(true)}
+                            disabled={sharingStrategy}
+                          >
+                            <MaterialCommunityIcons name="share-variant" size={20} color="white" />
+                            <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>
+                              Share Strategy with Coach
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </>
+                  ),
+                  conditions: (
+                    <>
+                      {/* Weather & Conditions */}
+                      <WindWeatherCard
+                        raceId={selectedRaceData.id}
+                        raceTime={selectedRaceData.start_date}
+                        venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                          lat: selectedRaceData.metadata.venue_lat,
+                          lng: selectedRaceData.metadata.venue_lng
+                        } : undefined}
+                        venue={selectedRaceData.metadata?.venue_lat ? {
+                          id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                          name: selectedRaceData.metadata?.venue_name || 'Race Venue',
+                          coordinates: {
+                            latitude: selectedRaceData.metadata.venue_lat,
+                            longitude: selectedRaceData.metadata.venue_lng
+                          },
+                          region: 'asia_pacific',
+                          country: 'HK'
+                        } : undefined}
+                        initialWeather={initialConditionsSnapshot ?? undefined}
+                      />
 
-                {!selectedRaceClassId && (
-                  <View className="flex-row items-start gap-2 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                    <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
-                    <View className="flex-1">
-                      <Text className="text-xs font-semibold text-amber-700">Class not set yet</Text>
-                      <Text className="text-xs text-amber-600 mt-1">
-                        Select a boat class to unlock rig tuning checklists and class-based start sequences.
-                      </Text>
-                      <Pressable onPress={handleEditSelectedRace} className="flex-row items-center gap-1 mt-2">
-                        <MaterialCommunityIcons name="pencil" size={14} color="#b45309" />
-                        <Text className="text-xs font-semibold text-amber-700">Set class</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
+                      <CurrentTideCard
+                        raceId={selectedRaceData.id}
+                        raceTime={selectedRaceData.start_date}
+                        venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                          lat: selectedRaceData.metadata.venue_lat,
+                          lng: selectedRaceData.metadata.venue_lng
+                        } : undefined}
+                        venue={selectedRaceData.metadata?.venue_lat ? {
+                          id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                          name: selectedRaceData.metadata?.venue_name || 'Race Venue',
+                          coordinates: {
+                            latitude: selectedRaceData.metadata.venue_lat,
+                            longitude: selectedRaceData.metadata.venue_lng
+                          },
+                          region: 'asia_pacific',
+                          country: 'HK'
+                        } : undefined}
+                        initialTide={initialConditionsSnapshot ?? undefined}
+                      />
 
-                <RigTuningCard
-                  raceId={selectedRaceData.id}
-                  boatClassName={selectedRaceClassName}
-                  recommendation={selectedRaceTuningRecommendation}
-                  loading={selectedRaceTuningLoading}
-                  onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
-                />
+                      {/* Contingency Plans */}
+                      <ContingencyPlansCard
+                        raceId={selectedRaceData.id}
+                      />
+                    </>
+                  ),
+                  boatSetup: (
+                    <>
+                      {!selectedRaceClassId && (
+                        <View className="flex-row items-start gap-2 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                          <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
+                          <View className="flex-1">
+                            <Text className="text-xs font-semibold text-amber-700">Class not set yet</Text>
+                            <Text className="text-xs text-amber-600 mt-1">
+                              Select a boat class to unlock rig tuning checklists and class-based start sequences.
+                            </Text>
+                            <Pressable onPress={handleEditSelectedRace} className="flex-row items-center gap-1 mt-2">
+                              <MaterialCommunityIcons name="pencil" size={14} color="#b45309" />
+                              <Text className="text-xs font-semibold text-amber-700">Set class</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
 
-                <CurrentTideCard
-                  raceId={selectedRaceData.id}
-                  raceTime={selectedRaceData.start_date}
-                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
-                    lat: selectedRaceData.metadata.venue_lat,
-                    lng: selectedRaceData.metadata.venue_lng
-                  } : undefined}
-                  venue={selectedRaceData.metadata?.venue_lat ? {
-                    id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
-                    name: selectedRaceData.metadata?.venue_name || 'Race Venue',
-                    coordinates: {
-                      latitude: selectedRaceData.metadata.venue_lat,
-                      longitude: selectedRaceData.metadata.venue_lng
-                    },
-                    region: 'asia_pacific',
-                    country: 'HK'
-                  } : undefined}
-                />
+                      <RigTuningCard
+                        raceId={selectedRaceData.id}
+                        boatClassName={selectedRaceClassName}
+                        recommendation={selectedRaceTuningRecommendation}
+                        loading={selectedRaceTuningLoading}
+                        onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
+                      />
 
-                {/* Contingency Plans */}
-                <ContingencyPlansCard
-                  raceId={selectedRaceData.id}
-                />
+                      <RigPlannerCard
+                        presets={rigPresets}
+                        selectedBand={selectedRigBand}
+                        onSelectBand={(bandId) => setSelectedRigBand(bandId)}
+                        notes={rigNotes}
+                        onChangeNotes={setRigNotes}
+                        onOpenChat={handleOpenChatFromRigPlanner}
+                      />
+                    </>
+                  ),
+                  teamAndLogistics: (
+                    <>
+                      <View
+                        onLayout={({ nativeEvent }) => {
+                          const positionY = nativeEvent.layout.y;
+                          setLogisticsSectionY((prev) => (Math.abs(prev - positionY) > 4 ? positionY : prev));
+                        }}
+                      >
+                        <CrewEquipmentCard
+                          raceId={selectedRaceData.id}
+                          classId={selectedRaceData.class_id || selectedRaceData.metadata?.class_id}
+                          raceDate={selectedRaceData.start_date}
+                          onManageCrew={() =>
+                            handleManageCrewNavigation({
+                              raceId: selectedRaceData.id,
+                              classId: selectedRaceData.class_id || selectedRaceData.metadata?.class_id,
+                              className: selectedRaceClassName || selectedRaceData.metadata?.class_name,
+                              raceName: selectedRaceData.name || selectedRaceData.race_name,
+                              raceDate: selectedRaceData.start_date,
+                            })
+                          }
+                        />
 
-                {/* ============================================ */}
-                {/*  POST-RACE ANALYSIS SECTION                 */}
-                {/* ============================================ */}
-                <RacePhaseHeader
-                  icon="trophy"
-                  title="Post-Race Analysis"
-                  subtitle="Review performance and get coaching"
-                  badge="Complete"
-                  phase="completed"
-                />
-                <PostRaceAnalysisCard
-                  raceId={selectedRaceData.id}
-                  raceName={selectedRaceData.name}
-                  raceStartTime={selectedRaceData.start_date}
-                />
+                        <FleetRacersCard
+                          raceId={selectedRaceData.id}
+                          classId={selectedRaceData.metadata?.class_name}
+                          venueId={selectedRaceData.metadata?.venue_id}
+                          onJoinFleet={(fleetId) => {
+                            logger.debug('Joined fleet:', fleetId);
+                          }}
+                        />
 
-                {/* ============================================ */}
-                {/*  LOGISTICS SECTION                         */}
-                {/* ============================================ */}
-                <RacePhaseHeader
-                  icon="package-variant"
-                  title="Logistics"
-                  subtitle="Crew, equipment, and race details"
-                  phase="upcoming"
-                />
+                        <RaceDocumentsCard
+                          raceId={selectedRaceData.id}
+                          documents={isDemoSession ? undefined : raceDocumentsForDisplay}
+                          isLoading={!isDemoSession && (loadingRaceDocuments || isUploadingRaceDocument)}
+                          error={isDemoSession ? null : raceDocumentsError}
+                          onRetry={isDemoSession ? undefined : handleRefreshRaceDocuments}
+                          onUpload={handleUploadRaceDocument}
+                          onDocumentPress={(doc) => {
+                            logger.debug('Document pressed:', doc);
+                          }}
+                          onShareWithFleet={(docId) => {
+                            logger.debug('Share document with fleet:', docId);
+                          }}
+                        />
+                      </View>
+                    </>
+                  ),
+                  regulatory: (
+                    <>
+                      <View
+                        onLayout={({ nativeEvent }) => {
+                          const positionY = nativeEvent.layout.y;
+                          setRegulatorySectionY((prev) => (Math.abs(prev - positionY) > 4 ? positionY : prev));
+                        }}
+                        className="mt-6"
+                      >
+                        <RegulatoryDigestCard
+                          digest={regulatoryDigest}
+                          acknowledgements={regattaAcknowledgements}
+                          onToggle={handleToggleAcknowledgement}
+                        />
 
-                <CrewEquipmentCard
-                  raceId={selectedRaceData.id}
-                  classId={selectedRaceData.class_id || selectedRaceData.metadata?.class_id}
-                  raceDate={selectedRaceData.start_date}
-                  onManageCrew={() =>
-                    handleManageCrewNavigation({
-                      raceId: selectedRaceData.id,
-                      classId: selectedRaceData.class_id || selectedRaceData.metadata?.class_id,
-                      className: selectedRaceClassName || selectedRaceData.metadata?.class_name,
-                      raceName: selectedRaceData.name || selectedRaceData.race_name,
-                      raceDate: selectedRaceData.start_date,
-                    })
-                  }
-                />
-
-                <FleetRacersCard
-                  raceId={selectedRaceData.id}
-                  classId={selectedRaceData.metadata?.class_name}
-                  venueId={selectedRaceData.metadata?.venue_id}
-                  onJoinFleet={(fleetId) => {
-                    logger.debug('Joined fleet:', fleetId);
-                  }}
-                />
-
-                <RaceDocumentsCard
-                  raceId={selectedRaceData.id}
-                  onUpload={() => {
-                    logger.debug('Upload document tapped');
-                  }}
-                  onDocumentPress={(doc) => {
-                    logger.debug('Document pressed:', doc);
-                  }}
-                  onShareWithFleet={(docId) => {
-                    logger.debug('Share document with fleet:', docId);
-                  }}
-                />
-              </View>
+                        <CourseOutlineCard groups={courseOutlineGroups} />
+                      </View>
+                    </>
+                  ),
+                  raceExecution: (
+                    <>
+                      <View className="mb-4">
+                        <LiveRaceTimer
+                          raceStartTime={selectedRaceData?.start_date || new Date().toISOString()}
+                          sessionId={gpsTrackSessionId || selectedRaceData?.id}
+                          sailorId={user?.id}
+                          regattaId={selectedRaceData?.event_id}
+                          onTimerStart={() => {
+                            logger.debug('[races.tsx] Timer started');
+                          }}
+                          onTimerStop={() => {
+                            logger.debug('[races.tsx] Timer stopped');
+                            setIsGPSTracking(false);
+                          }}
+                          onTrackingStart={(sessionId) => {
+                            logger.info('[races.tsx] GPS tracking started', { sessionId });
+                            setIsGPSTracking(true);
+                            setGpsTrackSessionId(sessionId);
+                          }}
+                          onTrackingStop={() => {
+                            logger.info('[races.tsx] GPS tracking stopped');
+                            setIsGPSTracking(false);
+                          }}
+                          onAlert={(type) => logger.debug('[races.tsx] Timer alert:', type)}
+                          enableGPSTracking={true}
+                        />
+                      </View>
+                      <View style={{ height: 600 }}>
+                        <OnWaterTrackingView
+                          sessionId={gpsTrackSessionId || selectedRaceData?.id}
+                          isTracking={isGPSTracking}
+                          courseMarks={selectedRaceMarks}
+                          initialRegion={
+                            selectedRaceData?.venue ? {
+                              latitude: selectedRaceData.venue.coordinates_lat || 22.3193,
+                              longitude: selectedRaceData.venue.coordinates_lng || 114.1694,
+                              latitudeDelta: 0.05,
+                              longitudeDelta: 0.05,
+                            } : undefined
+                          }
+                        />
+                      </View>
+                    </>
+                  ),
+                  postRaceAnalysis: (
+                    <>
+                      <PostRaceAnalysisCard
+                        raceId={selectedRaceData.id}
+                        raceName={selectedRaceData.name}
+                        raceStartTime={selectedRaceData.start_date}
+                      />
+                      <View className="flex-row flex-wrap gap-2 mt-4">
+                        <Pressable
+                          className="flex-row items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200"
+                          onPress={handleShareRaceAnalysis}
+                        >
+                          <Text className="text-sm font-semibold text-blue-700">Share summary</Text>
+                        </Pressable>
+                        <Pressable
+                          className="flex-row items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200"
+                          onPress={() => {
+                            logger.debug('[races.tsx] Export race analysis');
+                            Alert.alert('Export', 'Race analysis export coming soon!');
+                          }}
+                        >
+                          <Text className="text-sm font-semibold text-slate-700">Export data</Text>
+                        </Pressable>
+                      </View>
+                      <View className="mt-4">
+                        <FleetPostRaceInsights
+                          raceId={selectedRaceData.id}
+                          currentUserId={user?.id}
+                          onViewSession={(sessionId) =>
+                            router.push({
+                              pathname: '/(tabs)/race-session/[sessionId]',
+                              params: { sessionId },
+                            })
+                          }
+                        />
+                      </View>
+                      <View className="mt-4">
+                        <PerformanceMetrics
+                          gpsTrack={currentGpsTrack}
+                          weather={selectedRaceWeather}
+                        />
+                      </View>
+                      <View className="mt-4">
+                        <SplitTimesAnalysis
+                          splitTimes={currentSplitTimes}
+                          raceStartTime={currentSplitTimes[0]?.time}
+                        />
+                      </View>
+                      <View className="mt-4">
+                        <TacticalInsights
+                          gpsTrack={currentGpsTrack}
+                          splitTimes={currentSplitTimes}
+                          raceResult={{
+                            position: 3,
+                            totalBoats: 15,
+                          }}
+                        />
+                      </View>
+                      <View className="mt-4">
+                        <AIPatternDetection />
+                      </View>
+                    </>
+                  ),
+                }}
+              />
             )}
           </>
         ) : (
@@ -1679,7 +4869,7 @@ const selectedRaceClassName = useMemo(() => {
             <View className="mb-3">
               <Text className="text-base font-bold text-gray-800">Demo Races</Text>
               <Text className="text-xs text-gray-500">
-                📋 Example races to get you started - tap "+" to add your first race!
+                📋 Example races to get you started – use the Add Race card to drop your first real event.
               </Text>
             </View>
             <ScrollView
@@ -1690,6 +4880,12 @@ const selectedRaceClassName = useMemo(() => {
               nestedScrollEnabled={true}
               scrollEventThrottle={16}
             >
+              <AddRaceTimelineCard
+                key="add-race-cta-demo"
+                onAddRace={handleAddRaceNavigation}
+                onImportCalendar={handleOpenCalendarImport}
+                hasRealRaces={hasRealRaces}
+              />
               {MOCK_RACES.map((race, index) => (
                 <RaceCard
                   key={race.id}
@@ -1705,12 +4901,22 @@ const selectedRaceClassName = useMemo(() => {
                   isPrimary={index === 0}
                   isMock={true}
                   isSelected={selectedDemoRaceId === race.id}
+                  isDimmed={selectedDemoRaceId !== race.id}
                   onSelect={() => setSelectedDemoRaceId(race.id)}
                 />
               ))}
             </ScrollView>
             {selectedDemoRace && (
-              <DemoRaceDetail race={selectedDemoRace} onAddRace={handleAddRaceNavigation} />
+              <DemoRaceDetail
+                race={selectedDemoRace}
+                onAddRace={handleAddRaceNavigation}
+                onLogisticsSectionLayout={(y) => {
+                  setLogisticsSectionY((prev) => (Math.abs(prev - y) > 4 ? y : prev));
+                }}
+                onRegulatorySectionLayout={(y) => {
+                  setRegulatorySectionY((prev) => (Math.abs(prev - y) > 4 ? y : prev));
+                }}
+              />
             )}
           </>
         )}
@@ -1808,39 +5014,45 @@ const selectedRaceClassName = useMemo(() => {
         )}
       </ScrollView>
 
-      {/* FAB - Import Calendar Button */}
-      <TouchableOpacity
-        className="absolute bottom-28 right-6 w-14 h-14 bg-purple-600 rounded-full items-center justify-center shadow-lg"
-        onPress={() => setShowCalendarImport(true)}
-        accessibilityLabel="Import race calendar"
-        accessibilityHint="Import multiple races from a CSV calendar file"
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
-        }}
+      <Modal
+        visible={documentTypePickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleDismissDocumentTypePicker}
       >
-        <Calendar color="white" size={24} />
-      </TouchableOpacity>
+        <Pressable style={documentTypePickerStyles.overlay} onPress={handleDismissDocumentTypePicker}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={documentTypePickerStyles.sheet}>
+              <Text style={documentTypePickerStyles.title}>Choose document type</Text>
+              <Text style={documentTypePickerStyles.subtitle}>
+                Pick the category that best matches what you are uploading.
+              </Text>
+              {DOCUMENT_TYPE_OPTIONS.map((option, index) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    documentTypePickerStyles.option,
+                    index === DOCUMENT_TYPE_OPTIONS.length - 1 && documentTypePickerStyles.lastOption,
+                  ]}
+                  onPress={() => handleDocumentTypeOptionSelect(option.value)}
+                  disabled={isUploadingRaceDocument}
+                >
+                  <Text style={documentTypePickerStyles.optionLabel}>{option.label}</Text>
+                  <Text style={documentTypePickerStyles.optionDescription}>{option.description}</Text>
+                </TouchableOpacity>
+              ))}
 
-      {/* FAB - Add Race Button */}
-      <TouchableOpacity
-        className="absolute bottom-6 right-6 w-16 h-16 bg-blue-600 rounded-full items-center justify-center shadow-lg"
-        onPress={() => router.push('/(tabs)/race/comprehensive-add')}
-        accessibilityLabel="Add new race"
-        accessibilityHint="Create a new race with comprehensive race entry form"
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
-        }}
-      >
-        <Plus color="white" size={28} />
-      </TouchableOpacity>
+              <TouchableOpacity
+                style={documentTypePickerStyles.cancelButton}
+                onPress={handleDismissDocumentTypePicker}
+                disabled={isUploadingRaceDocument}
+              >
+                <Text style={documentTypePickerStyles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </Pressable>
+      </Modal>
 
       {/* Calendar Import Modal */}
       <Modal
@@ -1868,6 +5080,18 @@ const selectedRaceClassName = useMemo(() => {
           onComplete={handlePostRaceInterviewComplete}
         />
       )}
+
+      {/* Coach Selection Modal */}
+      {sailorId && (
+        <CoachSelectionModal
+          visible={showCoachSelectionModal}
+          onClose={() => setShowCoachSelectionModal(false)}
+          onSelectCoach={handleShareWithCoach}
+          sailorId={sailorId}
+        />
+      )}
+
+      </PlanModeLayout>
     </View>
   );
 }

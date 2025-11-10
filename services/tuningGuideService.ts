@@ -75,7 +75,7 @@ class TuningGuideService {
       .order('added_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching sailor library:', error);
+      logger.error('Error fetching sailor library:', error);
       throw error;
     }
 
@@ -97,7 +97,7 @@ class TuningGuideService {
       .order('added_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching favorite guides:', error);
+      logger.error('Error fetching favorite guides:', error);
       throw error;
     }
 
@@ -116,7 +116,7 @@ class TuningGuideService {
       });
 
     if (error) {
-      console.error('Error adding guide to library:', error);
+      logger.error('Error adding guide to library:', error);
       throw error;
     }
   }
@@ -132,7 +132,7 @@ class TuningGuideService {
       .eq('guide_id', guideId);
 
     if (error) {
-      console.error('Error toggling favorite:', error);
+      logger.error('Error toggling favorite:', error);
       throw error;
     }
   }
@@ -159,7 +159,7 @@ class TuningGuideService {
       .upload(fileName, file);
 
     if (uploadError) {
-      console.error('Error uploading file:', uploadError);
+      logger.error('Error uploading file:', uploadError);
       throw uploadError;
     }
 
@@ -187,7 +187,7 @@ class TuningGuideService {
       .single();
 
     if (error) {
-      console.error('Error creating guide record:', error);
+      logger.error('Error creating guide record:', error);
       throw error;
     }
 
@@ -207,7 +207,7 @@ class TuningGuideService {
       .single();
 
     if (classError || !classData) {
-      console.error('Error fetching class data:', classError);
+      logger.error('Error fetching class data:', classError);
       return;
     }
 
@@ -253,7 +253,7 @@ class TuningGuideService {
       .eq('sailor_id', sailorId);
 
     if (error) {
-      console.error('Error recording view:', error);
+      logger.error('Error recording view:', error);
     }
   }
 
@@ -290,7 +290,7 @@ class TuningGuideService {
     const { data, error } = await query.order('rating', { ascending: false });
 
     if (error) {
-      console.error('Error searching guides:', error);
+      logger.error('Error searching guides:', error);
       throw error;
     }
 
@@ -306,7 +306,7 @@ class TuningGuideService {
     });
 
     if (error) {
-      console.error('Error fetching fleet guides:', error);
+      logger.error('Error fetching fleet guides:', error);
       throw error;
     }
 
@@ -347,7 +347,7 @@ class TuningGuideService {
     });
 
     if (error) {
-      console.error('Error sharing guide with fleet:', error);
+      logger.error('Error sharing guide with fleet:', error);
       throw error;
     }
   }
@@ -394,10 +394,13 @@ class TuningGuideService {
   // Helper methods
   async getGuidesByReference(params: { classId?: string | null; className?: string | null }): Promise<TuningGuide[]> {
     const { classId, className } = params;
+    logger.debug('[tuningGuideService] getGuidesByReference called', { classId, className });
+
     let resolvedClassName = className ?? null;
     let databaseGuides: TuningGuide[] = [];
 
     if (classId) {
+      logger.debug('[tuningGuideService] Querying database for class reference', { classId });
       const { data, error } = await supabase
         .from('tuning_guides')
         .select('*')
@@ -405,11 +408,15 @@ class TuningGuideService {
         .order('year', { ascending: false });
 
       if (error) {
-        console.error('Error fetching tuning guides:', error);
+        logger.error('[tuningGuideService] Error fetching tuning guides', error);
         throw error;
       }
 
       databaseGuides = this.mapGuides(data || []);
+      logger.debug('[tuningGuideService] Database guides found', {
+        count: databaseGuides.length,
+        guides: databaseGuides.map(g => ({ id: g.id, title: g.title }))
+      });
 
       if (!resolvedClassName) {
         const { data: classData } = await supabase
@@ -419,25 +426,36 @@ class TuningGuideService {
           .maybeSingle();
 
         resolvedClassName = classData?.name ?? null;
+        logger.debug('[tuningGuideService] Resolved class name for lookup', { resolvedClassName });
       }
     }
 
     if (databaseGuides.length > 0) {
+      logger.debug('[tuningGuideService] Returning database guides');
       return databaseGuides;
     }
 
+    logger.info('[tuningGuideService] No database guides found, trying fallback', {
+      classId,
+      className: resolvedClassName,
+    });
     const fallbackGuides = await this.buildFallbackGuides({
       classId,
       className: resolvedClassName,
     });
 
     if (fallbackGuides.length > 0) {
+      logger.info('[tuningGuideService] Using built-in tuning guides', {
+        count: fallbackGuides.length,
+        classRef: classId || resolvedClassName || 'unknown',
+      });
       logger.debug(
         `Using built-in tuning guides for class reference ${classId || resolvedClassName || 'unknown'}`
       );
       return fallbackGuides;
     }
 
+    logger.warn('[tuningGuideService] No guides found for provided class reference');
     return [];
   }
 
@@ -458,7 +476,7 @@ class TuningGuideService {
 
         resolvedClassName = classData?.name ?? null;
       } catch (error) {
-        console.warn('Failed to resolve class name for fallback guides:', error);
+        logger.warn('Failed to resolve class name for fallback guides', error);
       }
     }
 

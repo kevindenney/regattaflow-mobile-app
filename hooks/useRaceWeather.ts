@@ -126,12 +126,12 @@ export function useRaceWeather(
 
     // Don't fetch weather for past races
     if (raceDateObj < now) {
-      logger.debug('[useRaceWeather] Race date is in the past, skipping weather fetch');
       setWeather(null);
       return;
     }
 
     fetchWeather();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue?.id, raceDate]);
 
   return {

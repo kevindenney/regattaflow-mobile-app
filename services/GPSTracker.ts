@@ -25,7 +25,7 @@ export interface RaceTimerSession {
   start_time: string;
   end_time: string | null;
   track_points: GPSTrackPoint[];
-  user_race_description: string | null;
+  notes: string | null;
 }
 
 class GPSTrackerService {

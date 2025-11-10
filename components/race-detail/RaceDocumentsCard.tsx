@@ -4,14 +4,14 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
 
-interface RaceDocument {
+export interface RaceDocument {
   id: string;
   name: string;
-  type: 'sailing_instructions' | 'nor' | 'course_diagram' | 'amendment' | 'other';
+  type: 'sailing_instructions' | 'nor' | 'course_diagram' | 'amendment' | 'notam' | 'other';
   size: number;
   uploadedAt: string;
   uploadedBy?: string;
@@ -19,9 +19,12 @@ interface RaceDocument {
   hasExtractedCourse?: boolean;
 }
 
-interface RaceDocumentsCardProps {
+export interface RaceDocumentsCardProps {
   raceId: string;
   documents?: RaceDocument[];
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   onUpload?: () => void;
   onDocumentPress?: (document: RaceDocument) => void;
   onShareWithFleet?: (documentId: string) => void;
@@ -59,6 +62,9 @@ const MOCK_DOCUMENTS: RaceDocument[] = [
 export function RaceDocumentsCard({
   raceId,
   documents = MOCK_DOCUMENTS,
+  isLoading,
+  error,
+  onRetry,
   onUpload,
   onDocumentPress,
   onShareWithFleet,
@@ -75,6 +81,8 @@ export function RaceDocumentsCard({
         return 'map';
       case 'amendment':
         return 'alert-circle';
+      case 'notam':
+        return 'warning';
       default:
         return 'document';
     }
@@ -90,6 +98,8 @@ export function RaceDocumentsCard({
         return 'Course Diagram';
       case 'amendment':
         return 'Amendment';
+      case 'notam':
+        return 'NOTAM';
       default:
         return 'Document';
     }
@@ -127,7 +137,22 @@ export function RaceDocumentsCard({
         </TouchableOpacity>
       </View>
 
-      {documents.length === 0 ? (
+      {isLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="small" color={colors.primary[600]} />
+          <Text style={styles.loadingText}>Loading documents…</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorState}>
+          <MaterialCommunityIcons name="alert-circle" size={28} color={colors.error[600]} />
+          <Text style={styles.errorText}>{error}</Text>
+          {onRetry && (
+            <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+              <Text style={styles.retryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : documents.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="folder-open-outline" size={48} color={colors.text.tertiary} />
           <Text style={styles.emptyText}>No documents uploaded yet</Text>
@@ -261,6 +286,37 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: Spacing.xl,
+  },
+  loadingState: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  errorState: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.error[600],
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: 8,
+    backgroundColor: colors.error[50],
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.error[700],
   },
   emptyText: {
     fontSize: 16,

@@ -45,18 +45,51 @@ export default function ProfileScreen() {
         .eq('is_primary', true)
         .maybeSingle();
 
-      // Fetch primary boat with class and club info
-      const { data: boat } = await supabase
+      // Fetch primary boat
+      const { data: boat, error: boatError } = await supabase
         .from('sailor_boats')
-        .select(`
-          *,
-          boat_classes(name),
-          yacht_clubs(name)
-        `)
+        .select('*')
         .eq('sailor_id', user?.id)
         .eq('is_primary', true)
         .eq('status', 'active')
         .maybeSingle();
+
+      if (boatError) {
+        console.error('Error loading primary boat:', boatError);
+      }
+
+      // Load related boat class & club details if needed
+      const [boatClassResult, yachtClubResult] = await Promise.all([
+        boat?.class_id
+          ? supabase
+              .from('boat_classes')
+              .select('id,name')
+              .eq('id', boat.class_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        boat?.home_club_id
+          ? supabase
+              .from('yacht_clubs')
+              .select('id,name')
+              .eq('id', boat.home_club_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      if (boatClassResult && 'error' in boatClassResult && boatClassResult.error) {
+        console.error('Error loading boat class:', boatClassResult.error);
+      }
+      if (yachtClubResult && 'error' in yachtClubResult && yachtClubResult.error) {
+        console.error('Error loading yacht club:', yachtClubResult.error);
+      }
+
+      const normalizedBoat = boat
+        ? {
+            ...boat,
+            boat_classes: boatClassResult?.data ? { name: boatClassResult.data.name } : null,
+            yacht_clubs: yachtClubResult?.data ? { name: yachtClubResult.data.name } : null,
+          }
+        : null;
 
       // Format member since date
       const memberSince = userData?.created_at
@@ -66,8 +99,8 @@ export default function ProfileScreen() {
       setProfileData({
         user: userData,
         homeVenue: location?.sailing_venues,
-        primaryBoat: boat,
-        boatClass: boat?.boat_classes,
+        primaryBoat: normalizedBoat,
+        boatClass: normalizedBoat?.boat_classes,
         memberSince,
         phone: userData?.phone || null,
       });

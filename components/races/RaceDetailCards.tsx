@@ -27,6 +27,8 @@ import { Card } from '@/components/race-ui/Card';
 import { CardHeader } from '@/components/race-ui/CardHeader';
 import { InfoGrid } from '@/components/race-ui/InfoGrid';
 import { colors, Spacing } from '@/constants/designSystem';
+import { PreRaceReminderCard } from '@/components/races/RaceLearningInsights';
+import { useAuth } from '@/providers/AuthProvider';
 
 interface RaceDetailCardsProps {
   raceData: any;
@@ -41,6 +43,8 @@ const degreesToCompass = (degrees: number): string => {
 };
 
 export const RaceDetailCards: React.FC<RaceDetailCardsProps> = ({ raceData }) => {
+  const { user } = useAuth();
+
   // Prepare map region from venue data
   const mapRegion = raceData.venue
     ? {
@@ -84,6 +88,22 @@ export const RaceDetailCards: React.FC<RaceDetailCardsProps> = ({ raceData }) =>
     },
     range: raceData.tide_range || '4.9m',
   };
+
+  const racingAreaPolygon = (() => {
+    const polygonCoords = raceData?.racing_area_polygon?.coordinates?.[0];
+    if (!Array.isArray(polygonCoords) || polygonCoords.length < 3) {
+      return undefined;
+    }
+    const base = polygonCoords.map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }));
+    if (base.length >= 2) {
+      const first = base[0];
+      const last = base[base.length - 1];
+      if (first.lat === last.lat && first.lng === last.lng) {
+        base.pop();
+      }
+    }
+    return base;
+  })();
 
   // Format date and time
   const formatDate = (dateString: string) => {
@@ -185,6 +205,9 @@ export const RaceDetailCards: React.FC<RaceDetailCardsProps> = ({ raceData }) =>
         currentConditions={currentConditions}
       />
 
+      {/* Pre-Race AI Learning Reminder */}
+      {user?.id && <PreRaceReminderCard userId={user.id} />}
+
       {/* Compact Race Info & Details Grid - Mac Weather style */}
       <View style={styles.metricsGrid}>
         <CompactRaceInfoCard
@@ -223,6 +246,7 @@ export const RaceDetailCards: React.FC<RaceDetailCardsProps> = ({ raceData }) =>
           lat: raceData.venue.coordinates_lat || 0,
           lng: raceData.venue.coordinates_lng || 0
         } : undefined}
+        racingAreaPolygon={racingAreaPolygon}
         weather={{
           wind: {
             speed: (windConditions.speed + windConditions.gusts) / 2,

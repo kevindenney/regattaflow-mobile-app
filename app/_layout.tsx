@@ -60,7 +60,10 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
        args[0].includes('"shadow*" style props are deprecated') ||
        args[0].includes('"textShadow*" style props are deprecated') ||
        args[0].includes('expo-av') ||
-       args[0].includes('Expo AV has been deprecated'))
+       args[0].includes('Expo AV has been deprecated') ||
+       args[0].includes('Download the React DevTools') ||
+       args[0].includes('useNativeDriver') ||
+       args[0].includes('[Intervention] Slow network is detected'))
     ) {
       return;
     }
@@ -74,7 +77,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
       (args[0].includes('timeout exceeded') ||
        args[0].includes('6000ms') ||
        args[0].includes('60000ms') ||
-       args[0].includes('fontfaceobserver'))
+       args[0].includes('fontfaceobserver') ||
+       args[0].includes('Unexpected text node'))
     ) {
       return;
     }
@@ -83,7 +87,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
         (args[0].message?.includes('timeout exceeded') ||
          args[0].message?.includes('6000ms') ||
          args[0].message?.includes('60000ms') ||
-         args[0].message?.includes('fontfaceobserver'))) {
+         args[0].message?.includes('fontfaceobserver') ||
+         args[0].message?.includes('Unexpected text node'))) {
       return;
     }
     originalError.apply(console, args);
@@ -105,7 +110,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
     if (event.message?.includes('timeout exceeded') ||
         event.message?.includes('6000ms') ||
         event.message?.includes('60000ms') ||
-        event.message?.includes('fontfaceobserver')) {
+        event.message?.includes('fontfaceobserver') ||
+        event.message?.includes('Unexpected text node')) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -120,7 +126,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
       if (error.message?.includes('timeout exceeded') ||
           error.message?.includes('6000ms') ||
           error.message?.includes('60000ms') ||
-          error.message?.includes('fontfaceobserver')) {
+          error.message?.includes('fontfaceobserver') ||
+          error.message?.includes('Unexpected text node')) {
         // Silently ignore font loading timeouts
         return;
       }
@@ -179,16 +186,27 @@ export default function RootLayout() {
       `;
       document.head.appendChild(style);
 
-      // Register Service Worker for offline bathymetry tile caching
+      // Register Service Worker for offline bathymetry tile caching (prod only)
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker
-          .register('/bathymetry-sw.js')
-          .then((registration) => {
-
-          })
-          .catch((error) => {
-
-          });
+        if (process.env.NODE_ENV === 'production') {
+          navigator.serviceWorker
+            .register('/bathymetry-sw.js')
+            .catch((error) => {
+              console.warn('[BathymetrySW] Failed to register service worker', error);
+            });
+        } else {
+          // Ensure dev sessions don't keep an old bathymetry SW around
+          navigator.serviceWorker
+            .getRegistrations()
+            .then((registrations) => {
+              registrations
+                .filter((reg) => reg?.scope?.includes('bathymetry'))
+                .forEach((reg) => reg.unregister());
+            })
+            .catch(() => {
+              // No-op
+            });
+        }
       }
 
       return () => {

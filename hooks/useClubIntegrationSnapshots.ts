@@ -3,6 +3,18 @@ import { supabase } from '@/services/supabase';
 import { ClubRole, normalizeClubRole } from '@/types/club';
 import type { PostgrestError } from '@supabase/supabase-js';
 
+interface ClubDetails {
+  id: string;
+  name: string;
+  location?: string;
+  country?: string;
+  website?: string;
+  contact_email?: string;
+  description?: string;
+  facilities?: string[] | null;
+  metadata?: Record<string, any> | null;
+}
+
 export interface ClubMembershipRecord {
   id: string;
   club_id?: string;
@@ -15,28 +27,9 @@ export interface ClubMembershipRecord {
   expiry_date?: string;
   payment_status?: string;
   total_volunteer_hours?: number;
-  yacht_clubs?: {
-    id: string;
-    name: string;
-    location?: string;
-    country?: string;
-    website?: string;
-    contact_email?: string;
-    description?: string;
-    facilities?: string[] | null;
-    metadata?: Record<string, any> | null;
-  } | null;
-  club?: {
-    id: string;
-    name: string;
-    location?: string;
-    country?: string;
-    website?: string;
-    contact_email?: string;
-    description?: string;
-    facilities?: string[] | null;
-    metadata?: Record<string, any> | null;
-  } | null;
+  yacht_clubs?: ClubDetails | null;
+  club?: ClubDetails | null;
+  clubs?: ClubDetails | null;
 }
 
 export interface ClubRegattaSnapshot {
@@ -225,10 +218,13 @@ async function fetchSafely<T>(query: PromiseLike<QueryResult<T>>): Promise<T[]> 
   }
 }
 
-type ClubDetails = NonNullable<ClubMembershipRecord['club']>;
-
 const extractClubDetails = (membership: ClubMembershipRecord): ClubDetails | null => {
-  return (membership.yacht_clubs as ClubDetails | null | undefined) ?? membership.club ?? null;
+  return (
+    (membership.yacht_clubs as ClubDetails | null | undefined) ??
+    membership.club ??
+    membership.clubs ??
+    null
+  );
 };
 
 type NormalizedMembership = {
@@ -252,16 +248,27 @@ export function useClubIntegrationSnapshots(
     error: null,
   });
 
-  const clubIds = useMemo(() => {
+  // Stabilize memberships by creating a key based on club IDs
+  const membershipsKey = useMemo(() => {
     const ids = memberships
       .map((membership) => extractClubDetails(membership)?.id || membership.club_id)
       .filter((id): id is string => Boolean(id));
 
-    return Array.from(new Set(ids));
+    return Array.from(new Set(ids)).sort().join(',');
   }, [memberships]);
 
-  const normalizedMemberships = useMemo<NormalizedMembership[]>(() => {
-    return memberships
+  const clubIds = useMemo(() => {
+    return membershipsKey.split(',').filter(Boolean);
+  }, [membershipsKey]);
+
+  // Use membershipsKey instead of clubIds for better stability
+  const clubIdsKey = membershipsKey;
+
+  const fetchSnapshots = useCallback(async () => {
+    const currentClubIds = clubIdsKey.split(',').filter(Boolean);
+
+    // Compute normalizedMemberships inside the callback to avoid dependency issues
+    const normalizedMemberships = memberships
       .map<NormalizedMembership | null>((membership) => {
         const club = extractClubDetails(membership);
         const clubId = club?.id ?? membership.club_id ?? null;
@@ -277,10 +284,7 @@ export function useClubIntegrationSnapshots(
         };
       })
       .filter(isNonNull);
-  }, [memberships]);
-
-  const fetchSnapshots = useCallback(async () => {
-    if (clubIds.length === 0) {
+    if (currentClubIds.length === 0) {
       setState({
         snapshots: [],
         loading: false,
@@ -293,6 +297,7 @@ export function useClubIntegrationSnapshots(
 
     try {
       const todayIso = new Date().toISOString();
+      const todayDate = todayIso.split('T')[0];
       const fourteenDaysAgoMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
       const [regattaRows, eventRows, documentRows, serviceRows] = await Promise.all([
@@ -304,20 +309,13 @@ export function useClubIntegrationSnapshots(
               club_id,
               event_name,
               event_type,
-              registration_status,
               start_date,
-              end_date,
-              entry_fee,
-              currency,
-              nor_url,
-              si_url,
-              results_url,
-              venue_id
+              end_date
             `)
-            .in('club_id', clubIds)
-            .gte('start_date', todayIso)
+            .in('club_id', currentClubIds)
+            .gte('start_date', todayDate)
             .order('start_date', { ascending: true })
-            .limit(clubIds.length * 6)
+            .limit(currentClubIds.length * 6)
         ),
         fetchSafely<ClubEventRow>(
           supabase
@@ -336,14 +334,14 @@ export function useClubIntegrationSnapshots(
               location_name,
               max_participants
             `)
-            .in('club_id', clubIds)
-            .gte('start_date', todayIso)
+            .in('club_id', currentClubIds)
+            .gte('start_date', todayDate)
             .order('start_date', { ascending: true })
-            .limit(clubIds.length * 6)
+            .limit(currentClubIds.length * 6)
         ),
         fetchSafely<ClubDocumentRow>(
           supabase
-            .from('club_documents')
+            .from('club_ai_documents')
             .select(`
               id,
               club_id,
@@ -353,9 +351,9 @@ export function useClubIntegrationSnapshots(
               url,
               parsed
             `)
-            .in('club_id', clubIds)
+            .in('club_id', currentClubIds)
             .order('publish_date', { ascending: false })
-            .limit(clubIds.length * 10)
+            .limit(currentClubIds.length * 10)
         ),
         fetchSafely<ClubServiceRow>(
           supabase
@@ -373,7 +371,7 @@ export function useClubIntegrationSnapshots(
               classes_supported,
               preferred_by_club
             `)
-            .in('club_id', clubIds)
+            .in('club_id', currentClubIds)
             .order('preferred_by_club', { ascending: false })
         ),
       ]);
@@ -580,7 +578,8 @@ export function useClubIntegrationSnapshots(
         error: message,
       });
     }
-  }, [clubIds, normalizedMemberships]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubIdsKey]); // Only depend on clubIdsKey (membershipsKey). memberships is accessed via closure.
 
   useEffect(() => {
     fetchSnapshots();

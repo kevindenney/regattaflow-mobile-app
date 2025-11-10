@@ -97,6 +97,37 @@ export interface CrewRaceStats {
 const logger = createLogger('crewManagementService');
 const CREW_COLLECTION = 'crew_members';
 const CREW_AVAILABILITY_COLLECTION = 'crew_availability';
+
+const normalizeDateInput = (value?: string): string | null => {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value.includes('T') ? value.split('T')[0] : value;
+  }
+
+  return parsed.toISOString().split('T')[0];
+};
+
+const isDateWithinRange = (targetDate: Date, start?: string | null, end?: string | null) => {
+  if (!start) {
+    return true;
+  }
+
+  const startDate = new Date(start);
+  if (!Number.isNaN(startDate.getTime()) && startDate > targetDate) {
+    return false;
+  }
+
+  if (end) {
+    const endDate = new Date(end);
+    if (!Number.isNaN(endDate.getTime()) && endDate < targetDate) {
+      return false;
+    }
+  }
+
+  return true;
+};
 class CrewManagementService {
   /**
    * Get all crew members for a sailor's class
@@ -986,17 +1017,47 @@ class CrewManagementService {
     crewMemberId: string,
     date: string
   ): Promise<AvailabilityStatus> {
-    const { data, error } = await supabase.rpc('check_crew_availability', {
-      p_crew_member_id: crewMemberId,
-      p_date: date,
-    });
+    const normalizedDate = normalizeDateInput(date);
 
-    if (error) {
+    if (!normalizedDate) {
+      console.warn('Invalid date provided to checkCrewAvailabilityForDate, defaulting to available', {
+        date,
+      });
+      return 'available';
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('crew_availability')
+        .select('status, start_date, end_date')
+        .eq('crew_member_id', crewMemberId)
+        .lte('start_date', normalizedDate)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
+        return 'available';
+      }
+
+      const targetDate = new Date(normalizedDate);
+      if (Number.isNaN(targetDate.getTime())) {
+        return (data.status as AvailabilityStatus) || 'available';
+      }
+
+      if (!isDateWithinRange(targetDate, data.start_date, data.end_date)) {
+        return 'available';
+      }
+
+      return (data.status as AvailabilityStatus) || 'available';
+    } catch (error) {
       console.error('Error checking crew availability:', error);
       return 'available'; // Default to available on error
     }
-
-    return data as AvailabilityStatus;
   }
 
   /**
@@ -1014,7 +1075,7 @@ class CrewManagementService {
         const currentAvailability = await this.checkCrewAvailabilityForDate(member.id, date);
 
         // Get next unavailable period
-        const { data: nextUnavailable } = await supabase
+        const { data: nextUnavailable, error: nextUnavailableError } = await supabase
           .from('crew_availability')
           .select('start_date, end_date, reason')
           .eq('crew_member_id', member.id)
@@ -1022,7 +1083,11 @@ class CrewManagementService {
           .gte('start_date', date)
           .order('start_date', { ascending: true })
           .limit(1)
-          .single();
+          .maybeSingle();
+
+        if (nextUnavailableError && nextUnavailableError.code !== 'PGRST116') {
+          console.error('Error loading next unavailable period:', nextUnavailableError);
+        }
 
         return {
           ...member,

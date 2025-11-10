@@ -22,7 +22,10 @@ export function useUserFleets(userId?: string | null) {
   });
 
   const refresh = useCallback(async () => {
-    logger.debug('[useUserFleets] refresh called with userId:', userId);
+    const refreshStartTime = Date.now();
+    logger.debug(`[useUserFleets] ========== REFRESH STARTED at ${new Date().toISOString()} ==========`);
+    logger.debug('[useUserFleets] Refresh start timestamp:', refreshStartTime);
+    logger.debug('[useUserFleets] User ID:', userId);
 
     if (!userId) {
       logger.debug('[useUserFleets] No userId, setting loading to false');
@@ -30,15 +33,34 @@ export function useUserFleets(userId?: string | null) {
       return;
     }
 
-    logger.debug('[useUserFleets] Setting loading to true');
+    logger.debug('[useUserFleets] Setting loading to true, calling fleetService.getFleetsForUser()...');
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
+      const serviceCallStart = Date.now();
       const fleets = await fleetService.getFleetsForUser(userId);
-      logger.debug('[useUserFleets] Got fleets from service:', fleets.length, fleets);
+      const serviceCallEnd = Date.now();
+      const serviceCallDuration = serviceCallEnd - serviceCallStart;
+
+      logger.debug('[useUserFleets] ========== SERVICE CALL COMPLETED ==========');
+      logger.debug('[useUserFleets] Service call duration:', serviceCallDuration, 'ms');
+      logger.debug('[useUserFleets] Fleets count:', fleets.length);
+      logger.debug('[useUserFleets] Fleet IDs:', fleets.map(f => f.fleet.id));
+      logger.debug('[useUserFleets] Fleet names:', fleets.map(f => f.fleet.name));
+      logger.debug('[useUserFleets] Fleet data:', fleets);
+
       setState({ data: fleets, loading: false, error: null });
+
+      const refreshEndTime = Date.now();
+      const totalDuration = refreshEndTime - refreshStartTime;
+      logger.debug('[useUserFleets] ========== REFRESH COMPLETED ==========');
+      logger.debug('[useUserFleets] Refresh end timestamp:', refreshEndTime);
+      logger.debug('[useUserFleets] Total refresh duration:', totalDuration, 'ms');
     } catch (error) {
-      console.error('[useUserFleets] Error fetching fleets:', error);
+      const errorTime = Date.now();
+      logger.error('[useUserFleets] ========== REFRESH FAILED ==========');
+      logger.error('[useUserFleets] Error timestamp:', errorTime);
+      logger.error('[useUserFleets] Error fetching fleets:', error);
       setState({ data: null, loading: false, error: error as Error });
     }
   }, [userId]);

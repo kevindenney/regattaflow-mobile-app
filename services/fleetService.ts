@@ -105,6 +105,34 @@ export interface FleetMember {
 }
 
 class FleetService {
+  private boatClassNameCache = new Map<string, string | null>();
+
+  private async resolveBoatClassName(classId?: string | null): Promise<string | null> {
+    if (!classId) {
+      return null;
+    }
+
+    if (this.boatClassNameCache.has(classId)) {
+      return this.boatClassNameCache.get(classId) ?? null;
+    }
+
+    const { data, error } = await supabase
+      .from('boat_classes')
+      .select('name')
+      .eq('id', classId)
+      .maybeSingle();
+
+    if (error) {
+      logger.warn('[FleetService] Unable to resolve boat class name', { classId, error });
+      this.boatClassNameCache.set(classId, null);
+      return null;
+    }
+
+    const name = data?.name ?? null;
+    this.boatClassNameCache.set(classId, name);
+    return name;
+  }
+
   private mapFleet(row: any): Fleet {
     return {
       id: row.id,
@@ -124,6 +152,11 @@ class FleetService {
   }
 
   async getFleetsForUser(userId: string): Promise<FleetMembership[]> {
+    const queryStartTime = Date.now();
+    logger.debug(`[FleetService] ========== GET FLEETS FOR USER STARTED at ${new Date().toISOString()} ==========`);
+    logger.debug('[FleetService] Query start timestamp:', queryStartTime);
+    logger.debug('[FleetService] User ID:', userId);
+
     const { data, error } = await supabase
       .from('fleet_members')
       .select(
@@ -139,12 +172,25 @@ class FleetService {
       .eq('user_id', userId)
       .eq('status', 'active');
 
+    const queryEndTime = Date.now();
+    const queryDuration = queryEndTime - queryStartTime;
+
+    logger.debug('[FleetService] ========== DATABASE QUERY COMPLETED ==========');
+    logger.debug('[FleetService] Query end timestamp:', queryEndTime);
+    logger.debug('[FleetService] Query duration:', queryDuration, 'ms');
+    logger.debug('[FleetService] Raw data from database:', data);
+    logger.debug('[FleetService] Error:', error);
+    logger.debug('[FleetService] Raw data count:', data?.length || 0);
+
     if (error) {
-      logger.error('Error fetching fleets for user:', error);
+      logger.error('[FleetService] ========== QUERY FAILED ==========');
+      logger.error('[FleetService] Error fetching fleets for user:', error);
       throw error;
     }
 
     const filtered = (data || []).filter(item => item.fleet);
+    logger.debug('[FleetService] After filtering (items with fleet):', filtered.length);
+    logger.debug('[FleetService] Filtered items:', filtered);
 
     const mapped = filtered.map(item => ({
       fleet: this.mapFleet(item.fleet),
@@ -152,6 +198,16 @@ class FleetService {
       status: (item.status ?? 'active') as FleetMembership['status'],
       joinedAt: item.joined_at,
     }));
+
+    logger.debug('[FleetService] ========== MAPPING COMPLETED ==========');
+    logger.debug('[FleetService] Mapped memberships count:', mapped.length);
+    logger.debug('[FleetService] Mapped fleet IDs:', mapped.map(m => m.fleet.id));
+    logger.debug('[FleetService] Mapped fleet names:', mapped.map(m => m.fleet.name));
+    logger.debug('[FleetService] Final result:', mapped);
+
+    const totalDuration = Date.now() - queryStartTime;
+    logger.debug('[FleetService] ========== GET FLEETS FOR USER COMPLETED ==========');
+    logger.debug('[FleetService] Total duration:', totalDuration, 'ms');
 
     return mapped;
   }
@@ -432,16 +488,26 @@ class FleetService {
 
   async getFleetUpcomingRaces(params: { classId?: string | null; limit?: number }): Promise<FleetRaceSummary[]> {
     if (!params.classId) {
+      logger.debug('[FleetService] No classId provided for getFleetUpcomingRaces, returning empty list');
       return [];
     }
 
     try {
+      const resolvedClassName = await this.resolveBoatClassName(params.classId);
+      if (!resolvedClassName) {
+        logger.warn('[FleetService] Could not resolve boat class name for display', {
+          classId: params.classId,
+        });
+      }
+
+      const nowIso = new Date().toISOString();
       let query = supabase
         .from('race_events')
-        .select('id, race_name, start_time, boat_class, race_series, venue_id, racing_area_name')
-        .eq('boat_class', params.classId)
-        .gte('start_time', new Date().toISOString())
+        .select('id, name, race_name, start_time, event_date, boat_classes, race_series, venue_id, racing_area_name')
+        .gte('start_time', nowIso)
         .order('start_time', { ascending: true });
+
+      query = query.contains('boat_classes', [params.classId]);
 
       if (params.limit) {
         query = query.limit(params.limit);
@@ -474,9 +540,9 @@ class FleetService {
 
       return (data || []).map(event => ({
         id: event.id,
-        raceName: event.race_name,
-        startTime: event.start_time,
-        boatClass: event.boat_class,
+        raceName: event.name || event.race_name,
+        startTime: event.start_time || event.event_date,
+        boatClass: event.boat_classes?.[0] || resolvedClassName || null,
         raceSeries: event.race_series,
         venueId: event.venue_id,
         racingAreaName: event.racing_area_name,

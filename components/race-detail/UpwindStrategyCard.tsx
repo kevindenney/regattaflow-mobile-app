@@ -4,12 +4,16 @@
  * Shows favored sides, shift playing tactics, theory + execution for each beat
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { strategicPlanningService } from '@/services/StrategicPlanningService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('UpwindStrategyCard');
 
 interface BeatRecommendation {
   leg: string; // 'Upwind Leg 1', 'Upwind Leg 2', etc.
@@ -24,75 +28,55 @@ interface BeatRecommendation {
 interface UpwindStrategyCardProps {
   raceId: string;
   raceName: string;
+  sailorId?: string;
+  raceEventId?: string;
 }
+
+const extractSideFromAction = (action: string): 'left' | 'right' | 'middle' | null => {
+  if (!action) return null;
+  const lowerAction = action.toLowerCase();
+  if (lowerAction.includes('right') || lowerAction.includes('starboard')) return 'right';
+  if (lowerAction.includes('left') || lowerAction.includes('port')) return 'left';
+  if (lowerAction.includes('middle') || lowerAction.includes('center')) return 'middle';
+  return null;
+};
+
+const extractSideFromBias = (favoredEnd: string): 'left' | 'right' | 'middle' | null => {
+  if (!favoredEnd) return null;
+  const lower = favoredEnd.toLowerCase();
+  if (lower === 'pin' || lower === 'left') return 'left';
+  if (lower === 'boat' || lower === 'committee' || lower === 'right') return 'right';
+  if (lower === 'middle') return 'middle';
+  return null;
+};
 
 export function UpwindStrategyCard({
   raceId,
-  raceName
+  raceName,
+  sailorId,
+  raceEventId
 }: UpwindStrategyCardProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [beats, setBeats] = useState<BeatRecommendation[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [userStrategy, setUserStrategy] = useState('');
+  const [savingUserStrategy, setSavingUserStrategy] = useState(false);
+
+  // Use refs to track state for polling without triggering re-renders
+  const beatsRef = useRef<BeatRecommendation[]>([]);
+  const loadingRef = useRef(true);
+
+  // Update refs when state changes
+  useEffect(() => {
+    beatsRef.current = beats;
+  }, [beats]);
 
   useEffect(() => {
-    loadUpwindStrategy();
+    loadingRef.current = loading;
+  }, [loading]);
 
-    // Subscribe to realtime changes for this race's strategy
-    const subscription = supabase
-      .channel(`race_strategy_${raceId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'race_strategies',
-          filter: `regatta_id=eq.${raceId}`,
-        },
-        (payload) => {
-          console.log('[UpwindStrategyCard] Realtime update received:', payload);
-          // Reload strategy when it changes
-          loadUpwindStrategy();
-        }
-      )
-      .subscribe();
-
-    // Poll for strategy updates every 3 seconds if no data yet
-    // This handles the case where strategy is generated after component mounts
-    const pollInterval = setInterval(() => {
-      if (beats.length === 0 && !loading) {
-        console.log('[UpwindStrategyCard] Polling for strategy updates...');
-        loadUpwindStrategy();
-      }
-    }, 3000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearInterval(pollInterval);
-    };
-  }, [raceId, beats.length, loading]);
-
-  // Helper function to extract favored side from action text
-  const extractSideFromAction = (action: string): 'left' | 'right' | 'middle' | null => {
-    if (!action) return null;
-    const lowerAction = action.toLowerCase();
-    if (lowerAction.includes('right') || lowerAction.includes('starboard')) return 'right';
-    if (lowerAction.includes('left') || lowerAction.includes('port')) return 'left';
-    if (lowerAction.includes('middle') || lowerAction.includes('center')) return 'middle';
-    return null;
-  };
-
-  // Helper function to extract side from start line bias
-  const extractSideFromBias = (favoredEnd: string): 'left' | 'right' | 'middle' | null => {
-    if (!favoredEnd) return null;
-    const lower = favoredEnd.toLowerCase();
-    if (lower === 'pin' || lower === 'left') return 'left';
-    if (lower === 'boat' || lower === 'committee' || lower === 'right') return 'right';
-    if (lower === 'middle') return 'middle';
-    return null;
-  };
-
-  const loadUpwindStrategy = async () => {
+  const loadUpwindStrategy = useCallback(async () => {
     console.log('[UpwindStrategyCard] Loading strategy for raceId:', raceId);
     console.log('[UpwindStrategyCard] Current user:', user?.id);
 
@@ -206,6 +190,84 @@ export function UpwindStrategyCard({
       setError('Failed to load upwind strategy');
     } finally {
       setLoading(false);
+    }
+  }, [user, raceId]);
+
+  useEffect(() => {
+    loadUpwindStrategy();
+
+    // Subscribe to realtime changes for this race's strategy
+    const subscription = supabase
+      .channel(`race_strategy_${raceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_strategies',
+          filter: `regatta_id=eq.${raceId}`,
+        },
+        (payload) => {
+          console.log('[UpwindStrategyCard] Realtime update received:', payload);
+          // Reload strategy when it changes
+          loadUpwindStrategy();
+        }
+      )
+      .subscribe();
+
+    // Poll for strategy updates every 3 seconds if no data yet
+    // This handles the case where strategy is generated after component mounts
+    const pollInterval = setInterval(() => {
+      if (beatsRef.current.length === 0 && !loadingRef.current) {
+        console.log('[UpwindStrategyCard] Polling for strategy updates...');
+        loadUpwindStrategy();
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [raceId, loadUpwindStrategy]); // Only depend on raceId and loadUpwindStrategy
+
+  // Load user's manual strategy
+  useEffect(() => {
+    if (!sailorId || !raceEventId) return;
+
+    const loadUserStrategy = async () => {
+      try {
+        const prep = await strategicPlanningService.getPreparationWithStrategy(
+          raceEventId,
+          sailorId
+        );
+        if (prep?.upwind_strategy) {
+          setUserStrategy(prep.upwind_strategy);
+        }
+      } catch (err) {
+        logger.error('[UpwindStrategyCard] Error loading user strategy', err);
+      }
+    };
+
+    loadUserStrategy();
+  }, [sailorId, raceEventId]);
+
+  // Auto-save user's strategy on change
+  const handleUserStrategyChange = async (text: string) => {
+    setUserStrategy(text);
+    if (!sailorId || !raceEventId) return;
+
+    setSavingUserStrategy(true);
+    try {
+      await strategicPlanningService.updatePhaseStrategy(
+        raceEventId,
+        sailorId,
+        'upwindStrategy',
+        text
+      );
+    } catch (err) {
+      logger.error('[UpwindStrategyCard] Error saving user strategy', err);
+    } finally {
+      setSavingUserStrategy(false);
     }
   };
 
@@ -348,6 +410,28 @@ export function UpwindStrategyCard({
             </View>
           </View>
         ))}
+
+        {/* User Strategy Input Section */}
+        {sailorId && raceEventId && (
+          <View style={styles.userStrategySection}>
+            <View style={styles.userStrategyHeader}>
+              <Text style={styles.userStrategyLabel}>Your Strategy Notes</Text>
+              {savingUserStrategy && (
+                <ActivityIndicator size="small" color="#3B82F6" />
+              )}
+            </View>
+            <TextInput
+              style={styles.userStrategyInput}
+              value={userStrategy}
+              onChangeText={handleUserStrategyChange}
+              placeholder="Add your own strategy notes for upwind legs... (e.g., side preference, shift plan, tacking)"
+              placeholderTextColor="#94A3B8"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        )}
       </View>
     );
   };
@@ -496,5 +580,35 @@ const styles = StyleSheet.create({
     color: '#64748B',
     minWidth: 40,
     textAlign: 'right',
+  },
+  userStrategySection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  userStrategyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userStrategyLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userStrategyInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#0F172A',
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    lineHeight: 20,
   },
 });

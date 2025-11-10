@@ -19,24 +19,29 @@ import {
   TideState,
   ConfidenceLevel
 } from '@/types/environmental';
+import { StormGlassService } from './weather/StormGlassService';
+import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 
 // Regional weather provider configuration
 const REGIONAL_PROVIDERS = {
-  'asia_pacific': ['HKO', 'JMA', 'BOM', 'OpenWeatherMap'],
-  'europe': ['ECMWF', 'Met_Office', 'Meteo_France', 'OpenWeatherMap'],
-  'north_america': ['NOAA', 'Environment_Canada', 'OpenWeatherMap'],
-  'south_america': ['OpenWeatherMap'],
-  'africa': ['OpenWeatherMap'],
-  'middle_east': ['OpenWeatherMap']
+  'asia_pacific': ['StormGlass', 'HKO', 'JMA', 'BOM', 'OpenWeatherMap'],
+  'europe': ['StormGlass', 'ECMWF', 'Met_Office', 'Meteo_France', 'OpenWeatherMap'],
+  'north_america': ['StormGlass', 'NOAA', 'Environment_Canada', 'OpenWeatherMap'],
+  'south_america': ['StormGlass', 'OpenWeatherMap'],
+  'africa': ['StormGlass', 'OpenWeatherMap'],
+  'middle_east': ['StormGlass', 'OpenWeatherMap'],
+  'global': ['StormGlass', 'OpenWeatherMap']
 };
 
 export class WeatherAggregationService {
   private providers: string[];
   private venueRegion: string;
+  private stormGlassService: StormGlassService | null;
 
   constructor(venue: { region?: string; country?: string }) {
     this.venueRegion = venue.region || 'global';
     this.providers = this.selectProvidersForRegion(this.venueRegion);
+    this.stormGlassService = this.createStormGlassService();
   }
 
   /**
@@ -177,6 +182,8 @@ export class WeatherAggregationService {
     const lng = venue.coordinates_lng;
 
     switch (provider) {
+      case 'StormGlass':
+        return this.fetchStormGlass(lat, lng, time);
       case 'HKO':
         return this.fetchHKO(lat, lng, time);
       case 'NOAA':
@@ -188,6 +195,96 @@ export class WeatherAggregationService {
       default:
         return null;
     }
+  }
+
+  private createStormGlassService(): StormGlassService | null {
+    const apiKey = process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || process.env.STORMGLASS_API_KEY;
+    if (!apiKey) {
+      console.warn('[WeatherAggregationService] No Storm Glass API key configured');
+      return null;
+    }
+
+    return new StormGlassService({
+      apiKey,
+      timeout: 10000,
+      retryAttempts: 2,
+    });
+  }
+
+  private async fetchStormGlass(lat: number, lng: number, time: Date): Promise<WeatherForecast | null> {
+    if (!this.stormGlassService) {
+      return null;
+    }
+
+    try {
+      const targetConditions = await this.stormGlassService.getWeatherAtTime({ latitude: lat, longitude: lng }, time);
+      if (!targetConditions) {
+        return null;
+      }
+
+      return this.transformStormGlassForecast(targetConditions);
+    } catch (error) {
+      console.warn('[WeatherAggregationService] Storm Glass provider failed', error);
+      return null;
+    }
+  }
+
+  private transformStormGlassForecast(weather: AdvancedWeatherConditions): WeatherForecast {
+    const confidenceRatio = weather.forecast?.confidence ?? 0.9;
+    const confidence: ConfidenceLevel = confidenceRatio >= 0.75
+      ? ConfidenceLevel.HIGH
+      : confidenceRatio >= 0.5
+        ? ConfidenceLevel.MEDIUM
+        : ConfidenceLevel.LOW;
+
+    const wind: WindData = {
+      speed: weather.wind?.speed ?? 0,
+      direction: weather.wind?.direction ?? 0,
+      gust: weather.wind?.gusts ?? undefined,
+    };
+
+    const tide: TideData | undefined = weather.tide
+      ? {
+          height: weather.tide.height ?? 0,
+          current_speed: weather.tide.speed ?? undefined,
+          current_direction: typeof weather.tide.direction === 'number' ? weather.tide.direction : undefined,
+          state: this.mapTideState(weather.tide.direction),
+        }
+      : undefined;
+
+    const wave: WaveData | undefined = weather.waves
+      ? {
+          height: weather.waves.height ?? 0,
+          period: weather.waves.period ?? 0,
+          direction: weather.waves.direction ?? 0,
+          swell_height: weather.waves.swellHeight,
+          swell_direction: weather.waves.swellDirection,
+        }
+      : undefined;
+
+    return {
+      time: (weather.timestamp ?? new Date()).toISOString(),
+      wind,
+      tide,
+      wave,
+      temperature: weather.temperature ?? weather.temperatureProfile?.air,
+      pressure: weather.pressure?.sealevel,
+      cloud_cover: weather.cloudCover ?? weather.cloudLayerProfile?.total,
+      confidence,
+      provider: 'StormGlass',
+    };
+  }
+
+  private mapTideState(direction: unknown): TideState {
+    if (typeof direction === 'string') {
+      const normalized = direction.toLowerCase();
+      if (normalized.includes('flood')) return TideState.FLOOD;
+      if (normalized.includes('ebb')) return TideState.EBB;
+      if (normalized.includes('high')) return TideState.HIGH;
+      if (normalized.includes('low')) return TideState.LOW;
+      if (normalized.includes('slack')) return TideState.SLACK;
+    }
+    return TideState.UNKNOWN;
   }
 
   /**

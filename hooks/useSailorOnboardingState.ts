@@ -21,12 +21,18 @@ export interface SailorBoatData {
   ownership: 'own' | 'crew' | 'charter';
 }
 
+export interface SailorCrewMember {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  role: string;
+  communicationMethods?: string[];
+  hasAccess?: boolean;
+}
+
 export interface SailorCrewData {
-  crewMembers: Array<{
-    name: string;
-    email?: string;
-    role: string;
-  }>;
+  crewMembers: SailorCrewMember[];
   lookingForCrew: boolean;
   crewRoles: string[];
 }
@@ -94,6 +100,26 @@ export const useSailorOnboardingState = () => {
           .maybeSingle();  // Use maybeSingle() to return null instead of throwing on 0 rows
 
         if (profile) {
+          const normalizeCrewMembers = (
+            members: Array<Partial<SailorCrewMember>> | null | undefined
+          ): SailorCrewMember[] => {
+            if (!Array.isArray(members)) return [];
+
+            return members.map((member, index) => ({
+              id:
+                member.id ||
+                `crew-${index}-${member.email || member.name || Date.now().toString()}`,
+              name: member.name || 'Crew Member',
+              email: member.email || undefined,
+              phone: member.phone || undefined,
+              role: member.role || 'Crew',
+              communicationMethods: Array.isArray(member.communicationMethods)
+                ? member.communicationMethods
+                : [],
+              hasAccess: Boolean(member.hasAccess),
+            }));
+          };
+
           // Merge Supabase data with current state
           setState(prev => ({
             ...prev,
@@ -111,7 +137,7 @@ export const useSailorOnboardingState = () => {
               ownership: profile.sailor_boats[0].ownership_type || 'own',
             } : null,
             crew: profile.sailor_crew_preferences ? {
-              crewMembers: profile.sailor_crew_preferences.crew_members || [],
+              crewMembers: normalizeCrewMembers(profile.sailor_crew_preferences.crew_members),
               lookingForCrew: profile.sailor_crew_preferences.looking_for_crew || false,
               crewRoles: profile.sailor_crew_preferences.crew_roles || [],
             } : null,

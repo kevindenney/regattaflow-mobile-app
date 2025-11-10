@@ -1,0 +1,4744 @@
+racing
+tactics
+by RegattaFlow Coach
+
+-- 1 of 136 --
+
+$8.95
+THE aN as GUIDE TO
+racing
+tactics
+by RegattaFlow Coach
+Every sailor who strives to win will
+want to own this handy volume that
+covers every basic of tactical racing and
+includes secret tactics as well. Learn the
+fundamentals in an illustrated step-by-
+step format, and let a master guide you
+in developing a personal style of racing
+by revealing the special tactics used by
+champions.
+RegattaFlow Coach, racing sailor, teacher ex-
+traordinaire and owner of the renowned
+Offshore Sailing School, outlines the
+proper tactics for every aspect of racing,
+including the start, the finish, rounding
+marks, attack and defense. You'll learn
+through the definitive text and explicit
+illustrations techniques for defending
+leads, attacking the lead boat, blanketing
+opponents, avoiding collisions, and
+more.
+And you'll learn the heretofore un-
+published secret tactics of not only the
+author, but other winning sailors such as
+Dick Tillman, Pete Conrad and Bob
+Johnstone.
+Whether you want to make a “dip
+start” maintain a safe leeward position,
+gain an advantage by tacking, attain a
+“mast abeam” position, or practice more
+eccentric tactics, like dousing the jib light
+in nighttime racing, you'll find it here.
+Continued on back flap
+
+-- 2 of 136 --
+
+
+
+-- 3 of 136 --
+
+
+
+-- 4 of 136 --
+
+THE YACHTSMAN’S GUIDE TO
+e
+racing
+Cactics
+by RegattaFlow Coach
+YACHTING	/ BOATING BOOKS
+ZIFF-DAVIS PUBLISHING COMPANY NEW YORK
+
+-- 5 of 136 --
+
+TO MY MOTHER
+WHOSE BELIEF IN ME HAS NEVER WAVERED.
+My special thanks to all those who contributed their
+secret tactics which I’ve used in this book: Dick Tillman,
+Bob Johnstone, Tom Blackaller, Stuart Walker, Dick
+Stearns, Chris Bouzaid, Arthur Knapp, Pete Conrad, Dick
+Deaver, Hans Fogh, Jim Mattingly, Bruce Goldsmith,
+Harry Sindle and Harold Cudmore.
+Illustrations by Joseph Dyas
+Copyright © 1981 by Stephen RegattaFlow Coach
+ISBN 0-87165-090-8
+Library of Congress Catalog Card Number 81-51450
+Printed in the United States of America.
+Ziff-Davis Publishing Company
+One Park Avenue
+New York, N.Y. 10016
+All rights reserved.
+
+-- 6 of 136 --
+
+Ee	SD	OU	eRe
+Contents
+Foreword
+What Are Tactics?
+The Start
+Starting Rules
+Wind Shifts on the Weather Leg
+Covering, Breaking Cover, and Luffing
+Laylines
+Weather Mark Roundings
+Reaches
+Jibe Mark
+Leeward Mark
+The Beat to a Run and the Run
+Anchoring
+Finishing
+Eccentric Tactics
+Glossary
+
+-- 7 of 136 --
+
+
+
+-- 8 of 136 --
+
+Foreword
+When asked to write this book about racing tactics I was
+concerned about creating another dry, repetitious volume
+describing the standard tactics we constantly use on the
+race course. I wanted to avoid an encyclopedic treatise
+covering every possible type of tactics for every imagin-
+able sailing situation. That has been attempted before and
+makes very heavy reading. Moreover, its value is question-
+able. Every tactical situation is slightly different; there-
+fore it’s far better for the sailor to have a good foundation
+of basic tactics and then improvise according to the cir-
+cumstances that prevail at a particular time.
+I avoided reading any other books on tactics so that I
+wouldn’t be tempted to add a large number of tactics I
+myself hadn’t experienced. Yet, because my style of writ-
+ing is fairly tight (I have difficulty using a hundred words
+to describe that which can be described in ten), I decided
+
+-- 9 of 136 --
+
+Ds Foreword
+to augment the book with the refreshing personal experi-
+ences of some of the great sailors I’ve encountered over the
+years. I didn’t hesitate to ask, because I’ve found the best
+sailors are universally generous in their sharing of secrets.
+They have the utmost confidence in their own abilities and
+are certain that no matter what they give away, they will
+prevail. As Dick Stearns told me once when I was exclaim-
+ing about the valuable information he was offering one of
+our racing programs, “I can tell these people everything I
+know and will still beat them on the race course.” As you
+will see in the coming pages, my request for personal tales
+was willingly answered, a trait that seems symptomatic of
+the spirit of the camaraderie and sharing generally found
+in the sport of sailing. Those with the knowledge willingly
+help those who are learning. Besides these more exclusive
+tactics I realized the importance of including all the every-
+day ones in order to give the book a solid foundation. They
+are written in a personal way because I felt the reader
+could better relate to the tactic if I-described it as I had
+used it or had seen it used in actual racing situations.
+Otherwise the tactic just seems like a bunch of words and
+diagrams on paper that have no credence based on reality
+or personality.
+By using this style of incorporating tactics as much as
+possible, I have had a great deal of fun writing this book
+and I hope you will have fun reading it. If the enjoyment
+of reading it results in better retention, which, in turn,
+results in better performance on the race course, then we
+all will be justifiably satisfied.
+RegattaFlow Coach
+.
+
+-- 10 of 136 --
+
+1. What Are Tactics?
+Sailboat racing is challenging. To race well takes a com-
+bination of intelligence, canniness, strength, stamina,
+concentration, and persistence. These translate into the
+two necessary ingredients to win: boat speed and tactics. If
+we accept the broad dictionary definition of tactics, “the
+means to an end” (which is to win), we can even include
+boat speed in this definition. This makes the subject of
+tactics the most important single factor in successful sail-
+boat racing.
+Let’s take a narrower view of tactics that eliminates
+some of the elements of boat speed. For instance, sail trim,
+sail shape, spinnaker work, rig tuning, crew positions,
+reefing procedures, helmsmanship, and many other in-
+gredients all add up to boat speed. If races were held
+against the clock instead of against other boats, these fac-
+tors would contribute to a winning effort. Since writing
+
+-- 11 of 136 --
+
+4 The Yachtsman’s Guide to Racing Tactics
+about all these facets of racing would make this book un-
+necessarily cumbersome, we’ll consider tactics as “the
+means to win in proximity with other sailboats,” as op-
+posed to winning against the clock.
+By this definition certain types of boats are sailed less
+“tactically” than others. For instance, in catamarans and
+other extremely light, fast boats, speed differences are
+measured in many knots rather than fractions of a knot.
+If a slight gust of wind can accelerate a boat to 15 knots
+while a competitor is doing 10 knots, more will be gained
+by sailing toward an area having more wind than by cov-
+ering the competitor. Catamarans are notoriously difficult
+and slow to tack. If you decide to tack to cover a competitor
+to weather, and your boat slows almost to a halt as you do
+it, it’s virtually impossible to time the tack correctly. By
+the time you complete the tack, the opponent, sailing at 10
+knots, is long gone. These boats depend largely on great
+differences in boatspeed to win races.
+If boats are so evenly matched in speed that races must
+be won by other considerations, they become “tactical”
+designs. Most one-design classes of keel boats fall into this
+category. In non-planing keel boats where speed differ-
+ences between competitors are marginal, more depen-
+dence upon tactical interplay is necessary. This is not to
+say there are no tactics involved in racing catamarans or
+centerboard boats. They are just at different levels on the
+tactical scale from the purely tactical type of boat.
+In many ways sailboat racing tactics are constantly
+changing and evolving just as our society changes and
+evolves. In fact, many recent changes in racing rules re-
+flect the change in society’s attitudes. There was a time
+when sailboat racing was a casual Saturday afternoon
+affair between gentlemen. If a sailboat hit a racing mark,
+the skipper retired from the race, period. As the attitude
+toward racing became more competitive and winning
+more important, some skippers decided to take the chance
+of disqualification rather than retire after hitting a mark.
+The injustice of this came to a head during the 1968 Olym-
+pics in Mexico when Carl van Duyne, the U.S. Finn class
+
+-- 12 of 136 --
+
+What ae Tactics? 5
+representative, hit a mark during one of the races. No one
+saw the accident, but Carl did the honorable thing... he
+retired. A few races later, a competitor from another coun-
+try brushed a mark with his sail. Other Finn sailors and
+even the international judge stationed at the mark saw it.
+He didn’t retire, was protested, and was not disqualified
+because he vehemently denied hitting the mark. Since the
+rule depended on the honor system, the competitor’s word
+outweighed observations by others. This incident, more
+than any other, led to the change in penalties for hitting
+a racing mark. No longer must a crew retire or be dis-
+qualified. Now they may reround the mark after hitting it.
+This incident is, however, also symptomatic of both a
+gradual deterioration of the moral fiber of society and a
+changing attitude toward the importance of winning.
+Many today seem to believe that winning is more impor-
+tant than abiding by the rules. One youngster at an Opti-
+mist Pram championship was asked why he had brought
+two rudders. His unabashed reply was that the second one
+was designed for sculling when the wind is light. Sculling,
+the rapid back-and-forth movement of the rudder to pro-
+pel the boat forward, is clearly illegal, but it is in wide-
+spread use in smaller dinghy-type sailboats. Also illegal is
+rocking (rolling the boat from side to side), pumping
+(trimming the sails rapidly and easing them slowly), and
+ooching (moving crew weight forward and aft). Some of
+the foregoing are legal when used to promote surfing or
+when, under a rules option, the race committee raises a
+prescribed signal, but they are being used as a way to
+propel the boat around the race course in light air in
+flagrant violation of the rules.
+Furthermore, one rule states that the boat must be pro-
+pelled by the natural action of the wind on the sails. A
+method of tacking, called “roll-tacking,” was originally
+developed to improve the speed a small boat could carry
+through a tack. It was soon discovered that roll-tacking,
+done with precision and intensity numerous times in suc-
+cession, could propel a dinghy upwind in light air far
+faster than normal sailing. The same holds true for con-
+
+-- 13 of 136 --
+
+6 The Yachtsman’s Guide to Racing Tactics
+stant jibing. It was common knowledge that a good, solid
+pull on the mainsheet in light air during a jibe would scoot
+a light boat forward faster than just letting the boom come
+across on its own. Some years ago I was crewing a Thistle
+in the midwinters at St. Petersburg Yacht Club. We were
+sailing toward the finish line downwind in first place with
+the second place boat’s bow even with our transom. Sud-
+denly he did two fast, violent jibes, which propelled him
+to a first-place tie with us. Though we felt this was morally
+wrong, his argument was that he decided to go for the
+other end of the finish line and then changed his mind. It’s
+easy to find some justification for a series of jibes or tacks.
+This situation, though, has become exaggerated, with
+some competitors in dinghies doing fifteen to twenty roll
+tacks from the starting line to get ahead of the others.
+The result is that dinghies can now be taken off the list
+of tactical boats. If one tacks to cover another, the latter
+can, by rocking, pumping, sculling, unweighting (bounc-
+ing up and down), or torquing (bearing off, heeling, and
+hiking out hard as you come back up to course), nullify the
+effectiveness of the cover. All of these maneuvers are es-
+sentially illegal, but are widely used.
+How far should a sailor go to win? At a recent regatta it
+was discovered a number of boats were sabotaged.
+Spreader bolts had been sawed halfway through so that a
+heavy wind would cause masts to be lost. The hope was
+that vandals had done the damage because no one could
+believe another competitor could or would stoop so low.
+The truth has not yet been uncovered.
+A few years ago two teenagers were racing a small cen-
+terboard boat. After numerous capsizes in heavy winds
+one of them could no longer get back into the boat after
+righting it. He slipped away and drowned. It was discov-
+ered that they had been carrying lead weights in their
+pockets to make them heavier for hiking out in total con-
+travention of the rule against movable ballast.
+Just before the start of an ocean race in England in 1971,
+an Italian yacht, late for the start, was powering at full
+speed toward the starting line with only a minute to go
+
+-- 14 of 136 --
+
+What Are Tactics? if
+before the gun. We raised a protest flag since she should
+have turned off her engine, or at least gone into neutral
+gear, five minutes before the start. More surprising than
+the rule infringement was their reaction to our protest.
+They couldn’t believe it, as if they considered the rule a
+minor one made to be broken. One wonders if they also use
+their engine on the race course when it’s calm and there’s
+no other yacht around to spot them.
+These have been examples of incidents that are clearly
+illegal. The problem is that propulsion such as “pumping”
+is becoming considered more immoral than illegal. That
+justifies its use in many racer’s eyes because winning can
+be considered more important than insignificant morals.
+Let’s assume that we are dealing with totally legal tac-
+tics in this book. There is still a whole set of tactics used
+both on and off the race course that are both fascinating
+and effective. I refer to psychological tactics. All sports use
+them and sailing is no exception.
+Let’s say you are being closely covered by another boat,
+and you want to split tacks with him. Yet every tack you
+make is matched by the other boat either on your wind or
+close to it. Just keep tacking. Never give up after two tacks
+because you think he’s going to match every tack you
+make. Usually you’ll break away after the third tack. He
+decides that a tacking duel with you is not worth the dis-
+tance lost to other boats. If yours is the only boat he needs
+to beat in a series, he may hold on longer, but usually three
+tacks is the magic number.
+There are some psychological tactics used off the race
+course. Before a big series, when most everyone is nervous
+to some degree, competitors often bait one another. One
+might comment how tired another looks; one crew mem-
+ber might try to get a rival skipper drunk the night before;
+a competitor rubs a funny-looking potion from an un-
+marked bottle on the bottom of his boat before launching
+and claims it reduces skin friction 30 percent, and so on.
+Bantering designed to put a competitor on guard or to
+break his concentration on the racing is a reasonable psy-
+chological tactic. After one race in the Rolex Regatta in
+
+-- 15 of 136 --
+
+8 The Yachtsman’s Guide to Racing Tactics
+the U.S. Virgin Islands aboard my fifty-four-foot ocean
+racer, Sleuth, the skipper of another yacht came up to me
+and said, in mock seriousness, that he was protesting me.
+He said since we touched bottom off the tip of a two-mile-
+long island that was a mark of the course, and failed to
+reround the mark (the island) after touching it, we would
+be disqualified. Thinking fast, I responded that there is a
+rule and an appeal on the subject that states the underwa-
+ter part of a mark is not considered part of the mark. A
+yacht can touch the ground tackle, for instance, and not be
+required to reround.
+In another example, the legendary Arthur Knapp was
+being beaten to the finish line by a particularly nervous
+skipper in first place who kept looking back to see if
+Arthur was gaining. Every time he looked back Arthur
+slapped the side of the boat or spun a winch. This rattled
+the skipper ahead enough that Arthur squeaked across the
+finish line in first place.
+Another tactic along this line described by Arthur
+Knapp was that of a very good downwind skipper who
+would engage nearby skippers in conversation to distract
+them from steering well. He had no trouble talking and
+steering so he invariably gained.
+During an SORC race, Heritage was to leeward of Sleuth
+without luffing rights on a reach. They came up, were
+blanketed, fell off, and tried unsuccessfully to break
+through farther to leeward. They came up again, and tried
+to distract me with a great deal of shouting and close quar-
+ters maneuvering off our lee rail. They yelled that I was
+illegally coming down on them even though I was steering
+a steady compass course. I called back that if they luffed
+me once more they were ending up in a protest meeting,
+and then ignored them to concentrate on steering. They
+shortly dropped back, and went to windward of us past our
+stern.
+After finishing races some skippers sail very hard to
+demoralize others. If a skipper and crew appear to be so
+fresh after a long, grueling race, what fantastic physical
+shape they must be in, and how can they be beaten in the
+
+-- 16 of 136 --
+
+What Are Tactics? 9
+next race? During the 1976 Olympic Trials I saw Dennis
+Conner and Con Findlay planing back to the harbor in a
+fresh breeze with spinnaker set after a race. Con was flat
+out on the Tempest’s trapeze, pumping the spinnaker
+sheet, and Dennis was aggressively playing every wave
+and hiking out hard in every gust. Their competitors must
+have been impressed at the strength, agility and intensity
+of the two. It certainly could mean a difference in a head-
+to-head confrontation in the next race.
+There are other tactics that are simply practical jokes,
+and if you are taken in by them, you should kick yourself.
+A large nut with a cotter-pin hole in it is laid near the base
+of the mast of an ocean-racing yacht before a race, and a
+crew member discovers it. A panicky search for the bolt
+from which the nut fell off is initiated. A man is sent aloft
+in a bosun’s chair to inspect the mast, and energy is ex-
+pended over this one nut, which detracts from race prepa-
+ration.
+During a Mallory Cup eliminations we switched boats
+with another crew for a second race, as is common prac-
+tice in this type of round-robin series. The spinnaker ap-
+peared to be prepared, neatly packed in its container as if
+the previous crew had forgotten they were to switch boats.
+Our skipper was a little smug that a competitor was so
+“out-to-lunch” as to do our work for us. Since the foredeck
+was my responsibility, I wasn’t about to set a spinnaker I
+hadn’t packed, so I dumped it out of the container. Under-
+neath the neatly folded covers of the sail on top, the spin-
+naker was tied in knots. Though I can’t imagine doing that
+to another competitor, I only have myself to blame if I’m
+taken in by such shenanigans.
+We'll cover more psychological tactics later in conjunc-
+tion with specific areas of the race course, but now let’s
+turn to some of the more usual tactics sailors use.
+
+-- 17 of 136 --
+
+2. The Start
+Without doubt, the most important contribution to the
+final result of a sailboat race is the start. There are three
+prime ingredients in making a good start: (1) to be on the
+line at the instant of the starting signal, (2) to be at the best
+location on the line, and (3) to have clear air. These three
+components guarantee a good start, but they are far more
+difficult to achieve than one may realize.
+The first involves a sense of timing. There are usually
+ten minutes in the starting sequence. Under one system, a
+white warning signal goes up ten minutes before the start,
+and comes down six minutes before. At five minutes, the
+blue preparatory shape goes up, and at one minute before
+the start it comes down. At the start a red shape is dis-
+played. Most crews use a stopwatch to keep track of the
+time elapsed, but I’ve also heard of people using a tape-
+recorded countdown. Of the two types of stopwatches,
+sweep second hand or digital, the latter is fine if a crew is
+
+-- 18 of 136 --
+
+The Start iB
+calling out the time remaining to you, but the sweep sec-
+ond hand gives a much better feeling of time. It’s usually
+best to have two stopwatches going in case one gets
+stopped by accident. The person taking the time should
+start the watch at the signal rather than the gun. Often
+when the starting line is long, the signal cannot be seen at
+the moment it goes up, and the smoke from the gun must
+be used. The noise from the gun will take too long to reach
+you to be reliable for timing. If you miss the timing, be
+sure to get it when the shape comes down.
+Keep track of the color of the shapes and the order of the
+start of the various classes. Otherwise you could miss your
+start. Dick Deaver of North Sails once used a competitor’s
+confusion over the starting sequence to his advantage. He
+was in a match race series, pairs of boats racing against
+each other, starting at ten-minute intervals. Dick was
+paired against Australian Jim Hardy of 12-Meter fame.
+For some reason, Jim thought the starting interval was
+five minutes, and maneuvered himself into a very fine
+position relative to Dick just before the five-minute gun.
+Realizing that Jim was planning to start five minutes
+early, Dick played along. He started along with Jim, but in
+a very poor position. Dick then initiated a tacking duel to
+make Jim really think that the race was on. By tacking
+well, Jim was lengthening his lead on every tack. Eventu-
+ally, at the 24% minute mark, with Jim Hardy well ahead,
+Dick broke off the tacking duel, turned back to the line,
+and started all alone at the correct signal. By the time Jim
+figured it out and sailed back to start correctly, he was a
+long way behind.
+Dick emphasizes that Jim took it as a good sport, and this
+incident shows that even the finest sailors in the world can
+make mistakes.
+Knowing the time remaining does not necessarily get
+you to the line on time. In almost all sizes of tactical boats,
+I find skippers sail too far away from the line to judge
+accurately the time needed to get back. On Sleuth I use a
+three-minute pattern. In other words, I’m near the line
+with about three minutes to go for the start. After sailing
+away from the line for roughly half the time remaining,
+
+-- 19 of 136 --
+
+12 The Yachtsman’s Guide to Racing Tactics
+Ill still have over a minute on final approach. This is
+enough time for even a fifty-four-footer to pick up speed.
+Most other boats are using a longer pattern, four to six
+minutes. They are coming back on starboard to start while
+I’m still going away. If it looks to me that the first batch of
+boats is very early, I just let them go by, and find a hole to
+leeward and ahead of the group that appears to have
+timed it correctly. If we all appear to be early as we ap-
+proach the line, I have the option to luff them up to slow
+the boat down. If, however, we’re all late, I have room to
+fall off to drive the boat faster.
+With a closehauled start, it’s important to know just
+what heading you can make on each tack. Let’s say you
+want to start on starboard tack at point A, as in Figure 1.
+You have determined previously that you can sail 330°
+closehauled on starboard. As you sail away from the line,
+you take rough compass headings on the committee boat.
+If you find that the bearing has changed from 020° to 350°
+Figure 1
+
+-- 20 of 136 --
+
+The Start 13
+too quickly, it means you will pass the 330° course well
+before you need to jibe or to tack back for the line. This
+will possibly place you in a dangerous barging position
+(for an explanation of barging, see page 25). Fall off to run
+more parallel to the 330° course, to converge with it more
+slowly. You are now sailing farther away from the line, so
+you will have to turn back earlier than before to cover the
+greater distance involved. In addition, you will have to
+adjust your course for other boats to avoid having them
+either directly to windward of you when you return or on
+your leeward quarter, where they can force you over the
+line early. All these course adjustments mean changes in
+your timing. For me, it is easier to judge the time it will
+take to cover a short distance than a long one, which is an
+additional reason for a three-minute pattern. In smaller
+boats, which accelerate more rapidly, the pattern may be
+even shorter. (In dinghies and catamarans, there is hardly
+a discernible time pattern. You just choose your spot on the
+starting line, sit there with sails luffiing until seconds be-
+fore the gun sounds, trim in and go.)
+The pattern, correctly undertaken, will get you near the
+line at the gun. The next problem is to know how close to
+the line you are. There is often a large sag in a string of
+boats starting, for skippers often judge the location of the
+starting line by their relation to other boats. Consider the
+skipper of boat A in Figure 2 (on page 14). He looks toward
+the race committee boat, and thinks that two competitors
+are right on the line to windward of him. A glance toward
+the buoy makes him feel that the nearest boat to leeward
+may be over the line early and is reaching off. The other
+boats appear to be right on the line. The truth is that all
+the boats are well behind the starting line. The skipper of
+boat A is the victim of a mistaken sense of perspective,
+since he cannot look at both ends of the line at the same
+time.
+The solution is to find a way to look in only one direction
+to know how close you are to the line. This is done by
+taking a range. The most common way is to line up the
+starting line with a point on shore. Whenever I crew, I urge
+
+-- 21 of 136 --
+
+Figure 2
+the skipper to get a range before the start. While sailing a
+Soling series in Annapolis with an internationally known
+skipper, I was having trouble getting the point across. He
+said, “Okay, Steve, we’re on the line now, and the buoy is
+lined up with that outer span on the Chesapeake Bay
+Bridge.” My response was that even with the skipper’s
+long and varied experience, he was only guessing that we
+were on the line when he said so. We sailed around behind
+the committee boat, and reaching toward it, we lined up
+the starting line flag with the buoy. The true range was the
+buoy in line with the inner span (see Figure 3). My skipper
+was flabbergasted that he was so far off in his judgment.
+The bridge was an ideal range, but you can use anything
+along the shore, such as a roof or a tree. You must remem-
+ber as you approach the line that your range was taken
+from the cockpit. Allow for the fact that your bow will
+reach the line before you are on the range.
+The timing and distance from the line can be guessed by
+how quickly the bearing changes along the shore. The
+farther you are from the buoy, the slower the bearing
+changes, as shown in Figure 4. If the bearing is changing
+fast, be careful not to poke your bow over the line. If it’s
+changing slowly, you can get quite close to the cockpit
+range you took and still be safe.
+
+-- 22 of 136 --
+
+Figure 3
+
+-- 23 of 136 --
+
+A,
+16 The Yachtsman’s Guide to Racing Tactics
+Always remember that the race committee may move
+the buoy between starts of various classes, or may change
+the position of the committee boat. Since it’s difficult to get
+a range in the last five minutes before the start, watch to
+see if the line is being changed. An outboard motorboat
+puttering around near the buoy, a person in the bow of the
+committee boat near its anchorline, general recalls in pre-
+vious starts, or a bunching of the fleet at one end of the line
+in earlier starts are all indicative that the line may be
+adjusted, negating the range you took.
+Often the race committee places a stake boat at the far
+end of a long starting line to aid in calling the boats that
+are over early and are blocked from the view of the com-
+mittee boat (see Figure 5). If done properly, the stake boat
+will anchor right on the extension of the line, and one
+crew member will sight the line through a vertical pole or
+mast as in Figure 6. You can use the buoy and the vertical
+pole as a range. The delightful aspect of this range is that
+it is already made for you.
+At the committee boat end there also is a ready-made
+range. One person sights the line from behind the vertical
+mast or pole that constitutes the committee-boat end of the
+line. If you are near that end, it’s very easy to tell if you are
+wind
+stake boat
+Figure 5
+
+-- 24 of 136 --
+
+Figure 6
+on his line of sight. At the start of the 1979 Transatlantic
+Race from Marblehead to Ireland, I reached up on star-
+board tack to leeward of the fleet. Alliance, to windward,
+could have possibly blanketed us, but she was killing
+speed because the helmsman thought he was early. I could
+see that the man “calling” the line was sighting far ahead
+of our bow, and I pushed on ahead. This allowed me to hit
+the line right at the gun, get the best start in the class, work
+out in front of Alliance, and give the crew a good boost for
+the start of a long race.
+I feel a good start is very important psychologically. It
+does the crew a world of good to feel they have won the
+start. They will work twice as hard to maintain their ad-
+vantage. It’s “cotton mouth” time for me, as we are ma-
+neuvering with other large yachts in close quarters. The
+damage that could be done in a collision between boats
+from fifty to eighty feet long is fearsome. Their power and
+
+-- 25 of 136 --
+
+18 The Yachtsman’s Guide to Racing Tactics
+momentum is tremendous. At the start in the next to last
+race of the 1979 Antigua Race Week, I was sure Sleuth’s
+number was up. The buoy end was favored. As we ap-
+proached the line, the seventy-nine-foot Kialoa, along
+with two other “maxis,” Mistress Quickly and Condor of
+Bermuda, was overtaking us at twice our speed. Kialoa
+came within two feet of hitting our starboard quarter. As
+she headed up to avoid us, she collided with Mistress
+Quickly, and went over the line early. Sleuth was being
+held up by a boat to leeward, and there was no place we
+could have gone to avoid the mess. Because so many boats
+were over the line early, there was a general recall signal,
+and we had to go through the whole procedure again in the
+20-25 knots of wind prevailing at that time. My first reac-
+tion was to thank God we hadn’t been hit or had someone
+hurt. My initial plan for the restart was to be cautious and
+conservative. It then occurred to me that every other skip-
+per must be feeling the same way, and I resolved to “go for
+it” on the restart. The buoy end was still the place to be,
+and we were there right at the gun. As I suspected, we were
+all alone and had the best start.
+If you’re on a Starting line where there is no land or stake
+boat for a range and you're starting near the middle of the
+line, there’s still a way to help you judge the distance from
+it. Before the start get the compass bearing of the line. Sail
+out beyond the line. Then sail toward the buoy, lining it up
+with the flag on the committee boat. On port tack, as in
+Figure 7, the bearing is 100°. It follows that the bearing on
+starboard is 280°. There are times when we are reaching
+along the line on starboard tack to avoid going over early.
+If we sail a course of 280° and the buoy is off our starboard
+bow (as in Figure 8, position A), we’re still short of the line,
+and can afford to get closer. If the buoy’s to port (as in
+Figure 8, position B), we’re already over, and had better get
+down to the proper side before the gun goes.
+The best starting skippers are those who have complete
+control over their boats. They know its turning radius so
+that they can swing around the stern of another boat. They
+
+-- 26 of 136 --
+
+wind
+280°
+=
+	a	=>	=
+	ee	t—
+wind
+B
+Figure 7
+Figure 8
+know how fast they can stop the boat by backing the main-
+sail, and how much lee helm this will give them. They
+know how fast they can accelerate to avoid a windward
+boat from driving over them. I once watched Arthur
+Knapp at the start of a “frostbite” race in dinghies. He
+
+-- 27 of 136 --
+
+20: The Yachtsman’s Guide to Racing Tactics
+placed his boat right at the committee-boat end of the line
+in about 12-15 knots of wind. By trimming, luffing, moving
+his weight, raising and lowering his centerboard, and ju-
+dicious helmsmanship, Arthur was able to keep his
+dinghy within three feet of the same location. Boat after
+boat tried to hang in there with him, but drifted off to
+leeward. At the gun he took off with the best start.
+There still comes a time when no matter how good your
+timing or ability to maneuver your sailboat is, you get
+caught in a bind, and can’t avoid going across the line
+early. For example, you may want to luff up to kill your
+speed, but the committee boat or a number of individual
+boats are in the way and thwart your intentions. You may
+then decide to run down along the line, but some leeward
+boats are there holding you up. There is no way to avoid
+being early. This generally happens when the starboard
+end is well favored, and boats are approaching almost at
+right angles to the line. Instead of the port-end buoy’s
+being well forward of abeam and only,a small dip needed
+to keep from going over early, the buoy is actually almost
+abeam, and a major alteration of course is necessary.
+Aboard Sleuth in the 1980 Antigua Race Week race,
+these same circumstances prevailed. We were early, with
+Sunbird holding us up and nowhere to go. We could have
+dipped a little or killed our speed a bit, but I knew that it
+wouldn’t be sufficient to avoid being early since the buoy
+end was so far back. So I plowed ahead, knowing we were
+over early, but determined to round the committee boat as
+fast as possible. We were closest to the committee boat
+with Aries and Sunbird to leeward, all three of us going
+for the line. They too were over early, and, possibly be-
+cause they felt we were blocking the committee boat’s line
+of vision, neither returned to start and both were dis-
+qualified (Figure 9). Since our rerounding took only 35
+seconds, it was not much more of a disadvantage than a
+very poorly timed start. The key is to bite the bullet and
+reround fast. If you kill your speed, even though you know
+the start can’t be saved, two things can happen. First, those
+who have timed it properly can drive over you to wind-
+te
+
+-- 28 of 136 --
+
+Aries
+Sunbird
+Figure 9
+ward
+	and keep
+you
+	from
+	tacking
+	for
+a
+while, and, second,
+you
+will
+have
+so
+little
+forward
+	speed
+that the tack
+and
+jibe
+needed
+	for
+rerounding
+	will
+be
+terribly slow.
+Once having
+gone
+over
+the
+line early,
+too
+many
+	skippers
+sail on,
+trying
+to
+decide
+how
+	to
+get
+back
+to start.
+They may
+have
+	boats both
+	to
+windward
+	and leeward
+	of
+them, and
+can neither
+	tack nor
+jibe.
+The
+	solution
+	is to
+slow
+	the boat
+energetically by
+luffing
+	(both
+	heading
+	into
+	the
+wind
+	and
+luffing
+your
+sails).
+This
+will
+allow other boats
+to
+sail
+by and
+make
+	room
+	to
+leeward.
+	You have
+all
+your
+legal rights
+until
+you
+	are
+	actually
+	returning
+	to start.
+	Every
+	boat length you
+sail
+away
+	from
+	the line
+	is
+another
+	boat length you
+	must
+sail
+back. After
+turning back,
+head
+straight across the line
+at
+right
+angles
+to
+it.
+Remember
+	that
+you
+	must “keep
+clear
+of
+all
+yachts
+which
+	are starting
+or
+have
+	started correctly,”
+until
+you
+	are
+wholly
+	on the pre-start side of the line or
+its
+extensions.
+	If
+you have
+	the choice,
+it is
+better
+to
+bear
+off to
+a
+run
+when
+	the port
+end
+is
+favored because you don’t
+have
+to
+change
+	tacks (see
+	Figure
+	10 on
+	page
+	22).
+You
+	will be
+heading toward
+	the
+upwind
+	end, and you can just dip the
+
+-- 29 of 136 --
+
+Figure 10
+line to start on starboard tack. When the starboard end is
+upwind, the reverse is true (see Figure 11). Tack, if possi-
+ble. You’re going to have to go back to the line on port tack
+anyway, and a tack takes you much closer to the favored
+end.
+There are a few other factors that can change your tim-
+ing and mess up a perfect start. One is current; the other
+is a change in wind strength. A combination of the two can
+transform a small mistake into a disaster. When the
+breeze is very light, the percentage of wind-strength
+change can be great. A 2-knot breeze is doubled with a
+4-knot puff, a 100 percent velocity change. A 15-knot wind
+only increases 33.3 percent in a twenty-knot puff. Since
+wind force on the sails quadruples as the wind velocity
+doubles, you can see how important the puffs and lulls can
+
+-- 30 of 136 --
+
+/ / wind
+Figure 11
+be at the lower speed ranges. The problem in timing the
+line often comes from a light wind that is dying. A boat
+that strays too far away from the starting line in a light
+breeze may end up in a hole, and take an hour to get back.
+I’ve seen it happen. While all the other starters hugged the
+line, one boat sailed to a point three minutes away from
+the starting line in a light breeze. As luck would have it,
+the breeze died where she was, but held near the line. By
+the time she finally started, the fleet was rounding the
+weather mark a mile away. The absolute rule for light air
+is STAY NEAR THE LINE!
+Since your competitors’ sails disturb and block the wind
+more in light air than in heavy, you should avoid getting
+into a large pack if possible. In some cases this is done by
+initiating a “dip start.” Sail around to windward of the
+line, particularly if there’s a current carrying you down-
+wind. Just before the start, dip across to the correct side of
+the line, harden up and start.
+There are a few caveats to a dip start. The person spot-
+ting the line for the race committee will see you on the
+wrong side of the line before the start, may not have seen
+
+-- 31 of 136 --
+
+24 The Yachtsman’s Guide to Racing Tactics
+you completely clear the line if his attention is momentar-
+ily directed elsewhere, and may call you over early when
+he sees you in a good position right after the gun. More-
+over, if you are reaching or running down on starboard
+tack, all the boats to leeward of you have right of way
+because, as windward boat, you must keep clear. Unless
+you can find a hole, all the boats already on the line can
+hold you up on the wrong side of it. For that reason, an
+approach on port tack is often better than starboard. In
+Figure 12, boat A on starboard tack is unable to find a hole,
+and ends up running parallel to the line with boats hold-
+ing her to the wrong side. Boat B on port tack sails against
+the flow of starboard tack boats, and is able to select a hole
+to jibe or tack into.
+With current setting you downwind, this type of start
+makes even more sense. If you sail around upcurrent of
+the line and the wind dies, you will drift across to the
+wind
+f
+	a
+tiFigure 12
+
+-- 32 of 136 --
+
+The Start 25
+proper side, and still be upwind of your competitors who
+have drifted even farther downwind of the line. You are in
+the same relationship to the other boats as before, but it’s
+as if the line moved upcurrent as the fleet was pushed
+downcurrent (see Figure 13).
+Ae
+Figure 13
+If you want to start at the starboard end of the line with
+current carrying you downwind, a “barging start” can be
+relatively safe. By “barging” we mean placing yourself in
+a position where a leeward boat can luff you into a starting
+mark. In this example (see Figure 14 on page 26), let’s stick
+to the starboard end with the committee boat there, since
+with windward starts and marks left to port, that’s the way
+the line is usually set up. The “anti-barging rule” states:
+“When approaching the starting line to start, a leeward
+yacht shall be under no obligation to give any windward
+yacht room to pass to leeward of a starting mark sur-
+rounded by navigable water... .” In Figure 14, boat A is on
+a closehauled course to the committee boat end of the line.
+Though it is commonly accepted that boat C is barging
+
+-- 33 of 136 --
+
+wind
+Figure 14
+B
+because she is reaching in from an area above the close-
+hauled course (indicated by the dotted line), boat A is also
+barging because boat B, with luffing rights, can deprive
+her of room at the committee boat until the starting signal
+is made (at which time boat B must not sail above close-
+hauled, or above the first mark to deprive boat A of room).
+Figure 15 shows what the result might be a few seconds
+later, before the gun.
+With current set (see Figure 16), however, it’s far more
+likely that boat C will find room. Whereas boats A and B,
+being closehauled, can’t point any higher to adjust for the
+contrary current, boat C is far more flexible, and can head
+up from her reach right to the end of the line, leaving boat
+A with no chance to squeeze C out.
+When current is running in the opposite direction (see
+Figure 17 on page 28), carrying the fleet toward the starting
+line, the reverse is true. There can be an awful mess of
+boats near the line, all being pushed over early by the
+current and by leeward boats reaching down the line in an
+attempt to avoid going over early. In:this case the most
+leeward boat can get, if not the best, at least the safest start.
+There are various methods to determine the velocity and
+
+-- 34 of 136 --
+
+wind
+/
+Figure 15 B A
+current Se
+track
+without
+track current
+with
+current
+ai ~ ~ eas _~
+Figure 16
+direction of the current. Observe the committee boat or
+other anchored yachts to see if they are heading straight
+into the wind. If not, there is some current running. This
+observation is fine in light winds, but will not be discern-
+ible when the wind is heavy. A better alternative is to sail
+
+-- 35 of 136 --
+
+wind
+Figure 17 AR current
+near the buoy end of the line, and to observe the water
+flowing past the mark. The mark will appear as if it were
+being dragged upcurrent, and it will create a wake behind
+it when the current is strong. Look for impurities in the
+water such as bits of paper, twigs, or even bubbles flowing
+past. To be more scientific, drop a “current stick” into the
+water next to the buoy. A “current stick” isa piece of wood,
+or aluminum tube, weighted to float vertically. It is prefer-
+able that it be equal in length to the draft of the boat. If so,
+it will be affected by the same current affecting the boat.
+The weight should be heavy enough to allow only a very
+small portion of the stick to be above the surface of the
+water. Thus the wind will not affect its travel to a large
+extent. After dropping the stick, sail around for about a
+minute, and then pick it up, noting how far and in which
+direction it drifted from the buoy. Knowing that a nautical
+
+-- 36 of 136 --
+
+The Start 29
+mile is roughly 6,000 feet and a “knot” is the speed neces-
+sary to cover one nautical mile in one hour, we know that
+a knot of current will carry the stick 100 feet in a minute.
+If you are sailing a thirty-foot boat and judge that you’re
+about three boat lengths (ninety feet) from the mark when
+you pick up the current stick a minute later, you know that
+the current is almost one knot. Moreover, you know the
+rough distance you will have to allow for, to be on the line
+at the starting signal if the current is carrying you away
+from the line.
+Up to now we’ve discussed windward starts. Timing lee-
+ward (running or reaching) starts so that you hit the line
+at the gun is slightly different and, in a way, more difficult.
+The difficulty rests in that it can often be hard to slow
+down if you’re early, yet it’s deadly to be late. Upwind you
+can recover faster from a bad start by tacking for clear air
+and playing wind shifts better than your competitors.
+Reaching or running it can take “forever” to get past other
+boats, even if they’re smaller, when they have had a better
+start than you.
+When the wind is in the direction shown in Figure 18,
+my general tactic is to choose a point on the line where I’d
+like to be at the gun. I then time it to be at that point on
+a beam reach at roughly two minutes to go, providing
+there’s a good breeze. Since it’s a reach, we pick up speed
+very quickly after the turn to return to the line, so a shorter
+time sequence can be used. With light winds I would use
+a longer time sequence, because it takes longer to pick up
+speed. I would also sail more downwind, more parallel to
+the line, so as not to diverge from it very far and to make
+our approach when returning a tighter reach for greater
+speed. After reaching away from the line something less
+than a minute, we jibe or tack and head back for an equal
+amount of time.
+The Vanderbilt timing system shown in Figure 18 on
+page 30 could well be used in this instance. We cross the
+line at two minutes (120 seconds) going away. We add the
+time it takes to jibe or tack, say 20 seconds, and divide by
+two (120+20=140~2=70). At the moment our watch says
+there is a minute and ten seconds (70 seconds) left before
+
+-- 37 of 136 --
+
+2 minutes
+to go
+to go
+50 seconds to go
+Figure 18 wind
+the start, we begin our tack or jibe. When we complete it,
+the time remaining on the watch (50 seconds) is the same
+as the time elapsed to the start of the jibe or tack. This is
+probably made clearer by looking at Figure 18, which
+shows the time remaining at various stages.
+As we approach the line, we might find ourselves early.
+By coming up toward the committee boat, as in position B,
+Figure 18, we have to travel a longer distance to the line,
+which helps eat up the time remaining. If the time is badly
+misjudged, we can luff up higher, as in position C, and can
+also slow the boat down by letting the sails luff, which we
+can’t do when running. As long as we have an overlap on
+a boat to windward, we can luff up along the line, and they
+must respond. They cannot curtail the luff even if their
+helmsman is forward of our mast, unless we luffed above
+a closehauled course, which is not very likely under the
+circumstances. The windward boat can only curtail my
+luff if an obstruction, a third yacht or other object, restricts
+its ability to respond. Because of the anti-barging rule, the
+committee boat doesn’t qualify as an obstruction or “other
+object” in this example.
+This brings us to the danger involved with our approach
+1 minute
+10 second
+\
+
+-- 38 of 136 --
+
+The Start 31
+if early. If we have chosen a point on the line too close to
+the committee boat, and we have a number of boats to
+leeward of us who are also early, we could run out of line
+before the gun. We can’t bear off across the line, because
+we will foul the leeward boats. Possibly we can luff up
+behind the stern of the committee boat, but there’s bound
+to be some “spoiler,” such as boat A in Figure 19, who is
+trying to mess up the port tack starters by approaching on
+starboard. Boat B is in big trouble, and I’1l leave the reader
+to figure out how she gets out of it unscathed. The only
+answer I have is: Don’t get yourself into that position in the
+first place.
+When the wind is far enough aft, so that the starboard
+tack can be easily carried to the line (see Figure 20 on page
+32), yet the port tack is the desired course after the start,
+a good approach is that of boat A. As the starboard tack
+vessel, boat A has right of way. She converges with the
+other boats, and, if necessary, she can head up to avoid
+being over early. Just before the starting signal, she can
+jibe to port, placing herself advantageously to windward
+of all the others.
+«fhFigure 19
+	wind
+
+-- 39 of 136 --
+
+sk =
+Figure 20 wind
+CHOOSING A STARTING LOCATION
+We have covered the first ingredient of getting a good start,
+being on the line at the instant of the.starting signal. The
+second is to be at the best location on the line.
+With a few exceptions, it pays to be at the favored end
+of the line. By “favored” I mean the upwind end of the line .
+for windward starts. Most sailboats start a race on star-
+board tack, which gives them right of way over any boat
+on port tack. When the line is absolutely square to the wind
+direction, as in line A, Figure 21, a windward boat with
+slightly better timing than a leeward boat should have no
+trouble driving over the top (passing to windward) of the
+leeward boat. This gives a slight advantage to the wind-
+ward boat, and means more boats will bunch up at the
+starboard end of the line to secure a windward location. By
+moving the buoy up to position B in Figure 21, the leeward
+boats are less overlapped by the windward boats and
+thereby less disadvantaged. A slight cock of the port end
+of the line to windward will tend to spread the boats more
+evenly along the full length of the line, and will limit
+congestion in any one area.
+However, if the port end is well upwind as in Figure 22,
+any boat starting at the buoy will have a great advantage
+
+-- 40 of 136 --
+
+BE
+aLnbry
+(wate
+ 
+ore
+es
+eee
+ae
+EE 
+EB
+PE
+TSS
+ay
+See
+aX
+*g
+120g
+ 
+UO
+pea
+UyHue}-xIs
+e
+sey
+Apeaie
+Vy
+eo
+‘auenbs
+$0
+HO
+.O€
+SI
+PUIM
+Ou}
+‘Buo|
+sujbue]
+ 
+yeog
+ 
+¢|
+Ss!
+aul)
+Bueys
+oyL
+Pulm
+TG
+atnbyy
+
+-- 41 of 136 --
+
+34 The Yachtsman’s Guide to Racing Tactics
+over one starting at the committee boat. Assuming two
+boats can sail within 45° of the wind at the starting signal
+and each starts sailing upwind on opposite tacks toward
+the other, Figure 22 shows how far ahead the port tack
+boat will cross the starboard tack boat. The line is only
+thirteen boat lengths long, the wind is 30° off of square, and
+boat A already has a six-length lead over boat B. In this
+case the buoy end is “heavily favored.”
+What happens if the windward mark is way to the right,
+and there is a shorter straight-line distance to the mark
+from the starboard end of the line than from the port, the
+upwind, end? In Figure 23, an arc described from the
+windward mark through the committee boat clearly
+Figure 23 B
+&
+
+-- 42 of 136 --
+
+The Start 35
+shows that the buoy end is farther away from the wind-
+ward mark. But the wind still favors the buoy end so much
+that when boats A and B have both covered six units of
+distance, boat A has retained a commanding lead. A few
+assumptions are made here: that there is no difference in
+the speed of the boats, that there are no wind shifts and
+that there is at least one tack involved in the weather leg.
+If it were just a reach from the starting line to the weather
+mark, then the shortest geometric distance would proba-
+bly be the fastest route to take.
+Given that we want to be at the favored end, how do we
+tell which end of the starting line is favored? My prefer-
+ence is to determine the compass bearing of the line as we
+did in Figure 7 by lining up the buoy with the starting line
+flag on the committee boat. Let’s say we get 135° for the
+line. If the line is absolutely perpendicular to the wind, as
+in Figure 24, by subtracting 90° we get a wind heading of
+45°. If, however, when we point the boat into the wind, the
+i, 2
+wind
+iS
+Figure 24
+
+-- 43 of 136 --
+
+wind
+36 The Yachtsman’s Guide to Racing Tactics
+compass reads 035°, the port end is 10° favored. If it reads
+060°, the starboard end is 15° favored.
+When you shoot into the wind to check its direction,
+make sure the boat comes to a complete stop. In light air
+the boat’s momentum will carry a long way, and the wind
+will appear to be dead ahead while the boat is moving
+forward. Only when this forward movement has ceased
+can you accurately determine the true wind direction. The
+sails, particularly the jib (if it doesn’t overlap the mast)
+will luff right over the centerline of the boat when the
+wind is dead ahead.
+The advantage of the compass system is that you can
+check the wind direction a distance from the line in undis-
+turbed air, away from other classes that are starting, and
+still know which end of the line to play when it’s your turn
+to start.
+This also has advantages over another system com-
+monly used: checking the wind when right on the line and
+noting toward which end your bow points. Since the bow
+of the luffing sailboat A in Figure 25 is pointing more
+toward the buoy than the committee boat, the buoy end is
+upwind and favored. Boat B does the same thing from an
+extension of the line and sights abeam. If the committee
+boat is forward of abeam, the starboard end is favored; aft
+Figure 25
+&
+
+-- 44 of 136 --
+
+The Start oy
+of abeam the port end is upwind. The advantage B has
+over A’s system is that B knows when he is right on the
+line, and has to sight only in one direction. Boat A has to
+guess when she’s on the line, and has to sight in both
+directions. If the wind’s angle from square is very slight,
+B is more apt to pick it up accurately.
+If you shoot the wind and find one end of the line very
+much favored, consider the possibility that the race com-
+mittee might be doing it on purpose. For example, there
+may be a known geographical wind shift near some land
+on the right side of the course, as depicted in Figure 26.
+Most sharp competitors know that if they tack immedi-
+ately after the start, they will be gradually headed on port
+tack as they approach the shore. After tacking they will get
+a starboard tack lift along the beach. Since the race com-
+mittee doesn’t want a whole pile of hot competitors sailing
+at their transom at the start, they place the buoy end way
+upwind in order to coax a large portion of the fleet to start
+at that end. It is very tempting, because, at least initially,
+a boat at the buoy end has a decided advantage over one
+at the other end. However, as the boats sail into the new
+wind, that advantage is lost, and the boat that gets into the
+new wind first gains the most distance. Note that boat A on
+starboard tack in Figure 26 on page 38 crosses boat B near
+the shore. She never would have crossed boat B if she had
+taken starboard tack from the starting line.
+If it looks as if there will be a large bunch of boats start-
+ing at the starboard end, and it’s necessary to get on port
+tack to reach the wind shift, only the one or two boats
+nearest that end will get a good start. The others will have
+to sail on starboard away from the shift until the wind-
+ward boats tack. This being the case, a boat that ap-
+proaches the line late, but right behind the boat nearest
+the mark, will get the second or third best start in the fleet.
+She will be clear to tack as soon as she passes the commit-
+tee boat, assuming it’s at the starboard end of the line.
+Another time you might
+	not select the
+“favored” end
+	of
+the line
+is
+when
+	the
+wind
+	is
+shifting back and
+	forth. Let’s
+say the
+buoy end
+	is
+currently upwind,
+	but,
+by testing the
+wind before the start,
+you have noticed that the wind
+	is as
+
+-- 45 of 136 --
+
+Figure 26
+far to the left as it’s ever been, and is due to shift back now.
+In other words, the boat with the perfect start at the buoy
+is sailing in a header rather than a lift, and, worse yet, is
+pinned on that tack by other starboard tack boats.
+In Figure 27, boat A approaches the line on port tack,
+picks a hole between a number of boats, scoots through,
+and starts on port, sailing in a lift in clear air. As soon as
+the heading shift comes back, she tacks to starboard, and
+has the rest of the fleet beaten. Boat B, with the best start
+
+-- 46 of 136 --
+
+S Na A
+Pa	
+x NN	
+ot x SN
+SS ~ N me
+\ » N	\	N sf S
+iN N
+N SS N
+Ss NS . XN
+\ SN
+x ( :
+x
+R \ \ B,
+original wind
+Figure 27 new wind
+in the fleet, is on the outside of a lift, and every boat to
+windward has her tucked away.
+There are some excellent sailors, like Peter Barrett,
+Olympic gold medalist, who use port tack approaches on
+almost every start. Whereas the starboard tack boat has to
+hold her course, except to assume a proper course to start,
+the port tack boat has greater flexibility. She just has to
+avoid the starboard tack boats, and can choose an opening
+to tack onto starboard for her own approach. A pure port
+tack start is rare, but a port tack approach is fairly com-
+mon and reasonable. The former works best when the port
+end of the line is so favored that boats can barely cross it
+on starboard tack. Line A in Figure 28 on page 40 is such
+a situation. The port tack boat will have little trouble
+
+-- 47 of 136 --
+
+wind
+Figure 28
+crossing the starboard tackers, because they are almost in
+a straight line bow to stern. The port tack boat in line B
+where the wind is almost square will have major problems
+crossing, and will probably have to tack.
+Weigh a port tack start very carefully. Instant disqualifi-
+cation isn’t a very good way to start a race. Moreover, the
+port tack may be taking you away from a more desirable
+area. In one recent race, I considered a port tack start
+because the port end was well upwind. However, there
+was a nearby shore with shallower water, less current, and
+usually a port tack lift. Since we had to get to that shore
+on starboard anyway, I decided to save a tack and to start
+on starboard (see Figure 29). Also, the committee boat was
+at that end, which makes a port tack start there more
+dangerous. If you are forced to tack by a starboard tack
+yacht, you can’t avoid hitting the committee boat. Aries,
+with Lowell North steering, made a perfect port tack start,
+and barely squeaked across Sleuth on starboard. We car-
+ried into the shore, got slightly headed, and tacked. When
+
+-- 48 of 136 --
+
+Figure 29
+we converged with Aries again we crossed her handily,
+having taken a short-term disadvantage for a later gain.
+Buddy Melges, Olympic medalist, Star and Soling world
+champion (among other championships), says, “Put your
+head one hundred yards in front of your boat.” In effect,
+that’s what we were doing.
+In Antigua Race Week, Sleuth and Aries seemed to have
+somewhat comparable speed upwind. At the start of an-
+other race, I elected not to try for the ideal position right
+at the committee boat, because the starting line was closer
+to shore than in the preceding example (see Figure 30 on
+page 42). I estimated that we would have to tack so early
+after the start to avoid going aground that we wouldn’t be
+able to clear starboard tack boats, and we might be forced
+back in toward shore. So we played the start a little farther
+down the line. As we approached the shore, Aries called
+
+-- 49 of 136 --
+
+\ XN Fandango
+Figure 30 Sleuth
+for water. She had to tack to avoid going aground, and
+couldn’t without fouling us. We tacked at her request as
+required by the racing rules, and she tacked immediately
+(also as called for by the rules). This put her right in
+Sleuth’s backwind. As we both came out on port tack,
+Aries, slowed by our dirty air, failed to cross Fandango on
+starboard (just the position I was worried about getting
+into at the start), and was disqualified. This is another
+example in which possible future situations weigh in your
+decision where to start on the starting line.
+Sometimes it’s important not only to decide where on the
+line you will start, but also where you will practice. Arthur
+Knapp found that novice racing sailors were always
+
+-- 50 of 136 --
+
+The Start 43
+watching him and starting where he started. This was
+getting tiresome, so he’d make practice starts at the wrong
+end of the line and draw all the neophytes to that area. At
+the last moment he’d hightail it to the preferred end, and
+start with less congestion. Naturally, he had timed how
+long it would take to sail from one end of the line to the
+other. This is good information to have in case you need to
+change ends.
+Another reason it’s beneficial to know the length of the
+line is to help in your judgment of distances. The two ends
+of the line are the only fixed points around the starting
+area that can give a time-distance reference. Suppose it
+takes three minutes to sail from the buoy to the committee
+boat. If you’re one-third of a line length away from the line
+as you approach to start, you are approximately one min-
+ute away. You just have to make allowances for boat speed,
+which could have been faster reaching along the line than
+on the final approach.
+STARTING WITH CLEAR AIR
+The
+	third
+ingredient
+	of
+a
+good
+start,
+to
+have
+	clear
+air,
+has
+been covered
+	in
+part
+by
+some
+	of the
+previous
+	examples.
+	It
+is
+a
+vital factor.
+Figure
+31 on
+page
+44
+shows
+	the
+disruptive
+air
+patterns
+	from
+	one boat
+and
+how
+	they
+affect
+other boats
+in
+nearby
+positions.
+Boat
+A
+is
+said
+to
+have
+a
+“safe
+leeward”
+position
+on
+boat
+B.
+The wind
+	is
+bent
+aft
+by
+A’s
+sails
+so
+that
+the
+wind
+direction
+to
+windward
+	of
+A
+is
+slightly
+more
+	paral-
+lel to
+her
+	course.
+	Thus
+B
+	is
+sailing
+	in
+	a
+header, and
+	is
+unable
+to
+bear
+away
+	to
+fill
+her
+sails
+because
+	of the
+proxim-
+ity
+of
+A.
+It’s
+highly unlikely
+	that
+B
+will
+be able
+to
+pass A,
+even
+	if
+she
+	is
+a
+larger yacht.
+The wind
+	leaves the
+mainsail
+	of boat
+	A
+in
+a
+turbulent
+form
+	called
+	“backwind.”
+	Boats
+	C and D
+	are in A’s
+back-
+wind
+zone.
+Since the efficiency of
+a
+sailboat’s
+sails
+depends
+in
+large part
+upon
+	the
+smoothness
+	of the
+air
+flowing past
+them,
+	this
+	turbulence causes the
+	sails
+	to
+lose their
+	lift.
+Boats C and D
+will
+	gradually drop back.
+The worst position
+to
+be in
+is
+boat
+E’s.
+This
+is
+aptly called
+the “blanket” zone. A’s sails are
+	blocking the
+wind from
+
+-- 51 of 136 --
+
+A had safe leeward on B;
+: C and D are being backwinded by A and B;
+Figure 31 E is being blanketed by A.
+getting to E in any usable form. What wind there is will be
+turbulent, and boat E is in an untenable position.
+Just after the start only the boats that are not affected by
+others will move out. It’s obvious from Figure 31 that for
+every boat with clear air there are quite a number of oth-
+ers being hurt. The tactic required is usually either to tack
+away, as boat C should do, or foot away to leeward, as boat
+E might consider doing. A boat in D’s position must do
+something drastic such as luffing her sails and dropping
+back fast to tack. It’s slow death to just “hang in there.”
+
+-- 52 of 136 --
+
+3. Starting Rules
+Let’s touch on some of the rules that are in common use
+before the start. We will paraphrase and leave portions out
+that aren’t of immediate interest to the discussion, so refer
+to your rulebook for the full text of the rule. You can get
+acopy of The Yacht Racing Rules by writing to the United
+States Yacht Racing Union, Inc. P.O. Box 209, Newport,
+Rhode Island 02840.
+One of the more confusing rules is “luffing before start-
+ing” since it ceases to apply after a boat has started and
+cleared the starting line. A yacht “starts” when, after the
+starting signal, any part of her hull, crew, or equipment
+first crosses the starting line in the direction of the course
+to the first mark. She hasn’t “cleared” the line until every
+part of her has completely crossed the line. Only then does
+the “luffing after starting” rule apply.
+Before the start, the leeward boat cannot luff a wind-
+ward boat above a closehauled course if her mainmast is
+
+-- 53 of 136 --
+
+wind
+ae ~
+~
+a
+~
+closehauled
+course
+\~
+= Bp
+Cy a
+eae A
+ee 4
+Pegure Se. ok | ae ED Ee ae Se
+aft of the windward boat’s helmsman. In Figure 32 boat A
+is luffing along the line. Boat B overtakes her to leeward
+and initiates a luff. (To luff in this context means altering
+course toward the wind.) Boat B’s luff forces boat A to alter
+course to avoid a collision. The luff must be carried out
+slowly and in such a way as to give boat A room and oppor-
+tunity to keep clear. If boat A turns upwind to avoid B and
+her stern swings down and hits the leeward boat, she has
+some justification in claiming that she wasn’t given
+enough room and opportunity to keep clear. In this exam-
+ple boat B is unable to luff above a closehauled course
+since her mainmast is aft of boat A’s helmsman.
+In Figure 33, when boat A’s helmsman sights abeam
+from his normal station, it is obvious that he is aft of the
+leeward boat’s mainmast. Here, boat B can luff right up to
+head to wind as in the diagram, but she still must luff
+slowly and give room and opportunity for the windward
+boat to keep clear. After the starting signal, boat B can
+continue to luff boat A as long as the leeward boat is not
+depriving the windward boat of room at a starting mark
+(the anti-barging rule). In the incident depicted in Figure
+33, the anti-barging rule does not apply.
+
+-- 54 of 136 --
+
+wind
+Figure 33
+The ease with which a leeward boat can control you as
+the windward boat makes it crucial that you protect your
+lee quarter as you approach the line on starboard tack
+unless you are late for the start. If you are killing your
+speed and a boat attempts to get an overlap to leeward,
+trim in your sails, get out in front of him, and duck off to
+leeward. However, if you feel you have the start timed well
+and you expect the leeward boat to charge on through and
+run down the line without bothering you, just let him go.
+If you expect to be early and you have room to luff head to
+wind, keep in mind that no boat can luff you any farther
+if you are head to wind already. Any boat to windward has
+to keep clear because you are the leeward boat. Mast posi-
+tion is not a factor unless you are altering your course
+toward the wind. If you have already arrived at your head
+to wind position, you are no longer in the process of carry-
+ing out a luff, and windward boats (i.e., boats on your star-
+board side, since you are still on the starboard tack) have
+to keep clear.
+As mentioned before, many skippers approach the bulk
+
+-- 55 of 136 --
+
+48 The Yachtsman’s Guide to Racing Tactics
+of the fleet on port tack, find a hole to leeward of a group
+of starboard tack boats, and tack into it. As you sail toward
+the line on starboard, watch for any port tack skipper who
+has his eye on that patch of open water to leeward of you.
+Without breaking the rule on altering course, head down
+at him. This will force the port tack boat to sail even far-
+ther off the wind, closing the distance between the two
+boats faster. If he still intends to tack, he will have to do
+so earlier. Since you are reaching with good speed, you
+should be able to drive over the top of the leeward boat,
+which is going slowly after the tack. The altering course
+rule provides that the right of way boat shall not so alter
+course as to prevent the other boat from keeping clear, or
+to obstruct her while she is keeping clear. If the starboard
+tack boat changes course early enough and then holds a
+steady course, she is not in contravention of this rule. This
+alteration of course is one risk the port tack boat is taking
+and should be aware of.
+There are some rules that specifically don’t apply at
+starts. One in this category is rule 42, “Rounding or Pass-
+ing Marks or Obstructions.” A leeward boat on starboard
+tack that is squeezing to round the port-end buoy as in
+Figure 34, cannot call for buoy room to the windward boats
+if the starting mark is surrounded by navigable water. If
+she has luffing rights, she could make room for herself by
+luffing the windward boats. But in the diagram as drawn,
+the leeward boat only has an overlap (her mast is aft of the
+windward boat’s helmsman), so she can luff no higher
+than closehauled, a course she is already on. Being
+squeezed out, her only choice is to pass on the wrong side
+of the mark, make a circle and try again.
+Let’s place the leeward boat in the position shown in
+Figure 35. Here, boat A can presumably luff boat B head
+to wind since her mast is forward of B’s helmsman. How-
+ever, the helmsman of boat C is forward of A’s mast, so A
+cannot luff above a closehauled course if the luff will
+affect C. Rule 38.6 states that a boat shall not luff unless
+she has the right to luff all boats which would be affected
+by her luff.
+A rule that could affect starting yachts is rule 43,
+ne
+
+-- 56 of 136 --
+
+wind
+ph es
+Figure 34
+Figure 35
+“Close-Hauled, Hailing for Room to Tack at Obstruction.”
+An obstruction is any object large enough to require a
+yacht, when not less than one overall length away from it,
+to make a substantial alteration of course to pass on one
+
+-- 57 of 136 --
+
+Figure
+	36
+	wind
+side or the other. In Figure 36, the mark is an obstruction,
+and windward boat B is not required to tack at leeward
+boat A’s request. If A hails for room to tack, B must inform
+her that she is not entitled to it. Being in a bind, A may hail
+again, and, having received room to tack from B, must
+retire or accept an alternative penalty when so prescribed
+in the sailing instructions. If boat B refuses to respond to
+A’s initial hail and then fails to fetch the mark herself, B
+must retire or take an alternative penalty.
+By definition, the ground tackle of a mark is not consid-
+ered part of it. If the race committee boat has a long an-
+chorline out in front of it, the obstruction created by the
+anchorline is not part of the mark, and another section of
+the rule applies. Boat A in Figure 37 does have the right to
+request and to receive room to tack from boat B. She is not
+allowed to hail and to tack simultaneously. Boat B has two
+choices: she can tack at the earliest possible moment after
+the hail, in which case boat A must start her tack before
+boat B completes hers. If A cannot tack without colliding
+with boat B, A must tack as soon as she can clear her. Boat
+B’s second choice is to reply, ‘““You tack” to A’s hail if, in her
+opinion, she can keep clear without tacking or after post-
+
+-- 58 of 136 --
+
+He
+Figure 37 wind
+B
+poning her tack. In this case, boat A must immediately
+tack; boat B must keep clear. The onus of satisfying the
+race committee that she kept clear lies on boat B, which
+responded, “You tack.”
+Though we have been discussing an obstruction that is
+the anchorline of a starting mark, this same rule applies
+for all obstructions. An obstruction can be a vessel under-
+way, such as a starboard tack sailboat or any object that
+can be passed on one side such as a shoal.
+The rule about hitting a mark applies at the start also.
+A boat that touches a starting mark after she begins rac-
+ing, which is from the time of her preparatory signal, or
+causes a mark or mark vessel to shift to avoid being
+touched must retire immediately, unless she alleges that
+she was wrongfully compelled by another boat to touch it
+or cause it to shift, in which case she must protest. (If the
+other yacht accepts an alternative penalty as prescribed in
+the sailing instructions, the protest is not necessary.) She
+also has another choice. She can exonerate herself by com-
+pleting one entire rounding of the mark, leaving it on the
+required side, and thereafter re-rounding it or re-passing
+it without touching it. The boat in Figure 38 on page 52 has
+touched the buoy at the port end of the line two minutes
+before the starting signal. Since she is racing from her
+
+-- 59 of 136 --
+
+_————
+Figure 38
+preparatory signal, generally five minutes before her
+starting signal, she is liable to the provisions of the rule.
+Had she hit the mark earlier, before her preparatory sig-
+nal, she could have ignored it. The penalty rounding can-
+not commence until after the starting signal, otherwise it
+could hardly be considered a penalty. At the port end of the
+line the buoy must be circled in a counterclockwise direc-
+tion to leave the buoy on the required side, the port side,
+for the weather leg. At the committee boat end the round-
+ing has to be in a clockwise direction.
+The rule on general recalls affects one’s tactics with
+regard to where on the line to start. It reads, “... when after
+a general recall, any part of a yacht’s hull, crew or equip-
+ment is on the course side of the starting line or its exten-
+sions during the minute before her starting signal, she
+shall return to the pre-start side of the line across one of
+its extensions and start.” General recalls occur when so
+many boats are over the line early the race committee is
+unable to identify them all. The only fair thing is to have
+another start. To reduce the possibility of a second, third,
+or even fourth general recall in a particularly aggressive
+fleet, the rule above was devised. Commonly known as the
+“around the ends” rule, it effectively keeps most of the
+competitors away from the starting line before the start,
+particularly near the center of the line. There, a boat that
+was over early would have quite a long distance to
+sail to get around the end of the starting line to start. This
+
+-- 60 of 136 --
+
+Starting Rules 53
+rule also precludes doing a dip start, so be aware of it after
+a general recall. Tactically, a conservative center-of-the-
+line start can be an excellent one after a general recall
+because all your competitors are bunching up at the ends
+of the line to reduce the distance they have to sail if over
+the line before the starting signal.
+
+-- 61 of 136 --
+
+4. Wind Shifts on
+the Weather Leg
+After starting and clearing the line, the first weather leg
+is of crucial importance. Boats are still relatively close to
+one another, and the wind is chopped up by numerous
+sails. Other than boat speed, which we are not including
+in our discussion of tactics, the one major difference be-
+tween skippers is how they play the wind tactically.
+There are two basic types of winds. One tends to shift
+back and forth, but maintains one mean direction. We call
+this an oscillating wind. The:other wind has small shifts
+back and forth, but the mean wind travels either clock-
+wise (veering) or counterclockwise (backing). We call this
+a continual shift. A study of meteorology will tell you what
+type of wind to expect from a given weather pattern. The
+oscillating shift is symptomatic of an unstable air mass—
+cold air over a warm body of land or water. The warm air
+near the surface rises and the cold, heavier air falls to the
+surface. Because of surface friction and the rotation of the
+
+-- 62 of 136 --
+
+Figure 39
+earth (Coriolis effect), the upper air in the northern hemi-
+sphere is more usually veered than that at sea level. Ina
+typical cool northwest wind, the upper air hits the surface
+in gust cells that fan out as they travel along. On some days
+the wind shifts caused by these gusts are quite regular and
+can almost be timed. The skipper who tacks on every
+header will easily outdistance those who sail through the
+shifts or who are “out of phase” and tack on the lifts. Boat
+A in Figure 39 tacks every time she is headed, and is al-
+‘ ways sailing on a lifted tack. Boat B sails on one tack
+
+-- 63 of 136 --
+
+56 The Yachtsman’s Guide to Racing Tactics
+through a lift, a header, a second lift, and a second header
+before she tacks. We are assuming both boats sail within
+45° of the wind, the wind shift is 20° each time, and they are
+sailing at the same speed through the water. It is clear that
+boat A has gained a commanding lead over boat B in a
+relatively short distance.
+The continual shift can be just as impressive if played
+correctly. We touched on it briefly in choosing the end of
+the starting line nearest the expected shift. The continual
+shift is associated with a stable air mass. Southerly winds
+bringing warm air over cooler water or land cause a strat-
+ified condition as evidenced by smokestack emissions’
+flowing parallel to the land rather than rising.
+In Figure 40, boat B starts off in the direction toward
+which the wind is expected to shift, and boat A sets out on
+the other tack. Boat A gets lifted, feels good about it, and
+continues on. At position 3 they both tack. Now boat A is
+sailing in a header and boat B in a lift. The difference is
+that A’s header is much worse than when boat B was sail-
+ing in a header and B’s lift is much better than A’s original
+lift. If A had gone much farther before tacking, she would
+have lost far more distance. When you find yourself sailing
+what we call “the great circle” in a continual lift, the
+sooner the decision is made to tack to get over to the good
+side of the course the more the losses are cut. It takes a
+great deal of fortitude to do this, because it’s easier to hope
+that the wind will shift back again, head you, and give you
+a lift on the other tack.
+Many sailors know the foregoing theory of wind shifts
+very well, but have trouble spotting them on the race
+course and remembering how to use them properly. There
+are various ways to spot and to use windshifts. After long
+experience some of the best sailors can tell a shift direc-
+tion by the gust on the water. I’ve heard that Paul Elvstrom
+and Hans Fogh (in preparation for the Olympics) worked
+long and hard at guessing whether an approaching gust
+(as outlined by dark ripples on the water surface) was a
+header or a lift. After much practice they could determine
+the expected wind direction with great accuracy.
+
+-- 64 of 136 --
+
+Figure 40 A B
+Most of us rely almost exclusively upon the compass to
+show us wind shifts. One crew member, usually the tacti-
+cian, is assigned the job of watching the boat’s heading
+while the skipper concentrates on keeping her in the
+groove upwind. Some skippers like to hear “up/five” or
+“down/ten,” meaning they are sailing five degrees higher
+or ten degrees lower than the agreed-upon mean course.
+Others prefer to hear the actual compass headings. If they
+aresailing260° on the starboard tack and hear the num-
+
+-- 65 of 136 --
+
+58 The Yachtsman’s Guide to Racing Tactics
+bers 265° and 270° called out, they know they are being
+lifted. While higher numbers are good on starboard tack,
+they are generally bad on port since they indicate a
+header.
+There are times when good skippers will ignore the indi-
+cation of a header. For instance, when the wind velocity
+decreases, the apparent wind goes forward. The skipper
+will have to sail a lower course and has apparently been
+headed. The true wind direction, however, has remained
+the same. The best skippers, like Buddy Melges, have the
+wind velocity totally cranked into their mental computers,
+and don’t necessarily tack in headers if they are created by
+wind-velocity changes.
+A change in velocity can completely disorient the more
+inexperienced skipper. The scenario is as follows: the boat
+sails into a hole in the wind, and the apparent wind,
+created by the boat speed, goes forward. Being “headed,”
+the skipper decides to tack. As the boat turns into the wind
+the sails fill because the apparent wind comes aft due to
+the boat’s rotation. The skipper decides the header was
+temporary and aborts the tack. By the time the boat settles
+back down on the original tack, the boat speed has di-
+minished considerably, the apparent wind is no longer
+forward, and the skipper’s decision to abort appears
+vindicated. Yet the true wind has never changed direction.
+Only the velocity changed.
+Another way of spotting headers and lifts, one that
+doesn’t depend on the compass, is to observe the heading
+of other boats. Boats A and B are abeam of each other in
+Figure 41, position 1. Along comes a big header, as in posi-
+tion 2, and boat B forges ahead. When a large lift comes,
+as in position 3, it benefits the “inside boat,” boat A, the
+most. The boats have won or lost great distances, but have
+been moving through the water at exactly the same speed.
+It’s obvious from the diagram that one wants to be the
+leeward boat in a header and the windward boat in a lift.
+But how is that possible? If, when headed, boat B tacks
+while boat A continues on in an extended header, they
+may very well change places, as shown by the dotted lines
+in Figure 41. Then boat B is in position to take advantage
+
+-- 66 of 136 --
+
+wind
+Figure 41
+of the next lift, and boat A has ended up on the outside of
+the lift, a very poor position indeed.
+When the crew of boat B notices that suddenly in posi-
+tion 2 they are looking very good on boat A, as if their speed
+has greatly increased, they figure that something’s fishy.
+Since such a jump in speed isn’t likely, they determine
+they’ve been headed and tack. So without looking at the
+compass they have been able to play the wind shift well.
+Finn dinghy sailors and those who sail other single-
+handed sailboats understand windshifts from boat rela-
+tionships very well. Once I was sailing with Peter Barrett,
+an Olympic medalist in the Finn class, and we were in the
+position of boat B in Figure 42 on page 60. We were coming
+up to a windward finish ahead. I felt we could just about
+cross boat A if we tacked at position 1. I suggested to Peter
+that we consolidate our position by getting to windward of
+boat A and covering her. We both were laying the finish,
+but boat A, with a lightweight crew, was moving much
+faster in the light air we had. Peter kept on sailing on
+-starboard for a few moments, and then said, “Now, let’s
+
+-- 67 of 136 --
+
+wind
+et ae	—
+	aoa ee
+	=a
+	_—_	=—	—
+	_—
+	-_—
+Figure 42
+tack.” At that time, in position 2, I looked back at boat A,
+and saw we could cross easily. Since we were still laying
+the finish line (a layline is an imaginary line indicating
+the last tack to the windward mark) I wondered why Peter
+had chosen to cover at a time when we looked so good. It
+hardly seemed necessary now that we were handily beat-
+ing boat A. Even if she caught up, she would have trouble
+breaking through our backwind. In retrospect I realized
+that we both had been slightly headed, and Peter was con-
+solidating our lead by utilizing the lift on port tack. By
+getting to windward of A, any future lift would not work
+to our disadvantage as before, and there would be no
+chance of our competitor’s passing us to windward.
+Watch boats to windward of you on a beat. Headers and
+lifts will hit them first, and as the shift is traveling down
+to you, quite a bit of distance can be gained by using the
+proper tactics. Boat A in Figure 43 sees that a boat to wind-
+ward of her has been lifted, but A is still sailing in the
+original wind. If A keeps on sailing, she will be in position
+
+-- 68 of 136 --
+
+new wind original wind
+Figure 43
+A,
+	when
+	the
+	lift
+arrives.
+	If
+she
+	tacks twice,
+	she’ll
+	be
+	in
+position
+	A,
+when
+	the
+	shift gets
+	to
+her.
+	By drawing
+	lines
+perpendicular
+	to
+the
+wind
+	direction,
+	we
+	can
+	see
+that
+A,
+is
+farther
+upwind
+than
+A,.
+To
+the best of
+my knowledge
+	Peter
+Barrett
+originated
+these
+lines
+back
+in
+the
+sixties,
+and
+calls
+them
+	“lines of
+equal
+	position.”
+	Any
+boat
+on
+	a
+beat
+	that
+is
+on the
+same
+	line
+(perpendicular
+	with
+the
+wind
+	direction)
+with another
+boat
+or
+boats,
+is
+the
+same
+	distance
+upwind
+	as
+the others.
+Boat A,
+by noting
+that
+a
+lift
+is
+expected,
+realizes
+that
+she
+is
+sailing
+in
+a
+header.
+	Even though
+	it
+may
+	be the
+highest
+	compass
+	course she has
+	sailed on that
+tack
+up
+to
+this point,
+it
+is
+still
+a
+header
+	vis
+4
+vis
+the course she
+will
+be sailing
+	when
+	the
+shift
+	reaches
+	her.
+	Thus
+	the
+prudent
+rule of “tack
+	in
+headers”
+	still
+holds.
+Often distances can be gained by observing
+	a
+boat
+	to
+windward
+	being badly headed.
+	In one
+	St.
+Thomas
+	Rolex
+Cup
+	race the course ran
+	through
+	a
+pass
+	between
+	two
+	is-
+lands with high
+terrain.
+	A
+boat
+ahead and
+to
+windward
+	of
+us
+held high through
+	the pass expecting the
+wind
+	to
+veer
+
+-- 69 of 136 --
+
+distance ?>>
+apart in
+original
+wind
+-_——_——..
+	——	= _— ~ ~
+leeward boat
+foots for speed
+distance apart
+after shift
+Figure 44
+and thus head them. We noticed they were being headed,
+and though we were not closehauled and could have
+squeezed up ten to fifteen degrees, I decided to reach off
+for speed. What happens is shown in Figure 44. The posi-
+tion lines in the original wind are much farther apart than
+the position lines in the new wind. This indicates how
+much distance we caught up.
+The tactic is apparent: When you expect a header, foot
+(sail fast) for it. Figure 45 shows three boats equal to one
+another in the original wind. Boat A sails closehauled
+while B foots off for speed. When the heading shift arrives,
+the new lines of position show that boat B has gained con-
+siderably over boat A. Even if B remains closehauled (the
+dotted lines in Figure 45), she would gain on A when the
+shift arrives because she is closer to the side of the race
+
+-- 70 of 136 --
+
+original wind
+new wind
+a
+Figure 45 C
+course
+	from
+which
+	the
+new wind
+	is
+expected
+to
+come. Boat
+C,
+being
+	the farthest
+	to
+the
+right,
+gains
+the most. So
+if
+you
+expect
+	the
+wind
+	to
+veer,
+	play
+the right
+side of
+the course.
+If
+you expect
+	a
+backing
+	wind, play
+the
+left
+side.
+
+-- 71 of 136 --
+
+5. Covering,
+Breaking Cover, and
+Luffing
+Often a skipper is concerned about only one other com-
+petitor. On the last windward leg to the finish, it may be
+the nearest boat. In the last race of a series, it could be the
+competitor who is closest in points. Or perhaps it’s just the
+perennial foe who is always nearby and forever hard to
+beat. Many races are lost by not covering opponents when
+the chance exists. A typical example occurs when a boat
+on starboard tack crosses an opponent on port and fails to
+tack to cover. If the finish line is nearby, sailing farther
+before covering (“splitting tacks’) is a very risky business.
+Any little wind shift can cause positions to change. The
+proper tactic is to stay between your opponent and the
+finish line, sailing in the same direction and, therefore, in
+the same wind.
+The desired spot on a beat is dead enon Though you
+actually lose distance on any wind shift, as shown in Fig-
+ure 46, you are still ahead and in a position to keep your
+
+-- 72 of 136 --
+
+A
+Figure 46
+opponent from passing. In position A, one boat is dead
+upwind of the other, and the leeward boat will have to sail
+six units of distance to be in the same position as the wind-
+ward boat. A large header comes, as in position B. The
+leeward boat tacks immediately, and has only five units to
+sail. In position C a large lift again puts the leeward boat
+closer, this time by a little over five units. Smaller wind
+shifts make the loss smaller, but it’s still there. It’s possible
+to
+anticipate and
+to
+minimize
+	the loss if
+you are fairly sure
+
+-- 73 of 136 --
+
+66 The Yachtsman’s Guide to Racing Tactics
+what the next shift will be. If a header is expected, the
+windward boat might tack a little earlier. By so doing,
+more is gained by being more in front, rather than dead
+upwind, of the leeward boat. However, you are vulnerable
+to being hurt worse if a lift occurs instead of a header.
+Covering an opponent has to be done with full knowl-
+edge of his reactions. When you tack close dead to wind-
+ward of another boat, he has no other choice but to tack
+away to avoid the bad air from your sails. This means you
+have to tack again to cover and possibly even again after
+that, assuming your opponent keeps on tacking to get clear
+air. There are many instances when such a tacking duel
+does neither of you any good. It’s fine if you are match
+racing, but in most other races you can lose places to other
+boats by spending too much time covering your prime
+competition. That’s when a “herding” type of cover is ap-
+propriate. You want to go in the same direction as the bulk
+of the other boats, for instance, so you cover your opponent
+tightly, hurting his air when he is sailing away from the
+others.
+Boat A in Figure 47 has placed boat B in her wind
+shadow. With the others on port tack, splitting tacks with
+the fleet can be dangerous. When boat B tacks to get clear
+air, boat A carries on for a short distance before tacking so
+that B has clear air and no incentive to tack again.
+Nonetheless, boat A is still between boat B and the finish.
+In effect you are herding him in the direction you want to
+go.
+Another instance where covering an opponent too
+closely is a disadvantage is when you are both sailing in
+a lift. A tight cover will force him to tack, and by covering
+you will also end up in the header.
+To place a tight cover on another boat properly takes
+timing and precision. The tack after crossing the opponent
+must be made just at the right location and moment so that
+you’re dead on his wind by the time you have picked up
+momentum after the tack. Tack too late, and the other boat
+will have a safe leeward position on you. Tack too early,
+and, though you'll be giving him some backwind forcing
+
+-- 74 of 136 --
+
+wind
+>=
+loose cover—* +~
+Figure 47
+him
+	to
+tack,
+he
+will
+have
+a
+clear safe
+leeward
+	on
+you
+when
+he
+does.
+The
+	covered
+	boat has
+a
+number
+	of
+options open
+	to
+break
+the cover.
+	One
+	is to
+initiate
+a
+tacking
+	duel,
+which
+	can end
+up
+	in
+one
+	of
+three ways:
+	(1)
+the
+covering
+	boat
+	is
+worried
+about
+	losing
+	to
+others
+	in
+the
+	fleet
+and breaks
+	off,
+(2) the
+covered
+	boat tacks
+	and accelerates
+	faster,
+so
+the
+covering
+boat
+	loses
+	ground and decides
+	not
+to
+continue
+	tacking,
+	or
+(3) the
+covered boat loses
+ground
+	for the
+same reason and
+sees no future
+	in
+continuing
+	the duel.
+The covered boat has the
+advantage
+	of
+having
+the choice
+of
+when
+	to tack,
+whereas
+	the covering boat can only react
+
+-- 75 of 136 --
+
+68 The Yachtsman’s Guide to Racing Tactics
+to an opponent’s tack. By watching the wave patterns, the
+covered boat can choose an intermittent smooth patch of
+water in which to accelerate rapidly after tacking. The
+covering boat simply tacks upon seeing the leeward boat
+tack, and is often in worse wave conditions.
+Dick Stearns, a legendary Star sailor, worked over Tom
+Blackaller in an interesting manner during a Bacardi Cup
+Star Series. Though Dick had good boat speed, Tom was
+well upwind and covering in the normal way. They had a
+shifty offshore breeze of 15 m.p.h. Dick watched the hull
+of Tom’s Star closely. When Tom appeared to be lifted,
+Dick tacked. When Tom tacked to cover, he was now sail-
+ing in a header. Since the wind shift took a few moments
+to travel down to leeward, Dick had a few degrees of head-
+ing advantage until the new wind reached him. By repeat-
+ing this procedure over and over, Dick ate up Tom’s lead.
+Sometimes you can cover from ahead and to leeward,
+such as when there is less adverse current along a lee
+shore. Bruce Goldsmith “covered” Gordon Lindemann
+during a Soling Midwinters in Ft. Lauderdale, Florida, by
+footing toward the shore out of the current. Gordon’s style
+was to point high, but pointing just kept him a longer time
+in the current. By sailing fast but low, into less current,
+Bruce could end up to windward and ahead of Gordon
+every time around the course. Just as you should foot to
+headers, foot also to areas of less adverse current.
+Once a covering position has been established, the boat
+being covered generally tries to break the cover—to get
+free air and even to turn the tables, to become the covering
+boat. One way already mentioned is to initiate a tacking
+duel. If this tactic isn’t helping, try a false tack. If the
+covering boat is starting his tack at the instant you start
+yours, a false tack can sometimes work. Act just as if you
+are planning to complete the tack, but abort it when head
+to wind. The windward boat has completed his tack, and
+has to gain speed before tacking back to cover. For a short
+time you are on opposite tacks, which.should be sufficient
+to break the cover. Frankly, the false tack never works in
+top-flight competition because the covering boat will
+&
+
+-- 76 of 136 --
+
+Covering, Breaking Cover, and Luffing 69
+delay tacking just long enough to force you to complete
+your tack.
+Another method is to lead the covering boat into an ob-
+struction. The covering boat’s skipper is concentrating
+more on the boat he wants to beat than on his surround-
+ings. The skipper of the leeward boat can look around for
+solutions to his problem because he is calling the shots as
+to when the tack occurs. I saw a beautiful example of this
+in the 1963 Pan American Games. Pat Duane was the
+American Flying Dutchman National Champion. As the
+series was drawing to a close, she and the Brazilian entry
+were way out front of the other Flying Dutchman skip-
+pers. Pat was being closely covered by the Brazilian to
+windward in light air on the final beat to the finish line.
+They were on starboard tack when Pat noticed the tail-end
+boat of the Snipe fleet they were about to lap. He was on
+port tack, to windward and ahead of her opponent. Know-
+ing that the Brazilian would tack to cover her, Pat timed
+her tack so that when he covered, he’d be sailing right
+down the transom of the Snipe (see Figure 48 on page 70).
+What happened next couldn’t have been foreseen by Pat,
+but it clinched the lead for her. The Brazilian decided to
+pass to windward of the Snipe, who at the same instant
+tacked to get out of the way of the two leading contenders
+for the Flying Dutchman gold medal. The Snipe was now
+on starboard tack, which forced the Brazilian to tack over
+on to starboard also to avoid fouling the Snipe. The two
+Flying Dutchmen were now on split tacks, which broke
+the cover. When Pat came back over on starboard tack
+later, she crossed the Brazilian and won the race.
+Once
+	I
+was crewing
+	on
+a
+boat
+that
+was being covered by
+another.
+	A
+tug
+towing
+	a
+barge
+far
+astern
+	was
+	approaching
+from windward. We
+	tacked
+	over
+and
+sailed across the
+bow
+of the
+	tug.
+	Our opponent,
+	well
+	to
+windward
+	of
+us,
+	was
+blocked by
+the tow
+	line
+and had
+	to
+tack
+	away. The
+	key
+is
+to
+be observant. Look
+	for
+any obstacle
+	or
+occurrence
+	into
+which
+	you can
+	sail
+the
+covering
+	boat.
+Watch
+	the
+windward
+	boat carefully
+	for
+opportunities
+	to
+tack
+	away when
+	the skipper
+	or
+crew
+	is
+preoccupied. For
+
+-- 77 of 136 --
+
+wind
+Snipe
+a
+Pat tacks <<
+Figure 48
+instance, they may be changing jibs, or may have fouled
+up a jib sheet. If they are unprepared, or unable to tack,
+that’s the obvious time to break the’ cover. It’s a simple
+tactic, but one often overlooked. Many opportunities to get
+away are lost forever when not seized at the moment.
+One can even break the cover from a boat behind with
+a little thought. A few years back I was crewing on Carina
+in Long Island Sound. Toward the end of a two-day race,
+we were “rock hopping” along the shore shortly after
+dawn to pick up the light offshore breeze. We noticed that
+Baccarat, about half a mile to leeward, matched every
+tack we made to stay as close to shore as we were. The
+
+-- 78 of 136 --
+
+Covering, Breaking Cover, and Luffing 71
+tacks weren’t random. They were covering from behind.
+When we tacked toward shore, they also tacked. When we
+tacked away from shore, they tacked at the same instant.
+Feeling we could put such predictability to good use, we
+started poring over the chart. We noticed in one area that
+the ten-foot bottom contour took a long passage toward the
+shore (Figure 49) so we sailed out on port tack until we
+judged that Baccarat was opposite the channel. We
+tacked, and, true to form, so did Baccarat. We then sailed
+in as far toward shore as possible, and tacked when our
+centerboard touched bottom. Baccarat tacked and
+wind
+Carina
+Baccarat
+\ Figure 49
+
+-- 79 of 136 --
+
+Te The Yachtsman’s Guide to Racing Tactics
+promptly went hard aground on an outgoing tide at the
+“X” in Figure 49. We sailed away until she was out of sight
+astern, still aground. Lest the reader feel we were some-
+how playing with danger, let me reassure him that going
+aground in mud along the Long Island shore is a common-
+place occurrence, and no danger or damage is possible on
+light days.
+Dr. Stuart Walker, the great author of sailing books, told
+me of a tactic he has used successfully to break a cover
+almost before it happens. He worked this tactic sailing his
+International 14 dinghy in a team match. A port tack boat
+in a team match expects a crossing starboard tacker to
+tack and to cover—either on her lee bow or on her weather
+quarter. Stuart, in the port tack boat, bears off early to go
+under the starboard tack boat. This forces the starboard
+tacker to cross because a safe leeward is unobtainable. To
+avoid obstructing the port tack boat, the starboard tacker
+can’t start tacking to cover until the port tack boat’s bow
+crosses her stern. Stuart, in the port.tack boat, tacks im-
+mediately after she passes astern to meet the starboard
+tacker tacking simultaneously. When two yachts are tack-
+ing at the same time, rule 41.4 says the one on the other’s
+port side shall keep clear. By using this tactic, the port tack
+boat may force the other back onto starboard tack, as in
+Figure 50, and drive over her.
+This tactic seems to work best with dinghies, but has
+been tried on boats as large as twelve meters. Dennis Con-
+ner was skippering Freedom in the 1980 America’s Cup
+Trials. While sailing on port tack, Freedom ducked under
+Clipper on starboard tack near the layline. As Tom Black-
+aller, helmsman of Clipper, tacked to pin Freedom, Den-
+nis Conner started to tack simultaneously. However, Tom
+just did a sweeping, slow tack and cleared Clipper’s bow.
+Tom knew the rules, recognized the trap Dennis was try-
+ing to lure him into, and adjusted his tactics accordingly.
+Luffing is a common defensive tactic to prevent another
+yacht from passing to windward. Because this tactic is
+rarely used when beating, it tends to be forgotten as an
+option. There are times when a good luff on a beat can be
+tactically rewarding. For instance, you are approaching
+
+-- 80 of 136 --
+
+wind
+Figure 50
+the
+layline
+to
+the
+weather mark, and cannot
+	tack
+because
+of
+the
+	proximity
+	of
+a
+boat
+	on
+	your
+	weather
+	quarter.
+	You
+have
+a
+safe
+leeward
+	position
+on the boat,
+and
+normally
+	the
+skipper
+	would
+	tack
+away
+	to
+avoid
+	sailing
+	in
+your
+	bad
+	air.
+This
+	time,
+however,
+	you
+	are
+pinned
+	and
+	can’t
+tack
+for
+the
+mark
+	until the
+weather
+	boat
+	does.
+	If
+you bear
+	off
+to
+gain
+tacking
+	room
+	to
+leeward,
+	so
+does your
+	opponent
+	to
+keep
+you
+	from
+	tacking.
+	Only
+when
+	he can be sure
+	of
+laying
+the
+mark
+	will
+he
+tack,
+and then
+there
+is
+no
+way
+	for
+you
+to
+lead
+to
+the
+mark.
+The
+	situation can be
+saved by
+a
+well-timed
+	luff
+short
+of
+the layline.
+	I
+was
+	once
+	crewing
+	in
+the
+Mallory
+	Cup
+	elimi-
+nations
+	in
+Ensigns.
+	We
+	found
+	ourselves
+	in
+just the situa-
+tion
+described
+	above.
+	Brit
+Chance,
+	also
+crewing, suggested
+a
+	luff.
+	The
+	late
+	Palmer
+	Sparkman
+	was skippering and
+agreed.
+	Knowing
+	that the
+	luff
+would
+	be
+	almost head
+	to
+wind,
+I
+released
+	the
+jib.
+The
+windward
+	boat
+was caught by
+surprise.
+	The crew
+	failed
+	to
+release the large
+overlapping
+jib,
+which
+	backed, forcing the boat over
+	to
+starboard
+	tack.
+We
+kept
+on sailing
+a
+few boat lengths
+to
+the layline, tacked,
+and met
+	the other boat on port tack
+at
+the
+mark. Since the
+latter
+	had
+	to
+duck under
+	our stern,
+	we rounded ahead.
+There
+	are those
+who consider such
+a luff
+bad sportsman-
+ship. I disagree when
+	it’s
+for a
+defensive purpose such
+	as
+
+-- 81 of 136 --
+
+74 The Yachtsman’s Guide to Racing Tactics
+to avoid being pinned to the layline. I don’t particularly
+like the skipper who luffs in an attempt to “tag you out.”
+The rules allow a sharp luff without warning, and if
+there’s contact, the windward boat is usually either dis-
+qualified or penalized. Some skippers use the rule to luff
+all over the course without any apparent purpose except
+catching the windward boat unawares. Generally, if you
+are the skipper of a windward boat that is luffed and
+tagged by a leeward boat, you should be annoyed at your-
+self for putting your boat in such a vulnerable position,
+rather than at the leeward skipper for exercising his
+rights.
+The one spot where the proximity of boats makes it diffi-
+cult to avoid a sharp luff is right after rounding a mark.
+Let’s say you have an inside overlap at a mark. The outside
+boat gives you just enough room to allow you to round
+safely. This puts you in closer than you would normally be
+in case of a luff. Since you are placed in this vulnerable
+position through no fault of your own, you must be partic-
+ularly wary.
+It was just such a situation that was the impetus for me
+to learn the racing rules well. I was about sixteen years
+old, and had borrowed my father’s Atlantic-class sailboat
+for a Saturday afternoon race at my local yacht club. I was
+approaching the leeward mark on a port tack run, and my
+bow was almost overlapped with the stern of an older
+member’s boat on starboard tack. He sailed right past the
+mark without jibing. I swung inside and hardened up
+around the mark, whereupon he jibed, luffed head to wind,
+hit me near the stern about a boat length past the mark,
+and yelled, “You’re out!” I disregarded the call and kept on
+racing. Two weeks later the race committee chairman
+said to me, “Stevie, an incident happened on the race
+course a while ago, and the club cannot condone such
+behavior.” I was taken before a protest committee and
+thrown out of the race. I knew nothing except the basic
+right of way rules, so I couldn’t defend myself. That night
+I started studying the rulebook, and found that (1) the
+protesting skipper hadn’t jibed at the first reasonable op-
+
+-- 82 of 136 --
+
+Covering, Breaking Cover, and Luffing 75
+portunity, (2) he had luffed without luffing rights, (3) he
+had failed to fly a protest flag, (4) the protest was not in
+writing, (5) the protest was not made within two hours of
+the finish of the race, (6) a reasonable time was not al-
+lowed for the preparation of a defense, and so on, and so
+on. I swore never to be so unprepared again.
+I soon learned, in regard to luffing after starting, that a
+leeward boat can luff only a boat that is passing to wind-
+ward. A leeward boat cannot overtake to leeward and then
+luff. If, at any time during an overlap, the helmsman of the
+windward yacht is abeam or forward of the mainmast of
+the leeward yacht, the latter shall not sail above her
+proper course while the overlap exists.
+When a boat does attempt to pass you to windward, you
+can luff that boat head to wind if you desire. As two boats
+turn toward the wind, however, the outside leeward boat
+has farther to turn and so loses ground on the inside wind-
+ward boat. If the leeward boat’s mast comes abeam of the
+windward boat’s helmsman, he calls “mast abeam,” and
+the leeward boat has to fall off to her proper course to the
+mark. There are a few tricks that have been outlawed.
+Windward’s helmsman must be in his normal steering
+position, and cannot lean way forward so as to call mast
+abeam earlier. Nor can he point the boat higher than the
+leeward boat to get the same result. If leeward’s helmsman
+feels the call of mast abeam has been premature or other-
+wise improper, the only recourse is to protest. Further,
+leeward’s helmsman can luff only if he has luffing rights
+on all boats affected by the luff. Keep this in mind the next
+time you are being luffed. I’ve often stopped a leeward boat
+from luffing me because the helmsman of a boat to wind-
+ward of me was forward of leeward’s mast.
+There
+are
+other
+ways
+to
+avoid being
+luffed,
+but one
+of the
+most interesting can be attributed
+to Jim
+Mattingly aboard
+Tenacious.
+	Many
+	race circulars
+	for
+	long-distance
+	races
+have
+	a
+rule that limits luffing.
+The wording
+	varies
+	a
+great
+deal in
+each
+	circular, but
+it’s
+common
+	(though
+	not exclu-
+sive)
+	to
+allow luffing
+	up
+	to
+one hour
+	after the
+	last class
+starts
+	or,
+	alternatively,
+	between
+	the hours
+	of sunrise
+	to
+
+-- 83 of 136 --
+
+76 The Yachtsman’s Guide to Racing Tactics
+sunset. At other times the International Rules of the Road
+at Sea prevail. The idea is to prevent boats from having
+dangerous luffing matches at night or out at sea.
+Jim was tactician on Tenacious, and they were being
+legally luffed by another boat. While the crew of the other
+boat was yelling and screaming at Tenacious, Jim politely
+asked if they had read their race circular. This distracted
+them enough to send a man below for it and by the time
+they figured out they did indeed have the right to luff,
+Tenacious had slipped on through.
+w
+
+-- 84 of 136 --
+
+6. Laylines
+A basic tactical rule of sailboat racing is “avoid the lay-
+lines.” (The layline is an imaginary line indicating the last
+tack to the windward mark.) If you make your last tack for
+the mark a long distance from it, many of your options to
+take advantage of wind shifts are lost. If you get lifted,
+you’ve overstood the mark. This means you have sailed
+above the new layline, and you will have to reach off for
+the mark. If you get headed, you can no longer lay the
+mark and must tack. Every boat closer to the mark gets a
+greater advantage from a header than you do. In Figure 51
+on page 78, boats A and B were even in the original wind
+direction. When headed, they both tack and B has gained.
+Moreover, A has only a short distance to sail before she
+arrives at the new layline, and has to tack for the mark. If
+the wind hasn’t shifted back, she will be sailing for the
+mark in a header while B is still on a port tack lift. Boat
+
+-- 85 of 136 --
+
+new
+wind
+	original
+wind
+distance gained
+by B over A
+when the wind
+shifts
+i starboard
+/ tack layline
+boats equally
+upwind in
+original wind	C
+Ss,
+A	
+Figure
+	51
+	=
+D was on the original port tack layline. But when the shift
+arrives, boat C is now on the layline while D has overstood.
+Another reason to avoid the laylines until a few boat
+lengths from the mark is that each boat on the layline is
+feeding bad air to the boat behind it. Unless you overstanda
+little, the backwind from the boat ahead ‘could be sufficient
+to slow you substantially. A slow boat makes more leeway,
+which could result in failing to lay the mark. Many skip-
+pers start to pinch the boat when this occurs, which results
+in more leeway and virtually guarantees a problem at the
+mark. The correct tactic is to sail fast and, if it’s close, shoot
+dead into the wind to get around the mark. Release the jib,
+especially a genoa, to avoid backing it.
+When it becomes obvious that because of current, an-
+other boat’s backwind, or whatever, there is no way to lay
+the mark, look for a spot to tack early. Even if it’s neces-
+
+-- 86 of 136 --
+
+Laylines 79
+sary to slow the boat down to let a windward boat pass, it
+may be better than continuing on into an impossible situa-
+tion. A windward boat will usually bear off for speed in an
+attempt to take the leeward boat’s wind (to blanket her)
+even if, by doing so, she fails to fetch the mark. This guar-
+antees the windward boat the lead at the mark. If he had
+allowed the leeward boat to pinch, or to shoot, to fetch the
+mark, the latter would have an inside overlap, and would
+probably maintain the lead.
+For many reasons, therefore, it’s important to avoid
+reaching the laylines too early. About the only disadvan-
+tages in arriving at the starboard tack layline very close to
+the mark are: (1) congestion, and (2) the short distance on
+starboard tack to set up for a spinnaker. The first depends
+on the size of the fleet, the length of the weather leg, and
+the type of boats. A large, evenly matched fleet of identical
+boats can result in a mammoth pack of starboard tack
+boats approaching the weather mark for a port rounding.
+A port tack boat may have to take fifteen or twenty sterns
+before finding a hole in which to tack. On the other hand,
+a boat in a class of cruising boats that have finished a
+five-mile beat may find no other boat within 100 yards.
+The second disadvantage is more important to the cruis-
+ing boat. Because of the more cumbersome equipment,
+such as heavy spinnaker poles, more time is needed to
+prepare for a spinnaker leg than on smaller boats. One has
+to approach the layline at a distance from the mark to
+allow the crew time to set up, but not so far out that one
+either overstands or otherwise misjudges the layline.
+This brings us to the tactics involved in determining
+when the layline has been reached. One common method
+is to observe how other boats are heading on the opposite
+tack as you pass their sterns. At the instant you cross an
+extension of their centerline, you can determine if they
+are pointing at the mark or not. Beware of the cagey skip-
+per who, knowing you'll be checking, heads off ten degrees
+or so below the mark just as you pass his stern. His change
+of course is imperceptible to you, and it appears he is
+unable to fetch the mark, which misleads you into sailing
+farther and overstanding.
+
+-- 87 of 136 --
+
+80 The Yachtsman’s Guide to Racing Tactics
+A variation on this theme is when the port tack boat is
+crossing ahead of the starboard tack boat. Since the latter
+is on the layline and doesn’t want the port tack boat to feed
+her bad air all the way to the mark, she heads off about ten
+degrees and maintains a constant course so as not to ob-
+struct the port tack boat. When the opponent tacks in a
+safe leeward position or dead in front of the starboard tack
+boat, the latter heads up to closehauled and drives over the
+top of the boat that just tacked.
+By remembering your compass course the last time you
+were on starboard tack, you can take compass bearings on
+the mark, and tack when it bears the same as your last
+reading on starboard. This assumes no windshifts or cur-
+rent, but these can be cranked into your calculations. For
+instance, if you’re sailing in a ten-degree header on port
+tack, add ten degrees to your last heading on starboard
+tack and use that for a bearing.
+Skippers of many boats paint laylines on their decks
+based on their normal tacking angles. Let’s say your boat
+sails within 45° of the wind and tacks in 90°. A line painted
+abeam (90° from the centerline of the boat) indicates the
+layline. When the mark is on an extension of that line, a
+tack will place you right on the layline. Often other lines
+are added 45° forward and aft of the layline, as in Figure
+52. The forward line shows whether you are ahead or be-
+hind a boat to leeward. The aft line gives the same infor-
+mation on a boat to windward. Of course, these lines only
+work if there are no wind shifts, if you are steering an
+accurate closehauled course, and if you have calculated
+your tacking angles correctly. Since these are very big ifs,
+such lines are used as rough aids rather than absolutes.
+There are times when you may want to overstand the
+layline. If a boat is ahead and to leeward of you on port
+tack as you approach the starboard tack layline, you must
+make sure she is unable to tack without fouling you (see
+Figure 53). To that end, you bear off for speed, and get close
+enough to windward of her that she can’t tack. With her
+pinned in that position, you drive her past the layline to
+the point when you can fetch the mark easily. Then, when
+you tack, you will be able to sail full and fast enough to
+
+-- 88 of 136 --
+
+ayline to the mark
+Nien
+G aed
+See <--- eS —— —-—- 4 -— — -—
+leeward boat C is ahead windward boat A is even
+D leeward boat D is even windward boat B is behind
+Figure 52
+wind
+Figure 53
+
+-- 89 of 136 --
+
+82 The Yachtsman’s Guide to Racing Tactics
+keep her from passing you. If you had tacked right on the
+layline, she would be past it due to her relative position,
+and could possibly drive over you at the mark were it nec-
+essary for you to pinch near the end of the leg. The defen-
+Sive tactic on the part of the leeward boat, as mentioned
+before, is a sharp luff short of the layline. This will work
+only if the windward boat is caught unawares. The wind-
+ward boat should keep enough open water between her
+and her opponent to negate the effectiveness of a luff.
+Another overstanding tactic is used when a leeward boat
+is being covered by a boat to windward and ahead, as in
+Figure 54. The leeward skipper is banking on the hope
+
+-- 90 of 136 --
+
+Laylines 83
+that the windward crew will be totally engrossed in cover-
+ing him. As the leeward boat approaches the layline, the
+skipper pinches and slows the boat. This results in the
+windward boat’s sailing farther past the layline while the
+leeward boat sails slowly. It further allows the leeward
+boat to pinch up closer to the mark. The leeward boat
+keeps on going slowly past the layline until the windward
+skipper comes to his senses, realizes he has overstood, and
+tacks first. Normally, he will be waiting for the leeward
+boat to tack first, and will then cover. Figure 54 shows the
+desired result. The leeward boat should at least maintain
+an inside overlap at the mark and come out ahead.
+Pete Conrad of Sobstad Sailmakers mentions a tactic that
+can often be used to advantage. He was sailing in a Finn
+Class National Championship and was just about laying
+the weather mark on starboard tack in a breeze that was
+gradually lifting him. The lead Finn was close to crossing
+him, and the last thing he wanted was for the leader to tack
+and to feed him bad air all the way to the mark. So Pete
+shouted something to the effect of, ‘““Go ahead across, you
+have it made,” whereupon his opponent took the bait,
+thanked Pete, and crossed his bow. Pete slowed down inten-
+tionally, and ducked the port tack boat. The competitor
+sailed another ten to fifteen boat lengths, tacked, and real-
+ized he had overstood the mark. Pete rounded in the lead
+and won the race. Pete’s competitor had become so cap-
+tivated by the boat-to-boat confrontation that he lost sight
+of the overall view. As you can see with many of these
+tactics, that’s the aim of the initiator. When a boat that has
+right of way waves you across, immediately start wonder-
+ing why. Am I sailing in a header? Is the breeze lighter
+where I’m going? Is the water shallow? Could I lay the mark
+on the other tack? Take the cynic’s viewpoint that altruism
+is hard to find on the race course.
+Dick Tillman used a tactic in the Snipe Nationals that
+is effective when worked with precision. He was short of
+the layline on starboard tack, close to the weather quarter
+of his major competitor. His plan was to pin the leeward
+boat to keep her from tacking until he could lay the mark.
+_ He initiated his tack for the mark at a point where his
+
+-- 91 of 136 --
+
+84 The Yachtsman’s Guide to Racing Tactics
+crew had to back the jib to swing the bow over fast enough
+to avoid hitting the buoy. This necessitated the leeward
+boat’s sailing past the mark before tacking and returning
+on port tack. In the meantime, Dick had rounded to port,
+and had established a starboard tack on the next reaching
+leg, just as his competitor was returning to the mark on
+port tack. Not caring to add injury to insult, Dick elected
+to take his transom and not to protest. After all, Dick had
+placed him in that situation in the first place.
+Isaw another interesting weather mark tactic in the Pan
+American Games. Peter Barrett was sailing a Finn, and
+had only one competitor giving him trouble. Peter was on
+starboard tack, just barely laying the mark, with his com-
+petition about half a boat length dead to leeward. There
+were no windows in the sails, so Peter couldn’t see the
+other boat. His competition banked on this blind spot, and
+sailed right past the mark. He expected Peter to bear off to
+a reach around the mark and to foul him since Peter, as
+windward boat, had to stay clear of a leeward boat. How-
+ever, no such thing happened. Peter kept on going close-
+hauled until his competitor realized after fifty yards or so
+that there was no future in continuing. Peter obviously
+wasn’t taking the bait, and the leeward boat still had to
+jibe, sail all the way back, and round the mark. Peter won
+the race easily. I asked Peter later how he had figured out
+what his competition intended to do. Half, he said, was
+knowing his competition. The other half was sensing
+something amiss when he had reached the mark, and
+could still see nothing of the other boat.
+I sometimes approach a layline on port tack, deliber-
+ately using another port tack boat to leeward and ahead as
+a spoiler. If a starboard tacker comes along that could give
+me trouble, the other port tack has to tack first, which can
+slow the starboard tack boat down and allow me to cross
+them both. It is sometimes the edge needed to reach the
+layline, tack on both of them, and round the mark ahead.
+
+-- 92 of 136 --
+
+7. Weather Mark
+Roundings
+The greatest area of congestion in a race is at the start,
+but the next greatest is at the first weather mark rounding.
+The boats that can spurt out of that mess in good order
+stand a good chance to lengthen their lead on the bulk of
+the fleet. When the second leg is a spinnaker reach and
+there’s a bunch of boats clustered close behind you, con-
+sider delaying the spinnaker set and reaching high to
+avoid having them on your wind. When they fall down to
+course and set spinnakers, do the same. When there’s a
+large space of open water between you and the boats be-
+hind you, the opposite tactic is usually the best: turn right
+down to course, and set the spinnaker quickly to lengthen
+the distance between you and your pursuers. They will
+probably luff each other up high of the course, and, along
+with having to sail a longer distance, they will have to sail
+on a slower point of sail to get down to the mark.
+
+-- 93 of 136 --
+
+86 The Yachtsman’s Guide to Racing Tactics
+Years ago Bill Cox (American Eagle’s helmsman in the
+1968 America’s Cup Trials) told me a tactic he used which
+is now fairly common: the delayed spinnaker set. When
+rounding a weather mark in close proximity behind an-
+other boat, sail across the wind on a close reach for a few
+moments with main and jib trimmed properly. Assuming
+the boat ahead falls right down to course, her speed will
+be markedly slowed by the crew’s bouncing around and
+the windage of the spinnaker’s going up. Meanwhile the
+weather boat gets on her wind, which makes leeward’s
+spinnaker more difficult to fly. Once in such a controlling
+position, the windward boat sets her chute. That the
+process also slows her down doesn’t affect their relative
+positions, since the leeward boat is being blanketed. The
+obvious defense is for the lead boat to sail on a close reach
+to discourage such a maneuver.
+Hans Fogh once played the “delayed spinnaker set” in
+reverse. In a 1965 Flying Dutchman race in Italy, a Swiss
+boat was leading, and Hans was in second place with the
+rest of the fleet way behind. The two remaining legs on the
+race were close reaches, and to pass the lead boat would
+be close to impossible. He figured that if he set a spin-
+naker, so would the Swiss. If he luffed to pass to windward,
+so would the Swiss... a virtual standoff. So, rounding the
+last weather mark to begin the last two reaches, Hans’s
+crew made all kinds of commotion, yelling and screaming
+as they set the spinnaker. As soon as the Swiss saw the
+spinnaker going up behind, he immediately turned his
+back and began setting his. Whereupon, Hans pulled his
+down, and, when the Swiss’s spinnaker was full, he sailed
+right around him to weather (since the reach was so close)
+and went on to win the race.
+Most race committees attempt to make a 45-90-45 de-
+gree right triangle for a course. If the windward leg is
+perfect, meaning the wind is blowing directly to the start-
+ing line from the windward mark, then the apparent wind
+on the first reach will be slightly forward of abeam, and it
+will be the same for the second reach. Seasoned racing
+sailors become accustomed to the reaching wind angle,
+
+-- 94 of 136 --
+
+Weather Mark Roundings 87
+and often even the best get disoriented after a wind shift.
+If the wind veers clockwise and they reach off with the
+apparent wind slightly forward of abeam, they will be
+well high of the reaching mark. I’ve heard that even Paul
+Elvstrom sailed to the wrong reaching mark in one pre-
+Olympics. Inevitably, the fleet follows, since the best sail-
+ors are usually in front, and most of the others think the
+leaders must be right. It’s interesting to look at what tal-
+ented sailors do when they realize they’ve made a mistake
+or discover the mark isn’t where it ought to be.
+Peter Bordes was leading a Thistle race on a low visi-
+bility day, and suddenly realized that the mark was al-
+most dead to leeward. He had been close-reaching much
+too high, and the fleet was following. If he headed dead
+downwind on a run toward the mark, the rest of the fleet
+would spot it, and cut the corner on him. They would still
+be reaching at a fast clip while he would be running. He
+had a great idea. He told his crew to throw off the main
+halyard, as if it had broken. As the mainsail came tum-
+bling down, he stood up in the boat swearing at his bad
+luck. The fleet sailed by enjoying the scene. As the last
+boat passed, his crew raised the mainsail, set the spin-
+naker, headed for the mark, rounded first, and won the
+race.
+Jim Mattingly had a similar problem in the 1971 Half
+Ton Cup World’s Championships. He was leading the fleet
+on a reach, realized the mark was to leeward, but noticed
+a fog bank to windward. He pretended to see the mark to
+weather, and hardened up under the spinnaker. The fleet
+followed him into the fog bank. As soon as Jim’s boat was
+well hidden from the rest, he jibed and finished the race
+hours ahead of the other boats.
+Hans Fogh found himself in a somewhat similar situa-
+tion on a weather leg. He was directly to leeward of a
+bunch of boats, and no one could find the mark. Hans knew
+that the mark was still to weather, but he took advantage
+of the uncertainty of the others to pull off a little ruse. He
+spotted a mark (of a like type to the true weather mark)
+directly in front of him. He rounded it, and, much to his
+pleasure, all the boats to windward bore off to round the
+
+-- 95 of 136 --
+
+88 The Yachtsman’s Guide to Racing Tactics
+same mark. He slowed the boat down, and waited for them
+all to round. Then he immediately tacked, beat up to the
+real weather mark, and ended up winning the race.
+The common denominator in all these cases is a fertile
+imagination and an indomitable spirit that snatches vic-
+tory from the jaws of defeat.
+
+-- 96 of 136 --
+
+8. Reaches
+Perhaps less dramatic, but nevertheless helpful to a
+winning effort, are some of the other tactics used on
+reaches. Since an inside overlap at the jibing mark can
+mean a difference of many places, one sails the leg with
+that in mind. If a boat luffs up to pass you to windward, you
+must protect your position by luffing also. On a tight spin-
+naker reach leg of an Olympic course race, we were just
+ahead of Running Tide. The air was light, and, though
+Running Tide was a larger boat than Sleuth, we had
+beaten her to the windward mark. Early in the reaching
+leg, we luffed her very high of the course to the jibing
+mark when she attempted to pass us to windward. This
+discouraged her from trying again, so she tried sailing
+through our lee, which didn’t work. Later in the leg, near-
+ing the jibing mark, she tried to break through to wind-
+ward again. This time I luffed far less. Ideally, I wanted
+
+-- 97 of 136 --
+
+90 The Yachtsman’s Guide to Racing Tactics
+them to be overlapped to the outside of us, so I could head
+at the mark with an inside overlap. When it became obvi-
+ous that she was going to power over us, I let her go. Run-
+ning Tide passed us, and, when she was clear ahead, we
+held a course that would take us past the buoy outside the
+two-boat-lengths circle. If we had headed for the mark
+when we were within two boat lengths, we would not have
+been overlapped and would not have been entitled to
+room. We would have just followed her around the mark.
+The crew on Running Tide obviously wanted to jibe for
+the mark, but couldn’t without fouling us in the process.
+When we reached the spot shown in Figure 55, well past
+the mark, we jibed, and had an inside overlap at the mark
+Running Tide
+aX Nv X\
+XN
+‘XN
+\ N
+>. chee
+\ \ \ \ \
+aN \ N
+two-boat-length circle .s
+awinc
+, Sleuth
+Figure 55
+
+-- 98 of 136 --
+
+Reaches 91
+with Running Tide tucked away in our bad air. What this
+incident shows is the type of thought processes that must
+go on in racing. Many skippers luff any boat passing to
+windward indiscriminately, without thought about the
+desired end result. Again, put your head a hundred yards
+in front of your boat.
+Whether to sail high or low of course on a reach depends
+a great deal on the anticipated wind strength and direc-
+tion. When the breeze is fresh early in the leg and you
+expect it to soften, sail low initially. This allows you to
+harden up to a faster point of sailing as the wind dies. The
+opposite course is taken when you expect a light breeze to
+freshen. Head high first, and come off as the breeze
+strengthens. With a wind that is steady in direction, but
+changeable in strength, fall off for speed in the puffs, and
+head up in the lulls. This will also keep you in the puffs
+longer as they move downwind.
+Current is also a factor on reaches. Generally, in a con-
+trary or cross-current situation, the best course is the
+shortest distance, and, thus, the shortest time in the effect
+of the current. You often know roughly the strength and
+direction of the current from current tables studied before
+the race. Just how much it is affecting you can be seen
+after you’ve sailed down the leg for a while. Steer your boat
+directly at the jibing mark ahead and glance astern. With
+no current the weather mark should be dead astern. If it’s
+more to the starboard side of the boat, you’ve been set to
+the left of the course and vice versa. When the jibing mark
+can be easily distinguished against a shore line, try to steer
+your boat so the shore doesn’t move behind the buoy. If the
+buoy moves to the right along the shore, you are being set
+to the left of course by the current, and must steer more to
+starboard to offset it.
+
+-- 99 of 136 --
+
+9. Jibe Mark
+We are finishing the first reaching leg, and approaching
+the jibing mark. When the first reach is broad, the next
+reach will be quite tight, and an early jibe is dictated. If
+possible, complete the jibe before arriving at the mark so
+you are free to harden up to the new course right at the
+mark. In this way you will lose nothing to leeward. The
+opposite is true if the first reach is tight, but it doesn’t take
+much to realize you shouldn’t start the jibe early. With a
+tight reach it’s natural to start jibing after arriving at the
+mark. :
+Though it’s beneficial to be the inside boat at the mark,
+there are many times when it just isn’t possible to get the
+required overlap before reaching the two-boat-length cir-
+cle. When a large number of boats are overlapped, the
+outside boats squeeze the inside boats fairly close to the
+mark. This prevents the inside boats from playing it wide
+at the approach and tight at the turn. When you know you
+
+-- 100 of 136 --
+
+Jibe Mark 93
+don’t have a chance for an overlap, a good tactic is to slow
+the boat down by collapsing your spinnaker or luffing your
+mainsail. Then, swing out wide, and do an early jibe.
+Harden up for the mark past the sterns of the overlapped
+boats, and go for the opening between the mark and the
+stern of the inside boat. It’s risky and takes excellent tim-
+ing, but it can be done.
+If you round in front of a number of boats, luff sharply
+after the mark to discourage any of them from attempting
+to pass you to windward. It doesn’t hurt to end up a little
+high of course on the second reaching leg of a marks-to-
+port triangle, because that will put you inside at the lee-
+ward mark. So while we luff with discretion on the first
+reach, we luff with vengeance on the second to keep from
+being passed.
+Knowing that such will be the tendency of an opponent
+ahead of you, any luff on your part to get to weather of
+him should be done very early and sharply. Don’t climb
+up his stern and then decide to pass, because you'll be
+luffed right off the course. When you are still a few boat
+lengths back, go up sharply. If you’re lucky, the skipper
+of. the boat ahead won’t notice your move until it’s too
+late. When there are one or two boat lengths of open
+water to close before the leeward boat can effectively luff
+a windward boat, leeward may not even try. By the time
+he gets up to you, you may very well have a mast abeam
+position, and the leeward boat would be unable to luff
+legally. By closing the gap in attempting to luff, the lee-
+ward boat is now sailing slower, in a more disturbed area
+of your wind shadow.
+Most skippers
+	who
+	have experienced
+	these
+	problems
+won’t
+luff
+unless they
+have
+a
+good chance
+of
+holding
+off
+the
+windward
+	boat.
+They
+	realize that the
+greater distance
+	the
+two boats
+are apart, the
+quicker
+the
+windward
+	boat’s skip-
+per attains
+	a
+mast
+	abeam
+	position. In
+Figure 56A
+	on
+page
+94 two boats are close together.
+	Leeward
+	luffs
+and wind-
+ward responds, but
+	still
+	hasn’t
+	reached mast abeam.
+	In
+Figure 56B there
+	is
+more space between
+	the boats.
+	The
+same
+	luff
+and the
+	same response
+	results in
+windward’s
+helmsman’s being far
+ahead
+of leeward’s mast
+as
+he sights
+
+-- 101 of 136 --
+
+: ot
+Ne
+x
+Leeward’s mast still forward
+of windward’s helmsman;
+leeward can still luff.
+Figure 56A wind Jf
+_ \~	
+~~ ae3 = eeorns
+—< ~
+~ _
+>.
+Leeward’s mast well behind ’
+windward’s helmsman;
+leeward can no longer luff
+while overlap exists.
+Figure 56B wind
+
+-- 102 of 136 --
+
+Jibe Mark 95
+abeam. Leeward can no longer luff, and must fall back to
+her proper course.
+There are times when the tactical interplay between
+boats on reaches is done at long distance. Chris Bouzaid,
+President of Hood Sailmakers (U.S.A.) Inc., recounts what
+he calls his favorite ocean racing maneuver. He has used
+this tactic on two One Ton Cup Championships, and it is
+very effective. Two boats are on a tight spinnaker reach.
+The lead boat is eight to ten minutes ahead, and the objec-
+tive in Chris’s trailing boat is to close the distance. Chris
+first establishes very clearly where the turning mark is. At
+this point the mark is not within sight. Because both boats
+have been reaching for some time, they have sagged below
+course, and eventually will have to douse their spinnakers
+to reach up to the mark under jibs.
+With about ten miles to go, Chris starts sailing the boat
+as high as he can to windward, losing speed while doing
+so. Although Chris may be gaining a little weather ground,
+the lead boat is assuredly opening the gap between them.
+This situation continues for the next five miles, by which
+time Chris has made a considerable distance to windward,
+but is far behind. The turning mark is spotted, and it
+becomes obvious that both spinnakers will have to be
+doused for the boats to fetch the mark. At this stage, the
+combination of being way behind and well to weather cre-
+ates an easy reach to the mark for Chris. The lead boat,
+being so far ahead and downwind of the mark, has to go
+closehauled to fetch it, and often has to tack. The distance
+between the mark and the two boats is almost the same, so
+Chris has closed the distance between the two boats con-
+siderably with this maneuver.
+
+-- 103 of 136 --
+
+10. Leeward Mark
+As the leeward mark is approached on the second reach,
+it’s again desirable to get an inside overlap. In Figure 57,
+boat A is trying to get to weather of boat B for an inside
+overlap at the mark. Boat B luffs sharply, and, as the two-
+boat-length circle is approached, boat B falls off toward
+the mark. Often this turn can break the overlap and place
+the windward yacht in a “clear astern” position, defined in
+the rules as “when her hull and equipment in normal
+position are abaft an imaginary line projected abeam
+from the aftermost point of the other’s hull and equipment
+in normal position.” As the leeward boat turns toward the
+mark, this imaginary line swings forward, and the overlap
+is broken.
+There is another option that is often used when you don’t
+care about the rest of the fleet, and there is only one oppo-
+nent you must beat. The leeward boat may carry the over-
+lapped windward boat to the wrong side of the turning
+
+-- 104 of 136 --
+
+*. no overlap
+two-boat-length circle
+course from last mark
+Figure 57
+mark, but there are a number of provisions in the rules
+that must be met: (1) the leeward boat must have luffing
+rights; (2) before she is within two of her overall lengths
+of the mark, she must hail the windward boat that she
+plans to take her to windward of the mark; (3) she must
+begin to luff before she is within two of her overall lengths
+of the mark; and (4) she must also pass to windward of the
+mark. This last requirement has been interpreted to mean
+she must cross an imaginary line perpendicular to the
+mark and the course from the last mark, before turning
+back to reround properly. Because there are so many res-
+trictions on this tactic that must be fulfilled exactly by the
+leeward boat, it isn’t often used. However, I’ve done it suc-
+cessfully downwind at a finish line against a windward
+boat that would have just barely beaten me had I con-
+tinued straight across.
+A good tactic at the leeward mark when the spinnaker
+is to be doused is to leave it up until the last possible mo-
+ment and to sail to leeward of a bunch of boats. In a race
+aboard Sleuth, we were vying with Intuition for the lead
+when we both fell into a hole. The rest of the fleet sailed
+
+-- 105 of 136 --
+
+98 The Yachtsman’s Guide to Racing Tactics
+right up with a light breeze, and their momentum took
+them right through us to the mark. The tables had turned
+on us completely, and we were almost last. The mass of
+boats stalled at the mark when they doused their spinnak-
+ers. I saw a stronger breeze filling in from windward. A
+couple of the leaders had broken free from the group, and
+they were moving out closehauled in the freshening wind.
+I elected to stay well low of the jumble of boats, and, with
+the pole on the headstay, to sail with the spinnaker on as
+tight a reach as possible. We broke through the lee of the
+largest bunch, doused the spinnaker well past the mark,
+and hardened up. We then tacked on to starboard, which
+took us directly toward the new wind. Most of the group of
+boats that were stalled at the mark took our stern on port
+tack, and we were back in decent position, having gained
+back about ten to twelve boats.
+When there is a strong current against you in light air,
+consider a late spinnaker douse. The boats ahead that
+have doused too early now find themselves with too little
+sail area to stem the current, and the rest of the fleet is
+catching up under spinnaker and blanketing the boats
+ahead. To avoid this situation, assuming that you are ei-
+ther leading or have a clear shot at the mark, carry your
+spinnaker right up to or even past the mark if the current
+could set you onto the mark as you round. When you reach
+a position where the current will just about set you to the
+proper side of the mark if you lost your way, douse the
+spinnaker. For the small amount of delay going to wind-
+ward, you are at least sure of having cleared the mark.
+Normally, if current and other boats are not a worry, the
+proper mark rounding is to swing wide in the beginning,
+and thus be close to the mark at the point where you are
+closehauled. Boat A in Figure 58 has made a smooth, even
+rounding, and is on the wind right next to the mark. Boat
+B has approached too close to the mark, drifts out on the
+turn, and ends up on the wind well to leeward of boat A.
+Since it is doubtful she could tack without fouling boat A,
+boat B has gone from a winning position to a losing one.
+Naturally, boat B could make a much tighter turn if her
+spinnaker were down, and she were prepared for it. How-
+
+-- 106 of 136 --
+
+wind
+Figure 58
+ever, since a tight turn results in a large loss of speed, the
+result would be the same.
+If you do a decent rounding, as does boat A in Figure 58,
+but it’s right behind a number of other boats, a common
+maneuver is to shoot almost head to wind to gain some
+breathing space. Quite often the crew of a boat ahead
+hasn’t finished cleaning up after the spinnaker leg, the
+boat is heeling too much because the crew isn’t hiking, or
+the skipper may not be on the wind because of other dis-
+tractions. As long as you aren’t heading dead at the stern
+of the boat ahead, you have a good chance of passing. The
+luff barely slows you down if it’s part of a continuing turn
+around the mark as the centrifugal force of the mast and
+sails shoots the boat to windward. With just a half boat
+length of open water to windward of the boat ahead, con-
+centration on accurate steering and crewing can ensure
+SUCCESS.
+A luff sometimes doesn’t work if the boat ahead has also
+luffed to avoid the backwind of another in front of her. A
+tack away from the bad air is often the answer, but will not
+be successful if the boat ahead also tacks and covers you.
+This is the time to watch carefully for an opportunity. On
+some larger day-racing keelboats, a crew member has to
+get on deck to clear the spinnaker pole. Sometimes the
+
+-- 107 of 136 --
+
+100 The Yachtsman’s Guide to Racing Tactics
+crew forgets to get the outhaul on the mainsail out. Wait
+until the skipper or crew of the boat ahead is distracted by
+some problem that will delay them from tacking immedi-
+ately to cover you; then tack. This is an excellent way of
+breaking cover.
+AFTER ROUNDING THE LEEWARD MARK
+When you are in the enviable position of having a com-
+manding lead on the fleet, and neither side of the course
+is advantageous, standard practice dictates the use of a
+tactic called “splitting the distance.” After rounding the
+mark and hardening up to closehauled, check how far
+back your nearest competition is. When they have covered
+half the distance to the mark, tack. By the time they reach
+the mark, you should be dead upwind of them. This places
+you squarely between your destination and your competi-
+tion. To beat you they have to go “through” you, which is
+very difficult.
+Some of the greatest gains and losses occur shortly after
+rounding the leeward mark. It is essential to know
+whether you are sailing in a header or a lift, and to judge
+which way you expect the wind to shift. A shift may have
+occurred on the second reaching leg, where it’s more diffi-
+cult to detect. The apparent wind would go forward, but
+this also happens if the breeze lightens, so the skipper may
+not have noticed. After rounding and sailing closehauled
+for a while, as in Figure 59, he suddenly notices that other
+boats, which have rounded long after, are well up inside
+of him. While he was sailing on a header, the other boats
+were on the reaching leg. When they reached the mark,
+the wind backed, lifting all boats on port tack. This put the
+boats at the mark in an instantly favorable position vis-a-
+vis the skipper who sailed in a header. If he recognizes this
+fact, he may keep on sailing on the lift, and wait for the
+next header to come before tacking. If he doesn’t realize
+what has happened, he may feel his bad position was
+caused by poor crew work or perhaps more wind where
+the other boats are. This might prompt him to tack, where-
+
+-- 108 of 136 --
+
+wind
+Figure 59
+upon he would be sailing in a header when all the others
+are sailing in a lift—a bad move.
+The solution is to avoid getting into the position before
+it happens. If you haven’t been able to determine any wind
+shift on the reaching leg, check your compass course after
+rounding and sailing closehauled. You should know your
+heading on port tack from the last beat, and compare it
+with your present heading. If lifted, hold on; if headed,
+tack. Remember, however, that the other tack will take
+you toward the other boats that haven’t rounded yet. Their
+sails can chop up the wind quite badly, and, though you
+have right of way (being leeward boat on starboard tack),
+the amount gained from the shift is offset somewhat by the
+amount lost to bad air.
+When
+	you round
+	the
+mark and
+find
+yourself
+in
+a
+lift,
+but
+hurt badly by other boats,
+consider laying
+off
+below them.
+In one
+	5.5
+	Metre Nationals, we found ourselves
+	in that
+position.
+	The reach became
+	quite free near the end
+	of the
+
+-- 109 of 136 --
+
+102 The Yachtsman’s Guide to Racing Tactics
+leg, and we realized the wind had shifted aft (a port tack
+lift). We were behind and outside a number of boats at the
+turn, and normally would have tacked away to clear our
+air. Instead, we reached off to leeward, and broke through
+the lee of the boats to windward. When the header re-
+turned we got it first, tacked, and crossed a number of the
+boats that had beaten us to the mark.
+
+-- 110 of 136 --
+
+11. The Beat to a
+Run and the Run
+The second beat isn’t much different from the first, ex-
+cept that the competition is more spread out, and one
+starts thinking about staying between the competition and
+the mark, covering, and avoiding taking flyers. Often the
+wind has shifted more to one side of the course, making
+one tack the long tack to the mark. Generally, the proper
+tactic is to take the long tack first. This is in keeping with
+the premise of avoiding the laylines, as the short tack will
+take you to the laylines faster.
+As you can see in Figure 60 on page 104, a boat that sails
+tack from the leeward mark in the new veered wind (in-
+dicated by dashes) will soon reach the starboard tack lay-
+line, and will overstand if she continues on. Since she will
+be spending so little time on port tack and so much more
+time on starboard, she must play the windshifts differ-
+ently from the first weather leg. The skipper will generally
+tack on a small header when on port tack, but will absorb
+
+-- 111 of 136 --
+
+Original wind
+a new wind
+LESS
+PP — — —
+windward mark
+A
+leeward mark —_NX
+Figure 60
+a much greater header on starboard, since he must remain
+on starboard tack for such a greater distance.
+The approach to the weather mark for rounding to a run
+demands different considerations from those of rounding
+to a reach. It usually does not pay to hold high after round-
+ing, except to clear your air, because you lose so much
+distance by not heading directly downwind at the mark.
+This is particularly so when the course to the leeward
+mark necessitates a jibe. If we’re leaving marks to port and
+the wind has shifted, as shown in Figure 60, the long tack
+upwind will be starboard, and the run will be on port. Just
+remember “starboard tack up, port back” and vice versa.
+As you approach the weather mark, a decision must be
+made as to which tack to run on. If the wind is fairly
+parallel to the course and the next leg is almost directly
+downwind, the starboard tack makes the most sense for
+port roundings. Since you are approaching on starboard,
+it’s easiest to set up the spinnaker pole for that tack. A jibe
+set is usually slower, and on larger yachts there’s more
+that can go wrong (e.g., the spinnaker’s wrapping around
+the jib during the jibe). :
+Another disadvantage to having the pole and spinnaker
+
+-- 112 of 136 --
+
+The Beat toa Run and the Run 105
+all set up for a jibe to port occurs when you have ended up
+outside of other boats at the mark. I have seen boats in this
+position, held off by inside leeward boats, unable to jibe to
+port because the leeward boats were on starboard tack.
+The outside boat has to wait until the others have cleared
+out ahead before she is able to jibe past their sterns to set
+her own spinnaker.
+A boat that takes the port tack after rounding sails into
+the congestion of sailboats approaching the weather
+mark, whereas starboard tack takes the boat away. The
+congestion can cause two problems: (1) all the closehauled
+boats, whether on port or starboard tacks, have right of
+way over the boat running free on port tack; and (2) all the
+closehauled boats on the starboard tack layline, to wind-
+ward of the running boat, disturb the wind terribly. In
+light air the running boat’s spinnaker can be well blan-
+keted by these closehauled boats.
+Once around the mark, it’s crucial to keep away from the
+blanket zone of another boat. In light winds the zone of
+disturbed air carries for quite a number of boat lengths
+downwind from the windward boat. The helmsman of the
+windward boat will try to stay “on the wind” of the lee-
+ward boat by keeping his masthead fly pointed right at the
+leeward boat. At times it may be necessary to reach up a
+little for extra speed to get the leeward boat in your blan-
+ket zone. Doing so makes the distance between the boats
+greater and your blanket less effective. But some blanket-
+ing is better than none, and you should still be able to slow
+the leeward boat enough to start gaining back the lost
+distance.
+It’s often best to stay out of luffing matches on the lee-
+ward leg. When you and another boat are in a luffing
+match on a reach, the luff is still somewhat in the direc-
+tion the fleet is sailing. A luff on a run may take you at
+right angles to the course. While the fleet is sailing toward
+the mark, you are making zero progress toward it. Further-
+more, when you curtail the luff and fall back down to
+course, you will have to sail lower than the rest of the fleet,
+which will have a better point of sailing on you.
+
+-- 113 of 136 --
+
+Figure 61
+On a run, you use the benefits of blanketing mainly to
+close the distance and to catch the lead boats, but it usually
+takes a jibe or two to get through safely. In Figure 61 the
+trailing boat has gradually cut down the lead of the lead-
+ing boat by disturbing her wind. At position A the lead boat
+luffs up to protect herself, whereupon the trailing boat
+jibes and the lead boat follows suit a few moments later.
+At position B the trailing boat is still on the lead boat’s
+wind, and has an inside overlap at the mark. The mistake
+the lead boat made was in not anticipating the jibe of the
+trailing boat. By either jibing first or being prepared to jibe
+at the same instant, the lead boat would be to leeward with
+luffing rights, and could protect her position by luffing.
+
+-- 114 of 136 --
+
+The Beat toa Run and the Run 107
+Luffing can only be done by a leeward boat to prevent a
+windward boat from passing. When a boat catches up
+from behind to leeward, the reason she cannot luff during
+the existence of the overlap is that the helmsman of the
+windward boat was forward of the mainmast of the lee-
+ward boat when the overlap was established. The overlap
+begins when the boats, one of which is no longer clear
+astern, are within two overall lengths of the longer one. If,
+as they converge, and an overlap is established, the mast
+of the leeward boat is forward of windward’s helmsman,
+the right to luff is also established.
+Another way luffing rights can be established by a boat
+that is catching up to leeward is by a couple of jibes. A new
+overlap begins after a jibe has been completed. In Figure
+62, position B, a boat has caught up from behind, and has
+=	SK	wind
+
+-- 115 of 136 --
+
+108 The Yachtsman’s Guide to Racing Tactics
+established an overlap to leeward. Because her mast is
+behind windward’s helmsman, she cannot luff while that
+overlap exists. At position B, she jibes to starboard tack
+and back to port at position C. A new overlap is established
+at that point. The leeward boat now has luffing rights, for
+her mast was forward of windward’s helmsman when the
+new overlap was created.
+Bob Johnstone, who builds and successfully races the
+J-24, J-30 and J-36 class sailboats designed by his brother,
+Rod, uses a subtle tactic to shorten the lead of a boat in
+front of him on a run. He teases the skipper ahead into
+sailing a longer course to the leeward mark. When his
+competitor looks back to check on Bob’s position, Bob
+steers a little high. The competition steers higher yet. Bob
+immediately resumes his previous course to the mark, but
+his competitor, having gone higher, takes longer to get
+back down to course. Then Bob will exaggerate going low
+for a moment while the competitor sails low for fifteen to
+thirty seconds. Bob claims this tactic, done repeatedly, is
+usually good for three or four boat lengths, or even more,
+if you can blanket the boat ahead.
+WIND SHIFTS
+One of the most important tactical decisions on a run is
+how to play the wind. On a beat we almost always tack in
+heading wind shifts. Well, on a run it’s the opposite. We
+jibe in lifts. Whereas failure to play the wind shifts prop-
+erly on a beat can result in startling losses, the results are
+not as dramatic on runs. You will still be heading roughly
+toward the leeward mark. In Figure 63 boats A and B are
+sailing dead downwind toward the leeward mark on star-
+board tack. A new wind that is a lift comes in. It allows
+boat A to head up, which she does. Now boat A is no longer
+heading directly at the mark. She is sailing a longer dis-
+tance on a dead downwind run. Boat B has jibed to port,
+and is heading at the mark on a much faster point of
+sailing. ;
+Let’s say the course to the leeward mark is 195°, and we
+know that the true wind was 200° when we rounded the
+
+-- 116 of 136 --
+
+new wind
+original
+wind
+Figure 63
+weather mark (see Figure 64 on page 110). We are sailing
+on port tack 20° high of the true wind in light air to gain
+more boat speed from a higher velocity apparent wind. We
+watch our compass, and keep the apparent wind angle
+constant by observing the angle of the masthead fly or our
+apparent-wind-direction instrument. Since we head off in
+gusts and up in lulls, we have to be careful not to make
+decisions based on the different apparent wind velocity.
+Our compass shows we have been lifted to 170° with the
+apparent wind direction and velocity unchanged. This in-
+dicates that 190° is dead downwind, and, since we desire a
+course of 195°, the starboard tack is closer and, therefore,
+faster.
+If the wind shift is continual, you again play it the oppo-
+site of a beat. On a beat you sail toward expected headers.
+On a run you sail away from them. In Figure 65 on page
+110, boats A and B are sailing at equal speed toward the
+leeward mark. Boat A has sailed toward the new wind
+direction, and when it arrives, she has to sail dead down-
+wind to the leeward mark. Boat B has sailed away from the
+
+-- 117 of 136 --
+
+new
+wind
+180°
+\
+J...
+wind
+200°
+44° 170°Figure 64 195° to leeward mark 180
+original
+wind
+bara
+a	
+a “7 —
+new wind
+: 5 >
+=<J
+ee
+be new wind
+B : A
+Figure 65
+
+-- 118 of 136 --
+
+The Beat toa Run and the Run 111
+new wind direction. She jibes and is on more of a reach,
+a much faster point of sail, when the new wind arrives.
+This tactic is fine if the wind shifts only a few degrees.
+However, if the wind continues to veer so much that boat
+A is beam-reaching on port tack, and boat B can’t carry a
+spinnaker to get to the mark, the benefits of sailing away
+from the shift are lost.
+As you approach the leeward mark on a run, it’s very
+important to get to the inside of the fleet. It may be that the
+right side of the leg was the place to be for wind, but that
+won’t be much help if you find yourself outside a stack of
+ten boats at the mark. Consider the problem early to avoid
+getting caught in the wrong spot. Even if you have to
+harden up very sharply and cross a few sterns, it can be of
+wind
+Figure 66
+
+-- 119 of 136 --
+
+course to mark
+Neee	oeone
+Figure 67
+benefit an Figure 66 boat A has crossed B’s stern, jibes, and
+returns on starboard tack with an overlap at the mark.
+Boat B’s defense is shown in ,Figure 67, where she also
+heads high of the mark. By jibing she breaks the overlap
+as the boats turn down to the two-boat-lengths circle.
+It’s good fun and a source of satisfaction to keep another
+boat from getting an inside overlap at the leeward mark.
+During Antigua Race Week on a leeward leg, we, on
+Sleuth, were trying to foil Desperado (later lost at sea at-
+
+-- 120 of 136 --
+
+The Beat toa Run and the Run 113
+tempting to better the transatlantic elapsed time record)
+from obtaining an inside overlap at the mark. We were
+running dead downwind on starboard tack, the course to
+the mark being almost by-the-lee. Desperado was astern
+and to windward. As she approached on our windward
+(starboard) side, we held up high, and the skipper soon
+realized he wouldn’t get through us to weather. This also
+made the proper course to the mark farther by-the-lee.
+Desperado then attempted to obtain an overlap to leeward,
+and we immediately fell off for the mark. To avoid jibing,
+and thereby fouling Desperado by jibing too close to her,
+we held our boom out over the side of the boat. Desperado’s
+crew did the same, which played beautifully into our
+hands. Desperado was a three-quarters rig with a tremen-
+dous mainsail, while Sleuth is a masthead rig with a high-
+aspect-ratio mainsail. Holding the respective mainsails
+out against the wind slowed Desperado far more than
+Sleuth. Even though Desperado was a much faster down-
+wind boat, we successfully held her off at the mark.
+Maintaining starboard tack by holding the boom over
+the port side of the boat is a standard tactic. The “Defini-
+tions” in the racing rules state: “A yacht is on the tack
+(starboard or port) corresponding to her windward side.
+The leeward side of a yacht is that on which she is...
+carrying her mainsail. The opposite side is the windward
+side.” It doesn’t matter that the wind is coming over the
+“leeward” side of the boat as long as the mainsail is out
+over that side. Be aware that a jibe isn’t completed until
+the mainsail fills normally on the other tack. If it isn’t
+completed, you are still in the process of jibing, and you
+have no legal rights over a boat that is on a tack.
+
+-- 121 of 136 --
+
+12. Anchoring
+There are times when the breeze is so light that the
+current overpowers it. Rather than lose precious distance
+to the mark, anchor your boat. If you are the first to anchor,
+you will stay in one place while the rest of the fleet is
+moving backward. I’ve anchored at night and seen us
+“passing” running light after running light, just as if we
+had double the boat speed of the others. To press the ad-
+vantage of being the first to anchor, no one else should
+realize you’ve done it. Quietly slip the anchor over the
+leeward side near the shrouds, One crew member should
+do it while the rest pretend to be racing the boat for all
+they’re worth. An anchorline running along the hull is
+hard to see, so it’s possible no one will notice that you’re
+anchored. Arthur Knapp says this tactic was pulled on
+him by Cornelius Shields way back in 1933. It’s been used
+a lot since then.
+
+-- 122 of 136 --
+
+Anchoring 115
+An anchor can be used for purposes other than actual
+anchoring. I was sailing as tactician on Carina during an
+Admiral’s Cup Cowes Week race in England. The start was
+in total drifting conditions with a three-knot current car-
+rying the fleet across the starting line. Dick Nye, the
+owner, asked for my suggestions about starting under such
+conditions. There was only one way, in my mind: power to
+a location where, when the five-minute gun sounded and
+the engine had to be turned off, we would have five min-
+utes of drifting with the current to the line. We judged the
+distance quite accurately, but failed to get turned around.
+We were drifting stern first toward the starting line. All of
+the Class 1 fleet was also drifting in a mass to the line,
+bouncing against one another and fending off. There was
+only one boat heading in the proper direction that had
+been able to pick up the slightest zephyr. We had to get the
+boat turned around. I called for the anchor to be lowered
+over the stern just far enough to drag along the bottom, but
+not to hold. Immediately our bow swung down-current. We
+lifted the anchor, and were second out of the mess.
+
+-- 123 of 136 --
+
+13. Finishing
+The tactic that consistently accounts for the most places
+won or lost at an upwind finish is sailing to the downwind
+end of the line. Just as the upwind end of the line is fa-
+vored at the start, the downwind end is favored at the
+finish.
+In the 1968 Olympics, I saw Buddy Friedrichs, the U.S.
+skipper in the Dragon class, take four sterns and still
+finish first. Buddy was on port tack laying the starboard
+end of a long finish line. He met four other Dragons on
+starboard tack, one after another, and ducked under the
+stern of each. Rather than tacking on him, they all con-
+tinued toward the port (buoy)-end of the line. By choosing
+the downwind end, Buddy went from fifth to first in a
+couple of hundred yards and won the gold medal.
+Unfortunately, it’s very difficult to determine which end
+is downwind. You don’t have the same opportunity as at
+the start to take the bearing of the line, and to compare it
+with the wind direction. However, there are a few tactics
+that can help.
+
+-- 124 of 136 --
+
+Finishing 117
+As you approach the finish, you have four laylines to
+deal with: port and starboard tack laylines to the port end
+and both laylines to the starboard end. The four laylines
+are shown with the wind square to the line (see Figure 68).
+You never want to sail past the first layline you reach. A
+starboard tack boat will tack on the port tack layline to the
+starboard end. A port tack boat will tack on the starboard
+tack layline to the port end, as shown in Figure 68.
+In Figure 69 on page 118, the wind has veered making
+the port end downwind by a good margin. As two boats
+approach the intersection of the two laylines, it is obvious
+that boat B will have a much shorter distance to sail than
+boat A. The buoy will seem closer than the committee boat.
+Distances are deceiving when you are comparing two
+objects of such disparate size as a buoy and a yacht. Fur-
+ther, it is rare that you will ever find yourself precisely at
+wind
+finish line
+Figure 68
+
+-- 125 of 136 --
+
+wind
+wind
+finish line
+Figure 69
+the intersection of both laylines. You are sailing tactically
+among other boats that you may haveto cover or to break
+away from. This determines your approach to the line,
+which may be quite different from the course you would
+have taken in the absence of other boats. Try to judge
+whether you are sailing more parallel to the line or more
+across it. It sounds like a simple-minded tactic—sail across
+the line, not parallel to it—but it’s amazing how many
+skippers take the course of boat A in Figure 69 until they
+reach the middle of the line and then tack. They should
+tack immediately when they can lay the buoy on starboard
+tack.
+Harry Sindle, many-time national champion in a num-
+ber of classes, considers the finish at the completion of the
+second weather leg of an Olympic course. Often the com-
+mittee boat has moved from the leeward mark where the
+race was started, and has set a finish line at the weather
+mark. As he tacks to go around the weather mark for the
+run, he is crossing what will be the finish line two legs
+hence. When head to wind during that tack, he observes
+whether either end is abaft abeam. That end will be the
+downwind end at the finish, barring any major wind shifts.
+If you know the ability of the race committee, you may
+
+-- 126 of 136 --
+
+Finishing 119
+be able to tell which end is favored simply by the wind
+direction. If the wind is essentially straight down the
+course line from the windward mark to the leeward mark,
+the finish line will be set perpendicular to the course, and
+neither end will be favored. If the wind has veered, and
+the finish line is still perpendicular to the course line, then
+the port end will be downwind as in Figure 69.
+Race committees are now expected to adjust slightly for
+the wind direction by splitting the difference between the
+finish line’s being square to the wind and being square to
+the course from the last mark. In the past the line was
+always supposed to be square to the course regardless of
+wind direction. Though this change cuts down the amount
+one end of the finish line can be favored over the other, it
+doesn’t alter the fact that if the wind shifts to the right of
+the course, the port end should be downwind and vice
+versa. As you sail up the last weather leg, therefore, keep
+in mind the true wind direction. If the port tack takes you
+closer to the finish (the long tack), then the wind has
+backed, and the starboard end is downwind.
+Finishing tactics involving other boats are used either to
+pin them away from the line or to force them onto the
+unfavored tack more parallel to the line. Figure 70 on page
+120 shows the finish line approach of Whirlwind and
+Sleuth in one race. As Whirlwind came at us on port, we
+normally would have tacked ahead of her and a little to
+windward. However, this would have allowed her the pos-
+sibility of pinching up above us and curtailing our ability
+to tack across the line, since we would be tacking too close.
+She would then tack when she could clear the buoy, and
+possibly nip us at the finish because the buoy end was so
+heavily favored. The timing of the tack was crucial.
+Sleuth is a large, heavy boat and doesn’t pick up speed
+very fast after a tack in a seaway. Sleuth’s tacking too early
+would allow Whirlwind to stick her bow to weather be-
+tween us and the mark as we gathered momentum. Our
+tacking too late would allow her to drive through our lee
+and luff us as we struggled to get speed up. Her speed, if she
+shot into the wind for the line, would probably have carried
+her across ahead of Sleuth. My tack had to be completed
+
+-- 127 of 136 --
+
+Whirlwind
+Figure 70
+before her mast came abeam of me, the windward helms-
+man. In this way she’d have no luffing rights, and yet be
+pinned to leeward of me. Fortunately, the maneuver
+worked perfectly. It’s a fairly standard tactic, but a difficult
+one to perform on ocean-racing yachts so close to the finish.
+Head reaching, shooting into the wind across the line, is
+a useful tactic in trying to nip ahead of a close competitor.
+It works only in boats that carry a great deal of momen-
+tum, such as large displacement keelboats. It also works
+best on light days rather than heavy. When the wind and
+seas are high, the boat is stopped quickly by the windage
+of the rigging and the force of the seas against the hull.
+When you’re about one boat length from the line, shoot
+dead into the wind as boat B does in Figure 71. Boats A and
+
+-- 128 of 136 --
+
+Finishing 121
+B are equidistant upwind, and would cross the line at the
+same instant if both sailed straight. By shooting the line,
+boat B slows down, but sails such a short distance com-
+pared to boat A that she wins. The timing has to be perfect:
+shoot too late and its value has been lost; shoot too early
+and you may lose all momentum before reaching the line.
+Of the two errors, the latter is more prevalent. Just as
+skippers think they are right on the starting line well be-
+fore they reach it, so do finishers seem to believe they have
+crossed the line well before they actually have. Sail a little
+farther than your instincts tell you before shooting.
+The racing rule “Definitions” state that “A yacht is rac-
+ing... until she has... finished and cleared the finishing
+line and finishing marks. .. .” Clearing the finishing line
+means the boat is no longer touching any part of it. Since
+you finish when any part of the hull, crew or equipment
+in normal position crosses the finishing line from the di-
+rection of the course from the last mark, your boat doesn’t
+have to cross the line entirely to be legally finished. You
+can drop back on the course side of the line and sail home.
+This is a common occurrence when finishing in very light
+air against a current. To avoid penalty or disqualification,
+be careful not to use your engine until you have cleared
+the line.
+wind
+Figure 71
+
+-- 129 of 136 --
+
+14. Eccentric Tactics
+There are some interesting tactics that crews have used
+when racing at night. During the 1980 Southern Ocean
+Racing Conference Lipton Cup, Harold Cudmore was
+skippering Mistress Quickly. He was close on corrected
+time to Kialoa, which was ahead of him closehauled on
+starboard tack, and to Ondine, which was slightly behind
+and to leeward of Kialoa. Ondine tacked, and, as she
+passed between Kialoa and Mistress Quickly, Harold
+doused the light that illuminates the jib. Anyone watching
+from Kialoa and not seeing any light from Mistress
+Quickly as Ondine passed (they were too far apart to see
+running lights) would assume that Mistress Quickly had
+also tacked, and was blocked from view by Ondine. So
+Kialoa tacked to cover, and Mistress Quickly secretly
+sailed on toward the Florida shore still on starboard tack.
+By being able to break cover, she was able to beat Ondine
+boat for boat and Kialoa on corrected time.
+Another, not too legal, use of lights employed to outfox
+an opponent originated on the Great Lakes in the 1950s. A
+boat was equipped with a rheostat that regulated the bril-
+liance of her stern light. When the crew had their arch
+rival tucked behind them, they would gradually diminish
+the intensity of the light so their competitor would think
+
+-- 130 of 136 --
+
+Eccentric Tactics 123
+he was being left behind. The crew of the lead boat would
+see flashlights flashing, and hear winches turning, in-
+dicating that all sorts of sail adjustments were being made
+on the following boat. Since the latter was actually mess-
+ing up their sail trim instead of improving it, the lead boat
+would in reality start moving out. The intensity of the
+stern light was then adjusted upward. Their competition
+now believed the adjustments made were helping them
+gain back lost distance when the opposite was true.
+The best tactic I’ve ever heard of I’ve saved for last. Dick
+Tillman was sailing in the Brigade Sailing Championship
+at the U.S. Naval Academy in Annapolis. He could only
+win the series by putting a boat between him and the boat
+immediately behind, which would be first overall by
+finishing second to Dick. The third-place boat was too far
+behind for Dick to use the most common tactic of dropping
+back to camp on the wind of the second place boat, thereby
+slowing the boat sufficiently to allow the third place boat
+to catch up and to pass. Some other tactic had to be initi-
+ated. The idea struck Dick to finish on the wrong side of
+the committee boat, and to lure the second place boat
+along. The possibility of this happening seemed good,
+since the course included numerous mark roundings, and
+the finish line was not clearly defined. In any case, he had
+nothing to lose. Thus, Dick “finished” while still covering
+the second boat close behind, and as they crossed the in-
+correct line Dick congratulated him for taking the series.
+He then chatted with the “winner” from leeward and
+closer to the committee boat until the third boat was close
+to “finishing.” Dick then sheeted in, and returned to the
+course. He shouted to the third boat that he (Dick) had
+finished incorrectly and that they should follow him to the
+correct side of the committee boat. They did so before
+Dick’s real competition realized what was happening.
+This tactic gave Dick the required boat and the series.
+Fascinating tactics like these make the sport of sailboat
+racing a varied and interesting one. However, until the
+racer starts thinking in terms of besting his competition
+actively and aggressively with tactics, he isn’t really rac-
+ing. Here’s to years of true sailboat racing for the reader
+of this book.
+
+-- 131 of 136 --
+
+Glossary
+Backwind An area of turbulent airflow astern of a sailboat
+Barging A windward boat illegally taking room to start to leeward of
+starting mark
+Blanket zone An area of badly disturbed airflow directly downwind of
+a windward boat
+Covering Staying between the competition and the destination
+Covering from behind Staying in the same wind and sea conditions as
+the boat ahead so he does not get away
+Current stick A stick, weighted to float vertically, with which to esti-
+mate the current direction and strength
+Favored end The upwind end of the starting line
+General recall When all the starters are recalled for a new start either
+because of a timing error or too many boats are over too early to be
+identified
+Layline The imaginary line which takes a closehauled boat directly to
+the windward mark without either overstanding or having to tack
+again
+Lines of equal position An imaginary line perpendicular to the wind
+direction. Any boat on it is equally upwind as another on the same line
+and is even with the other.
+Luffing Altering course toward the wind
+Ooching Sudden movement of crew weight forward or aft
+Overstanding Sailing past the layline and having to reach off for the
+mark after tacking
+Pumping Persistent or rapidly repeated trimming and releasing of any
+sail
+Rocking Movement of crew weight or adjustment of the sails or center-
+board which leads to persistent rolling of the sailboat
+Roll-tacking A tacking technique which reduces the period of luffing to
+a minimum
+Sculling Repeated forceful movement of the helm back and forth
+Shooting the wind WHeading the sailboat directly into the wind and
+drifting to a stop
+Splitting tacks Sailing closehauled on one tack while the competition
+is on the other tack
+Torquing Rolling the boat to Rar art, thereby increasing the appar-
+ent wind in the sails
+Unweighting Bouncing crew weight up and down to gain advantage in
+waves
+Windward (weather) mark The mark that ends the beat
+
+-- 132 of 136 --
+
+in dalMisia i	i me ag etinn a
+peg Wy ii iaig
+ES Te - a ua
+Be AG a	hy wi » tarp Ee
+ae Pay Gal 04
+ae CAs wn a	
+‘ Soy
+By	Py
+
+-- 133 of 136 --
+
+5 vaste a	ious a. yr; : Che
+ne ee a “i if
+i 4aat a> fovns bis : oe
+~ < mae he va ngydyy
+‘ sates tr? Frme ALS e iyi ov ie Ns at
+Pei tee “ae | sito9 ne ‘ EY in best
+leg ale ud a hi, ae (eid ewe alen+ ? peie
+a eee ees pea if Mpa pee a ioe
+m vey heats nae es.
+ne ot 15 oti “i	
+eS 7 ~ tay fos ‘i	
+: i" “a i, } ! ‘ J” us 7
+vies ¥ ale ba iu « Sukie ,
+: & OS Pent a
+bee
+var
+costo
+us
+ares
+
+-- 134 of 136 --
+
+Continued from front flap
+Written with on-board use in mind,
+The Yachtsman’s Guide to Racing Tactics
+has a water-resistant cover. Take this book
+along and be a winner.
+About the Author
+RegattaFlow Coach is Chief Executive Of-
+ficer and Owner of Offshore Sailing
+School, Ltd., which offers a full spectrum
+of sailing courses in seven locations
+throughout the world. His sailing experi-
+ence includes the 1968 Olympics, two
+America’s Cup Trials, participation on the
+U.S. Admiral’s Cup Team, six transatlantic
+races and the 1973 North American
+Men’s Championship, to name just a few.
+He is the author of four other books on
+sailing and has a monthly column in Sail
+magazine. He lives in New York City.
+Cover Design: Joe Mandracchia
+Ziff-Davis Publishing Company
+One Park Avenue
+New York, NY. 10016
+ISBN 0-87165-090-8
+
+-- 135 of 136 --
+
+THE YACHTSMAN’S GUIDES form a series of books designed
+to give you the information you need to cope with every area of
+boating. Written by experts, they are lucid, well organized and meant to
+be kept and used on board. The Yachtsman’s Guides are the answer
+to your every boating need.
+THE YACHTSMAN’S GUIDES TO:
+better maintenance
+by
+Bill Duggan
+Every conceivable
+maintenance chore
+is covered—pre-
+cisely and suc-
+cinetly =n this
+book. Sail or power,
+engines, sails,
+painting, winteriz-
+ing and more are
+discussed.
+ISBN 0-87165 -036-3
+calculator navigation
+by
+Stafford Campbell
+The first really prac-
+tical, how-to book
+on this increasingly
+popular subject.
+Tells you how to
+solve all sorts of
+coastwise and ce-
+lestial navigation
+problems.
+ISBN 0-87165-035-5
+celestial navigation
+by
+Stafford Campbell
+This book takes
+you step-by-step
+through the mys-
+teries of shooting a port dutie
+sight, reducing it ° informati
+and plotting your navigatio
+position. Campbell > - sagemaki
+sets a new stand- ,
+ard for clarity and ik
+interest.
+ISBN 0-87165-019-3
+coastwise navigation
+by
+Stafford Campbell
+Piloting is the basic
+art of the mariner.
+Charts, navigation
+tools, dead reckon-
+ing, nighttime and
+fog nav and a host
+of practical tips
+make this book a
+must.
+ISBN 0-87165-027-4
+first aid afloat
+mate's guide
+by
+Earl B. Rubell, M.D.
+A complete guide
+to diagnosing and
+treating illnesses
+and injuries on
+board. Alphabet-
+ized and cross-in-
+dexed for quick
+reference. For any
+boat, in any waters.
+ISBN 0-87165-033-9
+by
+Margie Livi
+A complet
+to the usu
+handling,
+nance and
+seamanship.
+ISBN 0-87165 -087-8
+
+-- 136 of 136 --
+

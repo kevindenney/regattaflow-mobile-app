@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bathymetry Console Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        #logs {
+            background: #252526;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007acc;
+        }
+        .success { border-left-color: #4ec9b0; }
+        .warning { border-left-color: #ce9178; }
+        .error { border-left-color: #f48771; }
+        h1 { color: #4ec9b0; }
+        .instructions {
+            background: #2d2d30;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Bathymetry Console Log Monitor</h1>
+
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Keep this window open</li>
+            <li>In another tab, open: <a href="http://localhost:8081/races" target="_blank">http://localhost:8081/races</a></li>
+            <li>Click on a race with a map</li>
+            <li>Toggle the "Depth" layer ON</li>
+            <li>Watch for logs below (they'll appear from the main app via localStorage polling)</li>
+        </ol>
+        <p><strong>Looking for:</strong> "Adding bathymetry deck layers" with <code>synthetic: false</code></p>
+    </div>
+
+    <h3>Console Logs:</h3>
+    <div id="logs"></div>
+
+    <script>
+        const logsDiv = document.getElementById('logs');
+
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        // Poll localStorage for logs (simple cross-tab communication)
+        let lastCheck = Date.now();
+        setInterval(() => {
+            try {
+                const bathymetryLogs = localStorage.getItem('bathymetry_logs');
+                if (bathymetryLogs) {
+                    const logs = JSON.parse(bathymetryLogs);
+                    logs.filter(log => log.timestamp > lastCheck).forEach(log => {
+                        addLog(log.message, log.type);
+                    });
+                    lastCheck = Date.now();
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }, 1000);
+
+        // Simulate some test logs
+        addLog('Monitor started. Waiting for bathymetry logs...', 'info');
+
+        setTimeout(() => {
+            addLog('💡 TIP: Make sure the Depth layer toggle is visible in the race map', 'info');
+        }, 3000);
+
+        // Test GEBCO connectivity
+        fetch('https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv')
+            .then(response => {
+                addLog('✅ Network access to GEBCO confirmed (status: ' + response.status + ')', 'success');
+            })
+            .catch(error => {
+                addLog('❌ Cannot reach GEBCO: ' + error.message, 'error');
+            });
+    </script>
+</body>
+</html>

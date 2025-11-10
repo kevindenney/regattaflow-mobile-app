@@ -46,6 +46,18 @@ export default function PaymentConfirmation({
   };
 
   const { date, time } = formatDateTime(session.scheduled_start);
+  const totalAmount =
+    typeof session.total_amount === 'number' && !Number.isNaN(session.total_amount)
+      ? session.total_amount
+      : 0;
+  const coachPayout =
+    typeof session.coach_payout === 'number' && !Number.isNaN(session.coach_payout)
+      ? session.coach_payout
+      : 0;
+  const platformFee =
+    typeof session.platform_fee === 'number' && !Number.isNaN(session.platform_fee)
+      ? session.platform_fee
+      : Math.max(0, totalAmount - coachPayout);
 
   return (
     <Modal
@@ -109,21 +121,21 @@ export default function PaymentConfirmation({
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>Session Fee</Text>
                 <Text style={styles.paymentValue}>
-                  {formatPrice(session.total_amount)}
+                  {formatPrice(totalAmount)}
                 </Text>
               </View>
 
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>Platform Fee</Text>
                 <Text style={styles.paymentValue}>
-                  {formatPrice(session.platform_fee)}
+                  {formatPrice(platformFee)}
                 </Text>
               </View>
 
               <View style={[styles.paymentRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total Paid</Text>
                 <Text style={styles.totalValue}>
-                  {formatPrice(session.total_amount)}
+                  {formatPrice(totalAmount)}
                 </Text>
               </View>
 

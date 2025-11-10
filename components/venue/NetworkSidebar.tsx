@@ -44,10 +44,10 @@ export function NetworkSidebar({
   useEffect(() => {
     Animated.spring(slideAnim, {
       toValue: isCollapsed ? -380 : 0,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       friction: 8,
     }).start();
-  }, [isCollapsed]);
+  }, [isCollapsed, slideAnim]);
 
   // Fetch saved places on mount
   useEffect(() => {

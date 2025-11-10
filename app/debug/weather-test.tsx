@@ -115,7 +115,7 @@ export default function WeatherTestScreen() {
             <Text style={styles.errorTitle}>Error</Text>
             <Text style={styles.errorText}>{error}</Text>
             <Text style={styles.errorHint}>
-              Make sure WEATHER_API_KEY is set in your .env file
+              Make sure EXPO_PUBLIC_STORMGLASS_API_KEY is set in your .env file
             </Text>
           </View>
         )}
@@ -220,8 +220,8 @@ export default function WeatherTestScreen() {
         <View style={styles.instructionsCard}>
           <Text style={styles.instructionsTitle}>How to Test</Text>
           <Text style={styles.instructionsText}>
-            1. Get a free API key from weatherapi.com{'\n'}
-            2. Add to .env file: WEATHER_API_KEY=your_key_here{'\n'}
+            1. Get an API key from stormglass.io{'\n'}
+            2. Add to .env file: EXPO_PUBLIC_STORMGLASS_API_KEY=your_key_here{'\n'}
             3. Restart your app{'\n'}
             4. Tap "Fetch Weather Data"{'\n'}
             5. Check if wave height has realistic precision (e.g., "0.8m" not "0.9809509007496541m")

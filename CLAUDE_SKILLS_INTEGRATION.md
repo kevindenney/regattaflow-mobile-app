@@ -5,7 +5,7 @@
 Your RegattaFlow app now uses **Claude Skills AI** for generating AI-powered race tactical plans! This integration provides:
 
 - **60% token reduction** through custom skill knowledge
-- **Expert sailing frameworks** from Kevin Gladstone & Kevin Colgate
+- **Expert sailing frameworks** from RegattaFlow Playbook & RegattaFlow Coach
 - **Championship tactics** with theory + execution
 - **Automatic skill initialization** on app startup
 - **Graceful fallback** if skill unavailable

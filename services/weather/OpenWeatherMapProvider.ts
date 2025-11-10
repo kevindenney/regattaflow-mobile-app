@@ -20,6 +20,7 @@ import {
   ConfidenceLevel,
   TideState
 } from '@/types/environmental';
+import Constants from 'expo-constants';
 
 const OWM_API_BASE = 'https://api.openweathermap.org/data/2.5';
 
@@ -124,11 +125,15 @@ export class OpenWeatherMapProvider {
 
   constructor(apiKey?: string) {
     // Get API key from environment or parameter
-    this.apiKey = apiKey || process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY || '';
+    this.apiKey =
+      apiKey ||
+      Constants.expoConfig?.extra?.openWeatherMapApiKey ||
+      process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY ||
+      '';
 
     if (!this.apiKey) {
       console.warn(
-        'OpenWeatherMap API key not set. Set EXPO_PUBLIC_OPENWEATHERMAP_API_KEY in .env'
+        'OpenWeatherMap API key not set. Set EXPO_PUBLIC_OPENWEATHERMAP_API_KEY in .env or configure extra.openWeatherMapApiKey.'
       );
     }
   }

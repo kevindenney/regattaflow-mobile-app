@@ -8,6 +8,7 @@
  * - Feedback collection
  */
 
+import { addDays } from 'date-fns';
 import { supabase } from './supabase';
 import type { CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
 
@@ -31,6 +32,14 @@ export interface CoachProfile {
   verified: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface SailorSummary {
+  id: string;
+  email?: string | null;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  primary_boat_class?: string | null;
 }
 
 export interface CoachingClient {
@@ -178,6 +187,50 @@ export interface SharedRaceStrategySummary {
   strategy_content?: any;
 }
 
+export type CoachTransactionStatus =
+  | 'scheduled'
+  | 'pending'
+  | 'paid'
+  | 'cancelled'
+  | 'refunded'
+  | 'requires_action';
+
+export interface CoachEarningsTransaction {
+  id: string;
+  clientName: string;
+  sessionType: string;
+  status: CoachTransactionStatus;
+  paymentStatus?: string | null;
+  amount: number;
+  currency: string;
+  date: string | null;
+  payoutDate?: string | null;
+}
+
+export interface PeriodEarningsStats {
+  total: number;
+  sessions: number;
+  averagePerSession: number;
+}
+
+export interface CoachEarningsSummary {
+  period: {
+    week: { current: PeriodEarningsStats; previous: PeriodEarningsStats };
+    month: { current: PeriodEarningsStats; previous: PeriodEarningsStats };
+    year: { current: PeriodEarningsStats; previous: PeriodEarningsStats };
+  };
+  totals: {
+    lifetime: number;
+    sessions: number;
+    averagePerSession: number;
+    pendingPayouts: number;
+    nextPayoutDate: string | null;
+  };
+  breakdown: Record<string, number>;
+  transactions: CoachEarningsTransaction[];
+  pendingTransactions: CoachEarningsTransaction[];
+}
+
 class CoachingService {
   /**
    * Get coach profile for current user
@@ -235,16 +288,32 @@ class CoachingService {
         .eq('status', 'scheduled')
         .gte('scheduled_at', now.toISOString()),
 
-      // Average rating
+      // Average rating - get all feedback first, then filter by coach sessions
       supabase
         .from('session_feedback')
-        .select('rating, session:coaching_sessions!inner(coach_id)')
-        .eq('session.coach_id', coachId)
+        .select('rating, session_id')
     ]);
 
-    const averageRating = feedbackResult.data && feedbackResult.data.length > 0
-      ? feedbackResult.data.reduce((sum, f) => sum + f.rating, 0) / feedbackResult.data.length
-      : undefined;
+    // WORKAROUND: Filter feedback by coach's sessions manually since JOIN doesn't work
+    let averageRating: number | undefined = undefined;
+    if (feedbackResult.data && feedbackResult.data.length > 0) {
+      // Get session IDs for this coach
+      const { data: coachSessions } = await supabase
+        .from('coaching_sessions')
+        .select('id')
+        .eq('coach_id', coachId);
+
+      const coachSessionIds = new Set(coachSessions?.map(s => s.id) || []);
+
+      // Filter feedback to only include coach's sessions
+      const coachFeedback = feedbackResult.data.filter(f =>
+        coachSessionIds.has(f.session_id)
+      );
+
+      if (coachFeedback.length > 0) {
+        averageRating = coachFeedback.reduce((sum, f) => sum + f.rating, 0) / coachFeedback.length;
+      }
+    }
 
     return {
       activeClients: clientsResult.count || 0,
@@ -256,35 +325,282 @@ class CoachingService {
   }
 
   /**
+   * Build an earnings + payouts snapshot for the earnings tab
+   */
+  async getCoachEarningsSummary(coachId: string): Promise<CoachEarningsSummary> {
+    if (!coachId) {
+      throw new Error('coachId is required to load earnings');
+    }
+
+    const { data: sessionRows, error } = await supabase
+      .from('coaching_sessions')
+      .select(`
+        id,
+        sailor_id,
+        session_type,
+        status,
+        payment_status,
+        fee_amount,
+        total_amount,
+        coach_payout,
+        currency,
+        scheduled_at,
+        completed_at,
+        created_at
+      `)
+      .eq('coach_id', coachId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching coach sessions for earnings summary:', error);
+      throw error;
+    }
+
+    const amountOrZero = (value?: number | null, fallback?: number | null) => {
+      if (typeof value === 'number' && !Number.isNaN(value)) {
+        return value;
+      }
+      if (typeof fallback === 'number' && !Number.isNaN(fallback)) {
+        return fallback;
+      }
+      return 0;
+    };
+
+    const computePlatformFee = (session: {
+      platform_fee?: number | null;
+      total_amount?: number | null;
+      fee_amount?: number | null;
+      coach_payout?: number | null;
+    }) => {
+      if (typeof session.platform_fee === 'number' && !Number.isNaN(session.platform_fee)) {
+        return session.platform_fee;
+      }
+      const total = amountOrZero(session.total_amount, session.fee_amount);
+      const payout = amountOrZero(session.coach_payout, total > 0 ? Math.round(total * 0.85) : undefined);
+      const fee = total - payout;
+      return fee > 0 ? fee : 0;
+    };
+
+    const sessions = (sessionRows || []).map(session => ({
+      ...session,
+      platform_fee: computePlatformFee(session),
+    }));
+    const sailorIds = Array.from(new Set(sessions.map(row => row.sailor_id).filter(Boolean))) as string[];
+
+    let sailorMap = new Map<string, { id: string; full_name?: string | null; email?: string | null }>();
+    if (sailorIds.length > 0) {
+      const { data: sailors, error: sailorsError } = await supabase
+        .from('users')
+        .select('id, full_name, email')
+        .in('id', sailorIds);
+
+      if (sailorsError) {
+        console.warn('[CoachingService.getCoachEarningsSummary] Failed to fetch sailor details:', sailorsError.message);
+      } else if (sailors) {
+        sailorMap = new Map(sailors.map(s => [s.id, s]));
+      }
+    }
+
+    const resolveDate = (value?: string | null) => (value ? new Date(value) : null);
+
+    const paidStates = new Set(['captured', 'paid']);
+    const now = new Date();
+
+    const completedPaidSessions = sessions.filter(session =>
+      paidStates.has(session.payment_status ?? '') && amountOrZero(session.coach_payout, session.fee_amount) > 0
+    );
+
+    const lifetimeEarnings = completedPaidSessions.reduce(
+      (sum, session) => sum + amountOrZero(session.coach_payout, session.total_amount ? Math.round(session.total_amount * 0.85) : session.fee_amount),
+      0
+    );
+
+    const lifetimeSessions = completedPaidSessions.length;
+    const averagePerSession = lifetimeSessions > 0 ? lifetimeEarnings / lifetimeSessions : 0;
+
+    const nextPayoutDate = (() => {
+      const payout = new Date(now);
+      const daysUntilFriday = ((5 - payout.getDay() + 7) % 7) || 7;
+      payout.setDate(payout.getDate() + daysUntilFriday);
+      payout.setHours(9, 0, 0, 0);
+      return payout.toISOString();
+    })();
+
+    const makeStatsForRange = (start: Date, end: Date): PeriodEarningsStats => {
+      const bucket = completedPaidSessions.filter(session => {
+        const date = resolveDate(session.completed_at) || resolveDate(session.scheduled_at) || resolveDate(session.created_at);
+        if (!date) return false;
+        return date >= start && date < end;
+      });
+
+      const total = bucket.reduce((sum, session) => sum + amountOrZero(session.coach_payout, session.fee_amount), 0);
+      const sessionsCount = bucket.length;
+
+      return {
+        total,
+        sessions: sessionsCount,
+        averagePerSession: sessionsCount > 0 ? total / sessionsCount : 0,
+      };
+    };
+
+    const daysAgo = (days: number) => {
+      const date = new Date(now);
+      date.setDate(date.getDate() - days);
+      return date;
+    };
+
+    const weekStart = daysAgo(7);
+    const prevWeekStart = daysAgo(14);
+    const weekStats = makeStatsForRange(weekStart, now);
+    const prevWeekStats = makeStatsForRange(prevWeekStart, weekStart);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const monthStats = makeStatsForRange(monthStart, now);
+    const prevMonthStats = makeStatsForRange(prevMonthStart, monthStart);
+
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const prevYearStart = new Date(now.getFullYear() - 1, 0, 1);
+    const yearStats = makeStatsForRange(yearStart, now);
+    const prevYearStats = makeStatsForRange(prevYearStart, yearStart);
+
+    const breakdown = sessions.reduce<Record<string, number>>((acc, session) => {
+      const key = session.session_type || 'other';
+      acc[key] = (acc[key] || 0) + amountOrZero(session.coach_payout, session.fee_amount);
+      return acc;
+    }, {});
+
+    const deriveStatus = (session: any): CoachTransactionStatus => {
+      if (session.payment_status === 'refunded') {
+        return 'refunded';
+      }
+      if (session.status === 'cancelled') {
+        return 'cancelled';
+      }
+      if (session.status === 'completed' && paidStates.has(session.payment_status ?? '')) {
+        const completedDate = resolveDate(session.completed_at) || resolveDate(session.scheduled_at) || resolveDate(session.created_at);
+        if (completedDate && (now.getTime() - completedDate.getTime()) > 7 * 24 * 60 * 60 * 1000) {
+          return 'paid';
+        }
+        return 'pending';
+      }
+      if (session.payment_status === 'requires_action') {
+        return 'requires_action';
+      }
+      return 'scheduled';
+    };
+
+    const buildTransaction = (session: any): CoachEarningsTransaction => {
+      const sailor = session.sailor_id ? sailorMap.get(session.sailor_id) : null;
+      const clientName = sailor?.full_name || sailor?.email || 'Unassigned Sailor';
+      const status = deriveStatus(session);
+
+      return {
+        id: session.id,
+        clientName,
+        sessionType: session.session_type || 'Coaching Session',
+        status,
+        paymentStatus: session.payment_status,
+        amount: amountOrZero(session.coach_payout, session.fee_amount),
+        currency: session.currency || 'USD',
+        date: session.completed_at || session.scheduled_at || session.created_at,
+        payoutDate: status === 'pending' ? nextPayoutDate : null,
+      };
+    };
+
+    const allTransactions = sessions.map(buildTransaction);
+    const transactions: CoachEarningsTransaction[] = allTransactions.slice(0, 30);
+
+    const pendingTransactions: CoachEarningsTransaction[] = allTransactions
+      .filter(txn => txn.status === 'pending' || txn.status === 'requires_action')
+      .slice(0, 20);
+
+    const pendingPayouts = pendingTransactions
+      .filter(txn => txn.status === 'pending')
+      .reduce((sum, txn) => sum + txn.amount, 0);
+
+    return {
+      period: {
+        week: { current: weekStats, previous: prevWeekStats },
+        month: { current: monthStats, previous: prevMonthStats },
+        year: { current: yearStats, previous: prevYearStats },
+      },
+      totals: {
+        lifetime: lifetimeEarnings,
+        sessions: lifetimeSessions,
+        averagePerSession,
+        pendingPayouts,
+        nextPayoutDate,
+      },
+      breakdown,
+      transactions,
+      pendingTransactions,
+    };
+  }
+
+  /**
    * Get all clients for a coach
    */
   async getClients(coachId: string, status?: 'active' | 'inactive' | 'completed'): Promise<CoachingClient[]> {
-    let query = supabase
+    // WORKAROUND: Until foreign keys are added to coaching_clients table,
+    // fetch clients and users separately, then join in code
+    console.log('[CoachingService.getClients] coachId:', coachId, 'status:', status);
+
+    let clientsQuery = supabase
       .from('coaching_clients')
-      .select(`
-        *,
-        sailor:sailor_id (
-          id,
-          email,
-          full_name,
-          avatar_url
-        )
-      `)
+      .select('*')
       .eq('coach_id', coachId)
       .order('last_session_date', { ascending: false, nullsFirst: false });
 
     if (status) {
-      query = query.eq('status', status);
+      clientsQuery = clientsQuery.eq('status', status);
     }
 
-    const { data, error } = await query;
+    const { data: clients, error: clientsError } = await clientsQuery;
 
-    if (error) {
-      console.error('Error fetching clients:', error);
-      throw error;
+    console.log('[CoachingService.getClients] clients query result:', { clientsCount: clients?.length, error: clientsError });
+
+    if (clientsError) {
+      console.error('Error fetching clients:', clientsError);
+      throw clientsError;
     }
 
-    return data || [];
+    if (!clients || clients.length === 0) {
+      return [];
+    }
+
+    // Get sailor IDs
+    const sailorIds = clients.map(c => c.sailor_id).filter(Boolean);
+
+    if (sailorIds.length === 0) {
+      return clients as CoachingClient[];
+    }
+
+    // Fetch sailor data separately
+    console.log('[CoachingService.getClients] Fetching sailors for IDs:', sailorIds);
+    const { data: sailors, error: sailorsError } = await supabase
+      .from('users')
+      .select('id, email, full_name')
+      .in('id', sailorIds);
+
+    console.log('[CoachingService.getClients] sailors query result:', { sailorsCount: sailors?.length, error: sailorsError });
+
+    if (sailorsError) {
+      console.error('Error fetching sailors:', sailorsError);
+      // Return clients without sailor data rather than failing
+      return clients as CoachingClient[];
+    }
+
+    // Join in code
+    const sailorMap = new Map(sailors?.map(s => [s.id, s]) || []);
+
+    const result = clients.map(client => ({
+      ...client,
+      sailor: client.sailor_id ? sailorMap.get(client.sailor_id) : undefined,
+    })) as CoachingClient[];
+
+    console.log('[CoachingService.getClients] Returning', result.length, 'clients');
+    return result;
   }
 
   /**
@@ -292,38 +608,17 @@ class CoachingService {
    */
   async getClientDetails(clientId: string): Promise<ClientDetails | null> {
     const [clientResult, sessionsResult, metricsResult] = await Promise.all([
-      // Client info
+      // Client info (fetch sailor separately because FK isn't defined in Supabase)
       supabase
         .from('coaching_clients')
-        .select(`
-          *,
-          sailor:sailor_id (
-            id,
-            email,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('id', clientId)
         .single(),
 
-      // All sessions
+      // All sessions (without JOINs for now - foreign keys not set up)
       supabase
         .from('coaching_sessions')
-        .select(`
-          *,
-          sailor:sailor_id (
-            id,
-            email,
-            full_name,
-            avatar_url
-          ),
-          venue:sailing_venues (
-            id,
-            name
-          ),
-          feedback:session_feedback (*)
-        `)
+        .select('*')
         .eq('client_id', clientId)
         .order('scheduled_at', { ascending: false }),
 
@@ -340,15 +635,53 @@ class CoachingService {
       return null;
     }
 
-    const sessions = sessionsResult.data || [];
+    const rawClient = clientResult.data;
+
+    if (!rawClient) {
+      return null;
+    }
+
+    let clientSailor:
+      | {
+          id: string;
+          email?: string;
+          full_name?: string;
+          avatar_url?: string;
+        }
+      | undefined;
+
+    if (rawClient.sailor_id) {
+      const { data: sailorData, error: sailorError } = await supabase
+        .from('users')
+        .select('id, email, full_name')
+        .eq('id', rawClient.sailor_id)
+        .maybeSingle();
+
+      if (sailorError && sailorError.code !== 'PGRST116') {
+        console.warn('[CoachingService] Failed to load sailor profile for client', sailorError);
+      } else if (sailorData) {
+        clientSailor = sailorData;
+      }
+    }
+
+    const sessions = sessionsResult.error ? [] : (sessionsResult.data || []);
+    if (sessionsResult.error) {
+      console.warn('[CoachingService] Failed to load sessions for client', clientId, sessionsResult.error);
+    }
+
+    const progressMetrics = metricsResult.error ? [] : (metricsResult.data || []);
+    if (metricsResult.error) {
+      console.warn('[CoachingService] Failed to load progress metrics for client', clientId, metricsResult.error);
+    }
+
     const completedSessions = sessions.filter((session: CoachingSession & { completed_at?: string }) => session.status === 'completed');
     const upcomingSessions = sessions.filter((session: CoachingSession & { scheduled_at?: string }) => session.status === 'scheduled' && new Date(session.scheduled_at || '') > new Date());
 
     const feedbacks = sessions
-      .map((session: CoachingSession & { feedback?: { rating?: number } }) => session.feedback)
-      .filter((feedback): feedback is { rating?: number } => Boolean(feedback));
+      .map((session: CoachingSession) => session.feedback)
+      .filter((feedback): feedback is SessionFeedback => Boolean(feedback));
     const averageRating = feedbacks.length > 0
-      ? feedbacks.reduce((sum: number, feedback) => sum + (feedback.rating || 0), 0) / feedbacks.length
+      ? feedbacks.reduce((sum: number, feedback: SessionFeedback) => sum + (feedback.rating || 0), 0) / feedbacks.length
       : undefined;
 
     const lastSession = completedSessions.find(s => s.completed_at);
@@ -358,7 +691,7 @@ class CoachingService {
     let recentRaceStrategies: SharedRaceStrategySummary[] = [];
 
     try {
-      const sailorUserId = clientResult.data?.sailor_id;
+      const sailorUserId = rawClient?.sailor_id;
 
       if (sailorUserId) {
         const { data: sailorProfile } = await supabase
@@ -420,7 +753,7 @@ class CoachingService {
           });
         }
 
-        const { data: strategyRows } = await supabase
+        const { data: strategyRows, error: strategyError } = await supabase
           .from('race_strategies')
           .select(`
             regatta_id,
@@ -435,7 +768,11 @@ class CoachingService {
           .order('generated_at', { ascending: false })
           .limit(5);
 
-        if (strategyRows?.length) {
+        if (strategyError) {
+          console.warn('[CoachingService] Failed to load race strategies for sailor', sailorUserId, strategyError);
+        }
+
+        if (!strategyError && strategyRows?.length) {
           const regattaIds = strategyRows.map((row: any) => row.regatta_id).filter(Boolean);
           let regattaMeta = new Map<string, string>();
 
@@ -467,9 +804,10 @@ class CoachingService {
     }
 
     return {
-      ...clientResult.data,
+      ...rawClient,
+      sailor: clientSailor,
       sessions,
-      progressMetrics: metricsResult.data || [],
+      progressMetrics,
       stats: {
         totalSessions: sessions.length,
         completedSessions: completedSessions.length,
@@ -554,6 +892,29 @@ class CoachingService {
     }
 
     return data;
+  }
+
+  /**
+   * Search for sailors by name or email to attach to a coach
+   */
+  async searchSailors(query: string): Promise<SailorSummary[]> {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, full_name, avatar_url, primary_boat_class')
+      .or(`email.ilike.%${cleanQuery}%,full_name.ilike.%${cleanQuery}%`)
+      .limit(10);
+
+    if (error) {
+      console.error('Error searching sailors:', error);
+      throw error;
+    }
+
+    return data || [];
   }
 
   /**
@@ -799,15 +1160,12 @@ class CoachingService {
     endDate?: Date,
     availableOnly: boolean = true
   ): Promise<any[]> {
-    let query = supabase
+    const baseQuery = supabase
       .from('coach_availability')
       .select('*')
-      .eq('coach_id', coachId)
-      .order('start_time', { ascending: true });
+      .eq('coach_id', coachId);
 
-    if (availableOnly) {
-      query = query.eq('is_available', true);
-    }
+    let query = baseQuery;
 
     if (startDate) {
       query = query.gte('start_time', startDate.toISOString());
@@ -817,14 +1175,38 @@ class CoachingService {
       query = query.lte('end_time', endDate.toISOString());
     }
 
+    query = query.order('start_time', { ascending: true });
+
     const { data, error } = await query;
 
     if (error) {
+      // Column not found error (legacy schema without time-based slots)
+      if (error.code === '42703') {
+        const { data: fallbackData, error: fallbackError } = await baseQuery;
+        if (fallbackError) {
+          console.error('Error fetching availability slots:', fallbackError);
+          throw fallbackError;
+        }
+        return expandLegacyAvailabilitySlots(fallbackData || [], startDate, endDate);
+      }
+
       console.error('Error fetching availability slots:', error);
       throw error;
     }
 
-    return data || [];
+    if (data && data.length > 0 && !('start_time' in (data[0] || {}))) {
+      return expandLegacyAvailabilitySlots(data, startDate, endDate);
+    }
+
+    const normalized = (data || []).filter((slot) => {
+      if (!availableOnly) return true;
+      if (typeof slot.is_available === 'boolean') {
+        return slot.is_available;
+      }
+      return true;
+    });
+
+    return normalized;
   }
 
   /**
@@ -1209,31 +1591,59 @@ class CoachingService {
     highlights?: string[];
   }): Promise<void> {
     try {
-      const { data, error } = await supabase
+      const { data: clientRows, error: clientsError } = await supabase
         .from('coaching_clients')
-        .select(`
-          id,
-          status,
-          coach:coach_profiles!coach_id (
-            id,
-            display_name,
-            user_id,
-            users:coach_profiles_user_id_fkey (
-              email,
-              full_name
-            )
-          )
-        `)
+        .select('id, status, coach_id')
         .eq('sailor_id', params.sailorUserId)
         .eq('status', 'active');
 
-      if (error) {
-        throw error;
+      if (clientsError) {
+        throw clientsError;
       }
 
-      const activeCoaches = (data || []).filter(
-        (row: any) => row.coach?.users?.email
+      if (!clientRows?.length) {
+        return;
+      }
+
+      const coachIds = Array.from(
+        new Set(
+          clientRows
+            .map((row: any) => row.coach_id)
+            .filter((id: string | null | undefined): id is string => Boolean(id))
+        )
       );
+
+      if (coachIds.length === 0) {
+        return;
+      }
+
+      const { data: coachProfiles, error: coachError } = await supabase
+        .from('coach_profiles')
+        .select(`
+          id,
+          display_name,
+          user_id,
+          users:coach_profiles_user_id_fkey (
+            email,
+            full_name
+          )
+        `)
+        .in('id', coachIds);
+
+      if (coachError) {
+        throw coachError;
+      }
+
+      const coachesById = new Map(
+        (coachProfiles || []).map((coach: any) => [coach.id, coach])
+      );
+
+      const activeCoaches = clientRows
+        .map((row: any) => ({
+          ...row,
+          coach: coachesById.get(row.coach_id),
+        }))
+        .filter((row: any) => row.coach?.users?.email);
 
       if (activeCoaches.length === 0) {
         return;
@@ -1796,6 +2206,270 @@ class CoachingService {
 
     return data || [];
   }
+
+  // ============================================================================
+  // RPC Helpers and View Mappers (NEW)
+  // ============================================================================
+
+  /**
+   * Get complete coach dashboard data in a single RPC call
+   * Uses the get_coach_dashboard_data RPC function for optimized data fetching
+   */
+  async getCoachDashboardData(coachId: string): Promise<any> {
+    const { data, error } = await supabase.rpc('get_coach_dashboard_data', {
+      p_coach_id: coachId,
+    });
+
+    if (error) {
+      console.error('Error fetching coach dashboard data:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get sailor's coaching overview in a single RPC call
+   * Uses the get_sailor_coaching_overview RPC function
+   */
+  async getSailorCoachingOverview(sailorId: string): Promise<any> {
+    const { data, error } = await supabase.rpc('get_sailor_coaching_overview', {
+      p_sailor_id: sailorId,
+    });
+
+    if (error) {
+      console.error('Error fetching sailor coaching overview:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Search coaches with advanced filtering
+   * Uses the search_coaches RPC function with ranking
+   */
+  async searchCoaches(params?: {
+    specialties?: string[];
+    minRating?: number;
+    maxHourlyRate?: number;
+    location?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    const { data, error } = await supabase.rpc('search_coaches', {
+      p_specialties: params?.specialties || null,
+      p_min_rating: params?.minRating || null,
+      p_max_hourly_rate: params?.maxHourlyRate || null,
+      p_location: params?.location || null,
+      p_limit: params?.limit || 20,
+      p_offset: params?.offset || 0,
+    });
+
+    if (error) {
+      console.error('Error searching coaches:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Query the coach_sailor_sessions_view directly
+   * Provides access to the consolidated session view
+   */
+  async querySailorSessionsView(filters?: {
+    coachId?: string;
+    sailorId?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<any[]> {
+    let query = supabase.from('coach_sailor_sessions_view').select('*');
+
+    if (filters?.coachId) {
+      query = query.eq('coach_id', filters.coachId);
+    }
+
+    if (filters?.sailorId) {
+      query = query.eq('sailor_id', filters.sailorId);
+    }
+
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    query = query.order('scheduled_at', { ascending: false });
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error querying sailor sessions view:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get coach metrics from the aggregated view
+   */
+  async getCoachMetricsFromView(coachId: string): Promise<any> {
+    const { data, error } = await supabase
+      .from('coach_metrics_view')
+      .select('*')
+      .eq('coach_id', coachId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching coach metrics:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  /**
+   * Get recent feedback from the feedback view
+   */
+  async getCoachFeedbackFromView(coachId: string, limit: number = 10): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('coach_feedback_view')
+      .select('*')
+      .eq('coach_id', coachId)
+      .order('feedback_date', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Error fetching coach feedback:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * DTO to view-model mapper for coaching sessions
+   * Converts database DTOs to frontend-friendly view models
+   */
+  mapSessionToViewModel(session: any): any {
+    return {
+      id: session.session_id || session.id,
+      coachId: session.coach_id,
+      coachName: session.coach_name,
+      coachPhoto: session.coach_photo,
+      sailorId: session.sailor_id,
+      sailorName: session.sailor_name,
+      sailorEmail: session.sailor_email,
+      sailorAvatar: session.sailor_avatar,
+      type: session.session_type,
+      duration: session.duration_minutes,
+      scheduledAt: session.scheduled_at,
+      completedAt: session.completed_at,
+      status: session.status,
+      location: session.location_notes,
+      venueName: session.venue_name,
+      venueLocation: session.venue_location,
+      focusAreas: session.focus_areas || [],
+      goals: session.goals,
+      notes: session.session_notes,
+      homework: session.homework,
+      fee: {
+        amount: session.fee_amount,
+        currency: session.currency,
+        paid: session.paid,
+      },
+      feedback: session.feedback_rating ? {
+        rating: session.feedback_rating,
+        text: session.feedback_text,
+        skillImprovement: session.skill_improvement,
+        wouldRecommend: session.would_recommend,
+      } : null,
+      createdAt: session.created_at,
+      updatedAt: session.updated_at,
+    };
+  }
+
+  /**
+   * DTO to view-model mapper for coach profiles
+   */
+  mapCoachToViewModel(coach: any): any {
+    return {
+      id: coach.coach_id || coach.id,
+      userId: coach.user_id,
+      name: coach.display_name,
+      photo: coach.profile_photo_url,
+      bio: coach.bio,
+      specialties: coach.specialties || [],
+      hourlyRate: coach.hourly_rate,
+      currency: coach.currency,
+      location: coach.based_at,
+      availableLocations: coach.available_locations || [],
+      metrics: {
+        rating: coach.average_rating,
+        totalSessions: coach.total_sessions,
+        totalClients: coach.total_clients,
+        completedSessions: coach.total_completed_sessions,
+        upcomingSessions: coach.upcoming_sessions,
+      },
+      verified: coach.verified,
+      matchScore: coach.match_score,
+    };
+  }
 }
 
 export const coachingService = new CoachingService();
+
+const LEGACY_DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+const LEGACY_TIME_BLOCKS = [
+  { key: 'morning', startHour: 8, endHour: 11 },
+  { key: 'afternoon', startHour: 12, endHour: 16 },
+  { key: 'evening', startHour: 17, endHour: 20 },
+] as const;
+
+function expandLegacyAvailabilitySlots(records: Record<string, any>[], startDate?: Date, endDate?: Date) {
+  if (!records.length) {
+    return [];
+  }
+
+  const windowStart = startDate ? new Date(startDate) : new Date();
+  const windowEnd = endDate ? new Date(endDate) : addDays(windowStart, 14);
+  const slots: any[] = [];
+
+  records.forEach((record) => {
+    const enabledBlocks = LEGACY_TIME_BLOCKS.filter((block) => record[block.key]);
+    if (!enabledBlocks.length) {
+      return;
+    }
+
+    for (let cursor = new Date(windowStart); cursor <= windowEnd; cursor = addDays(cursor, 1)) {
+      const dayKey = LEGACY_DAY_KEYS[cursor.getDay()];
+      if (!record[dayKey]) continue;
+
+      enabledBlocks.forEach((block) => {
+        const slotStart = new Date(cursor);
+        slotStart.setHours(block.startHour, 0, 0, 0);
+
+        const slotEnd = new Date(cursor);
+        slotEnd.setHours(block.endHour, 0, 0, 0);
+
+        slots.push({
+          id: `${record.id}-${dayKey}-${block.key}-${slotStart.getTime()}`,
+          coach_id: record.coach_id,
+          start_time: slotStart.toISOString(),
+          end_time: slotEnd.toISOString(),
+          is_available: true,
+          notes: record.notes || null,
+          recurring_pattern: 'legacy',
+        });
+      });
+    }
+  });
+
+  return slots.sort(
+    (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  );
+}

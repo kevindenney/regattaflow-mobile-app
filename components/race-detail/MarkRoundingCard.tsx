@@ -4,12 +4,16 @@
  * Shows approach & exit strategies with championship techniques
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { strategicPlanningService } from '@/services/StrategicPlanningService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('MarkRoundingCard');
 
 interface MarkRounding {
   mark: string; // 'Windward Mark', 'Leeward Gate', etc.
@@ -25,55 +29,26 @@ interface MarkRounding {
 interface MarkRoundingCardProps {
   raceId: string;
   raceName: string;
+  sailorId?: string;
+  raceEventId?: string;
 }
 
 export function MarkRoundingCard({
   raceId,
-  raceName
+  raceName,
+  sailorId,
+  raceEventId
 }: MarkRoundingCardProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [roundings, setRoundings] = useState<MarkRounding[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [userWindwardStrategy, setUserWindwardStrategy] = useState('');
+  const [userLeewardStrategy, setUserLeewardStrategy] = useState('');
+  const [savingWindward, setSavingWindward] = useState(false);
+  const [savingLeeward, setSavingLeeward] = useState(false);
 
-  useEffect(() => {
-    loadMarkRoundings();
-
-    // Subscribe to realtime changes for this race's strategy
-    const subscription = supabase
-      .channel(`race_strategy_marks_${raceId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'race_strategies',
-          filter: `regatta_id=eq.${raceId}`,
-        },
-        (payload) => {
-          console.log('[MarkRoundingCard] Realtime update received:', payload);
-          // Reload strategy when it changes
-          loadMarkRoundings();
-        }
-      )
-      .subscribe();
-
-    // Poll for strategy updates every 3 seconds if no data yet
-    // This handles the case where strategy is generated after component mounts
-    const pollInterval = setInterval(() => {
-      if (roundings.length === 0 && !loading) {
-        console.log('[MarkRoundingCard] Polling for strategy updates...');
-        loadMarkRoundings();
-      }
-    }, 3000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearInterval(pollInterval);
-    };
-  }, [raceId, roundings.length, loading]);
-
-  const loadMarkRoundings = async () => {
+  const loadMarkRoundings = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
@@ -118,6 +93,107 @@ export function MarkRoundingCard({
       setError('Failed to load mark rounding strategy');
     } finally {
       setLoading(false);
+    }
+  }, [user, raceId]);
+
+  useEffect(() => {
+    loadMarkRoundings();
+
+    // Subscribe to realtime changes for this race's strategy
+    const subscription = supabase
+      .channel(`race_strategy_marks_${raceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_strategies',
+          filter: `regatta_id=eq.${raceId}`,
+        },
+        (payload) => {
+          console.log('[MarkRoundingCard] Realtime update received:', payload);
+          // Reload strategy when it changes
+          loadMarkRoundings();
+        }
+      )
+      .subscribe();
+
+    // Poll for strategy updates every 3 seconds if no data yet
+    // This handles the case where strategy is generated after component mounts
+    const pollInterval = setInterval(() => {
+      if (roundings.length === 0 && !loading) {
+        console.log('[MarkRoundingCard] Polling for strategy updates...');
+        loadMarkRoundings();
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [raceId, loadMarkRoundings]);
+
+  // Load user's manual strategy for marks
+  useEffect(() => {
+    if (!sailorId || !raceEventId) return;
+
+    const loadUserStrategy = async () => {
+      try {
+        const prep = await strategicPlanningService.getPreparationWithStrategy(
+          raceEventId,
+          sailorId
+        );
+        if (prep?.windward_mark_strategy) {
+          setUserWindwardStrategy(prep.windward_mark_strategy);
+        }
+        if (prep?.leeward_mark_strategy) {
+          setUserLeewardStrategy(prep.leeward_mark_strategy);
+        }
+      } catch (err) {
+        logger.error('[MarkRoundingCard] Error loading user strategy', err);
+      }
+    };
+
+    loadUserStrategy();
+  }, [sailorId, raceEventId]);
+
+  // Auto-save windward mark strategy
+  const handleWindwardStrategyChange = async (text: string) => {
+    setUserWindwardStrategy(text);
+    if (!sailorId || !raceEventId) return;
+
+    setSavingWindward(true);
+    try {
+      await strategicPlanningService.updatePhaseStrategy(
+        raceEventId,
+        sailorId,
+        'windwardMarkStrategy',
+        text
+      );
+    } catch (err) {
+      logger.error('[MarkRoundingCard] Error saving windward strategy', err);
+    } finally {
+      setSavingWindward(false);
+    }
+  };
+
+  // Auto-save leeward mark strategy
+  const handleLeewardStrategyChange = async (text: string) => {
+    setUserLeewardStrategy(text);
+    if (!sailorId || !raceEventId) return;
+
+    setSavingLeeward(true);
+    try {
+      await strategicPlanningService.updatePhaseStrategy(
+        raceEventId,
+        sailorId,
+        'leewardMarkStrategy',
+        text
+      );
+    } catch (err) {
+      logger.error('[MarkRoundingCard] Error saving leeward strategy', err);
+    } finally {
+      setSavingLeeward(false);
     }
   };
 
@@ -247,6 +323,51 @@ export function MarkRoundingCard({
             </View>
           </View>
         ))}
+
+        {/* User Strategy Input Section */}
+        {sailorId && raceEventId && (
+          <>
+            {/* Windward Mark Notes */}
+            <View style={styles.userStrategySection}>
+              <View style={styles.userStrategyHeader}>
+                <Text style={styles.userStrategyLabel}>Windward Mark Notes</Text>
+                {savingWindward && (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                )}
+              </View>
+              <TextInput
+                style={styles.userStrategyInput}
+                value={userWindwardStrategy}
+                onChangeText={handleWindwardStrategyChange}
+                placeholder="Add your own notes for windward mark rounding... (e.g., approach angle, positioning)"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            {/* Leeward Mark Notes */}
+            <View style={styles.userStrategySection}>
+              <View style={styles.userStrategyHeader}>
+                <Text style={styles.userStrategyLabel}>Leeward Mark Notes</Text>
+                {savingLeeward && (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                )}
+              </View>
+              <TextInput
+                style={styles.userStrategyInput}
+                value={userLeewardStrategy}
+                onChangeText={handleLeewardStrategyChange}
+                placeholder="Add your own notes for leeward mark rounding... (e.g., approach angle, positioning)"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+          </>
+        )}
       </View>
     );
   };
@@ -421,5 +542,35 @@ const styles = StyleSheet.create({
     color: '#64748B',
     minWidth: 40,
     textAlign: 'right',
+  },
+  userStrategySection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  userStrategyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userStrategyLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userStrategyInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#0F172A',
+    minHeight: 70,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    lineHeight: 20,
   },
 });

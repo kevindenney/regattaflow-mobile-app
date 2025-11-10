@@ -363,6 +363,9 @@ export function VenueMapView({
   );
 }
 
+export { VenueMapView };
+export default VenueMapView;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

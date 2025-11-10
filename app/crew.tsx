@@ -1,6 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, FlatList } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  FlatList,
+  ActivityIndicator,
+} from 'react-native';
 import { ChevronRight, Plus, User, Mail, Phone, MessageCircle, Shield, Users } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { useSailorOnboardingState, type SailorCrewData, type SailorCrewMember } from '@/hooks/useSailorOnboardingState';
 
 // Mock data for crew roles
 const CREW_ROLES = [
@@ -26,18 +37,10 @@ const COMMUNICATION_METHODS = [
 ];
 
 export default function CrewScreen() {
-  const [crewMembers, setCrewMembers] = useState([
-    {
-      id: '1',
-      name: 'Alex Morgan',
-      role: 'Skipper',
-      email: 'alex@example.com',
-      phone: '+1234567890',
-      communicationMethods: ['phone', 'email'],
-      hasAccess: true,
-      avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTF8fHVzZXJ8ZW58MHx8MHx8fDA%3D'
-    }
-  ]);
+  const router = useRouter();
+  const { state, updateCrew, loading } = useSailorOnboardingState();
+  const [crewMembers, setCrewMembers] = useState<SailorCrewMember[]>(() => state.crew?.crewMembers ?? []);
+  const [isSaving, setIsSaving] = useState(false);
   
   const [newMember, setNewMember] = useState({
     name: '',
@@ -64,24 +67,45 @@ export default function CrewScreen() {
     "https://images.unsplash.com/photo-1578445714074-946b536079aa?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTl8fFByb2Zlc3Npb25hbCUyMGF2YXRhciUyMHdpdGglMjBnbGFzc2VzfGVufDB8fDB8fHww"
   ];
 
+  useEffect(() => {
+    setCrewMembers(state.crew?.crewMembers ?? []);
+  }, [state.crew?.crewMembers]);
+
+  const persistCrewMembers = useCallback(
+    (members: SailorCrewMember[]) => {
+      setCrewMembers(members);
+      const nextCrewData: SailorCrewData = {
+        crewMembers: members,
+        lookingForCrew: state.crew?.lookingForCrew ?? false,
+        crewRoles: Array.from(
+          new Set(members.map(member => member.role).filter(Boolean))
+        ),
+      };
+      updateCrew(nextCrewData);
+    },
+    [state.crew?.lookingForCrew, updateCrew]
+  );
+
+  const generateMemberId = () => `crew-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const handleAddMember = () => {
     if (!newMember.name.trim() || !newMember.role.trim()) {
       Alert.alert('Validation Error', 'Please enter both name and role');
       return;
     }
     
-    const member = {
-      id: (crewMembers.length + 1).toString(),
-      name: newMember.name,
-      role: newMember.role,
-      email: newMember.email,
-      phone: newMember.phone,
+    const member: SailorCrewMember = {
+      id: generateMemberId(),
+      name: newMember.name.trim(),
+      role: newMember.role.trim(),
+      email: newMember.email.trim() || undefined,
+      phone: newMember.phone.trim() || undefined,
       communicationMethods: newMember.communicationMethods,
       hasAccess: newMember.hasAccess,
-      avatar: avatars[selectedAvatar]
     };
     
-    setCrewMembers([...crewMembers, member]);
+    persistCrewMembers([...crewMembers, member]);
+    Alert.alert('Crew member added', `${member.name} was added to your roster.`);
     
     // Reset form
     setNewMember({
@@ -138,8 +162,29 @@ export default function CrewScreen() {
   };
 
   const removeCrewMember = (id: string) => {
-    setCrewMembers(crewMembers.filter(member => member.id !== id));
+    const updated = crewMembers.filter(member => member.id !== id);
+    persistCrewMembers(updated);
   };
+
+  const handleContinueToReview = () => {
+    if (crewMembers.length === 0) {
+      Alert.alert('Add crew', 'Add at least one crew member before continuing.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      persistCrewMembers(crewMembers);
+      router.push('/review');
+    } catch (error: any) {
+      console.error('Error continuing to review:', error);
+      Alert.alert('Unable to continue', 'Please try again in a moment.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const canContinue = crewMembers.length > 0 && !isSaving;
 
   return (
     <View className="flex-1 bg-white">
@@ -317,7 +362,12 @@ export default function CrewScreen() {
               Current Crew ({crewMembers.length})
             </Text>
             
-            {crewMembers.length === 0 ? (
+            {loading ? (
+              <View className="bg-gray-50 rounded-xl p-8 items-center justify-center">
+                <ActivityIndicator size="large" color="#2563EB" />
+                <Text className="text-gray-500 mt-4">Loading crew preferences...</Text>
+              </View>
+            ) : crewMembers.length === 0 ? (
               <View className="bg-gray-50 rounded-xl p-8 items-center justify-center">
                 <Users size={48} className="text-gray-300 mb-4" />
                 <Text className="text-gray-500 text-center">
@@ -339,7 +389,7 @@ export default function CrewScreen() {
                         <Text className="font-semibold text-gray-800">{item.name}</Text>
                         <Text className="text-blue-600">{item.role}</Text>
                         <View className="flex-row flex-wrap mt-1">
-                          {item.communicationMethods.map(methodId => {
+                          {(item.communicationMethods ?? []).map(methodId => {
                             const method = COMMUNICATION_METHODS.find(m => m.id === methodId);
                             if (!method) return null;
                             const Icon = method.icon;
@@ -376,14 +426,12 @@ export default function CrewScreen() {
       {/* Bottom Action */}
       <View className="px-4 py-4 border-t border-gray-200">
         <TouchableOpacity 
-          className="bg-blue-600 rounded-xl py-4 flex-row items-center justify-center"
-          onPress={() => {
-            Alert.alert('Success', 'Crew saved successfully!');
-            // Navigation would go here
-          }}
+          className={`rounded-xl py-4 flex-row items-center justify-center ${canContinue ? 'bg-blue-600' : 'bg-gray-300'}`}
+          disabled={!canContinue}
+          onPress={handleContinueToReview}
         >
           <Text className="text-white font-semibold text-lg">
-            Continue to Review
+            {isSaving ? 'Saving...' : 'Continue to Review'}
           </Text>
           <ChevronRight size={20} color="white" className="ml-2" />
         </TouchableOpacity>

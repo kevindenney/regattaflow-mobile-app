@@ -6,7 +6,7 @@
  * Use this to test the TacticalRaceMap component immediately
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import TacticalRaceMap from './TacticalRaceMap';
 import { createLogger } from '@/lib/utils/logger';
@@ -193,15 +193,15 @@ export default function TacticalMapStandalone() {
     ],
   };
 
-  const handleMarkSelected = (mark: CourseMark) => {
+  const handleMarkSelected = useCallback((mark: CourseMark) => {
     setSelectedMark(mark);
     logger.debug('Mark selected:', mark.mark_name);
-  };
+  }, []);
 
-  const handleRacingAreaSelected = (coordinates: [number, number][]) => {
+  const handleRacingAreaSelected = useCallback((coordinates: [number, number][]) => {
     setRacingAreaCoords(coordinates);
 
-  };
+  }, []);
 
   return (
     <View style={styles.container}>

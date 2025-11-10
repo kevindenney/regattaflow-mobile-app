@@ -40,7 +40,18 @@ export const WeatherMetricCard: React.FC<WeatherMetricCardProps> = ({
       </View>
 
       {/* Content */}
-      <View style={styles.content}>{children}</View>
+      <View style={styles.content}>
+        {React.Children.map(children, (child, index) => {
+          if (typeof child === 'string' || typeof child === 'number') {
+            return (
+              <Text key={`content-text-${index}`} style={{ textAlign: 'center' }}>
+                {child}
+              </Text>
+            );
+          }
+          return child;
+        })}
+      </View>
     </View>
   );
 };

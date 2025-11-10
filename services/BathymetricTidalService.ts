@@ -25,6 +25,7 @@ import {
 } from '../types/bathymetry';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import { createLogger } from '@/lib/utils/logger';
+import { skillManagementService } from './ai/SkillManagementService';
 
 /**
  * Main service for bathymetric and tidal analysis
@@ -32,12 +33,14 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('BathymetricTidalService');
 export class BathymetricTidalService {
-  private anthropic: Anthropic;
+  private anthropic?: Anthropic;
 
   constructor() {
     const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured');
+      console.warn('BathymetricTidalService: EXPO_PUBLIC_ANTHROPIC_API_KEY not configured. Proceeding with rule-based analysis only.');
+      this.anthropic = undefined;
+      return;
     }
     this.anthropic = new Anthropic({ apiKey });
   }
@@ -191,63 +194,19 @@ export class BathymetricTidalService {
     // For proof-of-concept, return simulated data based on Hong Kong bathymetry
     // In production, would call GEBCO WMS API: https://www.gebco.net/data_and_products/gebco_web_services/
 
-    const resolution = 50; // meters (simulated high resolution for PoC)
-    const latStep = resolution / 111320;
-    const lngStep = resolution / (111320 * Math.cos((bounds.north + bounds.south) / 2 * Math.PI / 180));
+    const synthetic = this.generateSyntheticBathymetry(bounds, desiredResolution ?? 100);
 
-    const rows = Math.ceil((bounds.north - bounds.south) / latStep);
-    const cols = Math.ceil((bounds.east - bounds.west) / lngStep);
-
-    // Generate simulated depth grid (for Hong Kong Victoria Harbour)
-    const depths: number[][] = [];
-    for (let i = 0; i < rows; i++) {
-      const row: number[] = [];
-      const lat = bounds.south + i * latStep;
-
-      for (let j = 0; j < cols; j++) {
-        const lng = bounds.west + j * lngStep;
-
-        // Simulate Hong Kong bathymetry:
-        // - Shallow in north (Kowloon side): 5-10m
-        // - Deeper in center: 12-18m
-        // - Kellett Bank simulation (shallow in specific area)
-
-        const latFactor = (lat - bounds.south) / (bounds.north - bounds.south); // 0 (south) to 1 (north)
-        const lngFactor = (lng - bounds.west) / (bounds.east - bounds.west); // 0 (west) to 1 (east)
-
-        // Base depth: deeper in center, shallower at edges
-        let depth = 10 + 8 * (1 - Math.abs(latFactor - 0.5) * 2);
-
-        // Kellett Bank simulation (shallow area in northeast quadrant)
-        if (latFactor > 0.6 && lngFactor > 0.6) {
-          const bankCenterLat = 0.75;
-          const bankCenterLng = 0.75;
-          const distToBank = Math.sqrt(
-            Math.pow(latFactor - bankCenterLat, 2) + Math.pow(lngFactor - bankCenterLng, 2)
-          );
-
-          if (distToBank < 0.15) {
-            // On the bank: 3-5m
-            depth = 3 + 2 * (distToBank / 0.15);
-          }
-        }
-
-        // Add some noise for realism
-        depth += (Math.random() - 0.5) * 2;
-
-        row.push(Math.max(2, Math.min(25, depth))); // Clamp to 2-25m range
+    try {
+      const geotiffData = await this.tryFetchGEBCOGeoTiff(bounds, desiredResolution);
+      if (geotiffData) {
+        return geotiffData;
       }
-
-      depths.push(row);
+      logger.debug('GEBCO GeoTIFF unavailable, using synthetic bathymetry fallback.');
+    } catch (error) {
+      logger.warn('Failed to fetch GEBCO GeoTIFF, using synthetic fallback.', error);
     }
 
-    return {
-      resolution,
-      depths,
-      bounds,
-      source: BathymetrySource.GEBCO,
-      date: new Date().toISOString()
-    };
+    return synthetic;
   }
 
   /**
@@ -630,6 +589,11 @@ export class BathymetricTidalService {
     confidence: 'high' | 'moderate' | 'low';
     caveats: string[];
   }> {
+    if (!this.anthropic) {
+      logger.debug('BathymetricTidalService: Anthropic client unavailable, generating heuristic analysis.');
+      return this.generateFallbackAnalysis(data);
+    }
+
     // Prepare bathymetric summary
     const depths = data.bathymetry.depths.flat();
     const minDepth = Math.min(...depths);
@@ -701,16 +665,34 @@ Format your response as JSON:
 }`;
 
     try {
-      const response = await this.anthropic.messages.create({
+      // Try to get the tidal-opportunism-analyst skill ID
+      let tidalSkillId: string | null = null;
+      try {
+        tidalSkillId = await skillManagementService.getSkillId('tidal-opportunism-analyst');
+      } catch (skillError) {
+        console.warn('BathymetricTidalService: Unable to load tidal-opportunism-analyst skill, continuing without it.', skillError);
+      }
+
+      // Build the message creation params
+      const messageParams: any = {
         model: 'claude-3-5-haiku-latest',
         max_tokens: 4096,
         messages: [{
           role: 'user',
           content: prompt
         }]
-        // Note: Skills will be loaded via project configuration in production
-        // For now, the Skill content is embedded in the prompt context
-      });
+      };
+
+      // If we have the skill ID, use it
+      if (tidalSkillId) {
+        console.log(`🎯 BathymetricTidalService: Using tidal-opportunism-analyst skill (${tidalSkillId})`);
+        messageParams.betas = ['skills-2025-10-02'];
+        messageParams.skills = [{ type: 'custom', id: tidalSkillId }];
+      } else {
+        console.warn('⚠️ BathymetricTidalService: tidal-opportunism-analyst skill not found, proceeding without skill');
+      }
+
+      const response = await this.anthropic.messages.create(messageParams);
 
       const content = response.content[0];
       if (content.type !== 'text') {
@@ -740,8 +722,149 @@ Format your response as JSON:
 
     } catch (error) {
       console.error('Error calling Claude API:', error);
-      throw new Error(`Failed to generate AI analysis: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return this.generateFallbackAnalysis(data, error);
     }
+  }
+
+  /**
+   * Generate heuristic analysis when Anthropic is unavailable
+   */
+  private generateFallbackAnalysis(
+    data: {
+      bathymetry: BathymetricData;
+      tidal: TidalAnalysis;
+      venue: SailingVenue;
+      raceTime: Date;
+      raceDuration: number;
+      racingArea: GeoJSON.Polygon;
+      strategicFeatures: UnderwaterAnalysis['strategicFeatures'];
+    },
+    error?: unknown
+  ): {
+    analysis: string;
+    recommendations: UnderwaterAnalysis['recommendations'];
+    confidence: 'high' | 'moderate' | 'low';
+    caveats: string[];
+  } {
+    if (error) {
+      console.warn('BathymetricTidalService: Falling back to heuristic analysis due to error.', error);
+    }
+
+    const snapshot =
+      data.tidal.currentSnapshot ||
+      this.findClosestPrediction(data.tidal.predictions, data.raceTime) ||
+      null;
+
+    const snapshotPhase = snapshot && 'phase' in snapshot ? snapshot.phase : undefined;
+    const snapshotSpeed = snapshot && 'speed' in snapshot ? snapshot.speed : undefined;
+    const snapshotDirection = snapshot && 'direction' in snapshot ? snapshot.direction : undefined;
+
+    const phase = snapshotPhase ?? data.tidal.currentSummary?.dominantPhase ?? 'slack';
+    const speed: number = snapshotSpeed ?? data.tidal.currentSummary?.averageSpeed ?? 0.4;
+    const direction: number = snapshotDirection ?? data.tidal.currentSummary?.averageDirection ?? 0;
+
+    const directionLabel = this.bearingToCardinal(direction);
+    const accelerationZones = data.strategicFeatures.accelerationZones || [];
+    const zoneSummaries = accelerationZones
+      .slice(0, 3)
+      .map((zone) => this.describeZone(zone, data.racingArea))
+      .filter(Boolean) as string[];
+
+    const analysisLines = [
+      `Prevailing current around start: ${speed.toFixed(1)}kt flowing ${directionLabel} (${phase}).`,
+      accelerationZones.length > 0
+        ? `Bathymetry reveals ${accelerationZones.length} faster-water seams where depth shoals into the main channel${zoneSummaries.length ? `, including ${zoneSummaries.join('; ')}` : ''}.`
+        : 'Depth profile is relatively uniform; expect broadly even flow with only weak acceleration near the channel edges.',
+      'Use the depth layer to visualize the deeper mid-channel lanes versus shallower shelves that bleed speed.'
+    ];
+
+    const recommendations = {
+      startStrategy: this.buildStartStrategy(phase, directionLabel, zoneSummaries),
+      upwindStrategy: this.buildUpwindStrategy(zoneSummaries),
+      downwindStrategy: this.buildDownwindStrategy(zoneSummaries),
+      markRoundings: 'Plan roundings so you exit marks into the faster lane; anticipate set toward the shallower shoreline when crossing the harbour.',
+      timing: speed > 1.2
+        ? 'Expect a punchy tide; timing layline crossings with a lull or slack will be valuable.'
+        : 'With moderate current, timing is flexible—focus on linking acceleration lanes rather than waiting for slack.'
+    };
+
+    return {
+      analysis: `Depth–current synthesis for ${data.venue.name}:\n- ${analysisLines[0]}\n- ${analysisLines[1]}\n- ${analysisLines[2]}`,
+      recommendations,
+      confidence: accelerationZones.length > 0 ? 'moderate' : 'low',
+      caveats: [
+        'Generated with simulated bathymetry/tide data—verify against local observations.',
+        error ? `AI analysis unavailable: ${error instanceof Error ? error.message : 'unknown error'}` : 'AI assistant unavailable; provided rule-based guidance instead.'
+      ]
+    };
+  }
+
+  private buildStartStrategy(
+    phase: string,
+    directionLabel: string,
+    zoneSummaries: string[]
+  ): string {
+    const lane = zoneSummaries[0] ?? 'the deepest mid-channel lane';
+    if (phase === 'flood') {
+      return `Bias the start toward the upstream (${directionLabel} flowing) end so you can punch into ${lane} immediately. Protect the boat that can reach that conveyor first.`;
+    }
+    if (phase === 'ebb') {
+      return `Set up closer to the downstream escape lane so you are not swept over early; accelerate cleanly then slide into ${lane}. Watch for lee eddies near the harbor edges.`;
+    }
+    return `With slack tide focus on accelerating cleanly; as flow builds, slide into ${lane} to ride the developing stream.`;
+  }
+
+  private buildUpwindStrategy(zoneSummaries: string[]): string {
+    if (zoneSummaries.length === 0) {
+      return 'Sail the shifts and minimize extra tacks; current differentials look small so positioning takes priority over conveyor hunting.';
+    }
+    return `After the start, link into ${zoneSummaries[0]} and stay in velocity bands longer than the fleet. Cross the harbour only where the depth contour keeps flow attached; avoid shallows that bleed speed.`;
+  }
+
+  private buildDownwindStrategy(zoneSummaries: string[]): string {
+    if (zoneSummaries.length === 0) {
+      return 'Downwind VMG will be mostly wind-driven—sail pressure and keep the boat rumbling while watching for localized shear near piers.';
+    }
+    const secondary = zoneSummaries[1] ? `, then transition toward ${zoneSummaries[1]} as you approach the leeward gate` : '';
+    return `Downwind, soak along ${zoneSummaries[0]} to keep the boat in boosted flow${secondary}. Guard against being pushed toward the shallower shore on gybes.`;
+  }
+
+  private describeZone(zone: StrategicZone, racingArea: GeoJSON.Polygon): string | null {
+    if (!zone?.polygon?.coordinates?.[0]) {
+      return null;
+    }
+
+    const coords = zone.polygon.coordinates[0];
+    const latSum = coords.reduce((sum, [lng, lat]) => sum + lat, 0);
+    const lngSum = coords.reduce((sum, [lng]) => sum + lng, 0);
+    const centroidLat = latSum / coords.length;
+    const centroidLng = lngSum / coords.length;
+
+    const bounds = this.calculateBounds(racingArea);
+    const latNormalized = (centroidLat - bounds.south) / Math.max(1e-6, bounds.north - bounds.south);
+    const lngNormalized = (centroidLng - bounds.west) / Math.max(1e-6, bounds.east - bounds.west);
+
+    const northSouth = latNormalized > 0.66 ? 'north' : latNormalized < 0.33 ? 'south' : 'central';
+    const eastWest = lngNormalized > 0.66 ? 'east' : lngNormalized < 0.33 ? 'west' : 'central';
+
+    let quadrant: string;
+    if (northSouth === 'central' && eastWest === 'central') quadrant = 'mid-channel';
+    else if (northSouth === 'central') quadrant = `${eastWest} lane`;
+    else if (eastWest === 'central') quadrant = `${northSouth} corridor`;
+    else quadrant = `${northSouth}-${eastWest} quadrant`;
+
+    const speed = zone.estimatedCurrent.toFixed(1);
+    return `${quadrant} (${speed}kt)`;
+  }
+
+  private bearingToCardinal(direction: number): string {
+    if (!Number.isFinite(direction)) {
+      return 'variable';
+    }
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const normalized = ((direction % 360) + 360) % 360;
+    const index = Math.round(normalized / 45) % 8;
+    return dirs[(index + 8) % 8];
   }
 
   /**
@@ -820,6 +943,181 @@ Format your response as JSON:
 
     console.warn('Depth contour generation not yet implemented');
     return [];
+  }
+
+  /**
+   * Attempt to fetch GEBCO bathymetry as GeoTIFF and decode to depth grid.
+   * Returns null when network or decoding is unavailable.
+   */
+  private async tryFetchGEBCOGeoTiff(
+    bounds: { north: number; south: number; east: number; west: number },
+    desiredResolution?: number
+  ): Promise<BathymetricData | null> {
+    const resolutionMeters = desiredResolution ?? 120;
+    const mercatorBounds = this.projectBoundsToMercator(bounds);
+    if (!mercatorBounds) {
+      return null;
+    }
+
+    const width = Math.max(64, Math.min(1024, Math.round((mercatorBounds.maxX - mercatorBounds.minX) / resolutionMeters)));
+    const height = Math.max(64, Math.min(1024, Math.round((mercatorBounds.maxY - mercatorBounds.minY) / resolutionMeters)));
+
+    const url = new URL('https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv');
+    url.searchParams.set('request', 'GetMap');
+    url.searchParams.set('service', 'WMS');
+    url.searchParams.set('version', '1.3.0');
+    url.searchParams.set('layers', 'GEBCO_LATEST');
+    url.searchParams.set('crs', 'EPSG:3857');
+    url.searchParams.set('bbox', `${mercatorBounds.minX},${mercatorBounds.minY},${mercatorBounds.maxX},${mercatorBounds.maxY}`);
+    url.searchParams.set('width', String(width));
+    url.searchParams.set('height', String(height));
+    url.searchParams.set('format', 'image/geotiff');
+
+    let arrayBuffer: ArrayBuffer;
+    try {
+      const response = await fetch(url.toString(), { cache: 'no-store' });
+      if (!response.ok) {
+        logger.warn('GEBCO WMS request failed', { status: response.status });
+        return null;
+      }
+      arrayBuffer = await response.arrayBuffer();
+    } catch (error: any) {
+      if (error?.cause?.code === 'ENOTFOUND' || error?.code === 'ENOTFOUND') {
+        logger.warn('Network unavailable for GEBCO WMS, skipping remote fetch.');
+        return null;
+      }
+      logger.warn('Error fetching GEBCO GeoTIFF', error);
+      return null;
+    }
+
+    const geoTiffModule = await this.safeImportGeoTiff();
+    if (!geoTiffModule) {
+      logger.warn('geotiff module not available, cannot decode GEBCO data.');
+      return null;
+    }
+
+    try {
+      const tiff = await geoTiffModule.fromArrayBuffer(arrayBuffer);
+      const image = await tiff.getImage();
+      const [raster] = await image.readRasters({ interleave: true });
+      const imgWidth = image.getWidth();
+      const imgHeight = image.getHeight();
+
+      const depths: number[][] = [];
+      for (let y = 0; y < imgHeight; y++) {
+        const row: number[] = [];
+        for (let x = 0; x < imgWidth; x++) {
+          const value = raster[y * imgWidth + x];
+          // GEBCO uses negative values for depth below sea level
+          const depth = value < 0 ? Math.abs(value) : value;
+          row.push(depth);
+        }
+        depths.push(row);
+      }
+
+      return {
+        resolution: (mercatorBounds.maxX - mercatorBounds.minX) / imgWidth,
+        depths,
+        bounds,
+        source: BathymetrySource.GEBCO,
+        date: new Date().toISOString()
+      };
+    } catch (error) {
+      logger.warn('Failed to decode GEBCO GeoTIFF, reverting to synthetic data.', error);
+      return null;
+    }
+  }
+
+  /**
+   * Gracefully import the geotiff decoding library when available.
+   */
+  private async safeImportGeoTiff(): Promise<any | null> {
+    try {
+      // Prefer default export, fallback to module namespace
+      const module = await import('geotiff');
+      return module.default ?? module;
+    } catch (error) {
+      logger.debug('geotiff module import failed', error);
+      return null;
+    }
+  }
+
+  /**
+   * Convert latitude/longitude bounds to Web Mercator meters.
+   */
+  private projectBoundsToMercator(bounds: { north: number; south: number; east: number; west: number }) {
+    const minX = this.lonToWebMercator(bounds.west);
+    const maxX = this.lonToWebMercator(bounds.east);
+    const minY = this.latToWebMercator(bounds.south);
+    const maxY = this.latToWebMercator(bounds.north);
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+      return null;
+    }
+
+    return { minX, maxX, minY, maxY };
+  }
+
+  private lonToWebMercator(lon: number): number {
+    return (lon * 20037508.34) / 180;
+  }
+
+  private latToWebMercator(lat: number): number {
+    const clampedLat = Math.max(-89.9999, Math.min(89.9999, lat));
+    const rad = (clampedLat * Math.PI) / 180;
+    return Math.log(Math.tan(Math.PI / 4 + rad / 2)) * (20037508.34 / Math.PI);
+  }
+
+  /**
+   * Generate deterministic synthetic bathymetry when remote data is not available.
+   */
+  private generateSyntheticBathymetry(
+    bounds: { north: number; south: number; east: number; west: number },
+    resolutionMeters: number
+  ): BathymetricData {
+    const latStep = resolutionMeters / 111320;
+    const lngStep = resolutionMeters / (111320 * Math.cos(((bounds.north + bounds.south) / 2) * Math.PI / 180));
+
+    const rows = Math.max(16, Math.ceil((bounds.north - bounds.south) / latStep));
+    const cols = Math.max(16, Math.ceil((bounds.east - bounds.west) / lngStep));
+
+    const depths: number[][] = [];
+    for (let i = 0; i < rows; i++) {
+      const lat = bounds.south + (i / rows) * (bounds.north - bounds.south);
+      const row: number[] = [];
+      for (let j = 0; j < cols; j++) {
+        const lng = bounds.west + (j / cols) * (bounds.east - bounds.west);
+
+        const latFactor = (lat - bounds.south) / (bounds.north - bounds.south);
+        const lngFactor = (lng - bounds.west) / (bounds.east - bounds.west);
+
+        let depth = 8 + 10 * (1 - Math.abs(latFactor - 0.5) * 2);
+
+        if (latFactor > 0.65 && lngFactor > 0.55) {
+          const bankCenterLat = 0.78;
+          const bankCenterLng = 0.68;
+          const distToBank = Math.hypot(latFactor - bankCenterLat, lngFactor - bankCenterLng);
+          if (distToBank < 0.12) {
+            depth = 3 + 2 * (distToBank / 0.12);
+          }
+        }
+
+        const trenchCenterLng = 0.82;
+        const trenchFactor = Math.max(0, 1 - Math.abs(lngFactor - trenchCenterLng) * 5);
+        depth += trenchFactor * 6;
+
+        row.push(Math.max(1.5, Math.min(40, depth)));
+      }
+      depths.push(row);
+    }
+
+    return {
+      resolution: resolutionMeters,
+      depths,
+      bounds,
+      source: BathymetrySource.GEBCO,
+      date: new Date().toISOString()
+    };
   }
 
   /**

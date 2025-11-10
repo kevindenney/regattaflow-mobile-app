@@ -52,12 +52,11 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
     }
 
     // 2. Create/update sailor profile
-    const { data: existingProfiles } = await supabase
+    const { data: existingProfile } = await supabase
       .from('sailor_profiles')
       .select('id')
-      .eq('user_id', sailor_id);
-
-    const existingProfile = existingProfiles?.[0];
+      .eq('user_id', sailor_id)
+      .maybeSingle();
 
     const profileData: any = {
       user_id: sailor_id,

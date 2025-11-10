@@ -44,7 +44,8 @@ export class RaceWeatherService {
     lat: number,
     lng: number,
     raceDate: string,
-    venueName?: string
+    venueName?: string,
+    options?: { warningSignalTime?: string | null }
   ): Promise<RaceWeatherMetadata | null> {
     try {
       const displayName = venueName || `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
@@ -74,14 +75,18 @@ export class RaceWeatherService {
         country: 'Unknown',
         region: this.detectRegion(lat, lng),
         coordinates: { lat, lng },
-        timezone: 'UTC',
+        timeZone: 'UTC',
         weatherSources: undefined,
         sailingConditions: undefined,
         conditions: undefined,
         services: undefined,
       };
 
-      return this.fetchWeatherForRace(venue, raceDate);
+      const targetDate = options?.warningSignalTime
+        ? this.combineDateWithTimeZone(raceDate, options.warningSignalTime, venue.timeZone || 'UTC') ?? new Date(raceDate)
+        : new Date(raceDate);
+
+      return this.fetchWeatherForRace(venue, targetDate.toISOString());
 
     } catch (error: any) {
       console.error('[RaceWeatherService] Error fetching weather by coordinates:', error.message);
@@ -222,7 +227,8 @@ export class RaceWeatherService {
    */
   static async fetchWeatherByVenueName(
     venueName: string,
-    raceDate: string
+    raceDate: string,
+    options?: { warningSignalTime?: string | null }
   ): Promise<RaceWeatherMetadata | null> {
     try {
       logger.debug(`[RaceWeatherService] Looking up venue: "${venueName}"`);
@@ -244,13 +250,17 @@ export class RaceWeatherService {
         setTimeout(() => reject(new Error('Venue lookup timeout')), 10000)
       );
 
+      logger.debug(`[RaceWeatherService] Starting venue query...`);
+
       const venuePromise = supabase
         .from('sailing_venues')
-        .select('*')
+        .select('*, time_zone')
         .ilike('name', `%${cleanVenueName}%`)
         .limit(1);
 
+      logger.debug(`[RaceWeatherService] Waiting for venue query result...`);
       const { data: venues, error } = await Promise.race([venuePromise, timeoutPromise]) as any;
+      logger.debug(`[RaceWeatherService] Venue query completed`, { venues: venues?.length, error });
 
       if (error) {
         console.warn(`[RaceWeatherService] Venue lookup error:`, error);
@@ -276,7 +286,7 @@ export class RaceWeatherService {
           lat: venue.coordinates_lat,
           lng: venue.coordinates_lng,
         },
-        timezone: venue.timezone || 'UTC',
+        timeZone: venue.time_zone || venue.timezone || 'UTC',
         // Add minimal required fields
         weatherSources: undefined,
         sailingConditions: undefined,
@@ -284,7 +294,13 @@ export class RaceWeatherService {
         services: undefined,
       };
 
-      return this.fetchWeatherForRace(sailingVenue, raceDate);
+      const targetDate = this.combineDateWithTimeZone(
+        raceDate,
+        options?.warningSignalTime ?? null,
+        sailingVenue.timeZone || 'UTC'
+      ) ?? new Date(raceDate);
+
+      return this.fetchWeatherForRace(sailingVenue, targetDate.toISOString());
 
     } catch (error: any) {
       console.error('[RaceWeatherService] Error in fetchWeatherByVenueName:', error.message);
@@ -312,6 +328,63 @@ export class RaceWeatherService {
     const hoursSinceFetch = (now.getTime() - fetchedAt.getTime()) / (1000 * 60 * 60);
 
     return hoursSinceFetch > 24;
+  }
+
+  private static combineDateWithTimeZone(dateString: string, timeString: string | null, timeZone: string | undefined): Date | null {
+    if (!timeString || !timeZone) {
+      return new Date(dateString);
+    }
+
+    try {
+      const baseDate = new Date(dateString);
+      if (Number.isNaN(baseDate.getTime())) {
+        return new Date(dateString);
+      }
+
+      const [hours, minutes, seconds = '00'] = timeString.split(':');
+      const utcDate = new Date(Date.UTC(
+        baseDate.getUTCFullYear(),
+        baseDate.getUTCMonth(),
+        baseDate.getUTCDate(),
+        Number(hours),
+        Number(minutes),
+        Number(seconds)
+      ));
+
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      const parts = formatter.formatToParts(utcDate);
+      const values: Record<string, string> = {};
+      for (const part of parts) {
+        if (part.type !== 'literal') {
+          values[part.type] = part.value;
+        }
+      }
+
+      const zonedUTC = Date.UTC(
+        Number(values.year),
+        Number(values.month) - 1,
+        Number(values.day),
+        Number(values.hour),
+        Number(values.minute),
+        Number(values.second)
+      );
+
+      const offset = zonedUTC - utcDate.getTime();
+      return new Date(utcDate.getTime() - offset);
+    } catch (error) {
+      console.warn('[RaceWeatherService] Failed to combine date/time with timezone, using base date', error);
+      return new Date(dateString);
+    }
   }
 }
 

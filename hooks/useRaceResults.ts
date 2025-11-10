@@ -151,22 +151,71 @@ export function useLiveRaces(userId?: string) {
     setLoading(true);
 
     try {
-      // Get all regattas for the user (don't filter by status to show all races)
-      // Increased from limit(10) to limit(100) to support full season calendars
-      let { data, error } = await supabase
+      const racesById = new Map<string, Race>();
+      const addRaces = (races: any[] | null | undefined) => {
+        races?.forEach((race: any) => {
+          if (race?.id) {
+            racesById.set(race.id, race);
+          }
+        });
+      };
+
+      // Regattas the user created
+      const { data: createdRaces, error: createdError } = await supabase
         .from('regattas')
         .select('*')
         .eq('created_by', userId)
         .order('start_date', { ascending: true })
         .limit(100);
 
-      if (error) {
-        logger.warn('Returning empty due to error:', error);
+      if (createdError) {
+        logger.warn('Returning empty due to regatta query error:', createdError);
         setLiveRaces([]);
         setLoading(false);
         return;
       }
-      setLiveRaces((data as any[]) || []);
+      addRaces(createdRaces as any[]);
+
+      // Regattas where the user has logged timer sessions
+      const { data: sessionRows, error: sessionsError } = await supabase
+        .from('race_timer_sessions')
+        .select('regatta_id')
+        .eq('sailor_id', userId)
+        .not('regatta_id', 'is', null)
+        .order('end_time', { ascending: false })
+        .limit(200);
+
+      if (sessionsError) {
+        logger.warn('Unable to load participant regattas from race_timer_sessions:', sessionsError);
+      } else {
+        const uniqueSessionRegattaIds = Array.from(
+          new Set((sessionRows ?? []).map((row) => row.regatta_id).filter(Boolean))
+        ) as string[];
+
+        const missingRegattaIds = uniqueSessionRegattaIds.filter((regattaId) => !racesById.has(regattaId));
+
+        if (missingRegattaIds.length > 0) {
+          const { data: participantRaces, error: participantError } = await supabase
+            .from('regattas')
+            .select('*')
+            .in('id', missingRegattaIds)
+            .order('start_date', { ascending: true });
+
+          if (participantError) {
+            logger.warn('Unable to load regattas for participant sessions:', participantError);
+          } else {
+            addRaces(participantRaces as any[]);
+          }
+        }
+      }
+
+      const merged = Array.from(racesById.values()).sort((a: any, b: any) => {
+        const aTime = a?.start_date ? new Date(a.start_date).getTime() : Number.MAX_SAFE_INTEGER;
+        const bTime = b?.start_date ? new Date(b.start_date).getTime() : Number.MAX_SAFE_INTEGER;
+        return aTime - bTime;
+      });
+
+      setLiveRaces(merged);
     } catch (err) {
       logger.error('Error loading races:', err);
       setLiveRaces([]);

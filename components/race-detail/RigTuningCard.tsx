@@ -93,9 +93,24 @@ export function RigTuningCard({
 
         {!loading && recommendation && (
           <>
+            {/* AI-Generated Badge (if applicable) */}
+            {recommendation.isAIGenerated && (
+              <View style={styles.aiBadge}>
+                <MaterialCommunityIcons name="robot-outline" size={16} color="#7C3AED" />
+                <Text style={styles.aiBadgeText}>
+                  AI-Generated Recommendations
+                  {recommendation.confidence && ` • ${Math.round(recommendation.confidence * 100)}% confidence`}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <MaterialCommunityIcons name="text-box-check-outline" size={20} color="#3B82F6" />
+                <MaterialCommunityIcons
+                  name={recommendation.isAIGenerated ? "robot-outline" : "text-box-check-outline"}
+                  size={20}
+                  color={recommendation.isAIGenerated ? "#7C3AED" : "#3B82F6"}
+                />
                 <View>
                   <Text style={styles.headerTitle}>{recommendation.sectionTitle || 'Matched Setup'}</Text>
                   {recommendation.conditionSummary && (
@@ -106,13 +121,25 @@ export function RigTuningCard({
                 </View>
               </View>
               <TouchableOpacity
-                style={styles.sourceBadge}
+                style={[
+                  styles.sourceBadge,
+                  recommendation.isAIGenerated && styles.aiSourceBadge
+                ]}
                 onPress={onRefresh}
                 disabled={!onRefresh}
                 accessibilityLabel="Refresh tuning recommendations"
               >
-                <MaterialCommunityIcons name="file-document-outline" size={14} color="#2563EB" />
-                <Text style={styles.sourceText}>{recommendation.guideTitle}</Text>
+                <MaterialCommunityIcons
+                  name={recommendation.isAIGenerated ? "robot-outline" : "file-document-outline"}
+                  size={14}
+                  color={recommendation.isAIGenerated ? "#7C3AED" : "#2563EB"}
+                />
+                <Text style={[
+                  styles.sourceText,
+                  recommendation.isAIGenerated && styles.aiSourceText
+                ]}>
+                  {recommendation.guideTitle}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -121,6 +148,9 @@ export function RigTuningCard({
                 <View key={`${raceId}-${setting.key}-${setting.value}`} style={styles.settingCard}>
                   <Text style={styles.settingLabel}>{setting.label}</Text>
                   <Text style={styles.settingValue}>{setting.value}</Text>
+                  {setting.reasoning && (
+                    <Text style={styles.settingReasoning}>{setting.reasoning}</Text>
+                  )}
                   {setting.rawKey && setting.rawKey !== setting.label && (
                     <Text style={styles.settingMeta}>{setting.rawKey}</Text>
                   )}
@@ -128,12 +158,34 @@ export function RigTuningCard({
               ))}
             </View>
 
+            {recommendation.weatherSpecificNotes && recommendation.weatherSpecificNotes.length > 0 && (
+              <View style={styles.weatherNotes}>
+                <MaterialCommunityIcons name="weather-partly-cloudy" size={16} color="#F59E0B" />
+                <View style={styles.weatherNotesList}>
+                  {recommendation.weatherSpecificNotes.map((note, idx) => (
+                    <Text key={idx} style={styles.weatherNoteText}>• {note}</Text>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {recommendation.notes && (
               <View style={styles.notes}>
                 <MaterialCommunityIcons name="note-text-outline" size={16} color="#64748B" />
                 <Text style={styles.notesText} numberOfLines={3}>
                   {recommendation.notes}
                 </Text>
+              </View>
+            )}
+
+            {recommendation.caveats && recommendation.caveats.length > 0 && (
+              <View style={styles.caveats}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#F59E0B" />
+                <View style={styles.caveatsList}>
+                  {recommendation.caveats.map((caveat, idx) => (
+                    <Text key={idx} style={styles.caveatText}>• {caveat}</Text>
+                  ))}
+                </View>
               </View>
             )}
 
@@ -178,6 +230,23 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
   },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F3E8FF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  aiBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7C3AED',
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -209,10 +278,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
+  aiSourceBadge: {
+    backgroundColor: '#F3E8FF',
+  },
   sourceText: {
     fontSize: 13,
     color: '#2563EB',
     fontWeight: '600',
+  },
+  aiSourceText: {
+    color: '#7C3AED',
   },
   settingsGrid: {
     flexDirection: 'row',
@@ -239,9 +314,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0F172A',
   },
+  settingReasoning: {
+    fontSize: 11,
+    color: '#7C3AED',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
   settingMeta: {
     fontSize: 11,
     color: '#94A3B8',
+  },
+  weatherNotes: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  weatherNotesList: {
+    flex: 1,
+    gap: 4,
+  },
+  weatherNoteText: {
+    fontSize: 12,
+    color: '#92400E',
   },
   notes: {
     flexDirection: 'row',
@@ -254,6 +352,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#475569',
     flex: 1,
+  },
+  caveats: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  caveatsList: {
+    flex: 1,
+    gap: 4,
+  },
+  caveatText: {
+    fontSize: 11,
+    color: '#9A3412',
   },
   footer: {
     borderTopWidth: 1,

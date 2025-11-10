@@ -3,37 +3,48 @@ import type {
   AdvancedWeatherConditions,
   WeatherAlert
 } from '@/lib/types/advanced-map';
-import { WeatherAPIProService } from './WeatherAPIProService';
-import { WorldTidesProService } from '../tides/WorldTidesProService';
+import { StormGlassService } from './StormGlassService';
+import { OpenWeatherMapProvider } from './OpenWeatherMapProvider';
+import type { WeatherForecast as EnvironmentalForecast } from '@/types/environmental';
+import { ConfidenceLevel } from '@/types/environmental';
 
 export class ProfessionalWeatherService {
   private apiKeys: { [key: string]: string };
   private cache: Map<string, any> = new Map();
   private updateIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
-  private weatherAPIService: WeatherAPIProService;
-  private worldTidesService: WorldTidesProService;
+  private stormGlassService: StormGlassService;
+  private openWeatherProvider: OpenWeatherMapProvider | null;
 
   constructor(apiKeys: { [key: string]: string }) {
     this.apiKeys = apiKeys;
 
-    // Initialize premium services
-    this.weatherAPIService = new WeatherAPIProService({
-      apiKey: apiKeys['weatherapi-pro'] || 'demo-key',
-      baseUrl: 'https://api.weatherapi.com/v1',
+    // Initialize Storm Glass - comprehensive marine weather service
+    this.stormGlassService = new StormGlassService({
+      apiKey: apiKeys['stormglass'] || 'demo-key',
+      baseUrl: 'https://api.stormglass.io/v2',
       timeout: 10000,
       retryAttempts: 3
     });
 
-    this.worldTidesService = new WorldTidesProService({
-      apiKey: apiKeys['worldtides-pro'] || 'demo-key',
-      baseUrl: 'https://www.worldtides.info/api/v3',
-      timeout: 10000,
-      retryAttempts: 3
+    // Initialize OpenWeatherMap as a cheaper global fallback provider
+    this.openWeatherProvider = new OpenWeatherMapProvider(
+      apiKeys['openweathermap']
+    );
+  }
+
+  /**
+   * Backwards compatible helper used by legacy components (e.g. WeatherOverlay3D)
+   * Converts positional args into the GeoLocation shape expected internally.
+   */
+  async getAdvancedWeatherData(lat: number, lng: number, venueName?: string): Promise<AdvancedWeatherConditions> {
+    return this.getAdvancedWeatherConditions({
+      latitude: lat,
+      longitude: lng,
     });
   }
 
   /**
-   * Get comprehensive weather conditions with multiple source validation
+   * Get comprehensive weather conditions from Storm Glass
    */
   async getAdvancedWeatherConditions(location: GeoLocation): Promise<AdvancedWeatherConditions> {
     const cacheKey = `weather_${location.latitude}_${location.longitude}`;
@@ -45,36 +56,73 @@ export class ProfessionalWeatherService {
       }
     }
 
+    let weatherData: AdvancedWeatherConditions | null = null;
+
     try {
-      // Primary: WeatherAPI Pro with premium marine data
-      const primaryWeather = await this.weatherAPIService.getCurrentWeather(location);
+      // Storm Glass provides comprehensive marine data (weather + tides + currents)
+      weatherData = await this.stormGlassService.getWeatherAtTime(location, new Date());
 
-      // Get professional tide data
-      const tideData = await this.worldTidesService.getCurrentTideData(location);
+      if (weatherData) {
+        // Enhance with tide extremes from Storm Glass
+        try {
+          const tideExtremes = await this.stormGlassService.getTideExtremes(location, 1);
+          const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > new Date());
+          const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > new Date());
 
-      // Integrate tide data into weather conditions
-      primaryWeather.tide = {
-        height: tideData.height,
-        direction: tideData.direction ?? 'unknown',
-        speed: tideData.speed,
-        nextHigh: tideData.nextHigh,
-        nextLow: tideData.nextLow
-      };
+          if (nextHigh || nextLow) {
+            weatherData.tide.nextHigh = nextHigh?.time;
+            weatherData.tide.nextLow = nextLow?.time;
+          }
 
-      // Enhanced confidence scoring with premium data
-      primaryWeather.forecast.confidence = this.calculateProfessionalConfidence(primaryWeather, tideData);
+          // Get current tide height
+          const tideHeight = await this.stormGlassService.getTideHeightAtTime(location, new Date());
+          weatherData.tide.height = tideHeight;
 
-      const combined = primaryWeather;
-
-      this.cache.set(cacheKey, {
-        data: combined,
-        timestamp: Date.now()
-      });
-
-      return combined;
+          // Determine tide direction based on next extreme
+          if (nextHigh && nextLow) {
+            weatherData.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
+          }
+        } catch (tideError) {
+          console.warn('[ProfessionalWeatherService] Tide data fetch failed, using defaults');
+        }
+      }
     } catch (error) {
+      console.error('[ProfessionalWeatherService] Storm Glass error:', error);
+    }
 
-      return this.getFallbackWeather(location);
+    if (!weatherData) {
+      weatherData = await this.getFallbackWeather(location);
+    }
+
+    this.cache.set(cacheKey, {
+      data: weatherData,
+      timestamp: Date.now()
+    });
+
+    return weatherData;
+  }
+
+  /**
+   * Convenience wrapper used by visualization components to render tidal current overlays.
+   */
+  async getTidalCurrents(bounds: BoundingBox): Promise<Array<{ time: Date; speed: number; direction: number }>> {
+    try {
+      const centerLat = bounds.southwest.latitude + ((bounds.northeast.latitude - bounds.southwest.latitude) / 2);
+      const centerLng = bounds.southwest.longitude + ((bounds.northeast.longitude - bounds.southwest.longitude) / 2);
+
+      const currents = await this.stormGlassService.getCurrents({
+        latitude: centerLat,
+        longitude: centerLng,
+      }, 24);
+
+      return currents.map(current => ({
+        time: current.time,
+        speed: current.speed * 1.943844, // Convert m/s to knots for UI consumers
+        direction: current.direction,
+      }));
+    } catch (error) {
+      console.warn('[ProfessionalWeatherService] Failed to load tidal currents from Storm Glass', error);
+      return [];
     }
   }
 
@@ -83,15 +131,32 @@ export class ProfessionalWeatherService {
    */
   async getMarineForecast(location: GeoLocation, hours: number = 72): Promise<AdvancedWeatherConditions[]> {
     try {
-      const forecasts = await Promise.all([
-        this.fetchWeatherAPIForecast(location, hours),
-        this.fetchPredictWindForecast(location, hours),
-        this.fetchMeteomaticsForecast(location, hours)
-      ]);
+      // Storm Glass provides comprehensive marine forecast
+      const forecasts = await this.stormGlassService.getMarineWeather(location, hours);
 
-      return this.processForecastEnsemble(forecasts);
+      // Enhance with tide data for each forecast hour
+      const tideExtremes = await this.stormGlassService.getTideExtremes(location, Math.ceil(hours / 24));
+
+      for (const forecast of forecasts) {
+        const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > forecast.timestamp);
+        const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > forecast.timestamp);
+
+        if (nextHigh) forecast.tide.nextHigh = nextHigh.time;
+        if (nextLow) forecast.tide.nextLow = nextLow.time;
+
+        // Determine tide direction
+        if (nextHigh && nextLow) {
+          forecast.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
+        }
+      }
+
+      return forecasts;
     } catch (error) {
-
+      console.error('[ProfessionalWeatherService] Marine forecast error:', error);
+      const fallbackForecasts = await this.getFallbackMarineForecast(location, hours);
+      if (fallbackForecasts.length > 0) {
+        return fallbackForecasts;
+      }
       return [];
     }
   }
@@ -117,6 +182,18 @@ export class ProfessionalWeatherService {
     }
   }
 
+  private async fetchNOAAAlerts(_bounds: BoundingBox): Promise<WeatherAlert[]> {
+    return [];
+  }
+
+  private async fetchWeatherAPIAlerts(_bounds: BoundingBox): Promise<WeatherAlert[]> {
+    return [];
+  }
+
+  private async fetchLocalMarineAlerts(_bounds: BoundingBox): Promise<WeatherAlert[]> {
+    return [];
+  }
+
   /**
    * Get GRIB data for advanced analysis
    */
@@ -138,6 +215,19 @@ export class ProfessionalWeatherService {
 
       throw error;
     }
+  }
+
+  private buildGRIBUrl(bounds: BoundingBox, modelRun: Date): string {
+    const baseUrl = 'https://api.stormglass.io/v2/weather/point';
+    const params = new URLSearchParams({
+      lat: bounds.southwest.latitude.toString(),
+      lng: bounds.southwest.longitude.toString(),
+      params: 'windSpeed,windDirection,airTemperature,pressure',
+      start: Math.floor(modelRun.getTime() / 1000).toString(),
+      end: Math.floor((modelRun.getTime() + (6 * 60 * 60 * 1000)) / 1000).toString(),
+    });
+
+    return `${baseUrl}?${params.toString()}`;
   }
 
   /**
@@ -176,383 +266,301 @@ export class ProfessionalWeatherService {
     }
   }
 
-  // Private methods for data source integration
+  // Private methods for Storm Glass integration
+  // (Old multi-source methods removed - Storm Glass aggregates sources internally)
 
-  private async fetchWeatherAPIPro(location: GeoLocation): Promise<Partial<AdvancedWeatherConditions>> {
-    const apiKey = this.apiKeys['weatherapi-pro'];
-    if (!apiKey) throw new Error('WeatherAPI Pro key not configured');
 
-    const url = `https://api.weatherapi.com/v1/marine.json?` +
-      `key=${apiKey}&` +
-      `q=${location.latitude},${location.longitude}&` +
-      `days=3&` +
-      `aqi=yes&` +
-      `alerts=yes`;
+  private async getFallbackWeather(location: GeoLocation): Promise<AdvancedWeatherConditions> {
+    if (this.openWeatherProvider) {
+      try {
+        const current = await this.openWeatherProvider.getCurrentConditions(
+          location.latitude,
+          location.longitude
+        );
 
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(`WeatherAPI Pro error: ${data.error?.message}`);
-    }
-
-    return this.parseWeatherAPIData(data);
-  }
-
-  private async fetchPredictWindPro(location: GeoLocation): Promise<Partial<AdvancedWeatherConditions>> {
-    const apiKey = this.apiKeys['predictwind-pro'];
-    if (!apiKey) throw new Error('PredictWind Pro key not configured');
-
-    const url = `https://api.predictwind.com/v1/weather/point?` +
-      `lat=${location.latitude}&` +
-      `lon=${location.longitude}&` +
-      `api_key=${apiKey}&` +
-      `models=gfs,ecmwf,nam&` +
-      `params=wind,pressure,waves,rain`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(`PredictWind Pro error: ${data.message}`);
-    }
-
-    return this.parsePredictWindData(data);
-  }
-
-  private async fetchNOAAGFS(location: GeoLocation): Promise<Partial<AdvancedWeatherConditions>> {
-    // Free NOAA GFS data for validation
-    const url = `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?` +
-      `file=gfs.t00z.pgrb2.0p25.f000&` +
-      `lev_10_m_above_ground=on&` +
-      `lev_surface=on&` +
-      `var_UGRD=on&var_VGRD=on&var_PRMSL=on&` +
-      `subregion=&` +
-      `leftlon=${location.longitude-0.5}&` +
-      `rightlon=${location.longitude+0.5}&` +
-      `toplat=${location.latitude+0.5}&` +
-      `bottomlat=${location.latitude-0.5}&` +
-      `dir=%2Fgfs.${this.getGFSDateString()}%2F00%2Fatmos`;
-
-    const response = await fetch(url);
-    const gribData = await response.arrayBuffer();
-
-    return this.parseGRIBData(gribData, location);
-  }
-
-  private async fetchMeteomaticsForecast(location: GeoLocation, hours: number): Promise<AdvancedWeatherConditions[]> {
-    const apiKey = this.apiKeys['meteomatics'];
-    if (!apiKey) throw new Error('Meteomatics key not configured');
-
-    const startTime = new Date();
-    const endTime = new Date(Date.now() + hours * 60 * 60 * 1000);
-
-    const url = `https://api.meteomatics.com/` +
-      `${this.formatISO(startTime)}--${this.formatISO(endTime)}:PT1H/` +
-      `wind_speed_10m:ms,wind_dir_10m:d,msl_pressure:hPa,` +
-      `significant_wave_height:m,mean_wave_period:s,mean_wave_direction:d,` +
-      `sea_surface_temperature:C,visibility:m/` +
-      `${location.latitude},${location.longitude}/json`;
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Basic ${btoa(`${this.apiKeys['meteomatics-user']}:${apiKey}`)}`
+        if (current) {
+          console.info('[ProfessionalWeatherService] Using OpenWeatherMap fallback data');
+          return this.transformOpenWeatherForecast(current, location);
+        }
+      } catch (error) {
+        console.warn('[ProfessionalWeatherService] OpenWeatherMap fallback failed', error);
       }
-    });
+    }
 
-    const data = await response.json();
-    return this.parseMeteomaticsData(data);
+    console.warn('[ProfessionalWeatherService] Falling back to static default weather data');
+    return this.getStaticFallbackWeather(location);
   }
 
-  private combineWeatherSources(
-    primary: Partial<AdvancedWeatherConditions>,
-    sailing: Partial<AdvancedWeatherConditions>,
-    noaa: Partial<AdvancedWeatherConditions>
+  private transformOpenWeatherForecast(
+    forecast: EnvironmentalForecast,
+    location: GeoLocation
   ): AdvancedWeatherConditions {
-    // Implement ensemble averaging and validation logic
+    const timestamp = forecast.time ? new Date(forecast.time) : new Date();
+    const windSpeed = forecast.wind.speed;
+    const windDirection = forecast.wind.direction ?? 0;
+    const gusts = forecast.wind.gust ?? Math.round(windSpeed * 1.15);
+    const cloudCover = forecast.cloud_cover ?? 0;
+    const waveHeight = this.estimateWaveHeightFromWind(windSpeed);
+    const wavePeriod = this.estimateWavePeriodFromWind(windSpeed);
+    const airTemperature = forecast.temperature ?? 20;
+    const waterTemperature = airTemperature - 2;
+    const visibilityMeters = cloudCover >= 90 ? 6000 : cloudCover >= 70 ? 8000 : 12000;
+
     return {
-      // Wind data - average from all sources with confidence weighting
       wind: {
-        speed: this.weightedAverage([
-          { value: primary.wind?.speed || 0, weight: 0.5 },
-          { value: sailing.wind?.speed || 0, weight: 0.3 },
-          { value: noaa.wind?.speed || 0, weight: 0.2 }
-        ]),
-        direction: this.circularAverage([
-          { value: primary.wind?.direction || 0, weight: 0.5 },
-          { value: sailing.wind?.direction || 0, weight: 0.3 },
-          { value: noaa.wind?.direction || 0, weight: 0.2 }
-        ]),
-        gusts: primary.wind?.gusts || sailing.wind?.gusts || 0
+        speed: windSpeed,
+        direction: windDirection,
+        gusts,
+        variability: 5,
+        beaufortScale: this.calculateBeaufortScale(windSpeed)
       },
-
-      // Pressure data - prefer most recent
-      pressure: {
-        sealevel: primary.pressure?.sealevel || sailing.pressure?.sealevel || 1013.25,
-        trend: this.calculatePressureTrend(primary.pressure, sailing.pressure),
-        gradient: this.calculatePressureGradient([primary.pressure, sailing.pressure])
-      },
-
-      // Sea state - prefer sailing-specific source
-      seaState: sailing.seaState || primary.seaState || {
-        waveHeight: 0.5,
-        wavePeriod: 5,
-        seaTemperature: 15
-      },
-
-      // Visibility
-      visibility: {
-        horizontal: primary.visibility?.horizontal || 10,
-        conditions: primary.visibility?.conditions || 'clear'
-      },
-
-      // Forecast metadata
-      forecast: {
-        confidence: this.calculateEnsembleConfidence([primary, sailing, noaa]),
-        source: 'Professional Multi-Source Ensemble',
-        modelRun: new Date(),
-        validTime: new Date(),
-        resolution: '1km'
-      },
-
-      // Tide and base weather from primary
-      tide: primary.tide || {
+      tide: {
         height: 0,
-        direction: 'flood' as const,
+        direction: 'unknown',
         speed: 0
       },
-      waves: primary.waves || {
-        height: 0.5,
-        period: 5,
-        direction: 180
+      waves: {
+        height: waveHeight,
+        period: wavePeriod,
+        direction: windDirection,
+        swellHeight: Math.round(waveHeight * 0.6 * 10) / 10,
+        swellPeriod: Math.max(3, Math.round(wavePeriod * 1.2)),
+        swellDirection: windDirection
       },
-      timestamp: new Date()
-    };
-  }
-
-  private parseWeatherAPIData(data: any): Partial<AdvancedWeatherConditions> {
-    const current = data.current;
-    const marine = data.forecast?.forecastday?.[0]?.hour?.[0];
-
-    return {
-      wind: {
-        speed: current.wind_kph * 0.539957, // Convert km/h to knots
-        direction: current.wind_degree,
-        gusts: current.gust_kph * 0.539957
-      },
+      temperature: airTemperature,
+      cloudCover,
+      precipitation: 0,
       pressure: {
-        sealevel: current.pressure_mb,
-        trend: 'steady' as const, // Would need historical data for trend
-        gradient: 0
+        sealevel: forecast.pressure ?? 1013.25,
+        trend: 'steady',
+        gradient: 0,
+        rate: 0
       },
       visibility: {
-        horizontal: current.vis_km * 0.539957, // Convert to nautical miles
-        conditions: this.mapWeatherCondition(current.condition.text)
-      },
-      seaState: marine ? {
-        waveHeight: marine.sig_ht_mt || 0,
-        wavePeriod: marine.swell_period_secs || 5,
-        seaTemperature: marine.water_temp_c || 15
-      } : undefined
-    };
-  }
-
-  private parsePredictWindData(data: any): Partial<AdvancedWeatherConditions> {
-    // PredictWind specific parsing logic
-    return {
-      wind: {
-        speed: data.wind_speed_kts,
-        direction: data.wind_direction,
-        gusts: data.wind_gust_kts
+        horizontal: visibilityMeters,
+        conditions: this.determineVisibilityCondition(cloudCover),
+        restrictions: cloudCover > 85 ? ['reduced by cloud cover'] : undefined
       },
       seaState: {
-        waveHeight: data.wave_height,
-        wavePeriod: data.wave_period,
-        swellHeight: data.swell_height,
-        swellPeriod: data.swell_period,
-        swellDirection: data.swell_direction
-      }
-    };
-  }
-
-  private parseGRIBData(gribData: ArrayBuffer, location: GeoLocation): Partial<AdvancedWeatherConditions> {
-    // GRIB parsing logic - would use a library like node-grib2
-    // For now, return placeholder
-    return {
-      wind: { speed: 10, direction: 180, gusts: 12 },
-      pressure: { sealevel: 1013.25, trend: 'steady', gradient: 0 }
-    };
-  }
-
-  private getFallbackWeather(location: GeoLocation): AdvancedWeatherConditions {
-    // Return safe fallback weather conditions
-    return {
-      wind: { speed: 5, direction: 180, gusts: 8 },
-      tide: { height: 0, direction: 'flood', speed: 0.5 },
-      waves: { height: 0.5, period: 5, direction: 180 },
-      pressure: { sealevel: 1013.25, trend: 'steady', gradient: 0 },
-      visibility: { horizontal: 10, conditions: 'clear' },
-      seaState: { waveHeight: 0.5, wavePeriod: 5, seaTemperature: 15 },
-      forecast: {
-        confidence: 0.3,
-        source: 'Fallback',
-        modelRun: new Date(),
-        validTime: new Date(),
-        resolution: 'low'
+        waveHeight,
+        wavePeriod,
+        swellHeight: Math.round(waveHeight * 0.6 * 10) / 10,
+        swellPeriod: Math.max(3, Math.round(wavePeriod * 1.2)),
+        swellDirection: windDirection,
+        seaTemperature: waterTemperature
       },
-      timestamp: new Date()
+      temperatureProfile: {
+        air: airTemperature,
+        water: waterTemperature,
+        dewpoint: airTemperature - 2,
+        feelslike: airTemperature
+      },
+      precipitationProfile: {
+        rate: 0,
+        probability: 0,
+        type: 'none'
+      },
+      cloudLayerProfile: {
+        total: cloudCover,
+        low: Math.min(100, Math.round(cloudCover * 0.6)),
+        medium: Math.min(100, Math.round(cloudCover * 0.3)),
+        high: Math.min(100, Math.round(cloudCover * 0.1))
+      },
+      forecast: {
+        confidence: this.mapConfidenceToScore(forecast.confidence),
+        source: forecast.provider || 'OpenWeatherMap',
+        modelRun: timestamp,
+        validTime: timestamp,
+        resolution: '10km',
+        model: 'OpenWeatherMap Global Forecast',
+        lastUpdated: timestamp,
+        nextUpdate: new Date(timestamp.getTime() + 3 * 60 * 60 * 1000)
+      },
+      alerts: [],
+      location: {
+        latitude: location.latitude,
+        longitude: location.longitude
+      },
+      timestamp
     };
   }
 
-  // Utility methods
-  private weightedAverage(values: { value: number; weight: number }[]): number {
-    const totalWeight = values.reduce((sum, v) => sum + v.weight, 0);
-    const weightedSum = values.reduce((sum, v) => sum + (v.value * v.weight), 0);
-    return weightedSum / totalWeight;
+  private async getFallbackMarineForecast(
+    location: GeoLocation,
+    hours: number
+  ): Promise<AdvancedWeatherConditions[]> {
+    if (!this.openWeatherProvider) {
+      return [];
+    }
+
+    const intervalHours = 3;
+    const steps = Math.max(1, Math.min(Math.ceil(hours / intervalHours), 16));
+    const forecasts: AdvancedWeatherConditions[] = [];
+
+    for (let i = 0; i < steps; i++) {
+      const targetTime = new Date(Date.now() + i * intervalHours * 60 * 60 * 1000);
+      try {
+        const forecast = await this.openWeatherProvider.getForecast(
+          location.latitude,
+          location.longitude,
+          targetTime
+        );
+
+        if (!forecast) {
+          continue;
+        }
+
+        const advanced = this.transformOpenWeatherForecast(forecast, location);
+        advanced.timestamp = targetTime;
+        advanced.forecast.validTime = targetTime;
+        advanced.forecast.modelRun = targetTime;
+        advanced.forecast.lastUpdated = new Date();
+        forecasts.push(advanced);
+      } catch (error) {
+        console.warn('[ProfessionalWeatherService] OpenWeatherMap marine fallback fetch failed', error);
+        break;
+      }
+    }
+
+    return forecasts;
   }
 
-  private circularAverage(values: { value: number; weight: number }[]): number {
-    // Handle circular averaging for wind direction
-    let x = 0, y = 0, totalWeight = 0;
-
-    values.forEach(v => {
-      const rad = v.value * Math.PI / 180;
-      x += Math.cos(rad) * v.weight;
-      y += Math.sin(rad) * v.weight;
-      totalWeight += v.weight;
-    });
-
-    const avgRad = Math.atan2(y / totalWeight, x / totalWeight);
-    return ((avgRad * 180 / Math.PI) + 360) % 360;
+  private mapConfidenceToScore(level?: ConfidenceLevel): number {
+    switch (level) {
+      case ConfidenceLevel.HIGH:
+        return 0.8;
+      case ConfidenceLevel.MEDIUM:
+        return 0.55;
+      case ConfidenceLevel.LOW:
+        return 0.35;
+      default:
+        return 0.45;
+    }
   }
 
-  private calculateEnsembleConfidence(sources: Partial<AdvancedWeatherConditions>[]): number {
-    // Calculate confidence based on agreement between sources
-    const validSources = sources.filter(s => s.wind);
-    if (validSources.length < 2) return 0.5;
+  private determineVisibilityCondition(cloudCover?: number): 'clear' | 'haze' | 'fog' | 'rain' | 'snow' {
+    if (cloudCover === undefined) {
+      return 'clear';
+    }
 
-    // Simple confidence based on wind speed agreement
-    const windSpeeds = validSources.map(s => s.wind!.speed);
-    const stdDev = this.standardDeviation(windSpeeds);
+    if (cloudCover >= 90) {
+      return 'rain';
+    }
 
-    return Math.max(0.1, 1 - (stdDev / 10)); // Lower confidence for higher disagreement
-  }
+    if (cloudCover >= 70) {
+      return 'haze';
+    }
 
-  private standardDeviation(values: number[]): number {
-    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const squareDiffs = values.map(value => Math.pow(value - avg, 2));
-    const avgSquareDiff = squareDiffs.reduce((sum, val) => sum + val, 0) / values.length;
-    return Math.sqrt(avgSquareDiff);
-  }
-
-  private getGFSDateString(): string {
-    const now = new Date();
-    return now.getFullYear().toString() +
-           (now.getMonth() + 1).toString().padStart(2, '0') +
-           now.getDate().toString().padStart(2, '0');
-  }
-
-  private formatISO(date: Date): string {
-    return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
-  }
-
-  private mapWeatherCondition(condition: string): 'clear' | 'haze' | 'fog' | 'rain' | 'snow' {
-    const lower = condition.toLowerCase();
-    if (lower.includes('fog')) return 'fog';
-    if (lower.includes('rain')) return 'rain';
-    if (lower.includes('snow')) return 'snow';
-    if (lower.includes('haze') || lower.includes('mist')) return 'haze';
     return 'clear';
   }
 
-  private calculatePressureTrend(p1: any, p2: any): 'rising' | 'falling' | 'steady' {
-    if (!p1?.sealevel || !p2?.sealevel) return 'steady';
-    const diff = p1.sealevel - p2.sealevel;
-    if (diff > 1) return 'rising';
-    if (diff < -1) return 'falling';
-    return 'steady';
-  }
-
-  private calculatePressureGradient(pressures: any[]): number {
-    // Simplified gradient calculation
-    return 0.1; // mb per degree
-  }
-
-  private buildGRIBUrl(bounds: BoundingBox, modelRun: Date): string {
-    // Build Meteomatics GRIB URL
-    return `https://api.meteomatics.com/${this.formatISO(modelRun)}/` +
-           `wind_speed_10m:ms,wind_dir_10m:d,msl_pressure:hPa/` +
-           `${bounds.southwest.latitude},${bounds.southwest.longitude}:` +
-           `${bounds.northeast.latitude},${bounds.northeast.longitude}:0.1,0.1/grib`;
-  }
-
-  private async fetchNOAAAlerts(bounds: BoundingBox): Promise<WeatherAlert[]> {
-    // NOAA Weather Alerts implementation
-    return [];
-  }
-
-  private async fetchWeatherAPIAlerts(bounds: BoundingBox): Promise<WeatherAlert[]> {
-    // WeatherAPI alerts implementation
-    return [];
-  }
-
-  private async fetchLocalMarineAlerts(bounds: BoundingBox): Promise<WeatherAlert[]> {
-    // Local marine authority alerts
-    return [];
-  }
-
-  private async fetchWeatherAPIForecast(location: GeoLocation, hours: number): Promise<AdvancedWeatherConditions[]> {
-    // Implementation for WeatherAPI forecast
-    return [];
-  }
-
-  private async fetchPredictWindForecast(location: GeoLocation, hours: number): Promise<AdvancedWeatherConditions[]> {
-    // Implementation for PredictWind forecast
-    return [];
-  }
-
-  private parseMeteomaticsData(data: any): AdvancedWeatherConditions[] {
-    // Parse Meteomatics forecast data
-    return [];
-  }
-
-  private processForecastEnsemble(forecasts: AdvancedWeatherConditions[][]): AdvancedWeatherConditions[] {
-    // Process ensemble forecasts
-    return [];
-  }
-
-  /**
-   * Calculate professional confidence score with premium data sources
-   */
-  private calculateProfessionalConfidence(weather: AdvancedWeatherConditions, tideData: any): number {
-    let confidence = 0.85; // Base professional confidence
-
-    // Weather API Pro quality factors
-    if (weather.forecast.source === 'WeatherAPI Pro') {
-      confidence += 0.05;
+  private estimateWaveHeightFromWind(windSpeedKnots: number): number {
+    if (windSpeedKnots <= 0) {
+      return 0.2;
     }
 
-    // Tide data quality
-    if (tideData.coefficient > 50) {
-      confidence += 0.03; // High tide accuracy
-    }
-
-    // Time-based confidence degradation
-    const hoursAgo = (Date.now() - weather.timestamp.getTime()) / (1000 * 60 * 60);
-    if (hoursAgo > 3) {
-      confidence -= hoursAgo * 0.02;
-    }
-
-    // Wind consistency check
-    if ((weather.wind.variability ?? 0) < 10) {
-      confidence += 0.02; // Stable wind conditions
-    }
-
-    // Pressure trend reliability
-    if (weather.pressure.trend !== 'steady') {
-      confidence += 0.02; // Clear pressure trend
-    }
-
-    return Math.max(0.6, Math.min(0.98, confidence));
+    const estimated = Math.min(4, Math.max(0.2, windSpeedKnots * 0.1));
+    return Math.round(estimated * 10) / 10;
   }
+
+  private estimateWavePeriodFromWind(windSpeedKnots: number): number {
+    if (windSpeedKnots <= 0) {
+      return 3;
+    }
+
+    return Math.max(3, Math.round(windSpeedKnots * 0.5));
+  }
+
+  private calculateBeaufortScale(knots: number): number {
+    const thresholds = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
+
+    for (let scale = 0; scale < thresholds.length; scale++) {
+      if (knots < thresholds[scale]) {
+        return scale;
+      }
+    }
+
+    return 12;
+  }
+
+  private getStaticFallbackWeather(location: GeoLocation): AdvancedWeatherConditions {
+    const timestamp = new Date();
+
+    return {
+      wind: {
+        speed: 5,
+        direction: 180,
+        gusts: 8,
+        variability: 4,
+        beaufortScale: this.calculateBeaufortScale(5)
+      },
+      tide: {
+        height: 0,
+        direction: 'flood',
+        speed: 0.5
+      },
+      waves: {
+        height: 0.5,
+        period: 5,
+        direction: 180,
+        swellHeight: 0.3,
+        swellPeriod: 6,
+        swellDirection: 190
+      },
+      temperature: 15,
+      precipitation: 0,
+      cloudCover: 20,
+      pressure: {
+        sealevel: 1013.25,
+        trend: 'steady',
+        gradient: 0,
+        rate: 0
+      },
+      visibility: {
+        horizontal: 12000,
+        conditions: 'clear'
+      },
+      seaState: {
+        waveHeight: 0.5,
+        wavePeriod: 5,
+        swellHeight: 0.3,
+        swellPeriod: 6,
+        swellDirection: 190,
+        seaTemperature: 15
+      },
+      temperatureProfile: {
+        air: 15,
+        water: 13,
+        dewpoint: 12,
+        feelslike: 15
+      },
+      precipitationProfile: {
+        rate: 0,
+        probability: 0,
+        type: 'none'
+      },
+      cloudLayerProfile: {
+        total: 20,
+        low: 10,
+        medium: 7,
+        high: 3
+      },
+      forecast: {
+        confidence: 0.3,
+        source: 'StaticFallback',
+        modelRun: timestamp,
+        validTime: timestamp,
+        resolution: 'low',
+        lastUpdated: timestamp,
+        nextUpdate: new Date(timestamp.getTime() + 60 * 60 * 1000)
+      },
+      alerts: [],
+      location: {
+        latitude: location.latitude,
+        longitude: location.longitude
+      },
+      timestamp
+    };
+  }
+
 }

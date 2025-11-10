@@ -1,0 +1,3084 @@
+import {
+    ContingencyPlansCard,
+    CrewEquipmentCard,
+    CurrentTideCard,
+    DownwindStrategyCard,
+    FleetRacersCard,
+    MarkRoundingCard,
+    PostRaceAnalysisCard,
+    RaceDetailMapHero,
+    RaceDocumentsCard,
+    RaceOverviewCard,
+    RacePhaseHeader,
+    StartStrategyCard,
+    UpwindStrategyCard,
+    WindWeatherCard,
+    RigTuningCard,
+} from '@/components/race-detail';
+import { CourseSelector } from '@/components/race-detail/CourseSelector';
+import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
+import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
+import { PostRaceInterview } from '@/components/races/PostRaceInterview';
+import { RaceCard } from '@/components/races/RaceCard';
+import { SmartRaceCoach } from '@/components/coaching/SmartRaceCoach';
+import { QuickSkillButtons } from '@/components/coaching/QuickSkillButtons';
+import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
+import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { ErrorMessage } from '@/components/ui/error';
+import { DashboardSkeleton } from '@/components/ui/loading';
+import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
+import { MOCK_RACES, calculateCountdown } from '@/constants/mockData';
+import { useDashboardData } from '@/hooks/useData';
+import { useOffline } from '@/hooks/useOffline';
+import { useLiveRaces } from '@/hooks/useRaceResults';
+import { useRaceWeather } from '@/hooks/useRaceWeather';
+import { useEnrichedRaces } from '@/hooks/useEnrichedRaces';
+import { useVenueDetection } from '@/hooks/useVenueDetection';
+import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
+import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
+import { supabase } from '@/services/supabase';
+import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
+import { CourseLibraryService } from '@/services/CourseLibraryService';
+import type { CourseScope, Mark } from '@/types/courses';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    AlertTriangle,
+    Bell,
+    Calendar,
+    ChevronRight,
+    Clock,
+    MapPin,
+    Navigation,
+    Pencil,
+    Plus,
+    ShieldCheck,
+    Trash2,
+    TrendingUp,
+    Users,
+    X
+} from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+const logger = createLogger('RacesScreen');
+
+type PhaseStatus = 'completed' | 'in_progress' | 'upcoming';
+
+interface ActiveRaceSummary {
+  id: string;
+  name: string;
+  series?: string;
+  venue?: string;
+  startTime?: string;
+  warningSignal?: string;
+  cleanRegatta?: boolean;
+  lastUpdated?: string | null;
+}
+
+interface RaceBriefData extends ActiveRaceSummary {
+  countdown?: {
+    days: number;
+    hours: number;
+    minutes: number;
+  };
+  weatherSummary?: string;
+  tideSummary?: string;
+}
+
+interface PhaseStep {
+  key: string;
+  label: string;
+  status: PhaseStatus;
+  description: string;
+  badge?: string;
+  onPress?: () => void;
+}
+
+interface RigPreset {
+  id: string;
+  label: string;
+  windRange: string;
+  uppers: string;
+  lowers: string;
+  runners: string;
+  ram: string;
+  notes: string;
+}
+
+interface RegulatoryDigestData {
+  seriesName: string;
+  venueArea: string;
+  cleanRegatta: boolean;
+  signOnWindow: string;
+  entryNotes: string[];
+  courseSelection: string;
+  safetyNotes: string[];
+  reference: string;
+}
+
+interface RegulatoryAcknowledgements {
+  cleanRegatta: boolean;
+  signOn: boolean;
+  safetyBriefing: boolean;
+}
+
+interface CourseOutlineGroup {
+  group: string;
+  description: string;
+  courses: Array<{
+    name: string;
+    sequence: string;
+  }>;
+}
+
+export default function RacesScreen() {
+  const auth = useAuth();
+  const { user, signedIn, ready, isDemoSession } = auth;
+  const fetchUserProfileRef = useRef(auth.fetchUserProfile);
+  useEffect(() => {
+    fetchUserProfileRef.current = auth.fetchUserProfile;
+  }, [auth.fetchUserProfile]);
+  const router = useRouter();
+  const searchParams = useLocalSearchParams<{ selected?: string }>();
+  const [showCalendarImport, setShowCalendarImport] = useState(false);
+  const [isFabExpanded, setIsFabExpanded] = useState(false);
+  const mainScrollViewRef = useRef<ScrollView>(null); // Main vertical ScrollView
+  const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
+  const hasAutoCenteredNextRace = useRef(false);
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  // Maintain card dimension constants in sync with RaceCard.tsx to keep scroll math accurate
+  const RACE_CARD_WIDTH = 170;
+  const RACE_CARD_TOTAL_WIDTH = RACE_CARD_WIDTH + 8; // width + combined horizontal margin (4px each side)
+
+  const [regulatorySectionY, setRegulatorySectionY] = useState(0);
+  const [logisticsSectionY, setLogisticsSectionY] = useState(0);
+
+  // Post-race interview state
+  const [showPostRaceInterview, setShowPostRaceInterview] = useState(false);
+  const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
+  const [completedRaceName, setCompletedRaceName] = useState<string>('');
+
+  // Selected race detail state
+  const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
+  const [selectedRaceData, setSelectedRaceData] = useState<any>(null);
+  const [selectedRaceMarks, setSelectedRaceMarks] = useState<any[]>([]);
+  const [loadingRaceDetail, setLoadingRaceDetail] = useState(false);
+  const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
+  const [isDeletingRace, setIsDeletingRace] = useState(false);
+  const [hasManuallySelected, setHasManuallySelected] = useState(false);
+  const [isApplyingCourseTemplate, setIsApplyingCourseTemplate] = useState(false);
+  const [savingCourseTemplate, setSavingCourseTemplate] = useState(false);
+  const hasAssignedFallbackRole = useRef(false);
+  const initialSelectedRaceParam = useRef<string | null>(
+    typeof searchParams?.selected === 'string' ? searchParams.selected : null
+  );
+
+  // Use race preparation hook for persistent storage
+  const {
+    rigNotes,
+    setRigNotes,
+    selectedRigPresetId: selectedRigBand,
+    setSelectedRigPresetId: setSelectedRigBand,
+    acknowledgements: regattaAcknowledgements,
+    setAcknowledgements: setRegattaAcknowledgements,
+    toggleAcknowledgement,
+    updateRaceBrief,
+    isLoading: isLoadingPreparation,
+    isSaving: isSavingPreparation,
+  } = useRacePreparation({
+    raceEventId: selectedRaceData?.id || null,
+    autoSave: true,
+    debounceMs: 1000,
+  });
+
+  const scrollToPosition = useCallback((position: number) => {
+    if (!mainScrollViewRef.current) {
+      return;
+    }
+
+    const target = position > 0 ? Math.max(position - 24, 0) : 0;
+
+    try {
+      mainScrollViewRef.current.scrollTo?.({ y: target, animated: true });
+    } catch (error) {
+      logger.warn('Unable to scroll to position', { position, error });
+    }
+  }, [logger]);
+
+  const handleShowRegulatoryDigest = useCallback(() => {
+    logger.info('[DEBUG] View NoR Digest clicked', {
+      regulatorySectionY,
+      hasScrollRef: !!mainScrollViewRef.current,
+      selectedRaceId: selectedRaceData?.id,
+      selectedDemoRaceId,
+      isDemoRace: !!selectedDemoRaceId,
+    });
+    scrollToPosition(regulatorySectionY);
+  }, [regulatorySectionY, scrollToPosition, selectedRaceData?.id, selectedDemoRaceId, logger]);
+
+  const handleShowRigPlanner = useCallback(() => {
+    logger.info('[DEBUG] Rig Planner clicked', {
+      logisticsSectionY,
+      hasScrollRef: !!mainScrollViewRef.current,
+      selectedRaceId: selectedRaceData?.id,
+      selectedDemoRaceId,
+      isDemoRace: !!selectedDemoRaceId,
+    });
+    scrollToPosition(logisticsSectionY);
+  }, [logisticsSectionY, scrollToPosition, selectedRaceData?.id, selectedDemoRaceId, logger]);
+
+  const handleAddRaceNavigation = useCallback(() => {
+    setIsFabExpanded(false);
+    router.push('/(tabs)/race/comprehensive-add');
+  }, [router]);
+
+  const handleOpenCalendarImport = useCallback(() => {
+    logger.info('[DEBUG] Import Calendar clicked', {
+      showCalendarImport,
+      isFabExpanded,
+    });
+    setIsFabExpanded(false);
+    setShowCalendarImport(true);
+  }, [showCalendarImport, isFabExpanded, logger]);
+
+  const handleManageCrewNavigation = useCallback(
+    ({
+      raceId,
+      classId,
+      className,
+      raceName,
+      raceDate,
+    }: {
+      raceId: string;
+      classId?: string | null;
+      className?: string | null;
+      raceName?: string | null;
+      raceDate?: string | null;
+    }) => {
+      if (!raceId) {
+        logger.warn('handleManageCrewNavigation called without raceId');
+        return;
+      }
+
+      const params: Record<string, string> = {
+        fromRaceId: raceId,
+      };
+
+      if (classId) {
+        params.classId = String(classId);
+      }
+      if (className) {
+        params.className = String(className);
+      }
+      if (raceName) {
+        params.raceName = String(raceName);
+      }
+      if (raceDate) {
+        params.raceDate = String(raceDate);
+      }
+
+      router.push({
+        pathname: '/(tabs)/crew',
+        params,
+      });
+    },
+    [router]
+  );
+
+  // Racing area drawing state
+  const [drawingRacingArea, setDrawingRacingArea] = useState<Array<{lat: number, lng: number}>>([]);
+
+  // Combined auth and onboarding check - prevents multiple re-renders
+  React.useEffect(() => {
+    const checkAuthAndOnboarding = async () => {
+      // Wait for auth to be ready
+      if (!ready) return;
+
+      if (isDemoSession) {
+        logger.debug('Demo session detected, skipping Supabase onboarding checks');
+        return;
+      }
+
+      // Redirect to login if not authenticated
+      if (!signedIn) {
+        logger.debug('User not authenticated, redirecting to login');
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      // Check onboarding status
+      if (!user?.id) return;
+
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('onboarding_completed, user_type')
+          .eq('id', user.id)
+          .single();
+
+        logger.debug('User onboarding status:', userData);
+
+        // If no user type selected, redirect to persona selection
+        if (!userData?.user_type && !hasAssignedFallbackRole.current) {
+          logger.debug('No user type, assigning sailor persona fallback');
+          hasAssignedFallbackRole.current = true;
+          try {
+            await supabase
+              .from('users')
+              .update({
+                user_type: 'sailor',
+                onboarding_completed: true,
+              })
+              .eq('id', user.id);
+            await fetchUserProfileRef.current?.(user.id);
+          } catch (assignError) {
+            logger.error('Unable to assign default persona:', assignError);
+          }
+        }
+      } catch (error) {
+        logger.error('Error checking onboarding status:', error);
+      }
+    };
+
+    checkAuthAndOnboarding();
+  }, [ready, signedIn, user?.id, router, isDemoSession]);
+
+interface RaceBriefHeroProps {
+  brief: RaceBriefData;
+  onViewNoR: () => void;
+  onViewRigPlanner: () => void;
+  onImportCalendar: () => void;
+  ackComplete?: boolean;
+  strategyReady?: boolean;
+}
+
+function RaceBriefHero({
+  brief,
+  onViewNoR,
+  onViewRigPlanner,
+  onImportCalendar,
+  ackComplete,
+  strategyReady,
+}: RaceBriefHeroProps) {
+  const hasCountdown = Boolean(brief.countdown);
+  const countdownText = hasCountdown
+    ? `${brief.countdown?.days ?? 0}d ${brief.countdown?.hours ?? 0}h ${brief.countdown?.minutes ?? 0}m`
+    : 'Countdown unavailable';
+  const lastUpdatedDate = brief.lastUpdated ? new Date(brief.lastUpdated) : null;
+  const lastUpdatedLabel = lastUpdatedDate && !Number.isNaN(lastUpdatedDate.valueOf())
+    ? lastUpdatedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <View className="bg-white border border-blue-100 rounded-3xl px-4 py-4 mb-4 shadow-sm">
+      <View className="flex-row justify-between items-start">
+        <View className="flex-1 pr-3">
+          <Text className="text-[11px] font-semibold uppercase tracking-widest text-blue-600">
+            {brief.series || 'Race Series'}
+          </Text>
+          <Text className="text-xl font-bold text-slate-900 mt-1" numberOfLines={2}>
+            {brief.name}
+          </Text>
+          <View className="flex-row items-center mt-2">
+            <MapPin size={14} color="#2563EB" />
+            <Text className="text-xs text-slate-600 ml-1" numberOfLines={1}>
+              {brief.venue || 'Venue TBD'}
+            </Text>
+          </View>
+          <View className="flex-row gap-2 mt-2">
+            {strategyReady && (
+              <View className="flex-row items-center bg-blue-100 rounded-full px-2 py-[3px]">
+                <MaterialCommunityIcons name="lightning-bolt-outline" size={12} color="#1D4ED8" />
+                <Text className="text-[10px] font-semibold text-blue-700 ml-1">Strategy synced</Text>
+              </View>
+            )}
+            <View
+              className={`flex-row items-center rounded-full px-2 py-[3px] ${ackComplete ? 'bg-emerald-100' : 'bg-amber-100'}`}
+            >
+              <MaterialCommunityIcons
+                name={ackComplete ? 'clipboard-check-outline' : 'clipboard-alert-outline'}
+                size={12}
+                color={ackComplete ? '#047857' : '#92400E'}
+              />
+              <Text
+                className={`text-[10px] font-semibold ml-1 ${ackComplete ? 'text-emerald-700' : 'text-amber-700'}`}
+              >
+                {ackComplete ? 'NoR acknowledged' : 'NoR pending'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View className="items-end">
+          <View className="flex-row items-center">
+            <Clock size={14} color="#1D4ED8" />
+            <Text className="text-xs font-semibold text-slate-700 ml-1">
+              Warning {brief.warningSignal || 'TBD'}
+            </Text>
+          </View>
+          {hasCountdown && (
+            <Text className="text-[11px] text-slate-500 mt-1">{countdownText}</Text>
+          )}
+          {lastUpdatedLabel && (
+            <Text className="text-[10px] text-slate-400 mt-1">
+              Updated {lastUpdatedLabel}
+            </Text>
+          )}
+          {brief.cleanRegatta && (
+            <View className="flex-row items-center mt-2 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-[3px]">
+              <ShieldCheck size={12} color="#047857" />
+              <Text className="text-[10px] font-semibold text-emerald-700 ml-1">Clean Regatta</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      <View className="flex-row gap-3 mt-4 flex-wrap">
+        {brief.weatherSummary && (
+          <View className="flex-row items-center bg-blue-50 border border-blue-100 rounded-2xl px-3 py-2">
+            <WindWeatherTag label="Wind" value={brief.weatherSummary} />
+          </View>
+        )}
+        {brief.tideSummary && (
+          <View className="flex-row items-center bg-sky-50 border border-sky-100 rounded-2xl px-3 py-2">
+            <WindWeatherTag label="Tide" value={brief.tideSummary} />
+          </View>
+        )}
+      </View>
+
+      <View className="flex-row gap-2 mt-4">
+        <TouchableOpacity
+          onPress={onViewNoR}
+          accessibilityRole="button"
+          className="flex-1 bg-blue-600 rounded-2xl items-center justify-center py-2"
+        >
+          <Text className="text-white text-sm font-semibold">View NoR Digest</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onImportCalendar}
+          accessibilityRole="button"
+          className="flex-1 bg-purple-50 border border-purple-200 rounded-2xl items-center justify-center py-2"
+        >
+          <View className="flex-row items-center">
+            <Calendar size={14} color="#7C3AED" />
+            <Text className="text-purple-700 text-sm font-semibold ml-1">Import Calendar</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onViewRigPlanner}
+          accessibilityRole="button"
+          className="flex-1 bg-blue-50 border border-blue-200 rounded-2xl items-center justify-center py-2"
+        >
+          <Text className="text-blue-700 text-sm font-semibold">Rig Planner</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const fabStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.12)',
+  },
+  container: {
+    position: 'absolute',
+    right: 24,
+    bottom: 24,
+    alignItems: 'flex-end',
+  },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 9999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  actionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 10,
+    color: '#1F2937',
+  },
+  primaryAction: {
+    backgroundColor: '#1D4ED8',
+  },
+  primaryActionLabel: {
+    color: '#FFFFFF',
+  },
+  secondaryAction: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#DDD6FE',
+    borderWidth: 1,
+  },
+  secondaryActionLabel: {
+    color: '#6D28D9',
+  },
+  mainFab: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.22,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 14,
+    elevation: 12,
+  },
+  mainFabActive: {
+    backgroundColor: '#1E40AF',
+  },
+});
+
+function WindWeatherTag({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <Text className="text-[11px] font-semibold text-blue-900 mr-2">{label}</Text>
+      <Text className="text-[11px] text-blue-700">{value}</Text>
+    </>
+  );
+}
+
+function PhaseStepper({ steps }: { steps: PhaseStep[] }) {
+  if (!steps || steps.length === 0) {
+    return null;
+  }
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 2 }}
+    >
+      {steps.map((step) => {
+        const { status } = step;
+        const statusColor = getStatusColor(status);
+        const statusLabel = getStatusLabel(status);
+
+        return (
+          <TouchableOpacity
+            key={step.key}
+            onPress={step.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={`${step.label} phase`}
+          >
+            <View
+              className="bg-white border rounded-2xl px-4 py-3 mr-3 min-w-[180px]"
+              style={{ borderColor: statusColor + '33' }}
+            >
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="text-sm font-semibold text-slate-900">{step.label}</Text>
+                {step.badge && (
+                  <Text className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-[2px] rounded-full">
+                    {step.badge}
+                  </Text>
+                )}
+              </View>
+              <Text className="text-xs text-slate-600 leading-4" numberOfLines={3}>
+                {step.description}
+              </Text>
+              <View className="flex-row items-center mt-3">
+                <View
+                  className="w-2 h-2 rounded-full mr-2"
+                  style={{ backgroundColor: statusColor }}
+                />
+                <Text className="text-[10px] uppercase tracking-widest text-slate-500">
+                  {statusLabel}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function getStatusColor(status: PhaseStatus): string {
+  switch (status) {
+    case 'completed':
+      return '#10B981';
+    case 'in_progress':
+      return '#2563EB';
+    default:
+      return '#94A3B8';
+  }
+}
+
+function getStatusLabel(status: PhaseStatus): string {
+  switch (status) {
+    case 'completed':
+      return 'Completed';
+    case 'in_progress':
+      return 'In Progress';
+    default:
+      return 'Upcoming';
+  }
+}
+
+interface RigPlannerCardProps {
+  presets: RigPreset[];
+  selectedBand: string | null;
+  onSelectBand: (bandId: string) => void;
+  notes: string;
+  onChangeNotes: (value: string) => void;
+  onOpenChat: () => void;
+}
+
+function RigPlannerCard({ presets, selectedBand, onSelectBand, notes, onChangeNotes, onOpenChat }: RigPlannerCardProps) {
+  if (!presets || presets.length === 0) {
+    return null;
+  }
+
+  const activePreset = presets.find((preset) => preset.id === selectedBand) ?? presets[0];
+
+  return (
+    <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+      <View className="flex-row items-center justify-between mb-3">
+        <Text className="text-base font-semibold text-slate-900">Rig &amp; Sail Planner</Text>
+        <TouchableOpacity
+          onPress={onOpenChat}
+          accessibilityRole="button"
+          className="flex-row items-center"
+        >
+          <MaterialCommunityIcons name="chat-processing-outline" size={16} color="#2563EB" />
+          <Text className="text-xs font-semibold text-blue-600 ml-1">Review chat</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View className="flex-row flex-wrap gap-2 mb-3">
+        {presets.map((preset) => {
+          const isActive = preset.id === activePreset.id;
+          return (
+            <TouchableOpacity
+              key={preset.id}
+              onPress={() => onSelectBand(preset.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+              className={`px-3 py-2 rounded-full border ${isActive ? 'bg-blue-600 border-blue-600' : 'bg-blue-50 border-blue-200'}`}
+            >
+              <Text className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-blue-700'}`}>
+                {preset.label} • {preset.windRange}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View className="bg-blue-50 border border-blue-100 rounded-2xl p-3 mb-3">
+        <RigPlannerDetailRow label="Uppers" value={activePreset.uppers} />
+        <RigPlannerDetailRow label="Lowers" value={activePreset.lowers} />
+        <RigPlannerDetailRow label="Runners" value={activePreset.runners} />
+        <RigPlannerDetailRow label="Mast Ram" value={activePreset.ram} />
+        <Text className="text-[11px] text-blue-900 mt-2">{activePreset.notes}</Text>
+      </View>
+
+      <TextInput
+        value={notes}
+        onChangeText={onChangeNotes}
+        placeholder="Notes or adjustments (e.g., traveller +1 cm, jib lead aft ½ hole)"
+        multiline
+        numberOfLines={3}
+        className="border border-slate-200 rounded-2xl px-3 py-2 text-sm text-slate-700"
+        placeholderTextColor="#94A3B8"
+      />
+      <Text className="text-[11px] text-slate-500 mt-2">
+        Track tweaks made dockside so the crew can sync after racing.
+      </Text>
+    </View>
+  );
+}
+
+function RigPlannerDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-row items-start justify-between mt-1">
+      <Text className="text-xs font-semibold text-blue-900">{label}</Text>
+      <Text className="text-xs text-blue-800 text-right ml-3 flex-1">{value}</Text>
+    </View>
+  );
+}
+
+interface RegulatoryDigestCardProps {
+  digest: RegulatoryDigestData;
+  acknowledgements: RegulatoryAcknowledgements;
+  onToggle: (key: keyof RegulatoryAcknowledgements) => void;
+}
+
+function RegulatoryDigestCard({ digest, acknowledgements, onToggle }: RegulatoryDigestCardProps) {
+  const ackItems: Array<{ key: keyof RegulatoryAcknowledgements; label: string; description: string }> = [
+    {
+      key: 'cleanRegatta',
+      label: 'Clean Regatta commitments noted',
+      description: digest.cleanRegatta ? 'Event flagged as Sailors for the Sea Clean Regatta.' : 'Not designated Clean Regatta.',
+    },
+    {
+      key: 'signOn',
+      label: 'Sign-on window understood',
+      description: digest.signOnWindow,
+    },
+    {
+      key: 'safetyBriefing',
+      label: 'Safety briefing complete',
+      description: 'Required video briefing and quiz submitted in SailSys.',
+    },
+  ];
+
+  return (
+    <View className="bg-white border border-purple-200 rounded-2xl p-4 mb-4">
+      <View className="flex-row items-start justify-between">
+        <View className="flex-1 pr-4">
+          <Text className="text-base font-semibold text-purple-900">Notice of Race Digest</Text>
+          <Text className="text-xs text-purple-600 mt-1">
+            {digest.seriesName} • {digest.venueArea}
+          </Text>
+        </View>
+        <Text className="text-[10px] font-semibold text-purple-500">{digest.reference}</Text>
+      </View>
+
+      <View className="mt-3">
+        <Text className="text-sm font-semibold text-slate-900">Entry &amp; Compliance</Text>
+        {digest.entryNotes.map((note, index) => (
+          <View key={`${note}-${index}`} className="flex-row items-start gap-2 mt-2">
+            <View className="w-1.5 h-1.5 rounded-full bg-purple-400 mt-1" />
+            <Text className="text-xs text-slate-700 flex-1">{note}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View className="mt-3">
+        <Text className="text-sm font-semibold text-slate-900">Acknowledgements</Text>
+        {ackItems.map((item) => (
+          <AcknowledgementRow
+            key={item.key}
+            label={item.label}
+            description={item.description}
+            checked={acknowledgements[item.key]}
+            onPress={() => onToggle(item.key)}
+          />
+        ))}
+      </View>
+
+      <View className="mt-4">
+        <Text className="text-sm font-semibold text-slate-900">Course Selection</Text>
+        <Text className="text-xs text-slate-600 mt-1">{digest.courseSelection}</Text>
+      </View>
+
+      <View className="mt-4">
+        <Text className="text-sm font-semibold text-slate-900">Safety Notes</Text>
+        {digest.safetyNotes.map((note, index) => (
+          <View key={`${note}-${index}`} className="flex-row items-start gap-2 mt-2">
+            <MaterialCommunityIcons name="shield-alert-outline" size={16} color="#F97316" />
+            <Text className="text-xs text-slate-700 flex-1">{note}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function AcknowledgementRow({
+  label,
+  description,
+  checked,
+  onPress,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      className="flex-row items-start gap-3 mt-3"
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+    >
+      <MaterialCommunityIcons
+        name={checked ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+        size={20}
+        color={checked ? '#2563EB' : '#CBD5F5'}
+      />
+      <View className="flex-1">
+        <Text className="text-xs font-semibold text-slate-800">{label}</Text>
+        <Text className="text-[11px] text-slate-500 mt-1">{description}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
+  if (!groups || groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+      <Text className="text-base font-semibold text-slate-900">Course Outlines</Text>
+      {groups.map((group) => (
+        <View key={group.group} className="mt-4">
+          <Text className="text-sm font-semibold text-slate-800">{group.group}</Text>
+          <Text className="text-xs text-slate-500 mt-1">{group.description}</Text>
+          <View className="mt-2">
+            {group.courses.map((course) => (
+              <View key={course.name} className="flex-row items-start gap-3 mt-1">
+                <Text className="text-[11px] font-semibold text-slate-700 w-20">{course.name}</Text>
+                <Text className="flex-1 text-[11px] text-slate-600">{course.sequence}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+  // Fetch data from API
+  const {
+    profile,
+    nextRace,
+    recentRaces,
+    recentTimerSessions,
+    performanceHistory,
+    boats,
+    fleets,
+    loading,
+    error,
+    refreshing,
+    onRefresh,
+    refetch
+  } = useDashboardData();
+
+  // Refetch races when dashboard comes into focus (after navigation back from race creation)
+  // Skip the initial mount to prevent unnecessary refetch
+  const isInitialMount = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
+      logger.debug('Screen focused - refetching races');
+      refetch?.();
+    }, [refetch])
+  );
+
+  // GPS Venue Detection
+  const { currentVenue, isDetecting, confidence, error: venueError } = useVenueDetection();
+
+  // Offline support
+  const { isOnline, cacheNextRace } = useOffline();
+
+  // Real-time race updates
+  const { liveRaces, loading: liveRacesLoading } = useLiveRaces(user?.id);
+
+  // Enrich races with real weather data
+  const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
+
+  // Debug logging
+  useEffect(() => {
+    logger.info('[RacesScreen] ===== ENRICHED RACES DEBUG =====');
+    logger.info('[RacesScreen] liveRaces count:', liveRaces?.length || 0);
+    logger.info('[RacesScreen] enrichedRaces count:', enrichedRaces?.length || 0);
+    logger.info('[RacesScreen] enrichedRaces sample:', enrichedRaces?.[0]);
+  }, [liveRaces, enrichedRaces]);
+
+  // Real-time weather for next race
+  const { weather: raceWeather, loading: weatherLoading, error: weatherError } = useRaceWeather(
+    currentVenue,
+    nextRace?.date
+  );
+
+  // AI Venue Analysis
+  const [venueInsights, setVenueInsights] = useState<any>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
+
+  // Create agent instance once using useMemo - MUST be before any returns
+  const venueAgent = useMemo(() => new VenueIntelligenceAgent(), []);
+
+  // Get first recent race if available - MOVED UP before conditional returns
+  const safeNextRace: any = (nextRace as any) || {};
+  // Memoize safeRecentRaces to prevent unnecessary re-renders and effect triggers
+  // Use enriched races with real weather data when available, fall back to recentRaces
+  const safeRecentRaces: any[] = useMemo(
+    () => {
+      console.log('🔍 safeRecentRaces calculation:', {
+        enrichedRacesCount: enrichedRaces?.length,
+        recentRacesCount: Array.isArray(recentRaces) ? recentRaces.length : 0,
+        firstEnrichedRace: enrichedRaces?.[0],
+      });
+
+      // Prefer enriched races (with real weather) over default recentRaces
+      if (enrichedRaces && enrichedRaces.length > 0) {
+        console.log('✅ Using enriched races');
+        return enrichedRaces;
+      }
+      console.log('⚠️ Using fallback recentRaces');
+      return Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [];
+    },
+    [enrichedRaces, recentRaces]
+  );
+  const recentRace = safeRecentRaces.length > 0 ? safeRecentRaces[0] : null;
+  const hasRealRaces = safeRecentRaces.length > 0 || !!nextRace;
+  const selectedDemoRace = useMemo(
+    () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
+    [selectedDemoRaceId]
+  );
+
+  const activeRace = useMemo<ActiveRaceSummary | null>(() => {
+    if (selectedRaceData) {
+      const metadata = selectedRaceData.metadata || {};
+      const startTime = selectedRaceData.start_date || selectedRaceData.date || metadata?.start_time;
+      return {
+        id: selectedRaceData.id,
+        name: selectedRaceData.name || metadata?.race_name || 'Upcoming Race',
+        series: metadata?.series_name || metadata?.series || metadata?.event_name || 'Corinthian Series',
+        venue: metadata?.venue_name || selectedRaceData.venue_name || currentVenue?.name || 'Port Shelter',
+        startTime: typeof startTime === 'string' ? startTime : startTime ? new Date(startTime).toISOString() : undefined,
+        warningSignal: metadata?.warning_signal || metadata?.first_warning || metadata?.signal_time || nextRace?.startTime || '13:36',
+        cleanRegatta: metadata?.clean_regatta !== false,
+        lastUpdated: metadata?.updated_at || selectedRaceData.updated_at || null,
+      };
+    }
+
+    if (nextRace) {
+      const nextRaceAny = nextRace as any;
+      return {
+        id: nextRaceAny.id || 'next-race',
+        name: nextRaceAny.name || nextRaceAny.title || 'Upcoming Race',
+        series: nextRaceAny.series || nextRaceAny.event || 'Corinthian Series',
+        venue: nextRaceAny.venue || currentVenue?.name || 'Port Shelter',
+        startTime: nextRaceAny.date || nextRaceAny.startTime,
+        warningSignal: nextRaceAny.warningSignal || nextRaceAny.startTime || '13:36',
+        cleanRegatta: nextRaceAny.cleanRegatta ?? true,
+        lastUpdated: nextRaceAny.updated_at || null,
+      };
+    }
+
+    if (selectedDemoRace) {
+      return {
+        id: selectedDemoRace.id,
+        name: selectedDemoRace.name,
+        series: 'Demo Series',
+        venue: selectedDemoRace.venue,
+        startTime: selectedDemoRace.date,
+        warningSignal: selectedDemoRace.critical_details?.warning_signal || selectedDemoRace.startTime,
+        cleanRegatta: true,
+        lastUpdated: null,
+      };
+    }
+
+    return null;
+  }, [
+    // Only depend on specific fields used in calculation, not entire objects
+    selectedRaceData?.id,
+    selectedRaceData?.name,
+    selectedRaceData?.start_date,
+    selectedRaceData?.date,
+    selectedRaceData?.venue_name,
+    selectedRaceData?.updated_at,
+    selectedRaceData?.metadata,
+    nextRace,
+    selectedDemoRace?.id,
+    selectedDemoRace?.name,
+    selectedDemoRace?.venue,
+    selectedDemoRace?.date,
+    currentVenue?.name
+  ]);
+
+  const raceBrief = useMemo<RaceBriefData | null>(() => {
+    if (!activeRace) {
+      return null;
+    }
+
+    const startISO = activeRace.startTime;
+    const countdown = startISO ? calculateCountdown(startISO) : undefined;
+
+    const weatherSummary = (() => {
+      if (raceWeather?.wind) {
+        const min = raceWeather.wind.speedMin ?? raceWeather.wind.speed ?? 0;
+        const max = raceWeather.wind.speedMax ?? raceWeather.wind.speed ?? min;
+        const direction = raceWeather.wind.direction ?? raceWeather.wind.directionCardinal;
+        if (min && max) {
+          return `${direction ?? ''} ${Math.round(min)}-${Math.round(max)} kt`.trim();
+        }
+        if (direction) {
+          return `${direction}`;
+        }
+      }
+
+      const metadata = (selectedRaceData?.metadata || nextRace as any || {}) as Record<string, any>;
+      if (metadata?.wind_summary) {
+        return metadata.wind_summary;
+      }
+      if (metadata?.wind_direction && metadata?.wind_speed) {
+        return `${metadata.wind_direction} ${metadata.wind_speed}`;
+      }
+
+      if (selectedDemoRace) {
+        return `${selectedDemoRace.wind.direction} ${selectedDemoRace.wind.speedMin}-${selectedDemoRace.wind.speedMax} kt`;
+      }
+
+      return undefined;
+    })();
+
+    const tideSummary = (() => {
+      if (raceWeather?.tide) {
+        const state = raceWeather.tide.state || raceWeather.tide.phase;
+        const height = raceWeather.tide.height;
+        if (state || height) {
+          return `${state ? state.replace(/_/g, ' ') : ''}${height ? ` • ${height.toFixed(1)} m` : ''}`.trim();
+        }
+      }
+      const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+      if (metadata?.tide_summary) {
+        return metadata.tide_summary;
+      }
+      if (selectedDemoRace) {
+        return `${selectedDemoRace.tide.state} • ${selectedDemoRace.tide.height} m`;
+      }
+      return undefined;
+    })();
+
+    return {
+      ...activeRace,
+      countdown,
+      weatherSummary,
+      tideSummary,
+    };
+  }, [
+    activeRace,
+    // Only depend on specific weather values, not the entire object
+    raceWeather?.wind?.direction,
+    raceWeather?.wind?.speedMin,
+    raceWeather?.wind?.speedMax,
+    raceWeather?.tide?.state,
+    raceWeather?.tide?.height,
+    selectedRaceData?.metadata,
+    selectedDemoRace,
+    nextRace
+  ]);
+
+  // Sync race brief data to preparation service for AI context
+  useEffect(() => {
+    if (raceBrief && selectedRaceData?.id) {
+      updateRaceBrief(raceBrief);
+    }
+  }, [raceBrief, selectedRaceData?.id, updateRaceBrief]);
+
+  // Use race brief sync for AI chat integration
+  const { getAIContext, isStale: isRaceBriefStale, refreshContext } = useRaceBriefSync({
+    raceEventId: selectedRaceData?.id || null,
+    raceBrief,
+    enabled: true,
+  });
+
+  const rigPresets = useMemo<RigPreset[]>(() => {
+    const metadataPresets = selectedRaceData?.metadata?.rig_presets as RigPreset[] | undefined;
+    if (Array.isArray(metadataPresets) && metadataPresets.length > 0) {
+      return metadataPresets;
+    }
+
+    return [
+      {
+        id: 'light',
+        label: 'Light Air',
+        windRange: '< 8 kn',
+        uppers: '12–13 Loos',
+        lowers: 'Slack (0–1 turn off)',
+        runners: 'Ease for visible sag',
+        ram: '+2 cm forward',
+        notes: 'Power on: ease lowers and runners to maintain depth and acceleration.',
+      },
+      {
+        id: 'medium',
+        label: 'Today',
+        windRange: '8–14 kn',
+        uppers: '14–16 Loos',
+        lowers: 'Mast straight athwartships',
+        runners: '≈30 Loos – stay just taut',
+        ram: 'Neutral to +1 cm',
+        notes: 'Baseline Port Shelter tune; traveller slightly weather, maintain twist in chop.',
+      },
+      {
+        id: 'fresh',
+        label: 'Fresh Breeze',
+        windRange: '15–20 kn',
+        uppers: '17–18 Loos',
+        lowers: '+½ turn',
+        runners: '35–40 Loos',
+        ram: '+3 cm forward',
+        notes: 'Flatten sails, move lead aft ½ hole, ease traveller down in gusts.',
+      },
+    ];
+  }, [selectedRaceData]);
+
+  const regulatoryDigest = useMemo<RegulatoryDigestData>(() => {
+    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+    return {
+      seriesName: metadata.series_name || metadata.event_name || activeRace?.series || 'Corinthian Series',
+      venueArea: metadata.venue_area || 'Port Shelter / Clearwater Bay',
+      cleanRegatta: metadata.clean_regatta !== false,
+      signOnWindow: metadata.sign_on_window || 'Sign-on via SailSys ≥10 minutes before warning signal',
+      entryNotes: metadata.entry_requirements || [
+        'Single season entry through SailSys for Dragon class',
+        'Complete mandatory safety briefing video and quiz',
+        'Acknowledge boat safety responsibilities and Club Bye-Laws',
+      ],
+      courseSelection: metadata.course_reference || 'Courses selected from RHKYC Attachment B (Geometric Courses)',
+      safetyNotes: metadata.safety_notes || [
+        'Keep clear of commercial traffic; breaches may result in DSQ without hearing',
+        'Race Committee may bar future entry for serious safety violations',
+      ],
+      reference: metadata.nor_reference || 'RHKYC Dragon Class NoR 2025–2026',
+    };
+  }, [selectedRaceData, activeRace]);
+
+  const courseOutlineGroups = useMemo<CourseOutlineGroup[]>(() => {
+    const metadataCourses = selectedRaceData?.metadata?.course_outline as CourseOutlineGroup[] | undefined;
+    if (Array.isArray(metadataCourses) && metadataCourses.length > 0) {
+      return metadataCourses;
+    }
+
+    return [
+      {
+        group: 'Group 1',
+        description: 'All marks rounded to port',
+        courses: [
+          { name: 'Course 1', sequence: 'Start – A – C – A – C – Finish at A' },
+          { name: 'Course 2', sequence: 'Start – A – C – A – B – C – Finish at A' },
+          { name: 'Course 3', sequence: 'Start – A – C – A – C – A – C – Finish at A' },
+          { name: 'Course 4', sequence: 'Start – A – B – C – A – C – A – C – Finish at A' },
+          { name: 'Course 5', sequence: 'Start – A – B – C – A – C – A – B – C – Finish at A' },
+          { name: 'Course 6', sequence: 'Start – A – B – C – A – B – C – A – B – C – Finish at A' },
+          { name: 'Course 7', sequence: 'Start – A – Finish at C' },
+          { name: 'Course 8', sequence: 'Start – A – C – A – Finish at C' },
+          { name: 'Course 9', sequence: 'Start – A – B – C – A – Finish at C' },
+          { name: 'Course 10', sequence: 'Start – A – C – A – C – A – Finish at C' },
+          { name: 'Course 11', sequence: 'Start – A – C – A – B – C – A – Finish at C' },
+        ],
+      },
+      {
+        group: 'Group 2',
+        description: 'Gate C1/C2 (if replaced by single mark, round to port)',
+        courses: [
+          { name: 'Course 12', sequence: 'Start – A – Finish' },
+          { name: 'Course 13', sequence: 'Start – A – C1/C2 – A – Finish' },
+          { name: 'Course 14', sequence: 'Start – A – C1/C2 – A – C1/C2 – A – Finish' },
+          { name: 'Course 15', sequence: 'Start – A – C1/C2 – A – B – Finish' },
+          { name: 'Course 16', sequence: 'Start – A – C1/C2 – A – B – C2 – A – Finish' },
+        ],
+      },
+    ];
+  }, [selectedRaceData]);
+
+  useEffect(() => {
+    if (!selectedRaceData) {
+      setSelectedRigBand(null);
+      setRigNotes('');
+      setRegattaAcknowledgements({
+        cleanRegatta: false,
+        signOn: false,
+        safetyBriefing: false,
+      });
+      return;
+    }
+
+    const metadata = (selectedRaceData.metadata || {}) as Record<string, any>;
+    if (metadata.selected_rig_band) {
+      setSelectedRigBand(metadata.selected_rig_band);
+    } else {
+      setSelectedRigBand(null);
+    }
+    if (typeof metadata.rig_notes === 'string') {
+      setRigNotes(metadata.rig_notes);
+    } else {
+      setRigNotes('');
+    }
+
+    setRegattaAcknowledgements({
+      cleanRegatta: metadata.clean_regatta_ack === true,
+      signOn: metadata.sign_on_ack === true,
+      safetyBriefing: metadata.safety_briefing_ack === true,
+    });
+  }, [selectedRaceData]);
+
+  useEffect(() => {
+    if (!rigPresets.length) {
+      return;
+    }
+
+    if (selectedRigBand && rigPresets.some((preset) => preset.id === selectedRigBand)) {
+      return;
+    }
+
+    const fallback = rigPresets.find((preset) => preset.id === 'medium') || rigPresets[0];
+    setSelectedRigBand(fallback.id);
+  }, [rigPresets, selectedRigBand]);
+
+  const hasStrategyGenerated = Boolean(
+    selectedRaceData?.metadata?.strategy_generated_at ||
+    selectedRaceData?.metadata?.ai_strategy_ready ||
+    selectedRaceData?.metadata?.start_strategy_summary
+  );
+
+  const hasPostAnalysis = Boolean(
+    selectedRaceData?.metadata?.post_race_notes ||
+    selectedRaceData?.metadata?.analysis_completed_at
+  );
+
+  const hasCrewReady = Boolean(
+    selectedRaceData?.metadata?.crew_ready ||
+    selectedRaceMarks.length > 0
+  );
+
+  const hasRegulatoryAcknowledged =
+    regattaAcknowledgements.cleanRegatta &&
+    regattaAcknowledgements.signOn &&
+    regattaAcknowledgements.safetyBriefing;
+
+  const phaseSteps = useMemo<PhaseStep[]>(() => {
+    return [
+      {
+        key: 'pre',
+        label: 'Pre-Race',
+        status: selectedRaceData
+          ? (hasStrategyGenerated && hasRegulatoryAcknowledged ? 'completed' : 'in_progress')
+          : 'upcoming',
+        description: hasStrategyGenerated && hasRegulatoryAcknowledged
+          ? 'Strategy & NoR confirmed'
+          : 'Review AI brief and confirm NoR obligations',
+        onPress: () => scrollToPosition(0),
+        badge: hasStrategyGenerated && hasRegulatoryAcknowledged ? 'Ready' : undefined,
+      },
+      {
+        key: 'in',
+        label: 'In-Race',
+        status: selectedRaceData?.status === 'in_progress' ? 'in_progress' : 'upcoming',
+        description: 'Start checklists, timers, and wind calls',
+        onPress: () => scrollToPosition(logisticsSectionY),
+      },
+      {
+        key: 'post',
+        label: 'Post-Race',
+        status: hasPostAnalysis ? 'completed' : 'upcoming',
+        description: hasPostAnalysis ? 'Debrief uploaded' : 'Log results & analytics',
+        onPress: () => scrollToPosition(regulatorySectionY),
+      },
+      {
+        key: 'logistics',
+        label: 'Logistics',
+        status: hasCrewReady ? 'completed' : selectedRaceData ? 'in_progress' : 'upcoming',
+        description: hasCrewReady ? 'Crew & rig ready' : 'Assign crew and set rig plan',
+        onPress: handleShowRigPlanner,
+      },
+    ];
+  }, [hasStrategyGenerated, selectedRaceData, hasPostAnalysis, hasCrewReady, scrollToPosition, logisticsSectionY, regulatorySectionY, handleShowRigPlanner, hasRegulatoryAcknowledged]);
+
+  // Determine race status (past, next, future)
+  const getRaceStatus = (raceDate: string, isNextRace: boolean): 'past' | 'next' | 'future' => {
+    if (isNextRace) return 'next';
+
+    // Compare dates only (ignore time) to avoid issues with races at midnight
+    const now = new Date();
+    const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const raceDateTime = new Date(raceDate);
+    const raceDateOnly = new Date(raceDateTime.getFullYear(), raceDateTime.getMonth(), raceDateTime.getDate());
+
+    if (raceDateOnly < todayDateOnly) return 'past';
+    return 'future';
+  };
+
+  // Handle race completion - trigger post-race interview
+  const handleRaceComplete = useCallback((sessionId: string, raceName: string) => {
+    logger.debug('Race completed:', sessionId, raceName);
+    setCompletedSessionId(sessionId);
+    setCompletedRaceName(raceName);
+    setShowPostRaceInterview(true);
+  }, []);
+
+  // Handle post-race interview completion
+  const handlePostRaceInterviewComplete = useCallback(() => {
+    logger.debug('Post-race interview completed');
+    setShowPostRaceInterview(false);
+    setCompletedSessionId(null);
+    setCompletedRaceName('');
+    // Refresh races data to show updated analysis
+    refetch?.();
+  }, [refetch]);
+
+  const handleOpenChatFromRigPlanner = useCallback(async () => {
+    try {
+      // Get AI context with race preparation data before opening chat
+      const context = await getAIContext('rig_planning');
+
+      // TODO: Pass context to chat/messages screen via route params or global state
+      // For now, just navigate to messages - the chat will use useRaceBriefSync to get context
+      router.push('/messages' as any);
+
+      logger.info('Opened chat with race context', {
+        hasContext: !!context,
+        isStale: isRaceBriefStale,
+      });
+    } catch (error) {
+      logger.warn('Unable to navigate to chat from rig planner', error);
+    }
+  }, [router, getAIContext, isRaceBriefStale]);
+
+  const handleToggleAcknowledgement = useCallback((key: keyof RegulatoryAcknowledgements) => {
+    toggleAcknowledgement(key);
+  }, [toggleAcknowledgement]);
+
+  // Navigate to the comprehensive edit flow for the selected race
+  const handleEditSelectedRace = useCallback(() => {
+    if (!selectedRaceId) return;
+
+    try {
+      router.push(`/race/edit/${selectedRaceId}`);
+    } catch (error) {
+      logger.error('Error navigating to edit race:', error);
+    }
+  }, [logger, router, selectedRaceId]);
+
+  // Delete the currently selected race with confirmation
+  const handleDeleteSelectedRace = useCallback(() => {
+    if (!selectedRaceId || isDeletingRace) {
+      return;
+    }
+
+    const raceName = selectedRaceData?.name || 'this race';
+    const confirmationMessage = `Are you sure you want to delete "${raceName}"? This action cannot be undone.`;
+
+    const performDelete = async () => {
+      setIsDeletingRace(true);
+      try {
+        // Remove any race events associated with this regatta first to avoid FK conflicts
+        const { data: raceEvents, error: raceEventsError } = await supabase
+          .from('race_events')
+          .select('id')
+          .eq('regatta_id', selectedRaceId);
+
+        if (raceEventsError) {
+          throw raceEventsError;
+        }
+
+        const eventIds = (raceEvents || []).map((event: { id: string }) => event.id);
+
+        if (eventIds.length > 0) {
+          const { error: deleteEventsError } = await supabase
+            .from('race_events')
+            .delete()
+            .in('id', eventIds);
+
+          if (deleteEventsError) {
+            throw deleteEventsError;
+          }
+        }
+
+        // Delete the regatta itself
+        const { error: deleteRegattaError } = await supabase
+          .from('regattas')
+          .delete()
+          .eq('id', selectedRaceId);
+
+        if (deleteRegattaError) {
+          throw deleteRegattaError;
+        }
+
+        // Clear local selection and refresh dashboard data
+        setSelectedRaceId(null);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        setHasManuallySelected(false);
+        await refetch?.();
+
+        Alert.alert('Race deleted', `"${raceName}" has been removed.`);
+      } catch (error: any) {
+        logger.error('Error deleting race:', error);
+        const message = error?.message || 'Unable to delete race. Please try again.';
+        Alert.alert('Error', message);
+      } finally {
+        setIsDeletingRace(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof globalThis !== 'undefined' &&
+        typeof (globalThis as any).confirm === 'function'
+          ? (globalThis as any).confirm(confirmationMessage)
+          : false;
+      if (confirmed) {
+        void performDelete();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Delete race?',
+      confirmationMessage,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void performDelete();
+          },
+        },
+      ],
+    );
+  }, [isDeletingRace, logger, refetch, selectedRaceData, selectedRaceId]);
+
+  // Handle racing area drawing
+  const handleRacingAreaChange = useCallback((polygon: Array<{lat: number, lng: number}>) => {
+    setDrawingRacingArea(polygon);
+  }, []);
+
+  // Handle saving racing area to database
+  const handleSaveRacingArea = useCallback(async () => {
+    if (!selectedRaceId || drawingRacingArea.length < 3) return;
+
+    try {
+      logger.debug('Saving racing area:', drawingRacingArea);
+
+      // Convert to GeoJSON format
+      const coordinates = drawingRacingArea.map(point => [point.lng, point.lat]);
+      const polygonGeoJSON = {
+        type: 'Polygon',
+        coordinates: [[...coordinates, coordinates[0]]] // Close the polygon
+      };
+
+      // Save to regattas table
+      const { error } = await supabase
+        .from('regattas')
+        .update({ racing_area_polygon: polygonGeoJSON })
+        .eq('id', selectedRaceId);
+
+      if (error) throw error;
+
+      logger.debug('Racing area saved successfully');
+
+      // Update local state immediately to prevent racing area from disappearing
+      setSelectedRaceData((prev: any) => ({
+        ...prev,
+        racing_area_polygon: polygonGeoJSON
+      }));
+
+      // Clear drawing state
+      setDrawingRacingArea([]);
+
+      // Refresh race data in background
+      refetch?.();
+    } catch (error) {
+      logger.error('Error saving racing area:', error);
+    }
+  }, [selectedRaceId, drawingRacingArea, refetch]);
+
+  const ensureRaceEventId = useCallback(async (): Promise<string | null> => {
+    console.log('[ensureRaceEventId] START - selectedRaceId:', selectedRaceId);
+
+    if (!selectedRaceId) {
+      logger.warn('Attempted to ensure race event without selected race');
+      console.log('[ensureRaceEventId] ERROR: No selectedRaceId');
+      return null;
+    }
+
+    console.log('[ensureRaceEventId] Querying for existing race_event...');
+    const { data: existingRaceEvent, error: existingRaceEventError } = await supabase
+      .from('race_events')
+      .select('id')
+      .eq('regatta_id', selectedRaceId)
+      .maybeSingle();
+
+    console.log('[ensureRaceEventId] Query result:', { existingRaceEvent, existingRaceEventError });
+
+    if (existingRaceEventError) {
+      console.error('[ensureRaceEventId] ERROR querying existing race_event:', existingRaceEventError);
+      throw existingRaceEventError;
+    }
+
+    if (existingRaceEvent?.id) {
+      console.log('[ensureRaceEventId] SUCCESS: Found existing race_event:', existingRaceEvent.id);
+      return existingRaceEvent.id;
+    }
+
+    console.log('[ensureRaceEventId] No existing race_event found, creating new one...');
+    console.log('[ensureRaceEventId] selectedRaceData:', selectedRaceData);
+
+    const startDateObj = selectedRaceData?.start_date
+      ? new Date(selectedRaceData.start_date)
+      : null;
+
+    const startTime = startDateObj && !Number.isNaN(startDateObj.getTime())
+      ? startDateObj.toISOString().split('T')[1]?.split('Z')[0]?.split('.')[0] || '00:00:00'
+      : '00:00:00';
+
+    const eventDate = startDateObj && !Number.isNaN(startDateObj.getTime())
+      ? startDateObj.toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+    const insertPayload = {
+      regatta_id: selectedRaceId,
+      name: `${selectedRaceData?.name || 'Race'} - Event 1`,
+      start_time: startTime,
+      event_date: eventDate,
+    };
+    console.log('[ensureRaceEventId] Insert payload:', insertPayload);
+
+    console.log('[ensureRaceEventId] Executing insert...');
+    const { data: newRaceEvent, error: createError } = await supabase
+      .from('race_events')
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    console.log('[ensureRaceEventId] Insert result:', { newRaceEvent, createError });
+
+    if (createError) {
+      console.error('[ensureRaceEventId] ERROR creating race_event:', createError);
+      throw createError;
+    }
+
+    console.log('[ensureRaceEventId] SUCCESS: Created new race_event:', newRaceEvent.id);
+    return newRaceEvent.id;
+  }, [selectedRaceData?.name, selectedRaceData?.start_date, selectedRaceId]);
+
+  const normalizeCourseMarkType = (type?: string | null): string => {
+    if (!type) return 'custom';
+
+    switch (type) {
+      case 'start_pin':
+      case 'pin':
+        return 'pin';
+      case 'start_boat':
+      case 'committee':
+      case 'committee_boat':
+        return 'committee_boat';
+      case 'gate_port':
+      case 'gate_left':
+        return 'gate_left';
+      case 'gate_starboard':
+      case 'gate_right':
+        return 'gate_right';
+      case 'windward_mark':
+        return 'windward';
+      case 'leeward_mark':
+        return 'leeward';
+      default:
+        return type;
+    }
+  };
+
+  // Handle adding a new mark
+  const handleMarkAdded = useCallback(async (mark: Omit<any, 'id'>) => {
+    if (!selectedRaceId) return;
+
+    try {
+      logger.debug('Adding new mark:', mark);
+
+      const raceEventId = await ensureRaceEventId();
+      if (!raceEventId) {
+        throw new Error('Unable to resolve race event ID');
+      }
+
+      // Prepare insert payload using only supported columns
+      const insertPayload: any = {
+        race_id: raceEventId,
+        name: mark.name || mark.mark_name || 'Custom Mark',
+        mark_type: mark.mark_type || 'custom',
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        sequence_order: typeof mark.sequence_order === 'number' ? mark.sequence_order : 0,
+        is_custom: true,
+      };
+
+      const { data: newMark, error } = await supabase
+        .from('race_marks')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      logger.debug('Mark added successfully:', newMark);
+
+      // Update local state
+      setSelectedRaceMarks((prev: any[]) => [
+        ...prev,
+        {
+          id: newMark.id,
+          mark_name: newMark.name,
+          mark_type: newMark.mark_type,
+          latitude: newMark.latitude,
+          longitude: newMark.longitude,
+          sequence_order: 0,
+        }
+      ]);
+    } catch (error) {
+      logger.error('Error adding mark:', error);
+    }
+  }, [ensureRaceEventId, selectedRaceId]);
+
+  // Handle updating a mark's position
+  const handleMarkUpdated = useCallback(async (mark: any) => {
+    try {
+      logger.debug('Updating mark:', mark.id);
+
+      const { error } = await supabase
+        .from('race_marks')
+        .update({
+          latitude: mark.latitude,
+          longitude: mark.longitude,
+        })
+        .eq('id', mark.id);
+
+      if (error) throw error;
+
+      logger.debug('Mark updated successfully');
+
+      // Update local state
+      setSelectedRaceMarks((prev: any[]) =>
+        prev.map((m: any) =>
+          m.id === mark.id
+            ? {
+                ...m,
+                latitude: mark.latitude,
+                longitude: mark.longitude,
+              }
+            : m
+        )
+      );
+    } catch (error) {
+      logger.error('Error updating mark:', error);
+    }
+  }, []);
+
+  // Handle deleting a mark
+  const handleMarkDeleted = useCallback(async (markId: string) => {
+    try {
+      logger.debug('Deleting mark:', markId);
+
+      const { error } = await supabase
+        .from('race_marks')
+        .delete()
+        .eq('id', markId);
+
+      if (error) throw error;
+
+      logger.debug('Mark deleted successfully');
+
+      // Update local state
+      setSelectedRaceMarks((prev: any[]) => prev.filter((m: any) => m.id !== markId));
+    } catch (error) {
+      logger.error('Error deleting mark:', error);
+    }
+  }, []);
+
+  const handleBulkMarksUpdate = useCallback(async (updatedMarks: any[]) => {
+    if (!updatedMarks || updatedMarks.length === 0) {
+      return;
+    }
+
+    try {
+      logger.debug('Bulk updating marks:', updatedMarks.length);
+
+      const updates = updatedMarks.map((mark) => {
+        const lat = mark.latitude ?? mark.coordinates_lat;
+        const lng = mark.longitude ?? mark.coordinates_lng;
+        return supabase
+          .from('race_marks')
+          .update({
+            latitude: lat,
+            longitude: lng,
+          })
+          .eq('id', mark.id);
+      });
+
+      const results = await Promise.allSettled(updates);
+      const rejected = results.filter(result => result.status === 'rejected');
+      if (rejected.length > 0) {
+        throw new Error(`${rejected.length} mark updates failed`);
+      }
+
+      setSelectedRaceMarks(
+        updatedMarks.map((mark) => ({
+          ...mark,
+          latitude: mark.latitude ?? mark.coordinates_lat,
+          longitude: mark.longitude ?? mark.coordinates_lng,
+        }))
+      );
+    } catch (error) {
+      logger.error('Error bulk updating marks:', error);
+    }
+  }, []);
+
+  const handleCourseTemplateSelected = useCallback(async (courseMarks: Mark[]) => {
+    console.log('[handleCourseTemplateSelected] START - courseMarks:', courseMarks);
+    console.log('[handleCourseTemplateSelected] selectedRaceId:', selectedRaceId);
+
+    if (!selectedRaceId) {
+      console.log('[handleCourseTemplateSelected] ERROR: No selectedRaceId');
+      Alert.alert('Select a race first', 'Choose a race before applying a course template.');
+      return;
+    }
+
+    console.log('[handleCourseTemplateSelected] Setting isApplyingCourseTemplate = true');
+    setIsApplyingCourseTemplate(true);
+
+    try {
+      console.log('[handleCourseTemplateSelected] Calling ensureRaceEventId...');
+      const raceEventId = await ensureRaceEventId();
+      console.log('[handleCourseTemplateSelected] ensureRaceEventId result:', raceEventId);
+
+      if (!raceEventId) {
+        throw new Error('Missing race event ID');
+      }
+
+      // Clear any existing marks before applying the template
+      console.log('[handleCourseTemplateSelected] Deleting existing marks for race_id:', raceEventId);
+      const deleteResult = await supabase
+        .from('race_marks')
+        .delete()
+        .eq('race_id', raceEventId);
+      console.log('[handleCourseTemplateSelected] Delete result:', deleteResult);
+
+      if (!courseMarks || courseMarks.length === 0) {
+        console.log('[handleCourseTemplateSelected] No course marks provided, clearing state');
+        setSelectedRaceMarks([]);
+        Alert.alert('Course cleared', 'Existing course marks have been removed.');
+        return;
+      }
+
+      const insertPayload = courseMarks
+        .filter((mark) => typeof mark.latitude === 'number' && typeof mark.longitude === 'number')
+        .map((mark, index) => ({
+          race_id: raceEventId,
+          name: mark.name || `Mark ${index + 1}`,
+          mark_type: normalizeCourseMarkType(mark.type),
+          latitude: mark.latitude,
+          longitude: mark.longitude,
+          sequence_order: index,
+          is_custom: false,
+        }));
+
+      console.log('[handleCourseTemplateSelected] Insert payload:', insertPayload);
+
+      if (insertPayload.length === 0) {
+        console.log('[handleCourseTemplateSelected] No usable marks after filtering');
+        setSelectedRaceMarks([]);
+        Alert.alert('No usable marks', 'That course does not have coordinates we can plot.');
+        return;
+      }
+
+      console.log('[handleCourseTemplateSelected] Inserting marks...');
+      const { data: insertedMarks, error: insertError } = await supabase
+        .from('race_marks')
+        .insert(insertPayload)
+        .select();
+
+      console.log('[handleCourseTemplateSelected] Insert result:', { insertedMarks, insertError });
+
+      if (insertError) {
+        console.error('[handleCourseTemplateSelected] ERROR inserting marks:', insertError);
+        throw insertError;
+      }
+
+      const mappedMarks = (insertedMarks || []).map((mark: any) => ({
+        id: mark.id,
+        mark_name: mark.name,
+        mark_type: mark.mark_type,
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        sequence_order: mark.sequence_order ?? 0,
+      }));
+
+      console.log('[handleCourseTemplateSelected] Mapped marks:', mappedMarks);
+
+      setSelectedRaceMarks(mappedMarks);
+      setDrawingRacingArea([]);
+      refetch?.();
+
+      console.log('[handleCourseTemplateSelected] SUCCESS');
+      Alert.alert('Course applied', 'The selected course has been laid onto the tactical map.');
+    } catch (error) {
+      console.error('[handleCourseTemplateSelected] CATCH ERROR:', error);
+      logger.error('Error applying course template:', error);
+      Alert.alert('Unable to apply course', 'We could not load that course. Please try again.');
+    } finally {
+      console.log('[handleCourseTemplateSelected] FINALLY: Setting isApplyingCourseTemplate = false');
+      setIsApplyingCourseTemplate(false);
+    }
+  }, [ensureRaceEventId, normalizeCourseMarkType, refetch, selectedRaceId]);
+
+  const handleSaveCourseTemplate = useCallback(async () => {
+    if (savingCourseTemplate) {
+      return;
+    }
+
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'You need to be signed in to save course templates.');
+      return;
+    }
+
+    if (!selectedRaceMarks || selectedRaceMarks.length === 0) {
+      Alert.alert('No marks to save', 'Add marks to the tactical map before saving a template.');
+      return;
+    }
+
+    const defaultName =
+      selectedRaceData?.name
+        ? `${selectedRaceData.name} Course`
+        : `Custom Course ${new Date().toLocaleDateString()}`;
+
+    let courseName = defaultName;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const response = window.prompt('Name your course template', defaultName);
+      if (!response) {
+        return;
+      }
+      courseName = response;
+    }
+
+    const scope: CourseScope =
+      selectedRaceData?.metadata?.club_id
+        ? 'club'
+        : selectedRaceData?.metadata?.venue_id
+          ? 'venue'
+          : 'personal';
+
+    const courseDescription =
+      selectedRaceData?.metadata?.venue_name
+        ? `Saved from ${selectedRaceData.metadata.venue_name}`
+        : 'Custom racing course';
+
+    const marksPayload = selectedRaceMarks
+      .filter((mark: any) => typeof mark.latitude === 'number' && typeof mark.longitude === 'number')
+      .map((mark: any, index: number) => ({
+        id: mark.id || `${courseName.replace(/\s+/g, '-').toLowerCase()}-${index}`,
+        name: mark.mark_name || mark.name || `Mark ${index + 1}`,
+        type: mark.mark_type || mark.type || 'custom',
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        sequence_order: index,
+      }));
+
+    if (marksPayload.length === 0) {
+      Alert.alert('Unable to save course', 'Could not detect mark positions to save.');
+      return;
+    }
+
+    setSavingCourseTemplate(true);
+
+    try {
+      const savedCourse = await CourseLibraryService.saveCourse(
+        {
+          name: courseName,
+          description: courseDescription,
+          course_type: 'custom',
+          marks: marksPayload,
+          typical_length_nm: null,
+          estimated_duration_minutes: null,
+          min_wind_direction: selectedRaceData?.metadata?.expected_wind_direction ?? null,
+          max_wind_direction: selectedRaceData?.metadata?.expected_wind_direction ?? null,
+          min_wind_speed: selectedRaceData?.metadata?.expected_wind_speed ?? null,
+          max_wind_speed: selectedRaceData?.metadata?.expected_wind_speed ?? null,
+          venue_id: selectedRaceData?.metadata?.venue_id ?? undefined,
+          club_id: selectedRaceData?.metadata?.club_id ?? undefined,
+        },
+        scope,
+        user.id
+      );
+
+      if (!savedCourse) {
+        throw new Error('Course could not be saved');
+      }
+
+      Alert.alert('Course saved', `${courseName} is now in your course library.`);
+    } catch (error: any) {
+      logger.error('Error saving course template:', error);
+      Alert.alert('Save failed', error?.message || 'Could not save this course. Please try again.');
+    } finally {
+      setSavingCourseTemplate(false);
+    }
+  }, [logger, savingCourseTemplate, selectedRaceData, selectedRaceMarks, user?.id]);
+
+  const selectedRaceVenueCoordinates = useMemo(() => {
+    if (selectedRaceData?.metadata?.venue_lat && selectedRaceData?.metadata?.venue_lng) {
+      return {
+        lat: selectedRaceData.metadata.venue_lat,
+        lng: selectedRaceData.metadata.venue_lng,
+      };
+    }
+
+    if (drawingRacingArea.length > 0) {
+      const lat = drawingRacingArea.reduce((sum, point) => sum + point.lat, 0) / drawingRacingArea.length;
+      const lng = drawingRacingArea.reduce((sum, point) => sum + point.lng, 0) / drawingRacingArea.length;
+      return { lat, lng };
+    }
+
+    const polygon = selectedRaceData?.racing_area_polygon?.coordinates?.[0];
+    if (Array.isArray(polygon) && polygon.length > 0) {
+      const coords = polygon
+        .filter((coord: any) => Array.isArray(coord) && coord.length >= 2)
+        .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }));
+      if (coords.length > 0) {
+        const lat = coords.reduce((sum, point) => sum + point.lat, 0) / coords.length;
+        const lng = coords.reduce((sum, point) => sum + point.lng, 0) / coords.length;
+        return { lat, lng };
+      }
+    }
+
+    if (selectedRaceData?.metadata?.venue_name) {
+      return {
+        lat: selectedRaceData?.metadata?.venue_lat ?? 22.2650,
+        lng: selectedRaceData?.metadata?.venue_lng ?? 114.2620,
+      };
+    }
+
+    return undefined;
+  }, [drawingRacingArea, selectedRaceData]);
+
+  // Memoized navigation handlers
+  const handleVenuePress = useCallback(() => {
+    router.push('/venue');
+  }, [router]);
+
+  // Load cached insights from database
+  const loadCachedInsights = useCallback(async (venueId: string) => {
+    try {
+      const cachedInsights = await venueIntelligenceService.getVenueInsights(venueId);
+
+      if (cachedInsights) {
+        logger.info('Loaded cached venue insights from database');
+        setVenueInsights(cachedInsights);
+        setShowInsights(true);
+      } else {
+        logger.debug('No cached insights found for venue:', venueId);
+        // Insights will be null, triggering auto-generation if GPS confidence is high
+      }
+    } catch (error: any) {
+      logger.error('Error loading cached insights:', error);
+    }
+  }, []);
+
+  // Get AI insights for current venue (force regenerate)
+  const handleGetVenueInsights = useCallback(async (forceRegenerate = false) => {
+    if (!currentVenue?.id) return;
+
+    // If forcing regenerate, delete old insights first
+    if (forceRegenerate) {
+      await venueIntelligenceService.deleteInsights(currentVenue.id);
+    }
+
+    setLoadingInsights(true);
+    try {
+      const result = await venueAgent.analyzeVenue(currentVenue.id);
+
+      if (result.success) {
+        setVenueInsights(result.insights);
+        setShowInsights(true);
+      } else {
+        logger.error('Failed to get venue insights:', result.error);
+      }
+    } catch (error: any) {
+      logger.error('Error getting venue insights:', error);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }, [currentVenue?.id, venueAgent]);
+
+  // Cache next race for offline use when it loads
+  React.useEffect(() => {
+    if (nextRace && user) {
+      cacheNextRace(nextRace.id, user.id).catch(err =>
+        logger.error('Failed to cache race:', err)
+      );
+    }
+  }, [nextRace, user]);
+
+  // Load cached insights from database when venue changes
+  React.useEffect(() => {
+    if (currentVenue?.id) {
+      // Clear old insights immediately when venue changes
+      setVenueInsights(null);
+      setShowInsights(false);
+
+      // Load cached insights for new venue
+      loadCachedInsights(currentVenue.id);
+    }
+  }, [currentVenue?.id, loadCachedInsights]);
+
+  // Trigger AI venue analysis when venue is detected (only if no cached insights)
+  React.useEffect(() => {
+    if (currentVenue && confidence > 0.5 && !venueInsights) {
+      handleGetVenueInsights();
+    }
+  }, [currentVenue, confidence, venueInsights, handleGetVenueInsights]);
+
+  // Auto-select first race when races load (only runs once when loading completes)
+  // Using useRef to track if auto-selection has happened to prevent re-running
+  const hasAutoSelected = useRef(false);
+  React.useEffect(() => {
+    if (!loading && safeRecentRaces.length > 0 && !hasAutoSelected.current) {
+      // Select next race if available, otherwise first race
+      const raceToSelect = nextRace || safeRecentRaces[0];
+      logger.debug('[races.tsx] Auto-selecting race:', raceToSelect?.name, raceToSelect?.id);
+      setSelectedRaceId(raceToSelect.id);
+      hasAutoSelected.current = true;
+    }
+  }, [loading, safeRecentRaces, nextRace]); // Removed selectedRaceId from dependencies
+
+  // Handle deep links that request a specific race selection (e.g., after creation)
+  useEffect(() => {
+    const targetId = initialSelectedRaceParam.current;
+    if (!targetId || loading) {
+      return;
+    }
+
+    const matchingRace = safeRecentRaces.find((race: any) => race.id === targetId);
+    if (!matchingRace) {
+      return;
+    }
+
+    logger.debug('[races.tsx] Selecting race from route params:', targetId);
+    hasAutoSelected.current = true;
+    setSelectedRaceId(targetId);
+    setHasManuallySelected(true);
+    initialSelectedRaceParam.current = null;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('selected');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [loading, safeRecentRaces]);
+
+  useEffect(() => {
+    if (hasRealRaces) {
+      if (selectedDemoRaceId) {
+        setSelectedDemoRaceId(null);
+      }
+      return;
+    }
+
+    if (!loading && !selectedDemoRaceId && MOCK_RACES.length > 0) {
+      setSelectedDemoRaceId(MOCK_RACES[0].id);
+    }
+  }, [hasRealRaces, loading, selectedDemoRaceId]);
+
+  // Scroll to race detail when a race is selected (but not on initial auto-select)
+  React.useEffect(() => {
+    if (hasManuallySelected && selectedRaceId && mainScrollViewRef.current) {
+      // Simple scroll - just scroll down a fixed amount to show the detail section
+      // This works reliably on both native and web
+      setTimeout(() => {
+        mainScrollViewRef.current?.scrollTo({
+          y: 500, // Approximate position of race detail section
+          animated: true,
+        });
+      }, 100);
+    }
+  }, [selectedRaceId, hasManuallySelected]);
+
+  // Fetch race detail when selected race changes
+  React.useEffect(() => {
+    const fetchRaceDetail = async () => {
+      // Track the selection value at the beginning of this fetch to prevent stale updates
+      const selectionAtStart = selectedRaceId;
+      logger.debug('=====================================');
+      logger.debug('[races.tsx] 📥 FETCHING RACE DETAILS');
+      logger.debug('[races.tsx] selectedRaceId:', selectedRaceId);
+
+      if (!selectedRaceId) {
+        logger.debug('[races.tsx] No selectedRaceId, clearing data');
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        return;
+      }
+
+      setLoadingRaceDetail(true);
+      try {
+        logger.debug('[races.tsx] Querying database for race ID:', selectedRaceId);
+        const { data, error } = await supabase
+          .from('regattas')
+          .select('*')
+          .eq('id', selectedRaceId)
+          .single();
+
+        if (error) throw error;
+        logger.debug('[races.tsx] ✅ Race data fetched:', data?.name);
+        // If the selection changed during the fetch, ignore this result
+        if (selectionAtStart !== selectedRaceId) {
+          logger.debug(
+            '[races.tsx] ⏭️ Ignoring stale fetch result for',
+            data?.name,
+            'selection changed to',
+            selectedRaceId
+          );
+          return;
+        }
+        setSelectedRaceData(data);
+
+        // Try to find associated race_event for marks
+        const { data: raceEvent } = await supabase
+          .from('race_events')
+          .select('id')
+          .eq('regatta_id', selectedRaceId)
+          .maybeSingle();
+
+        if (raceEvent) {
+          // Load race marks
+          const { data: marksData, error: marksError} = await supabase
+            .from('race_marks')
+            .select('*')
+            .eq('race_id', raceEvent.id)
+            .order('name', { ascending: true });
+
+          if (!marksError && marksData) {
+            // Convert race_marks format to component format
+            const convertedMarks = marksData.map((mark: any) => ({
+              id: mark.id,
+              mark_name: mark.name,
+              mark_type: mark.mark_type,
+              latitude: mark.latitude,
+              longitude: mark.longitude,
+              sequence_order: 0,
+            }));
+            setSelectedRaceMarks(convertedMarks);
+            logger.debug('[races.tsx] Marks loaded:', convertedMarks.length);
+          }
+        }
+      } catch (error) {
+        console.error('[races.tsx] ❌ Error fetching race detail:', error);
+        logger.error('[races.tsx] ❌ Error fetching race detail:', error);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+      } finally {
+        setLoadingRaceDetail(false);
+        logger.debug('[races.tsx] 🏁 Fetch complete');
+        logger.debug('=====================================');
+      }
+    };
+
+    fetchRaceDetail();
+  }, [selectedRaceId]);
+
+const selectedRaceClassId = useMemo(() => {
+  if (!selectedRaceData) return null;
+  const classId = (
+    selectedRaceData.class_id ||
+    selectedRaceData.classId ||
+    selectedRaceData.metadata?.class_id ||
+    selectedRaceData.metadata?.classId ||
+    null
+  );
+  console.log('[races.tsx] 🏷️ Computed selectedRaceClassId:', { classId, raceData: selectedRaceData });
+  return classId;
+}, [selectedRaceData]);
+
+const selectedRaceClassName = useMemo(() => {
+  if (!selectedRaceData) return undefined;
+  const className = (
+    selectedRaceData.metadata?.class_name ||
+    selectedRaceData.class_divisions?.[0]?.name ||
+    undefined
+  );
+  console.log('[races.tsx] 📛 Computed selectedRaceClassName:', { className });
+  return className;
+}, [selectedRaceData]);
+
+  const {
+    recommendation: selectedRaceTuningRecommendation,
+    loading: selectedRaceTuningLoading,
+    refresh: refreshSelectedRaceTuning,
+  } = useRaceTuningRecommendation({
+    classId: selectedRaceClassId,
+    className: selectedRaceClassName,
+    pointsOfSail: 'upwind',
+    enabled: !!(selectedRaceClassId || selectedRaceClassName),
+  });
+
+  const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
+
+  const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
+
+  const handleClaimWorkspace = useCallback(() => {
+    router.push('/(tabs)/settings' as any);
+  }, [router]);
+
+  // Clear old details immediately on selection change to avoid showing stale details
+  React.useEffect(() => {
+    logger.debug('[races.tsx] 🔄 Selection changed, clearing previous details for ID:', selectedRaceId);
+    setSelectedRaceData(null);
+    setSelectedRaceMarks([]);
+  }, [selectedRaceId]);
+
+  // Auto-scroll to center on next race
+  useEffect(() => {
+    // Skip auto-centering once the user has manually interacted or after the first center
+    if (
+      loading ||
+      !nextRace ||
+      safeRecentRaces.length === 0 ||
+      hasManuallySelected ||
+      hasAutoCenteredNextRace.current
+    ) {
+      return;
+    }
+
+    const nextRaceIndex = safeRecentRaces.findIndex((race: any) => race.id === nextRace.id);
+    if (nextRaceIndex === -1) {
+      return;
+    }
+
+    const scrollX =
+      nextRaceIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
+
+    const timer = setTimeout(() => {
+      if (raceCardsScrollViewRef.current) {
+        raceCardsScrollViewRef.current.scrollTo({
+          x: Math.max(0, scrollX),
+          y: 0,
+          animated: true,
+        });
+        hasAutoCenteredNextRace.current = true;
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [nextRace, safeRecentRaces, loading, hasManuallySelected, SCREEN_WIDTH]);
+
+  // Keep the selected race visible by centering it when selection changes
+  useEffect(() => {
+    if (!selectedRaceId || !raceCardsScrollViewRef.current || safeRecentRaces.length === 0) {
+      return;
+    }
+
+    const selectedIndex = safeRecentRaces.findIndex((race: any) => race.id === selectedRaceId);
+    if (selectedIndex === -1) {
+      return;
+    }
+
+    const scrollX =
+      selectedIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
+
+    raceCardsScrollViewRef.current.scrollTo({
+      x: Math.max(0, scrollX),
+      y: 0,
+      animated: true,
+    });
+  }, [selectedRaceId, safeRecentRaces, SCREEN_WIDTH]);
+
+  // Auth loading state - show while auth is being initialized
+  if (!ready) {
+    logger.debug('Waiting for auth to be ready');
+    return <DashboardSkeleton />;
+  }
+
+  // Loading state - AFTER all hooks
+  if (loading && !profile) {
+    logger.debug('Loading skeleton');
+    return <DashboardSkeleton />;
+  }
+
+  // Error state
+  if (error && !profile) {
+    logger.error('Top-level error', error);
+    return (
+      <View className="flex-1 bg-background-0 items-center justify-center">
+        <ErrorMessage
+          title="Unable to load dashboard"
+          message={error.message || 'Please check your connection and try again'}
+          type="network"
+          onRetry={onRefresh}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-gray-50">
+      {/* Header */}
+      <View className="bg-primary-500 pt-10 pb-2 px-4">
+        <View className="flex-row justify-between items-center mb-1">
+          <Text className="text-white text-lg font-bold">Races</Text>
+          <View className="flex-row gap-2 items-center">
+            {!isOnline && <OfflineIndicator />}
+            <AccessibleTouchTarget
+              onPress={() => router.push('/notifications' as any)}
+              accessibilityLabel="Notifications"
+              accessibilityHint="View your notifications and alerts"
+              className="bg-primary-600 rounded-full p-1"
+            >
+              <Bell color="white" size={18} />
+            </AccessibleTouchTarget>
+          </View>
+        </View>
+
+        {/* Venue Display */}
+        {currentVenue && (
+          <TouchableOpacity
+            className="flex-row items-center"
+            onPress={handleVenuePress}
+            accessibilityLabel={`Current venue: ${currentVenue.name}`}
+            accessibilityHint="Tap to view venue details or change venue"
+            accessibilityRole="button"
+            style={{ minHeight: 32 }}
+          >
+            <MapPin color="white" size={12} />
+            <View className="flex-row items-center flex-1">
+              <Text className="text-white text-xs ml-1">{currentVenue.name}</Text>
+              {(loadingInsights || weatherLoading) && (
+                <ActivityIndicator size="small" color="white" className="ml-1" />
+              )}
+              {!weatherLoading && raceWeather && (
+                <Text className="text-white/70 text-[10px] ml-1">
+                  (HKO)
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
+
+
+      {/* Main Content */}
+      <ScrollView
+        ref={mainScrollViewRef}
+        className="px-4 py-4"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#2563EB"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {raceBrief && (
+          <RaceBriefHero
+            brief={raceBrief}
+            onViewNoR={handleShowRegulatoryDigest}
+            onViewRigPlanner={handleShowRigPlanner}
+            onImportCalendar={handleOpenCalendarImport}
+            ackComplete={hasRegulatoryAcknowledged}
+            strategyReady={hasStrategyGenerated}
+          />
+        )}
+
+        {phaseSteps.length > 0 && (
+          <View className="mb-4">
+            <PhaseStepper steps={phaseSteps} />
+          </View>
+        )}
+
+        {isDemoProfile && (
+          <View className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-4">
+            <Text className="text-indigo-900 text-sm font-semibold">
+              You’re exploring a demo workspace
+            </Text>
+            <Text className="text-indigo-700 text-xs mt-1 leading-4">
+              All races, boats, and analytics below are sample data. Add your own boat or claim your workspace to start syncing real results.
+            </Text>
+            <Button
+              size="sm"
+              className="mt-3 self-start"
+              onPress={handleClaimWorkspace}
+            >
+              <ButtonText>Claim my workspace</ButtonText>
+            </Button>
+          </View>
+        )}
+        {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
+        {hasRealRaces ? (
+          // User has real races - show all upcoming races
+          <>
+            <View className="mb-3 flex-row items-center justify-between">
+              <View>
+                <Text className="text-base font-bold text-gray-800">All Races</Text>
+                <Text className="text-xs text-gray-500">Swipe to view all races chronologically</Text>
+              </View>
+              <View className="bg-blue-100 px-3 py-1 rounded-full">
+                <Text className="text-blue-800 font-semibold text-sm">
+                  {safeRecentRaces.length} races
+                </Text>
+              </View>
+            </View>
+            <ScrollView
+              ref={raceCardsScrollViewRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-4"
+              contentContainerStyle={{ paddingRight: 16 }}
+              nestedScrollEnabled={true}
+              scrollEventThrottle={16}
+            >
+              {/* All races in chronological order */}
+              {safeRecentRaces.map((race: any, index: number) => {
+                const isNextRace = !!(nextRace && race.id === nextRace.id);
+                const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
+                return (
+                  <RaceCard
+                    key={race.id || index}
+                    id={race.id}
+                    name={race.name}
+                    venue={race.venue || 'Unknown Venue'}
+                    date={race.date || new Date().toISOString()}
+                    startTime={race.startTime || '10:00'}
+                    wind={race.wind}
+                    tide={race.tide}
+                    weatherStatus={race.weatherStatus}
+                    weatherError={race.weatherError}
+                    strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
+                    critical_details={race.critical_details}
+                    isPrimary={isNextRace}
+                    raceStatus={raceStatus}
+                    onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name)}
+                    isSelected={selectedRaceId === race.id}
+                    onSelect={() => {
+                      logger.debug('=====================================');
+                      logger.debug('[RacesScreen] 🎯 RACE CARD CLICKED');
+                      logger.debug('[RacesScreen] Race name:', race.name);
+                      logger.debug('[RacesScreen] Race ID:', race.id);
+                      logger.debug('[RacesScreen] Previous selectedRaceId:', selectedRaceId);
+                      logger.debug('[RacesScreen] Will set selectedRaceId to:', race.id);
+                      logger.debug('=====================================');
+                      setHasManuallySelected(true);
+                      setSelectedRaceId(race.id);
+                    }}
+                  />
+                );
+              })}
+            </ScrollView>
+
+            {/* Inline Comprehensive Race Detail Section */}
+            {loadingRaceDetail && !selectedRaceData && (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator size="large" color="#2563EB" />
+                <Text className="text-gray-500 mt-2">Loading race details...</Text>
+              </View>
+            )}
+
+            {selectedRaceData && (
+              <View className="mt-2 gap-4">
+                <View className="flex-row gap-3">
+                  <Button
+                    action="secondary"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onPress={handleEditSelectedRace}
+                  >
+                    <ButtonIcon as={Pencil} />
+                    <ButtonText>Edit Race</ButtonText>
+                  </Button>
+                  <Button
+                    action="negative"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onPress={handleDeleteSelectedRace}
+                    disabled={isDeletingRace}
+                  >
+                    <ButtonIcon as={Trash2} />
+                    <ButtonText>{isDeletingRace ? 'Deleting...' : 'Delete Race'}</ButtonText>
+                  </Button>
+                </View>
+
+                {/* Course Template Selector */}
+                <View className="mt-3">
+                  <View className="flex-row items-center gap-2">
+                    <View style={{ flex: 1 }}>
+                      <CourseSelector
+                        venueId={selectedRaceData.metadata?.venue_id ?? undefined}
+                        venueName={selectedRaceData.metadata?.venue_name ?? undefined}
+                        venueCoordinates={selectedRaceVenueCoordinates}
+                        currentWindDirection={
+                          selectedRaceData.metadata?.expected_wind_direction ??
+                          selectedRaceData.metadata?.wind_direction ??
+                          undefined
+                        }
+                        currentWindSpeed={
+                          selectedRaceData.metadata?.expected_wind_speed ??
+                          selectedRaceData.metadata?.wind_speed ??
+                          undefined
+                        }
+                        onCourseSelected={handleCourseTemplateSelected}
+                      />
+                    </View>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-[48px]"
+                      disabled={
+                        savingCourseTemplate ||
+                        !selectedRaceMarks ||
+                        selectedRaceMarks.length === 0
+                      }
+                      onPress={handleSaveCourseTemplate}
+                    >
+                      <ButtonIcon as={Plus} />
+                      <ButtonText>
+                        {savingCourseTemplate ? 'Saving...' : 'Save Template'}
+                      </ButtonText>
+                    </Button>
+                  </View>
+
+                  {(isApplyingCourseTemplate || savingCourseTemplate) && (
+                    <View className="flex-row items-center gap-2 mt-2">
+                      <ActivityIndicator size="small" color="#2563EB" />
+                      <Text className="text-sm text-gray-600">
+                        {isApplyingCourseTemplate
+                          ? 'Applying course template...'
+                          : 'Saving course to your library...'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Tactical Race Map */}
+                <RaceDetailMapHero
+                  race={{
+                    id: selectedRaceData.id,
+                    race_name: selectedRaceData.name,
+                    start_time: selectedRaceData.start_date,
+                    venue: selectedRaceData.metadata?.venue_name ? {
+                      name: selectedRaceData.metadata.venue_name,
+                      coordinates_lat: selectedRaceData.metadata?.venue_lat || 22.2650,
+                      coordinates_lng: selectedRaceData.metadata?.venue_lng || 114.2620,
+                    } : undefined,
+                    racing_area_polygon: selectedRaceData.racing_area_polygon,
+                    boat_class: selectedRaceData.metadata?.class_name ? {
+                      name: selectedRaceData.metadata.class_name
+                    } : undefined,
+                  }}
+                  marks={selectedRaceMarks}
+                  compact={false}
+                  racingAreaPolygon={
+                    drawingRacingArea.length > 0
+                      ? drawingRacingArea
+                      : selectedRaceData.racing_area_polygon?.coordinates?.[0]?.map((coord: number[]) => ({
+                          lat: coord[1],
+                          lng: coord[0]
+                        }))
+                  }
+                  onRacingAreaChange={handleRacingAreaChange}
+                  onSaveRacingArea={handleSaveRacingArea}
+                  onMarkAdded={handleMarkAdded}
+                  onMarkUpdated={handleMarkUpdated}
+                  onMarkDeleted={handleMarkDeleted}
+                  onMarksBulkUpdate={handleBulkMarksUpdate}
+                />
+
+                {/* ============================================ */}
+                {/*  PRE-RACE STRATEGY SECTION                 */}
+                {/* ============================================ */}
+                <RacePhaseHeader
+                  icon="chess-knight"
+                  title="Pre-Race Strategy"
+                  subtitle="AI-generated plan based on conditions"
+                  badge="Ready"
+                  phase="upcoming"
+                />
+
+                {/* AI Coach - Quick Skill Access */}
+                <View className="mb-4">
+                  <QuickSkillButtons
+                    raceData={selectedRaceData}
+                    onSkillInvoked={(skillId, advice) => {
+                      logger.info('AI Skill invoked:', skillId, advice);
+                    }}
+                  />
+                </View>
+
+                {/* AI Coach - Context-Aware Tactical Guidance */}
+                <View className="mb-4 px-4">
+                  <SmartRaceCoach
+                    raceId={selectedRaceData.id}
+                    raceData={{
+                      startTime: selectedRaceData.start_date,
+                      fleetSize: selectedRaceData.metadata?.fleet_size,
+                      course: selectedRaceData.metadata?.course_type,
+                      marks: selectedRaceMarks,
+                      weather: {
+                        windSpeed: selectedRaceData.metadata?.expected_wind_speed,
+                        windDirection: selectedRaceData.metadata?.expected_wind_direction,
+                      },
+                      location: selectedRaceData.metadata?.venue_name ? {
+                        name: selectedRaceData.metadata.venue_name,
+                        lat: selectedRaceData.metadata.venue_lat,
+                        lon: selectedRaceData.metadata.venue_lng,
+                      } : undefined,
+                    }}
+                    autoRefresh={true}
+                  />
+                </View>
+
+                {/* Race Overview - Quick Stats & Confidence */}
+                <RaceOverviewCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                  startTime={selectedRaceData.start_date}
+                  venue={selectedRaceData.metadata?.venue_name
+                    ? ({ name: selectedRaceData.metadata.venue_name } as { name?: string })
+                    : undefined}
+                  boatClass={selectedRaceData.metadata?.class_name}
+                />
+
+                {/* Start Strategy */}
+                <StartStrategyCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                  raceStartTime={selectedRaceData.start_date}
+                  venueId={selectedRaceData.metadata?.venue_id}
+                  venueName={selectedRaceData.metadata?.venue_name}
+                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                    lat: selectedRaceData.metadata.venue_lat,
+                    lng: selectedRaceData.metadata.venue_lng
+                  } : undefined}
+                />
+
+                {/* Upwind Strategy - Dedicated Beats Card */}
+                <UpwindStrategyCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                />
+
+                {/* Downwind Strategy - Dedicated Runs Card */}
+                <DownwindStrategyCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                />
+
+                {/* Mark Rounding Strategy */}
+                <MarkRoundingCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                />
+
+                {/* Weather & Conditions */}
+                <WindWeatherCard
+                  raceId={selectedRaceData.id}
+                  raceTime={selectedRaceData.start_date}
+                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                    lat: selectedRaceData.metadata.venue_lat,
+                    lng: selectedRaceData.metadata.venue_lng
+                  } : undefined}
+                  venue={selectedRaceData.metadata?.venue_lat ? {
+                    id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                    name: selectedRaceData.metadata?.venue_name || 'Race Venue',
+                    coordinates: {
+                      latitude: selectedRaceData.metadata.venue_lat,
+                      longitude: selectedRaceData.metadata.venue_lng
+                    },
+                    region: 'asia_pacific',
+                    country: 'HK'
+                  } : undefined}
+                />
+
+                {!selectedRaceClassId && (
+                  <View className="flex-row items-start gap-2 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
+                    <View className="flex-1">
+                      <Text className="text-xs font-semibold text-amber-700">Class not set yet</Text>
+                      <Text className="text-xs text-amber-600 mt-1">
+                        Select a boat class to unlock rig tuning checklists and class-based start sequences.
+                      </Text>
+                      <Pressable onPress={handleEditSelectedRace} className="flex-row items-center gap-1 mt-2">
+                        <MaterialCommunityIcons name="pencil" size={14} color="#b45309" />
+                        <Text className="text-xs font-semibold text-amber-700">Set class</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                <RigTuningCard
+                  raceId={selectedRaceData.id}
+                  boatClassName={selectedRaceClassName}
+                  recommendation={selectedRaceTuningRecommendation}
+                  loading={selectedRaceTuningLoading}
+                  onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
+                />
+
+                <CurrentTideCard
+                  raceId={selectedRaceData.id}
+                  raceTime={selectedRaceData.start_date}
+                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                    lat: selectedRaceData.metadata.venue_lat,
+                    lng: selectedRaceData.metadata.venue_lng
+                  } : undefined}
+                  venue={selectedRaceData.metadata?.venue_lat ? {
+                    id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                    name: selectedRaceData.metadata?.venue_name || 'Race Venue',
+                    coordinates: {
+                      latitude: selectedRaceData.metadata.venue_lat,
+                      longitude: selectedRaceData.metadata.venue_lng
+                    },
+                    region: 'asia_pacific',
+                    country: 'HK'
+                  } : undefined}
+                />
+
+                {/* Contingency Plans */}
+                <ContingencyPlansCard
+                  raceId={selectedRaceData.id}
+                />
+
+                {/* ============================================ */}
+                {/*  POST-RACE ANALYSIS SECTION                 */}
+                {/* ============================================ */}
+                <RacePhaseHeader
+                  icon="trophy"
+                  title="Post-Race Analysis"
+                  subtitle="Review performance and get coaching"
+                  badge="Complete"
+                  phase="completed"
+                />
+                <PostRaceAnalysisCard
+                  raceId={selectedRaceData.id}
+                  raceName={selectedRaceData.name}
+                  raceStartTime={selectedRaceData.start_date}
+                />
+
+                {/* ============================================ */}
+                {/*  LOGISTICS SECTION                         */}
+                {/* ============================================ */}
+                <View
+                  onLayout={({ nativeEvent }) => {
+                    const positionY = nativeEvent.layout.y;
+                    logger.info('[DEBUG] Real race Logistics section onLayout', {
+                      positionY,
+                      previousValue: logisticsSectionY,
+                      willUpdate: Math.abs(logisticsSectionY - positionY) > 4,
+                    });
+                    setLogisticsSectionY((prev) => (Math.abs(prev - positionY) > 4 ? positionY : prev));
+                  }}
+                >
+                  <RacePhaseHeader
+                    icon="package-variant"
+                    title="Logistics"
+                    subtitle="Crew, equipment, and race details"
+                    phase="upcoming"
+                  />
+
+                  <RigPlannerCard
+                    presets={rigPresets}
+                    selectedBand={selectedRigBand}
+                    onSelectBand={(bandId) => setSelectedRigBand(bandId)}
+                    notes={rigNotes}
+                    onChangeNotes={setRigNotes}
+                    onOpenChat={handleOpenChatFromRigPlanner}
+                  />
+
+                  <CrewEquipmentCard
+                    raceId={selectedRaceData.id}
+                    classId={selectedRaceData.class_id || selectedRaceData.metadata?.class_id}
+                    raceDate={selectedRaceData.start_date}
+                    onManageCrew={() =>
+                      handleManageCrewNavigation({
+                        raceId: selectedRaceData.id,
+                        classId: selectedRaceData.class_id || selectedRaceData.metadata?.class_id,
+                        className: selectedRaceClassName || selectedRaceData.metadata?.class_name,
+                        raceName: selectedRaceData.name || selectedRaceData.race_name,
+                        raceDate: selectedRaceData.start_date,
+                      })
+                    }
+                  />
+
+                  <FleetRacersCard
+                    raceId={selectedRaceData.id}
+                    classId={selectedRaceData.metadata?.class_name}
+                    venueId={selectedRaceData.metadata?.venue_id}
+                    onJoinFleet={(fleetId) => {
+                      logger.debug('Joined fleet:', fleetId);
+                    }}
+                  />
+
+                  <RaceDocumentsCard
+                    raceId={selectedRaceData.id}
+                    onUpload={() => {
+                      logger.debug('Upload document tapped');
+                    }}
+                    onDocumentPress={(doc) => {
+                      logger.debug('Document pressed:', doc);
+                    }}
+                    onShareWithFleet={(docId) => {
+                      logger.debug('Share document with fleet:', docId);
+                    }}
+                  />
+                </View>
+
+                <View
+                  onLayout={({ nativeEvent }) => {
+                    const positionY = nativeEvent.layout.y;
+                    logger.info('[DEBUG] Real race Regulatory section onLayout', {
+                      positionY,
+                      previousValue: regulatorySectionY,
+                      willUpdate: Math.abs(regulatorySectionY - positionY) > 4,
+                    });
+                    setRegulatorySectionY((prev) => (Math.abs(prev - positionY) > 4 ? positionY : prev));
+                  }}
+                  className="mt-6"
+                >
+                  <RegulatoryDigestCard
+                    digest={regulatoryDigest}
+                    acknowledgements={regattaAcknowledgements}
+                    onToggle={handleToggleAcknowledgement}
+                  />
+
+                  <CourseOutlineCard groups={courseOutlineGroups} />
+                </View>
+              </View>
+            )}
+          </>
+        ) : (
+          // User has no races - show mock race cards horizontally
+          <>
+            <View className="mb-3">
+              <Text className="text-base font-bold text-gray-800">Demo Races</Text>
+              <Text className="text-xs text-gray-500">
+                📋 Example races to get you started - tap "+" to add your first race!
+              </Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-4"
+              contentContainerStyle={{ paddingRight: 16, pointerEvents: 'box-none' }}
+              nestedScrollEnabled={true}
+              scrollEventThrottle={16}
+            >
+              {MOCK_RACES.map((race, index) => (
+                <RaceCard
+                  key={race.id}
+                  id={race.id}
+                  name={race.name}
+                  venue={race.venue}
+                  date={race.date}
+                  startTime={race.startTime}
+                  wind={race.wind}
+                  tide={race.tide}
+                  strategy={race.strategy}
+                  critical_details={race.critical_details}
+                  isPrimary={index === 0}
+                  isMock={true}
+                  isSelected={selectedDemoRaceId === race.id}
+                  onSelect={() => setSelectedDemoRaceId(race.id)}
+                />
+              ))}
+            </ScrollView>
+            {selectedDemoRace && (
+              <DemoRaceDetail
+                race={selectedDemoRace}
+                onAddRace={handleAddRaceNavigation}
+                onLogisticsSectionLayout={(y) => {
+                  logger.info('[DEBUG] Demo race Logistics section onLayout', {
+                    positionY: y,
+                    previousValue: logisticsSectionY,
+                    willUpdate: Math.abs(logisticsSectionY - y) > 4,
+                  });
+                  setLogisticsSectionY((prev) => (Math.abs(prev - y) > 4 ? y : prev));
+                }}
+                onRegulatorySectionLayout={(y) => {
+                  logger.info('[DEBUG] Demo race Regulatory section onLayout', {
+                    positionY: y,
+                    previousValue: regulatorySectionY,
+                    willUpdate: Math.abs(regulatorySectionY - y) > 4,
+                  });
+                  setRegulatorySectionY((prev) => (Math.abs(prev - y) > 4 ? y : prev));
+                }}
+              />
+            )}
+          </>
+        )}
+
+        {/* AI Venue Insights Card */}
+        {showInsights && venueInsights && (
+          <Card className="mb-4 p-4 border-2 border-purple-500" variant="elevated">
+            <View className="flex-row justify-between items-center mb-3">
+              <View className="flex-row items-center">
+                <Navigation color="#8B5CF6" size={20} />
+                <Text className="text-lg font-bold ml-2">🤖 AI Venue Intelligence</Text>
+              </View>
+              <AccessibleTouchTarget
+                onPress={() => setShowInsights(false)}
+                accessibilityLabel="Dismiss AI venue intelligence"
+                accessibilityHint="Hide this card"
+              >
+                <X color="#6B7280" size={20} />
+              </AccessibleTouchTarget>
+            </View>
+
+            <Text className="font-bold text-purple-700 mb-1">{venueInsights.venueName}</Text>
+            {venueInsights.generatedAt && (
+              <Text className="text-xs text-gray-500 mb-2">
+                Generated {new Date(venueInsights.generatedAt).toLocaleDateString()} at{' '}
+                {new Date(venueInsights.generatedAt).toLocaleTimeString()}
+              </Text>
+            )}
+
+            {/* Safety Recommendations */}
+            {venueInsights.recommendations?.safety && (
+              <View className="mb-3">
+                <View className="flex-row items-center mb-1">
+                  <AlertTriangle color="#EF4444" size={16} />
+                  <Text className="font-bold text-red-600 ml-1">Safety</Text>
+                </View>
+                <Text className="text-sm text-gray-700 ml-5">
+                  {venueInsights.recommendations.safety.split('\n')[0]}
+                </Text>
+              </View>
+            )}
+
+            {/* Racing Tips */}
+            {venueInsights.recommendations?.racing && (
+              <View className="mb-3">
+                <View className="flex-row items-center mb-1">
+                  <TrendingUp color="#10B981" size={16} />
+                  <Text className="font-bold text-green-600 ml-1">Racing Tips</Text>
+                </View>
+                <Text className="text-sm text-gray-700 ml-5">
+                  {venueInsights.recommendations.racing.split('\n')[0]}
+                </Text>
+              </View>
+            )}
+
+            {/* Cultural Notes */}
+            {venueInsights.recommendations?.cultural && (
+              <View className="mb-3">
+                <View className="flex-row items-center mb-1">
+                  <Users color="#3B82F6" size={16} />
+                  <Text className="font-bold text-blue-600 ml-1">Cultural</Text>
+                </View>
+                <Text className="text-sm text-gray-700 ml-5">
+                  {venueInsights.recommendations.cultural.split('\n')[0]}
+                </Text>
+              </View>
+            )}
+
+            <View className="flex-row gap-2 mt-2">
+              <Button
+                action="secondary"
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onPress={handleVenuePress}
+              >
+                <ButtonText>View Full Intelligence</ButtonText>
+                <ButtonIcon as={ChevronRight} />
+              </Button>
+              <Button
+                action="primary"
+                variant="outline"
+                size="sm"
+                onPress={() => handleGetVenueInsights(true)}
+                disabled={loadingInsights}
+              >
+                {loadingInsights ? (
+                  <ActivityIndicator size="small" color="#8B5CF6" />
+                ) : (
+                  <ButtonText>🔄</ButtonText>
+                )}
+              </Button>
+            </View>
+          </Card>
+        )}
+      </ScrollView>
+
+      {/* Floating Action Menu */}
+      {isFabExpanded && (
+        <Pressable
+          style={fabStyles.overlay}
+          onPress={() => setIsFabExpanded(false)}
+          accessibilityLabel="Close race actions menu"
+        />
+      )}
+
+      <View pointerEvents="box-none" style={fabStyles.container}>
+        {isFabExpanded && (
+          <>
+            <TouchableOpacity
+              style={[fabStyles.action, fabStyles.secondaryAction]}
+              onPress={handleOpenCalendarImport}
+              accessibilityLabel="Import race calendar"
+              accessibilityHint="Import multiple races from a CSV calendar file"
+              activeOpacity={0.9}
+            >
+              <Text style={[fabStyles.actionLabel, fabStyles.secondaryActionLabel]}>Import calendar</Text>
+              <Calendar color="#6D28D9" size={20} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[fabStyles.action, fabStyles.primaryAction]}
+              onPress={handleAddRaceNavigation}
+              accessibilityLabel="Add new race"
+              accessibilityHint="Create a new race with comprehensive race entry form"
+              activeOpacity={0.9}
+            >
+              <Text style={[fabStyles.actionLabel, fabStyles.primaryActionLabel]}>Add race</Text>
+              <Plus color="#FFFFFF" size={20} />
+            </TouchableOpacity>
+          </>
+        )}
+
+        <TouchableOpacity
+          className="items-center justify-center"
+          style={[fabStyles.mainFab, isFabExpanded && fabStyles.mainFabActive]}
+          onPress={() => setIsFabExpanded((prev) => !prev)}
+          accessibilityLabel={isFabExpanded ? 'Close race actions menu' : 'Open race actions menu'}
+          accessibilityHint="Access actions to add a race or import a calendar"
+          activeOpacity={0.85}
+        >
+          {isFabExpanded ? <X color="white" size={26} /> : <Plus color="white" size={28} />}
+        </TouchableOpacity>
+      </View>
+
+      {/* Calendar Import Modal */}
+      <Modal
+        visible={showCalendarImport}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCalendarImport(false)}
+      >
+        <CalendarImportFlow
+          onComplete={(count) => {
+            setShowCalendarImport(false);
+            onRefresh(); // Refresh the race list
+          }}
+          onCancel={() => setShowCalendarImport(false)}
+        />
+      </Modal>
+
+      {/* Post-Race Interview Modal */}
+      {completedSessionId && (
+        <PostRaceInterview
+          visible={showPostRaceInterview}
+          sessionId={completedSessionId}
+          raceName={completedRaceName}
+          onClose={() => setShowPostRaceInterview(false)}
+          onComplete={handlePostRaceInterviewComplete}
+        />
+      )}
+    </View>
+  );
+}

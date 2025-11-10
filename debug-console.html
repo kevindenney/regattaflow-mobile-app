@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Console Debug</title>
+</head>
+<body>
+  <h1>Opening localhost:8081 and capturing console errors...</h1>
+  <iframe id="app" src="http://localhost:8081" style="width:100%; height:800px;"></iframe>
+
+  <div id="errors" style="margin-top:20px; background:#f00; color:#fff; padding:10px;">
+    <h2>Console Errors:</h2>
+    <pre id="error-log"></pre>
+  </div>
+
+  <script>
+    const errorLog = document.getElementById('error-log');
+
+    window.addEventListener('error', (e) => {
+      errorLog.textContent += `\n\nERROR: ${e.message}\nFile: ${e.filename}:${e.lineno}:${e.colno}\nStack: ${e.error?.stack || 'no stack'}`;
+    });
+
+    window.addEventListener('unhandledrejection', (e) => {
+      errorLog.textContent += `\n\nUNHANDLED PROMISE REJECTION: ${e.reason}\nStack: ${e.reason?.stack || 'no stack'}`;
+    });
+
+    // Try to listen to iframe errors
+    const iframe = document.getElementById('app');
+    iframe.onload = function() {
+      try {
+        const iframeWindow = iframe.contentWindow;
+
+        iframeWindow.addEventListener('error', (e) => {
+          errorLog.textContent += `\n\n[IFRAME] ERROR: ${e.message}\nFile: ${e.filename}:${e.lineno}:${e.colno}\nStack: ${e.error?.stack || 'no stack'}`;
+        });
+
+        iframeWindow.addEventListener('unhandledrejection', (e) => {
+          errorLog.textContent += `\n\n[IFRAME] UNHANDLED PROMISE REJECTION: ${e.reason}\nStack: ${e.reason?.stack || 'no stack'}`;
+        });
+      } catch(err) {
+        errorLog.textContent += `\n\nCannot access iframe: ${err.message}`;
+      }
+    };
+  </script>
+</body>
+</html>

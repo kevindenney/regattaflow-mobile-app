@@ -1,44 +1,66 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 
-// Platform-specific storage adapter
-const createStorageAdapter = () => {
-  if (Platform.OS === 'web') {
-    // Use localStorage for web
+type SecureStoreModule = typeof import('expo-secure-store');
+
+let SecureStore: SecureStoreModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  SecureStore = require('expo-secure-store');
+} catch {
+  SecureStore = null;
+}
+
+type StorageAdapter = {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+};
+
+const createStorageAdapter = (): StorageAdapter => {
+  const hasWindow = typeof window !== 'undefined';
+  const isWeb = hasWindow && typeof document !== 'undefined';
+
+  if (isWeb) {
     return {
-      getItem: async (key: string) => {
-        if (typeof window !== 'undefined') {
-          return window.localStorage.getItem(key);
-        }
-        return null;
-      },
+      getItem: async (key: string) => window.localStorage.getItem(key),
       setItem: async (key: string, value: string) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, value);
-        }
+        window.localStorage.setItem(key, value);
       },
       removeItem: async (key: string) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(key);
-        }
-      }
-    };
-  } else {
-    // Use SecureStore for native platforms
-    return {
-      getItem: async (key: string) => {
-        return await SecureStore.getItemAsync(key);
+        window.localStorage.removeItem(key);
       },
-      setItem: async (key: string, value: string) => {
-        await SecureStore.setItemAsync(key, value);
-      },
-      removeItem: async (key: string) => {
-        await SecureStore.deleteItemAsync(key);
-      }
     };
   }
+
+  if (SecureStore) {
+    return {
+      getItem: async (key: string) => {
+        try {
+          return await SecureStore!.getItemAsync(key);
+        } catch {
+          return null;
+        }
+      },
+      setItem: async (key: string, value: string) => {
+        await SecureStore!.setItemAsync(key, value);
+      },
+      removeItem: async (key: string) => {
+        await SecureStore!.deleteItemAsync(key);
+      },
+    };
+  }
+
+  const memoryStore = new Map<string, string>();
+  return {
+    getItem: async (key: string) => memoryStore.get(key) ?? null,
+    setItem: async (key: string, value: string) => {
+      memoryStore.set(key, value);
+    },
+    removeItem: async (key: string) => {
+      memoryStore.delete(key);
+    },
+  };
 };
 
 const ExpoSecureStorage = createStorageAdapter();
@@ -55,6 +77,16 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    },
+    global: {
+      headers: {
+        'x-client-info': 'regattaflow-app'
+      }
     }
   }
 );

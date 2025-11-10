@@ -74,6 +74,50 @@ export interface ComprehensiveRaceData {
   checkInTime?: string;
   skipperBriefingTime?: string;
 
+  // NOR Document Fields
+  supplementarySIUrl?: string;
+  norAmendments?: Array<{ url?: string; date: string; description: string }>;
+
+  // Governing Rules
+  racingRulesSystem?: string;
+  classRules?: string;
+  prescriptions?: string;
+  additionalDocuments?: string[];
+
+  // Eligibility & Entry
+  eligibilityRequirements?: string;
+  entryFormUrl?: string;
+  entryDeadline?: string;
+  lateEntryPolicy?: string;
+
+  // Schedule Details
+  eventSeriesName?: string;
+  eventType?: string;
+  racingDays?: string[];
+  racesPerDay?: number;
+  firstWarningSignal?: string;
+  reserveDays?: string[];
+
+  // Enhanced Course Information
+  courseAttachmentReference?: string;
+  courseAreaDesignation?: string;
+
+  // Enhanced Scoring
+  seriesRacesRequired?: number;
+  discardsPolicy?: string;
+
+  // Safety
+  safetyRequirements?: string;
+  retirementNotificationRequirements?: string;
+
+  // Insurance
+  minimumInsuranceCoverage?: number;
+  insurancePolicyReference?: string;
+
+  // Prizes
+  prizesDescription?: string;
+  prizePresentationDetails?: string;
+
   // GPS Coordinates & Course Layout (NEW - from enhanced Skills extraction)
   marks?: Array<{
     name: string;
@@ -218,13 +262,35 @@ export class ComprehensiveRaceExtractionAgent {
         }
 
         logger.debug('[ComprehensiveRaceExtractionAgent] Extraction successful:', {
-          confidence: result.confidence,
+          confidence: result.confidence || result.overallConfidence,
         });
+
+        // Handle multi-race response (new edge function format)
+        if (result.multipleRaces && result.races && result.races.length > 0) {
+          logger.debug('[ComprehensiveRaceExtractionAgent] Multi-race extraction detected:', result.races.length, 'races');
+          // Return the multi-race data structure directly
+          // The caller (ComprehensiveRaceEntry) will handle showing MultiRaceSelectionScreen
+          return {
+            success: true,
+            data: result as any, // Pass through the full multi-race structure
+            confidence: result.overallConfidence,
+          };
+        }
+
+        // Handle single-race response (legacy format or single race in new format)
+        const singleRaceData = result.data || (result.races && result.races.length === 1 ? result.races[0] : null);
+
+        if (!singleRaceData) {
+          return {
+            success: false,
+            error: 'No race data found in extraction result',
+          };
+        }
 
         return {
           success: true,
-          data: result.data as ComprehensiveRaceData,
-          confidence: result.confidence,
+          data: singleRaceData as ComprehensiveRaceData,
+          confidence: result.confidence || result.overallConfidence,
         };
       } catch (fetchError: any) {
         clearTimeout(timeoutId);

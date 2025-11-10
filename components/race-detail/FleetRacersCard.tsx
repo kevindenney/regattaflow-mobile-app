@@ -1,6 +1,6 @@
 /**
- * Fleet Racers Card
- * Shows other RegattaFlow users racing this event
+ * Fleet Competitors Card
+ * Shows other boats/sailors competing in this race
  * Enables fleet connectivity and coordination
  */
 
@@ -9,6 +9,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking } 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
 import { FleetDiscoveryService, Fleet } from '@/services/FleetDiscoveryService';
+import { raceParticipantService, ParticipantWithProfile } from '@/services/RaceParticipantService';
 import { useAuth } from '@/providers/AuthProvider';
 
 interface RaceParticipant {
@@ -28,56 +29,6 @@ interface FleetRacersCardProps {
   onJoinFleet?: (fleetId: string) => void;
 }
 
-// Mock data for demonstration
-const MOCK_PARTICIPANTS: RaceParticipant[] = [
-  {
-    id: '1',
-    name: 'John Smith',
-    boatName: 'Sea Dragon',
-    sailNumber: 'HKG 123',
-    fleetId: 'rhkyc-dragon',
-    status: 'confirmed',
-    visibility: 'public',
-  },
-  {
-    id: '2',
-    name: 'Sarah Chen',
-    boatName: 'Phoenix',
-    sailNumber: 'HKG 456',
-    fleetId: 'rhkyc-dragon',
-    status: 'confirmed',
-    visibility: 'public',
-  },
-  {
-    id: '3',
-    name: 'Mike Johnson',
-    boatName: 'Thunder',
-    sailNumber: 'HKG 789',
-    fleetId: 'rhkyc-dragon',
-    status: 'registered',
-    visibility: 'fleet',
-  },
-  {
-    id: '4',
-    name: 'Lisa Wong',
-    boatName: 'Dragonfly',
-    sailNumber: 'HKG 321',
-    fleetId: 'rhkyc-dragon',
-    status: 'tentative',
-    visibility: 'public',
-  },
-];
-
-const MOCK_FLEET: Fleet = {
-  id: 'rhkyc-dragon',
-  name: 'RHKYC Dragon Class',
-  description: 'Hong Kong Dragon Class Fleet',
-  visibility: 'public',
-  whatsapp_link: 'https://chat.whatsapp.com/example',
-  region: 'Hong Kong',
-  member_count: 24,
-};
-
 export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: FleetRacersCardProps) {
   const { user } = useAuth();
   const [participants, setParticipants] = useState<RaceParticipant[]>([]);
@@ -89,15 +40,37 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
   useEffect(() => {
     loadParticipants();
     loadSuggestedFleet();
-  }, [raceId, classId]);
+  }, [raceId, classId, user?.id]);
 
   const loadParticipants = async () => {
+    if (!user?.id) return;
+
     try {
       setLoading(true);
-      // TODO: Replace with actual API call to RaceParticipantService
-      setParticipants(MOCK_PARTICIPANTS);
+
+      // Fetch real competitors from database
+      const competitors = await raceParticipantService.getRaceCompetitors(
+        raceId,
+        user.id,
+        isFleetMember
+      );
+
+      // Map to local RaceParticipant interface
+      const mapped: RaceParticipant[] = competitors.map(c => ({
+        id: c.id,
+        name: c.profile?.name || 'Unknown Sailor',
+        boatName: c.boatName,
+        sailNumber: c.sailNumber,
+        fleetId: c.fleetId,
+        status: c.status as 'registered' | 'confirmed' | 'tentative',
+        visibility: c.visibility,
+      }));
+
+      setParticipants(mapped);
     } catch (error) {
       console.error('Error loading participants:', error);
+      // Fallback to empty array on error
+      setParticipants([]);
     } finally {
       setLoading(false);
     }
@@ -107,12 +80,20 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
     if (!user?.id || !classId) return;
 
     try {
-      // Check if user is already a member
-      const isMember = await FleetDiscoveryService.isMember(user.id, MOCK_FLEET.id);
-      setIsFleetMember(isMember);
+      // Get fleets for this class
+      const fleets = await FleetDiscoveryService.discoverFleets({
+        classId,
+        visibility: 'public',
+      });
 
-      // For now, use mock fleet
-      setSuggestedFleet(MOCK_FLEET);
+      if (fleets.length > 0) {
+        const fleet = fleets[0]; // Use the first matching fleet
+        setSuggestedFleet(fleet);
+
+        // Check if user is already a member
+        const isMember = await FleetDiscoveryService.isMember(user.id, fleet.id);
+        setIsFleetMember(isMember);
+      }
     } catch (error) {
       console.error('Error loading fleet:', error);
     }
@@ -171,7 +152,7 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <MaterialCommunityIcons name="sail-boat" size={24} color={colors.primary[600]} />
-          <Text style={styles.title}>Who's Racing?</Text>
+          <Text style={styles.title}>Fleet Competitors</Text>
         </View>
         <View style={styles.countBadge}>
           <Text style={styles.countText}>{visibleParticipants.length}</Text>
@@ -213,8 +194,8 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
       ) : visibleParticipants.length === 0 ? (
         <View style={styles.emptyState}>
           <MaterialCommunityIcons name="account-search" size={48} color={colors.text.tertiary} />
-          <Text style={styles.emptyText}>No public racers yet</Text>
-          <Text style={styles.emptySubtext}>Be the first to register!</Text>
+          <Text style={styles.emptyText}>No other competitors yet</Text>
+          <Text style={styles.emptySubtext}>Other sailors will appear here when they register</Text>
         </View>
       ) : (
         <>

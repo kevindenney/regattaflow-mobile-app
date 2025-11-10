@@ -46,15 +46,25 @@ export default function FleetOverviewScreen() {
   const [leavingFleetId, setLeavingFleetId] = useState<string | null>(null);
   const [pendingHighlightFleetId, setPendingHighlightFleetId] = useState<string | null>(null);
 
-  logger.debug('[FleetOverview] Component render - user:', user?.id);
+  const componentRenderTime = Date.now();
+  logger.debug(`[FleetOverview] ========== COMPONENT RENDER at ${new Date().toISOString()} ==========`);
+  logger.debug('[FleetOverview] Component render timestamp:', componentRenderTime);
+  logger.debug('[FleetOverview] User ID:', user?.id);
 
   const { fleets, loading: fleetsLoading, refresh: refreshFleets } = useUserFleets(user?.id);
-  logger.debug('[FleetOverview] After useUserFleets:', { fleetsCount: fleets.length, fleetsLoading });
+  logger.debug('[FleetOverview] After useUserFleets hook:');
+  logger.debug('[FleetOverview]   - Fleets count:', fleets.length);
+  logger.debug('[FleetOverview]   - Loading state:', fleetsLoading);
+  logger.debug('[FleetOverview]   - Fleet IDs:', fleets.map(f => f.fleet.id));
+  logger.debug('[FleetOverview]   - Fleet names:', fleets.map(f => f.fleet.name));
 
   // Refresh fleets when screen comes into focus (after returning from select screen)
   useFocusEffect(
     React.useCallback(() => {
-      logger.debug('[FleetOverview] useFocusEffect triggered - refreshing fleets');
+      const focusTime = Date.now();
+      logger.debug('[FleetOverview] ========== SCREEN FOCUSED ==========');
+      logger.debug('[FleetOverview] Focus timestamp:', focusTime);
+      logger.debug('[FleetOverview] Calling refreshFleets()...');
       refreshFleets();
     }, [refreshFleets])
   );
@@ -100,6 +110,29 @@ export default function FleetOverviewScreen() {
     [suggestions, membershipFleetIds]
   );
   const summaryFleet = overview?.fleet ?? activeFleet ?? null;
+  const nextSharedRace = useMemo(() => {
+    if (!sharedRaces.length) {
+      return null;
+    }
+
+    const sorted = [...sharedRaces].sort((a, b) => {
+      const aTime = a.startTime ? new Date(a.startTime).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.startTime ? new Date(b.startTime).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    });
+
+    return sorted[0] ?? null;
+  }, [sharedRaces]);
+
+  const nextRaceCountdown = useMemo(
+    () => (nextSharedRace?.startTime ? formatRaceCountdown(nextSharedRace.startTime) : null),
+    [nextSharedRace?.startTime]
+  );
+
+  const recentResultPosts = useMemo(
+    () => posts.filter(post => post.postType === 'race_result').slice(0, 3),
+    [posts]
+  );
 
   const handleCreatePost = async (params: { postType: any; content: string }) => {
     await createPost(params);
@@ -184,6 +217,14 @@ export default function FleetOverviewScreen() {
     );
   }, [handleLeaveFleetConfirmed]);
 
+  const handleOpenRaces = useCallback(() => {
+    router.push('/(tabs)/races');
+  }, [router]);
+
+  const handleShareResult = useCallback(() => {
+    setShowPostComposer(true);
+  }, []);
+
   // Memoized handlers for posts
   const handleLike = useCallback((postId: string, isLiked: boolean) => {
     if (isLiked) {
@@ -249,9 +290,23 @@ export default function FleetOverviewScreen() {
   }, [overview?.fleet]);
 
   const shouldShowEmpty = !fleetsLoading && (!fleets.length || !activeFleet);
-  logger.debug('[FleetOverview] Empty state check:', { shouldShowEmpty, fleetsLoading });
+  const racesEmptyMessage = summaryFleet?.name
+    ? `No upcoming races shared for ${summaryFleet.name} yet. Add race days from the Races tab.`
+    : 'No upcoming races shared yet. Add race days from the Races tab.';
+  const coursesEmptyMessage = summaryFleet?.name
+    ? `No favorite courses saved for ${summaryFleet.name}. Save one from the Course Library to surface it here.`
+    : 'No shared courses yet. Save a course from the Course Library to surface it here.';
+  logger.debug('[FleetOverview] ========== EMPTY STATE CHECK ==========');
+  logger.debug('[FleetOverview] Should show empty:', shouldShowEmpty);
+  logger.debug('[FleetOverview] Fleets loading:', fleetsLoading);
+  logger.debug('[FleetOverview] Fleets length:', fleets.length);
+  logger.debug('[FleetOverview] Active fleet exists:', !!activeFleet);
+  logger.debug('[FleetOverview] Active fleet:', activeFleet);
 
   if (shouldShowEmpty) {
+    logger.debug('[FleetOverview] ========== RENDERING EMPTY STATE ==========');
+    logger.debug('[FleetOverview] Empty state render timestamp:', Date.now());
+    logger.debug('[FleetOverview] Reason: fleetsLoading=', fleetsLoading, ', fleets.length=', fleets.length, ', activeFleet=', activeFleet);
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.emptyStateContent}>
         <View style={styles.heroBanner}>
@@ -457,6 +512,28 @@ export default function FleetOverviewScreen() {
       </DashboardSection>
 
       <DashboardSection
+        title="Race Prep"
+        subtitle="Upcoming starts and latest results for this fleet"
+        showBorder={false}
+      >
+        <View style={styles.racePrepGrid}>
+          <NextRaceCard
+            fleetName={summaryFleet?.name}
+            race={nextSharedRace}
+            countdown={nextRaceCountdown}
+            loading={sharedContentLoading}
+            onOpenSchedule={handleOpenRaces}
+            onShareUpdate={() => setShowPostComposer(true)}
+          />
+          <ResultsColumn
+            posts={recentResultPosts}
+            loading={postsLoading}
+            onShareResult={handleShareResult}
+          />
+        </View>
+      </DashboardSection>
+
+      <DashboardSection
         title="Shared Resources"
         subtitle="Fleet documents, guides, and playbooks"
         showBorder={false}
@@ -468,7 +545,9 @@ export default function FleetOverviewScreen() {
         {resourcesLoading && <Text style={styles.placeholderText}>Loading documents…</Text>}
         {!resourcesLoading && resources.length === 0 && (
           <Text style={styles.placeholderText}>
-            No documents yet. Upload tuning guides, NOR/SSI, or debrief notes to get started.
+            {summaryFleet?.name
+              ? `No documents have been shared with ${summaryFleet.name} yet. Upload tuning guides, NOR/SSI, or debrief notes to get started.`
+              : 'No documents yet. Upload tuning guides, NOR/SSI, or debrief notes to get started.'}
           </Text>
         )}
         {!resourcesLoading && resources.length > 0 && (
@@ -491,7 +570,7 @@ export default function FleetOverviewScreen() {
             loading={sharedContentLoading}
             items={sharedRaces}
             renderItem={race => <RaceCard key={race.id} race={race} />}
-            emptyMessage="No upcoming races shared yet. Add race days from the Races tab."
+            emptyMessage={racesEmptyMessage}
           />
           <PlanningColumn
             title="Favorite courses"
@@ -499,7 +578,7 @@ export default function FleetOverviewScreen() {
             loading={sharedContentLoading}
             items={sharedCourses}
             renderItem={course => <CourseCard key={course.id} course={course} />}
-            emptyMessage="No shared courses yet. Save a course from the Course Library to surface it here."
+            emptyMessage={coursesEmptyMessage}
           />
         </View>
       </DashboardSection>
@@ -910,6 +989,146 @@ const FleetSuggestionCard = ({
   </View>
 );
 
+interface NextRaceCardProps {
+  fleetName?: string;
+  race: FleetRaceSummary | null;
+  countdown: string | null;
+  loading: boolean;
+  onOpenSchedule: () => void;
+  onShareUpdate: () => void;
+}
+
+const NextRaceCard = ({
+  fleetName,
+  race,
+  countdown,
+  loading,
+  onOpenSchedule,
+  onShareUpdate,
+}: NextRaceCardProps) => {
+  if (loading) {
+    return (
+      <View style={styles.nextRaceCard}>
+        <Text style={styles.placeholderText}>Loading next start…</Text>
+      </View>
+    );
+  }
+
+  if (!race) {
+    return (
+      <View style={styles.nextRaceCard}>
+        <Text style={styles.nextRaceTitle}>No races on the board</Text>
+        <Text style={styles.nextRaceMeta}>
+          {fleetName
+            ? `Share the next start for ${fleetName} so your crew can prep together.`
+            : 'Share your next start so the fleet can prep together.'}
+        </Text>
+        <View style={styles.nextRaceActions}>
+          <TouchableOpacity style={styles.summaryAction} onPress={onShareUpdate}>
+            <MaterialCommunityIcons name="flag-plus" size={18} color="#2563EB" />
+            <Text style={styles.summaryActionText}>Share update</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.nextRacePrimary} onPress={onOpenSchedule}>
+            <Text style={styles.nextRacePrimaryText}>Open races</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.nextRaceCard}>
+      <View style={styles.nextRaceHeader}>
+        <MaterialCommunityIcons name="flag-checkered" size={20} color="#2563EB" />
+        <Text style={styles.nextRaceLabel}>Next start</Text>
+      </View>
+      <Text style={styles.nextRaceTitle} numberOfLines={2}>
+        {race.raceName}
+      </Text>
+      <Text style={styles.nextRaceMeta}>{formatRaceDateTime(race.startTime)}</Text>
+      {race.venueName && (
+        <Text style={styles.nextRaceVenue}>{race.venueName}</Text>
+      )}
+      <View style={styles.nextRaceCountdownRow}>
+        <View style={styles.nextRaceCountdownPill}>
+          <MaterialCommunityIcons name="timer-outline" size={16} color="#0F172A" />
+          <Text style={styles.nextRaceCountdownText}>{countdown ?? 'Soon'}</Text>
+        </View>
+        {race.raceSeries && (
+          <Text style={styles.nextRaceSeries}>{race.raceSeries}</Text>
+        )}
+      </View>
+      <View style={styles.nextRaceActions}>
+        <TouchableOpacity style={styles.summaryAction} onPress={onShareUpdate}>
+          <MaterialCommunityIcons name="note-text-outline" size={18} color="#2563EB" />
+          <Text style={styles.summaryActionText}>Post briefing</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.nextRacePrimary} onPress={onOpenSchedule}>
+          <Text style={styles.nextRacePrimaryText}>View schedule</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+interface ResultsColumnProps {
+  posts: FleetPost[];
+  loading: boolean;
+  onShareResult: () => void;
+}
+
+const ResultsColumn = ({ posts, loading, onShareResult }: ResultsColumnProps) => (
+  <View style={styles.resultsColumn}>
+    <View style={styles.resultsHeader}>
+      <View style={styles.resultsHeaderText}>
+        <Text style={styles.resultsTitle}>Recent results</Text>
+        <Text style={styles.resultsSubtitle}>Highlights shared by the fleet</Text>
+      </View>
+      <TouchableOpacity style={styles.resultsShareButton} onPress={onShareResult}>
+        <MaterialCommunityIcons name="trophy-outline" size={16} color="#2563EB" />
+        <Text style={styles.resultsShareText}>Share result</Text>
+      </TouchableOpacity>
+    </View>
+    {loading && <Text style={styles.placeholderText}>Loading results…</Text>}
+    {!loading && posts.length === 0 && (
+      <Text style={styles.placeholderText}>
+        No race recaps yet. Post finishes or lessons learned after the next start.
+      </Text>
+    )}
+    {!loading && posts.length > 0 && (
+      <View style={styles.resultsList}>
+        {posts.map(post => (
+          <ResultPostCard key={post.id} post={post} />
+        ))}
+      </View>
+    )}
+  </View>
+);
+
+const ResultPostCard = ({ post }: { post: FleetPost }) => (
+  <View style={styles.resultCard}>
+    <View style={styles.resultCardHeader}>
+      <MaterialCommunityIcons name="trophy" size={18} color="#F97316" />
+      <Text style={styles.resultAuthor}>{post.author?.name ?? 'Fleet member'}</Text>
+      <Text style={styles.resultDate}>{formatRelativeDate(post.createdAt)}</Text>
+    </View>
+    {post.content && (
+      <Text style={styles.resultContent} numberOfLines={3}>
+        {post.content}
+      </Text>
+    )}
+    {post.metadata?.finish_position && (
+      <View style={styles.resultMetaRow}>
+        <InfoPill
+          icon="medal"
+          text={`Finish: ${post.metadata.finish_position}/${post.metadata.fleet_size ?? '—'}`}
+          highlight
+        />
+      </View>
+    )}
+  </View>
+);
+
 const BenefitRow = ({ icon, label, description }: { icon: string; label: string; description: string }) => (
   <View style={styles.benefitRow}>
     <MaterialCommunityIcons name={icon as any} size={22} color="#2563EB" />
@@ -919,6 +1138,54 @@ const BenefitRow = ({ icon, label, description }: { icon: string; label: string;
     </View>
   </View>
 );
+
+const formatRaceDateTime = (iso?: string | null) => {
+  if (!iso) {
+    return 'Timing TBA';
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'Timing TBA';
+  }
+
+  return date.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const formatRaceCountdown = (iso: string) => {
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return null;
+
+  const diff = target - Date.now();
+  if (diff <= 0) return 'In progress';
+
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  const days = Math.floor(diff / day);
+  const hours = Math.floor((diff % day) / hour);
+  const minutes = Math.floor((diff % hour) / minute);
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${Math.max(minutes, 1)}m`;
+};
+
+const formatRelativeDate = (iso: string) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -1233,6 +1500,161 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#475569',
+  },
+  racePrepGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  nextRaceCard: {
+    flex: 1,
+    minWidth: '48%',
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+  },
+  nextRaceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nextRaceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#BFDBFE',
+    textTransform: 'uppercase',
+  },
+  nextRaceTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  nextRaceMeta: {
+    fontSize: 14,
+    color: '#E2E8F0',
+  },
+  nextRaceVenue: {
+    fontSize: 13,
+    color: '#7DD3FC',
+  },
+  nextRaceCountdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  nextRaceCountdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FACC15',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  nextRaceCountdownText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  nextRaceSeries: {
+    fontSize: 12,
+    color: '#CBD5F5',
+  },
+  nextRaceActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  nextRacePrimary: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  nextRacePrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  resultsColumn: {
+    flex: 1,
+    minWidth: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    gap: 12,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  resultsHeaderText: {
+    flex: 1,
+  },
+  resultsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  resultsSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  resultsShareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  resultsShareText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  resultsList: {
+    gap: 10,
+  },
+  resultCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  resultCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  resultAuthor: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E293B',
+    flex: 1,
+  },
+  resultDate: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  resultContent: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  resultMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   planningGrid: {
     flexDirection: 'row',

@@ -15,9 +15,9 @@ export interface DefaultTuningGuideDefinition {
   sections: ExtractedSection[];
 }
 
-type DefaultGuideLibrary = Record<string, DefaultTuningGuideDefinition[]>;
+export type DefaultGuideLibrary = Record<string, DefaultTuningGuideDefinition[]>;
 
-const DEFAULT_GUIDES: DefaultGuideLibrary = {
+export const DEFAULT_GUIDES: DefaultGuideLibrary = {
   dragon: [
     {
       title: 'Dragon Class European Trim Reference',
@@ -274,4 +274,8 @@ export function getDefaultGuidesForClass(className?: string | null): DefaultTuni
   const aliasKey = CLASS_ALIASES[normalized] || normalized;
 
   return DEFAULT_GUIDES[aliasKey] || [];
+}
+
+export function getAllDefaultTuningGuides(): DefaultGuideLibrary {
+  return DEFAULT_GUIDES;
 }

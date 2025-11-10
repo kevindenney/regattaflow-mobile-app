@@ -6,44 +6,14 @@
  * Always visible at top, shows racing area, marks, and overlays
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
-import type { EnvironmentalIntelligence, WeatherForecast } from '@/types/raceEvents';
-import { useRaceWeather } from '@/hooks/useRaceWeather';
-
-function detectRegionFromCoordinates(lat: number, lng: number): string {
-  if (lat >= 22 && lat <= 23 && lng >= 113.5 && lng <= 114.5) {
-    return 'asia-pacific';
-  }
-  if (lat >= 25 && lat <= 50 && lng >= -130 && lng <= -65) {
-    return 'north-america';
-  }
-  if (lat >= 35 && lat <= 70 && lng >= -10 && lng <= 40) {
-    return 'europe';
-  }
-  if (lat >= 30 && lat <= 46 && lng >= 129 && lng <= 146) {
-    return 'asia-pacific';
-  }
-  if (lat >= -45 && lat <= -10 && lng >= 110 && lng <= 180) {
-    return 'asia-pacific';
-  }
-  return 'global';
-}
 
 interface LatLng {
   lat: number;
   lng: number;
-}
-
-interface CourseMark {
-  id: string;
-  mark_name: string;
-  mark_type: string;
-  latitude?: number;
-  longitude?: number;
-  sequence_order?: number;
 }
 
 interface RaceEvent {
@@ -64,15 +34,9 @@ interface RaceEvent {
 interface RaceDetailMapHeroProps {
   race: RaceEvent;
   racingAreaPolygon?: LatLng[];
-  marks: CourseMark[];
-  compact?: boolean; // Shrink on scroll
-  onFullscreen?: () => void;
-  onRacingAreaChange?: (polygon: LatLng[]) => void; // Called when racing area is drawn/edited
-  onSaveRacingArea?: () => void; // Called when user confirms save
-  onMarkAdded?: (mark: Omit<CourseMark, 'id'>) => void; // Called when new mark is placed
-  onMarkUpdated?: (mark: CourseMark) => void; // Called when mark is moved
-  onMarkDeleted?: (markId: string) => void; // Called when mark is deleted
-  onMarksBulkUpdate?: (marks: CourseMark[]) => Promise<void> | void; // Called when course-wide transforms are applied
+  compact?: boolean;
+  onRacingAreaChange?: (polygon: LatLng[]) => void;
+  onSaveRacingArea?: () => void;
 }
 
 const MARK_TYPES: Array<{
@@ -256,184 +220,14 @@ function generateSampleEnvironmentalData(venue?: { coordinates_lat?: number; coo
 export function RaceDetailMapHero({
   race,
   racingAreaPolygon,
-  marks,
   compact = false,
-  onFullscreen,
   onRacingAreaChange,
   onSaveRacingArea,
-  onMarkAdded,
-  onMarkUpdated,
-  onMarkDeleted,
-  onMarksBulkUpdate,
 }: RaceDetailMapHeroProps) {
-  const [mapView, setMapView] = useState<'2d' | '3d'>('3d');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [currentPointCount, setCurrentPointCount] = useState(0);
   const [currentPoints, setCurrentPoints] = useState<LatLng[]>([]);
-  const [mapKey, setMapKey] = useState(0); // Force map reset
-  const [toggle2D3DTrigger, setToggle2D3DTrigger] = useState(0); // Trigger for map 2D/3D toggle
-  const [orientToWindTrigger, setOrientToWindTrigger] = useState(0); // Trigger for wind orientation
 
-  // Mark management state
-  const [isAddingMark, setIsAddingMark] = useState(false);
-  const [selectedMarkType, setSelectedMarkType] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [showLayerPanel, setShowLayerPanel] = useState(false);
-  const [showMarkTypeModal, setShowMarkTypeModal] = useState(false);
-  const [editableMarks, setEditableMarks] = useState<CourseMark[]>(marks);
-  const [hasPendingCourseTransform, setHasPendingCourseTransform] = useState(false);
-  const [isApplyingCourseTransform, setIsApplyingCourseTransform] = useState(false);
-
-  useEffect(() => {
-    setEditableMarks(marks);
-    setHasPendingCourseTransform(false);
-  }, [marks]);
-
-  const getMarkCoordinates = (mark: CourseMark) => {
-    const lat =
-      typeof (mark as any).latitude === 'number'
-        ? (mark as any).latitude
-        : typeof (mark as any).coordinates_lat === 'number'
-        ? (mark as any).coordinates_lat
-        : 0;
-    const lng =
-      typeof (mark as any).longitude === 'number'
-        ? (mark as any).longitude
-        : typeof (mark as any).coordinates_lng === 'number'
-        ? (mark as any).coordinates_lng
-        : 0;
-    return { lat, lng };
-  };
-
-  const updateMarkCoordinates = (mark: CourseMark, lat: number, lng: number): CourseMark => ({
-    ...mark,
-    latitude: lat,
-    longitude: lng,
-    coordinates_lat: lat,
-    coordinates_lng: lng,
-  } as any);
-
-  const courseCenter = useMemo(() => {
-    if (!editableMarks || editableMarks.length === 0) {
-      return null;
-    }
-
-    const sum = editableMarks.reduce(
-      (acc, mark) => {
-        const { lat, lng } = getMarkCoordinates(mark);
-        return {
-          lat: acc.lat + lat,
-          lng: acc.lng + lng,
-        };
-      },
-      { lat: 0, lng: 0 }
-    );
-
-    return {
-      lat: sum.lat / editableMarks.length,
-      lng: sum.lng / editableMarks.length,
-    };
-  }, [editableMarks]);
-
-  const DEG_TO_RAD = Math.PI / 180;
-  const METERS_PER_DEG_LAT = 111_320;
-  const NUDGE_DISTANCE_METERS = 150;
-  const SCALE_STEP_SMALL = 0.9;
-  const SCALE_STEP_LARGE = 1.1;
-  const ROTATION_STEP_DEGREES = 10;
-  const transformsDisabled = !courseCenter;
-
-  const applyTransform = (
-    transform: (
-      coords: { lat: number; lng: number },
-      center: { lat: number; lng: number },
-      mark: CourseMark
-    ) => { lat: number; lng: number }
-  ) => {
-    if (!courseCenter) {
-      return;
-    }
-
-    setEditableMarks(prev =>
-      prev.map(mark => {
-        const coords = getMarkCoordinates(mark);
-        const result = transform(coords, courseCenter, mark);
-        return updateMarkCoordinates(mark, result.lat, result.lng);
-      })
-    );
-    setHasPendingCourseTransform(true);
-  };
-
-  const moveCourse = (eastMeters: number, northMeters: number) => {
-    if (!courseCenter) return;
-    const latDelta = northMeters / METERS_PER_DEG_LAT;
-    const lngDelta =
-      eastMeters / (METERS_PER_DEG_LAT * Math.max(Math.cos(courseCenter.lat * DEG_TO_RAD), 0.2));
-
-    applyTransform(({ lat, lng }) => {
-      return {
-        lat: lat + latDelta,
-        lng: lng + lngDelta,
-      };
-    });
-  };
-
-  const scaleCourse = (factor: number) => {
-    if (!courseCenter) return;
-    const cosLat = Math.max(Math.cos(courseCenter.lat * DEG_TO_RAD), 0.2);
-
-    applyTransform(({ lat, lng }) => {
-      const x = (lng - courseCenter.lng) * cosLat;
-      const y = lat - courseCenter.lat;
-      const newX = x * factor;
-      const newY = y * factor;
-      return {
-        lat: courseCenter.lat + newY,
-        lng: courseCenter.lng + newX / cosLat,
-      };
-    });
-  };
-
-  const rotateCourse = (degrees: number) => {
-    if (!courseCenter) return;
-    const cosLat = Math.max(Math.cos(courseCenter.lat * DEG_TO_RAD), 0.2);
-    const radians = (degrees * Math.PI) / 180;
-    const sin = Math.sin(radians);
-    const cos = Math.cos(radians);
-
-    applyTransform(({ lat, lng }) => {
-      const x = (lng - courseCenter.lng) * cosLat;
-      const y = lat - courseCenter.lat;
-      const rotatedX = x * cos - y * sin;
-      const rotatedY = x * sin + y * cos;
-      return {
-        lat: courseCenter.lat + rotatedY,
-        lng: courseCenter.lng + rotatedX / cosLat,
-      };
-    });
-  };
-
-  const resetCourseEdits = () => {
-    setEditableMarks(marks);
-    setHasPendingCourseTransform(false);
-  };
-
-  const handleApplyCourseChanges = async () => {
-    if (!onMarksBulkUpdate) {
-      setHasPendingCourseTransform(false);
-      setEditableMarks(marks);
-      return;
-    }
-    try {
-      setIsApplyingCourseTransform(true);
-      await onMarksBulkUpdate(editableMarks);
-      setHasPendingCourseTransform(false);
-    } catch (error) {
-      console.error('[RaceDetailMapHero] Failed to save course changes', error);
-    } finally {
-      setIsApplyingCourseTransform(false);
-    }
-  };
 
   // Get racing area from race object or prop
   const racingArea = racingAreaPolygon ||
@@ -460,96 +254,31 @@ export function RaceDetailMapHero({
     ? racingAreaCentroid
     : { lat: 22.2650, lng: 114.2620 }; // Default: Clearwater Bay
 
-  const venueForWeather = useMemo(() => {
-    if (racingAreaCentroid) {
-      const { lat, lng } = racingAreaCentroid;
-      return {
-        id: `race-area-${race.id}`,
-        name: race.venue?.name
-          ? `${race.venue.name} Race Area`
-          : 'Race Area',
-        coordinates: {
-          latitude: lat,
-          longitude: lng,
-        },
-        region: detectRegionFromCoordinates(lat, lng),
-        country: 'Unknown',
-      };
-    }
-
-    if (race.venue?.coordinates_lat && race.venue?.coordinates_lng) {
-      const lat = race.venue.coordinates_lat;
-      const lng = race.venue.coordinates_lng;
-      return {
-        id: `venue-${lat}-${lng}`,
-        name: race.venue.name || 'Race Venue',
-        coordinates: {
-          latitude: lat,
-          longitude: lng,
-        },
-        region: detectRegionFromCoordinates(lat, lng),
-        country: 'Unknown',
-      };
-    }
-
-    return null;
-  }, [
-    racingAreaCentroid?.lat,
-    racingAreaCentroid?.lng,
-    race.id,
-    race.venue?.coordinates_lat,
-    race.venue?.coordinates_lng,
-    race.venue?.name,
-  ]);
-
-  const { weather, loading: weatherLoading, error: weatherError } = useRaceWeather(
-    venueForWeather as any,
-    race.start_time
-  );
-
-  // Generate environmental data from real weather or fallback to sample
-  const environmental = useMemo(() => {
-    if (weather && !weatherError) {
-      return transformWeatherToEnvironmental(weather, race);
-    }
-
-    const fallbackVenue = racingAreaCentroid
-      ? { coordinates_lat: racingAreaCentroid.lat, coordinates_lng: racingAreaCentroid.lng }
-      : race.venue;
-
-    return generateSampleEnvironmentalData(fallbackVenue);
-  }, [weather, weatherError, racingAreaCentroid, race.venue]);
 
   // Quick stats
   const daysUntil = race.start_time
     ? Math.ceil((new Date(race.start_time).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
   const boatClass = race.boat_class?.name || 'Class TBD';
-  const markCount = editableMarks.length;
 
   // Handle racing area selection from TacticalRaceMap
-  const handleRacingAreaSelected = (coordinates: [number, number][]) => {
+  const handleRacingAreaSelected = useCallback((coordinates: [number, number][]) => {
     const polygon = coordinates.map(coord => ({
       lat: coord[1],
       lng: coord[0]
     }));
     setCurrentPoints(polygon);
     onRacingAreaChange?.(polygon);
-  };
+  }, [onRacingAreaChange]);
 
   // Handle point count updates
-  const handlePointsChanged = (count: number) => {
+  const handlePointsChanged = useCallback((count: number) => {
     setCurrentPointCount(count);
-  };
+  }, []);
 
-  useEffect(() => {
-    if (isDrawingMode && showLayerPanel) {
-      setShowLayerPanel(false);
-    }
-  }, [isDrawingMode, showLayerPanel]);
 
   // Undo last point
-  const handleUndoPoint = () => {
+  const handleUndoPoint = useCallback(() => {
     if (currentPoints.length > 0) {
       const updatedPoints = currentPoints.slice(0, -1);
       setCurrentPoints(updatedPoints);
@@ -558,28 +287,26 @@ export function RaceDetailMapHero({
       // Don't reset map key - TacticalRaceMap can handle updates without remounting
       // setMapKey(prev => prev + 1);
     }
-  };
+  }, [currentPoints, onRacingAreaChange]);
 
   // Clear all points
-  const handleClearPoints = () => {
+  const handleClearPoints = useCallback(() => {
 
     setCurrentPoints([]);
     setCurrentPointCount(0);
     onRacingAreaChange?.([]);
     // Don't reset map key - just let the sync handle it
     // setMapKey(prev => prev + 1);
-  };
+  }, [onRacingAreaChange]);
 
   // Toggle drawing mode
   const handleEditCourse = () => {
     // Load existing racing area into editable state so user can modify it
     if (racingArea.length > 0 && currentPoints.length === 0) {
-
       setCurrentPoints(racingArea);
       setCurrentPointCount(racingArea.length);
       onRacingAreaChange?.(racingArea);
     }
-    setShowLayerPanel(false);
     setIsDrawingMode(true);
   };
 
@@ -604,110 +331,6 @@ export function RaceDetailMapHero({
     onSaveRacingArea?.();
   };
 
-  // Mark management handlers
-  const handleAddMark = (markType: string) => {
-
-    setShowLayerPanel(false);
-    setSelectedMarkType(markType);
-    setIsAddingMark(true);
-  };
-
-  const handleMarkAdded = (mark: Omit<CourseMark, 'id'>) => {
-
-    // Exit mark placement mode
-    setIsAddingMark(false);
-    setSelectedMarkType(null);
-    // Notify parent
-    onMarkAdded?.(mark);
-  };
-
-  const handleMarkUpdated = (mark: CourseMark) => {
-    setEditableMarks(prev =>
-      prev.map(existing =>
-        existing.id === mark.id
-          ? updateMarkCoordinates(
-              existing,
-              (mark as any).latitude ?? (mark as any).coordinates_lat ?? 0,
-              (mark as any).longitude ?? (mark as any).coordinates_lng ?? 0
-            )
-          : existing
-      )
-    );
-    // Notify parent immediately for real-time updates
-    onMarkUpdated?.(mark);
-  };
-
-  const handleMarkDeleted = (markId: string) => {
-    setEditableMarks(prev => prev.filter(mark => mark.id !== markId));
-    // Notify parent
-    onMarkDeleted?.(markId);
-  };
-
-  const handleMarkTypeSelect = (markType: string) => {
-    setShowMarkTypeModal(false);
-    handleAddMark(markType);
-  };
-
-  const handleResetView = () => {
-    setShowLayerPanel(false);
-    setIsDrawingMode(false);
-    setCurrentPoints([]);
-    setCurrentPointCount(0);
-    setIsEditMode(false);
-    setIsAddingMark(false);
-    setSelectedMarkType(null);
-    setMapView('2d');
-    setMapKey(prev => prev + 1);
-    setEditableMarks(marks);
-    setHasPendingCourseTransform(false);
-  };
-
-  const renderToolbarButton = ({
-    icon,
-    label,
-    onPress,
-    active = false,
-    disabled = false,
-  }: {
-    icon: string;
-    label: string;
-    onPress: () => void;
-    active?: boolean;
-    disabled?: boolean;
-  }) => (
-    <TouchableOpacity
-      key={label}
-      style={[
-        styles.toolbarButton,
-        active && styles.toolbarButtonActive,
-        disabled && styles.toolbarButtonDisabled,
-      ]}
-      onPress={onPress}
-      activeOpacity={0.85}
-      disabled={disabled}
-    >
-      <MaterialCommunityIcons
-        name={icon as any}
-        size={18}
-        color={
-          disabled
-            ? 'rgba(255, 255, 255, 0.35)'
-            : active
-            ? '#1D4ED8'
-            : '#F8FAFC'
-        }
-      />
-      <Text
-        style={[
-          styles.toolbarButtonLabel,
-          active && styles.toolbarButtonLabelActive,
-          disabled && styles.toolbarButtonLabelDisabled,
-        ]}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
 
   return (
     <View style={[
@@ -720,7 +343,6 @@ export function RaceDetailMapHero({
         compact && styles.mapContainerCompact
       ]}>
         <TacticalRaceMap
-          key={`map-${mapKey}`}
           raceEvent={{
             ...race,
             venue: race.venue || {
@@ -728,249 +350,38 @@ export function RaceDetailMapHero({
               coordinates_lng: mapCenter.lng
             }
           }}
-          marks={editableMarks}
-          environmental={environmental}
+          marks={[]}
           initialRacingArea={
             isDrawingMode
-              ? currentPoints  // When drawing, always use currentPoints (even if empty for "Clear All")
-              : (racingArea.length > 0 ? racingArea : undefined)  // When not drawing, use saved area
+              ? currentPoints
+              : (racingArea.length > 0 ? racingArea : undefined)
           }
           allowAreaSelection={isDrawingMode}
           isDrawing={isDrawingMode}
           onRacingAreaSelected={handleRacingAreaSelected}
           onPointsChanged={handlePointsChanged}
-          showControls={showLayerPanel && !isDrawingMode}
-          toggle2D3D={toggle2D3DTrigger}
-          orientToWind={orientToWindTrigger}
-          isAddingMark={isAddingMark}
-          selectedMarkType={selectedMarkType || undefined}
-          isEditMode={isEditMode}
-          onMarkAdded={handleMarkAdded}
-          onMarkUpdated={handleMarkUpdated}
-          onMarkDeleted={handleMarkDeleted}
+          showControls={false}
+          externalLayers={{ depth: false }}
           racingAreaPolygon={racingArea}
         />
 
-        {/* Map Controls Overlay */}
+        {/* Simple Draw Button */}
         {!isDrawingMode && (
           <View style={styles.toolbarContainer}>
-            {renderToolbarButton({
-              icon: mapView === '3d' ? 'rotate-3d-variant' : 'map',
-              label: mapView === '3d' ? '3D' : '2D',
-              onPress: () => {
-                setMapView(mapView === '2d' ? '3d' : '2d');
-                setToggle2D3DTrigger(prev => prev + 1);
-              },
-              active: mapView === '3d',
-            })}
-
-            {renderToolbarButton({
-              icon: 'layers-triple-outline',
-              label: 'Layers',
-              onPress: () => setShowLayerPanel(prev => !prev),
-              active: showLayerPanel,
-            })}
-
-            {renderToolbarButton({
-              icon: 'compass',
-              label: 'Wind',
-              onPress: () => setOrientToWindTrigger(prev => prev + 1),
-              disabled: !environmental?.current?.wind,
-            })}
-
-            {renderToolbarButton({
-              icon: 'pencil-ruler',
-              label: racingArea.length > 0 ? 'Redraw' : 'Draw',
-              onPress: handleEditCourse,
-            })}
-
-            {renderToolbarButton({
-              icon: isEditMode ? 'cursor-move' : 'cursor-default-outline',
-              label: 'Edit',
-              onPress: () => setIsEditMode(prev => !prev),
-              active: isEditMode,
-            })}
-
-            {renderToolbarButton({
-              icon: 'map-marker-plus',
-              label: 'Mark',
-              onPress: () => {
-                setShowLayerPanel(false);
-                setShowMarkTypeModal(true);
-              },
-            })}
-
-            {renderToolbarButton({
-              icon: 'target-variant',
-              label: 'Reset',
-              onPress: handleResetView,
-            })}
-
-            {onFullscreen &&
-              renderToolbarButton({
-                icon: 'fullscreen',
-                label: 'Expand',
-                onPress: onFullscreen,
-            })}
-          </View>
-        )}
-
-        {isEditMode && !isDrawingMode && (
-          <View style={styles.courseEditPanel}>
-            <Text style={styles.courseEditTitle}>Adjust Course Layout</Text>
-            <Text style={styles.courseEditSubtitle}>
-              Nudge, scale, or rotate all marks together. Apply to save changes.
-            </Text>
-
-            <View style={styles.transformGroup}>
-              <Text style={styles.transformGroupLabel}>Move (≈{NUDGE_DISTANCE_METERS} m)</Text>
-              <View style={styles.transformGrid}>
-                <View style={styles.transformGridRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => moveCourse(0, NUDGE_DISTANCE_METERS)}
-                    accessibilityLabel="Move course north"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="arrow-up" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.transformGridRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => moveCourse(-NUDGE_DISTANCE_METERS, 0)}
-                    accessibilityLabel="Move course west"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="arrow-left" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => moveCourse(NUDGE_DISTANCE_METERS, 0)}
-                    accessibilityLabel="Move course east"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="arrow-right" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.transformGridRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => moveCourse(0, -NUDGE_DISTANCE_METERS)}
-                    accessibilityLabel="Move course south"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="arrow-down" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.transformGroupInline}>
-              <View style={styles.transformGroupColumn}>
-                <Text style={styles.transformGroupLabel}>Scale</Text>
-                <View style={styles.transformInlineButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => scaleCourse(SCALE_STEP_SMALL)}
-                    accessibilityLabel="Scale course down"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="arrow-collapse" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => scaleCourse(SCALE_STEP_LARGE)}
-                    accessibilityLabel="Scale course up"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="arrow-expand" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.transformGroupColumn}>
-                <Text style={styles.transformGroupLabel}>Rotate (±{ROTATION_STEP_DEGREES}°)</Text>
-                <View style={styles.transformInlineButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => rotateCourse(-ROTATION_STEP_DEGREES)}
-                    accessibilityLabel="Rotate course counter clockwise"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="rotate-left" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.transformButton,
-                      transformsDisabled && styles.transformButtonDisabled,
-                    ]}
-                    onPress={() => rotateCourse(ROTATION_STEP_DEGREES)}
-                    accessibilityLabel="Rotate course clockwise"
-                    disabled={transformsDisabled}
-                  >
-                    <MaterialCommunityIcons name="rotate-right" size={18} color="#1E40AF" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.transformFooter}>
-              <Text style={styles.transformHint}>
-                {courseCenter
-              ? `Course center: ${courseCenter.lat.toFixed(4)}°, ${courseCenter.lng.toFixed(4)}°`
-              : 'No marks yet'}
-          </Text>
-          <View style={styles.transformActionRow}>
-            {hasPendingCourseTransform && onMarksBulkUpdate && (
-              <>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.applyButton]}
-                  onPress={handleApplyCourseChanges}
-                  disabled={isApplyingCourseTransform}
-                    >
-                      {isApplyingCourseTransform ? (
-                        <ActivityIndicator size="small" color="#ffffff" />
-                      ) : (
-                        <MaterialCommunityIcons name="content-save" size={16} color="#0F172A" />
-                      )}
-                      <Text style={[styles.actionButtonText, styles.applyButtonText]}>
-                        {isApplyingCourseTransform ? 'Saving…' : 'Apply changes'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.resetButton]}
-                      onPress={resetCourseEdits}
-                      disabled={isApplyingCourseTransform}
-                    >
-                      <MaterialCommunityIcons name="backup-restore" size={16} color="#1E40AF" />
-                      <Text style={[styles.actionButtonText, styles.resetButtonText]}>Reset</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </View>
+            <TouchableOpacity
+              style={styles.toolbarButton}
+              onPress={handleEditCourse}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons
+                name="pencil-ruler"
+                size={18}
+                color="#F8FAFC"
+              />
+              <Text style={styles.toolbarButtonLabel}>
+                {racingArea.length > 0 ? 'Redraw' : 'Draw'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1054,13 +465,6 @@ export function RaceDetailMapHero({
             <Text style={styles.statText}>{boatClass}</Text>
           </View>
 
-          <View style={styles.stat}>
-            <MaterialCommunityIcons name="map-marker-multiple" size={16} color="#64748B" />
-            <Text style={styles.statText}>
-              {markCount === 0 ? 'No marks' : markCount === 1 ? '1 mark' : `${markCount} marks`}
-            </Text>
-          </View>
-
           {racingArea.length > 0 && (
             <View style={styles.stat}>
               <MaterialCommunityIcons name="vector-polygon" size={16} color="#3B82F6" />
@@ -1070,53 +474,6 @@ export function RaceDetailMapHero({
         </View>
       )}
 
-      {/* Mark Manager - Only show when not in drawing mode */}
-      <Modal
-        visible={showMarkTypeModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowMarkTypeModal(false)}
-      >
-        <View style={styles.markModal}>
-          <View style={styles.markModalHeader}>
-            <TouchableOpacity onPress={() => setShowMarkTypeModal(false)}>
-              <MaterialCommunityIcons name="close" size={24} color="#64748B" />
-            </TouchableOpacity>
-            <Text style={styles.markModalTitle}>Add Course Mark</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <View style={styles.markModalInstructions}>
-            <MaterialCommunityIcons name="information" size={20} color="#0066CC" />
-            <Text style={styles.markModalInstructionsText}>
-              Choose a mark type, then tap on the map to place it.
-            </Text>
-          </View>
-
-            <ScrollView style={styles.markList}>
-              {MARK_TYPES.map(markType => (
-                <TouchableOpacity
-                  key={markType.id}
-                  style={styles.markCard}
-                  onPress={() => handleMarkTypeSelect(markType.id)}
-                >
-                  <View style={[styles.markIcon, { backgroundColor: `${markType.color}20` }]}>
-                    <MaterialCommunityIcons
-                      name={markType.icon as any}
-                      size={28}
-                      color={markType.color}
-                    />
-                  </View>
-                  <View style={styles.markInfo}>
-                    <Text style={styles.markName}>{markType.name}</Text>
-                    <Text style={styles.markDescription}>{markType.description}</Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={24} color="#CBD5E1" />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-        </View>
-      </Modal>
     </View>
   );
 }

@@ -15,16 +15,29 @@ export function GluestackUIProvider({
   style?: ViewProps['style'];
 }) {
   const { colorScheme, setColorScheme } = useColorScheme();
+  const resolvedScheme = (
+    mode === 'system' ? colorScheme ?? 'light' : mode
+  ) as Exclude<ModeType, 'system'>;
 
   useEffect(() => {
-    setColorScheme(mode);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+    if (mode === 'system') return;
+    try {
+      setColorScheme(mode);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn(
+          '[GluestackUIProvider]',
+          'Falling back to system color scheme because Tailwind darkMode is not class-based.',
+          error
+        );
+      }
+    }
+  }, [mode, setColorScheme]);
 
   return (
     <View
       style={[
-        config[colorScheme!],
+        config[resolvedScheme],
         // eslint-disable-next-line react-native/no-inline-styles
         { flex: 1, height: '100%', width: '100%' },
         props.style,

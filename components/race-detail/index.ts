@@ -44,6 +44,10 @@ export { UpwindStrategyCard } from './UpwindStrategyCard';
 export { DownwindStrategyCard } from './DownwindStrategyCard';
 export { MarkRoundingCard } from './MarkRoundingCard';
 
+// Strategic Planning & Execution Evaluation
+export { StrategyPlanningCard } from './StrategyPlanningCard';
+export { ExecutionEvaluationCard } from './ExecutionEvaluationCard';
+
 // Map components - NOTE: Import directly from '@/components/race-detail/map' for native apps only
 // react-native-maps doesn't support web, so these are not exported here to avoid bundler errors
 // export * from './map';

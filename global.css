@@ -255,24 +255,3 @@ select[aria-invalid="true"] {
 /* Note: Expo Router debug tabs are now properly hidden via route configuration
    in src/app/(tabs)/_layout.tsx using href: null on development routes.
    No CSS overrides needed. */
-
-/* ============================================
-   TAB BAR SPACING FIX
-   ============================================ */
-
-/* Fix React Native Web tab bar spacing - ensure even distribution */
-[role="tablist"] {
-  display: flex !important;
-  justify-content: space-evenly !important;
-  width: 100% !important;
-}
-
-[role="tablist"] > [role="tab"],
-[role="tablist"] > button[role="tab"] {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-}

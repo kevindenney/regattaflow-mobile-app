@@ -43,14 +43,20 @@ const TimeBlock: React.FC<{ value: number; label: string; compact?: boolean }> =
   value,
   label,
   compact = false,
-}) => (
-  <View style={styles.timeBlock}>
-    <Text style={compact ? styles.timeValueCompact : styles.timeValue}>
-      {String(value).padStart(2, '0')}
-    </Text>
-    <Text style={compact ? styles.timeLabelCompact : styles.timeLabel}>{label}</Text>
-  </View>
-);
+}) => {
+  // Pluralize label based on value (e.g., "1 day" vs "2 days")
+  const singularLabel = label.replace(/S$/, '');
+  const displayLabel = value === 1 ? singularLabel : label;
+
+  return (
+    <View style={styles.timeBlock}>
+      <Text style={compact ? styles.timeValueCompact : styles.timeValue}>
+        {String(value).padStart(2, '0')}
+      </Text>
+      <Text style={compact ? styles.timeLabelCompact : styles.timeLabel}>{displayLabel}</Text>
+    </View>
+  );
+};
 
 export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   targetDate,
@@ -77,15 +83,19 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
 
   return (
     <View style={[styles.timerRow, compact && styles.timerRowCompact]}>
-      {timeLeft.days > 0 && <TimeBlock value={timeLeft.days} label="DAYS" compact={compact} />}
-      {timeLeft.days > 0 && <Text style={styles.separator}>:</Text>}
+      {timeLeft.days > 0 && (
+        <>
+          <TimeBlock value={timeLeft.days} label="DAYS" compact={compact} />
+          <Text style={compact ? styles.separatorCompact : styles.separator}> </Text>
+        </>
+      )}
       <TimeBlock value={timeLeft.hours} label="HRS" compact={compact} />
-      <Text style={styles.separator}>:</Text>
-      <TimeBlock value={timeLeft.minutes} label="MIN" compact={compact} />
+      <Text style={compact ? styles.separatorCompact : styles.separator}> </Text>
+      <TimeBlock value={timeLeft.minutes} label="MINS" compact={compact} />
       {!compact && (
         <>
-          <Text style={styles.separator}>:</Text>
-          <TimeBlock value={timeLeft.seconds} label="SEC" compact={compact} />
+          <Text style={styles.separator}> </Text>
+          <TimeBlock value={timeLeft.seconds} label="SECS" compact={compact} />
         </>
       )}
     </View>
@@ -96,45 +106,59 @@ const styles = StyleSheet.create({
   timerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.xs,
   },
   timerRowCompact: {
-    gap: 2,
+    gap: 3,
   },
   timeBlock: {
     alignItems: 'center',
+    minWidth: 28,
   },
   timeValue: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     color: colors.text.primary,
-    lineHeight: 24,
+    lineHeight: 32,
+    fontVariant: ['tabular-nums'],
   },
   timeValueCompact: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: colors.text.primary,
-    lineHeight: 20,
+    lineHeight: 24,
+    fontVariant: ['tabular-nums'],
   },
   timeLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.text.tertiary,
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  timeLabelCompact: {
     fontSize: 7,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text.tertiary,
     letterSpacing: 0.3,
     marginTop: 1,
-  },
-  timeLabelCompact: {
-    fontSize: 6,
-    fontWeight: '600',
-    color: colors.text.tertiary,
-    letterSpacing: 0.2,
-    marginTop: 1,
+    textTransform: 'uppercase',
   },
   separator: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '300',
     color: colors.text.tertiary,
-    marginTop: -10,
+    opacity: 0.3,
+    marginHorizontal: 2,
+  },
+  separatorCompact: {
+    fontSize: 16,
+    fontWeight: '300',
+    color: colors.text.tertiary,
+    opacity: 0.3,
+    marginHorizontal: 1,
   },
   startedContainer: {
     paddingVertical: Spacing.xs,
