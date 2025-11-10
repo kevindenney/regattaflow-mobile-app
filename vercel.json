@@ -3,14 +3,5 @@
     "api/**/*.ts": {
       "runtime": "nodejs20.x"
     }
-  },
-  "cron": [
-    {
-      "path": "/api/ai/cron/daily-summary",
-      "schedule": "0 8 * * *",
-      "headers": {
-        "x-cron-secret": "@cron_secret"
-      }
-    }
-  ]
+  }
 }
