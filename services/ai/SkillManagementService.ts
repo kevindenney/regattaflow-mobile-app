@@ -558,6 +558,10 @@ export class SkillManagementService {
   private readonly CACHE_KEY = '@regattaflow:claude_skills_cache';
   private initialized = false;
   private readonly EDGE_FUNCTION_URL: string;
+  private remoteSkillProxyEnabled: boolean;
+  private remoteSkillDisableReason: string | null = null;
+  private remoteSkillNoticeLogged = false;
+  private loggedSkipForSkill = new Set<string>();
 
   constructor() {
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -566,6 +570,19 @@ export class SkillManagementService {
       this.EDGE_FUNCTION_URL = '';
     } else {
       this.EDGE_FUNCTION_URL = `${supabaseUrl}/functions/v1/anthropic-skills-proxy`;
+    }
+
+    const disableViaEnv =
+      (process.env.EXPO_PUBLIC_DISABLE_REMOTE_SKILLS ?? '').toLowerCase() === 'true';
+
+    if (disableViaEnv) {
+      this.remoteSkillProxyEnabled = false;
+      this.remoteSkillDisableReason = 'Disabled via EXPO_PUBLIC_DISABLE_REMOTE_SKILLS';
+    } else if (!this.EDGE_FUNCTION_URL) {
+      this.remoteSkillProxyEnabled = false;
+      this.remoteSkillDisableReason = 'No Supabase Edge Function URL configured';
+    } else {
+      this.remoteSkillProxyEnabled = true;
     }
 
     // Don't load cache on construction - do it lazily
@@ -589,8 +606,8 @@ export class SkillManagementService {
    * Call the Anthropic Skills proxy Edge Function
    */
   private async callSkillsProxy(action: string, params: Record<string, any> = {}): Promise<any> {
-    if (!this.EDGE_FUNCTION_URL) {
-      throw new Error('Supabase URL not configured');
+    if (!this.remoteSkillProxyEnabled) {
+      throw new Error(this.remoteSkillDisableReason || 'Skill proxy disabled');
     }
 
     // Get Supabase credentials for authentication
@@ -606,18 +623,43 @@ export class SkillManagementService {
       headers['Authorization'] = `Bearer ${supabaseAnonKey}`;
     }
 
-    const response = await fetch(this.EDGE_FUNCTION_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ action, ...params }),
-    });
+    try {
+      const response = await fetch(this.EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action, ...params }),
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        const normalizedMessage = errorMessage.toLowerCase();
+
+        if (
+          response.status === 404 ||
+          /not\s+found/i.test(errorMessage) ||
+          normalizedMessage.includes('function not found')
+        ) {
+          this.disableRemoteSkills('Skill proxy edge function not deployed on this Supabase project');
+        } else if (response.status === 401 || response.status === 403) {
+          this.disableRemoteSkills('Skill proxy access denied (check Supabase anon key permissions)');
+        } else if (response.status >= 500) {
+          this.disableRemoteSkills(
+            `Skill proxy returned server error (HTTP ${response.status}). Check Supabase Edge Function logs.`
+          );
+        }
+
+        throw new Error(`Anthropic API error: ${errorMessage}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      if (error?.message?.includes('Failed to fetch') ||
+          error?.message?.includes('Network request failed')) {
+        this.disableRemoteSkills('Skill proxy unreachable (offline or blocked network)', error);
+      }
+      throw error;
     }
-
-    return await response.json();
   }
 
   /**
@@ -633,6 +675,11 @@ export class SkillManagementService {
     content: string
   ): Promise<string | null> {
     await this.ensureInitialized();
+
+    if (!this.remoteSkillProxyEnabled) {
+      this.logRemoteSkillsDisabled();
+      return null;
+    }
 
     try {
       logger.debug(`Uploading skill '${name}'`);
@@ -719,6 +766,11 @@ export class SkillManagementService {
   async listSkills(): Promise<SkillMetadata[]> {
     await this.ensureInitialized();
 
+    if (!this.remoteSkillProxyEnabled) {
+      this.logRemoteSkillsDisabled();
+      return Array.from(this.skillCache.values());
+    }
+
     try {
       logger.debug('Listing all skills via proxy');
 
@@ -763,8 +815,11 @@ export class SkillManagementService {
 
       return Array.from(this.skillCache.values());
     } catch (error) {
-      logger.error('Failed to list skills:', error);
-
+      if (this.remoteSkillProxyEnabled) {
+        logger.error('Failed to list skills:', error);
+      } else {
+        this.logRemoteSkillsDisabled();
+      }
       // Return cached skills as fallback
       return Array.from(this.skillCache.values());
     }
@@ -780,6 +835,11 @@ export class SkillManagementService {
     const cached = this.skillCache.get(name);
     if (cached) {
       return cached.id;
+    }
+
+    if (!this.remoteSkillProxyEnabled) {
+      this.logRemoteSkillsDisabled();
+      return null;
     }
 
     // Fetch from API
@@ -846,6 +906,12 @@ export class SkillManagementService {
 
   private async initializeSkillInternal(skillKey: BuiltInSkillKey): Promise<string | null> {
     await this.ensureInitialized();
+
+    if (!this.remoteSkillProxyEnabled) {
+      this.logRemoteSkillsDisabled();
+      this.logSkipForSkill(skillKey);
+      return null;
+    }
 
     try {
       const definition = BUILT_IN_SKILL_DEFINITIONS[skillKey];
@@ -961,6 +1027,37 @@ export class SkillManagementService {
    */
   static getBuiltInSkillNames(): string[] {
     return Object.keys(BUILT_IN_SKILL_DEFINITIONS);
+  }
+
+  private disableRemoteSkills(reason: string, error?: unknown) {
+    if (!this.remoteSkillProxyEnabled) {
+      return;
+    }
+    this.remoteSkillProxyEnabled = false;
+    this.remoteSkillDisableReason = reason;
+    if (error) {
+      logger.warn(`${reason} - disabling Claude skill proxy for this session`, error);
+    } else {
+      logger.warn(`${reason} - disabling Claude skill proxy for this session`);
+    }
+  }
+
+  private logRemoteSkillsDisabled() {
+    if (this.remoteSkillNoticeLogged) {
+      return;
+    }
+    this.remoteSkillNoticeLogged = true;
+    const reason = this.remoteSkillDisableReason ?? 'unknown reason';
+    logger.info(`Remote Claude skills disabled (${reason}). Falling back to full prompts.`);
+  }
+
+  private logSkipForSkill(skillKey: string) {
+    if (this.loggedSkipForSkill.has(skillKey)) {
+      return;
+    }
+    this.loggedSkipForSkill.add(skillKey);
+    const reason = this.remoteSkillDisableReason ? ` (${this.remoteSkillDisableReason})` : '';
+    logger.info(`Skipping '${skillKey}' skill initialization${reason}. Core AI flows will continue without skills.`);
   }
 }
 

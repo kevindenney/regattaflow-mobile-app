@@ -7,7 +7,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -75,6 +77,66 @@ const formatPercentChange = (current: number, previous: number) => {
   const delta = ((current - previous) / previous) * 100;
   return delta;
 };
+
+type ShadowStyle = ViewStyle & { boxShadow?: string };
+
+const createShadowStyle = ({
+  webShadow,
+  ios,
+  androidElevation = 0,
+}: {
+  webShadow: string;
+  ios: {
+    color: string;
+    opacity: number;
+    radius: number;
+    offset: { width: number; height: number };
+  };
+  androidElevation?: number;
+}): ShadowStyle => {
+  const style: ShadowStyle = {};
+
+  if (Platform.OS === 'web') {
+    style.boxShadow = webShadow;
+    return style;
+  }
+
+  if (Platform.OS === 'ios') {
+    style.shadowColor = ios.color;
+    style.shadowOpacity = ios.opacity;
+    style.shadowRadius = ios.radius;
+    style.shadowOffset = ios.offset;
+    return style;
+  }
+
+  if (Platform.OS === 'android' && androidElevation) {
+    style.elevation = androidElevation;
+  }
+
+  return style;
+};
+
+const summaryCardShadow = createShadowStyle({
+  webShadow: '0px 10px 20px rgba(15, 23, 42, 0.08)',
+  ios: {
+    color: '#0f172a',
+    opacity: 0.08,
+    radius: 20,
+    offset: { width: 0, height: 10 },
+  },
+  androidElevation: 4,
+});
+
+const quickStatCardShadow = createShadowStyle({
+  webShadow: '0px 6px 12px rgba(15, 23, 42, 0.05)',
+  ios: {
+    color: '#0f172a',
+    opacity: 0.03,
+    radius: 12,
+    offset: { width: 0, height: 6 },
+  },
+  androidElevation: 2,
+});
 
 export default function EarningsScreen() {
   const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
@@ -435,11 +497,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 20,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
+    ...summaryCardShadow,
   },
   summaryHeader: {
     flexDirection: 'row',
@@ -505,11 +563,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     gap: 6,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.03,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    ...quickStatCardShadow,
   },
   quickStatLabel: {
     fontSize: 13,

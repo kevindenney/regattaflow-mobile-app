@@ -245,6 +245,7 @@ See `/docs` folder for detailed guides:
 - `CLAUDE_SKILLS_SETUP.md` - Skills system configuration
 - `STORMGLASS_MIGRATION_PLAN.md` - Weather service setup
 - `MCP_CLAUDE_SKILLS_INTEGRATION.md` - MCP server setup
+- `VERCEL_MCP_SETUP.md` - Wire the Vercel MCP server into Codex
 
 ## 🎨 Design Patterns
 

@@ -1,0 +1,30 @@
+{
+  "name": "regattaflow-vercel-mcp",
+  "version": "0.1.0",
+  "description": "STDIO MCP server that exposes Vercel project data and deployment controls for Codex/Claude",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "vercel",
+    "codex",
+    "regattaflow"
+  ],
+  "author": "RegattaFlow",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

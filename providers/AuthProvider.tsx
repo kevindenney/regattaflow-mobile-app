@@ -545,9 +545,23 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         loading: false
       })
 
-      if (evt === 'SIGNED_OUT') {
-        authDebugLog('🚪 [AUTH] ===== SIGNED_OUT EVENT RECEIVED =====')
+      if (evt === 'SIGNED_OUT' || evt === 'TOKEN_REFRESH_FAILED') {
+        const reason =
+          evt === 'TOKEN_REFRESH_FAILED'
+            ? 'TOKEN_REFRESH_FAILED (invalid/expired session)'
+            : 'SIGNED_OUT';
+        authDebugLog(`🚪 [AUTH] ===== ${reason} EVENT RECEIVED =====`)
         authDebugLog('🚪 [AUTH] Starting state cleanup...')
+
+        if (evt === 'TOKEN_REFRESH_FAILED') {
+          console.error('[AUTH] Token refresh failed. Clearing session and forcing re-authentication.')
+          try {
+            await supabase.auth.signOut({ scope: 'local' })
+            authDebugLog('🚪 [AUTH] Local signOut completed after refresh failure')
+          } catch (signOutError) {
+            console.warn('[AUTH] Local signOut failed after refresh failure:', signOutError)
+          }
+        }
 
         // Clear all cached auth state
         authDebugLog('🚪 [AUTH] Clearing signedIn state...')
