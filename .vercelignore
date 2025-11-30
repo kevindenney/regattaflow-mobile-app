@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+!public/assets/node_modules/
+
+# Build outputs
+.expo/
+dist/
+web-build/
+
+# Native folders
+/ios
+/android
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+.env.*
+.env*.local
+
+# Cache and temp files
+.cache/
+.chrome-devtools/
+*.tsbuildinfo
+
+# Debug files
+bugreport-*.txt
+bugreport-*.zip
