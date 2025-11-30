@@ -62,6 +62,8 @@ export function BoatSelector({
       return;
     }
 
+    // NOTE: user.id is auth.users.id (not sailor_profiles.id)
+    // sailor_boats.sailor_id should reference auth.users.id
     logger.debug(`Starting boat load for user: ${user.id}`);
     console.log(`🚢 [BoatSelector] Loading boats for user: ${user.id} (${user.email})`);
     setLoading(true);

@@ -48,11 +48,17 @@ export default function EditRaceScreen() {
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const actualId = Array.isArray(id) ? id[0] : id;
 
+  // Skip validation during static rendering (when id is placeholder '[id]')
   if (!uuidPattern.test(actualId)) {
+    if (actualId === '[id]') {
+      // Static rendering placeholder - return null to skip rendering
+      return null;
+    }
     logger.error('[EditRaceScreen] Invalid UUID format:', {
       id: actualId,
       length: actualId.length
     });
+    return null;
   }
 
   return (
