@@ -14,8 +14,13 @@ DECLARE
   coach2_profile_id uuid;
   sailor_profile_id uuid;
 BEGIN
-  -- Create Coach Profile 1: Sarah Chen - Olympic Coach
-  INSERT INTO coach_profiles (
+  -- Check if coach profiles already exist, if so skip creation
+  IF EXISTS (SELECT 1 FROM coach_profiles WHERE user_id = coach1_user_id) THEN
+    RAISE NOTICE 'Coach profile for Sarah Chen already exists, skipping...';
+    SELECT id INTO coach1_profile_id FROM coach_profiles WHERE user_id = coach1_user_id;
+  ELSE
+    -- Create Coach Profile 1: Sarah Chen - Olympic Coach
+    INSERT INTO coach_profiles (
     id,
     user_id,
     display_name,
@@ -52,9 +57,15 @@ BEGIN
     ARRAY['English', 'Mandarin'],
     'https://i.pravatar.cc/150?img=5'
   ) RETURNING id INTO coach1_profile_id;
+  END IF;
 
-  -- Create Coach Profile 2: James "Jimmy" Wilson - Youth Development Expert
-  INSERT INTO coach_profiles (
+  -- Check if coach profile 2 already exists
+  IF EXISTS (SELECT 1 FROM coach_profiles WHERE user_id = coach2_user_id) THEN
+    RAISE NOTICE 'Coach profile for Jimmy Wilson already exists, skipping...';
+    SELECT id INTO coach2_profile_id FROM coach_profiles WHERE user_id = coach2_user_id;
+  ELSE
+    -- Create Coach Profile 2: James "Jimmy" Wilson - Youth Development Expert
+    INSERT INTO coach_profiles (
     id,
     user_id,
     display_name,
@@ -91,6 +102,7 @@ BEGIN
     ARRAY['English'],
     'https://i.pravatar.cc/150?img=12'
   ) RETURNING id INTO coach2_profile_id;
+  END IF;
 
   -- Get the demo sailor's profile ID
   SELECT id INTO sailor_profile_id
