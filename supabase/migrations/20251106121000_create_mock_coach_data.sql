@@ -172,14 +172,12 @@ BEGIN
   RAISE NOTICE 'Sailor Profile ID: %', sailor_profile_id;
 END $$;
 
--- Create additional mock coaches for testing variety
-INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at)
-VALUES
-  ('a1b2c3d4-e5f6-4789-a1b2-c3d4e5f67890', 'coach-maria@regattaflow.com', crypt('password123', gen_salt('bf')), NOW(), NOW(), NOW()),
-  ('b2c3d4e5-f6a7-4890-b2c3-d4e5f6a78901', 'coach-tom@regattaflow.com', crypt('password123', gen_salt('bf')), NOW(), NOW(), NOW())
-ON CONFLICT (id) DO NOTHING;
+-- Note: Additional mock coach users should be created via Supabase Auth API or dashboard
+-- Direct inserts into auth.users are not recommended in production Supabase projects
+-- The coach profiles below reference placeholder user IDs that can be replaced with real users
 
 -- Create Coach Profile 3: Maria Rodriguez - Offshore Racing Specialist
+-- Note: This will only insert if a user with this ID exists in auth.users
 INSERT INTO coach_profiles (
   id,
   user_id,
