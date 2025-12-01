@@ -1,37 +1,36 @@
 -- Add execution evaluation fields to race_analysis table
 -- This enables sailors to rate and reflect on how well they executed their planned strategy
 
-ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS
-  -- Link to pre-race preparation (plan)
-  preparation_id UUID REFERENCES public.sailor_race_preparation(id) ON DELETE SET NULL,
+-- Link to pre-race preparation (plan)
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS preparation_id UUID REFERENCES public.sailor_race_preparation(id) ON DELETE SET NULL;
 
-  -- Execution ratings (1-5: how well did you execute your plan?)
-  rig_tuning_execution_rating INT CHECK (rig_tuning_execution_rating >= 1 AND rig_tuning_execution_rating <= 5),
-  prestart_execution_rating INT CHECK (prestart_execution_rating >= 1 AND prestart_execution_rating <= 5),
-  start_execution_rating INT CHECK (start_execution_rating >= 1 AND start_execution_rating <= 5),
-  upwind_execution_rating INT CHECK (upwind_execution_rating >= 1 AND upwind_execution_rating <= 5),
-  windward_mark_execution_rating INT CHECK (windward_mark_execution_rating >= 1 AND windward_mark_execution_rating <= 5),
-  downwind_execution_rating INT CHECK (downwind_execution_rating >= 1 AND downwind_execution_rating <= 5),
-  leeward_mark_execution_rating INT CHECK (leeward_mark_execution_rating >= 1 AND leeward_mark_execution_rating <= 5),
-  finish_execution_rating INT CHECK (finish_execution_rating >= 1 AND finish_execution_rating <= 5),
+-- Execution ratings (1-5: how well did you execute your plan?)
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS rig_tuning_execution_rating INT CHECK (rig_tuning_execution_rating >= 1 AND rig_tuning_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS prestart_execution_rating INT CHECK (prestart_execution_rating >= 1 AND prestart_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS start_execution_rating INT CHECK (start_execution_rating >= 1 AND start_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS upwind_execution_rating INT CHECK (upwind_execution_rating >= 1 AND upwind_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS windward_mark_execution_rating INT CHECK (windward_mark_execution_rating >= 1 AND windward_mark_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS downwind_execution_rating INT CHECK (downwind_execution_rating >= 1 AND downwind_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS leeward_mark_execution_rating INT CHECK (leeward_mark_execution_rating >= 1 AND leeward_mark_execution_rating <= 5);
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS finish_execution_rating INT CHECK (finish_execution_rating >= 1 AND finish_execution_rating <= 5);
 
-  -- Execution notes (what actually happened vs the plan)
-  rig_tuning_execution_notes TEXT,
-  prestart_execution_notes TEXT,
-  start_execution_notes TEXT,
-  upwind_execution_notes TEXT,
-  windward_mark_execution_notes TEXT,
-  downwind_execution_notes TEXT,
-  leeward_mark_execution_notes TEXT,
-  finish_execution_notes TEXT,
+-- Execution notes (what actually happened vs the plan)
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS rig_tuning_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS prestart_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS start_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS upwind_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS windward_mark_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS downwind_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS leeward_mark_execution_notes TEXT;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS finish_execution_notes TEXT;
 
-  -- AI-generated execution coaching (plan vs actual analysis)
-  ai_execution_coaching JSONB DEFAULT '{}'::jsonb,
+-- AI-generated execution coaching (plan vs actual analysis)
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS ai_execution_coaching JSONB DEFAULT '{}'::jsonb;
 
-  -- Sharing & collaboration
-  execution_shared_with_coach BOOLEAN DEFAULT false,
-  execution_coach_id UUID REFERENCES public.coach_profiles(id) ON DELETE SET NULL,
-  execution_shared_at TIMESTAMPTZ;
+-- Sharing & collaboration
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS execution_shared_with_coach BOOLEAN DEFAULT false;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS execution_coach_id UUID REFERENCES public.coach_profiles(id) ON DELETE SET NULL;
+ALTER TABLE public.race_analysis ADD COLUMN IF NOT EXISTS execution_shared_at TIMESTAMPTZ;
 
 -- Add index for preparation lookups (plan-to-execution links)
 CREATE INDEX IF NOT EXISTS idx_race_analysis_preparation_id

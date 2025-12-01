@@ -300,6 +300,18 @@ ALTER TABLE public.ai_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_usage_monthly ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS ai_activity_logs_club_admin_select ON public.ai_activity_logs;
+DROP POLICY IF EXISTS ai_generated_documents_club_member_select ON public.ai_generated_documents;
+DROP POLICY IF EXISTS ai_generated_documents_club_admin_all ON public.ai_generated_documents;
+DROP POLICY IF EXISTS ai_notifications_club_member_select ON public.ai_notifications;
+DROP POLICY IF EXISTS ai_notifications_club_admin_all ON public.ai_notifications;
+DROP POLICY IF EXISTS ai_conversations_user_select ON public.ai_conversations;
+DROP POLICY IF EXISTS ai_conversations_user_insert ON public.ai_conversations;
+DROP POLICY IF EXISTS ai_conversations_user_update ON public.ai_conversations;
+DROP POLICY IF EXISTS ai_conversations_club_admin_select ON public.ai_conversations;
+DROP POLICY IF EXISTS ai_usage_monthly_club_admin_select ON public.ai_usage_monthly;
+
 -- ai_activity_logs: Club admins can view logs
 CREATE POLICY ai_activity_logs_club_admin_select
   ON public.ai_activity_logs

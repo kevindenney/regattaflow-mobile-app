@@ -1,8 +1,12 @@
 -- Allow authenticated sailors to view other sailors' race timer sessions
 -- This enables the Fleet Insights feature to show other fleet members' race data
 
--- Drop existing restrictive policy if it exists
+-- Drop existing policies if they exist
 DROP POLICY IF EXISTS "Users can view their own race timer sessions" ON race_timer_sessions;
+DROP POLICY IF EXISTS "Sailors can view all race timer sessions" ON race_timer_sessions;
+DROP POLICY IF EXISTS "Sailors can insert their own race timer sessions" ON race_timer_sessions;
+DROP POLICY IF EXISTS "Sailors can update their own race timer sessions" ON race_timer_sessions;
+DROP POLICY IF EXISTS "Sailors can delete their own race timer sessions" ON race_timer_sessions;
 
 -- Create policy allowing sailors to view all race timer sessions
 -- This is safe because race data is meant to be shared within the fleet/regatta
