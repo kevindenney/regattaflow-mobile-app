@@ -209,8 +209,30 @@ export default function RootLayout() {
         }
       }
 
+      // On web, Expo Router keeps inactive routes mounted with aria-hidden="true". If focus
+      // remains inside those hidden trees, Chrome emits "Blocked aria-hidden" warnings. Blur the
+      // focused element and move focus to a safe fallback whenever focus enters an aria-hidden
+      // ancestor.
+      const handleFocusIn = (event: FocusEvent) => {
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        const hiddenAncestor = target.closest('[aria-hidden="true"]');
+        if (!hiddenAncestor) return;
+
+        requestAnimationFrame(() => {
+          target.blur();
+          if (!document.body.hasAttribute('tabindex')) {
+            document.body.setAttribute('tabindex', '-1');
+          }
+          document.body.focus();
+        });
+      };
+
+      document.addEventListener('focusin', handleFocusIn, true);
+
       return () => {
         document.head.removeChild(style);
+        document.removeEventListener('focusin', handleFocusIn, true);
       };
     }
   }, []);
