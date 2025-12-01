@@ -176,3 +176,97 @@ END $$;
 -- 1. Creating users via Supabase Auth Dashboard or API
 -- 2. Then manually creating coach_profiles entries referencing those user IDs
 -- Direct SQL inserts into auth.users are not supported in Supabase
+-- Only insert these mock profiles when the backing user exists to avoid FK failures during deployments
+DO $$
+DECLARE
+  maria_user_id uuid := 'a1b2c3d4-e5f6-4789-a1b2-c3d4e5f67890';
+  tom_user_id uuid := 'b2c3d4e5-f6a7-4890-b2c3-d4e5f6a78901';
+BEGIN
+  IF EXISTS (SELECT 1 FROM auth.users WHERE id = maria_user_id) THEN
+    INSERT INTO coach_profiles (
+      id,
+      user_id,
+      display_name,
+      bio,
+      experience_years,
+      certifications,
+      specializations,
+      hourly_rate,
+      currency,
+      is_verified,
+      is_active,
+      rating,
+      total_sessions,
+      location_name,
+      location_region,
+      languages,
+      profile_image_url
+    ) VALUES (
+      gen_random_uuid(),
+      maria_user_id,
+      'Maria Rodriguez',
+      'Offshore and oceanic racing specialist with extensive experience in long-distance racing including multiple Transpac, Fastnet, and Sydney-Hobart campaigns. Expert in weather routing, crew management, and offshore race strategy. Focuses on navigation, tactical decision-making under pressure, and offshore safety.',
+      18,
+      '["Offshore Yachtmaster", "World Sailing Offshore Instructor", "Coastal Navigation Certified", "Crew Resource Management", "Weather Routing Specialist"]'::jsonb,
+      ARRAY['Offshore Racing', 'Weather Routing', 'Navigation', 'Crew Management', 'Long Distance Racing', 'Heavy Weather'],
+      175.00,
+      'USD',
+      true,
+      true,
+      4.9,
+      156,
+      'San Diego',
+      'North America',
+      ARRAY['English', 'Spanish'],
+      'https://i.pravatar.cc/150?img=9'
+    ) ON CONFLICT (user_id) DO NOTHING;
+    RAISE NOTICE 'Inserted mock coach profile for Maria Rodriguez';
+  ELSE
+    RAISE NOTICE 'Skipping Maria Rodriguez mock coach; user % not present in users table', maria_user_id;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM auth.users WHERE id = tom_user_id) THEN
+    INSERT INTO coach_profiles (
+      id,
+      user_id,
+      display_name,
+      bio,
+      experience_years,
+      certifications,
+      specializations,
+      hourly_rate,
+      currency,
+      is_verified,
+      is_active,
+      rating,
+      total_sessions,
+      location_name,
+      location_region,
+      languages,
+      profile_image_url
+    ) VALUES (
+      gen_random_uuid(),
+      tom_user_id,
+      'Tom Blackwell',
+      'Professional keelboat racing coach specializing in J/70, Melges 24, and one-design keelboats. 20+ years at the top level of the sport including America''s Cup campaign experience. Expert in crew coordination, boatspeed optimization, and tactical racing in tight fleets. Known for his systematic approach to performance improvement.',
+      20,
+      '["World Sailing Level 4", "Americas Cup Coach", "J/70 World Champion Coach", "Performance Analysis Expert", "Team Building Specialist"]'::jsonb,
+      ARRAY['Keelboat Racing', 'J/70', 'Melges 24', 'Crew Coordination', 'Boatspeed', 'Performance Analysis'],
+      200.00,
+      'USD',
+      true,
+      true,
+      5.0,
+      312,
+      'Newport',
+      'North America',
+      ARRAY['English'],
+      'https://i.pravatar.cc/150?img=13'
+    ) ON CONFLICT (user_id) DO NOTHING;
+    RAISE NOTICE 'Inserted mock coach profile for Tom Blackwell';
+  ELSE
+    RAISE NOTICE 'Skipping Tom Blackwell mock coach; user % not present in users table', tom_user_id;
+  END IF;
+END $$;
+
+COMMENT ON TABLE coach_profiles IS 'Mock coach data created for testing coach selection and strategy sharing features';
