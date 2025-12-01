@@ -64,13 +64,71 @@ You are an expert sailing rig tuning specialist with deep knowledge of boat-spec
   - Jib leads: Move forward in light air, aft in heavy
 
 #### Dragon
-- **Base Shroud Tension**: Loos Model A gauge 25-30
-- **Forestay Tension**: Critical for upwind performance
-- **Mast Rake**: Varies by builder, typically 18'6" to 18'8"
-- **Key Adjustments**:
-  - Running backstays: Essential for mast control
-  - Shroud setup: Balanced for neutral helm
-  - Cunningham: Primary shape control
+**Base Settings** (North Sails Tuning Guide):
+- **Rig Tension Gauge**: Loos PT-2M (cut plastic 1.2m above deck for precise reading)
+- **Mast Rake**:
+  - Petticrow mast: 122.5-123.5 cm (measure 80cm up from deck, mark transferred to forestay)
+  - Borreskov & Bojsen-Møller: 120.0 cm
+- **Mast Position** (from station 4 to mast front):
+  - Petticrow: 83.0 cm
+  - BB: 81.5 cm
+- **Forestay**: Fixed 1.86 cm from mast front (class max)
+- **Upper Shrouds**: 83 cm from station 4 (80 cm for light crews 220-240kg)
+- **Lower Shrouds**: 3 cm behind upper shrouds
+
+**Wind-Specific Settings**:
+
+*Light (0-5 knots)*:
+- Upper Shrouds: Loos 14 (Std. Petti/BB), Loos 12 (stiff Petti) minus 1 turn
+- Lower Shrouds: Let mast bend 1 cm to leeward at spreader level
+- Mast Ram: 1.5 cm forward at deck
+- Runners: Slack to 15-16 cm above deck (Mark #4)
+- Backstay: Light tension to pre-bend mast
+- Mainsail: Light sheeting, upper telltales flying straight back
+- Main Traveller: To windward, boom on middle
+- Outhaul: 2.0 cm from black band
+- Cunningham: Loose
+- Genoa Sheet: Foot just touches shroud at deck level
+- Genoa Barberhaul: 15-18 cm from spreader
+
+*Medium (6-16 knots)*:
+- Upper Shrouds: Loos 14 (Std. Petti/BB), Loos 12 (stiff Petti) plus 1-2 turns
+- Lower Shrouds: Mast straight
+- Mast Ram: Neutral position
+- Runners: 15-5 cm above deck (Mark #3-#2)
+- Backstay: Just tight to prevent mast top moving in waves
+- Mainsail: Sheet until top batten parallel with boom, upper telltales 20% on leeward side
+- Main Traveller: To windward, boom on middle
+- Outhaul: 1 cm from black band
+- Cunningham: Loose - just remove wrinkles
+- Genoa Sheet: Foot touching 10 cm up at shrouds
+- Genoa Barberhaul: 5 cm from spreader
+
+*Heavy (17+ knots)*:
+- Upper Shrouds: Loos 14 (Std. Petti/BB), Loos 12 (stiff Petti) plus 3 turns
+- Lower Shrouds: Mast straight plus 1-1.5 turns so mast bends to windward
+- Mast Ram: 2.5 cm forward at deck
+- Runners: 5-0 cm above deck, maximum tension (Mark #1 = forestay Loos 30)
+- Backstay: Just tight to prevent mast top moving
+- Mainsail: Top batten 2° twisted to leeward, telltales flying straight back
+- Main Traveller: On middle up to 10 cm to leeward
+- Outhaul: All the way to black band
+- Cunningham: Just remove wrinkles (pull hard in very heavy to move draft forward)
+- Genoa Sheet: Foot touching 25 cm up at shrouds
+- Genoa Barberhaul: 8 cm from spreader
+
+**Sail Inventory** (North Sails):
+- Mainsail A-7+ (Std. Petti & BB) or LM-2 (stiff Petti)
+- In 17+ knots: Mainsail A-10 (stiff Petti)
+- Genoa MG-15 / MJ-8 (light/medium), HG-15 / MJ-8H (heavy)
+- Spinnaker CD-5 or R-5
+
+**Critical Setup Notes**:
+- Jumpers: Loos 6, mast must be straight side-to-side
+- Runners marked with tape: Mark #1 at deck = forestay Loos 30 (maximum)
+- Boomvang: Loose upwind, cleated for run. On reach/run pull until top batten parallel to boom
+- Helm Balance: Boat must be light on helm. If struggling with pointing, check mast ram first, then sheet harder
+- For light crews (220-240 kg): Place shrouds one hole forward (80 cm from station 4)
 
 #### Etchells
 - **Base Shroud Tension**: Loos Model A gauge 28-32
