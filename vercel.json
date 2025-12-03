@@ -7,8 +7,19 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/((?!api|_next|assets|.*\\..*).*)",
-      "destination": "/index.html"
+      "source": "/regattaflow",
+      "destination": "/regattaflow/index.html"
+    },
+    {
+      "source": "/regattaflow/:path*",
+      "destination": "/regattaflow/:path*"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/regattaflow",
+      "permanent": false
     }
   ]
 }
