@@ -79,12 +79,13 @@ export default function Root({ children }: PropsWithChildren) {
             padding: 0;
           }
           body {
-            overflow: hidden;
+            overflow: auto;
             overscroll-behavior-y: none;
           }
           #root {
             display: flex;
             flex-direction: column;
+            min-height: 100%;
           }
         `}} />
       </head>
