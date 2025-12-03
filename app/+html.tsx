@@ -70,6 +70,23 @@ export default function Root({ children }: PropsWithChildren) {
         
         {/* Expo Router scroll reset */}
         <ScrollViewStyleReset />
+        
+        {/* Critical styles for Expo Router web */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          html, body, #root {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+          }
+          body {
+            overflow: hidden;
+            overscroll-behavior-y: none;
+          }
+          #root {
+            display: flex;
+            flex-direction: column;
+          }
+        `}} />
       </head>
       <body>{children}</body>
     </html>
