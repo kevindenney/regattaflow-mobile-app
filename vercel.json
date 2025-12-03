@@ -5,6 +5,16 @@
   "installCommand": "npm install",
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/regattaflow",
+      "destination": "/regattaflow/index.html"
+    },
+    {
+      "source": "/regattaflow/:path*",
+      "destination": "/regattaflow/:path*"
+    }
+  ],
   "redirects": [
     {
       "source": "/",
