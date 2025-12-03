@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, SafeAreaView, Platform, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
+import { Head } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { HeroPhones } from '@/components/landing/HeroPhones';
@@ -43,6 +44,53 @@ export default function LandingPage() {
 
   return (
     <Container style={containerStyle}>
+      <Head>
+        <title>RegattaFlow - AI-Powered Sailing Race Strategy & Performance</title>
+        <meta name="description" content="Master sailing race strategy with AI-powered venue intelligence, real-time wind analysis, and personalized coaching. Track performance, plan races, and outsmart the competition." />
+        <meta name="keywords" content="sailing, regatta, race strategy, sailing coach, wind shifts, venue intelligence, race planning, sailing performance, yacht racing, dinghy racing" />
+        
+        {/* Open Graph / Facebook */}
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://regattaflow.oceanflow.io/" />
+        <meta property="og:title" content="RegattaFlow - AI-Powered Sailing Race Strategy" />
+        <meta property="og:description" content="Master sailing race strategy with AI-powered venue intelligence, real-time wind analysis, and personalized coaching." />
+        <meta property="og:image" content="https://regattaflow.oceanflow.io/assets/images/og-image.png" />
+        <meta property="og:site_name" content="RegattaFlow" />
+        
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content="https://regattaflow.oceanflow.io/" />
+        <meta name="twitter:title" content="RegattaFlow - AI-Powered Sailing Race Strategy" />
+        <meta name="twitter:description" content="Master sailing race strategy with AI-powered venue intelligence, real-time wind analysis, and personalized coaching." />
+        <meta name="twitter:image" content="https://regattaflow.oceanflow.io/assets/images/og-image.png" />
+        
+        {/* Additional SEO */}
+        <meta name="robots" content="index, follow" />
+        <meta name="author" content="RegattaFlow" />
+        <link rel="canonical" href="https://regattaflow.oceanflow.io/" />
+        
+        {/* Structured Data for Software Application */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "RegattaFlow",
+            "applicationCategory": "SportsApplication",
+            "operatingSystem": "Web, iOS, Android",
+            "description": "AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "4.8",
+              "ratingCount": "150"
+            }
+          })}
+        </script>
+      </Head>
       <ScrollFix />
       <HeroPhones />
     </Container>

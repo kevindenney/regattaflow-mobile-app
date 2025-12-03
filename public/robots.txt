@@ -1,0 +1,33 @@
+# RegattaFlow - Sailing Race Strategy App
+# https://regattaflow.oceanflow.io
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://regattaflow.oceanflow.io/sitemap.xml
+
+# Allow AI crawlers
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# Block authenticated/private paths
+Disallow: /api/
+Disallow: /settings/
+Disallow: /profile/
+
