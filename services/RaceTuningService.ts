@@ -67,7 +67,7 @@ class RaceTuningService {
       limit = 1,
     } = request;
 
-    logger.debug('getRecommendations called', {
+    console.log('🔧 [RaceTuningService] getRecommendations called', {
       classId,
       className,
       averageWindSpeed,
@@ -83,17 +83,23 @@ class RaceTuningService {
     });
 
     if (!classId && !className) {
-      logger.warn('No class reference provided, skipping tuning lookup');
+      console.warn('⚠️ [RaceTuningService] No class reference provided, skipping tuning lookup');
       return [];
     }
 
-    logger.debug('Class reference resolved', { classId, className });
+    console.log('✅ [RaceTuningService] Class reference resolved', { classId, className });
 
     try {
       const guides = await tuningGuideService.getGuidesByReference({ classId, className });
-      logger.debug('Retrieved tuning guides', {
+      console.log('📚 [RaceTuningService] Retrieved tuning guides', {
         count: guides.length,
-        guides: guides.map(g => ({ id: g.id, title: g.title, hasExtractedSections: !!g.extractedSections })),
+        guides: guides.map(g => ({
+          id: g.id,
+          title: g.title,
+          source: g.source,
+          hasExtractedSections: !!g.extractedSections,
+          sectionsCount: g.extractedSections?.length || 0
+        })),
       });
 
       const candidateSections = this.collectCandidateSections(
@@ -101,52 +107,63 @@ class RaceTuningService {
         averageWindSpeed ?? undefined,
         pointsOfSail
       );
-      logger.debug('Candidate sections scored', {
+      console.log('🎯 [RaceTuningService] Candidate sections scored', {
         count: candidateSections.length,
-        topScores: candidateSections.slice(0, 3).map(c => ({ title: c.section.title, score: c.score })),
+        topScores: candidateSections.slice(0, 3).map(c => ({
+          title: c.section.title,
+          score: c.score,
+          settingsCount: Object.keys(c.section.settings || {}).length
+        })),
       });
 
       // NEW: If NO guides/sections exist, try AI-only generation
       if (candidateSections.length === 0) {
-        logger.info('No extracted sections found; attempting AI-only tuning generation', {
+        console.warn('⚠️ [RaceTuningService] No extracted sections found; attempting AI-only tuning generation', {
           aiAvailable: this.aiEngine.isAvailable(),
           aiReady: this.aiEngine.isSkillReady(),
         });
         const aiOnlyRecommendations = await this.tryGenerateAIOnlyRecommendations(request);
 
         if (aiOnlyRecommendations && aiOnlyRecommendations.length > 0) {
-          logger.info('Returning AI-only tuning recommendations', { count: aiOnlyRecommendations.length });
+          console.log('🤖 [RaceTuningService] Returning AI-only tuning recommendations', { count: aiOnlyRecommendations.length });
           return aiOnlyRecommendations;
         }
 
-        logger.warn('AI-only generation returned no recommendations');
+        console.warn('⚠️ [RaceTuningService] AI-only generation returned no recommendations');
         return [];
       }
 
       const sortedCandidates = candidateSections.sort((a, b) => b.score - a.score);
 
-      // Try AI enhancement with existing guides
-      const aiRecommendations = await this.tryGenerateAIRecommendations({
-        classId,
-        className,
-        averageWindSpeed: averageWindSpeed ?? undefined,
-        pointsOfSail,
-        limit,
-        candidates: sortedCandidates
-      });
-
-      if (aiRecommendations && aiRecommendations.length > 0) {
-        logger.info('Using AI-enhanced tuning recommendations', { count: aiRecommendations.length });
-        return aiRecommendations;
-      }
+      // DISABLED: AI enhancement was replacing North Sails guide data entirely
+      // TODO: Make AI enhancement actually enhance (add reasoning) rather than replace
+      // const aiRecommendations = await this.tryGenerateAIRecommendations({
+      //   classId,
+      //   className,
+      //   averageWindSpeed: averageWindSpeed ?? undefined,
+      //   pointsOfSail,
+      //   limit,
+      //   candidates: sortedCandidates
+      // });
+      //
+      // if (aiRecommendations && aiRecommendations.length > 0) {
+      //   logger.info('Using AI-enhanced tuning recommendations', { count: aiRecommendations.length });
+      //   return aiRecommendations;
+      // }
 
       const recommendations = sortedCandidates
         .slice(0, limit)
         .map(({ guide, section }) => this.buildRecommendation(guide, section));
 
-      logger.debug('Built deterministic recommendations', {
+      console.log('✅ [RaceTuningService] Built North Sails recommendations', {
         count: recommendations.length,
         withSettings: recommendations.filter(r => r.settings.length > 0).length,
+        firstRec: recommendations[0] ? {
+          guideTitle: recommendations[0].guideTitle,
+          guideSource: recommendations[0].guideSource,
+          sectionTitle: recommendations[0].sectionTitle,
+          settingsCount: recommendations[0].settings.length
+        } : null
       });
 
       return recommendations.filter(rec => rec.settings.length > 0);

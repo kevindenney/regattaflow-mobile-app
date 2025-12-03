@@ -31,6 +31,9 @@ const CoachOnboardingWelcome = () => {
     }
   }, [state.welcome]);
 
+const TOTAL_ONBOARDING_STEPS = 6;
+const STEP_LABELS = ['Welcome', 'Expertise', 'Availability', 'Pricing', 'Payments', 'Review'];
+
 const experienceOptions = [
 "1-2 years",
 "3-5 years",

@@ -1,42 +1,34 @@
 import {
     ContingencyPlansCard,
     CrewEquipmentCard,
-    CurrentTideCard,
     DownwindStrategyCard,
     FleetRacersCard,
     MarkRoundingCard,
     PostRaceAnalysisCard,
+    PreRaceStrategySection,
+    RaceConditionsCard,
     RaceDetailMapHero,
-    RaceDocumentsCard,
-    RaceOverviewCard,
     RacePhaseHeader,
-    StartStrategyCard,
-    UpwindStrategyCard,
-    WindWeatherCard,
     RigTuningCard,
+    StartStrategyCard,
+    UpwindStrategyCard
 } from '@/components/race-detail';
 import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/race-detail/RaceDocumentsCard';
+import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
 import { PlanModeLayout } from '@/components/races/modes';
 import { PerformanceMetrics, calculatePerformanceMetrics } from '@/components/races/PerformanceMetrics';
 import { SplitTimesAnalysis } from '@/components/races/SplitTimesAnalysis';
 import { TacticalInsights } from '@/components/races/TacticalInsights';
-import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
-import { LiveRaceTimer } from '@/components/races/LiveRaceTimer';
-import { LivePositionTracker } from '@/components/races/LivePositionTracker';
-import { TacticalDataOverlay, TacticalCalculations } from '@/components/races/TacticalDataOverlay';
-import { QuickActionDrawer } from '@/components/races/QuickActionDrawer';
-import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
-import { PhaseHeader, PhaseSkillButtons, PrimaryAICoach } from '@/components/races';
-import { PreStartConsole } from '@/components/racing-console/PreStartConsole';
-import { PlanModeContent } from '@/components/races/plan';
+// LiveRaceTimer removed - timer is now only in the Race Card
+import { StrategySharingModal } from '@/components/coaching/StrategySharingModal';
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
-import { PostRaceInterview } from '@/components/races/PostRaceInterview';
 import { FleetPostRaceInsights } from '@/components/races/FleetPostRaceInsights';
+import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
+import { PlanModeContent } from '@/components/races/plan';
+import { PostRaceInterview } from '@/components/races/PostRaceInterview';
 import { RaceCard } from '@/components/races/RaceCard';
-import { SmartRaceCoach } from '@/components/coaching/SmartRaceCoach';
-import { QuickSkillButtons } from '@/components/coaching/QuickSkillButtons';
-import { CoachSelectionModal } from '@/components/coaching/CoachSelectionModal';
+import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
 import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -44,29 +36,28 @@ import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
 import { MOCK_RACES, calculateCountdown } from '@/constants/mockData';
+import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
 import { useDashboardData } from '@/hooks/useData';
-import { useOffline } from '@/hooks/useOffline';
-import { useLiveRaces } from '@/hooks/useRaceResults';
-import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { useEnrichedRaces } from '@/hooks/useEnrichedRaces';
+import { useOffline } from '@/hooks/useOffline';
+import { useRacePhaseDetection } from '@/hooks/useRacePhaseDetection';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { useLiveRaces, withdrawFromRace, useUserRaceResults, type UserRaceResult } from '@/hooks/useRaceResults';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { useVenueDetection } from '@/hooks/useVenueDetection';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
-import { supabase } from '@/services/supabase';
-import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
-import { strategicPlanningService } from '@/services/StrategicPlanningService';
-import { TacticalZoneGenerator } from '@/services/TacticalZoneGenerator';
+import type { RaceDocumentType, RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { raceDocumentService } from '@/services/RaceDocumentService';
-import type { RaceDocumentWithDetails, RaceDocumentType } from '@/services/RaceDocumentService';
 import { documentStorageService } from '@/services/storage/DocumentStorageService';
-import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
-import { useRacePreparation } from '@/hooks/useRacePreparation';
-import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
-import type { Mark } from '@/types/courses';
-import { useRaceConditions } from '@/stores/raceConditionsStore';
-import { useRacePhaseDetection } from '@/hooks/useRacePhaseDetection';
+import { supabase } from '@/services/supabase';
+import { TacticalZoneGenerator } from '@/services/TacticalZoneGenerator';
+import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
 import type { Course } from '@/stores/raceConditionsStore';
+import { useRaceConditions } from '@/stores/raceConditionsStore';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
     AlertTriangle,
@@ -80,7 +71,6 @@ import {
     Users,
     X
 } from 'lucide-react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
@@ -571,7 +561,7 @@ const MOCK_SPLIT_TIMES = [
 
 export default function RacesScreen() {
   const auth = useAuth();
-  const { user, signedIn, ready, isDemoSession } = auth;
+  const { user, signedIn, ready, isDemoSession, userType } = auth;
   const fetchUserProfileRef = useRef(auth.fetchUserProfile);
   useEffect(() => {
     fetchUserProfileRef.current = auth.fetchUserProfile;
@@ -594,6 +584,8 @@ export default function RacesScreen() {
   const [showPostRaceInterview, setShowPostRaceInterview] = useState(false);
   const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
   const [completedRaceName, setCompletedRaceName] = useState<string>('');
+  const [completedRaceId, setCompletedRaceId] = useState<string | null>(null);
+  const [completedSessionGpsPoints, setCompletedSessionGpsPoints] = useState<number>(0);
   const [userPostRaceSession, setUserPostRaceSession] = useState<any | null>(null);
   const [loadingUserPostRaceSession, setLoadingUserPostRaceSession] = useState(false);
 
@@ -868,6 +860,7 @@ export default function RacesScreen() {
 
       setCompletedSessionId(session.id);
       setCompletedRaceName(selectedRaceData.name ?? 'Race');
+      setCompletedRaceId(selectedRaceId);
       setShowPostRaceInterview(true);
     } catch (error: any) {
       logger.error('[races.tsx] Failed to open post-race interview manually', error);
@@ -890,38 +883,6 @@ export default function RacesScreen() {
     userPostRaceSession,
   ]);
 
-  // Handle coach selection and share strategy
-  const handleShareWithCoach = useCallback(async (coachId: string, coachName: string) => {
-    if (!sailorId || !selectedRaceData?.id) {
-      Alert.alert('Error', 'Cannot share strategy at this time');
-      return;
-    }
-
-    setSharingStrategy(true);
-    try {
-      const success = await strategicPlanningService.shareWithCoach(
-        selectedRaceData.id,
-        sailorId,
-        coachId
-      );
-
-      if (success) {
-        Alert.alert(
-          'Strategy Shared',
-          `Your pre-race strategy has been shared with ${coachName}. They will be able to review your notes and provide feedback.`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert('Error', 'Failed to share strategy. Please try again.');
-      }
-    } catch (error) {
-      logger.error('[races.tsx] Failed to share strategy with coach', error);
-      Alert.alert('Error', 'An error occurred while sharing your strategy.');
-    } finally {
-      setSharingStrategy(false);
-    }
-  }, [sailorId, selectedRaceData?.id, logger]);
-
   // Racing area drawing state
   const [drawingRacingArea, setDrawingRacingArea] = useState<Array<{lat: number, lng: number}>>([]);
 
@@ -930,6 +891,19 @@ export default function RacesScreen() {
     const checkAuthAndOnboarding = async () => {
       // Wait for auth to be ready
       if (!ready) return;
+
+      // Redirect non-sailor users to their appropriate home page
+      // This page is only for sailors
+      if (userType === 'club') {
+        logger.debug('Club user on races page, redirecting to events');
+        router.replace('/(tabs)/events');
+        return;
+      }
+      if (userType === 'coach') {
+        logger.debug('Coach user on races page, redirecting to clients');
+        router.replace('/(tabs)/clients');
+        return;
+      }
 
       if (isDemoSession) {
         logger.debug('Demo session detected, skipping Supabase onboarding checks');
@@ -978,7 +952,7 @@ export default function RacesScreen() {
     };
 
     checkAuthAndOnboarding();
-  }, [ready, signedIn, user?.id, router, isDemoSession]);
+  }, [ready, signedIn, user?.id, router, isDemoSession, userType]);
 
 const addRaceTimelineStyles = StyleSheet.create({
   wrapper: {
@@ -1480,10 +1454,25 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
   const { isOnline, cacheNextRace } = useOffline();
 
   // Real-time race updates
-  const { liveRaces, loading: liveRacesLoading } = useLiveRaces(user?.id);
+  const { liveRaces, loading: liveRacesLoading, refresh: refetchRaces } = useLiveRaces(user?.id);
 
   // Enrich races with real weather data
   const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
+
+  // Get past race IDs for fetching results
+  const pastRaceIds = useMemo(() => {
+    const now = new Date();
+    return (liveRaces || [])
+      .filter((race: any) => {
+        const raceDate = new Date(race.start_date || race.date);
+        return raceDate < now;
+      })
+      .map((race: any) => race.id)
+      .filter(Boolean);
+  }, [liveRaces]);
+
+  // Fetch user results for past races
+  const { results: userRaceResults } = useUserRaceResults(user?.id, pastRaceIds);
   const normalizedLiveRaces = useMemo(
     () => {
       if (!liveRaces || liveRaces.length === 0) {
@@ -1533,8 +1522,6 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
   // Create agent instance once using useMemo - MUST be before any returns
   const venueAgent = useMemo(() => new VenueIntelligenceAgent(), []);
 
-  // Get first recent race if available - MOVED UP before conditional returns
-  const safeNextRace: any = (nextRace as any) || {};
   // Memoize safeRecentRaces to prevent unnecessary re-renders and effect triggers
   // Use enriched races with real weather data when available, fall back to recentRaces
   const safeRecentRaces: any[] = useMemo(() => {
@@ -1546,8 +1533,25 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
     }
     return Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [];
   }, [enrichedRaces, normalizedLiveRaces, recentRaces]);
+
+  // Calculate nextRace from safeRecentRaces (not from useDashboardData which may have stale/demo data)
+  // This ensures nextRace comes from the same data source as the displayed race cards
+  const safeNextRace: any = useMemo(() => {
+    if (safeRecentRaces.length === 0) return {};
+    
+    const now = new Date();
+    const nextRaceIndex = safeRecentRaces.findIndex((race: any) => {
+      const raceDateTime = new Date(race.date || race.start_date);
+      // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
+      const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
+      return raceEndEstimate > now;
+    });
+    
+    return nextRaceIndex >= 0 ? safeRecentRaces[nextRaceIndex] : {};
+  }, [safeRecentRaces]);
+
   const recentRace = safeRecentRaces.length > 0 ? safeRecentRaces[0] : null;
-  const hasRealRaces = safeRecentRaces.length > 0 || !!nextRace;
+  const hasRealRaces = safeRecentRaces.length > 0 || !!safeNextRace?.id;
   const selectedDemoRace = useMemo(
     () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
     [selectedDemoRaceId]
@@ -1938,25 +1942,54 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
     regattaAcknowledgements.safetyBriefing;
 
   // Determine race status (past, next, future)
-  const getRaceStatus = (raceDate: string, isNextRace: boolean): 'past' | 'next' | 'future' => {
+  const getRaceStatus = (raceDate: string, isNextRace: boolean, raceStartTime?: string): 'past' | 'next' | 'future' => {
     if (isNextRace) return 'next';
 
-    // Compare dates only (ignore time) to avoid issues with races at midnight
+    // Compare full datetime including time to correctly identify past races
     const now = new Date();
-    const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
     const raceDateTime = new Date(raceDate);
-    const raceDateOnly = new Date(raceDateTime.getFullYear(), raceDateTime.getMonth(), raceDateTime.getDate());
-
-    if (raceDateOnly < todayDateOnly) return 'past';
+    
+    // If we have a start time, use it for more accurate comparison
+    if (raceStartTime && typeof raceStartTime === 'string') {
+      const timeParts = raceStartTime.split(':');
+      if (timeParts.length >= 2) {
+        const hours = parseInt(timeParts[0], 10);
+        const minutes = parseInt(timeParts[1], 10);
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          raceDateTime.setHours(hours, minutes, 0, 0);
+        }
+      }
+    }
+    
+    // Race is "past" if estimated end time (start + 3 hours) has passed
+    const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
+    if (raceEndEstimate < now) return 'past';
+    
     return 'future';
   };
 
   // Handle race completion - trigger post-race interview
-  const handleRaceComplete = useCallback((sessionId: string, raceName: string) => {
-    logger.debug('Race completed:', sessionId, raceName);
+  const handleRaceComplete = useCallback(async (sessionId: string, raceName: string, raceId?: string) => {
+    logger.debug('Race completed:', sessionId, raceName, raceId);
+
+    // Fetch GPS point count from the session
+    try {
+      const { data: session } = await supabase
+        .from('race_timer_sessions')
+        .select('track_points')
+        .eq('id', sessionId)
+        .single();
+
+      const pointCount = Array.isArray(session?.track_points) ? session.track_points.length : 0;
+      setCompletedSessionGpsPoints(pointCount);
+    } catch (error) {
+      logger.warn('Failed to fetch GPS points count', error);
+      setCompletedSessionGpsPoints(0);
+    }
+
     setCompletedSessionId(sessionId);
     setCompletedRaceName(raceName);
+    setCompletedRaceId(raceId || null);
     setShowPostRaceInterview(true);
   }, []);
 
@@ -1966,6 +1999,8 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
     setShowPostRaceInterview(false);
     setCompletedSessionId(null);
     setCompletedRaceName('');
+    setCompletedRaceId(null);
+    setCompletedSessionGpsPoints(0);
     loadUserPostRaceSession();
     // Refresh races data to show updated analysis
     refetch?.();
@@ -2008,6 +2043,43 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
     if (!selectedRaceId) return;
     handleEditRace(selectedRaceId);
   }, [handleEditRace, selectedRaceId]);
+
+  const handleHideRace = useCallback(async (raceId: string, raceName?: string) => {
+    if (!raceId || !user?.id) {
+      return;
+    }
+
+    const friendlyName = raceName || 'this race';
+    const confirmationMessage = `Hide "${friendlyName}" from your timeline? You can rejoin later from the race discovery page.`;
+
+    Alert.alert(
+      'Hide from Timeline',
+      confirmationMessage,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Hide',
+          onPress: async () => {
+            const result = await withdrawFromRace(user.id, raceId);
+            if (result.success) {
+              // Clear selection if the hidden race was selected
+              if (selectedRaceId === raceId) {
+                setSelectedRaceId(null);
+              }
+              // Refresh the race list
+              refetchRaces?.();
+              Alert.alert('Hidden', `"${friendlyName}" has been removed from your timeline.`);
+            } else {
+              Alert.alert('Error', result.error || 'Failed to hide race');
+            }
+          },
+        },
+      ],
+    );
+  }, [refetchRaces, selectedRaceId, user?.id]);
 
   const handleDeleteRace = useCallback((raceId: string, raceName?: string) => {
     if (!raceId || isDeletingRace) {
@@ -2058,7 +2130,7 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
           setHasManuallySelected(false);
         }
 
-        await refetch?.();
+        await refetchRaces();
 
         Alert.alert('Race deleted', `"${friendlyName}" has been removed.`);
       } catch (error: any) {
@@ -2096,7 +2168,7 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
         },
       ],
     );
-  }, [isDeletingRace, logger, refetch, selectedRaceId]);
+  }, [isDeletingRace, logger, refetchRaces, selectedRaceId]);
 
   // Delete the currently selected race with confirmation
   const handleDeleteSelectedRace = useCallback(() => {
@@ -2113,33 +2185,84 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
   }, []);
 
   // Handle saving racing area to database
-  const handleSaveRacingArea = useCallback(async () => {
-    if (!selectedRaceId || drawingRacingArea.length < 3) return;
+  const handleSaveRacingArea = useCallback(async (polygonPoints?: Array<{lat: number, lng: number}>) => {
+    // Use passed points or fall back to state
+    const pointsToSave = polygonPoints || drawingRacingArea;
+    
+    logger.debug('[handleSaveRacingArea] Called with:', {
+      selectedRaceId,
+      passedPointsLength: polygonPoints?.length,
+      statePointsLength: drawingRacingArea.length,
+      usingPoints: pointsToSave.length
+    });
+
+    if (!selectedRaceId) {
+      logger.warn('[handleSaveRacingArea] No selectedRaceId, aborting');
+      Alert.alert('Error', 'No race selected');
+      return;
+    }
+    
+    if (pointsToSave.length < 3) {
+      logger.warn('[handleSaveRacingArea] Not enough points:', pointsToSave.length);
+      Alert.alert('Error', `Need at least 3 points to save racing area. Currently have ${pointsToSave.length} points.`);
+      return;
+    }
 
     try {
-      logger.debug('Saving racing area:', drawingRacingArea);
+      logger.debug('Saving racing area:', pointsToSave);
 
       // Convert to GeoJSON format
-      const coordinates = drawingRacingArea.map(point => [point.lng, point.lat]);
+      const coordinates = pointsToSave.map(point => [point.lng, point.lat]);
       const polygonGeoJSON = {
         type: 'Polygon',
         coordinates: [[...coordinates, coordinates[0]]] // Close the polygon
       };
 
-      // Save to regattas table
+      // Calculate centroid from the polygon for venue coordinates
+      // This enables tide/weather APIs to fetch data for this location
+      const centroidLat = pointsToSave.reduce((sum, p) => sum + p.lat, 0) / pointsToSave.length;
+      const centroidLng = pointsToSave.reduce((sum, p) => sum + p.lng, 0) / pointsToSave.length;
+      
+      logger.debug('[handleSaveRacingArea] Extracted centroid:', { centroidLat, centroidLng });
+
+      // Get current metadata to preserve existing fields
+      const currentMetadata = selectedRaceData?.metadata || {};
+      
+      // Only update venue coordinates if not already set (don't override user-specified venue)
+      const shouldUpdateVenueCoords = !currentMetadata.venue_lat || !currentMetadata.venue_lng;
+      
+      const updatedMetadata = shouldUpdateVenueCoords ? {
+        ...currentMetadata,
+        venue_lat: centroidLat,
+        venue_lng: centroidLng,
+        venue_coords_source: 'racing_area_centroid', // Track where coords came from
+      } : currentMetadata;
+
+      // Save racing area polygon AND update metadata with venue coordinates
       const { error } = await supabase
         .from('regattas')
-        .update({ racing_area_polygon: polygonGeoJSON })
+        .update({ 
+          racing_area_polygon: polygonGeoJSON,
+          metadata: updatedMetadata
+        })
         .eq('id', selectedRaceId);
 
-      if (error) throw error;
+      if (error) {
+        logger.error('[handleSaveRacingArea] Supabase error:', error);
+        Alert.alert('Error Saving', `Failed to save racing area: ${error.message}`);
+        throw error;
+      }
 
-      logger.debug('Racing area saved successfully');
+      logger.debug('Racing area saved successfully', { 
+        updatedVenueCoords: shouldUpdateVenueCoords,
+        centroid: { lat: centroidLat, lng: centroidLng }
+      });
 
       // Update local state immediately to prevent racing area from disappearing
       setSelectedRaceData((prev: any) => ({
         ...prev,
-        racing_area_polygon: polygonGeoJSON
+        racing_area_polygon: polygonGeoJSON,
+        metadata: updatedMetadata
       }));
 
       // Clear drawing state
@@ -2147,6 +2270,11 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
 
       // Refresh race data in background
       refetch?.();
+      
+      const coordsMessage = shouldUpdateVenueCoords 
+        ? `\n\nVenue coordinates auto-detected from racing area center for tide/weather data.`
+        : '';
+      Alert.alert('Success', `Racing area saved!${coordsMessage}`);
     } catch (error) {
       logger.error('Error saving racing area:', error);
     }
@@ -2535,6 +2663,8 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
   // Using useRef to track if auto-selection has happened to prevent re-running
   const autoSelectDatasetKeyRef = useRef<string | null>(null);
   const autoSelectLastAppliedIdRef = useRef<string | null>(null);
+  // Auto-select when data changes; omit selectedRaceId dependency to avoid loops when we set it here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (loading || safeRecentRaces.length === 0) {
       return;
@@ -2551,17 +2681,20 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
       ? safeRecentRaces.some((race: any) => race?.id === selectedRaceId)
       : false;
 
-    if (!datasetChanged && selectionStillValid) {
+    // If the user already has a valid selection, preserve it - don't override with auto-select
+    if (selectionStillValid) {
       return;
     }
 
+    // If dataset is unchanged and we're already on the desired target, no work needed.
     const routeTargetId = initialSelectedRaceParam.current;
     const raceToSelect =
       (routeTargetId && safeRecentRaces.find((race: any) => race?.id === routeTargetId)) ||
-      (nextRace && safeRecentRaces.find((race: any) => race?.id === nextRace.id)) ||
+      (safeNextRace?.id && safeRecentRaces.find((race: any) => race?.id === safeNextRace.id)) ||
       safeRecentRaces[0];
 
     const targetId = raceToSelect?.id ?? null;
+
     if (!targetId) {
       return;
     }
@@ -2581,8 +2714,10 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
       previousKey: autoSelectDatasetKeyRef.current,
     });
     autoSelectLastAppliedIdRef.current = targetId;
+    // Only mark as auto if we truly changed the selection here
+    setHasManuallySelected(false);
     setSelectedRaceId(targetId);
-  }, [loading, safeRecentRaces, nextRace, selectedRaceId]);
+  }, [loading, safeRecentRaces, nextRace]);
 
   useEffect(() => {
     if (selectedRaceId) {
@@ -3781,13 +3916,13 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
   const currentGpsTrack: GPSPoint[] = useMemo(() => {
     const metadataTrack = selectedRaceData?.metadata?.gps_track ?? selectedRaceData?.gps_track;
     const parsed = parseGpsTrack(metadataTrack);
-    return parsed ?? MOCK_GPS_TRACK;
+    return parsed ?? []; // Don't show mock data - return empty array if no real track
   }, [selectedRaceData]);
 
   const currentSplitTimes: DebriefSplitTime[] = useMemo(() => {
     const metadataSplits = selectedRaceData?.metadata?.split_times ?? selectedRaceData?.split_times;
     const parsed = parseSplitTimes(metadataSplits);
-    return parsed ?? MOCK_SPLIT_TIMES;
+    return parsed ?? []; // Don't show mock data - return empty array if no real splits
   }, [selectedRaceData]);
 
   useEffect(() => {
@@ -4177,7 +4312,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
       return;
     }
 
-    const nextRaceIndex = safeRecentRaces.findIndex((race: any) => race.id === nextRace.id);
+    const nextRaceIndex = safeRecentRaces.findIndex((race: any) => race.id === safeNextRace?.id);
     if (nextRaceIndex === -1) {
       return;
     }
@@ -4260,7 +4395,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
           <View className="flex-row gap-2 items-center">
             {!isOnline && <OfflineIndicator />}
             <AccessibleTouchTarget
-              onPress={() => router.push('/notifications' as any)}
+              onPress={() => router.push('/notifications')}
               accessibilityLabel="Notifications"
               accessibilityHint="View your notifications and alerts"
               className="bg-primary-600 rounded-full p-1"
@@ -4356,7 +4491,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 const cardElements: React.ReactNode[] = [];
 
                 safeRecentRaces.forEach((race: any, index: number) => {
-                  const isNextRace = !!(nextRace && race.id === nextRace.id);
+                  const isNextRace = !!(safeNextRace?.id && race.id === safeNextRace.id);
                   const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
                   const shouldInsertAddCardBefore = !addRaceCardInserted && isNextRace;
 
@@ -4371,6 +4506,17 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                     );
                     addRaceCardInserted = true;
                   }
+
+                  // Get results for this race if it's past
+                  const raceResult = raceStatus === 'past' && race.id ? userRaceResults.get(race.id) : undefined;
+                  const resultsData = raceResult ? {
+                    position: raceResult.position,
+                    points: raceResult.points,
+                    fleetSize: raceResult.fleetSize,
+                    status: raceResult.status,
+                    seriesPosition: raceResult.seriesPosition,
+                    totalRaces: raceResult.totalRaces,
+                  } : undefined;
 
                   cardElements.push(
                     <RaceCard
@@ -4388,15 +4534,17 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       critical_details={race.critical_details}
                       isPrimary={isNextRace}
                       raceStatus={raceStatus}
-                      onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name)}
+                      onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name, race.id)}
                       isSelected={selectedRaceId === race.id}
                       onSelect={() => {
                         setHasManuallySelected(true);
                         setSelectedRaceId(race.id);
                       }}
-                      onEdit={() => handleEditRace(race.id)}
-                      onDelete={() => handleDeleteRace(race.id, race.name)}
+                      onEdit={race.created_by === user?.id ? () => handleEditRace(race.id) : undefined}
+                      onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
+                      onHide={race.created_by !== user?.id ? () => handleHideRace(race.id, race.name) : undefined}
                       isDimmed={hasActiveRace && selectedRaceId !== race.id}
+                      results={resultsData}
                     />,
                   );
                 });
@@ -4478,49 +4626,35 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   phase="upcoming"
                 />
 
-                {/* AI Coach - Quick Skill Access */}
-                <View className="mb-4">
-                  <QuickSkillButtons
-                    raceData={selectedRaceData}
-                    onSkillInvoked={(skillId, advice) => {
-                      logger.info('AI Skill invoked:', skillId, advice);
-                    }}
-                  />
-                </View>
-
-                {/* AI Coach - Context-Aware Tactical Guidance */}
-                <View className="mb-4 px-4">
-                  <SmartRaceCoach
-                    raceId={selectedRaceData.id}
-                    raceData={{
-                      startTime: selectedRaceData.start_date,
-                      fleetSize: selectedRaceData.metadata?.fleet_size,
-                      course: selectedRaceData.metadata?.course_type,
-                      marks: selectedRaceMarks,
-                      weather: {
-                        windSpeed: selectedRaceData.metadata?.expected_wind_speed,
-                        windDirection: selectedRaceData.metadata?.expected_wind_direction,
-                      },
-                      location: selectedRaceData.metadata?.venue_name ? {
-                        name: selectedRaceData.metadata.venue_name,
-                        lat: selectedRaceData.metadata.venue_lat,
-                        lon: selectedRaceData.metadata.venue_lng,
-                      } : undefined,
-                    }}
-                    autoRefresh={true}
-                  />
-                </View>
-
-                {/* Race Overview - Quick Stats & Confidence */}
-                <RaceOverviewCard
+                {/* AI Race Coach - Unified Strategy Section (Redesigned) */}
+                <PreRaceStrategySection
                   raceId={selectedRaceData.id}
-                  raceName={selectedRaceData.name}
-                  startTime={selectedRaceData.start_date}
-                  venue={selectedRaceData.metadata?.venue_name
-                    ? ({ name: selectedRaceData.metadata.venue_name } as { name?: string })
-                    : undefined}
-                  boatClass={selectedRaceData.metadata?.class_name}
+                  raceData={{
+                    name: selectedRaceData.name,
+                    startTime: selectedRaceData.start_date,
+                    fleetSize: selectedRaceData.metadata?.fleet_size,
+                    course: selectedRaceData.metadata?.course_type,
+                    marks: selectedRaceMarks,
+                    weather: {
+                      windSpeed: selectedRaceData.metadata?.expected_wind_speed,
+                      windDirection: selectedRaceData.metadata?.expected_wind_direction,
+                    },
+                    venue: selectedRaceData.metadata?.venue_name ? {
+                      name: selectedRaceData.metadata.venue_name,
+                      lat: selectedRaceData.metadata.venue_lat,
+                      lng: selectedRaceData.metadata.venue_lng,
+                    } : undefined,
+                  }}
+                  racePhase={
+                    selectedRaceData.raceStatus === 'in_progress' ? 'racing' :
+                    selectedRaceData.raceStatus === 'completed' ? 'post-race' :
+                    'pre-race'
+                  }
+                  onSkillInvoked={(skillId, advice) => {
+                    logger.info('AI Skill invoked:', skillId, advice.primary);
+                  }}
                 />
+
 
                 {/* Start Strategy */}
                 <StartStrategyCard
@@ -4572,7 +4706,12 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         raceEventId={selectedRaceData.id}
                       />
 
-                      {/* Share Strategy with Coach */}
+                      {/* Contingency Plans - What-if scenarios */}
+                      <ContingencyPlansCard
+                        raceId={selectedRaceData.id}
+                      />
+
+                      {/* Share Strategy */}
                       {sailorId && selectedRaceData?.id && (
                         <View style={{ marginTop: 16, marginBottom: 8 }}>
                           <TouchableOpacity
@@ -4591,7 +4730,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                           >
                             <MaterialCommunityIcons name="share-variant" size={20} color="white" />
                             <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>
-                              Share Strategy with Coach
+                              Share Strategy
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -4600,8 +4739,8 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   ),
                   conditions: (
                     <>
-                      {/* Weather & Conditions */}
-                      <WindWeatherCard
+                      {/* Unified Race Conditions - Wind, Tide & Waves Timeline */}
+                      <RaceConditionsCard
                         raceId={selectedRaceData.id}
                         raceTime={selectedRaceData.start_date}
                         venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
@@ -4618,32 +4757,12 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                           region: 'asia_pacific',
                           country: 'HK'
                         } : undefined}
-                        initialWeather={initialConditionsSnapshot ?? undefined}
-                      />
-
-                      <CurrentTideCard
-                        raceId={selectedRaceData.id}
-                        raceTime={selectedRaceData.start_date}
-                        venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
-                          lat: selectedRaceData.metadata.venue_lat,
-                          lng: selectedRaceData.metadata.venue_lng
-                        } : undefined}
-                        venue={selectedRaceData.metadata?.venue_lat ? {
-                          id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
-                          name: selectedRaceData.metadata?.venue_name || 'Race Venue',
-                          coordinates: {
-                            latitude: selectedRaceData.metadata.venue_lat,
-                            longitude: selectedRaceData.metadata.venue_lng
-                          },
-                          region: 'asia_pacific',
-                          country: 'HK'
-                        } : undefined}
-                        initialTide={initialConditionsSnapshot ?? undefined}
-                      />
-
-                      {/* Contingency Plans */}
-                      <ContingencyPlansCard
-                        raceId={selectedRaceData.id}
+                        warningSignalTime={selectedRaceData.warning_signal_time}
+                        expectedDurationMinutes={selectedRaceData.time_limit_minutes || 90}
+                        savedWind={selectedRaceData.metadata?.wind}
+                        savedTide={selectedRaceData.metadata?.tide}
+                        savedWeatherFetchedAt={selectedRaceData.metadata?.weather_fetched_at}
+                        raceStatus={selectedRaceData.raceStatus}
                       />
                     </>
                   ),
@@ -4715,6 +4834,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                           }}
                         />
 
+                        {/* Documents card disabled - requires authentication
                         <RaceDocumentsCard
                           raceId={selectedRaceData.id}
                           documents={isDemoSession ? undefined : raceDocumentsForDisplay}
@@ -4729,6 +4849,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                             logger.debug('Share document with fleet:', docId);
                           }}
                         />
+                        */}
                       </View>
                     </>
                   ),
@@ -4753,32 +4874,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   ),
                   raceExecution: (
                     <>
-                      <View className="mb-4">
-                        <LiveRaceTimer
-                          raceStartTime={selectedRaceData?.start_date || new Date().toISOString()}
-                          sessionId={gpsTrackSessionId || selectedRaceData?.id}
-                          sailorId={user?.id}
-                          regattaId={selectedRaceData?.event_id}
-                          onTimerStart={() => {
-                            logger.debug('[races.tsx] Timer started');
-                          }}
-                          onTimerStop={() => {
-                            logger.debug('[races.tsx] Timer stopped');
-                            setIsGPSTracking(false);
-                          }}
-                          onTrackingStart={(sessionId) => {
-                            logger.info('[races.tsx] GPS tracking started', { sessionId });
-                            setIsGPSTracking(true);
-                            setGpsTrackSessionId(sessionId);
-                          }}
-                          onTrackingStop={() => {
-                            logger.info('[races.tsx] GPS tracking stopped');
-                            setIsGPSTracking(false);
-                          }}
-                          onAlert={(type) => logger.debug('[races.tsx] Timer alert:', type)}
-                          enableGPSTracking={true}
-                        />
-                      </View>
+                      {/* Timer removed - use the timer in the Race Card above */}
                       <View style={{ height: 600 }}>
                         <OnWaterTrackingView
                           sessionId={gpsTrackSessionId || selectedRaceData?.id}
@@ -5076,18 +5172,53 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
           visible={showPostRaceInterview}
           sessionId={completedSessionId}
           raceName={completedRaceName}
-          onClose={() => setShowPostRaceInterview(false)}
+          raceId={completedRaceId || undefined}
+          gpsPointCount={completedSessionGpsPoints}
+          onClose={() => {
+            setShowPostRaceInterview(false);
+            setCompletedSessionId(null);
+            setCompletedRaceName('');
+            setCompletedRaceId(null);
+            setCompletedSessionGpsPoints(0);
+          }}
           onComplete={handlePostRaceInterviewComplete}
         />
       )}
 
-      {/* Coach Selection Modal */}
-      {sailorId && (
-        <CoachSelectionModal
+      {/* Strategy Sharing Modal */}
+      {sailorId && selectedRaceData && (
+        <StrategySharingModal
           visible={showCoachSelectionModal}
           onClose={() => setShowCoachSelectionModal(false)}
-          onSelectCoach={handleShareWithCoach}
+          onShareComplete={(shareType, recipientName) => {
+            logger.info('Strategy shared:', { shareType, recipientName });
+          }}
           sailorId={sailorId}
+          raceId={selectedRaceData.id}
+          raceInfo={{
+            id: selectedRaceData.id,
+            name: selectedRaceData.name || 'Race',
+            date: selectedRaceData.start_date,
+            venue: selectedRaceData.metadata?.venue_name,
+            boatClass: selectedRaceData.metadata?.class_name,
+            weather: selectedRaceData.metadata?.wind ? {
+              windSpeed: selectedRaceData.metadata.wind.speedMin,
+              windSpeedMax: selectedRaceData.metadata.wind.speedMax,
+              windDirection: selectedRaceData.metadata.wind.direction,
+              tideState: selectedRaceData.metadata.tide?.state,
+              tideHeight: selectedRaceData.metadata.tide?.height,
+              currentSpeed: selectedRaceData.metadata.current?.speed,
+              currentDirection: selectedRaceData.metadata.current?.direction,
+              waveHeight: selectedRaceData.metadata.waves?.height,
+              temperature: selectedRaceData.metadata.weather?.temperature,
+            } : undefined,
+            rigTuning: selectedRaceData.metadata?.rigTuning ? {
+              preset: selectedRaceData.metadata.rigTuning.preset,
+              windRange: selectedRaceData.metadata.rigTuning.windRange,
+              settings: selectedRaceData.metadata.rigTuning.settings,
+              notes: selectedRaceData.metadata.rigTuning.notes,
+            } : undefined,
+          }}
         />
       )}
 

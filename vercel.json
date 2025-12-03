@@ -1,7 +1,25 @@
 {
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
-  "devCommand": "npm run web",
   "framework": null,
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/regattaflow/:path*",
+      "destination": "/regattaflow/:path*"
+    },
+    {
+      "source": "/regattaflow",
+      "destination": "/regattaflow/index.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/regattaflow",
+      "permanent": false
+    }
+  ]
 }

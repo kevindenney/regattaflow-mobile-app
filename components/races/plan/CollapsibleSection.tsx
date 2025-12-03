@@ -181,10 +181,13 @@ export function CollapsibleSection({
       <TouchableOpacity
         style={styles.header}
         onPress={handleToggle}
+        accessible={true}
+        accessibilityRole="button"
         accessibilityLabel={`${title} section`}
         accessibilityHint={`${isExpanded ? 'Collapse' : 'Expand'} to ${isExpanded ? 'hide' : 'show'} section content`}
         accessibilityState={{ expanded: isExpanded }}
         disabled={forceExpanded !== undefined}
+        importantForAccessibility={isExpanded ? "yes" : "no-hide-descendants"}
       >
         {/* Chevron Icon */}
         <Animated.View style={{ transform: [{ rotate: rotateInterpolate }] }}>
@@ -225,7 +228,11 @@ export function CollapsibleSection({
 
       {/* Section Content */}
       {isExpanded && (
-        <View style={styles.content}>
+        <View
+          style={styles.content}
+          accessible={true}
+          importantForAccessibility="yes"
+        >
           {React.Children.map(children, (child, index) => {
             if (typeof child === 'string' || typeof child === 'number') {
               return (

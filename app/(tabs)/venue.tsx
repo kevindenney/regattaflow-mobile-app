@@ -809,10 +809,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 20,
     maxWidth: 420,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.12)',
     elevation: 6,
   },
   discoveryTitle: {
@@ -867,10 +864,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.3)',
     elevation: 8,
   },
   aiDetectionButtonText: {

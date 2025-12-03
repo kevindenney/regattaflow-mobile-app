@@ -60,46 +60,64 @@ export class SailingNetworkService {
    * Get user's saved network for a specific location
    */
   static async getMyNetwork(locationName?: string): Promise<NetworkPlace[]> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      logger.debug('No user authenticated, returning empty network');
+    try {
+      // Timeout after 5 seconds to prevent indefinite hanging
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 5 seconds')), 5000)
+      );
+
+      const authPromise = supabase.auth.getUser();
+      const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
+
+      if (!user) {
+        logger.debug('No user authenticated, returning empty network');
+        return [];
+      }
+
+      let query = supabase
+        .from('saved_venues_with_details')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (locationName) {
+        query = query.eq('location_name', locationName);
+      }
+
+      const queryPromise = query.order('is_home_venue', { ascending: false });
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+      if (error) {
+        logger.error('Failed to get network:', error);
+        return []; // Return empty array instead of throwing
+      }
+
+      return (data || []).map(item => ({
+        id: item.id,
+        type: item.service_type as ServiceType,
+        name: item.name,
+        country: item.country,
+        location: {
+          name: item.location_name,
+          region: item.location_region,
+        },
+        coordinates: {
+          lat: item.coordinates_lat,
+          lng: item.coordinates_lng,
+        },
+        isSaved: true,
+        savedId: item.saved_venue_id,
+        notes: item.notes,
+        isHomeVenue: item.is_home_venue,
+      }));
+    } catch (error: any) {
+      // Handle timeout or other errors gracefully
+      if (error.message?.includes('timed out')) {
+        logger.warn('getMyNetwork timed out, returning empty array');
+      } else {
+        logger.error('getMyNetwork failed:', error);
+      }
       return [];
     }
-
-    let query = supabase
-      .from('saved_venues_with_details')
-      .select('*')
-      .eq('user_id', user.id);
-
-    if (locationName) {
-      query = query.eq('location_name', locationName);
-    }
-
-    const { data, error } = await query.order('is_home_venue', { ascending: false });
-
-    if (error) {
-      console.error('Failed to get network:', error);
-      return []; // Return empty array instead of throwing
-    }
-
-    return (data || []).map(item => ({
-      id: item.id,
-      type: item.service_type as ServiceType,
-      name: item.name,
-      country: item.country,
-      location: {
-        name: item.location_name,
-        region: item.location_region,
-      },
-      coordinates: {
-        lat: item.coordinates_lat,
-        lng: item.coordinates_lng,
-      },
-      isSaved: true,
-      savedId: item.saved_venue_id,
-      notes: item.notes,
-      isHomeVenue: item.is_home_venue,
-    }));
   }
 
   /**
@@ -112,51 +130,68 @@ export class SailingNetworkService {
       searchQuery?: string;
     }
   ): Promise<NetworkPlace[]> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    try {
+      // Timeout after 5 seconds
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 5 seconds')), 5000)
+      );
 
-    // Get saved venue IDs to exclude from discovery
-    const { data: savedVenues } = await supabase
-      .from('saved_venues')
-      .select('venue_id')
-      .eq('user_id', user.id);
+      const authPromise = supabase.auth.getUser();
+      const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
+      if (!user) throw new Error('User not authenticated');
 
-    const savedVenueIds = new Set((savedVenues || []).map((sv: { venue_id: string }) => sv.venue_id));
+      // Get saved venue IDs to exclude from discovery
+      const savedVenuesPromise = supabase
+        .from('saved_venues')
+        .select('venue_id')
+        .eq('user_id', user.id);
 
-    // Query sailing venues in this location
-    let query = supabase
-      .from('sailing_venues')
-      .select('*');
+      const { data: savedVenues } = await Promise.race([savedVenuesPromise, timeoutPromise]) as any;
 
-    // Filter by location (approximate matching)
-    if (filters?.searchQuery) {
-      query = query.or(`name.ilike.%${filters.searchQuery}%,country.ilike.%${filters.searchQuery}%`);
+      const savedVenueIds = new Set((savedVenues || []).map((sv: { venue_id: string }) => sv.venue_id));
+
+      // Query sailing venues in this location
+      let query = supabase
+        .from('sailing_venues')
+        .select('*');
+
+      // Filter by location (approximate matching)
+      if (filters?.searchQuery) {
+        query = query.or(`name.ilike.%${filters.searchQuery}%,country.ilike.%${filters.searchQuery}%`);
+      }
+
+      const { data, error } = await Promise.race([query, timeoutPromise]) as any;
+
+      if (error) throw error;
+
+      // Filter out already saved venues
+      const unsavedVenues = (data || [])
+        .filter((venue: any) => !savedVenueIds.has(venue.id))
+        .map((venue: any) => ({
+          id: venue.id,
+          type: 'venue' as ServiceType, // Default to venue for now
+          name: venue.name,
+          country: venue.country,
+          location: {
+            name: venue.name, // Use venue name as location
+            region: venue.region,
+          },
+          coordinates: {
+            lat: venue.coordinates_lat,
+            lng: venue.coordinates_lng,
+          },
+          isSaved: false,
+        }));
+
+      return unsavedVenues;
+    } catch (error: any) {
+      if (error.message?.includes('timed out')) {
+        logger.warn('discoverInLocation timed out, returning empty array');
+      } else {
+        logger.error('discoverInLocation failed:', error);
+      }
+      return [];
     }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    // Filter out already saved venues
-    const unsavedVenues = (data || [])
-      .filter((venue: any) => !savedVenueIds.has(venue.id))
-      .map((venue: any) => ({
-        id: venue.id,
-        type: 'venue' as ServiceType, // Default to venue for now
-        name: venue.name,
-        country: venue.country,
-        location: {
-          name: venue.name, // Use venue name as location
-          region: venue.region,
-        },
-        coordinates: {
-          lat: venue.coordinates_lat,
-          lng: venue.coordinates_lng,
-        },
-        isSaved: false,
-      }));
-
-    return unsavedVenues;
   }
 
   /**
@@ -227,70 +262,101 @@ export class SailingNetworkService {
    * Get summary of user's locations with saved place counts
    */
   static async getMyLocations(): Promise<LocationSummary[]> {
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      // Timeout after 5 seconds
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 5 seconds')), 5000)
+      );
 
-    if (!user) {
+      const authPromise = supabase.auth.getUser();
+      const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
 
+      if (!user) {
+        return [];
+      }
+
+      const rpcPromise = supabase.rpc('get_user_locations_summary', {
+        p_user_id: user.id,
+      });
+
+      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
+
+      if (error) {
+        logger.error('Failed to get locations:', error);
+        return []; // Return empty array instead of throwing
+      }
+
+      const mapped = (data || []).map((item: any) => ({
+        name: item.location_name,
+        region: item.location_region,
+        savedCount: item.saved_count,
+        hasHomeVenue: item.has_home_venue,
+        serviceTypes: item.service_types,
+      }));
+
+      return mapped;
+    } catch (error: any) {
+      if (error.message?.includes('timed out')) {
+        logger.warn('getMyLocations timed out, returning empty array');
+      } else {
+        logger.error('getMyLocations failed:', error);
+      }
       return [];
     }
-
-    const { data, error } = await supabase.rpc('get_user_locations_summary', {
-      p_user_id: user.id,
-    });
-
-    if (error) {
-
-      return []; // Return empty array instead of throwing
-    }
-
-    const mapped = (data || []).map((item: any) => ({
-      name: item.location_name,
-      region: item.location_region,
-      savedCount: item.saved_count,
-      hasHomeVenue: item.has_home_venue,
-      serviceTypes: item.service_types,
-    }));
-
-    return mapped;
   }
 
   /**
    * Get user's current location context
    */
   static async getCurrentLocationContext(): Promise<LocationContext | null> {
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      // Timeout after 5 seconds
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 5 seconds')), 5000)
+      );
 
-    if (!user) {
+      const authPromise = supabase.auth.getUser();
+      const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
 
+      if (!user) {
+        return null;
+      }
+
+      const queryPromise = supabase
+        .from('user_location_context')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+      if (error) {
+        logger.error('Failed to get current location context:', error);
+        return null; // Return null instead of throwing to prevent app crash
+      }
+      if (!data) {
+        return null;
+      }
+
+      const result = {
+        locationName: data.current_location_name,
+        locationRegion: data.current_location_region,
+        coordinates: {
+          lat: 0, // POINT type not used for now
+          lng: 0,
+        },
+        detectionMethod: data.detection_method as 'gps' | 'manual' | 'calendar',
+      };
+
+      return result;
+    } catch (error: any) {
+      if (error.message?.includes('timed out')) {
+        logger.warn('getCurrentLocationContext timed out, returning null');
+      } else {
+        logger.error('getCurrentLocationContext failed:', error);
+      }
       return null;
     }
-
-    const { data, error } = await supabase
-      .from('user_location_context')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (error) {
-
-      return null; // Return null instead of throwing to prevent app crash
-    }
-    if (!data) {
-
-      return null;
-    }
-
-    const result = {
-      locationName: data.current_location_name,
-      locationRegion: data.current_location_region,
-      coordinates: {
-        lat: 0, // POINT type not used for now
-        lng: 0,
-      },
-      detectionMethod: data.detection_method as 'gps' | 'manual' | 'calendar',
-    };
-
-    return result;
   }
 
   /**

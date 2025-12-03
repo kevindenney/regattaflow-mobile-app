@@ -154,32 +154,34 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
   const preferClubCreation = userRecord?.user_type === 'club';
 
   const findExistingClub = async () => {
-    // Attempt 1: club owned by user
-    const owned = await supabase
-      .from('clubs')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // 🔍 DEBUG: Log lookup attempts
+    console.log('[club/workspace] findExistingClub for userId:', userId);
 
-    if (owned.data) {
-      return { club: owned.data, membership: { role: 'admin', source: 'owner' as const } };
-    }
-
-    // Attempt 2: staff membership
+    // Attempt 1: club_profiles where contact_email matches user email (owner lookup)
+    // Note: club_profiles doesn't have user_id, so we check via club_staff
+    
+    // Attempt 2: staff membership (PRIMARY method - club_staff.club_id → club_profiles.id)
     const staff = await supabase
       .from('club_staff')
-      .select('club_id, role')
+      .select('club_id, role, active')
       .eq('user_id', userId)
       .limit(10);
 
+    console.log('[club/workspace] club_staff lookup result:', staff.data, staff.error);
+
     if (staff.data && staff.data.length > 0) {
       const activeStaff = staff.data.find((row: any) => row.active !== false && row.is_active !== false) ?? staff.data[0];
+      console.log('[club/workspace] Found active staff record:', activeStaff);
+      
       if (activeStaff?.club_id) {
+        // club_staff.club_id references club_profiles.id (not clubs.id!)
         const club = await supabase
-          .from('clubs')
+          .from('club_profiles')
           .select('*')
           .eq('id', activeStaff.club_id)
           .maybeSingle();
+
+        console.log('[club/workspace] club_profiles lookup result:', club.data, club.error);
 
         if (club.data) {
           return {
@@ -193,7 +195,20 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       }
     }
 
-    // Attempt 3: member roster
+    // Attempt 3: Try the clubs table as fallback (legacy lookup)
+    const owned = await supabase
+      .from('clubs')
+      .select('*')
+      .eq('email', userRecord?.email)
+      .maybeSingle();
+
+    console.log('[club/workspace] clubs table lookup result:', owned.data, owned.error);
+
+    if (owned.data) {
+      return { club: owned.data, membership: { role: 'admin', source: 'owner' as const } };
+    }
+
+    // Attempt 4: member roster
     const members = await supabase
       .from('club_members')
       .select('club_id, role')
@@ -207,7 +222,7 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
 
       if (activeMember?.club_id) {
         const club = await supabase
-          .from('clubs')
+          .from('club_profiles')
           .select('*')
           .eq('id', activeMember.club_id)
           .maybeSingle();
@@ -224,6 +239,7 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       }
     }
 
+    console.log('[club/workspace] No club found for user');
     return { club: null, membership: null };
   };
 
@@ -239,28 +255,32 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       'New Club';
 
     const now = new Date().toISOString();
+    
+    // Create in club_profiles table (matches the FK from club_staff)
     const insertPayload = {
-      user_id: userId,
-      club_name: fallbackName,
-      verification_status: 'pending',
-      verification_method: 'manual',
+      organization_name: fallbackName,
+      club_type: 'yacht_club',
+      contact_email: userRecord?.email,
       onboarding_completed: false,
       created_at: now,
       updated_at: now,
     };
 
+    console.log('[club/workspace] Creating new club_profile:', insertPayload);
+
     const insertion = await supabase
-      .from('clubs')
+      .from('club_profiles')
       .insert(insertPayload)
       .select('*')
       .maybeSingle();
 
     if (insertion.error) {
       if (insertion.error.code === '23505') {
+        // Duplicate - try to find existing by email
         const retry = await supabase
-          .from('clubs')
+          .from('club_profiles')
           .select('*')
-          .eq('user_id', userId)
+          .eq('contact_email', userRecord?.email)
           .maybeSingle();
 
         club = retry.data ?? null;
@@ -272,6 +292,7 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
     } else {
       club = insertion.data ?? null;
       created = !!club;
+      console.log('[club/workspace] Created new club_profile:', club);
     }
 
     if (club) {
@@ -281,9 +302,8 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       };
       try {
         await ensureStaffRecord(supabase, club.id, userId);
-        await ensureProfileRecord(supabase, club.id, userId, fallbackName);
       } catch (relError) {
-        console.warn('[club/workspace] Failed to ensure related records', relError);
+        console.warn('[club/workspace] Failed to ensure staff record', relError);
       }
     }
   }

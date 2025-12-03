@@ -100,7 +100,6 @@ export function SmartRaceCoach({
 
   // Initial fetch on mount
   useEffect(() => {
-    console.log('🚀 SmartRaceCoach mounted, fetching initial advice');
     fetchAdvice(phase);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -109,7 +108,6 @@ export function SmartRaceCoach({
   useEffect(() => {
     const detectedPhase = detectPhase(raceData, position);
     if (detectedPhase !== phase) {
-      console.log(`📍 Phase changed: ${phase} → ${detectedPhase}`);
       setPhase(detectedPhase);
       if (autoRefresh) {
         fetchAdvice(detectedPhase);
@@ -394,17 +392,11 @@ function buildContext(phase: RacePhase, raceData: any, position?: any): any {
 async function invokeSkill(skillName: keyof typeof SKILL_IDS, context: any): Promise<any> {
   const skillId = SKILL_IDS[skillName];
 
-  console.log(`🔍 invokeSkill called with:`, { skillName, skillId });
-
   // Check if this is a built-in skill (placeholder ID)
   if (skillId.startsWith('skill_builtin_')) {
-    console.log(`✅ Using built-in skill: ${skillName}`);
     const advice = getBuiltInSkillAdvice(skillName, context);
-    console.log(`✅ Built-in advice generated:`, advice);
     return advice;
   }
-
-  console.log(`⚠️ Not a built-in skill, calling API for: ${skillName}`);
 
   // Build a natural language prompt
   const prompt = buildPrompt(skillName, context);

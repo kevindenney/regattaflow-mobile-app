@@ -4,7 +4,7 @@
  * Shows approach & exit strategies with championship techniques
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
@@ -47,6 +47,19 @@ export function MarkRoundingCard({
   const [userLeewardStrategy, setUserLeewardStrategy] = useState('');
   const [savingWindward, setSavingWindward] = useState(false);
   const [savingLeeward, setSavingLeeward] = useState(false);
+
+  // Use refs to track state for polling without triggering re-renders
+  const roundingsRef = useRef<MarkRounding[]>([]);
+  const loadingRef = useRef(true);
+
+  // Update refs when state changes
+  useEffect(() => {
+    roundingsRef.current = roundings;
+  }, [roundings]);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   const loadMarkRoundings = useCallback(async () => {
     if (!user) {
@@ -121,7 +134,7 @@ export function MarkRoundingCard({
     // Poll for strategy updates every 3 seconds if no data yet
     // This handles the case where strategy is generated after component mounts
     const pollInterval = setInterval(() => {
-      if (roundings.length === 0 && !loading) {
+      if (roundingsRef.current.length === 0 && !loadingRef.current) {
         console.log('[MarkRoundingCard] Polling for strategy updates...');
         loadMarkRoundings();
       }
@@ -212,7 +225,8 @@ export function MarkRoundingCard({
   };
 
   const renderMarkContent = () => {
-    if (loading) {
+    // Only show spinner on initial load when we have no data
+    if (loading && roundings.length === 0) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#3B82F6" />
@@ -220,7 +234,8 @@ export function MarkRoundingCard({
       );
     }
 
-    if (error || roundings.length === 0) {
+    // If we have no data but finished loading, show error/empty state
+    if (roundings.length === 0) {
       return (
         <View style={styles.emptyState}>
           <MaterialCommunityIcons name="flag-checkered" size={48} color="#CBD5E1" />

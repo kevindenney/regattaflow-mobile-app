@@ -94,6 +94,35 @@ export interface CrewRaceStats {
   totalPoints?: number;
 }
 
+export interface RaceCrewAssignment {
+  id: string;
+  raceId: string;
+  crewMemberId: string;
+  assignedAt: string;
+  assignedBy?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrewMemberWithAssignment extends CrewMember {
+  isAssigned: boolean;
+  assignmentId?: string;
+  assignmentNotes?: string;
+}
+
+export interface CrewManifestEntry {
+  sailNumber: string;
+  boatName?: string;
+  skipperName?: string;
+  skipperUserId?: string;
+  assignedCrew: CrewMember[];
+  crewCount: number;
+  minCrewRequired?: number;
+  isCompliant: boolean;
+  registrationStatus?: string;
+}
+
 const logger = createLogger('crewManagementService');
 const CREW_COLLECTION = 'crew_members';
 const CREW_AVAILABILITY_COLLECTION = 'crew_availability';
@@ -164,6 +193,101 @@ class CrewManagementService {
     }
 
     return this.mapCrewMembers(data || []);
+  }
+
+  /**
+   * Add a crew member directly without sending an invite (active status, email optional)
+   */
+  async addCrewMemberDirect(
+    sailorId: string,
+    classId: string,
+    member: {
+      name: string;
+      email?: string;
+      role: CrewRole;
+      accessLevel?: CrewAccessLevel;
+      notes?: string;
+    }
+  ): Promise<CrewMember> {
+    const { data, error } = await supabase
+      .from('crew_members')
+      .insert({
+        sailor_id: sailorId,
+        class_id: classId,
+        email: member.email ? member.email.toLowerCase() : `${Date.now()}@noemail.local`,
+        name: member.name,
+        role: member.role,
+        access_level: member.accessLevel || 'view',
+        status: 'active',
+        notes: member.notes,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return this.mapCrewMember(data);
+  }
+
+  /**
+   * Add a crew member directly with offline queue support
+   */
+  async addCrewMember(
+    sailorId: string,
+    classId: string,
+    member: {
+      name: string;
+      email?: string;
+      role: CrewRole;
+      accessLevel?: CrewAccessLevel;
+      notes?: string;
+    }
+  ): Promise<CrewMember> {
+    try {
+      return await this.addCrewMemberDirect(sailorId, classId, member);
+    } catch (error: any) {
+      logger.warn('Error adding crew member, queueing for offline sync', error);
+
+      const tempId = `local_crew_${Date.now()}`;
+      const nowIso = new Date().toISOString();
+      const queuedMember: CrewMember = {
+        id: tempId,
+        sailorId,
+        classId,
+        email: member.email ? member.email.toLowerCase() : `${Date.now()}@noemail.local`,
+        name: member.name,
+        role: member.role,
+        accessLevel: member.accessLevel || 'view',
+        status: 'active',
+        isPrimary: false,
+        certifications: [],
+        inviteToken: undefined,
+        inviteSentAt: undefined,
+        inviteAcceptedAt: nowIso,
+        notes: member.notes,
+        performanceNotes: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        queuedForSync: true,
+        offlineOperation: 'add',
+      };
+
+      await MutationQueueService.enqueueMutation(CREW_COLLECTION, 'upsert', {
+        action: 'add',
+        sailorId,
+        classId,
+        member,
+      });
+
+      const offlineError: any = new Error('Crew member queued for sync');
+      offlineError.queuedForSync = true;
+      offlineError.entity = queuedMember;
+      offlineError.originalError = error;
+      offlineError.operation = 'addCrewMember';
+      throw offlineError;
+    }
   }
 
   /**
@@ -1037,6 +1161,11 @@ class CrewManagementService {
         .maybeSingle();
 
       if (error) {
+        // If table doesn't exist (PGRST205), silently default to available
+        if (error.code === 'PGRST205' || error.code === '42P01') {
+          logger.debug('crew_availability table not found, defaulting to available');
+          return 'available';
+        }
         throw error;
       }
 
@@ -1054,7 +1183,12 @@ class CrewManagementService {
       }
 
       return (data.status as AvailabilityStatus) || 'available';
-    } catch (error) {
+    } catch (error: any) {
+      // If table doesn't exist, silently default to available
+      if (error?.code === 'PGRST205' || error?.code === '42P01') {
+        logger.debug('crew_availability table not found, defaulting to available');
+        return 'available';
+      }
       console.error('Error checking crew availability:', error);
       return 'available'; // Default to available on error
     }
@@ -1085,7 +1219,11 @@ class CrewManagementService {
           .limit(1)
           .maybeSingle();
 
-        if (nextUnavailableError && nextUnavailableError.code !== 'PGRST116') {
+        // Ignore table not found errors
+        if (nextUnavailableError &&
+            nextUnavailableError.code !== 'PGRST116' &&
+            nextUnavailableError.code !== 'PGRST205' &&
+            nextUnavailableError.code !== '42P01') {
           console.error('Error loading next unavailable period:', nextUnavailableError);
         }
 
@@ -1173,6 +1311,327 @@ class CrewManagementService {
       pointsScored: data.points_scored,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
+    };
+  }
+
+  // ==========================================
+  // RACE CREW ASSIGNMENT METHODS
+  // ==========================================
+
+  /**
+   * Get crew members assigned to a specific race
+   */
+  async getAssignedCrewForRace(raceId: string): Promise<CrewMember[]> {
+    const { data, error } = await supabase
+      .from('race_crew_assignments')
+      .select(`
+        crew_member_id,
+        crew_members (*)
+      `)
+      .eq('race_id', raceId);
+
+    if (error) {
+      console.error('Error fetching assigned crew for race:', error);
+      throw error;
+    }
+
+    return (data || []).map((assignment: any) => this.mapCrewMember(assignment.crew_members));
+  }
+
+  /**
+   * Get crew for a class with assignment status for a specific race
+   */
+  async getCrewWithAssignmentStatus(
+    sailorId: string,
+    classId: string | null,
+    raceId: string
+  ): Promise<CrewMemberWithAssignment[]> {
+    // If we don't have a class ID (some regattas don't set it), fall back to all crew
+    const crew = classId
+      ? await this.getCrewForClass(sailorId, classId)
+      : await this.getAllCrew(sailorId);
+
+    // Get assignments for this race
+    const { data: assignments, error } = await supabase
+      .from('race_crew_assignments')
+      .select('*')
+      .eq('race_id', raceId);
+
+    if (error) {
+      console.error('Error fetching race crew assignments:', error);
+      throw error;
+    }
+
+    const assignmentMap = new Map(
+      (assignments || []).map((a: any) => [
+        a.crew_member_id,
+        { id: a.id, notes: a.notes }
+      ])
+    );
+
+    return crew.map((member) => {
+      const assignment = assignmentMap.get(member.id);
+      return {
+        ...member,
+        isAssigned: !!assignment,
+        assignmentId: assignment?.id,
+        assignmentNotes: assignment?.notes,
+      };
+    });
+  }
+
+  /**
+   * Assign a crew member to a race
+   */
+  async assignCrewToRace(
+    raceId: string,
+    crewMemberId: string,
+    notes?: string
+  ): Promise<RaceCrewAssignment> {
+    const { data, error } = await supabase
+      .from('race_crew_assignments')
+      .insert({
+        race_id: raceId,
+        crew_member_id: crewMemberId,
+        assigned_by: (await supabase.auth.getUser()).data.user?.id,
+        notes,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error assigning crew to race:', error);
+      throw error;
+    }
+
+    return this.mapRaceCrewAssignment(data);
+  }
+
+  /**
+   * Unassign a crew member from a race
+   */
+  async unassignCrewFromRace(assignmentId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_crew_assignments')
+      .delete()
+      .eq('id', assignmentId);
+
+    if (error) {
+      console.error('Error unassigning crew from race:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Assign multiple crew members to a race at once
+   */
+  async assignMultipleCrewToRace(
+    raceId: string,
+    crewMemberIds: string[],
+    notes?: string
+  ): Promise<RaceCrewAssignment[]> {
+    const userId = (await supabase.auth.getUser()).data.user?.id;
+
+    const { data, error } = await supabase
+      .from('race_crew_assignments')
+      .insert(
+        crewMemberIds.map((crewMemberId) => ({
+          race_id: raceId,
+          crew_member_id: crewMemberId,
+          assigned_by: userId,
+          notes,
+        }))
+      )
+      .select();
+
+    if (error) {
+      console.error('Error assigning multiple crew to race:', error);
+      throw error;
+    }
+
+    return (data || []).map(this.mapRaceCrewAssignment);
+  }
+
+  /**
+   * Clear all crew assignments for a race
+   */
+  async clearRaceCrewAssignments(raceId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_crew_assignments')
+      .delete()
+      .eq('race_id', raceId);
+
+    if (error) {
+      console.error('Error clearing race crew assignments:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update crew assignment notes
+   */
+  async updateRaceCrewAssignment(
+    assignmentId: string,
+    updates: { notes?: string }
+  ): Promise<RaceCrewAssignment> {
+    const { data, error } = await supabase
+      .from('race_crew_assignments')
+      .update({
+        notes: updates.notes,
+      })
+      .eq('id', assignmentId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating race crew assignment:', error);
+      throw error;
+    }
+
+    return this.mapRaceCrewAssignment(data);
+  }
+
+  // Helper method for race crew assignments
+  private mapRaceCrewAssignment(data: any): RaceCrewAssignment {
+    return {
+      id: data.id,
+      raceId: data.race_id,
+      crewMemberId: data.crew_member_id,
+      assignedAt: data.assigned_at,
+      assignedBy: data.assigned_by,
+      notes: data.notes,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  // ==========================================
+  // RACE OFFICER CREW MANIFEST METHODS
+  // ==========================================
+
+  /**
+   * Get crew manifest for a race (race officer view)
+   * Shows all boats registered for the race with their assigned crew
+   */
+  async getRaceCrewManifest(raceId: string): Promise<CrewManifestEntry[]> {
+    try {
+      // Get all participants for this race with their crew assignments
+      const { data: participants, error: participantsError } = await supabase
+        .from('race_participants')
+        .select(`
+          id,
+          sail_number,
+          boat_name,
+          user_id,
+          status,
+          sailor_profiles!inner(
+            id,
+            name,
+            user_id
+          )
+        `)
+        .eq('regatta_id', raceId);
+
+      if (participantsError) {
+        console.error('Error fetching race participants:', participantsError);
+        throw participantsError;
+      }
+
+      if (!participants || participants.length === 0) {
+        return [];
+      }
+
+      // Get all crew assignments for this race
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('race_crew_assignments')
+        .select(`
+          id,
+          crew_member_id,
+          notes,
+          crew_members(
+            id,
+            name,
+            role,
+            certifications,
+            status
+          )
+        `)
+        .eq('race_id', raceId);
+
+      if (assignmentsError) {
+        console.error('Error fetching crew assignments:', assignmentsError);
+        // Don't throw - just return participants without crew data
+      }
+
+      // Build manifest entries
+      const manifest: CrewManifestEntry[] = participants.map((participant: any) => {
+        const sailorProfile = participant.sailor_profiles;
+        const skipperUserId = participant.user_id;
+
+        // Find crew assignments for this participant's user
+        const participantCrew = (assignments || [])
+          .filter((assignment: any) => {
+            // Match crew assignments by checking if crew member's sailor_id matches participant's user_id
+            const crewMember = assignment.crew_members;
+            return crewMember && crewMember.sailor_id === skipperUserId;
+          })
+          .map((assignment: any) => this.mapCrewMember(assignment.crew_members))
+          .filter((crew: CrewMember) => crew.status === 'active');
+
+        const crewCount = participantCrew.length;
+        const minCrewRequired = 3; // Default, could be class-specific
+        const isCompliant = crewCount >= minCrewRequired;
+
+        return {
+          sailNumber: participant.sail_number || 'N/A',
+          boatName: participant.boat_name,
+          skipperName: sailorProfile?.name || 'Unknown',
+          skipperUserId,
+          assignedCrew: participantCrew,
+          crewCount,
+          minCrewRequired,
+          isCompliant,
+          registrationStatus: participant.status,
+        };
+      });
+
+      // Sort by compliance status (non-compliant first) then by sail number
+      return manifest.sort((a, b) => {
+        if (a.isCompliant !== b.isCompliant) {
+          return a.isCompliant ? 1 : -1; // Non-compliant first
+        }
+        return a.sailNumber.localeCompare(b.sailNumber);
+      });
+    } catch (error) {
+      console.error('Error getting race crew manifest:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get crew manifest summary stats for race officer dashboard
+   */
+  async getRaceCrewManifestSummary(raceId: string): Promise<{
+    totalBoats: number;
+    boatsWithFullCrew: number;
+    boatsWithNoCrew: number;
+    totalCrewAssigned: number;
+    complianceRate: number;
+  }> {
+    const manifest = await this.getRaceCrewManifest(raceId);
+
+    const totalBoats = manifest.length;
+    const boatsWithFullCrew = manifest.filter((entry) => entry.isCompliant).length;
+    const boatsWithNoCrew = manifest.filter((entry) => entry.crewCount === 0).length;
+    const totalCrewAssigned = manifest.reduce((sum, entry) => sum + entry.crewCount, 0);
+    const complianceRate = totalBoats > 0 ? (boatsWithFullCrew / totalBoats) * 100 : 0;
+
+    return {
+      totalBoats,
+      boatsWithFullCrew,
+      boatsWithNoCrew,
+      totalCrewAssigned,
+      complianceRate,
     };
   }
 }

@@ -3,11 +3,11 @@
  * Shows current conditions and race-time forecast
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StrategyCard } from './StrategyCard';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StrategyCard } from './StrategyCard';
 
 interface WeatherData {
   current: {
@@ -47,6 +47,27 @@ interface InitialWeather {
   provider?: string;
 }
 
+interface WindTimelinePoint {
+  time: Date;
+  label: string;
+  windSpeed: number;
+  windDirection: number;
+  gusts?: number;
+  isRaceEvent?: boolean;
+  eventType?: 'warning' | 'start' | 'finish';
+}
+
+interface WaveTimelinePoint {
+  time: Date;
+  label: string;
+  waveHeight: number;
+  wavePeriod?: number;
+  waveDirection?: number;
+  seaState: string;
+  isRaceEvent?: boolean;
+  eventType?: 'warning' | 'start' | 'finish';
+}
+
 interface WindWeatherCardProps {
   raceId: string;
   raceTime?: string;
@@ -65,6 +86,10 @@ interface WindWeatherCardProps {
     country: string;
   };
   initialWeather?: InitialWeather;
+  /** Warning signal time (e.g., "10:00:00") */
+  warningSignalTime?: string;
+  /** Expected race duration in minutes */
+  expectedDurationMinutes?: number;
 }
 
 export function WindWeatherCard({
@@ -72,7 +97,9 @@ export function WindWeatherCard({
   raceTime,
   venueCoordinates,
   venue,
-  initialWeather
+  initialWeather,
+  warningSignalTime,
+  expectedDurationMinutes = 90,
 }: WindWeatherCardProps) {
   const [useMockData, setUseMockData] = useState(false);
   const [hasAutoLoaded, setHasAutoLoaded] = useState(false);
@@ -284,6 +311,214 @@ export function WindWeatherCard({
 
   const weather: WeatherData | null =
     showingRecordedSnapshot ? recordedWeather ?? liveWeather : liveWeather ?? recordedWeather;
+
+  // Calculate Wind Timeline for race duration
+  const windTimeline = useMemo((): WindTimelinePoint[] => {
+    if (!raceTime || !weather) return [];
+    
+    const raceDate = new Date(raceTime);
+    if (Number.isNaN(raceDate.getTime())) return [];
+    
+    // Parse warning signal time if provided
+    let warningTime: Date;
+    if (warningSignalTime) {
+      const [hours, minutes] = warningSignalTime.split(':').map(Number);
+      warningTime = new Date(raceDate);
+      warningTime.setHours(hours, minutes, 0, 0);
+    } else {
+      warningTime = raceDate;
+    }
+    
+    const startTime = new Date(warningTime.getTime() + 5 * 60 * 1000);
+    const finishTime = new Date(startTime.getTime() + expectedDurationMinutes * 60 * 1000);
+    const timelineStart = new Date(warningTime.getTime() - 30 * 60 * 1000);
+    
+    const points: WindTimelinePoint[] = [];
+    const baseWind = weather.current.windSpeed;
+    const baseDirection = weather.current.windDirection;
+    const baseGusts = weather.current.gusts;
+    
+    // Get forecast data if available for interpolation
+    const forecasts = realWeather?.raw?.forecast || weather.forecast || [];
+    
+    // Helper to estimate wind at a specific time
+    const estimateWindAtTime = (time: Date): { speed: number; direction: number; gusts?: number } => {
+      // Find closest forecast points
+      if (forecasts.length > 0) {
+        const timeMs = time.getTime();
+        let before = forecasts[0];
+        let after = forecasts[forecasts.length - 1];
+        
+        for (let i = 0; i < forecasts.length - 1; i++) {
+          const forecastTime = forecasts[i].timestamp || new Date(forecasts[i].time);
+          const nextTime = forecasts[i + 1].timestamp || new Date(forecasts[i + 1].time);
+          if (forecastTime.getTime() <= timeMs && nextTime.getTime() >= timeMs) {
+            before = forecasts[i];
+            after = forecasts[i + 1];
+            break;
+          }
+        }
+        
+        // Interpolate between forecast points
+        const beforeTime = (before.timestamp || new Date(before.time)).getTime();
+        const afterTime = (after.timestamp || new Date(after.time)).getTime();
+        const progress = afterTime !== beforeTime 
+          ? (timeMs - beforeTime) / (afterTime - beforeTime)
+          : 0;
+        
+        return {
+          speed: Math.round(before.windSpeed + (after.windSpeed - before.windSpeed) * progress),
+          direction: Math.round(before.windDirection + (after.windDirection - before.windDirection) * progress),
+          gusts: before.gusts || after.gusts 
+            ? Math.round((before.gusts || before.windSpeed * 1.2) + 
+                ((after.gusts || after.windSpeed * 1.2) - (before.gusts || before.windSpeed * 1.2)) * progress)
+            : undefined
+        };
+      }
+      
+      // Fallback: add some natural variation
+      const hourOfDay = time.getHours();
+      const thermalFactor = hourOfDay >= 10 && hourOfDay <= 16 ? 1.15 : 1.0; // Thermal boost midday
+      const variation = (Math.sin(time.getTime() / (30 * 60 * 1000)) * 0.1); // Small oscillation
+      
+      return {
+        speed: Math.round(baseWind * thermalFactor * (1 + variation)),
+        direction: Math.round(baseDirection + (variation * 15)), // Small direction shifts
+        gusts: baseGusts ? Math.round(baseGusts * thermalFactor * (1 + variation * 0.5)) : undefined
+      };
+    };
+    
+    // Add timeline points
+    const addPoint = (time: Date, label: string, isRaceEvent?: boolean, eventType?: 'warning' | 'start' | 'finish') => {
+      const wind = estimateWindAtTime(time);
+      points.push({
+        time,
+        label,
+        windSpeed: wind.speed,
+        windDirection: wind.direction,
+        gusts: wind.gusts,
+        isRaceEvent,
+        eventType
+      });
+    };
+    
+    addPoint(timelineStart, '30 min before');
+    addPoint(warningTime, 'Warning Signal', true, 'warning');
+    addPoint(startTime, 'Race Start', true, 'start');
+    addPoint(new Date(startTime.getTime() + (expectedDurationMinutes / 2) * 60 * 1000), 'Mid-race');
+    addPoint(finishTime, 'Expected Finish', true, 'finish');
+    
+    return points;
+  }, [raceTime, warningSignalTime, expectedDurationMinutes, weather, realWeather]);
+
+  // Calculate Wave Timeline for race duration
+  const waveTimeline = useMemo((): WaveTimelinePoint[] => {
+    if (!raceTime) return [];
+    
+    const raceDate = new Date(raceTime);
+    if (Number.isNaN(raceDate.getTime())) return [];
+    
+    // Parse warning signal time if provided
+    let warningTime: Date;
+    if (warningSignalTime) {
+      const [hours, minutes] = warningSignalTime.split(':').map(Number);
+      warningTime = new Date(raceDate);
+      warningTime.setHours(hours, minutes, 0, 0);
+    } else {
+      warningTime = raceDate;
+    }
+    
+    const startTime = new Date(warningTime.getTime() + 5 * 60 * 1000);
+    const finishTime = new Date(startTime.getTime() + expectedDurationMinutes * 60 * 1000);
+    const timelineStart = new Date(warningTime.getTime() - 30 * 60 * 1000);
+    
+    const points: WaveTimelinePoint[] = [];
+    
+    // Get wave data from raw weather if available
+    const forecasts = realWeather?.raw?.forecast || [];
+    const marineConditions = realWeather?.raw?.marineConditions;
+    
+    // Helper to get sea state description
+    const getSeaStateDescription = (height: number): string => {
+      if (height < 0.1) return 'Glassy';
+      if (height < 0.3) return 'Calm';
+      if (height < 0.5) return 'Smooth';
+      if (height < 1.0) return 'Slight';
+      if (height < 2.0) return 'Moderate';
+      if (height < 3.0) return 'Rough';
+      if (height < 4.0) return 'Very Rough';
+      return 'High';
+    };
+    
+    // Helper to estimate waves at a specific time
+    const estimateWavesAtTime = (time: Date): { height: number; period?: number; direction?: number } => {
+      // Find closest forecast points with wave data
+      if (forecasts.length > 0) {
+        const timeMs = time.getTime();
+        let before = forecasts[0];
+        let after = forecasts[forecasts.length - 1];
+        
+        for (let i = 0; i < forecasts.length - 1; i++) {
+          const forecastTime = forecasts[i].timestamp || new Date(forecasts[i].time);
+          const nextTime = forecasts[i + 1].timestamp || new Date(forecasts[i + 1].time);
+          if (forecastTime.getTime() <= timeMs && nextTime.getTime() >= timeMs) {
+            before = forecasts[i];
+            after = forecasts[i + 1];
+            break;
+          }
+        }
+        
+        const beforeTime = (before.timestamp || new Date(before.time)).getTime();
+        const afterTime = (after.timestamp || new Date(after.time)).getTime();
+        const progress = afterTime !== beforeTime 
+          ? (timeMs - beforeTime) / (afterTime - beforeTime)
+          : 0;
+        
+        const beforeHeight = before.waveHeight ?? 0.5;
+        const afterHeight = after.waveHeight ?? 0.5;
+        
+        return {
+          height: Math.round((beforeHeight + (afterHeight - beforeHeight) * progress) * 10) / 10,
+          period: before.wavePeriod || after.wavePeriod,
+          direction: before.waveDirection || after.waveDirection
+        };
+      }
+      
+      // Fallback: estimate from marine conditions or wind
+      const baseHeight = marineConditions?.swellHeight ?? 0.5;
+      const windSpeed = weather?.current?.windSpeed ?? 10;
+      const windWaveHeight = windSpeed / 20; // Rough estimate: 1m waves per 20kts wind
+      
+      return {
+        height: Math.round((baseHeight + windWaveHeight * 0.3) * 10) / 10,
+        period: marineConditions?.swellPeriod ?? 5,
+        direction: marineConditions?.swellDirection
+      };
+    };
+    
+    // Add timeline points
+    const addPoint = (time: Date, label: string, isRaceEvent?: boolean, eventType?: 'warning' | 'start' | 'finish') => {
+      const waves = estimateWavesAtTime(time);
+      points.push({
+        time,
+        label,
+        waveHeight: waves.height,
+        wavePeriod: waves.period,
+        waveDirection: waves.direction,
+        seaState: getSeaStateDescription(waves.height),
+        isRaceEvent,
+        eventType
+      });
+    };
+    
+    addPoint(timelineStart, '30 min before');
+    addPoint(warningTime, 'Warning Signal', true, 'warning');
+    addPoint(startTime, 'Race Start', true, 'start');
+    addPoint(new Date(startTime.getTime() + (expectedDurationMinutes / 2) * 60 * 1000), 'Mid-race');
+    addPoint(finishTime, 'Expected Finish', true, 'finish');
+    
+    return points;
+  }, [raceTime, warningSignalTime, expectedDurationMinutes, weather, realWeather]);
 
   const shouldShowLiveLoading = !isPastRace || showLiveConditions || !recordedWeather;
 
@@ -576,6 +811,203 @@ export function WindWeatherCard({
                 ))}
               </View>
             )}
+          </View>
+        )}
+
+        {/* Wind Timeline - Wind changes throughout the race */}
+        {windTimeline.length > 0 && (
+          <View style={styles.timelineSection}>
+            <View style={styles.timelineHeader}>
+              <MaterialCommunityIcons name="weather-windy" size={20} color="#3B82F6" />
+              <Text style={styles.sectionTitle}>Wind Timeline</Text>
+            </View>
+            <Text style={styles.timelineSubtitle}>
+              Wind speed & direction from pre-race to finish
+            </Text>
+            
+            <View style={styles.timelineContainer}>
+              {windTimeline.map((point, index) => {
+                const isFirst = index === 0;
+                const isLast = index === windTimeline.length - 1;
+                const eventColor = point.eventType === 'start' ? '#10B981' 
+                  : point.eventType === 'warning' ? '#F59E0B' 
+                  : point.eventType === 'finish' ? '#EF4444' 
+                  : '#3B82F6';
+                
+                // Determine wind strength color
+                const windColor = point.windSpeed < 8 ? '#10B981' // Light - green
+                  : point.windSpeed < 15 ? '#3B82F6' // Moderate - blue
+                  : point.windSpeed < 22 ? '#F59E0B' // Fresh - amber
+                  : '#EF4444'; // Strong - red
+                
+                return (
+                  <View key={index} style={styles.timelineRow}>
+                    {/* Timeline connector */}
+                    <View style={styles.timelineConnector}>
+                      {!isFirst && <View style={[styles.timelineLine, { backgroundColor: '#3B82F6' }]} />}
+                      <View style={[
+                        styles.timelineDot,
+                        point.isRaceEvent && styles.timelineDotEvent,
+                        { backgroundColor: eventColor, borderColor: eventColor }
+                      ]}>
+                        {point.isRaceEvent && (
+                          <MaterialCommunityIcons 
+                            name={point.eventType === 'start' ? 'flag' : point.eventType === 'warning' ? 'alert' : 'flag-checkered'} 
+                            size={10} 
+                            color="#fff" 
+                          />
+                        )}
+                      </View>
+                      {!isLast && <View style={[styles.timelineLine, { backgroundColor: '#3B82F6' }]} />}
+                    </View>
+                    
+                    {/* Time */}
+                    <View style={styles.timelineTime}>
+                      <Text style={[styles.timelineTimeText, point.isRaceEvent && styles.timelineTimeTextBold]}>
+                        {point.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    
+                    {/* Content */}
+                    <View style={[
+                      styles.timelineContent,
+                      point.isRaceEvent && styles.timelineContentEvent,
+                      { borderLeftColor: eventColor }
+                    ]}>
+                      <Text style={[styles.timelineLabel, point.isRaceEvent && styles.timelineLabelEvent]}>
+                        {point.label}
+                      </Text>
+                      <View style={styles.timelineDetails}>
+                        {/* Wind Speed */}
+                        <View style={[styles.timelineMetric, { backgroundColor: windColor + '20' }]}>
+                          <MaterialCommunityIcons name="weather-windy" size={12} color={windColor} />
+                          <Text style={[styles.timelineMetricText, { color: windColor }]}>
+                            {point.windSpeed} kts
+                          </Text>
+                        </View>
+                        {/* Wind Direction */}
+                        <View style={styles.timelineMetric}>
+                          <MaterialCommunityIcons 
+                            name="navigation" 
+                            size={12} 
+                            color="#64748B"
+                            style={{ transform: [{ rotate: `${point.windDirection}deg` }] }}
+                          />
+                          <Text style={styles.timelineMetricText}>
+                            {getWindDirectionLabel(point.windDirection)}
+                          </Text>
+                        </View>
+                        {/* Gusts */}
+                        {point.gusts && point.gusts > point.windSpeed && (
+                          <View style={[styles.timelineMetric, { backgroundColor: '#FEF3C7' }]}>
+                            <MaterialCommunityIcons name="weather-windy-variant" size={12} color="#F59E0B" />
+                            <Text style={[styles.timelineMetricText, { color: '#D97706' }]}>
+                              G{point.gusts}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Wave Timeline - Sea state throughout the race */}
+        {waveTimeline.length > 0 && (
+          <View style={styles.timelineSection}>
+            <View style={styles.timelineHeader}>
+              <MaterialCommunityIcons name="waves" size={20} color="#0EA5E9" />
+              <Text style={styles.sectionTitle}>Wave Timeline</Text>
+            </View>
+            <Text style={styles.timelineSubtitle}>
+              Sea state & wave height from pre-race to finish
+            </Text>
+            
+            <View style={styles.timelineContainer}>
+              {waveTimeline.map((point, index) => {
+                const isFirst = index === 0;
+                const isLast = index === waveTimeline.length - 1;
+                const eventColor = point.eventType === 'start' ? '#10B981' 
+                  : point.eventType === 'warning' ? '#F59E0B' 
+                  : point.eventType === 'finish' ? '#EF4444' 
+                  : '#0EA5E9';
+                
+                // Determine sea state color
+                const waveColor = point.waveHeight < 0.3 ? '#10B981' // Calm - green
+                  : point.waveHeight < 1.0 ? '#0EA5E9' // Slight - cyan
+                  : point.waveHeight < 2.0 ? '#F59E0B' // Moderate - amber
+                  : '#EF4444'; // Rough - red
+                
+                return (
+                  <View key={index} style={styles.timelineRow}>
+                    {/* Timeline connector */}
+                    <View style={styles.timelineConnector}>
+                      {!isFirst && <View style={[styles.timelineLine, { backgroundColor: '#0EA5E9' }]} />}
+                      <View style={[
+                        styles.timelineDot,
+                        point.isRaceEvent && styles.timelineDotEvent,
+                        { backgroundColor: eventColor, borderColor: eventColor }
+                      ]}>
+                        {point.isRaceEvent && (
+                          <MaterialCommunityIcons 
+                            name={point.eventType === 'start' ? 'flag' : point.eventType === 'warning' ? 'alert' : 'flag-checkered'} 
+                            size={10} 
+                            color="#fff" 
+                          />
+                        )}
+                      </View>
+                      {!isLast && <View style={[styles.timelineLine, { backgroundColor: '#0EA5E9' }]} />}
+                    </View>
+                    
+                    {/* Time */}
+                    <View style={styles.timelineTime}>
+                      <Text style={[styles.timelineTimeText, point.isRaceEvent && styles.timelineTimeTextBold]}>
+                        {point.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    
+                    {/* Content */}
+                    <View style={[
+                      styles.timelineContent,
+                      point.isRaceEvent && styles.timelineContentEvent,
+                      { borderLeftColor: eventColor }
+                    ]}>
+                      <Text style={[styles.timelineLabel, point.isRaceEvent && styles.timelineLabelEvent]}>
+                        {point.label}
+                      </Text>
+                      <View style={styles.timelineDetails}>
+                        {/* Sea State */}
+                        <View style={[styles.timelineMetric, { backgroundColor: waveColor + '20' }]}>
+                          <MaterialCommunityIcons name="waves" size={12} color={waveColor} />
+                          <Text style={[styles.timelineMetricText, { color: waveColor }]}>
+                            {point.seaState}
+                          </Text>
+                        </View>
+                        {/* Wave Height */}
+                        <View style={styles.timelineMetric}>
+                          <MaterialCommunityIcons name="arrow-expand-vertical" size={12} color="#64748B" />
+                          <Text style={styles.timelineMetricText}>
+                            {point.waveHeight}m
+                          </Text>
+                        </View>
+                        {/* Wave Period */}
+                        {point.wavePeriod && (
+                          <View style={styles.timelineMetric}>
+                            <MaterialCommunityIcons name="timer-outline" size={12} color="#64748B" />
+                            <Text style={styles.timelineMetricText}>
+                              {Math.round(point.wavePeriod)}s
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         )}
 
@@ -903,6 +1335,113 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',
+  },
+  // Timeline styles
+  timelineSection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timelineSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  timelineContainer: {
+    gap: 0,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: 56,
+  },
+  timelineConnector: {
+    width: 24,
+    alignItems: 'center',
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: '#CBD5E1',
+  },
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    backgroundColor: '#fff',
+    zIndex: 1,
+  },
+  timelineDotEvent: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineTime: {
+    width: 52,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+  },
+  timelineTimeText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
+  timelineTimeTextBold: {
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  timelineContent: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#CBD5E1',
+    gap: 4,
+  },
+  timelineContentEvent: {
+    backgroundColor: '#F0FDF4',
+  },
+  timelineLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#334155',
+  },
+  timelineLabelEvent: {
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  timelineDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  timelineMetric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  timelineMetricText: {
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '600',
   },
 });
 

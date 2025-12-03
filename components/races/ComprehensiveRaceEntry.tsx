@@ -3,55 +3,54 @@
  * Complete race strategy planning interface with AI-powered auto-suggest
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TextInput,
-  Pressable,
-  Alert,
-  ActivityIndicator,
-  Switch,
-  Platform,
-} from 'react-native';
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  Radio,
-  Flag,
-  Navigation,
-  AlertCircle,
-  ChevronDown,
-  ChevronLeft,
-  Sparkles,
-  Plus,
-  X,
-  Upload,
-  FileText,
-} from 'lucide-react-native';
+import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
+import { Toast, ToastDescription, ToastTitle, useToast } from '@/components/ui/toast';
+import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
+import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
+import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
+import { PDFExtractionService } from '@/services/PDFExtractionService';
+import type { RaceSuggestion } from '@/services/RaceSuggestionService';
+import { RaceWeatherService } from '@/services/RaceWeatherService';
+import { sailorBoatService } from '@/services/SailorBoatService';
+import { supabase } from '@/services/supabase';
+import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
-import { PDFExtractionService } from '@/services/PDFExtractionService';
-import { RaceWeatherService } from '@/services/RaceWeatherService';
-import { BoatSelector } from './BoatSelector';
+import {
+  AlertCircle,
+  Calendar,
+  ChevronDown,
+  ChevronLeft,
+  Clock,
+  FileText,
+  Flag,
+  MapPin,
+  Navigation,
+  Plus,
+  Radio,
+  Sparkles,
+  Upload,
+  X,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import { AIValidationScreen, type ExtractedData, type FieldConfidenceMap, type MultiRaceExtractedData } from './AIValidationScreen';
+import { BoatSelector } from './BoatSelector';
 import { MultiRaceSelectionScreen } from './MultiRaceSelectionScreen';
-import { VenueLocationPicker } from './VenueLocationPicker';
-import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
-import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
-import { createLogger } from '@/lib/utils/logger';
-import { sailorBoatService } from '@/services/SailorBoatService';
-import { Toast, ToastDescription, ToastTitle, useToast } from '@/components/ui/toast';
 import { RaceSuggestionsDrawer } from './RaceSuggestionsDrawer';
-import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
-import type { RaceSuggestion } from '@/services/RaceSuggestionService';
+import { VenueLocationPicker } from './VenueLocationPicker';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
@@ -98,6 +97,7 @@ export function ComprehensiveRaceEntry({
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [processingSuggestionId, setProcessingSuggestionId] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['basic', 'timing'])
   );
@@ -118,6 +118,8 @@ export function ComprehensiveRaceEntry({
   const [extracting, setExtracting] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [currentDocType, setCurrentDocType] = useState<'nor' | 'si' | 'other' | null>(null);
+  // AI Quick Entry section is collapsed by default in edit mode
+  const [aiQuickEntryExpanded, setAiQuickEntryExpanded] = useState(!existingRaceId);
 
   // Multi-document processing state
   const [uploadedDocuments, setUploadedDocuments] = useState<Array<{
@@ -1186,87 +1188,87 @@ export function ComprehensiveRaceEntry({
 
     // Course
     if (validatedData.startAreaName) setStartAreaName(validatedData.startAreaName);
-    if (validatedData.startAreaDescription) setStartAreaDescription(validatedData.startAreaDescription);
+    if (validatedData.startAreaDescription) setStartAreaDescription(validatedData.startAreaDescription || '');
     if (validatedData.startLineLength != null) setStartLineLength(validatedData.startLineLength.toString());
-    if (validatedData.potentialCourses) setPotentialCourses(validatedData.potentialCourses);
-    if (validatedData.courseSelectionCriteria) setCourseSelectionCriteria(validatedData.courseSelectionCriteria);
-    if (validatedData.courseDiagramUrl) setCourseDiagramUrl(validatedData.courseDiagramUrl);
+    if (validatedData.potentialCourses) setPotentialCourses(validatedData.potentialCourses || []);
+    if (validatedData.courseSelectionCriteria) setCourseSelectionCriteria(validatedData.courseSelectionCriteria || '');
+    if (validatedData.courseDiagramUrl) setCourseDiagramUrl(validatedData.courseDiagramUrl || '');
 
     // Rules
-    if (validatedData.scoringSystem) setScoringSystem(validatedData.scoringSystem);
-    if (validatedData.penaltySystem) setPenaltySystem(validatedData.penaltySystem);
-    if (validatedData.penaltyDetails) setPenaltyDetails(validatedData.penaltyDetails);
-    if (validatedData.specialRules) setSpecialRules(validatedData.specialRules);
-    if (validatedData.sailingInstructionsUrl) setSailingInstructionsUrl(validatedData.sailingInstructionsUrl);
-    if (validatedData.noticeOfRaceUrl) setNoticeOfRaceUrl(validatedData.noticeOfRaceUrl);
+    if (validatedData.scoringSystem) setScoringSystem(validatedData.scoringSystem || '');
+    if (validatedData.penaltySystem) setPenaltySystem(validatedData.penaltySystem || '');
+    if (validatedData.penaltyDetails) setPenaltyDetails(validatedData.penaltyDetails || '');
+    if (validatedData.specialRules) setSpecialRules(validatedData.specialRules || []);
+    if (validatedData.sailingInstructionsUrl) setSailingInstructionsUrl(validatedData.sailingInstructionsUrl || '');
+    if (validatedData.noticeOfRaceUrl) setNoticeOfRaceUrl(validatedData.noticeOfRaceUrl || '');
 
     // Fleet
-    if (validatedData.classDivisions) setClassDivisions(validatedData.classDivisions);
+    if (validatedData.classDivisions) setClassDivisions(validatedData.classDivisions || []);
     if (validatedData.expectedFleetSize != null) setExpectedFleetSize(validatedData.expectedFleetSize.toString());
 
     // Weather
     if (validatedData.expectedWindDirection != null) setExpectedWindDirection(validatedData.expectedWindDirection.toString());
     if (validatedData.expectedWindSpeedMin != null) setExpectedWindSpeedMin(validatedData.expectedWindSpeedMin.toString());
     if (validatedData.expectedWindSpeedMax != null) setExpectedWindSpeedMax(validatedData.expectedWindSpeedMax.toString());
-    if (validatedData.expectedConditions) setExpectedConditions(validatedData.expectedConditions);
-    if (validatedData.tideAtStart) setTideAtStart(validatedData.tideAtStart);
+    if (validatedData.expectedConditions) setExpectedConditions(validatedData.expectedConditions || '');
+    if (validatedData.tideAtStart) setTideAtStart(validatedData.tideAtStart || '');
 
     // Tactical
-    if (validatedData.venueSpecificNotes) setVenueSpecificNotes(validatedData.venueSpecificNotes);
-    if (validatedData.favoredSide) setFavoredSide(validatedData.favoredSide);
-    if (validatedData.laylineStrategy) setLaylineStrategy(validatedData.laylineStrategy);
-    if (validatedData.startStrategy) setStartStrategy(validatedData.startStrategy);
+    if (validatedData.venueSpecificNotes) setVenueSpecificNotes(validatedData.venueSpecificNotes || '');
+    if (validatedData.favoredSide) setFavoredSide(validatedData.favoredSide || '');
+    if (validatedData.laylineStrategy) setLaylineStrategy(validatedData.laylineStrategy || '');
+    if (validatedData.startStrategy) setStartStrategy(validatedData.startStrategy || '');
 
     // Registration
-    if (validatedData.registrationDeadline) setRegistrationDeadline(validatedData.registrationDeadline);
+    if (validatedData.registrationDeadline) setRegistrationDeadline(validatedData.registrationDeadline || '');
     if (validatedData.entryFeeAmount != null) setEntryFeeAmount(validatedData.entryFeeAmount.toString());
-    if (validatedData.entryFeeCurrency) setEntryFeeCurrency(validatedData.entryFeeCurrency);
-    if (validatedData.checkInTime) setCheckInTime(validatedData.checkInTime);
-    if (validatedData.skipperBriefingTime) setSkipperBriefingTime(validatedData.skipperBriefingTime);
+    if (validatedData.entryFeeCurrency) setEntryFeeCurrency(validatedData.entryFeeCurrency || '');
+    if (validatedData.checkInTime) setCheckInTime(validatedData.checkInTime || '');
+    if (validatedData.skipperBriefingTime) setSkipperBriefingTime(validatedData.skipperBriefingTime || '');
 
     // NOR Documents
-    if (validatedData.supplementarySIUrl) setSupplementarySIUrl(validatedData.supplementarySIUrl);
-    if (validatedData.norAmendments) setNorAmendments(validatedData.norAmendments);
+    if (validatedData.supplementarySIUrl) setSupplementarySIUrl(validatedData.supplementarySIUrl || '');
+    if (validatedData.norAmendments) setNorAmendments(validatedData.norAmendments || []);
 
     // Governing Rules & Eligibility
-    if (validatedData.racingRulesSystem) setRacingRulesSystem(validatedData.racingRulesSystem);
-    if (validatedData.classRules) setClassRules(validatedData.classRules);
-    if (validatedData.prescriptions) setPrescriptions(validatedData.prescriptions);
-    if (validatedData.additionalDocuments) setAdditionalDocuments(validatedData.additionalDocuments);
-    if (validatedData.eligibilityRequirements) setEligibilityRequirements(validatedData.eligibilityRequirements);
-    if (validatedData.entryFormUrl) setEntryFormUrl(validatedData.entryFormUrl);
-    if (validatedData.entryDeadline) setEntryDeadline(validatedData.entryDeadline);
-    if (validatedData.lateEntryPolicy) setLateEntryPolicy(validatedData.lateEntryPolicy);
+    if (validatedData.racingRulesSystem) setRacingRulesSystem(validatedData.racingRulesSystem || '');
+    if (validatedData.classRules) setClassRules(validatedData.classRules || '');
+    if (validatedData.prescriptions) setPrescriptions(validatedData.prescriptions || '');
+    if (validatedData.additionalDocuments) setAdditionalDocuments(validatedData.additionalDocuments || []);
+    if (validatedData.eligibilityRequirements) setEligibilityRequirements(validatedData.eligibilityRequirements || '');
+    if (validatedData.entryFormUrl) setEntryFormUrl(validatedData.entryFormUrl || '');
+    if (validatedData.entryDeadline) setEntryDeadline(validatedData.entryDeadline || '');
+    if (validatedData.lateEntryPolicy) setLateEntryPolicy(validatedData.lateEntryPolicy || '');
 
     // Schedule Details
-    if (validatedData.eventSeriesName) setEventSeriesName(validatedData.eventSeriesName);
-    if (validatedData.eventType) setEventType(validatedData.eventType);
+    if (validatedData.eventSeriesName) setEventSeriesName(validatedData.eventSeriesName || '');
+    if (validatedData.eventType) setEventType(validatedData.eventType || '');
     if (validatedData.racingDays) {
       setRacingDays(Array.isArray(validatedData.racingDays) ? validatedData.racingDays : [validatedData.racingDays]);
     }
     if (validatedData.racesPerDay != null) setRacesPerDay(validatedData.racesPerDay.toString());
-    if (validatedData.firstWarningSignal) setFirstWarningSignal(validatedData.firstWarningSignal);
+    if (validatedData.firstWarningSignal) setFirstWarningSignal(validatedData.firstWarningSignal || '');
     if (validatedData.reserveDays) {
       setReserveDays(Array.isArray(validatedData.reserveDays) ? validatedData.reserveDays : [validatedData.reserveDays]);
     }
 
     // Course Attachments & Designations
-    if (validatedData.courseAttachmentReference) setCourseAttachmentReference(validatedData.courseAttachmentReference);
-    if (validatedData.courseAreaDesignation) setCourseAreaDesignation(validatedData.courseAreaDesignation);
+    if (validatedData.courseAttachmentReference) setCourseAttachmentReference(validatedData.courseAttachmentReference || '');
+    if (validatedData.courseAreaDesignation) setCourseAreaDesignation(validatedData.courseAreaDesignation || '');
 
     // Series Scoring Enhancements
     if (validatedData.seriesRacesRequired != null) setSeriesRacesRequired(validatedData.seriesRacesRequired.toString());
-    if (validatedData.discardsPolicy) setDiscardsPolicy(validatedData.discardsPolicy);
+    if (validatedData.discardsPolicy) setDiscardsPolicy(validatedData.discardsPolicy || '');
 
     // Safety & Insurance
-    if (validatedData.safetyRequirements) setSafetyRequirements(validatedData.safetyRequirements);
-    if (validatedData.retirementNotificationRequirements) setRetirementNotificationRequirements(validatedData.retirementNotificationRequirements);
+    if (validatedData.safetyRequirements) setSafetyRequirements(validatedData.safetyRequirements || '');
+    if (validatedData.retirementNotificationRequirements) setRetirementNotificationRequirements(validatedData.retirementNotificationRequirements || '');
     if (validatedData.minimumInsuranceCoverage != null) setMinimumInsuranceCoverage(validatedData.minimumInsuranceCoverage.toString());
-    if (validatedData.insurancePolicyReference) setInsurancePolicyReference(validatedData.insurancePolicyReference);
+    if (validatedData.insurancePolicyReference) setInsurancePolicyReference(validatedData.insurancePolicyReference || '');
 
     // Prizes
-    if (validatedData.prizesDescription) setPrizesDescription(validatedData.prizesDescription);
-    if (validatedData.prizePresentationDetails) setPrizePresentationDetails(validatedData.prizePresentationDetails);
+    if (validatedData.prizesDescription) setPrizesDescription(validatedData.prizesDescription || '');
+    if (validatedData.prizePresentationDetails) setPrizePresentationDetails(validatedData.prizePresentationDetails || '');
 
     // Expand all sections so user can see extracted data
     setExpandedSections(new Set(['basic', 'timing', 'comms', 'course', 'rules', 'fleet', 'weather', 'tactical', 'logistics']));
@@ -1314,43 +1316,239 @@ export function ComprehensiveRaceEntry({
    */
   const handleSelectSuggestion = async (suggestion: RaceSuggestion) => {
     console.log('✨ [ComprehensiveRaceEntry] Suggestion selected:', suggestion);
-    logger.debug('[handleSelectSuggestion] Filling form with suggestion:', suggestion.raceData);
+    logger.debug('[handleSelectSuggestion] canAddDirectly:', suggestion.canAddDirectly);
 
-    // Auto-fill the form with suggestion data
-    if (suggestion.raceData.raceName) {
-      setRaceName(suggestion.raceData.raceName);
-    }
-    if (suggestion.raceData.venue) {
-      setVenue(suggestion.raceData.venue);
-    }
-    if (suggestion.raceData.startDate) {
-      const parsedDate = new Date(suggestion.raceData.startDate);
-      if (!Number.isNaN(parsedDate.getTime())) {
-        setRaceDate(parsedDate.toISOString().slice(0, 10));
+    // Set processing state
+    setProcessingSuggestionId(suggestion.id);
+
+    try {
+      // If suggestion has enough data, create race directly
+      if (suggestion.canAddDirectly) {
+        await handleDirectRaceCreation(suggestion);
+        return;
       }
+
+      // Otherwise, fill the form with suggestion data
+      logger.debug('[handleSelectSuggestion] Filling form with suggestion:', suggestion.raceData);
+
+      // Auto-fill the form with suggestion data
+      if (suggestion.raceData.raceName) {
+        setRaceName(suggestion.raceData.raceName);
+      }
+      if (suggestion.raceData.venue) {
+        setVenue(suggestion.raceData.venue);
+      }
+      if (suggestion.raceData.startDate) {
+        const parsedDate = new Date(suggestion.raceData.startDate);
+        if (!Number.isNaN(parsedDate.getTime())) {
+          setRaceDate(parsedDate.toISOString().slice(0, 10));
+        }
+      }
+      if (suggestion.raceData.boatClass) {
+        setBoatClass(suggestion.raceData.boatClass);
+      }
+      if (suggestion.raceData.venueCoordinates) {
+        setVenueCoordinates(suggestion.raceData.venueCoordinates);
+      }
+      if (suggestion.raceData.description) {
+        setDescription(suggestion.raceData.description);
+      }
+
+      // Record that the suggestion was accepted
+      await acceptSuggestion(suggestion.id);
+
+      // Show success toast
+      toast.show({
+        placement: 'top',
+        render: () => (
+          <Toast action="success" variant="solid">
+            <ToastTitle>Suggestion Applied</ToastTitle>
+            <ToastDescription>
+              Race details filled from: {suggestion.reason}
+            </ToastDescription>
+          </Toast>
+        ),
+      });
+    } finally {
+      setProcessingSuggestionId(null);
     }
-    if (suggestion.raceData.boatClass) {
-      setBoatClass(suggestion.raceData.boatClass);
+  };
+
+  /**
+   * Directly create a race from a suggestion
+   */
+  const handleDirectRaceCreation = async (suggestion: RaceSuggestion) => {
+    console.log('🚀 [ComprehensiveRaceEntry] Creating race directly from suggestion:', suggestion);
+    logger.debug('[handleDirectRaceCreation] Starting direct race creation');
+
+    // Validate required fields
+    if (!suggestion.raceData.raceName) {
+      Alert.alert('Error', 'Cannot create race: missing race name');
+      return;
     }
-    if (suggestion.raceData.venueCoordinates) {
-      setVenueCoordinates(suggestion.raceData.venueCoordinates);
+    if (!suggestion.raceData.startDate) {
+      Alert.alert('Error', 'Cannot create race: missing start date');
+      return;
+    }
+    if (!suggestion.raceData.venue && !suggestion.raceData.venueCoordinates) {
+      Alert.alert('Error', 'Cannot create race: missing venue information');
+      return;
     }
 
-    // Record that the suggestion was accepted
-    await acceptSuggestion(suggestion.id);
+    setSaving(true);
 
-    // Show success toast
-    toast.show({
-      placement: 'top',
-      render: () => (
-        <Toast action="success" variant="solid">
-          <ToastTitle>Suggestion Applied</ToastTitle>
-          <ToastDescription>
-            Race details filled from: {suggestion.reason}
-          </ToastDescription>
-        </Toast>
-      ),
-    });
+    try {
+      if (!user?.id) {
+        Alert.alert('Authentication Error', 'You must be logged in to create a race');
+        return;
+      }
+
+      // Fetch weather data
+      logger.debug('[handleDirectRaceCreation] Fetching weather data...');
+      const weatherData = suggestion.raceData.venueCoordinates
+        ? await RaceWeatherService.fetchWeatherByCoordinates(
+            suggestion.raceData.venueCoordinates.lat,
+            suggestion.raceData.venueCoordinates.lng,
+            suggestion.raceData.startDate,
+            suggestion.raceData.venue || 'Racing Area'
+          )
+        : suggestion.raceData.venue
+        ? await RaceWeatherService.fetchWeatherByVenueName(
+            suggestion.raceData.venue,
+            suggestion.raceData.startDate
+          )
+        : null;
+
+      // Prepare race data
+      const raceData = {
+        created_by: user.id,
+        name: suggestion.raceData.raceName.trim(),
+        start_date: suggestion.raceData.startDate,
+        description: suggestion.raceData.description?.trim() || null,
+        boat_id: selectedBoatId || null,
+        class_id: selectedClassId ?? null,
+        metadata: {
+          venue_name: suggestion.raceData.venue?.trim() || 'Racing Area',
+          racing_area_coordinates: suggestion.raceData.venueCoordinates || undefined,
+          weather_data: weatherData || undefined,
+          source: 'suggestion',
+          suggestion_id: suggestion.id,
+          boat_class: suggestion.raceData.boatClass || undefined,
+          race_series: suggestion.raceData.raceSeries || undefined,
+          registration_url: suggestion.raceData.registrationUrl || undefined,
+        },
+      };
+
+      // Create race
+      logger.debug('[handleDirectRaceCreation] Creating race in database...');
+      const { data, error } = await supabase
+        .from('regattas')
+        .insert(raceData)
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('[handleDirectRaceCreation] Error creating race:', error);
+        throw error;
+      }
+
+      logger.debug('[handleDirectRaceCreation] Race created successfully:', data.id);
+
+      // Download and attach documents if URLs are provided
+      if (suggestion.raceData.documentUrls) {
+        logger.debug('[handleDirectRaceCreation] Downloading race documents...');
+        const documentPromises = [];
+
+        if (suggestion.raceData.documentUrls.nor) {
+          documentPromises.push(
+            downloadAndAttachDocument(
+              data.id,
+              suggestion.raceData.documentUrls.nor,
+              'NOR'
+            )
+          );
+        }
+
+        if (suggestion.raceData.documentUrls.si) {
+          documentPromises.push(
+            downloadAndAttachDocument(
+              data.id,
+              suggestion.raceData.documentUrls.si,
+              'SI'
+            )
+          );
+        }
+
+        // Wait for all documents to download/attach (but don't fail if they error)
+        await Promise.allSettled(documentPromises);
+      }
+
+      // Record that the suggestion was accepted
+      await acceptSuggestion(suggestion.id);
+
+      // Show success toast
+      toast.show({
+        placement: 'top',
+        render: () => (
+          <Toast action="success" variant="solid">
+            <ToastTitle>Race Added to Calendar</ToastTitle>
+            <ToastDescription>
+              {suggestion.raceData.raceName} has been added successfully
+            </ToastDescription>
+          </Toast>
+        ),
+      });
+
+      // Navigate to the race detail page
+      logger.debug('[handleDirectRaceCreation] Navigating to race detail page');
+      if (onSubmit) {
+        onSubmit(data.id);
+      } else {
+        router.push(`/(tabs)/race/scrollable/${data.id}` as any);
+      }
+    } catch (error: any) {
+      console.error('[handleDirectRaceCreation] Error:', error);
+      Alert.alert('Error', error.message || 'Failed to create race from suggestion');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * Download and attach a document to a race
+   */
+  const downloadAndAttachDocument = async (
+    raceId: string,
+    documentUrl: string,
+    docType: 'NOR' | 'SI'
+  ) => {
+    try {
+      logger.debug('[downloadAndAttachDocument] Downloading:', { raceId, documentUrl, docType });
+
+      // For now, just store the URL in metadata
+      // TODO: Actually download and upload to Supabase storage
+      const { error } = await supabase
+        .from('regattas')
+        .update({
+          metadata: supabase.raw(`
+            jsonb_set(
+              COALESCE(metadata, '{}'::jsonb),
+              '{document_urls, ${docType.toLowerCase()}}',
+              '"${documentUrl}"'::jsonb
+            )
+          `)
+        })
+        .eq('id', raceId);
+
+      if (error) {
+        console.error('[downloadAndAttachDocument] Error:', error);
+      } else {
+        logger.debug('[downloadAndAttachDocument] Document URL stored successfully');
+      }
+    } catch (error) {
+      console.error('[downloadAndAttachDocument] Error:', error);
+      // Don't throw - we don't want to fail race creation if document download fails
+    }
   };
 
   /**
@@ -1528,6 +1726,19 @@ export function ComprehensiveRaceEntry({
 
   const handleSubmit = async () => {
     logger.debug('=== HANDLESUBMIT CALLED ===');
+    // Normalize fields that might come in as arrays/objects from suggestions or prefill
+    const normalizedClassRules =
+      typeof classRules === 'string'
+        ? classRules.trim()
+        : Array.isArray(classRules)
+        ? classRules
+            .map((item) => (typeof item === 'string' ? item.trim() : String(item)))
+            .filter(Boolean)
+            .join(', ')
+        : classRules
+        ? String(classRules)
+        : null;
+
     logger.debug('[handleSubmit] raceName:', raceName);
     logger.debug('[handleSubmit] raceDate:', raceDate);
     logger.debug('[handleSubmit] venue:', venue);
@@ -1669,24 +1880,24 @@ export function ComprehensiveRaceEntry({
         // Rules & Penalties
         scoring_system: scoringSystem || 'Low Point',
         penalty_system: penaltySystem || '720°',
-        penalty_details: penaltyDetails.trim() || null,
-        special_rules: specialRules.length > 0 ? specialRules : null,
-        sailing_instructions_url: sailingInstructionsUrl.trim() || null,
-        notice_of_race_url: noticeOfRaceUrl.trim() || null,
+        penalty_details: penaltyDetails?.trim() || null,
+        special_rules: specialRules?.length > 0 ? specialRules : null,
+        sailing_instructions_url: sailingInstructionsUrl?.trim() || null,
+        notice_of_race_url: noticeOfRaceUrl?.trim() || null,
 
         // Fleet
-        class_divisions: classDivisions.filter((d) => d.name.trim()).length > 0 ? classDivisions : null,
+        class_divisions: classDivisions?.filter((d) => d.name?.trim()).length > 0 ? classDivisions : null,
         expected_fleet_size: expectedFleetSize ? parseInt(expectedFleetSize) : null,
 
         // Weather
         expected_wind_direction: expectedWindDirection ? parseInt(expectedWindDirection) : null,
         expected_wind_speed_min: expectedWindSpeedMin ? parseInt(expectedWindSpeedMin) : null,
         expected_wind_speed_max: expectedWindSpeedMax ? parseInt(expectedWindSpeedMax) : null,
-        expected_conditions: expectedConditions.trim() || null,
-        tide_at_start: tideAtStart.trim() || null,
+        expected_conditions: expectedConditions?.trim() || null,
+        tide_at_start: tideAtStart?.trim() || null,
 
         // Tactical
-        venue_specific_notes: venueSpecificNotes.trim() || null,
+        venue_specific_notes: venueSpecificNotes?.trim() || null,
         favored_side: favoredSide || null,
         layline_strategy: laylineStrategy || null,
         start_strategy: startStrategy || null,
@@ -1699,50 +1910,50 @@ export function ComprehensiveRaceEntry({
         skipper_briefing_time: skipperBriefingTime || null,
 
         // NOR Document Fields
-        supplementary_si_url: supplementarySIUrl.trim() || null,
-        nor_amendments: norAmendments.length > 0 ? norAmendments : null,
+        supplementary_si_url: supplementarySIUrl?.trim() || null,
+        nor_amendments: norAmendments?.length > 0 ? norAmendments : null,
 
         // Governing Rules
         governing_rules: {
-          racing_rules_system: racingRulesSystem.trim() || null,
-          class_rules: classRules.trim() || null,
-          prescriptions: prescriptions.trim() || null,
-          additional_documents: additionalDocuments.filter(d => d.trim()).length > 0 ? additionalDocuments : null,
+          racing_rules_system: racingRulesSystem?.trim() || null,
+          class_rules: normalizedClassRules || null,
+          prescriptions: prescriptions?.trim() || null,
+          additional_documents: additionalDocuments?.filter(d => d?.trim()).length > 0 ? additionalDocuments : null,
         },
 
         // Eligibility & Entry
-        eligibility_requirements: eligibilityRequirements.trim() || null,
-        entry_form_url: entryFormUrl.trim() || null,
+        eligibility_requirements: eligibilityRequirements?.trim() || null,
+        entry_form_url: entryFormUrl?.trim() || null,
         entry_deadline: entryDeadline || null,
-        late_entry_policy: lateEntryPolicy.trim() || null,
+        late_entry_policy: lateEntryPolicy?.trim() || null,
 
         // Schedule Details
-        event_series_name: eventSeriesName.trim() || null,
-        event_type: eventType.trim() || null,
-        racing_days: racingDays.length > 0 ? racingDays : null,
+        event_series_name: eventSeriesName?.trim() || null,
+        event_type: eventType?.trim() || null,
+        racing_days: racingDays?.length > 0 ? racingDays : null,
         races_per_day: racesPerDay ? parseInt(racesPerDay) : null,
         first_warning_signal: firstWarningSignal || null,
-        reserve_days: reserveDays.length > 0 ? reserveDays : null,
+        reserve_days: reserveDays?.length > 0 ? reserveDays : null,
 
         // Enhanced Course Information
-        course_attachment_reference: courseAttachmentReference.trim() || null,
-        course_area_designation: courseAreaDesignation.trim() || null,
+        course_attachment_reference: courseAttachmentReference?.trim() || null,
+        course_area_designation: courseAreaDesignation?.trim() || null,
 
         // Enhanced Scoring
         series_races_required: seriesRacesRequired ? parseInt(seriesRacesRequired) : null,
-        discards_policy: discardsPolicy.trim() || null,
+        discards_policy: discardsPolicy?.trim() || null,
 
         // Safety
-        safety_requirements: safetyRequirements.trim() || null,
-        retirement_notification_requirements: retirementNotificationRequirements.trim() || null,
+        safety_requirements: safetyRequirements?.trim() || null,
+        retirement_notification_requirements: retirementNotificationRequirements?.trim() || null,
 
         // Insurance
         minimum_insurance_coverage: minimumInsuranceCoverage ? parseFloat(minimumInsuranceCoverage) : null,
-        insurance_policy_reference: insurancePolicyReference.trim() || null,
+        insurance_policy_reference: insurancePolicyReference?.trim() || null,
 
         // Prizes
-        prizes_description: prizesDescription.trim() || null,
-        prize_presentation_details: prizePresentationDetails.trim() || null,
+        prizes_description: prizesDescription?.trim() || null,
+        prize_presentation_details: prizePresentationDetails?.trim() || null,
 
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -2025,32 +2236,81 @@ export function ComprehensiveRaceEntry({
     setClassDivisions(classDivisions.filter((_, i) => i !== index));
   };
 
+  // Helper to check if a section has data filled
+  const getSectionStatus = (sectionKey: string): 'empty' | 'partial' | 'complete' => {
+    switch (sectionKey) {
+      case 'basic':
+        if (raceName && raceDate && venue) return 'complete';
+        if (raceName || raceDate || venue) return 'partial';
+        return 'empty';
+      case 'timing':
+        if (warningSignalTime && firstWarningSignal) return 'complete';
+        if (warningSignalTime || firstWarningSignal) return 'partial';
+        return 'empty';
+      case 'comms':
+        if (vhfChannel) return 'complete';
+        return 'empty';
+      case 'course':
+        if (courseAreaDesignation || potentialCourses.length > 0) return 'complete';
+        return 'empty';
+      case 'fleet':
+        if (classDivisions.length > 0 && classDivisions[0]?.name) return 'complete';
+        return 'empty';
+      default:
+        return 'empty';
+    }
+  };
+
   const renderSectionHeader = (
     title: string,
     icon: React.ReactNode,
     sectionKey: string,
     required = false
-  ) => (
-    <Pressable
-      onPress={() => toggleSection(sectionKey)}
-      className="flex-row items-center justify-between bg-sky-50 px-4 py-3 rounded-lg mb-2"
-    >
-      <View className="flex-row items-center gap-2">
-        {icon}
-        <Text className="text-base font-semibold text-gray-900">
-          {title}
-          {required && <Text className="text-red-500"> *</Text>}
-        </Text>
-      </View>
-      <ChevronDown
-        size={20}
-        color="#64748B"
-        style={{
-          transform: [{ rotate: expandedSections.has(sectionKey) ? '180deg' : '0deg' }],
-        }}
-      />
-    </Pressable>
-  );
+  ) => {
+    const status = getSectionStatus(sectionKey);
+    const isExpanded = expandedSections.has(sectionKey);
+    
+    return (
+      <Pressable
+        onPress={() => toggleSection(sectionKey)}
+        className={`flex-row items-center justify-between px-4 py-3 rounded-lg mb-2 ${
+          status === 'complete' ? 'bg-green-50 border border-green-200' :
+          status === 'partial' ? 'bg-amber-50 border border-amber-200' :
+          'bg-sky-50 border border-sky-100'
+        }`}
+      >
+        <View className="flex-row items-center gap-2">
+          {/* Status indicator */}
+          {status === 'complete' ? (
+            <View className="w-5 h-5 bg-green-500 rounded-full items-center justify-center">
+              <Text className="text-white text-xs font-bold">✓</Text>
+            </View>
+          ) : status === 'partial' ? (
+            <View className="w-5 h-5 bg-amber-400 rounded-full items-center justify-center">
+              <Text className="text-white text-xs font-bold">•</Text>
+            </View>
+          ) : (
+            icon
+          )}
+          <Text className={`text-base font-semibold ${
+            status === 'complete' ? 'text-green-800' :
+            status === 'partial' ? 'text-amber-800' :
+            'text-gray-900'
+          }`}>
+            {title}
+            {required && <Text className="text-red-500"> *</Text>}
+          </Text>
+        </View>
+        <ChevronDown
+          size={20}
+          color={status === 'complete' ? '#16a34a' : status === 'partial' ? '#d97706' : '#64748B'}
+          style={{
+            transform: [{ rotate: isExpanded ? '180deg' : '0deg' }],
+          }}
+        />
+      </Pressable>
+    );
+  };
 
   const renderInputField = (
     label: string,
@@ -2172,23 +2432,46 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Race Suggestions */}
-        <RaceSuggestionsDrawer
-          suggestions={suggestions}
-          loading={suggestionsLoading}
-          onSelectSuggestion={handleSelectSuggestion}
-          onDismissSuggestion={handleDismissSuggestion}
-          onRefresh={refreshSuggestions}
-        />
+        {/* Race Suggestions - Only show when creating a new race, not when editing */}
+        {!existingRaceId && (
+          <RaceSuggestionsDrawer
+            suggestions={suggestions}
+            loading={suggestionsLoading}
+            processingSuggestionId={processingSuggestionId}
+            onSelectSuggestion={handleSelectSuggestion}
+            onDismissSuggestion={handleDismissSuggestion}
+            onRefresh={refreshSuggestions}
+          />
+        )}
 
-        {/* AI Freeform Text Input */}
-        <View className="bg-gradient-to-r from-purple-50 to-sky-50 border-2 border-purple-200 rounded-xl p-4 mb-6">
-          <View className="flex-row items-center gap-2 mb-3">
-            <Sparkles size={20} color="#9333ea" />
-            <Text className="text-lg font-bold text-purple-900">
-              AI Quick Entry
-            </Text>
-          </View>
+        {/* AI Freeform Text Input - Collapsible */}
+        <View className="bg-gradient-to-r from-purple-50 to-sky-50 border-2 border-purple-200 rounded-xl mb-6 overflow-hidden">
+          <Pressable 
+            onPress={() => setAiQuickEntryExpanded(!aiQuickEntryExpanded)}
+            className="flex-row items-center justify-between p-4"
+          >
+            <View className="flex-row items-center gap-2">
+              <Sparkles size={20} color="#9333ea" />
+              <Text className="text-lg font-bold text-purple-900">
+                AI Quick Entry
+              </Text>
+              {!aiQuickEntryExpanded && (
+                <View className="bg-purple-200 px-2 py-0.5 rounded-full ml-2">
+                  <Text className="text-xs text-purple-800 font-medium">
+                    Paste NOR/SI to auto-fill
+                  </Text>
+                </View>
+              )}
+            </View>
+            <ChevronDown 
+              size={20} 
+              color="#9333ea" 
+              style={{ transform: [{ rotate: aiQuickEntryExpanded ? '180deg' : '0deg' }] }}
+            />
+          </Pressable>
+          
+          {aiQuickEntryExpanded && (
+          <View className="px-4 pb-4">
           <Text className="text-sm text-purple-800 mb-2">
             Upload PDF/document, paste a PDF URL, or paste text. AI will automatically extract and fill all fields below.
           </Text>
@@ -2405,6 +2688,8 @@ export function ComprehensiveRaceEntry({
               </>
             )}
           </Pressable>
+        </View>
+        )}
         </View>
 
         {/* Extracted Marks Display */}
@@ -3224,12 +3509,26 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Action Buttons */}
-        <View className="flex-row gap-3 mt-6 mb-8">
+        {/* Spacer for floating button */}
+        <View className="h-24" />
+      </ScrollView>
+
+      {/* Floating Action Buttons */}
+      <View 
+        className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3"
+        style={{ 
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 5,
+        }}
+      >
+        <View className="flex-row gap-3">
           {onCancel && (
             <Pressable
               onPress={onCancel}
-              className="flex-1 bg-gray-300 py-4 rounded-xl items-center justify-center"
+              className="flex-1 bg-gray-100 py-3.5 rounded-xl items-center justify-center border border-gray-300"
             >
               <Text className="text-gray-700 font-semibold text-base">Cancel</Text>
             </Pressable>
@@ -3242,20 +3541,27 @@ export function ComprehensiveRaceEntry({
               handleSubmit();
             }}
             disabled={saving}
-            className={`flex-1 py-4 rounded-xl items-center justify-center ${
+            className={`flex-1 py-3.5 rounded-xl items-center justify-center flex-row gap-2 ${
               saving ? 'bg-gray-400' : 'bg-sky-600'
             }`}
           >
             {saving ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color="white" size="small" />
             ) : (
-              <Text className="text-white font-semibold text-base">
-                {existingRaceId ? 'Update Race' : 'Create Race'}
-              </Text>
+              <>
+                <MaterialCommunityIcons 
+                  name={existingRaceId ? "content-save" : "plus-circle"} 
+                  size={20} 
+                  color="white" 
+                />
+                <Text className="text-white font-semibold text-base">
+                  {existingRaceId ? 'Save Changes' : 'Create Race'}
+                </Text>
+              </>
             )}
           </Pressable>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }

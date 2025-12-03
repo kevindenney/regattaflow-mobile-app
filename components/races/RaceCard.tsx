@@ -2,11 +2,16 @@
  * RaceCard Component
  * Mobile phone-sized race card showing critical race details with countdown timer
  * Dimensions: 375×667px (iPhone SE size) for primary card, scaled down for others
+ * 
+ * Weather Display Logic:
+ * - Past races: Show saved/historical data
+ * - Races ≤7 days away: Show live forecast (auto-fetched)
+ * - Races >7 days away: Show saved snapshot with "📌 Saved" indicator
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2 } from 'lucide-react-native';
+import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2, Trophy, Medal, Award, Pin } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { calculateCountdown } from '@/constants/mockData';
 import { RaceTimer } from './RaceTimer';
@@ -15,6 +20,19 @@ import { RaceWeatherService } from '@/services/RaceWeatherService';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
+
+// Number of days within which we show live forecast
+const LIVE_FORECAST_DAYS = 7;
+
+// Results data for completed races
+export interface RaceResultData {
+  position: number;
+  points: number;
+  fleetSize: number;
+  status?: 'finished' | 'dnf' | 'dns' | 'dsq' | 'ocs' | 'ret';
+  seriesPosition?: number;
+  totalRaces?: number;
+}
 
 const logger = createLogger('RaceCard');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -73,8 +91,10 @@ export interface RaceCardProps {
   onSelect?: () => void; // Callback when card is selected (replaces navigation for inline view)
   onEdit?: () => void;
   onDelete?: () => void;
+  onHide?: () => void; // Callback to hide/withdraw from race (for registered races user didn't create)
   showTimelineIndicator?: boolean; // True to show the "now" timeline indicator on the left
   isDimmed?: boolean; // True when another race is selected and this one should recede
+  results?: RaceResultData; // Results data for completed races
 }
 
 export function RaceCard({
@@ -96,12 +116,16 @@ export function RaceCard({
   onSelect,
   onEdit,
   onDelete,
+  onHide,
   showTimelineIndicator = false,
   isDimmed = false,
+  results,
 }: RaceCardProps) {
   const router = useRouter();
   const editHandler = onEdit ?? null;
   const deleteHandler = onDelete ?? null;
+  const hideHandler = onHide ?? null;
+  const hasTopBadges = isSelected || isMock || raceStatus === 'next' || raceStatus === 'past';
 
   const menuItems = useMemo<CardMenuItem[]>(() => {
     const items: CardMenuItem[] = [];
@@ -110,6 +134,13 @@ export function RaceCard({
         label: 'Edit Race',
         icon: 'create-outline',
         onPress: editHandler,
+      });
+    }
+    if (hideHandler) {
+      items.push({
+        label: 'Hide from Timeline',
+        icon: 'eye-off-outline',
+        onPress: hideHandler,
       });
     }
     if (deleteHandler) {
@@ -121,18 +152,91 @@ export function RaceCard({
       });
     }
     return items;
-  }, [deleteHandler, editHandler]);
+  }, [deleteHandler, editHandler, hideHandler]);
   const [refreshingWeather, setRefreshingWeather] = useState(false);
   const [currentWind, setCurrentWind] = useState(wind);
   const [currentTide, setCurrentTide] = useState(tide);
   const [currentWeatherStatus, setCurrentWeatherStatus] = useState(weatherStatus);
+  const [isLiveForecast, setIsLiveForecast] = useState(false);
+  const [liveForecastLoading, setLiveForecastLoading] = useState(false);
 
-  // Sync props to state when they change (important for enrichment updates)
+  // Calculate days until race
+  const daysUntilRace = useMemo(() => {
+    const raceDate = new Date(date);
+    const now = new Date();
+    const diffTime = raceDate.getTime() - now.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }, [date]);
+
+  // Determine if we should show live forecast (race within 7 days and not past)
+  const shouldUseLiveForecast = useMemo(() => {
+    if (raceStatus === 'past') return false;
+    if (isMock) return false;
+    return daysUntilRace >= 0 && daysUntilRace <= LIVE_FORECAST_DAYS;
+  }, [raceStatus, isMock, daysUntilRace]);
+
+  // Fetch live forecast for races within 7 days
+  const fetchLiveForecast = useCallback(async () => {
+    if (!shouldUseLiveForecast || !venue || liveForecastLoading) return;
+
+    setLiveForecastLoading(true);
+    try {
+      logger.debug(`[RaceCard] Fetching live forecast for ${name} (${daysUntilRace} days away)`);
+      
+      const warningSignalTime =
+        critical_details?.warning_signal ||
+        (typeof startTime === 'string' && startTime.includes(':') && startTime.length <= 8 ? startTime : null);
+
+      const weatherData = await RaceWeatherService.fetchWeatherByVenueName(venue, date, {
+        warningSignalTime,
+      });
+
+      if (weatherData) {
+        setCurrentWind(weatherData.wind);
+        setCurrentTide(weatherData.tide);
+        setCurrentWeatherStatus('available');
+        setIsLiveForecast(true);
+        logger.debug(`[RaceCard] Live forecast loaded for ${name}: ${weatherData.wind?.direction} ${weatherData.wind?.speedMin}-${weatherData.wind?.speedMax}kts`);
+      } else {
+        // Fall back to saved data if live fetch fails
+        setCurrentWind(wind);
+        setCurrentTide(tide);
+        setCurrentWeatherStatus(weatherStatus || 'unavailable');
+        setIsLiveForecast(false);
+      }
+    } catch (error) {
+      logger.error(`[RaceCard] Error fetching live forecast for ${name}:`, error);
+      // Fall back to saved data on error
+      setCurrentWind(wind);
+      setCurrentTide(tide);
+      setCurrentWeatherStatus(weatherStatus || 'error');
+      setIsLiveForecast(false);
+    } finally {
+      setLiveForecastLoading(false);
+    }
+  }, [shouldUseLiveForecast, venue, date, startTime, critical_details?.warning_signal, name, daysUntilRace, wind, tide, weatherStatus, liveForecastLoading]);
+
+  // Auto-fetch live forecast on mount for races within 7 days
   useEffect(() => {
-    setCurrentWind(wind);
-    setCurrentTide(tide);
-    setCurrentWeatherStatus(weatherStatus);
-  }, [wind, tide, weatherStatus]);
+    if (shouldUseLiveForecast && !isLiveForecast && !liveForecastLoading) {
+      fetchLiveForecast();
+    } else if (!shouldUseLiveForecast) {
+      // For races >7 days or past, use saved data
+      setCurrentWind(wind);
+      setCurrentTide(tide);
+      setCurrentWeatherStatus(weatherStatus);
+      setIsLiveForecast(false);
+    }
+  }, [shouldUseLiveForecast]); // Only re-run when shouldUseLiveForecast changes
+
+  // Sync props to state when they change (for races NOT using live forecast)
+  useEffect(() => {
+    if (!shouldUseLiveForecast) {
+      setCurrentWind(wind);
+      setCurrentTide(tide);
+      setCurrentWeatherStatus(weatherStatus);
+    }
+  }, [wind, tide, weatherStatus, shouldUseLiveForecast]);
 
   // Calculate countdown once per minute using useMemo
   // This prevents re-calculating on every render
@@ -320,20 +424,37 @@ export function RaceCard({
         </View>
       )}
 
-     {/* Header */}
-     <View style={styles.header}>
-       <Text style={[styles.raceName, isPrimary && styles.primaryRaceName]} numberOfLines={2}>
-         {name}
-       </Text>
-        {menuItems.length > 0 && (
-          <View style={styles.menuTrigger}>
-            <CardMenu items={menuItems} />
-          </View>
-        )}
+      {/* Header */}
+      <View style={[styles.header, hasTopBadges && styles.headerWithBadges]}>
+        <View style={styles.headerTopRow}>
+          <Text
+            style={[styles.raceName, isPrimary && styles.primaryRaceName]}
+            numberOfLines={4}
+          >
+            {name}
+          </Text>
+          {menuItems.length > 0 && (
+            <View style={styles.menuTrigger}>
+              <CardMenu items={menuItems} />
+            </View>
+          )}
+        </View>
         <View style={styles.venueRow}>
           <MapPin size={12} color="#64748B" />
           <Text style={styles.venueText}>{venue}</Text>
         </View>
+        {/* Race Date & Time - only show when RaceTimer is NOT displayed */}
+        {(isMock || raceStatus === 'past' || !onRaceComplete) && (
+          <View style={styles.dateTimeRow}>
+            <Text style={styles.dateTimeText}>
+              {new Date(date).toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+              })} at {startTime?.substring(0, 5) || startTime}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Race Timer (Countdown or Active Timer) - Only show on upcoming races */}
@@ -346,6 +467,85 @@ export function RaceCard({
             raceTime={startTime}
             onRaceComplete={onRaceComplete}
           />
+        </View>
+      ) : raceStatus === 'past' ? (
+        /* Past race - show results or completion status */
+        <View style={[styles.countdownSection, styles.pastCountdownSection]}>
+          {results ? (
+            /* Show race results */
+            <>
+              <Text style={styles.pastCountdownLabel}>YOUR RESULT</Text>
+              <View style={styles.resultsContainer}>
+                {/* Position with medal/trophy */}
+                <View style={styles.positionDisplay}>
+                  {results.position === 1 ? (
+                    <Trophy size={28} color="#FFD700" fill="#FFD700" />
+                  ) : results.position === 2 ? (
+                    <Medal size={28} color="#C0C0C0" />
+                  ) : results.position === 3 ? (
+                    <Award size={28} color="#CD7F32" />
+                  ) : (
+                    <View style={styles.positionCircle}>
+                      <Text style={styles.positionNumber}>{results.position}</Text>
+                    </View>
+                  )}
+                  <Text style={[
+                    styles.positionText,
+                    results.position <= 3 && styles.positionTextPodium
+                  ]}>
+                    {results.position === 1 ? '1st' : 
+                     results.position === 2 ? '2nd' : 
+                     results.position === 3 ? '3rd' : 
+                     `${results.position}th`}
+                    {results.status && results.status !== 'finished' && (
+                      <Text style={styles.statusCode}> ({results.status.toUpperCase()})</Text>
+                    )}
+                  </Text>
+                </View>
+                
+                {/* Fleet size and points */}
+                <View style={styles.resultsStats}>
+                  <View style={styles.resultStat}>
+                    <Text style={styles.resultStatValue}>{results.fleetSize}</Text>
+                    <Text style={styles.resultStatLabel}>boats</Text>
+                  </View>
+                  <View style={styles.resultStatDivider} />
+                  <View style={styles.resultStat}>
+                    <Text style={styles.resultStatValue}>{results.points}</Text>
+                    <Text style={styles.resultStatLabel}>pts</Text>
+                  </View>
+                  {results.seriesPosition && (
+                    <>
+                      <View style={styles.resultStatDivider} />
+                      <View style={styles.resultStat}>
+                        <Text style={styles.resultStatValue}>
+                          {results.seriesPosition}/{results.totalRaces || '?'}
+                        </Text>
+                        <Text style={styles.resultStatLabel}>series</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </View>
+            </>
+          ) : (
+            /* No results yet - show completion status */
+            <>
+              <Text style={styles.pastCountdownLabel}>RACE COMPLETED</Text>
+              <View style={styles.pastRaceInfo}>
+                <CheckCircle2 size={24} color="#10B981" />
+                <Text style={styles.pastRaceDate}>
+                  {new Date(date).toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    month: 'long', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </Text>
+              </View>
+              <Text style={styles.noResultsHint}>Results not yet entered</Text>
+            </>
+          )}
         </View>
       ) : (
         <View style={[styles.countdownSection, isPrimary && styles.primaryCountdownSection]}>
@@ -377,26 +577,53 @@ export function RaceCard({
 
       {/* Critical Details - Enhanced with consistent visual hierarchy */}
       <View style={styles.detailsSection}>
+        {/* Section Label based on data source */}
+        {raceStatus === 'past' ? (
+          <View style={styles.conditionsHeader}>
+            <Text style={styles.conditionsHeaderText}>RACE CONDITIONS</Text>
+          </View>
+        ) : !shouldUseLiveForecast && currentWind ? (
+          <View style={styles.savedForecastHeader}>
+            <Pin size={10} color="#64748B" />
+            <Text style={styles.savedForecastText}>Saved forecast</Text>
+          </View>
+        ) : isLiveForecast ? (
+          <View style={styles.liveForecastHeader}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveForecastText}>Live forecast</Text>
+          </View>
+        ) : null}
+        
         {/* Wind Conditions - Primary environmental data */}
         <View style={styles.environmentalCard}>
           <View style={styles.detailRowEnhanced}>
             <Wind size={18} color="#3B82F6" strokeWidth={2.5} />
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>WIND</Text>
-              {currentWind ? (
+              <Text style={styles.detailLabel}>
+                {raceStatus === 'past' ? 'WIND (RECORDED)' : 'WIND'}
+              </Text>
+              {liveForecastLoading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <Text style={styles.detailValueMessage}>Loading forecast...</Text>
+                </View>
+              ) : currentWind ? (
                 <Text style={styles.detailValueLarge}>
-                  {currentWind.direction} {currentWind.speedMin}-{currentWind.speedMax}kts
+                  {currentWind.direction} {Math.min(currentWind.speedMin, currentWind.speedMax)}-{Math.max(currentWind.speedMin, currentWind.speedMax)}kts
                 </Text>
               ) : (
                 <Text style={styles.detailValueMessage}>
-                  {getWeatherStatusMessage(currentWeatherStatus)}
+                  {raceStatus === 'past' ? 'No conditions recorded' : getWeatherStatusMessage(currentWeatherStatus)}
                 </Text>
               )}
             </View>
-            {/* Weather Refresh Button (only for real races) */}
+            {/* Weather Refresh Button (only for real upcoming races) */}
             {!isMock && raceStatus !== 'past' && (
-              <Pressable onPress={handleRefreshWeather} disabled={refreshingWeather}>
-                {refreshingWeather ? (
+              <Pressable 
+                onPress={shouldUseLiveForecast ? fetchLiveForecast : handleRefreshWeather} 
+                disabled={refreshingWeather || liveForecastLoading}
+              >
+                {(refreshingWeather || liveForecastLoading) ? (
                   <ActivityIndicator size="small" color="#3B82F6" />
                 ) : (
                   <RefreshCw size={14} color="#64748B" />
@@ -411,14 +638,19 @@ export function RaceCard({
           <View style={styles.detailRowEnhanced}>
             <Waves size={18} color="#0EA5E9" strokeWidth={2.5} />
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>TIDE</Text>
-              {currentTide ? (
+              <Text style={styles.detailLabel}>{raceStatus === 'past' ? 'TIDE (RECORDED)' : 'TIDE'}</Text>
+              {liveForecastLoading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color="#0EA5E9" />
+                  <Text style={styles.detailValueMessage}>Loading...</Text>
+                </View>
+              ) : currentTide ? (
                 <Text style={styles.detailValueLarge}>
                   {currentTide.state} {currentTide.height}m {currentTide.direction ? `→ ${currentTide.direction}` : ''}
                 </Text>
               ) : (
                 <Text style={styles.detailValueMessage}>
-                  {getWeatherStatusMessage(currentWeatherStatus)}
+                  {raceStatus === 'past' ? 'No conditions recorded' : getWeatherStatusMessage(currentWeatherStatus)}
                 </Text>
               )}
             </View>
@@ -547,6 +779,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
+    maxWidth: '55%',
+    alignSelf: 'flex-end',
     backgroundColor: '#10B981',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -568,6 +802,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
+    maxWidth: '55%',
+    alignSelf: 'flex-end',
     backgroundColor: '#6B7280',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -587,21 +823,31 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingRight: 90, // Space for NEXT RACE badge
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  headerWithBadges: {
+    paddingTop: 22,
+  },
   menuTrigger: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    zIndex: 4,
   },
   raceName: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#1E293B',
-    marginBottom: 6,
-    lineHeight: 20,
+    marginBottom: 4,
+    lineHeight: 17,
   },
   primaryRaceName: {
-    fontSize: 18,
+    fontSize: 15,
+    fontWeight: '800',
     color: '#1E40AF',
+    lineHeight: 19,
   },
   venueRow: {
     flexDirection: 'row',
@@ -612,6 +858,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#64748B',
+  },
+  dateTimeRow: {
+    marginTop: 4,
+  },
+  dateTimeText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#94A3B8',
   },
   countdownSection: {
     backgroundColor: '#334155',
@@ -628,6 +882,104 @@ const styles = StyleSheet.create({
   primaryCountdownSection: {
     backgroundColor: '#1E293B',
     padding: 12,
+  },
+  pastCountdownSection: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  pastRaceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pastRaceDate: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  pastCountdownLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 1,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  // Results display styles for completed races
+  resultsContainer: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  positionDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  positionCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#475569',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  positionNumber: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  positionText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  positionTextPodium: {
+    color: '#059669',
+  },
+  statusCode: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  resultsStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  resultStat: {
+    alignItems: 'center',
+  },
+  resultStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  resultStatLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  resultStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+  },
+  noResultsHint: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#94A3B8',
+    marginTop: 6,
+    fontStyle: 'italic',
   },
   countdownLabel: {
     fontSize: 10,
@@ -678,6 +1030,51 @@ const styles = StyleSheet.create({
   },
   detailsSection: {
     marginBottom: 8,
+    gap: 6,
+  },
+  conditionsHeader: {
+    marginBottom: 4,
+  },
+  conditionsHeaderText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  savedForecastHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  savedForecastText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 0.3,
+  },
+  liveForecastHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  liveForecastText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#10B981',
+    letterSpacing: 0.3,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   environmentalCard: {

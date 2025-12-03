@@ -18,6 +18,7 @@ import type { RaceSuggestion, CategorizedSuggestions } from '@/services/RaceSugg
 interface RaceSuggestionsDrawerProps {
   suggestions: CategorizedSuggestions | null;
   loading: boolean;
+  processingSuggestionId?: string | null;
   onSelectSuggestion: (suggestion: RaceSuggestion) => void;
   onDismissSuggestion?: (suggestionId: string) => void;
   onRefresh?: () => void;
@@ -26,6 +27,7 @@ interface RaceSuggestionsDrawerProps {
 export function RaceSuggestionsDrawer({
   suggestions,
   loading,
+  processingSuggestionId,
   onSelectSuggestion,
   onDismissSuggestion,
   onRefresh,
@@ -110,6 +112,7 @@ export function RaceSuggestionsDrawer({
               <SuggestionCard
                 key={suggestion.id}
                 suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
                 onSelect={() => onSelectSuggestion(suggestion)}
                 onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
               />
@@ -131,6 +134,7 @@ export function RaceSuggestionsDrawer({
               <SuggestionCard
                 key={suggestion.id}
                 suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
                 onSelect={() => onSelectSuggestion(suggestion)}
                 onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
               />
@@ -152,6 +156,7 @@ export function RaceSuggestionsDrawer({
               <SuggestionCard
                 key={suggestion.id}
                 suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
                 onSelect={() => onSelectSuggestion(suggestion)}
                 onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
               />
@@ -173,6 +178,7 @@ export function RaceSuggestionsDrawer({
               <SuggestionCard
                 key={suggestion.id}
                 suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
                 onSelect={() => onSelectSuggestion(suggestion)}
                 onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
               />
@@ -235,11 +241,12 @@ function SuggestionSection({
 
 interface SuggestionCardProps {
   suggestion: RaceSuggestion;
+  isProcessing?: boolean;
   onSelect: () => void;
   onDismiss?: () => void;
 }
 
-function SuggestionCard({ suggestion, onSelect, onDismiss }: SuggestionCardProps) {
+function SuggestionCard({ suggestion, isProcessing, onSelect, onDismiss }: SuggestionCardProps) {
   const getConfidenceBadge = (score: number) => {
     if (score >= 0.8) return { label: 'High Match', color: '#10B981' };
     if (score >= 0.6) return { label: 'Good Match', color: '#F59E0B' };
@@ -300,13 +307,28 @@ function SuggestionCard({ suggestion, onSelect, onDismiss }: SuggestionCardProps
 
       {/* Actions */}
       <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.addButton} onPress={onSelect}>
-          <MaterialCommunityIcons name="plus-circle" size={18} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>
-            {suggestion.canAddDirectly ? 'Add to Calendar' : 'Use as Template'}
-          </Text>
+        <TouchableOpacity
+          style={[styles.addButton, isProcessing && styles.addButtonDisabled]}
+          onPress={onSelect}
+          disabled={isProcessing}
+        >
+          {isProcessing ? (
+            <>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.addButtonText}>
+                {suggestion.canAddDirectly ? 'Adding Race...' : 'Processing...'}
+              </Text>
+            </>
+          ) : (
+            <>
+              <MaterialCommunityIcons name="plus-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>
+                {suggestion.canAddDirectly ? 'Add to Calendar' : 'Use as Template'}
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
-        {onDismiss && (
+        {onDismiss && !isProcessing && (
           <TouchableOpacity style={styles.dismissButton} onPress={onDismiss}>
             <MaterialCommunityIcons name="close" size={18} color="#64748B" />
           </TouchableOpacity>
@@ -517,6 +539,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
+  },
+  addButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    opacity: 0.7,
   },
   addButtonText: {
     fontSize: 13,

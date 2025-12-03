@@ -6,20 +6,17 @@
  * and conditions into actionable race strategies with venue-specific intelligence
  */
 
+import type {
+  RaceCourseExtraction,
+  StrategyInsight,
+  TacticalRecommendation
+} from '@/lib/types/ai-knowledge';
+import { createLogger } from '@/lib/utils/logger';
 import Anthropic from '@anthropic-ai/sdk';
 import Constants from 'expo-constants';
 import { DocumentProcessingService } from './DocumentProcessingService';
 import { sailingEducationService } from './SailingEducationService';
 import { skillManagementService } from './SkillManagementService';
-import { createLogger } from '@/lib/utils/logger';
-import type {
-  RaceCourseExtraction,
-  StrategyInsight,
-  TacticalRecommendation,
-  AnalysisRequest,
-  AnalysisResponse,
-  DocumentAnalysis
-} from '@/lib/types/ai-knowledge';
 
 export interface RaceConditions {
   wind: {
@@ -291,6 +288,14 @@ export class RaceStrategyEngine {
       fleetSize?: number;
       importance?: 'practice' | 'series' | 'championship' | 'worlds';
       racingAreaPolygon?: Array<{ lat: number; lng: number }>;
+      // NEW: Sailor learning profile for personalized recommendations
+      sailorProfile?: {
+        strengths: Array<{ metric: string; average: number; trend: string }>;
+        focusAreas: Array<{ metric: string; average: number; trend: string }>;
+        recurringWins?: string[];
+        recurringChallenges?: string[];
+        racesAnalyzed?: number;
+      };
     }
   ): Promise<RaceStrategy> {
 
@@ -439,6 +444,11 @@ export class RaceStrategyEngine {
       ? `\nUSER-DEFINED RACING AREA:\n- Polygon vertices: ${raceContext.racingAreaSummary}\n- Treat edges as potential current relief and compression lines.\n`
       : '';
 
+    // NEW: Build personalized sailor profile section for the prompt
+    const sailorProfileSection = raceContext.sailorProfile
+      ? this.buildSailorProfilePromptSection(raceContext.sailorProfile)
+      : '';
+
     const strategyPrompt = `Generate a comprehensive venue-based race strategy for ${raceContext.raceName} at ${venue.name}. Use your race strategy expertise to combine theory (what/why) with execution (how).
 
 VENUE INTELLIGENCE:
@@ -467,8 +477,8 @@ RACE CONTEXT:
 - Boat Type: ${raceContext.boatType || 'Keelboat'}
 - Fleet Size: ${raceContext.fleetSize || 'Standard'}
 - Importance: ${raceContext.importance || 'series'}
-
-Apply your race strategy expertise including shift mathematics, puff response, starting techniques, covering tactics, and champion execution methods.
+${sailorProfileSection}
+Apply your race strategy expertise including shift mathematics, puff response, starting techniques, covering tactics, and champion execution methods.${raceContext.sailorProfile ? '\n\nIMPORTANT: Tailor your recommendations to this specific sailor\'s strengths and focus areas. Leverage their proven strengths while providing specific guidance to address their challenges.' : ''}
 
 TASK: Generate a comprehensive venue-based race strategy including:
 1. OVERALL APPROACH - Strategic philosophy with theory + execution
@@ -596,6 +606,48 @@ CRITICAL OUTPUT RULES:
       logger.error('API call failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Build a prompt section describing the sailor's learning profile
+   * This enables personalized strategy recommendations based on past performance
+   */
+  private buildSailorProfilePromptSection(sailorProfile: {
+    strengths: Array<{ metric: string; average: number; trend: string }>;
+    focusAreas: Array<{ metric: string; average: number; trend: string }>;
+    recurringWins?: string[];
+    recurringChallenges?: string[];
+    racesAnalyzed?: number;
+  }): string {
+    const lines: string[] = ['\nSAILOR PERFORMANCE PROFILE (based on post-race analysis):'];
+    
+    if (sailorProfile.racesAnalyzed) {
+      lines.push(`- Races analyzed: ${sailorProfile.racesAnalyzed}`);
+    }
+
+    if (sailorProfile.strengths.length > 0) {
+      lines.push('- PROVEN STRENGTHS (leverage these):');
+      sailorProfile.strengths.slice(0, 3).forEach(s => {
+        lines.push(`  • ${s.metric}: ${s.average.toFixed(1)}/5 avg (${s.trend})`);
+      });
+    }
+
+    if (sailorProfile.focusAreas.length > 0) {
+      lines.push('- FOCUS AREAS (provide specific guidance):');
+      sailorProfile.focusAreas.slice(0, 3).forEach(f => {
+        lines.push(`  • ${f.metric}: ${f.average.toFixed(1)}/5 avg (${f.trend})`);
+      });
+    }
+
+    if (sailorProfile.recurringWins && sailorProfile.recurringWins.length > 0) {
+      lines.push('- RECURRING WINS: ' + sailorProfile.recurringWins.slice(0, 2).join('; '));
+    }
+
+    if (sailorProfile.recurringChallenges && sailorProfile.recurringChallenges.length > 0) {
+      lines.push('- RECURRING CHALLENGES: ' + sailorProfile.recurringChallenges.slice(0, 2).join('; '));
+    }
+
+    return lines.join('\n');
   }
 
   /**
@@ -1105,65 +1157,193 @@ ABSOLUTE: Do NOT call any tools or code execution utilities. Respond directly wi
   }
 
   /**
-   * Generate contingency plans for different scenario changes
+   * Generate AI-powered contingency plans based on actual weather forecast and venue conditions
    */
   private async generateContingencyPlans(
     strategy: RaceStrategy['strategy'],
     conditions: RaceConditions,
     venue: VenueIntelligence
   ): Promise<RaceStrategy['contingencies']> {
-    return {
-      windShift: [
-        {
-          phase: 'first_beat',
-          priority: 'critical',
-          action: 'Tack on headers, continue on lifts, reassess preferred side',
-          rationale: 'Wind shifts require immediate tactical response to maintain advantage',
-          conditions: ['Persistent wind shift > 10°'],
-          riskLevel: 'medium'
+    try {
+      const contingencyPrompt = `You are an expert sailing tactician. Generate specific contingency plans for a race at ${venue.name}.
+
+CURRENT CONDITIONS:
+- Wind: ${conditions.wind.speed} knots from ${conditions.wind.direction}°
+- Wind forecast next hour: ${conditions.wind.forecast.nextHour.speed} knots from ${conditions.wind.forecast.nextHour.direction}°
+- Wind forecast 3 hours: ${conditions.wind.forecast.nextThreeHours.speed} knots from ${conditions.wind.forecast.nextThreeHours.direction}°
+- Current: ${conditions.current.speed} knots from ${conditions.current.direction}° (${conditions.current.tidePhase} tide)
+- Waves: ${conditions.waves.height}m at ${conditions.waves.period}s
+- Weather risk: ${conditions.weatherRisk}
+- Wind confidence: ${Math.round(conditions.wind.confidence * 100)}%
+
+VENUE LOCAL KNOWLEDGE:
+- Wind patterns: ${venue.localKnowledge.windPatterns.typical}
+- Local effects: ${venue.localKnowledge.windPatterns.localEffects.join(', ')}
+- Tidal range: ${venue.localKnowledge.currentPatterns.tidalRange}m
+- Common mistakes: ${venue.localKnowledge.commonMistakes.join('; ')}
+
+Generate 5-7 specific contingency scenarios that are MOST LIKELY given these conditions. For each scenario, provide:
+1. A specific trigger condition (what to watch for)
+2. The recommended action
+3. Priority level (high/medium/low)
+
+Focus on scenarios that are realistic for TODAY's conditions - don't include generic scenarios that aren't relevant.
+
+Respond in JSON format:
+{
+  "scenarios": [
+    {
+      "scenario": "Brief title",
+      "trigger": "Specific condition to watch for",
+      "action": "What to do",
+      "priority": "high|medium|low",
+      "category": "windShift|windDrop|windIncrease|currentChange|equipmentIssue|other"
+    }
+  ]
+}`;
+
+      const response = await this.anthropic.messages.create({
+        model: 'claude-3-5-haiku-20241022',
+        max_tokens: 1500,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: contingencyPrompt }]
+      });
+
+      const responseText = response.content[0].type === 'text' ? response.content[0].text : '';
+      
+      // Parse JSON response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const scenarios = parsed.scenarios || [];
+
+        // Convert to the expected format
+        const contingencies: RaceStrategy['contingencies'] = {
+          windShift: [],
+          windDrop: [],
+          windIncrease: [],
+          currentChange: [],
+          equipmentIssue: []
+        };
+
+        for (const scenario of scenarios) {
+          const recommendation: TacticalRecommendation = {
+            phase: 'first_beat',
+            priority: scenario.priority === 'high' ? 'critical' : scenario.priority === 'medium' ? 'important' : 'optional',
+            action: scenario.action,
+            rationale: scenario.trigger,
+            conditions: [scenario.trigger],
+            riskLevel: scenario.priority === 'high' ? 'high' : scenario.priority === 'medium' ? 'medium' : 'low'
+          };
+
+          // Categorize into the appropriate bucket
+          const category = scenario.category || 'other';
+          if (category === 'windShift' || scenario.scenario.toLowerCase().includes('shift')) {
+            contingencies.windShift.push(recommendation);
+          } else if (category === 'windDrop' || scenario.scenario.toLowerCase().includes('drop') || scenario.scenario.toLowerCase().includes('light')) {
+            contingencies.windDrop.push(recommendation);
+          } else if (category === 'windIncrease' || scenario.scenario.toLowerCase().includes('increase') || scenario.scenario.toLowerCase().includes('heavy')) {
+            contingencies.windIncrease.push(recommendation);
+          } else if (category === 'currentChange' || scenario.scenario.toLowerCase().includes('current') || scenario.scenario.toLowerCase().includes('tide')) {
+            contingencies.currentChange.push(recommendation);
+          } else if (category === 'equipmentIssue' || scenario.scenario.toLowerCase().includes('equipment')) {
+            contingencies.equipmentIssue.push(recommendation);
+          } else {
+            // Default to windShift for other tactical scenarios
+            contingencies.windShift.push(recommendation);
+          }
         }
-      ],
-      windDrop: [
-        {
-          phase: 'first_beat',
-          priority: 'important',
-          action: 'Move to center of course, minimize tacks, focus on boat speed',
-          rationale: 'Light air rewards patience and boat speed over aggressive tactics',
-          conditions: ['Wind drops below 8 knots'],
-          riskLevel: 'low'
-        }
-      ],
-      windIncrease: [
-        {
-          phase: 'first_beat',
-          priority: 'important',
-          action: 'Consider flattening sails, ensure crew is prepared for increased loads',
-          rationale: 'Heavy air requires different sail trim and crew positioning',
-          conditions: ['Wind increases above 18 knots'],
-          riskLevel: 'high'
-        }
-      ],
-      currentChange: [
-        {
-          phase: 'first_beat',
-          priority: 'important',
-          action: 'Reassess tidal strategy, adjust for new current direction and strength',
-          rationale: 'Current changes can significantly affect tactical decisions',
-          conditions: [`Current strength > ${conditions.current.speed + 0.5} knots`],
-          riskLevel: 'medium'
-        }
-      ],
-      equipmentIssue: [
-        {
-          phase: 'pre_start',
-          priority: 'critical',
-          action: 'Assess severity, determine if race continuation is safe and competitive',
-          rationale: 'Equipment failures require immediate assessment of safety and competitiveness',
-          conditions: ['Any equipment failure'],
-          riskLevel: 'high'
-        }
-      ]
+
+        // Store the raw scenarios for the UI component
+        (contingencies as any).rawScenarios = scenarios;
+
+        logger.debug('[RaceStrategyEngine] Generated AI contingency plans:', scenarios.length, 'scenarios');
+        return contingencies;
+      }
+    } catch (error) {
+      logger.warn('[RaceStrategyEngine] Failed to generate AI contingency plans, using defaults:', error);
+    }
+
+    // Fallback to condition-aware defaults if AI fails
+    return this.getDefaultContingencyPlans(conditions, venue);
+  }
+
+  /**
+   * Get default contingency plans based on current conditions (fallback)
+   */
+  private getDefaultContingencyPlans(
+    conditions: RaceConditions,
+    venue: VenueIntelligence
+  ): RaceStrategy['contingencies'] {
+    const contingencies: RaceStrategy['contingencies'] = {
+      windShift: [],
+      windDrop: [],
+      windIncrease: [],
+      currentChange: [],
+      equipmentIssue: []
     };
+
+    // Wind shift contingency - based on forecast difference
+    const forecastShift = Math.abs(conditions.wind.direction - conditions.wind.forecast.nextHour.direction);
+    if (forecastShift > 5) {
+      contingencies.windShift.push({
+        phase: 'first_beat',
+        priority: forecastShift > 15 ? 'critical' : 'important',
+        action: `Wind forecast shows ${forecastShift}° shift. Tack on headers, protect the ${conditions.wind.forecast.nextHour.direction > conditions.wind.direction ? 'right' : 'left'} side.`,
+        rationale: `Forecast indicates wind shifting from ${conditions.wind.direction}° to ${conditions.wind.forecast.nextHour.direction}°`,
+        conditions: [`Wind shifts ${forecastShift > 15 ? '>' : '~'}${Math.round(forecastShift)}°`],
+        riskLevel: forecastShift > 15 ? 'high' : 'medium'
+      });
+    }
+
+    // Wind drop contingency - if current wind is moderate and forecast shows decrease
+    if (conditions.wind.speed > 10 && conditions.wind.forecast.nextHour.speed < conditions.wind.speed - 3) {
+      contingencies.windDrop.push({
+        phase: 'first_beat',
+        priority: 'important',
+        action: `Wind dropping from ${conditions.wind.speed} to ${conditions.wind.forecast.nextHour.speed} knots. Prioritize clear air, minimize maneuvers.`,
+        rationale: 'Forecast shows wind decreasing - light air tactics needed',
+        conditions: [`Wind drops below ${Math.round(conditions.wind.forecast.nextHour.speed + 2)} knots`],
+        riskLevel: 'medium'
+      });
+    }
+
+    // Wind increase contingency
+    if (conditions.wind.forecast.nextHour.speed > conditions.wind.speed + 5) {
+      contingencies.windIncrease.push({
+        phase: 'first_beat',
+        priority: conditions.wind.forecast.nextHour.speed > 20 ? 'critical' : 'important',
+        action: `Wind building to ${conditions.wind.forecast.nextHour.speed} knots. Prepare for heavier conditions, adjust sail trim.`,
+        rationale: 'Forecast shows significant wind increase',
+        conditions: [`Wind increases above ${Math.round(conditions.wind.speed + 3)} knots`],
+        riskLevel: conditions.wind.forecast.nextHour.speed > 20 ? 'high' : 'medium'
+      });
+    }
+
+    // Current change contingency - based on tide phase
+    if (conditions.current.tidePhase !== 'slack') {
+      const nextPhase = conditions.current.tidePhase === 'flood' ? 'ebb' : 'flood';
+      contingencies.currentChange.push({
+        phase: 'first_beat',
+        priority: conditions.current.speed > 1 ? 'critical' : 'important',
+        action: `Current is ${conditions.current.tidePhase}ing at ${conditions.current.speed} knots. When it turns to ${nextPhase}, adjust laylines and favor the ${nextPhase === 'flood' ? 'upwind' : 'downwind'} current edge.`,
+        rationale: `Tide will change from ${conditions.current.tidePhase} to ${nextPhase}`,
+        conditions: [`Current reverses to ${nextPhase}`],
+        riskLevel: conditions.current.speed > 1.5 ? 'high' : 'medium'
+      });
+    }
+
+    // Equipment contingency (always include)
+    contingencies.equipmentIssue.push({
+      phase: 'pre_start',
+      priority: 'critical',
+      action: 'Assess severity immediately. If safe, continue with backup plan. If not, retire safely.',
+      rationale: 'Equipment failures require immediate assessment',
+      conditions: ['Any equipment failure'],
+      riskLevel: 'high'
+    });
+
+    return contingencies;
   }
 
   /**

@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CoachMarketplaceService } from '../../services/CoachService';
 import PaymentService from '../../services/PaymentService';
 import { CoachingSession } from '../../types/coach';
+import { PaymentSetupBanner } from './PaymentSetupBanner';
 
 interface DashboardStats {
   totalEarnings: number;
@@ -263,6 +264,9 @@ export default function CoachDashboard() {
           ))}
         </View>
       </View>
+
+      {/* Payment Setup Reminder Banner */}
+      <PaymentSetupBanner style={{ marginTop: 8 }} />
 
       {/* Stats Grid */}
       <View style={styles.statsGrid}>

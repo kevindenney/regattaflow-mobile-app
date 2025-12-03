@@ -54,8 +54,9 @@
           "emoji": "🐉",
           "boats": 28,
           "captain": "Sarah Chen",
-          "recentResult": "2024 Asia Pacific Champions",
-          "practiceNight": "Wednesdays"
+          "recentResult": "2024 Asia Pacific Champions | Hosting 2027 Dragon Worlds",
+          "practiceNight": "Wednesdays",
+          "highlight": "2027 World Championship Host Fleet"
         },
         {
           "name": "J/80 Match Squad",
@@ -158,6 +159,48 @@
   ],
   "regattas": [
     {
+      "slug": "dragon-worlds-2027",
+      "name": "2027 Hong Kong Dragon World Championship",
+      "eventType": "world_championship",
+      "status": "registration_open",
+      "startDate": "2026-11-21T02:00:00.000Z",
+      "endDate": "2026-11-29T10:00:00.000Z",
+      "entryFee": 9500,
+      "currency": "HKD",
+      "norUrl": "https://www.dragonworld2027.com/media/nor-2027.pdf",
+      "siUrl": "https://www.dragonworld2027.com/media/si-2027.pdf",
+      "resultsUrl": null,
+      "venueId": "hong-kong-clearwater-bay",
+      "website": "https://www.dragonworld2027.com",
+      "expectedFleetSize": 65,
+      "boatClasses": ["Dragon"],
+      "metadata": {
+        "firstWorldsInAsia": true,
+        "principalRaceOfficer": "Stuart Childerley",
+        "charterBoatsAvailable": 20,
+        "shippingSubsidized": true
+      }
+    },
+    {
+      "slug": "asia-pacific-dragon-2026",
+      "name": "2026 Asia Pacific Dragon Championship",
+      "eventType": "continental_championship",
+      "status": "registration_open",
+      "startDate": "2026-11-17T02:00:00.000Z",
+      "endDate": "2026-11-21T10:00:00.000Z",
+      "entryFee": 5500,
+      "currency": "HKD",
+      "norUrl": "https://www.dragonworld2027.com/media/apac-nor-2026.pdf",
+      "siUrl": null,
+      "resultsUrl": null,
+      "venueId": "hong-kong-clearwater-bay",
+      "boatClasses": ["Dragon"],
+      "metadata": {
+        "warmUpEvent": true,
+        "precedesWorlds": true
+      }
+    },
+    {
       "slug": "china-coast-regatta-2025",
       "name": "China Coast Regatta",
       "eventType": "offshore",
@@ -216,6 +259,45 @@
   ],
   "events": [
     {
+      "slug": "dragon-worlds-2027-skippers-briefing",
+      "title": "Dragon Worlds 2027 - Skippers Briefing",
+      "eventType": "training",
+      "status": "upcoming",
+      "startDate": "2026-11-21T09:00:00.000Z",
+      "endDate": "2026-11-21T10:30:00.000Z",
+      "registrationOpens": "2026-11-01T00:00:00.000Z",
+      "registrationCloses": "2026-11-20T23:59:00.000Z",
+      "venueId": "hong-kong-clearwater-bay",
+      "locationName": "Clearwater Bay Marina - Event Tent",
+      "maxParticipants": 200
+    },
+    {
+      "slug": "dragon-worlds-2027-opening-ceremony",
+      "title": "Dragon Worlds 2027 - Opening Ceremony",
+      "eventType": "community",
+      "status": "upcoming",
+      "startDate": "2026-11-22T18:00:00.000Z",
+      "endDate": "2026-11-22T21:00:00.000Z",
+      "registrationOpens": "2026-11-01T00:00:00.000Z",
+      "registrationCloses": "2026-11-21T23:59:00.000Z",
+      "venueId": "hong-kong-kellett-island",
+      "locationName": "RHKYC Kellett Island Clubhouse",
+      "maxParticipants": 350
+    },
+    {
+      "slug": "dragon-worlds-2027-prize-giving",
+      "title": "Dragon Worlds 2027 - Prize Giving & Closing",
+      "eventType": "community",
+      "status": "upcoming",
+      "startDate": "2026-11-29T14:00:00.000Z",
+      "endDate": "2026-11-29T18:00:00.000Z",
+      "registrationOpens": "2026-11-01T00:00:00.000Z",
+      "registrationCloses": "2026-11-28T23:59:00.000Z",
+      "venueId": "hong-kong-kellett-island",
+      "locationName": "RHKYC Kellett Island Clubhouse",
+      "maxParticipants": 400
+    },
+    {
       "slug": "kellet-volunteer-briefing",
       "title": "Kellett Island Volunteer Briefing",
       "eventType": "volunteer",
@@ -269,6 +351,30 @@
     }
   ],
   "documents": [
+    {
+      "slug": "dragon-worlds-2027-nor",
+      "title": "2027 Dragon World Championship - Notice of Race",
+      "documentType": "notice_of_race",
+      "publishDate": "2026-06-01",
+      "url": "https://www.dragonworld2027.com/media/nor-2027.pdf",
+      "parsed": false
+    },
+    {
+      "slug": "dragon-worlds-2027-si",
+      "title": "2027 Dragon World Championship - Sailing Instructions",
+      "documentType": "sailing_instructions",
+      "publishDate": "2026-10-15",
+      "url": "https://www.dragonworld2027.com/media/si-2027.pdf",
+      "parsed": false
+    },
+    {
+      "slug": "dragon-worlds-2027-shipping-guide",
+      "title": "Dragon Worlds 2027 - Boat Shipping Guide",
+      "documentType": "bulletin",
+      "publishDate": "2026-03-15",
+      "url": "https://www.dragonworld2027.com/media/shipping-guide.pdf",
+      "parsed": false
+    },
     {
       "slug": "2025-ccr-nor",
       "title": "2025 China Coast Regatta NOR",

@@ -44,11 +44,11 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
 
     case 'club':
       return [
-        { name: 'events', title: 'Events', icon: 'boat', iconFocused: 'boat' },
-        { name: 'members', title: 'Members', icon: 'people-circle-outline', iconFocused: 'people-circle' },
-        { name: 'race-management', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
-        { name: 'profile', title: 'Profile', icon: 'person-outline', iconFocused: 'person' },
-        { name: 'settings', title: 'Settings', icon: 'settings-outline', iconFocused: 'settings' },
+        { name: 'events', title: 'Events', icon: 'calendar-outline', iconFocused: 'calendar' },
+        { name: 'members', title: 'Members', icon: 'people-outline', iconFocused: 'people' },
+        { name: 'race-management', title: 'Racing', icon: 'flag-outline', iconFocused: 'flag' },
+        { name: 'profile', title: 'Club', icon: 'business-outline', iconFocused: 'business' },
+        { name: 'settings', title: 'Settings', icon: 'cog-outline', iconFocused: 'cog' },
       ];
 
     default:
@@ -76,6 +76,14 @@ function TabLayoutInner() {
     if (userType === 'coach' && !hasRedirected && !personaLoading) {
       setHasRedirected(true);
       router.replace('/(tabs)/clients');
+    }
+  }, [userType, hasRedirected, personaLoading, router]);
+
+  // Redirect club users to /events on initial load
+  useEffect(() => {
+    if (userType === 'club' && !hasRedirected && !personaLoading) {
+      setHasRedirected(true);
+      router.replace('/(tabs)/events');
     }
   }, [userType, hasRedirected, personaLoading, router]);
 
@@ -191,9 +199,34 @@ function TabLayoutInner() {
     );
   };
 
+  // Custom tab button for club users with active indicator
+  const renderClubTabButton = (props: BottomTabBarButtonProps) => {
+    const { accessibilityState, children, onPress, style } = props;
+    const isActive = accessibilityState?.selected;
+    
+    return (
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityState={accessibilityState}
+        onPress={onPress}
+        style={[
+          style,
+          styles.clubTabButton,
+          isActive && styles.clubTabButtonActive,
+        ]}
+        activeOpacity={0.7}
+      >
+        {isActive && (
+          <View style={styles.clubTabActiveIndicator} />
+        )}
+        {children}
+      </TouchableOpacity>
+    );
+  };
+
   const isClubUser = userType === 'club';
-  const tabBarActiveColor = isClubUser ? '#60A5FA' : '#2563EB'; // Brighter blue for club users
-  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.85)' : '#9CA3AF'; // Better contrast
+  const tabBarActiveColor = isClubUser ? '#FFFFFF' : '#2563EB'; // White for active club tabs
+  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.7)' : '#9CA3AF'; // Subtle gray for inactive
 
   const racesTab = findTab('races');
   const dashboardTab = findTab('dashboard'); // Legacy for non-sailor user types
@@ -215,7 +248,7 @@ function TabLayoutInner() {
   const moreTab = findTab('more');
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <NavigationHeader backgroundColor="#F8FAFC" />
       <Tabs
         screenOptions={({ route }) => {
@@ -234,13 +267,14 @@ function TabLayoutInner() {
               isClubUser ? styles.tabBarClub : styles.tabBarDefault,
             ],
             tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
-            tabBarLabel: ({ color }) => (
+            tabBarLabel: ({ color, focused }) => (
               <Text
                 numberOfLines={1}
                 style={[
                   styles.tabLabelBase,
                   isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
                   { color },
+                  isClubUser && focused && styles.tabLabelClubActive,
                 ]}
               >
                 {labelText}
@@ -355,12 +389,16 @@ function TabLayoutInner() {
             title: eventsTab?.title ?? 'Events',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(eventsTab, focused, eventsTab?.iconFocused ?? 'boat', eventsTab?.icon ?? 'boat') as any}
-                size={isClubUser ? 26 : size}
+                name={getIconName(eventsTab, focused, eventsTab?.iconFocused ?? 'calendar', eventsTab?.icon ?? 'calendar-outline') as any}
+                size={isClubUser ? 24 : size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('events') ? undefined : () => null,
+            tabBarButton: !isTabVisible('events') 
+              ? () => null 
+              : isClubUser 
+                ? renderClubTabButton 
+                : undefined,
           }}
         />
         <Tabs.Screen
@@ -369,40 +407,52 @@ function TabLayoutInner() {
             title: membersTab?.title ?? 'Members',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(membersTab, focused, membersTab?.iconFocused ?? 'people-circle', membersTab?.icon ?? 'people-circle-outline') as any}
-                size={isClubUser ? 26 : size}
+                name={getIconName(membersTab, focused, membersTab?.iconFocused ?? 'people', membersTab?.icon ?? 'people-outline') as any}
+                size={isClubUser ? 24 : size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('members') ? undefined : () => null,
+            tabBarButton: !isTabVisible('members') 
+              ? () => null 
+              : isClubUser 
+                ? renderClubTabButton 
+                : undefined,
           }}
         />
         <Tabs.Screen
           name="race-management"
           options={{
-            title: raceManagementTab?.title ?? 'Races',
+            title: raceManagementTab?.title ?? 'Racing',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
                 name={getIconName(raceManagementTab, focused, raceManagementTab?.iconFocused ?? 'flag', raceManagementTab?.icon ?? 'flag-outline') as any}
-                size={isClubUser ? 26 : size}
+                size={isClubUser ? 24 : size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('race-management') ? undefined : () => null,
+            tabBarButton: !isTabVisible('race-management') 
+              ? () => null 
+              : isClubUser 
+                ? renderClubTabButton 
+                : undefined,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
-            title: profileTab?.title ?? 'Profile',
+            title: profileTab?.title ?? 'Club',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(profileTab, focused, profileTab?.iconFocused ?? 'person', profileTab?.icon ?? 'person-outline') as any}
-                size={isClubUser ? 26 : size}
+                name={getIconName(profileTab, focused, profileTab?.iconFocused ?? 'business', profileTab?.icon ?? 'business-outline') as any}
+                size={isClubUser ? 24 : size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('profile') ? undefined : () => null,
+            tabBarButton: !isTabVisible('profile') 
+              ? () => null 
+              : isClubUser 
+                ? renderClubTabButton 
+                : undefined,
           }}
         />
         <Tabs.Screen
@@ -411,12 +461,16 @@ function TabLayoutInner() {
             title: settingsTab?.title ?? 'Settings',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(settingsTab, focused, settingsTab?.iconFocused ?? 'settings', settingsTab?.icon ?? 'settings-outline') as any}
-                size={isClubUser ? 26 : size}
+                name={getIconName(settingsTab, focused, settingsTab?.iconFocused ?? 'cog', settingsTab?.icon ?? 'cog-outline') as any}
+                size={isClubUser ? 24 : size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('settings') ? undefined : () => null,
+            tabBarButton: !isTabVisible('settings') 
+              ? () => null 
+              : isClubUser 
+                ? renderClubTabButton 
+                : undefined,
           }}
         />
         <Tabs.Screen
@@ -688,11 +742,34 @@ const getIconName = (
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        overflowX: 'hidden',
+        overflowY: 'hidden',
+      } as any,
+      default: {},
+    }),
+  },
   tabBarBase: {
     borderTopWidth: 0,
     elevation: 0,
+    overflow: 'hidden',
     ...Platform.select({
-      web: { boxShadow: 'none' },
+      web: {
+        boxShadow: 'none',
+        overflowX: 'hidden',
+        overflowY: 'hidden',
+        touchAction: 'none',
+        userSelect: 'none',
+      } as any,
       default: { shadowOpacity: 0 },
     }),
   },
@@ -700,21 +777,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    height: 60,
-    paddingTop: 4,
-    paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+    height: 68,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+      } as any,
+      default: {},
+    }),
   },
   tabBarClub: {
     backgroundColor: '#0F172A',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(51,65,85,0.5)',
-    height: 72,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 16 : 12,
-    paddingHorizontal: 28,
+    borderTopWidth: 0,
+    height: 80,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    paddingHorizontal: 8,
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-around',
     alignItems: 'center',
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        backgroundImage: 'linear-gradient(to top, #0F172A 0%, #1E293B 100%)',
+        borderTopWidth: 1,
+        borderTopStyle: 'solid',
+        borderTopColor: 'rgba(71, 85, 105, 0.3)',
+        backdropFilter: 'blur(12px)',
+      } as any,
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 12,
+      },
+    }),
   },
   tabLabelBase: {
     textAlign: 'center',
@@ -723,36 +830,68 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     marginTop: 2,
-    marginBottom: 4,
+    marginBottom: 0,
     letterSpacing: 0.15,
   },
   tabLabelClub: {
     fontSize: 11,
-    fontWeight: '700', // Increased from 600
-    marginTop: 4,
+    fontWeight: '500',
+    marginTop: 6,
     marginBottom: 0,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase' as any,
+    letterSpacing: 0.3,
+  },
+  tabLabelClubActive: {
+    fontWeight: '600',
   },
   tabIconDefault: {
     marginTop: 6,
   },
   tabIconClub: {
-    marginTop: 2,
-    marginBottom: 2,
+    marginTop: 0,
+    marginBottom: 0,
   },
   tabItemDefault: {
     paddingVertical: 4,
   },
   tabItemClub: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    gap: 4,
-    flex: 0,
-    width: 'auto',
-    marginRight: 24,
-    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    gap: 2,
+    flex: 1,
+    minWidth: 64,
+    maxWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabItemClubActive: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  clubTabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 16,
+    marginHorizontal: 4,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  clubTabButtonActive: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  clubTabActiveIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: 12,
+    right: 12,
+    height: 3,
+    backgroundColor: '#3B82F6',
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
   },
   hiddenTabItem: {
     display: 'none',
@@ -761,11 +900,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 4,
+    paddingTop: 8,
+    paddingBottom: 0,
   },
   hamburgerLabel: {
     fontSize: 10,
     marginTop: 2,
+    marginBottom: 0,
     fontWeight: '500',
   },
   menuOverlay: {

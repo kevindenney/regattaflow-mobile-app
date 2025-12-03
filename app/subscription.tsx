@@ -1,228 +1,337 @@
+/**
+ * Subscription Page
+ * Plan selection and Stripe checkout for club subscriptions
+ */
+
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { Check, Star, Shield, Clock, Smartphone } from 'lucide-react-native';
-import { createLogger } from '@/lib/utils/logger';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import {
+  Check,
+  Crown,
+  Zap,
+  Building2,
+  ChevronLeft,
+  Shield,
+  CreditCard,
+} from 'lucide-react-native';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
+import { useTrialStatus } from '@/components/subscription/TrialWarningBanner';
 
-const logger = createLogger('subscription');
-const SubscriptionScreen = () => {
-  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'standard' | 'pro'>('standard');
+const PLANS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    price: 99,
+    period: '/month',
+    description: 'Perfect for small yacht clubs',
+    icon: Zap,
+    color: '#6b7280',
+    features: [
+      'Up to 5 events per month',
+      'Basic scoring system',
+      'Entry management',
+      'Results publication',
+      'Email support',
+    ],
+    limitations: [
+      'No live tracking',
+      'No custom branding',
+    ],
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    price: 299,
+    period: '/month',
+    description: 'For active sailing clubs',
+    icon: Crown,
+    color: '#0284c7',
+    popular: true,
+    features: [
+      'Unlimited events',
+      'Advanced scoring options',
+      'Live race tracking',
+      'Custom branding',
+      'Priority support',
+      'Mobile race committee app',
+      'Competitor analytics',
+    ],
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: 999,
+    period: '/month',
+    description: 'For major sailing organizations',
+    icon: Building2,
+    color: '#7c3aed',
+    features: [
+      'Everything in Professional',
+      'Multiple venue management',
+      'Advanced analytics & reporting',
+      'API access',
+      'Dedicated support manager',
+      'Custom integrations',
+      'SLA guarantee',
+    ],
+  },
+];
 
-  const plans = [
-    {
-      id: 'basic',
-      name: 'Basic',
-      price: '$10',
-      period: '/month',
-      description: 'Perfect for individual sailors',
-      features: [
-        'Access to core features',
-        'GPS-powered venue detection',
-        'Boat class selection',
-        'Fleet discovery',
-        'Personalized dashboard'
-      ],
-      popular: false
-    },
-    {
-      id: 'standard',
-      name: 'Standard',
-      price: '$20',
-      period: '/month',
-      description: 'Ideal for small teams',
-      features: [
-        'All Basic features',
-        'Up to 2 additional crew members',
-        '1 email strategy support per month',
-        'Race analytics',
-        'Weather intelligence',
-        'Course mapping'
-      ],
-      popular: true
-    },
-    {
-      id: 'pro',
-      name: 'Pro',
-      price: '$50',
-      period: '/month',
-      description: 'For serious sailing teams',
-      features: [
-        'All Standard features',
-        'Up to 10 crew members',
-        '4 email strategy support sessions per month',
-        'Advanced race analysis',
-        'Custom strategy planning',
-        'Priority support',
-        'Performance insights'
-      ],
-      popular: false
+export default function SubscriptionPage() {
+  const router = useRouter();
+  const { user, clubProfile } = useAuth();
+  const trialStatus = useTrialStatus();
+  
+  const [selectedPlan, setSelectedPlan] = useState<string>('professional');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSelectPlan = async (planId: string) => {
+    if (planId === 'enterprise') {
+      // For enterprise, redirect to contact form
+      Alert.alert(
+        'Enterprise Plan',
+        'Our team will contact you to discuss your organization\'s needs.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Contact Sales', 
+            onPress: () => {
+              // Could open email or contact form
+              Alert.alert('Coming Soon', 'Enterprise contact form will be available soon.');
+            }
+          },
+        ]
+      );
+      return;
     }
-  ];
 
-  const handleSelectPlan = (planId: 'basic' | 'standard' | 'pro') => {
     setSelectedPlan(planId);
   };
 
-  const handleContinue = () => {
-    logger.debug(`Selected plan: ${selectedPlan}`);
-    // In a real app, this would navigate to payment screen
+  const handleCheckout = async () => {
+    if (!user?.id || !clubProfile?.id) {
+      Alert.alert('Error', 'Please log in to subscribe.');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // Call edge function to create Stripe checkout session
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: {
+          planId: selectedPlan,
+          clubId: clubProfile.id,
+          userId: user.id,
+          successUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/subscription/success`,
+          cancelUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/subscription`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        // Redirect to Stripe checkout
+        if (typeof window !== 'undefined') {
+          window.location.href = data.url;
+        }
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      Alert.alert(
+        'Checkout Error',
+        'Unable to start checkout. Please try again or contact support.'
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
+  const currentPlan = clubProfile?.subscription_status === 'active' 
+    ? clubProfile?.subscription_plan 
+    : null;
+
   return (
-    <View className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50">
       {/* Header */}
-      <View className="bg-blue-600 pt-12 pb-6 px-4 rounded-b-3xl">
-        <Text className="text-white text-2xl font-bold text-center">Subscription Plans</Text>
-        <Text className="text-blue-100 text-center mt-2">
-          Choose the plan that fits your sailing needs
+      <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="p-2 -ml-2 rounded-full"
+        >
+          <ChevronLeft size={24} color="#374151" />
+        </TouchableOpacity>
+        <Text className="flex-1 text-lg font-bold text-gray-900 text-center">
+          Choose Your Plan
         </Text>
+        <View className="w-10" />
       </View>
 
-      {/* Content */}
-      <ScrollView className="flex-1 px-4 py-6" showsVerticalScrollIndicator={false}>
-        {/* Plan Cards */}
-        <View className="flex-row flex-wrap gap-4">
-          {plans.map((plan) => (
-            <TouchableOpacity
-              key={plan.id}
-              className={`flex-1 min-w-[140px] bg-white rounded-2xl p-5 shadow-sm border-2 ${
-                selectedPlan === plan.id 
-                  ? 'border-blue-500 shadow-blue-100' 
-                  : 'border-gray-100'
-              } ${plan.popular ? 'mt-0' : 'mt-8'}`}
-              onPress={() => handleSelectPlan(plan.id as 'basic' | 'standard' | 'pro')}
-              activeOpacity={0.8}
-            >
-              {plan.popular && (
-                <View className="bg-blue-500 rounded-full py-1 px-3 self-start -mt-8 mb-2">
-                  <Text className="text-white text-xs font-bold">MOST POPULAR</Text>
-                </View>
-              )}
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* Trial Status Banner */}
+        {trialStatus.isOnTrial && (
+          <View className="mx-4 mt-4 bg-gradient-to-r from-sky-500 to-violet-500 rounded-2xl p-5">
+            <Text className="text-white text-lg font-bold">
+              {trialStatus.isExpired
+                ? '⚠️ Your trial has ended'
+                : `🎁 ${trialStatus.daysRemaining} days left in your free trial`}
+            </Text>
+            <Text className="text-white/80 mt-1">
+              {trialStatus.isExpired
+                ? 'Subscribe now to restore access to your events.'
+                : 'Subscribe before your trial ends to keep all features.'}
+            </Text>
+          </View>
+        )}
 
-              <View className="mb-4">
-                <Text className="text-gray-800 text-lg font-bold">{plan.name}</Text>
-                <Text className="text-gray-500 text-sm">{plan.description}</Text>
-              </View>
+        {/* Plans */}
+        <View className="px-4 py-6">
+          {PLANS.map((plan) => {
+            const Icon = plan.icon;
+            const isSelected = selectedPlan === plan.id;
+            const isCurrent = currentPlan === plan.id;
 
-              <View className="flex-row items-baseline mb-4">
-                <Text className="text-2xl font-bold text-gray-900">{plan.price}</Text>
-                <Text className="text-gray-500 text-sm">{plan.period}</Text>
-              </View>
-
-              <View className="mb-4">
-                {plan.features.map((feature, index) => (
-                  <View key={index} className="flex-row items-center mb-2">
-                    <Check size={16} color="#2563EB" className="mr-2" />
-                    <Text className="text-gray-700 text-sm">{feature}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <TouchableOpacity 
-                className={`py-3 rounded-xl items-center justify-center ${
-                  selectedPlan === plan.id 
-                    ? 'bg-blue-600' 
-                    : 'bg-gray-100'
+            return (
+              <TouchableOpacity
+                key={plan.id}
+                onPress={() => handleSelectPlan(plan.id)}
+                disabled={isCurrent}
+                className={`mb-4 rounded-2xl border-2 overflow-hidden ${
+                  isSelected
+                    ? 'border-sky-500 bg-white'
+                    : isCurrent
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-gray-200 bg-white'
                 }`}
-                onPress={() => handleSelectPlan(plan.id as 'basic' | 'standard' | 'pro')}
               >
-                <Text 
-                  className={`font-bold ${
-                    selectedPlan === plan.id 
-                      ? 'text-white' 
-                      : 'text-gray-700'
-                  }`}
-                >
-                  {selectedPlan === plan.id ? 'Selected' : 'Select Plan'}
-                </Text>
+                {/* Popular Badge */}
+                {plan.popular && (
+                  <View className="bg-sky-500 py-1 px-3">
+                    <Text className="text-white text-xs font-bold text-center">
+                      MOST POPULAR
+                    </Text>
+                  </View>
+                )}
+
+                {/* Current Plan Badge */}
+                {isCurrent && (
+                  <View className="bg-emerald-500 py-1 px-3">
+                    <Text className="text-white text-xs font-bold text-center">
+                      CURRENT PLAN
+                    </Text>
+                  </View>
+                )}
+
+                <View className="p-5">
+                  {/* Plan Header */}
+                  <View className="flex-row items-start justify-between mb-4">
+                    <View className="flex-row items-center">
+                      <View
+                        className="w-12 h-12 rounded-xl items-center justify-center"
+                        style={{ backgroundColor: `${plan.color}15` }}
+                      >
+                        <Icon size={24} color={plan.color} />
+                      </View>
+                      <View className="ml-3">
+                        <Text className="text-gray-900 font-bold text-lg">
+                          {plan.name}
+                        </Text>
+                        <Text className="text-gray-500 text-sm">
+                          {plan.description}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {/* Selection Indicator */}
+                    {isSelected && !isCurrent && (
+                      <View className="w-6 h-6 bg-sky-500 rounded-full items-center justify-center">
+                        <Check size={16} color="#fff" />
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Price */}
+                  <View className="mb-4">
+                    <Text className="text-gray-900">
+                      <Text className="text-3xl font-bold">${plan.price}</Text>
+                      <Text className="text-gray-500">{plan.period}</Text>
+                    </Text>
+                  </View>
+
+                  {/* Features */}
+                  <View className="space-y-2">
+                    {plan.features.map((feature, i) => (
+                      <View key={i} className="flex-row items-start">
+                        <Check size={16} color="#22c55e" className="mt-0.5" />
+                        <Text className="text-gray-700 ml-2 flex-1">{feature}</Text>
+                      </View>
+                    ))}
+                    {plan.limitations?.map((limitation, i) => (
+                      <View key={`lim-${i}`} className="flex-row items-start opacity-50">
+                        <Text className="text-gray-400 ml-6">{limitation}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
 
-        {/* Features Highlight */}
-        <View className="mt-8 bg-white rounded-2xl p-5 shadow-sm">
-          <Text className="text-gray-800 text-lg font-bold mb-4 text-center">Why Choose RegattaFlow?</Text>
-
-          <View className="flex-row items-start mb-4">
-            <Star size={20} color="#2563EB" className="mr-3 mt-1" />
-            <View>
-              <Text className="text-gray-800 font-bold">Personalized Experience</Text>
-              <Text className="text-gray-600 text-sm">Tailored dashboard with race insights in under 2 minutes</Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-start mb-4">
-            <Shield size={20} color="#2563EB" className="mr-3 mt-1" />
-            <View>
-              <Text className="text-gray-800 font-bold">Secure Payment</Text>
-              <Text className="text-gray-600 text-sm">Bank-level encryption for all transactions</Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-start mb-4">
-            <Clock size={20} color="#2563EB" className="mr-3 mt-1" />
-            <View>
-              <Text className="text-gray-800 font-bold">Flexible Plans</Text>
-              <Text className="text-gray-600 text-sm">Cancel anytime with no hidden fees</Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-start">
-            <Smartphone size={20} color="#2563EB" className="mr-3 mt-1" />
-            <View>
-              <Text className="text-gray-800 font-bold">Mobile Optimized</Text>
-              <Text className="text-gray-600 text-sm">Access all features on any device</Text>
-            </View>
-          </View>
+        {/* Security Note */}
+        <View className="mx-4 mb-6 flex-row items-center justify-center">
+          <Shield size={16} color="#9ca3af" />
+          <Text className="text-gray-500 text-sm ml-2">
+            Secure payment via Stripe • Cancel anytime
+          </Text>
         </View>
 
-        {/* Testimonials */}
-        <View className="mt-8">
-          <Text className="text-gray-800 text-lg font-bold mb-4 text-center">What Sailors Say</Text>
-
-          <View className="bg-white rounded-2xl p-5 shadow-sm mb-4">
-            <View className="flex-row items-center mb-3">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} size={16} color="#FBBF24" fill="#FBBF24" />
-              ))}
-            </View>
-            <Text className="text-gray-700 italic mb-3">
-              "RegattaFlow completely transformed how I prepare for races. The weather intelligence alone has saved me hours of planning!"
-            </Text>
-            <Text className="text-gray-800 font-bold">- Sarah M., Competitive Sailor</Text>
-          </View>
-
-          <View className="bg-white rounded-2xl p-5 shadow-sm">
-            <View className="flex-row items-center mb-3">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} size={16} color="#FBBF24" fill="#FBBF24" />
-              ))}
-            </View>
-            <Text className="text-gray-700 italic mb-3">
-              "The fleet matching feature helped me connect with sailors at my skill level. My racing performance has improved dramatically."
-            </Text>
-            <Text className="text-gray-800 font-bold">- James T., Club Racer</Text>
-          </View>
-        </View>
+        {/* Spacer for button */}
+        <View className="h-24" />
       </ScrollView>
 
-      {/* Footer */}
-      <View className="px-4 pb-6">
-        <TouchableOpacity 
-          className="bg-blue-600 py-4 rounded-2xl items-center shadow-md"
-          onPress={handleContinue}
+      {/* Checkout Button */}
+      <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100">
+        <TouchableOpacity
+          onPress={handleCheckout}
+          disabled={isProcessing || selectedPlan === 'enterprise' || currentPlan === selectedPlan}
+          className={`flex-row items-center justify-center py-4 rounded-2xl ${
+            isProcessing || currentPlan === selectedPlan
+              ? 'bg-gray-300'
+              : 'bg-sky-600'
+          }`}
         >
-          <Text className="text-white font-bold text-lg">
-            Continue with {plans.find(p => p.id === selectedPlan)?.name} Plan
-          </Text>
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <CreditCard size={20} color="#fff" />
+              <Text className="text-white font-bold text-lg ml-2">
+                {currentPlan === selectedPlan
+                  ? 'Current Plan'
+                  : selectedPlan === 'enterprise'
+                  ? 'Contact Sales'
+                  : `Subscribe to ${PLANS.find(p => p.id === selectedPlan)?.name}`}
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
-
+        
         <Text className="text-gray-500 text-xs text-center mt-3">
-          By continuing, you agree to our Terms of Service and Privacy Policy
+          30-day money-back guarantee • VAT may apply
         </Text>
       </View>
-    </View>
+    </SafeAreaView>
   );
-};
-
-export default SubscriptionScreen;
+}

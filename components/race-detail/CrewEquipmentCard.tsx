@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
-import { crewManagementService, CrewMember } from '@/services/crewManagementService';
+import { crewManagementService, CrewMemberWithAssignment } from '@/services/crewManagementService';
 import { useAuth } from '@/providers/AuthProvider';
 
 interface CrewEquipmentCardProps {
@@ -21,34 +21,65 @@ interface CrewEquipmentCardProps {
 
 export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: CrewEquipmentCardProps) {
   const { user } = useAuth();
-  const [crew, setCrew] = useState<CrewMember[]>([]);
+  const [crew, setCrew] = useState<CrewMemberWithAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAvailable, setShowAvailable] = useState(false);
 
   useEffect(() => {
     loadCrew();
-  }, [user, classId]);
+  }, [user, classId, raceId]);
 
   const loadCrew = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('[CrewEquipmentCard] No user ID, skipping load');
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
-      let crewMembers;
-      if (classId) {
-        crewMembers = await crewManagementService.getCrewForClass(user.id, classId);
-      } else {
-        // If no classId, get all crew members
-        crewMembers = await crewManagementService.getAllCrew(user.id);
-      }
-      // Filter to active crew only
-      const activeCrew = crewMembers.filter((c) => c.status === 'active');
-      setCrew(activeCrew);
+      console.log('[CrewEquipmentCard] Loading crew for:', { userId: user.id, classId, raceId });
+
+      // Get crew with assignment status for this race
+      const crewMembers = await crewManagementService.getCrewWithAssignmentStatus(
+        user.id,
+        classId,
+        raceId
+      );
+
+      console.log('[CrewEquipmentCard] Loaded crew members:', crewMembers.length);
+
+      // Show both active AND pending crew (pending = invited but not yet accepted)
+      // This helps sailors see their full crew roster including pending invites
+      const relevantCrew = crewMembers.filter((c) => c.status === 'active' || c.status === 'pending');
+      console.log('[CrewEquipmentCard] Relevant crew (active + pending):', relevantCrew.length);
+      setCrew(relevantCrew);
     } catch (error) {
-      console.error('Error loading crew:', error);
+      console.error('[CrewEquipmentCard] Error loading crew:', error);
       // Gracefully handle the error without showing an alert
       setCrew([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAssignCrew = async (crewMemberId: string) => {
+    try {
+      await crewManagementService.assignCrewToRace(raceId, crewMemberId);
+      await loadCrew(); // Refresh the list
+    } catch (error) {
+      console.error('Error assigning crew:', error);
+      Alert.alert('Error', 'Failed to assign crew member');
+    }
+  };
+
+  const handleUnassignCrew = async (assignmentId: string) => {
+    try {
+      await crewManagementService.unassignCrewFromRace(assignmentId);
+      await loadCrew(); // Refresh the list
+    } catch (error) {
+      console.error('Error unassigning crew:', error);
+      Alert.alert('Error', 'Failed to unassign crew member');
     }
   };
 
@@ -88,6 +119,91 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
+  const assignedCrew = crew.filter((c) => c.isAssigned);
+  const availableCrew = crew.filter((c) => !c.isAssigned);
+
+  const renderCrewMember = (member: CrewMemberWithAssignment) => {
+    const isPending = member.status === 'pending';
+    
+    return (
+    <View key={member.id} style={[styles.crewCard, isPending && styles.crewCardPending]}>
+      <View style={styles.crewIconContainer}>
+        <MaterialCommunityIcons
+          name={getRoleIcon(member.role)}
+          size={24}
+          color={isPending ? colors.text.tertiary : getRoleColor(member.role)}
+        />
+        {isPending && (
+          <View style={styles.pendingIndicator}>
+            <Ionicons name="time" size={10} color={colors.warning[600]} />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.crewInfo}>
+        <View style={styles.crewNameRow}>
+          <Text style={[styles.crewName, isPending && styles.crewNamePending]}>{member.name}</Text>
+          {isPending && (
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingBadgeText}>Pending</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.crewMeta}>
+          <View style={[styles.roleBadge, { backgroundColor: (isPending ? colors.text.tertiary : getRoleColor(member.role)) + '20' }]}>
+            <Text style={[styles.roleText, { color: isPending ? colors.text.tertiary : getRoleColor(member.role) }]}>
+              {formatRole(member.role)}
+            </Text>
+          </View>
+          {member.isPrimary && (
+            <View style={styles.primaryBadge}>
+              <Ionicons name="star" size={12} color={colors.warning[600]} />
+              <Text style={styles.primaryText}>Primary</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Certifications */}
+        {member.certifications && member.certifications.length > 0 && (
+          <View style={styles.certifications}>
+            {member.certifications.slice(0, 2).map((cert, idx) => (
+              <View key={idx} style={styles.certBadge}>
+                <Ionicons name="shield-checkmark" size={10} color={colors.success[600]} />
+                <Text style={styles.certText}>{cert.name}</Text>
+              </View>
+            ))}
+            {member.certifications.length > 2 && (
+              <Text style={styles.moreCerts}>+{member.certifications.length - 2}</Text>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Assignment Action - disabled for pending crew */}
+      {isPending ? (
+        <View style={styles.pendingAction}>
+          <Ionicons name="mail-outline" size={18} color={colors.text.tertiary} />
+          <Text style={styles.pendingActionText}>Invited</Text>
+        </View>
+      ) : member.isAssigned ? (
+        <TouchableOpacity
+          style={styles.unassignButton}
+          onPress={() => member.assignmentId && handleUnassignCrew(member.assignmentId)}
+        >
+          <Ionicons name="close-circle" size={20} color={colors.error[500]} />
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={styles.assignButton}
+          onPress={() => handleAssignCrew(member.id)}
+        >
+          <Ionicons name="add-circle" size={20} color={colors.primary[600]} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -108,8 +224,8 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
       ) : crew.length === 0 ? (
         <View style={styles.emptyState}>
           <MaterialCommunityIcons name="account-plus" size={48} color={colors.text.tertiary} />
-          <Text style={styles.emptyText}>No crew assigned yet</Text>
-          <Text style={styles.emptySubtext}>Add crew members to track who's sailing</Text>
+          <Text style={styles.emptyText}>No crew configured</Text>
+          <Text style={styles.emptySubtext}>Set up your crew roster to assign them to races</Text>
           <TouchableOpacity style={styles.addCrewButton} onPress={onManageCrew}>
             <Ionicons name="add-circle" size={20} color={colors.primary[600]} />
             <Text style={styles.addCrewButtonText}>Add Crew</Text>
@@ -117,71 +233,79 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
         </View>
       ) : (
         <>
-          {/* Crew List */}
-          <ScrollView style={styles.crewList} showsVerticalScrollIndicator={false}>
-            {crew.map((member) => (
-              <View key={member.id} style={styles.crewCard}>
-                <View style={styles.crewIconContainer}>
-                  <MaterialCommunityIcons
-                    name={getRoleIcon(member.role)}
-                    size={24}
-                    color={getRoleColor(member.role)}
-                  />
-                </View>
-
-                <View style={styles.crewInfo}>
-                  <Text style={styles.crewName}>{member.name}</Text>
-                  <View style={styles.crewMeta}>
-                    <View style={[styles.roleBadge, { backgroundColor: getRoleColor(member.role) + '20' }]}>
-                      <Text style={[styles.roleText, { color: getRoleColor(member.role) }]}>
-                        {formatRole(member.role)}
-                      </Text>
-                    </View>
-                    {member.isPrimary && (
-                      <View style={styles.primaryBadge}>
-                        <Ionicons name="star" size={12} color={colors.warning[600]} />
-                        <Text style={styles.primaryText}>Primary</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Certifications */}
-                  {member.certifications && member.certifications.length > 0 && (
-                    <View style={styles.certifications}>
-                      {member.certifications.slice(0, 2).map((cert, idx) => (
-                        <View key={idx} style={styles.certBadge}>
-                          <Ionicons name="shield-checkmark" size={10} color={colors.success[600]} />
-                          <Text style={styles.certText}>{cert.name}</Text>
-                        </View>
-                      ))}
-                      {member.certifications.length > 2 && (
-                        <Text style={styles.moreCerts}>+{member.certifications.length - 2}</Text>
-                      )}
-                    </View>
-                  )}
-                </View>
-
-                {/* Availability Status (future enhancement) */}
-                <View style={styles.availabilityIndicator}>
-                  <Ionicons name="checkmark-circle" size={20} color={colors.success[500]} />
+          {/* Assigned Crew Section */}
+          {assignedCrew.length > 0 && (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Assigned to this race</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{assignedCrew.length}</Text>
                 </View>
               </View>
-            ))}
-          </ScrollView>
+              <ScrollView style={styles.crewList} showsVerticalScrollIndicator={false}>
+                {assignedCrew.map(renderCrewMember)}
+              </ScrollView>
+            </>
+          )}
+
+          {/* Available Crew Section */}
+          {availableCrew.length > 0 && (
+            <>
+              <TouchableOpacity
+                style={styles.sectionHeader}
+                onPress={() => setShowAvailable(!showAvailable)}
+              >
+                <Text style={styles.sectionTitle}>Available crew</Text>
+                <View style={styles.headerRight}>
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countText}>{availableCrew.length}</Text>
+                  </View>
+                  <Ionicons
+                    name={showAvailable ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color={colors.text.secondary}
+                  />
+                </View>
+              </TouchableOpacity>
+              {showAvailable && (
+                <ScrollView style={styles.crewList} showsVerticalScrollIndicator={false}>
+                  {availableCrew.map(renderCrewMember)}
+                </ScrollView>
+              )}
+            </>
+          )}
+
+          {/* Empty State for No Assigned Crew */}
+          {assignedCrew.length === 0 && (
+            <View style={styles.noAssignedState}>
+              <MaterialCommunityIcons name="sail-boat" size={32} color={colors.text.tertiary} />
+              <Text style={styles.noAssignedText}>No crew assigned to this race yet</Text>
+              <Text style={styles.noAssignedSubtext}>
+                Tap the + button on crew members to assign them
+              </Text>
+            </View>
+          )}
 
           {/* Summary */}
           <View style={styles.summary}>
             <View style={styles.summaryItem}>
               <MaterialCommunityIcons name="account-check" size={18} color={colors.success[600]} />
-              <Text style={styles.summaryText}>{crew.length} crew members</Text>
+              <Text style={styles.summaryText}>{assignedCrew.length} assigned</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <MaterialCommunityIcons name="shield-check" size={18} color={colors.info[600]} />
-              <Text style={styles.summaryText}>
-                {crew.filter((c) => c.certifications?.length > 0).length} certified
-              </Text>
+              <MaterialCommunityIcons name="account-multiple" size={18} color={colors.info[600]} />
+              <Text style={styles.summaryText}>{crew.filter(c => c.status === 'active').length} active</Text>
             </View>
+            {crew.filter(c => c.status === 'pending').length > 0 && (
+              <>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                  <Ionicons name="time" size={16} color={colors.warning[600]} />
+                  <Text style={styles.summaryText}>{crew.filter(c => c.status === 'pending').length} pending</Text>
+                </View>
+              </>
+            )}
           </View>
         </>
       )}
@@ -378,5 +502,109 @@ const styles = StyleSheet.create({
     width: 1,
     height: 20,
     backgroundColor: colors.border.light,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  countBadge: {
+    backgroundColor: colors.primary[100],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary[700],
+  },
+  assignButton: {
+    padding: 8,
+  },
+  unassignButton: {
+    padding: 8,
+  },
+  noAssignedState: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+  },
+  noAssignedText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
+  },
+  noAssignedSubtext: {
+    fontSize: 13,
+    color: colors.text.tertiary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  // Pending crew styles
+  crewCardPending: {
+    backgroundColor: colors.warning[50],
+    borderWidth: 1,
+    borderColor: colors.warning[200],
+    borderStyle: 'dashed',
+  },
+  pendingIndicator: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.warning[100],
+    borderRadius: 8,
+    padding: 2,
+  },
+  crewNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  crewNamePending: {
+    color: colors.text.secondary,
+  },
+  pendingBadge: {
+    backgroundColor: colors.warning[100],
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.warning[700],
+  },
+  pendingAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pendingActionText: {
+    fontSize: 11,
+    color: colors.text.tertiary,
+    fontWeight: '500',
   },
 });

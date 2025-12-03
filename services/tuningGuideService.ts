@@ -394,13 +394,13 @@ class TuningGuideService {
   // Helper methods
   async getGuidesByReference(params: { classId?: string | null; className?: string | null }): Promise<TuningGuide[]> {
     const { classId, className } = params;
-    logger.debug('[tuningGuideService] getGuidesByReference called', { classId, className });
+    console.log('🔍 [tuningGuideService] getGuidesByReference called', { classId, className });
 
     let resolvedClassName = className ?? null;
     let databaseGuides: TuningGuide[] = [];
 
     if (classId) {
-      logger.debug('[tuningGuideService] Querying database for class reference', { classId });
+      console.log('🗄️ [tuningGuideService] Querying database for class reference', { classId });
       const { data, error } = await supabase
         .from('tuning_guides')
         .select('*')
@@ -408,14 +408,14 @@ class TuningGuideService {
         .order('year', { ascending: false });
 
       if (error) {
-        logger.error('[tuningGuideService] Error fetching tuning guides', error);
+        console.error('❌ [tuningGuideService] Error fetching tuning guides', error);
         throw error;
       }
 
       databaseGuides = this.mapGuides(data || []);
-      logger.debug('[tuningGuideService] Database guides found', {
+      console.log('📊 [tuningGuideService] Database guides found', {
         count: databaseGuides.length,
-        guides: databaseGuides.map(g => ({ id: g.id, title: g.title }))
+        guides: databaseGuides.map(g => ({ id: g.id, title: g.title, source: g.source }))
       });
 
       if (!resolvedClassName) {
@@ -426,36 +426,50 @@ class TuningGuideService {
           .maybeSingle();
 
         resolvedClassName = classData?.name ?? null;
-        logger.debug('[tuningGuideService] Resolved class name for lookup', { resolvedClassName });
+        console.log('🏷️ [tuningGuideService] Resolved class name for lookup', { resolvedClassName });
       }
     }
 
-    if (databaseGuides.length > 0) {
-      logger.debug('[tuningGuideService] Returning database guides');
-      return databaseGuides;
+    // Check if database guides have usable extracted sections
+    const guidesWithSections = databaseGuides.filter(
+      g => g.extractedSections && Array.isArray(g.extractedSections) && g.extractedSections.length > 0
+    );
+
+    if (guidesWithSections.length > 0) {
+      console.log('✅ [tuningGuideService] Returning database guides with extracted sections', {
+        count: guidesWithSections.length,
+        totalDbGuides: databaseGuides.length
+      });
+      return guidesWithSections;
     }
 
-    logger.info('[tuningGuideService] No database guides found, trying fallback', {
-      classId,
-      className: resolvedClassName,
-    });
+    if (databaseGuides.length > 0) {
+      console.log('⚠️ [tuningGuideService] Database guides found but lack extracted_sections, falling back to DEFAULT_GUIDES', {
+        dbGuidesCount: databaseGuides.length,
+        guides: databaseGuides.map(g => ({ title: g.title, source: g.source, hasExtracted: !!g.extractedSections }))
+      });
+    } else {
+      console.log('📚 [tuningGuideService] No database guides found, trying fallback', {
+        classId,
+        className: resolvedClassName,
+      });
+    }
+
     const fallbackGuides = await this.buildFallbackGuides({
       classId,
       className: resolvedClassName,
     });
 
     if (fallbackGuides.length > 0) {
-      logger.info('[tuningGuideService] Using built-in tuning guides', {
+      console.log('✅ [tuningGuideService] Using built-in North Sails tuning guides', {
         count: fallbackGuides.length,
         classRef: classId || resolvedClassName || 'unknown',
+        guides: fallbackGuides.map(g => ({ title: g.title, source: g.source, sections: g.extractedSections?.length }))
       });
-      logger.debug(
-        `Using built-in tuning guides for class reference ${classId || resolvedClassName || 'unknown'}`
-      );
       return fallbackGuides;
     }
 
-    logger.warn('[tuningGuideService] No guides found for provided class reference');
+    console.warn('⚠️ [tuningGuideService] No guides found for provided class reference');
     return [];
   }
 

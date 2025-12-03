@@ -87,8 +87,8 @@ const CoachOnboardingPricing = () => {
       packagePrices: pricingModel === 'packages' ? packagePrices : undefined,
     });
 
-    // Navigate to next step
-    router.push('/(auth)/coach-onboarding-profile-preview');
+    // Navigate to payment setup (new step before profile preview)
+    router.push('/(auth)/coach-onboarding-payment-setup');
   };
 
   const handleCompleteLater = () => {
@@ -120,8 +120,8 @@ const CoachOnboardingPricing = () => {
       <View className="px-4 pt-4 bg-white">
         <OnboardingProgress
           currentStep={4}
-          totalSteps={5}
-          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Review']}
+          totalSteps={6}
+          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Payments', 'Review']}
           color="#059669"
           showStepLabels={false}
         />

@@ -12,7 +12,7 @@ import {
   SubscriptionStatus,
   PurchaseResult,
 } from '@/lib/subscriptions/subscriptionService';
-import { useAuth } from './AuthContext';
+import { useAuth } from '@/providers/AuthProvider';
 
 interface SubscriptionContextType {
   // Subscription status

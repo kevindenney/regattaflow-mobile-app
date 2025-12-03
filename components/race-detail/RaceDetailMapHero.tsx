@@ -36,7 +36,7 @@ interface RaceDetailMapHeroProps {
   racingAreaPolygon?: LatLng[];
   compact?: boolean;
   onRacingAreaChange?: (polygon: LatLng[]) => void;
-  onSaveRacingArea?: () => void;
+  onSaveRacingArea?: (polygon: LatLng[]) => void;
 }
 
 const MARK_TYPES: Array<{
@@ -322,13 +322,14 @@ export function RaceDetailMapHero({
 
   // Save racing area
   const handleSave = () => {
-    if (currentPointCount < 3) {
+    if (currentPointCount < 3 || currentPoints.length < 3) {
+      console.warn('[RaceDetailMapHero] Cannot save - not enough points:', currentPointCount, currentPoints.length);
       return; // Should never happen due to disabled state, but safety check
     }
+    console.log('[RaceDetailMapHero] Saving racing area with points:', currentPoints);
     setIsDrawingMode(false);
-    // Parent will handle saving, we just exit drawing mode
-    // Points remain in parent state until parent's onSaveRacingArea clears them
-    onSaveRacingArea?.();
+    // Pass the points directly to ensure they're available for saving
+    onSaveRacingArea?.(currentPoints);
   };
 
 

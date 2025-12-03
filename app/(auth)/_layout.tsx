@@ -4,6 +4,13 @@ import { router, Stack, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 
 const ONBOARDING_ROUTES = new Set([
+  // New wizard-based club onboarding
+  'club-onboarding',
+  'step-1-basics',
+  'step-2-details',
+  'step-3-contact',
+  'step-4-launch',
+  // Legacy club onboarding (keep for backwards compatibility)
   'club-onboarding-chat',
   'club-onboarding-enhanced',
   'club-onboarding-simple',
@@ -24,6 +31,9 @@ const ONBOARDING_ROUTES = new Set([
   'onboarding-redesign',
 ]);
 
+// Routes that should be accessible while signed out (OAuth callback needs to run)
+const AUTH_ENTRY_ROUTES = new Set(['login', 'signup', 'callback']);
+
 export default function AuthLayout() {
   const { state, userType } = useAuth();
   const segments = useSegments();
@@ -33,7 +43,7 @@ export default function AuthLayout() {
   // Imperative redirect for signed_out to prevent any rendering
   // EXCEPT for login and signup pages
   useEffect(() => {
-    const isAuthEntryPoint = currentRoute === 'login' || currentRoute === 'signup';
+    const isAuthEntryPoint = AUTH_ENTRY_ROUTES.has(currentRoute ?? '');
 
     if (state === 'signed_out' && !isAuthEntryPoint) {
       router.replace('/');
@@ -59,7 +69,7 @@ export default function AuthLayout() {
   }
 
   // Allow rendering for login/signup pages even when signed out
-  const isAuthEntryPoint = currentRoute === 'login' || currentRoute === 'signup';
+  const isAuthEntryPoint = AUTH_ENTRY_ROUTES.has(currentRoute ?? '');
 
   // Don't render if signed out AND not on login/signup
   if (state === 'signed_out' && !isAuthEntryPoint) {
@@ -84,6 +94,7 @@ export default function AuthLayout() {
     >
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
+      <Stack.Screen name="callback" />
       <Stack.Screen name="club-onboarding-chat" />
       <Stack.Screen name="club-onboarding-enhanced" />
       <Stack.Screen name="club-onboarding-simple" />
@@ -95,6 +106,7 @@ export default function AuthLayout() {
       <Stack.Screen name="coach-onboarding-expertise" />
       <Stack.Screen name="coach-onboarding-pricing" />
       <Stack.Screen name="coach-onboarding-availability" />
+      <Stack.Screen name="coach-onboarding-payment-setup" />
       <Stack.Screen name="coach-onboarding-profile-preview" />
       <Stack.Screen name="coach-onboarding-stripe-callback" />
       <Stack.Screen name="coach-onboarding-complete" />

@@ -503,7 +503,7 @@ class FleetService {
       const nowIso = new Date().toISOString();
       let query = supabase
         .from('race_events')
-        .select('id, name, race_name, start_time, event_date, boat_classes, race_series, venue_id, racing_area_name')
+        .select('id, name, start_time, event_date, boat_classes, race_series, venue_id, racing_area_name')
         .gte('start_time', nowIso)
         .order('start_time', { ascending: true });
 
@@ -540,7 +540,7 @@ class FleetService {
 
       return (data || []).map(event => ({
         id: event.id,
-        raceName: event.name || event.race_name,
+        raceName: event.name || 'Untitled Race',
         startTime: event.start_time || event.event_date,
         boatClass: event.boat_classes?.[0] || resolvedClassName || null,
         raceSeries: event.race_series,

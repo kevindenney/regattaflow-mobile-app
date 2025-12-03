@@ -66,11 +66,25 @@ export function NetworkSidebar({
   const fetchSavedPlaces = async () => {
     setIsLoadingSaved(true);
     try {
+      // Early exit: Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('[NetworkSidebar] No authenticated user, skipping saved places fetch');
+        setSavedPlaces([]);
+        setIsLoadingSaved(false);
+        return;
+      }
+
       const places = await SailingNetworkService.getMyNetwork();
       setSavedPlaces(places);
       setSavedVenueIds(new Set(places.map(p => p.id)));
-    } catch (error) {
-      console.error('Failed to fetch saved places:', error);
+    } catch (error: any) {
+      // Log detailed error information
+      if (error.message?.includes('timed out')) {
+        console.error('[NetworkSidebar] Failed to fetch saved places: Request timed out. Check network connection and Supabase status.', error);
+      } else {
+        console.error('[NetworkSidebar] Failed to fetch saved places:', error);
+      }
       setSavedPlaces([]);
     } finally {
       setIsLoadingSaved(false);
@@ -82,15 +96,23 @@ export function NetworkSidebar({
 
     setIsSearching(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // Timeout after 5 seconds
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Search timed out after 5 seconds')), 5000)
+      );
+
+      const authPromise = supabase.auth.getUser();
+      const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
       if (!user) return;
 
       // Search sailing_venues table
-      const { data, error } = await supabase
+      const searchPromise = supabase
         .from('sailing_venues')
         .select('*')
         .or(`name.ilike.%${searchQuery}%,country.ilike.%${searchQuery}%`)
         .limit(20);
+
+      const { data, error } = await Promise.race([searchPromise, timeoutPromise]) as any;
 
       if (error) throw error;
 
@@ -112,8 +134,12 @@ export function NetworkSidebar({
       }));
 
       setSearchResults(results);
-    } catch (error) {
-      console.error('Search failed:', error);
+    } catch (error: any) {
+      if (error.message?.includes('timed out')) {
+        console.error('[NetworkSidebar] Search timed out. Check network connection.', error);
+      } else {
+        console.error('[NetworkSidebar] Search failed:', error);
+      }
       setSearchResults([]);
     } finally {
       setIsSearching(false);

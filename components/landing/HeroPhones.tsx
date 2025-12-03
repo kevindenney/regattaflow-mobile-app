@@ -21,7 +21,14 @@ import { supabase } from '@/services/supabase';
 export function HeroPhones() {
   const { user, userProfile } = useAuth();
   const { width } = useWindowDimensions();
-  const isDesktop = width > 768;
+  const [mounted, setMounted] = React.useState(false);
+
+  // Ensure we only check dimensions after mount to avoid hydration mismatch
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDesktop = mounted && width > 768;
   const showDevControls =
     (typeof __DEV__ !== 'undefined' && __DEV__) ||
     process.env.EXPO_PUBLIC_SHOW_DEV_CONTROLS === 'true';

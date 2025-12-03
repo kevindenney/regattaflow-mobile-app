@@ -152,9 +152,13 @@ class OfflineService {
         .from('regattas')
         .select('id, name, start_date, end_date, metadata, created_at, updated_at')
         .eq('id', raceId)
-        .single();
+        .maybeSingle();
 
       if (raceError) throw raceError;
+      if (!race) {
+        this.logDebug('No regatta found to cache for raceId', { raceId, userId });
+        return;
+      }
 
       // Cache race
       await this.setCachedItem(
@@ -173,7 +177,7 @@ class OfflineService {
         .select('*')
         .eq('regatta_id', raceId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (strategy) {
         await this.setCachedItem(

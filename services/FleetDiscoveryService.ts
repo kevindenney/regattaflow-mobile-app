@@ -359,9 +359,9 @@ export class FleetDiscoveryService {
         .eq('fleet_id', fleetId)
         .eq('user_id', sailorId)
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         throw error;
       }
 

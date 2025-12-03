@@ -1,0 +1,15 @@
+# Sound Assets
+
+This directory contains audio files for the race committee console.
+
+Required files:
+- horn.mp3 - Horn/whistle sound for start sequences and finishes
+
+Note: Add a suitable air horn or whistle sound effect (0.5-2 seconds).
+You can find free sound effects at:
+- freesound.org
+- soundbible.com
+- zapsplat.com
+
+The app will fall back to vibration if the sound file is missing.
+

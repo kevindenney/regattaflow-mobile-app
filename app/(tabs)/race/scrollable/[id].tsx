@@ -4,48 +4,44 @@
  * Phase 1: Core structure with map hero
  */
 
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  Platform,
-  Animated,
-  ViewStyle,
-} from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  RaceDetailMapHero,
-  StrategyCard,
-  StartStrategyCard,
-  WindWeatherCard,
-  CurrentTideCard,
-  TacticalPlanCard,
-  PostRaceAnalysisCard,
-  CourseSelector,
   ContingencyPlansCard,
-  RaceDocumentsCard,
+  CourseSelector,
   CrewEquipmentCard,
-  FleetRacersCard,
-  RacePhaseHeader,
-  RaceOverviewCard,
-  UpwindStrategyCard,
+  CurrentTideCard,
   DownwindStrategyCard,
+  FleetRacersCard,
   MarkRoundingCard,
+  PostRaceAnalysisCard,
+  PreRaceStrategySection,
+  RaceDetailMapHero,
+  RacePhaseHeader,
   RigTuningCard,
+  StartStrategyCard,
+  UpwindStrategyCard,
+  WindWeatherCard
 } from '@/components/race-detail';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle
+} from 'react-native';
 // import { StrategyPlanningCard } from '@/components/race-detail/StrategyPlanningCard'; // No longer used - strategy planning is integrated into individual strategy cards
-import { supabase } from '@/services/supabase';
-import { useAuth } from '@/providers/AuthProvider';
-import { useRaceWeather } from '@/hooks/useRaceWeather';
-import type { Mark } from '@/types/courses';
-import { autoCourseGenerator } from '@/services/AutoCourseGeneratorService';
-import { createLogger } from '@/lib/utils/logger';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useRaceWeather } from '@/hooks/useRaceWeather';
+import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
+import { autoCourseGenerator } from '@/services/AutoCourseGeneratorService';
+import { supabase } from '@/services/supabase';
+import type { Mark } from '@/types/courses';
 
 interface RaceEvent {
   id: string;
@@ -336,25 +332,27 @@ export default function RaceDetailScrollable() {
   const rawForecast = weather?.raw?.forecast?.[0];
   const marineConditions = weather?.raw?.marineConditions;
 
-  // DEBUG: Log weather data structure
-  console.log('[RaceDetail] 🌤️ Weather data check:', {
-    hasWeather: !!weather,
-    hasRaw: !!weather?.raw,
-    hasForecast: !!weather?.raw?.forecast,
-    forecastLength: weather?.raw?.forecast?.length,
-    hasMarineConditions: !!weather?.raw?.marineConditions,
-    rawForecast: rawForecast ? {
-      windDirection: rawForecast.windDirection,
-      windGusts: rawForecast.windGusts,
-    } : null,
-    marineConditions: marineConditions ? {
-      waveHeight: marineConditions.significantWaveHeight,
-      currentSpeed: marineConditions.surfaceCurrents?.[0]?.speed,
-    } : null,
-    windMin: weather?.wind?.speedMin,
-    windMax: weather?.wind?.speedMax,
-    averageWindSpeed,
-  });
+  // DEBUG: Log weather data structure (once per change)
+  useEffect(() => {
+    console.log('[RaceDetail] 🌤️ Weather data check:', {
+      hasWeather: !!weather,
+      hasRaw: !!weather?.raw,
+      hasForecast: !!weather?.raw?.forecast,
+      forecastLength: weather?.raw?.forecast?.length,
+      hasMarineConditions: !!weather?.raw?.marineConditions,
+      rawForecast: rawForecast ? {
+        windDirection: rawForecast.windDirection,
+        windGusts: rawForecast.windGusts,
+      } : null,
+      marineConditions: marineConditions ? {
+        waveHeight: marineConditions.significantWaveHeight,
+        currentSpeed: marineConditions.surfaceCurrents?.[0]?.speed,
+      } : null,
+      windMin: weather?.wind?.speedMin,
+      windMax: weather?.wind?.speedMax,
+      averageWindSpeed,
+    });
+  }, [weather, rawForecast, marineConditions, averageWindSpeed]);
 
   const {
     recommendation: tuningRecommendation,
@@ -745,36 +743,21 @@ export default function RaceDetailScrollable() {
             phase={getRaceStatus()}
           />
 
-          {/* Strategic Planning - Document your plan for each phase */}
-          {/* Note: Strategy planning is now integrated into individual strategy cards on /races tab */}
-          {/* {sailorId && (
-            <StrategyPlanningCard
-              raceEventId={race.id}
-              sailorId={sailorId}
-              onPlanUpdated={() => {
-                // Optional: Refresh any data that depends on the plan
-                console.log('Strategy plan updated');
-              }}
-            />
-          )} */}
-
-          {/* Race Overview - Quick Stats & Confidence */}
-          <RaceOverviewCard
+          {/* AI Race Coach - Unified Strategy Section */}
+          <PreRaceStrategySection
             raceId={race.id}
-            raceName={race.race_name}
-            startTime={race.start_time}
-            venue={race.venue}
-            weather={weather ? {
-              wind: weather.wind ? {
-                speed: (weather.wind.speedMin + weather.wind.speedMax) / 2,
-                direction: weather.wind.direction,
-                speedMin: weather.wind.speedMin,
-                speedMax: weather.wind.speedMax
-              } : undefined,
-              current: (weather as any).current
-            } : undefined}
-            boatClass={race.boat_class?.name}
+            raceData={{
+              name: race.race_name,
+              startTime: race.start_time,
+              venue: race.venue,
+              weather: weather,
+            }}
+            racePhase={getRaceStatus() === 'in_progress' ? 'racing' : getRaceStatus() === 'completed' ? 'post-race' : 'pre-race'}
+            onSkillInvoked={(skillId, advice) => {
+              logger.debug('[RaceDetail] AI Skill invoked:', skillId, advice.primary);
+            }}
           />
+
 
           {/* Start Strategy */}
           <StartStrategyCard
@@ -930,6 +913,7 @@ export default function RaceDetailScrollable() {
             }}
           />
 
+          {/* Documents card disabled - requires authentication
           <RaceDocumentsCard
             raceId={race.id}
             onUpload={() => {
@@ -944,6 +928,7 @@ export default function RaceDetailScrollable() {
               logger.debug('[RaceDetail] Share document with fleet:', docId);
             }}
           />
+          */}
 
           {/* Spacer for bottom */}
           <View style={styles.bottomSpacer} />

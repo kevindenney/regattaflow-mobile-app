@@ -3,16 +3,18 @@
  * Shows favored end, line bias, and recommended approach
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StrategyCard } from './StrategyCard';
-import { supabase } from '@/services/supabase';
-import { useAuth } from '@/providers/AuthProvider';
-import { raceStrategyEngine } from '@/services/ai/RaceStrategyEngine';
-import type { RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
+import type { RaceConditions } from '@/services/ai/RaceStrategyEngine';
+import { raceStrategyEngine } from '@/services/ai/RaceStrategyEngine';
+import { postRaceLearningService } from '@/services/PostRaceLearningService';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
+import { supabase } from '@/services/supabase';
+import type { LearningProfile } from '@/types/raceLearning';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StrategyCard } from './StrategyCard';
 
 interface StartStrategyData {
   favoredEnd: 'pin' | 'boat' | 'middle';
@@ -69,6 +71,8 @@ export function StartStrategyCard({
   const [error, setError] = useState<string | null>(null);
   const [userStrategy, setUserStrategy] = useState('');
   const [savingUserStrategy, setSavingUserStrategy] = useState(false);
+  const [learningProfile, setLearningProfile] = useState<LearningProfile | null>(null);
+  const [isPersonalized, setIsPersonalized] = useState(false);
 
   const loadStrategy = useCallback(async () => {
     if (!user) return;
@@ -125,15 +129,41 @@ export function StartStrategyCard({
     loadStrategy();
   }, [loadStrategy]);
 
-  // Load user's manual strategy
+  // Load sailor's learning profile for personalized recommendations
   useEffect(() => {
-    if (!sailorId || !raceEventId) return;
+    if (!user?.id) return;
+
+    const loadLearningProfile = async () => {
+      try {
+        logger.debug('[StartStrategyCard] Loading sailor learning profile');
+        const profile = await postRaceLearningService.getLearningProfileForUser(user.id);
+        if (profile && profile.racesAnalyzed > 0) {
+          setLearningProfile(profile);
+          logger.info('[StartStrategyCard] Loaded learning profile', {
+            racesAnalyzed: profile.racesAnalyzed,
+            strengthsCount: profile.strengths.length,
+            focusAreasCount: profile.focusAreas.length
+          });
+        }
+      } catch (err) {
+        logger.warn('[StartStrategyCard] Could not load learning profile', err);
+        // Non-blocking - strategy will work without personalization
+      }
+    };
+
+    loadLearningProfile();
+  }, [user?.id]);
+
+  // Load user's manual strategy
+  // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
+  useEffect(() => {
+    if (!user?.id || !raceEventId) return;
 
     const loadUserStrategy = async () => {
       try {
         const prep = await strategicPlanningService.getPreparationWithStrategy(
           raceEventId,
-          sailorId
+          user.id // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         );
         if (prep?.start_strategy) {
           setUserStrategy(prep.start_strategy);
@@ -144,18 +174,19 @@ export function StartStrategyCard({
     };
 
     loadUserStrategy();
-  }, [sailorId, raceEventId]);
+  }, [user?.id, raceEventId]);
 
   // Auto-save user's strategy on change
+  // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   const handleUserStrategyChange = async (text: string) => {
     setUserStrategy(text);
-    if (!sailorId || !raceEventId) return;
+    if (!user?.id || !raceEventId) return;
 
     setSavingUserStrategy(true);
     try {
       await strategicPlanningService.updatePhaseStrategy(
         raceEventId,
-        sailorId,
+        user.id, // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         'startStrategy',
         text
       );
@@ -222,6 +253,31 @@ export function StartStrategyCard({
 
       logger.debug('[generateStrategy] Race conditions prepared', conditions);
 
+      // Build sailor profile for personalized recommendations
+      const sailorProfileForAI = learningProfile && learningProfile.racesAnalyzed > 0 ? {
+        strengths: learningProfile.strengths.map(s => ({
+          metric: s.label, // PerformancePattern uses 'label' not 'metric'
+          average: s.average,
+          trend: s.trend
+        })),
+        focusAreas: learningProfile.focusAreas.map(f => ({
+          metric: f.label, // PerformancePattern uses 'label' not 'metric'
+          average: f.average,
+          trend: f.trend
+        })),
+        recurringWins: learningProfile.recurringWins?.map(w => w.summary),
+        recurringChallenges: learningProfile.recurringChallenges?.map(c => c.summary),
+        racesAnalyzed: learningProfile.racesAnalyzed
+      } : undefined;
+
+      if (sailorProfileForAI) {
+        logger.info('[generateStrategy] Including sailor learning profile for personalization', {
+          racesAnalyzed: sailorProfileForAI.racesAnalyzed,
+          strengthsCount: sailorProfileForAI.strengths.length,
+          focusAreasCount: sailorProfileForAI.focusAreas.length
+        });
+      }
+
       // Generate venue-based strategy using AI
       logger.info('[generateStrategy] Calling AI strategy engine');
       const aiStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
@@ -234,9 +290,13 @@ export function StartStrategyCard({
           boatType: 'Keelboat',
           fleetSize: 20,
           importance: 'series',
-          racingAreaPolygon
+          racingAreaPolygon,
+          sailorProfile: sailorProfileForAI
         }
       );
+
+      // Track if this strategy is personalized
+      setIsPersonalized(!!sailorProfileForAI);
 
       logger.info('[generateStrategy] AI strategy received', {
         hasStrategy: !!aiStrategy,
@@ -429,6 +489,16 @@ export function StartStrategyCard({
 
     return (
       <View style={styles.strategyContent}>
+        {/* Personalization Badge */}
+        {isPersonalized && learningProfile && (
+          <View style={styles.personalizationBadge}>
+            <MaterialCommunityIcons name="account-check" size={14} color="#8B5CF6" />
+            <Text style={styles.personalizationText}>
+              Personalized based on {learningProfile.racesAnalyzed} past race{learningProfile.racesAnalyzed !== 1 ? 's' : ''}
+            </Text>
+          </View>
+        )}
+
         {/* Favored End Indicator */}
         <View style={styles.favoredEndSection}>
           <View style={styles.favoredEndHeader}>
@@ -526,7 +596,7 @@ export function StartStrategyCard({
         </View>
 
         {/* User Strategy Input Section */}
-        {sailorId && raceEventId && (
+        {user?.id && raceEventId && (
           <View style={styles.userStrategySection}>
             <View style={styles.userStrategyHeader}>
               <Text style={styles.userStrategyLabel}>Your Strategy Notes</Text>
@@ -603,6 +673,24 @@ const styles = StyleSheet.create({
   },
   strategyContent: {
     gap: 20,
+  },
+  personalizationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    marginBottom: 4,
+  },
+  personalizationText: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '500',
   },
   favoredEndSection: {
     gap: 12,

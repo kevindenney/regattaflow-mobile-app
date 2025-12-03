@@ -26,7 +26,13 @@ const DEFAULT_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 const TIDE_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes
 
 // Check if we should use mock data (for development or when quota exceeded)
-const extraMockSetting = Constants?.expoConfig?.extra?.useMockWeather;
+// Only honor app.json's useMockWeather flag in non-production builds
+const extraMockSetting =
+  process.env.NODE_ENV !== 'production' &&
+  (Constants?.expoConfig?.extra?.useMockWeather === true ||
+    Constants?.expoConfig?.extra?.useMockWeather === 'true' ||
+    Constants?.expoConfig?.extra?.useMockWeather === 1 ||
+    Constants?.expoConfig?.extra?.useMockWeather === '1');
 const USE_MOCK_DATA =
   process.env.EXPO_PUBLIC_USE_MOCK_WEATHER === 'true' ||
   process.env.EXPO_PUBLIC_USE_MOCK_WEATHER === '1' ||

@@ -35,6 +35,22 @@ export const TacticalInsights: React.FC<TacticalInsightsProps> = ({
   splitTimes,
   raceResult,
 }) => {
+  // Show empty state if no GPS track data
+  if (!gpsTrack || gpsTrack.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.sectionTitle}>Tactical Insights</Text>
+        <View style={styles.emptyState}>
+          <Ionicons name="bulb-outline" size={48} color="#CBD5E1" />
+          <Text style={styles.emptyTitle}>No Race Data Available</Text>
+          <Text style={styles.emptyDescription}>
+            Tactical insights are generated from GPS track data. Record a race with GPS tracking to receive AI-powered analysis of what worked, areas for improvement, and personalized recommendations.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   const insights = generateInsights(gpsTrack, splitTimes, raceResult);
 
   const successInsights = insights.filter(i => i.type === 'success');
@@ -357,13 +373,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   emptyState: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
-    padding: 48,
+    padding: 32,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 400,
   },
   emptyText: {
     fontSize: 16,

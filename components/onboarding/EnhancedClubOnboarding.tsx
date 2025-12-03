@@ -94,20 +94,33 @@ export function EnhancedClubOnboarding({
   });
 
   /**
-   * Initialize session
+   * Initialize session - non-blocking, proceeds even if session restore fails
    */
   useEffect(() => {
     if (user) {
       initializeSession();
+    } else {
+      // No user yet - show the form anyway, they can fill it out
+      // The form will work once they're authenticated
+      setLoading(false);
     }
   }, [user]);
 
   const initializeSession = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
-      const session = await ClubOnboardingService.getOrCreateSession(user.id);
+      // Try to get/create session, but don't block if it fails
+      const session = await Promise.race([
+        ClubOnboardingService.getOrCreateSession(user.id),
+        // Timeout after 5 seconds
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
+      ]);
+      
       if (session) {
         setSessionId(session.id);
         logger.debug('Session initialized:', session.id);
@@ -125,9 +138,12 @@ export function EnhancedClubOnboarding({
           setVenueCountry(data.venue_country || '');
           setSelectedClasses(data.classes || []);
         }
+      } else {
+        logger.warn('Session initialization timed out or returned null - proceeding without session');
       }
     } catch (error) {
-      logger.error('Error initializing session:', error);
+      // Don't block on session errors - user can still fill out the form
+      logger.error('Error initializing session (non-blocking):', error);
     } finally {
       setLoading(false);
     }
@@ -365,10 +381,13 @@ export function EnhancedClubOnboarding({
   };
 
   /**
-   * Save and complete onboarding
+   * Save and complete onboarding - simplified direct Supabase approach
    */
   const handleSave = async () => {
-    if (!sessionId || !user) return;
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to create a club');
+      return;
+    }
 
     // Validation
     if (!clubName.trim()) {
@@ -378,51 +397,88 @@ export function EnhancedClubOnboarding({
 
     setSaving(true);
     try {
-      // Prepare confirmed data
-      const confirmedData = {
-        club_name: clubName,
-        website: clubWebsite,
-        email: clubEmail,
-        phone: clubPhone,
-        description: clubDescription,
-        venue_name: venueName,
-        venue_city: venueCity,
-        venue_country: venueCountry,
-        classes: selectedClasses,
-        events: upcomingEvents,
-      };
+      let clubId: string;
 
-      // Call edge function to complete onboarding (uses service role)
-      const { data, error } = await supabase.functions.invoke('club-onboarding-complete', {
-        body: {
-          sessionId,
-          clubData: {
-            name: clubName,
+      // If user selected an existing club, use that
+      if (selectedClub?.id) {
+        clubId = selectedClub.id;
+        logger.debug('Using existing club:', clubId);
+      } else {
+        // Create new club directly in Supabase
+        const { data: newClub, error: clubError } = await supabase
+          .from('clubs')
+          .insert({
+            name: clubName.trim(),
+            website: clubWebsite || null,
+            contact_email: clubEmail || null,
+            contact_phone: clubPhone || null,
+            description: clubDescription || null,
+            owner_id: user.id,
+          })
+          .select()
+          .single();
+
+        if (clubError) {
+          logger.error('Error creating club:', clubError);
+          throw new Error(clubError.message || 'Failed to create club');
+        }
+
+        clubId = newClub.id;
+        logger.debug('Created new club:', clubId);
+      }
+
+      // Add user as club member/admin
+      const { error: memberError } = await supabase
+        .from('club_members')
+        .upsert({
+          club_id: clubId,
+          user_id: user.id,
+          role: 'admin',
+          status: 'active',
+        }, {
+          onConflict: 'club_id,user_id'
+        });
+
+      if (memberError) {
+        logger.warn('Error adding club membership (may already exist):', memberError);
+        // Don't throw - membership might already exist
+      }
+
+      // Update user profile with club_id
+      const { error: profileError } = await supabase
+        .from('users')
+        .update({ club_id: clubId })
+        .eq('id', user.id);
+
+      if (profileError) {
+        logger.warn('Error updating user profile:', profileError);
+      }
+
+      // If we have a session, mark it as complete
+      if (sessionId) {
+        try {
+          await ClubOnboardingService.completeSession(sessionId, clubId, {
+            club_name: clubName,
             website: clubWebsite,
-            contact_email: clubEmail,
-            contact_phone: clubPhone,
+            email: clubEmail,
+            phone: clubPhone,
             description: clubDescription,
             venue_name: venueName,
             venue_city: venueCity,
             venue_country: venueCountry,
-          },
-          confirmedData,
-          existingClubId: selectedClub?.id,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.success && data?.clubId) {
-        Alert.alert('Success', 'Club onboarding completed!', [
-          {
-            text: 'OK',
-            onPress: () => onComplete?.(data.clubId),
-          },
-        ]);
-      } else {
-        throw new Error(data?.error || 'Failed to complete onboarding');
+            classes: selectedClasses,
+          });
+        } catch (sessionError) {
+          logger.warn('Error completing session (non-blocking):', sessionError);
+        }
       }
+
+      Alert.alert('Success', 'Club created successfully!', [
+        {
+          text: 'OK',
+          onPress: () => onComplete?.(clubId),
+        },
+      ]);
     } catch (error) {
       logger.error('Error saving club:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to save club. Please try again.';

@@ -154,7 +154,7 @@ export class ClubOnboardingService {
   static async searchClubs(query: string, limit: number = 10): Promise<ClubSuggestion[]> {
     try {
       const { data: clubs, error } = await supabase
-        .from('yacht_clubs')
+        .from('clubs')
         .select(`
           *,
           sailing_venues(id, name, city, country)

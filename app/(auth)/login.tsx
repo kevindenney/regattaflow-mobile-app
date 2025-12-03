@@ -31,10 +31,34 @@ const cardShadowStyle: ViewStyle =
         shadowOffset: { width: 0, height: 6 },
       };
 
+// Helper to get user-friendly error messages
+const getAuthErrorMessage = (error: any): string => {
+  const message = error?.message?.toLowerCase() || '';
+  const code = error?.code || '';
+  
+  if (message.includes('invalid login credentials') || code === 'invalid_credentials') {
+    return 'Invalid email or password. Please check your credentials and try again.';
+  }
+  if (message.includes('email not confirmed')) {
+    return 'Please check your email and click the confirmation link before signing in.';
+  }
+  if (message.includes('too many requests') || code === 'over_request_limit') {
+    return 'Too many sign-in attempts. Please wait a moment and try again.';
+  }
+  if (message.includes('network') || message.includes('fetch')) {
+    return 'Network error. Please check your internet connection.';
+  }
+  if (message.includes('timeout')) {
+    return 'The request timed out. Please try again.';
+  }
+  return error?.message || 'Sign in failed. Please try again.';
+};
+
 export default function Login() {
-  const { signIn, signInWithGoogle, loading } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple, loading } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const demoAccounts = useMemo(
     () => ({
@@ -91,34 +115,58 @@ export default function Login() {
   );
 
   const onEmailLogin = async () => {
-
+    setErrorMessage(null); // Clear previous errors
+    
     if (!identifier || !password) {
-      Alert.alert('Error', 'Please enter your username (or email) and password');
+      setErrorMessage('Please enter your email and password');
       return;
     }
     try {
       await signIn(identifier, password);
     } catch (e: any) {
       console.error('🔍 [LOGIN] Sign in failed:', e);
-      Alert.alert('Sign in failed', e?.message || 'Please try again');
+      const friendlyMessage = getAuthErrorMessage(e);
+      setErrorMessage(friendlyMessage);
+      // Also show alert on mobile for better visibility
+      if (Platform.OS !== 'web') {
+        Alert.alert('Sign in failed', friendlyMessage);
+      }
     }
   };
 
   const onGoogleLogin = async () => {
+    setErrorMessage(null);
     try {
       await signInWithGoogle();
     } catch (e: any) {
-      Alert.alert('Google sign-in failed', e?.message || 'Please try again');
+      console.error('🔍 [LOGIN] Google sign in failed:', e);
+      const friendlyMessage = getAuthErrorMessage(e);
+      setErrorMessage(friendlyMessage);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Google sign-in failed', friendlyMessage);
+      }
+    }
+  };
+
+  const onAppleLogin = async () => {
+    setErrorMessage(null);
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      console.error('🔍 [LOGIN] Apple sign in failed:', e);
+      const friendlyMessage = getAuthErrorMessage(e);
+      setErrorMessage(friendlyMessage);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Apple sign-in failed', friendlyMessage);
+      }
     }
   };
 
   const onDemoLogin = async (persona: DemoPersona) => {
+    setErrorMessage(null);
     const demo = demoAccounts[persona];
     if (!demo.password) {
-      Alert.alert(
-        'Demo credentials missing',
-        `Set EXPO_PUBLIC_DEMO_${persona.toUpperCase()}_PASSWORD in your environment to enable this shortcut.`
-      );
+      setErrorMessage(`Demo credentials for ${demo.label} are not configured.`);
       return;
     }
 
@@ -128,7 +176,8 @@ export default function Login() {
       await signIn(demo.identifier, demo.password);
     } catch (e: any) {
       console.error(`[LOGIN] Demo ${persona} sign in failed:`, e);
-      Alert.alert('Demo sign in failed', e?.message || 'Please try again');
+      const friendlyMessage = getAuthErrorMessage(e);
+      setErrorMessage(friendlyMessage);
     }
   };
 
@@ -138,16 +187,42 @@ export default function Login() {
         <Text accessibilityRole="header" accessibilityLabel="login-title" style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>Sign in to continue to RegattaFlow</Text>
 
-        {/* Google Sign-in */}
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="google-sign-in"
-          onPress={onGoogleLogin}
-          disabled={loading}
-          style={[styles.socialButton, loading && styles.buttonDisabled]}
-        >
-          <Text style={styles.socialButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
+        {/* Error Message Banner */}
+        {errorMessage && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            <TouchableOpacity onPress={() => setErrorMessage(null)} style={styles.errorDismiss}>
+              <Text style={styles.errorDismissText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Social Sign-in Buttons */}
+        <View style={styles.socialButtonsContainer}>
+          {/* Google Sign-in */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="google-sign-in"
+            onPress={onGoogleLogin}
+            disabled={loading}
+            style={[styles.socialButton, styles.googleButton, loading && styles.buttonDisabled]}
+          >
+            <Text style={styles.googleIcon}>G</Text>
+            <Text style={styles.socialButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          {/* Apple Sign-in */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="apple-sign-in"
+            onPress={onAppleLogin}
+            disabled={loading}
+            style={[styles.socialButton, styles.appleButton, loading && styles.buttonDisabled]}
+          >
+            <Text style={styles.appleIcon}></Text>
+            <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.dividerRow}>
           <View style={styles.divider} />
@@ -243,38 +318,50 @@ export default function Login() {
           </View>
         </View>
 
-        {/* Username or Email */}
-        <TextInput
-          accessibilityLabel="identifier-input"
-          style={styles.input}
-          placeholder="Username or email"
-          value={identifier}
-          onChangeText={setIdentifier}
-          autoCapitalize="none"
-          keyboardType="default"
-          editable={!loading}
-        />
-
-        {/* Password */}
-        <TextInput
-          accessibilityLabel="password-input"
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!loading}
-        />
-
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="submit-sign-in"
-          onPress={onEmailLogin}
-          disabled={loading}
-          style={[styles.primaryButton, loading && styles.buttonDisabled]}
+        {/* Login Form */}
+        <View
+          accessibilityRole="form"
+          accessible={true}
+          importantForAccessibility="yes"
         >
-          <Text style={styles.primaryButtonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
-        </TouchableOpacity>
+          {/* Username or Email */}
+          <TextInput
+            accessibilityLabel="identifier-input"
+            style={styles.input}
+            placeholder="Username or email"
+            value={identifier}
+            onChangeText={setIdentifier}
+            autoCapitalize="none"
+            keyboardType="default"
+            editable={!loading}
+            textContentType="username"
+            importantForAccessibility="yes"
+          />
+
+          {/* Password */}
+          <TextInput
+            accessibilityLabel="password-input"
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            editable={!loading}
+            textContentType="password"
+            importantForAccessibility="yes"
+          />
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="submit-sign-in"
+            onPress={onEmailLogin}
+            disabled={loading}
+            style={[styles.primaryButton, loading && styles.buttonDisabled]}
+            importantForAccessibility="yes"
+          >
+            <Text style={styles.primaryButtonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Don't have an account?</Text>
@@ -323,18 +410,44 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginBottom: 16
   },
+  socialButtonsContainer: {
+    marginBottom: 8,
+  },
   socialButton: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    paddingVertical: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0'
+  },
+  googleButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+  },
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4285F4',
+    marginRight: 12,
+  },
+  appleIcon: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    marginRight: 12,
   },
   socialButtonText: {
     color: '#0F172A',
-    fontWeight: '600'
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  appleButtonText: {
+    color: '#FFFFFF',
   },
   dividerRow: {
     flexDirection: 'row',
@@ -438,5 +551,31 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 12,
     lineHeight: 18
-  }
+  },
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 14,
+    flex: 1,
+    lineHeight: 20,
+  },
+  errorDismiss: {
+    marginLeft: 12,
+    padding: 4,
+  },
+  errorDismissText: {
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

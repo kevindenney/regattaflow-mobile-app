@@ -673,11 +673,20 @@ class RaceSuggestionService {
     }
 
     try {
-      await supabase.from('race_suggestions_cache').delete().eq('user_id', userId);
+      // First, delete old expired suggestions for this user
+      await supabase
+        .from('race_suggestions_cache')
+        .delete()
+        .eq('user_id', userId)
+        .lt('expires_at', new Date().toISOString());
 
+      // Use upsert to handle duplicates gracefully
       const { error } = await supabase
         .from('race_suggestions_cache')
-        .insert(uniqueEntries);
+        .upsert(uniqueEntries, {
+          onConflict: 'user_id,suggestion_type,source_id,race_data',
+          ignoreDuplicates: false
+        });
 
       if (error) {
         console.error('[RaceSuggestionService] Failed to cache suggestions', error);

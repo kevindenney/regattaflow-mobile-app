@@ -32,6 +32,15 @@ export default function Callback(){
         const refreshToken = hashParams.get('refresh_token')
 
         if (!accessToken) {
+          // If we don't see tokens in the hash, check if a session already exists (e.g. user reloaded /callback)
+          const { data: existingSession } = await supabase.auth.getSession()
+          if (existingSession.session?.user) {
+            const destination = getDashboardRoute(existingSession.session.user.user_metadata?.user_type ?? null)
+            logger.warn('No access token in callback but session exists, routing to dashboard:', destination)
+            router.replace(destination as any)
+            return
+          }
+
           logger.error('No access token in OAuth callback')
           setStatus('Invalid authentication response. Redirecting...')
           setTimeout(() => router.replace('/(auth)/login'), 2000)

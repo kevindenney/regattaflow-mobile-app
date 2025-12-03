@@ -6,6 +6,7 @@ import { router } from 'expo-router'
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import { Platform } from 'react-native'
 import { createLogger } from '@/lib/utils/logger';
+import { AuthApiError } from '@supabase/supabase-js';
 
 // Re-export UserType for backward compatibility
 export type { UserType } from '@/services/supabase'
@@ -25,17 +26,49 @@ const authDebugLog = (...args: Parameters<typeof logger.debug>) => {
   logger.debug(...args)
 }
 
-const API_BASE =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  process.env.EXPO_PUBLIC_BASE_URL ||
-  process.env.EXPO_PUBLIC_WEB_BASE_URL ||
-  ''
+const isInvalidRefreshTokenError = (error: unknown): error is AuthApiError => {
+  if (!error || typeof (error as any)?.message !== 'string') {
+    return false;
+  }
+  return /refresh token/i.test((error as any).message);
+};
+
+// Smart API_BASE detection with local development fallback
+const getApiBase = () => {
+  const envApiBase =
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    process.env.EXPO_PUBLIC_BASE_URL ||
+    process.env.EXPO_PUBLIC_WEB_BASE_URL ||
+    ''
+
+  // If we're on localhost (Expo dev) but env points to production, use local vercel dev server
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1'
+    const isProductionApi = envApiBase.includes('vercel.app') || envApiBase.includes('regattaflow.app')
+    
+    if (isLocalhost && isProductionApi) {
+      console.log('[AuthProvider] 🔄 Auto-switching to local vercel dev server (localhost:3000)')
+      return 'http://localhost:3000'
+    }
+  }
+
+  return envApiBase
+}
+
+const API_BASE = getApiBase()
+
+// 🔍 DEBUG: Log env vars at module load time
+console.log('[AuthProvider] 🔍 ENV DEBUG:', {
+  EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
+  EXPO_PUBLIC_BASE_URL: process.env.EXPO_PUBLIC_BASE_URL,
+  EXPO_PUBLIC_WEB_BASE_URL: process.env.EXPO_PUBLIC_WEB_BASE_URL,
+  RESOLVED_API_BASE: API_BASE,
+})
 
 const buildApiUrl = (path: string) => {
-  if (!API_BASE) {
-    return path
-  }
-  return `${API_BASE.replace(/\/$/, '')}${path}`
+  const url = !API_BASE ? path : `${API_BASE.replace(/\/$/, '')}${path}`
+  console.log('[AuthProvider] 🔍 buildApiUrl:', { path, API_BASE, result: url })
+  return url
 }
 
 type AuthState = 'checking' | 'signed_out' | 'ready'
@@ -99,6 +132,25 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [clubProfile, setClubProfile] = useState<any | null>(null)
   const [coachProfile, setCoachProfile] = useState<any | null>(null)
   const [isDemoSession, setIsDemoSession] = useState(false)
+
+  const clearInvalidSession = useCallback(async (context: string, error?: unknown) => {
+    authDebugLog(`[AUTH] Clearing invalid session (${context})`, {
+      message: (error as any)?.message,
+    })
+    try {
+      await supabase.auth.signOut({ scope: 'local' })
+    } catch (signOutError) {
+      console.warn(`[AUTH] Failed to sign out after invalid session (${context}):`, signOutError)
+    }
+    setSignedIn(false)
+    setUser(null)
+    setUserProfile(null)
+    setUserType(null)
+    setLoading(false)
+    setPersonaLoading(false)
+    setClubProfile(null)
+    setCoachProfile(null)
+  }, [])
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
@@ -318,50 +370,61 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     setPersonaLoading(true)
     authDebugLog('[loadPersonaContext] Starting to load persona context for:', effectiveUserType)
 
-    const resolveClubWorkspace = async (ensure: boolean) => {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    // Direct Supabase query for club profile - no external API needed
+    const resolveClubWorkspaceDirect = async () => {
+      authDebugLog('[loadPersonaContext] Resolving club workspace directly from Supabase')
+      
+      // First check if user has a club membership
+      const { data: membership, error: membershipError } = await supabase
+        .from('club_members')
+        .select(`
+          *,
+          club:clubs(*)
+        `)
+        .eq('user_id', user!.id)
+        .maybeSingle()
 
-      if (sessionError) {
-        throw sessionError
+      if (membershipError && membershipError.code !== 'PGRST116') {
+        authDebugLog('[loadPersonaContext] Club membership query error:', membershipError)
+        throw membershipError
       }
 
-      const accessToken = sessionData?.session?.access_token
-      if (!accessToken) {
-        throw new Error('Missing access token for workspace resolution')
+      if (membership?.club) {
+        authDebugLog('[loadPersonaContext] Found club via membership:', membership.club.name)
+        return { club: membership.club, membership }
       }
 
-      const url = buildApiUrl(`/api/club/workspace${ensure ? '?ensure=1' : ''}`)
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
+      // Check if user owns a club directly
+      const { data: ownedClub, error: ownedError } = await supabase
+        .from('clubs')
+        .select('*')
+        .eq('owner_id', user!.id)
+        .maybeSingle()
 
-      const payload = await response.json()
-      if (!response.ok) {
-        throw new Error(payload?.error || 'Failed to resolve club workspace')
+      if (ownedError && ownedError.code !== 'PGRST116') {
+        authDebugLog('[loadPersonaContext] Owned club query error:', ownedError)
+        throw ownedError
       }
 
-      return payload
+      if (ownedClub) {
+        authDebugLog('[loadPersonaContext] Found owned club:', ownedClub.name)
+        return { club: ownedClub, membership: { role: 'owner' } }
+      }
+
+      authDebugLog('[loadPersonaContext] No club found for user')
+      return null
     }
 
     try {
       if (effectiveUserType === 'club' || userProfile?.club_id) {
-        const ensureWorkspace = effectiveUserType === 'club'
-        authDebugLog('[loadPersonaContext] Resolving club workspace via API', {
-          ensureWorkspace,
-          userId: user?.id,
-        })
+        authDebugLog('[loadPersonaContext] Loading club profile for user:', user?.id)
 
-        const workspace = await resolveClubWorkspace(ensureWorkspace)
+        const workspace = await resolveClubWorkspaceDirect()
 
-        authDebugLog('[loadPersonaContext] Workspace response received:', {
+        authDebugLog('[loadPersonaContext] Workspace result:', {
           hasClub: !!workspace?.club,
-          created: workspace?.created ?? false,
-          membershipSource: workspace?.membership?.source ?? null,
-          role: workspace?.membership?.role ?? null,
           clubId: workspace?.club?.id ?? null,
+          role: workspace?.membership?.role ?? null,
         })
 
         if (workspace?.club) {
@@ -372,6 +435,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
             )
           }
         } else {
+          // Club user without a club yet - that's fine, they'll create one in onboarding
           setClubProfile(null)
         }
       } else {
@@ -429,6 +493,22 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         if (sessionError) {
           console.warn('[AUTH] getSession error:', sessionError)
+          if (isInvalidRefreshTokenError(sessionError)) {
+            console.error('[AUTH] Invalid refresh token detected - clearing session and redirecting to login')
+            await clearInvalidSession('getSession', sessionError)
+            setReady(true)
+            // Redirect to login page
+            try {
+              router.replace('/(auth)/login')
+            } catch (navError) {
+              console.warn('[AUTH] Navigation to login failed:', navError)
+              // Fallback: reload to clear bad state
+              if (typeof window !== 'undefined') {
+                window.location.href = '/'
+              }
+            }
+            return
+          }
         }
 
         if (!alive) return
@@ -492,7 +572,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       alive = false
       clearTimeout(watchdogTimer)
     }
-  }, []) // Run once on mount
+  }, [clearInvalidSession]) // Run once on mount
 
   useEffect(() => {
     if (!signedIn || !user?.id || isDemoSession) {
@@ -555,12 +635,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         if (evt === 'TOKEN_REFRESH_FAILED') {
           console.error('[AUTH] Token refresh failed. Clearing session and forcing re-authentication.')
-          try {
-            await supabase.auth.signOut({ scope: 'local' })
-            authDebugLog('🚪 [AUTH] Local signOut completed after refresh failure')
-          } catch (signOutError) {
-            console.warn('[AUTH] Local signOut failed after refresh failure:', signOutError)
-          }
+          await clearInvalidSession('auth_state_change:refresh_failed')
         }
 
         // Clear all cached auth state
@@ -623,7 +698,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     })
 
     return ()=>{ alive=false; sub.subscription.unsubscribe() }
-  }, [router])
+  }, [router, clearInvalidSession])
 
   const identifierToAuthEmail = (value: string) => {
     const normalized = value.trim().toLowerCase()

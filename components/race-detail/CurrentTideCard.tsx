@@ -3,12 +3,12 @@
  * Shows current direction/speed, tide phase, and impact on racing
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StrategyCard } from './StrategyCard';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { useTidalIntel } from '@/hooks/useTidalIntel';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StrategyCard } from './StrategyCard';
 
 interface TideData {
   current: {
@@ -69,6 +69,16 @@ interface InitialTide {
   provider?: string;
 }
 
+interface RaceTimelinePoint {
+  time: Date;
+  label: string;
+  phase: 'flood' | 'ebb' | 'slack' | 'high' | 'low';
+  height?: number;
+  currentSpeed?: number;
+  isRaceEvent?: boolean; // true for warning signal, start, expected finish
+  eventType?: 'warning' | 'start' | 'finish';
+}
+
 interface CurrentTideCardProps {
   raceId: string;
   raceTime?: string;
@@ -87,6 +97,10 @@ interface CurrentTideCardProps {
     country: string;
   };
   initialTide?: InitialTide;
+  /** Warning signal time (e.g., "10:00:00") */
+  warningSignalTime?: string;
+  /** Expected race duration in minutes */
+  expectedDurationMinutes?: number;
 }
 
 export function CurrentTideCard({
@@ -94,7 +108,9 @@ export function CurrentTideCard({
   raceTime,
   venueCoordinates,
   venue,
-  initialTide
+  initialTide,
+  warningSignalTime,
+  expectedDurationMinutes = 90, // Default 90 min race
 }: CurrentTideCardProps) {
   const [useMockData, setUseMockData] = useState(false);
   const [hasAutoLoaded, setHasAutoLoaded] = useState(false);
@@ -233,9 +249,12 @@ export function CurrentTideCard({
         ? 'ebb'
         : 'slack';
 
-    const strength = initialTide.tide.height > 1.5
+    // Calculate strength based on current SPEED, not tide height
+    // If slack, speed should be near zero; otherwise use reasonable estimate
+    const currentSpeed = phase === 'slack' ? 0.1 : 0.5;
+    const strength = currentSpeed >= 2
       ? 'strong'
-      : initialTide.tide.height > 0.8
+      : currentSpeed >= 1
         ? 'moderate'
         : 'weak';
 
@@ -245,7 +264,7 @@ export function CurrentTideCard({
 
     return {
       current: {
-        speed: 0.5,
+        speed: currentSpeed,
         direction: directionDegrees ?? 0,
         phase,
         strength,
@@ -516,9 +535,12 @@ export function CurrentTideCard({
         ? 'ebb'
         : 'slack';
 
-    const strength = realWeather.tide.height > 1.5
+    // Calculate strength based on current SPEED, not tide height
+    // If slack, speed should be near zero; otherwise use reasonable estimate
+    const currentSpeed = phase === 'slack' ? 0.1 : 0.5;
+    const strength = currentSpeed >= 2
       ? 'strong'
-      : realWeather.tide.height > 0.8
+      : currentSpeed >= 1
         ? 'moderate'
         : 'weak';
 
@@ -528,7 +550,7 @@ export function CurrentTideCard({
 
     return {
       current: {
-        speed: 0.5,
+        speed: currentSpeed,
         direction: directionDegrees ?? 0,
         phase,
         strength,
@@ -573,6 +595,268 @@ export function CurrentTideCard({
     : tideDataFromWeather ? 'weather'
     : metadataTide ? 'saved'
     : 'mock';
+
+  // Calculate race timeline with tide/current at key moments
+  const raceTimeline = useMemo((): RaceTimelinePoint[] => {
+    if (!raceTime) return [];
+    
+    const raceDate = new Date(raceTime);
+    if (Number.isNaN(raceDate.getTime())) return [];
+    
+    // Parse warning signal time if provided
+    let warningTime: Date;
+    if (warningSignalTime) {
+      const [hours, minutes] = warningSignalTime.split(':').map(Number);
+      warningTime = new Date(raceDate);
+      warningTime.setHours(hours, minutes, 0, 0);
+    } else {
+      warningTime = raceDate;
+    }
+    
+    // Calculate key race times
+    const startTime = new Date(warningTime.getTime() + 5 * 60 * 1000); // 5 min after warning
+    const finishTime = new Date(startTime.getTime() + expectedDurationMinutes * 60 * 1000);
+    
+    // Create timeline points at 15-minute intervals from 30 min before warning to finish
+    const timelineStart = new Date(warningTime.getTime() - 30 * 60 * 1000);
+    const timelineEnd = finishTime;
+    
+    const points: RaceTimelinePoint[] = [];
+    
+    // Get tide extreme info for interpolation
+    const highTideTime = intel?.extremes?.nextHigh?.time;
+    const highTideHeight = intel?.extremes?.nextHigh?.height;
+    const lowTideTime = intel?.extremes?.nextLow?.time;
+    const lowTideHeight = intel?.extremes?.nextLow?.height;
+    const tideRange = intel?.range ?? tideData?.tides?.tidalRange ?? 2.0;
+    
+    // Helper to interpolate tide height at a given time using sinusoidal model
+    // Tides follow a roughly sinusoidal pattern between high and low
+    const interpolateTideHeight = (time: Date): number | undefined => {
+      if (!highTideTime || !lowTideTime || !Number.isFinite(highTideHeight) || !Number.isFinite(lowTideHeight)) {
+        // Fallback to tideData if available
+        return tideData?.raceTimeForecast?.height ?? tideData?.tides?.highTide?.height;
+      }
+      
+      const timeMs = time.getTime();
+      const highMs = highTideTime.getTime();
+      const lowMs = lowTideTime.getTime();
+      
+      // Determine which extreme is before and after our target time
+      // Tidal period is ~12h 25min (745 minutes)
+      const tidalPeriodMs = 745 * 60 * 1000;
+      const halfPeriodMs = tidalPeriodMs / 2;
+      
+      // Find the closest high and low tides (could be before or after)
+      // For simplicity, use the known extremes and interpolate
+      if (highMs < lowMs) {
+        // High tide comes before low tide
+        if (timeMs <= highMs) {
+          // Before high tide - rising from previous low
+          const prevLowMs = highMs - halfPeriodMs;
+          const progress = (timeMs - prevLowMs) / halfPeriodMs;
+          const sinProgress = (1 - Math.cos(progress * Math.PI)) / 2; // 0 to 1 sinusoidal
+          return lowTideHeight + (highTideHeight - lowTideHeight) * sinProgress;
+        } else if (timeMs <= lowMs) {
+          // Between high and low - falling
+          const progress = (timeMs - highMs) / (lowMs - highMs);
+          const sinProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          return highTideHeight - (highTideHeight - lowTideHeight) * sinProgress;
+        } else {
+          // After low tide - rising to next high
+          const nextHighMs = lowMs + halfPeriodMs;
+          const progress = (timeMs - lowMs) / halfPeriodMs;
+          const sinProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          return lowTideHeight + (highTideHeight - lowTideHeight) * sinProgress;
+        }
+      } else {
+        // Low tide comes before high tide
+        if (timeMs <= lowMs) {
+          // Before low tide - falling from previous high
+          const prevHighMs = lowMs - halfPeriodMs;
+          const progress = (timeMs - prevHighMs) / halfPeriodMs;
+          const sinProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          return highTideHeight - (highTideHeight - lowTideHeight) * sinProgress;
+        } else if (timeMs <= highMs) {
+          // Between low and high - rising
+          const progress = (timeMs - lowMs) / (highMs - lowMs);
+          const sinProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          return lowTideHeight + (highTideHeight - lowTideHeight) * sinProgress;
+        } else {
+          // After high tide - falling to next low
+          const nextLowMs = highMs + halfPeriodMs;
+          const progress = (timeMs - highMs) / halfPeriodMs;
+          const sinProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+          return highTideHeight - (highTideHeight - lowTideHeight) * sinProgress;
+        }
+      }
+    };
+    
+    // Helper to estimate current speed based on tide phase
+    // Current is strongest mid-tide, weakest at slack (high/low)
+    const estimateCurrentSpeed = (time: Date, phase: string): number => {
+      // Base speed from intel or tideData
+      const baseSpeed = intel?.current?.speed ?? tideData?.current?.speed ?? 0.5;
+      
+      if (!highTideTime || !lowTideTime) return baseSpeed;
+      
+      const timeMs = time.getTime();
+      const highMs = highTideTime.getTime();
+      const lowMs = lowTideTime.getTime();
+      
+      // Find minutes to nearest extreme
+      const minutesToHigh = Math.abs(highMs - timeMs) / (60 * 1000);
+      const minutesToLow = Math.abs(lowMs - timeMs) / (60 * 1000);
+      const minutesToNearest = Math.min(minutesToHigh, minutesToLow);
+      
+      // Half tidal period in minutes (~372 min)
+      const halfPeriodMin = 372;
+      
+      // Current speed follows sinusoidal pattern - max at mid-tide, zero at extremes
+      // Use sine curve: 0 at extreme, max at mid-point (186 min from extreme)
+      const progressFromExtreme = Math.min(minutesToNearest / halfPeriodMin, 1);
+      const speedMultiplier = Math.sin(progressFromExtreme * Math.PI);
+      
+      // Scale by tidal range (bigger range = stronger currents)
+      const rangeMultiplier = tideRange / 2.0; // Normalize to 2m range
+      
+      return Math.round(baseSpeed * speedMultiplier * rangeMultiplier * 10) / 10;
+    };
+    
+    // Helper to estimate tide phase based on time relative to high/low
+    const estimatePhaseAtTime = (time: Date): { phase: 'flood' | 'ebb' | 'slack' | 'high' | 'low'; height: number | undefined; speed: number } => {
+      if (!tideData) return { phase: 'slack', height: undefined, speed: 0 };
+      
+      const height = interpolateTideHeight(time);
+      
+      // If we have intel data with extremes, use that
+      if (intel?.extremes) {
+        const nextHigh = intel.extremes.nextHigh?.time;
+        const nextLow = intel.extremes.nextLow?.time;
+        
+        if (nextHigh && nextLow) {
+          const timeMs = time.getTime();
+          const highMs = nextHigh.getTime();
+          const lowMs = nextLow.getTime();
+          
+          // Determine if rising or falling
+          if (highMs < lowMs) {
+            // High tide comes first - we're rising toward it
+            const minutesToHigh = (highMs - timeMs) / (60 * 1000);
+            if (minutesToHigh < 15 && minutesToHigh > -15) {
+              return { phase: 'high', height: highTideHeight, speed: estimateCurrentSpeed(time, 'high') };
+            }
+            if (minutesToHigh > 0) {
+              return { phase: 'flood', height, speed: estimateCurrentSpeed(time, 'flood') };
+            }
+            return { phase: 'ebb', height, speed: estimateCurrentSpeed(time, 'ebb') };
+          } else {
+            // Low tide comes first - we're falling toward it
+            const minutesToLow = (lowMs - timeMs) / (60 * 1000);
+            if (minutesToLow < 15 && minutesToLow > -15) {
+              return { phase: 'low', height: lowTideHeight, speed: estimateCurrentSpeed(time, 'low') };
+            }
+            if (minutesToLow > 0) {
+              return { phase: 'ebb', height, speed: estimateCurrentSpeed(time, 'ebb') };
+            }
+            return { phase: 'flood', height, speed: estimateCurrentSpeed(time, 'flood') };
+          }
+        }
+      }
+      
+      // Fallback to current phase
+      return { 
+        phase: tideData.current.phase, 
+        height: tideData.raceTimeForecast?.height ?? undefined,
+        speed: tideData.current.speed ?? 0
+      };
+    };
+    
+    // Add race event markers
+    const addRaceEvent = (time: Date, eventType: 'warning' | 'start' | 'finish', label: string) => {
+      const estimate = estimatePhaseAtTime(time);
+      points.push({
+        time,
+        label,
+        phase: estimate.phase,
+        height: estimate.height,
+        currentSpeed: estimate.speed,
+        isRaceEvent: true,
+        eventType
+      });
+    };
+    
+    // Add 30 min before warning
+    const estimate30Before = estimatePhaseAtTime(timelineStart);
+    points.push({
+      time: timelineStart,
+      label: '30 min before',
+      phase: estimate30Before.phase,
+      height: estimate30Before.height,
+      currentSpeed: estimate30Before.speed
+    });
+    
+    // Add warning signal
+    addRaceEvent(warningTime, 'warning', 'Warning Signal');
+    
+    // Add start
+    addRaceEvent(startTime, 'start', 'Race Start');
+    
+    // Add midpoint
+    const midTime = new Date(startTime.getTime() + (expectedDurationMinutes / 2) * 60 * 1000);
+    const estimateMid = estimatePhaseAtTime(midTime);
+    points.push({
+      time: midTime,
+      label: 'Mid-race',
+      phase: estimateMid.phase,
+      height: estimateMid.height,
+      currentSpeed: estimateMid.speed
+    });
+    
+    // Add finish
+    addRaceEvent(finishTime, 'finish', 'Expected Finish');
+    
+    // Add any tide extremes that fall within the race window
+    if (intel?.extremes) {
+      const { nextHigh, nextLow } = intel.extremes;
+      
+      if (nextHigh?.time && nextHigh.time >= timelineStart && nextHigh.time <= timelineEnd) {
+        // Check if we already have a point near this time
+        const existingNearby = points.find(p => 
+          Math.abs(p.time.getTime() - nextHigh.time.getTime()) < 10 * 60 * 1000
+        );
+        if (!existingNearby) {
+          points.push({
+            time: nextHigh.time,
+            label: 'High Tide',
+            phase: 'high',
+            height: nextHigh.height,
+            currentSpeed: 0 // Slack at high tide
+          });
+        }
+      }
+      
+      if (nextLow?.time && nextLow.time >= timelineStart && nextLow.time <= timelineEnd) {
+        const existingNearby = points.find(p => 
+          Math.abs(p.time.getTime() - nextLow.time.getTime()) < 10 * 60 * 1000
+        );
+        if (!existingNearby) {
+          points.push({
+            time: nextLow.time,
+            label: 'Low Tide',
+            phase: 'low',
+            height: nextLow.height,
+            currentSpeed: 0 // Slack at low tide
+          });
+        }
+      }
+    }
+    
+    // Sort by time
+    points.sort((a, b) => a.time.getTime() - b.time.getTime());
+    
+    return points;
+  }, [raceTime, warningSignalTime, expectedDurationMinutes, tideData, intel]);
 
   const liveLoading = loading || (intelAvailable && !!intelCoordinates && intelLoading);
   const shouldShowLiveState = !isPastRace || showLiveConditions || !recordedTideData;
@@ -963,15 +1247,28 @@ export function CurrentTideCard({
                 <Text style={styles.tideLabel}>High Tide</Text>
               </View>
               <Text style={styles.tideTime}>
-                {tideData.tides.highTide.time && tideData.tides.highTide.time !== '—'
-                  ? tideData.tides.highTide.time
-                  : '—'}
+                {/* Prefer intel times, fallback to tideData times */}
+                {intel?.extremes?.nextHigh?.time
+                  ? intel.extremes.nextHigh.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : tideData.tides.highTide.time && tideData.tides.highTide.time !== '—'
+                    ? tideData.tides.highTide.time
+                    : '—'}
               </Text>
               <Text style={styles.tideHeight}>
-                {Number.isFinite(tideData.tides.highTide.height)
-                  ? `${tideData.tides.highTide.height.toFixed(1)}m`
-                  : '—'}
+                {/* Prefer intel heights, fallback to tideData heights */}
+                {intel?.extremes?.nextHigh?.height !== undefined && Number.isFinite(intel.extremes.nextHigh.height)
+                  ? `${intel.extremes.nextHigh.height.toFixed(1)}m`
+                  : Number.isFinite(tideData.tides.highTide.height)
+                    ? `${tideData.tides.highTide.height.toFixed(1)}m`
+                    : '—'}
               </Text>
+              {intel?.extremes?.nextHigh?.minutesUntil !== undefined && (
+                <Text style={styles.tideCountdown}>
+                  {intel.extremes.nextHigh.minutesUntil > 0 
+                    ? `in ${Math.round(intel.extremes.nextHigh.minutesUntil)} min`
+                    : `${Math.abs(Math.round(intel.extremes.nextHigh.minutesUntil))} min ago`}
+                </Text>
+              )}
             </View>
 
             {/* Low Tide */}
@@ -981,15 +1278,28 @@ export function CurrentTideCard({
                 <Text style={styles.tideLabel}>Low Tide</Text>
               </View>
               <Text style={styles.tideTime}>
-                {tideData.tides.lowTide.time && tideData.tides.lowTide.time !== '—'
-                  ? tideData.tides.lowTide.time
-                  : '—'}
+                {/* Prefer intel times, fallback to tideData times */}
+                {intel?.extremes?.nextLow?.time
+                  ? intel.extremes.nextLow.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : tideData.tides.lowTide.time && tideData.tides.lowTide.time !== '—'
+                    ? tideData.tides.lowTide.time
+                    : '—'}
               </Text>
               <Text style={styles.tideHeight}>
-                {Number.isFinite(tideData.tides.lowTide.height)
-                  ? `${tideData.tides.lowTide.height.toFixed(1)}m`
-                  : '—'}
+                {/* Prefer intel heights, fallback to tideData heights */}
+                {intel?.extremes?.nextLow?.height !== undefined && Number.isFinite(intel.extremes.nextLow.height)
+                  ? `${intel.extremes.nextLow.height.toFixed(1)}m`
+                  : Number.isFinite(tideData.tides.lowTide.height)
+                    ? `${tideData.tides.lowTide.height.toFixed(1)}m`
+                    : '—'}
               </Text>
+              {intel?.extremes?.nextLow?.minutesUntil !== undefined && (
+                <Text style={styles.tideCountdown}>
+                  {intel.extremes.nextLow.minutesUntil > 0 
+                    ? `in ${Math.round(intel.extremes.nextLow.minutesUntil)} min`
+                    : `${Math.abs(Math.round(intel.extremes.nextLow.minutesUntil))} min ago`}
+                </Text>
+              )}
             </View>
 
             {/* Tidal Range */}
@@ -999,13 +1309,117 @@ export function CurrentTideCard({
                 <Text style={styles.tideLabel}>Range</Text>
               </View>
               <Text style={styles.tideRange}>
-                {Number.isFinite(tideData.tides.tidalRange)
-                  ? `${tideData.tides.tidalRange.toFixed(1)}m`
-                  : '—'}
+                {/* Prefer intel range, fallback to tideData range */}
+                {intel?.range !== undefined && Number.isFinite(intel.range)
+                  ? `${intel.range.toFixed(1)}m`
+                  : Number.isFinite(tideData.tides.tidalRange)
+                    ? `${tideData.tides.tidalRange.toFixed(1)}m`
+                    : '—'}
               </Text>
             </View>
           </View>
         </View>
+
+        {/* Race Timeline - Tide/Current throughout the race */}
+        {raceTimeline.length > 0 && (
+          <View style={styles.timelineSection}>
+            <View style={styles.timelineHeader}>
+              <MaterialCommunityIcons name="timeline-clock-outline" size={20} color="#6366F1" />
+              <Text style={styles.sectionTitle}>Race Timeline</Text>
+            </View>
+            <Text style={styles.timelineSubtitle}>
+              Tide & current from pre-race to finish
+            </Text>
+            
+            <View style={styles.timelineContainer}>
+              {raceTimeline.map((point, index) => {
+                const isFirst = index === 0;
+                const isLast = index === raceTimeline.length - 1;
+                const phaseColor = getTimelinePhaseColor(point.phase);
+                const eventColor = point.eventType === 'start' ? '#10B981' 
+                  : point.eventType === 'warning' ? '#F59E0B' 
+                  : point.eventType === 'finish' ? '#EF4444' 
+                  : phaseColor;
+                
+                return (
+                  <View key={index} style={styles.timelineRow}>
+                    {/* Timeline connector */}
+                    <View style={styles.timelineConnector}>
+                      {!isFirst && <View style={[styles.timelineLine, { backgroundColor: phaseColor }]} />}
+                      <View style={[
+                        styles.timelineDot,
+                        point.isRaceEvent && styles.timelineDotEvent,
+                        { backgroundColor: eventColor, borderColor: eventColor }
+                      ]}>
+                        {point.isRaceEvent && (
+                          <MaterialCommunityIcons 
+                            name={point.eventType === 'start' ? 'flag' : point.eventType === 'warning' ? 'alert' : 'flag-checkered'} 
+                            size={10} 
+                            color="#fff" 
+                          />
+                        )}
+                      </View>
+                      {!isLast && <View style={[styles.timelineLine, { backgroundColor: getTimelinePhaseColor(raceTimeline[index + 1]?.phase || 'slack') }]} />}
+                    </View>
+                    
+                    {/* Time */}
+                    <View style={styles.timelineTime}>
+                      <Text style={[styles.timelineTimeText, point.isRaceEvent && styles.timelineTimeTextBold]}>
+                        {point.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    
+                    {/* Content */}
+                    <View style={[
+                      styles.timelineContent,
+                      point.isRaceEvent && styles.timelineContentEvent,
+                      { borderLeftColor: eventColor }
+                    ]}>
+                      <Text style={[styles.timelineLabel, point.isRaceEvent && styles.timelineLabelEvent]}>
+                        {point.label}
+                      </Text>
+                      <View style={styles.timelineDetails}>
+                        <View style={[styles.timelinePhaseBadge, { backgroundColor: phaseColor + '20' }]}>
+                          <MaterialCommunityIcons 
+                            name={getTimelinePhaseIcon(point.phase)} 
+                            size={12} 
+                            color={phaseColor} 
+                          />
+                          <Text style={[styles.timelinePhaseText, { color: phaseColor }]}>
+                            {formatTimelinePhase(point.phase)}
+                          </Text>
+                        </View>
+                        {/* Tide Height - always show if available */}
+                        {point.height !== undefined && Number.isFinite(point.height) && (
+                          <View style={styles.timelineMetric}>
+                            <MaterialCommunityIcons name="waves" size={12} color="#64748B" />
+                            <Text style={styles.timelineHeight}>{point.height.toFixed(1)}m</Text>
+                          </View>
+                        )}
+                        {/* Current Speed - always show */}
+                        <View style={styles.timelineMetric}>
+                          <MaterialCommunityIcons 
+                            name="current-dc" 
+                            size={12} 
+                            color={point.currentSpeed && point.currentSpeed > 0.5 ? '#F59E0B' : '#64748B'} 
+                          />
+                          <Text style={[
+                            styles.timelineSpeed,
+                            point.currentSpeed && point.currentSpeed > 0.5 && styles.timelineSpeedStrong
+                          ]}>
+                            {point.currentSpeed !== undefined && Number.isFinite(point.currentSpeed) 
+                              ? `${point.currentSpeed.toFixed(1)} kts` 
+                              : '— kts'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Race Time Analysis */}
         {tideData.raceTimeAnalysis && raceTime && (
@@ -1248,6 +1662,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
+  tideCountdown: {
+    fontSize: 11,
+    color: '#3B82F6',
+    fontWeight: '500',
+    marginTop: 2,
+  },
   tideRange: {
     fontSize: 20,
     fontWeight: '700',
@@ -1459,7 +1879,169 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#0C4A6E',
   },
+  // Race Timeline styles
+  timelineSection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timelineSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  timelineContainer: {
+    gap: 0,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: 56,
+  },
+  timelineConnector: {
+    width: 24,
+    alignItems: 'center',
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: '#CBD5E1',
+  },
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    backgroundColor: '#fff',
+    zIndex: 1,
+  },
+  timelineDotEvent: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineTime: {
+    width: 52,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+  },
+  timelineTimeText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
+  timelineTimeTextBold: {
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  timelineContent: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#CBD5E1',
+    gap: 4,
+  },
+  timelineContentEvent: {
+    backgroundColor: '#F0FDF4',
+  },
+  timelineLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#334155',
+  },
+  timelineLabelEvent: {
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  timelineDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  timelinePhaseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  timelinePhaseText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  timelineMetric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  timelineHeight: {
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  timelineSpeed: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  timelineSpeedStrong: {
+    color: '#F59E0B',
+    fontWeight: '600',
+  },
 });
+
+// Helper functions for Race Timeline
+function getTimelinePhaseColor(phase: 'flood' | 'ebb' | 'slack' | 'high' | 'low'): string {
+  switch (phase) {
+    case 'flood': return '#3B82F6'; // Blue - rising
+    case 'ebb': return '#10B981'; // Green - falling
+    case 'high': return '#6366F1'; // Indigo - peak
+    case 'low': return '#8B5CF6'; // Purple - trough
+    case 'slack': return '#94A3B8'; // Gray - minimal current
+    default: return '#94A3B8';
+  }
+}
+
+function getTimelinePhaseIcon(phase: 'flood' | 'ebb' | 'slack' | 'high' | 'low'): string {
+  switch (phase) {
+    case 'flood': return 'arrow-up';
+    case 'ebb': return 'arrow-down';
+    case 'high': return 'arrow-up-bold';
+    case 'low': return 'arrow-down-bold';
+    case 'slack': return 'minus';
+    default: return 'minus';
+  }
+}
+
+function formatTimelinePhase(phase: 'flood' | 'ebb' | 'slack' | 'high' | 'low'): string {
+  switch (phase) {
+    case 'flood': return 'Flooding';
+    case 'ebb': return 'Ebbing';
+    case 'high': return 'High Tide';
+    case 'low': return 'Low Tide';
+    case 'slack': return 'Slack';
+    default: return 'Unknown';
+  }
+}
 
 const DEGREE_DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 

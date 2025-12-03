@@ -1,14 +1,14 @@
 // @ts-nocheck
 
-import { useCallback, useState, useEffect } from 'react';
+import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import api from '@/services/apiService';
-import { useApi, useMutation, usePaginatedQuery, usePullToRefreshReturn, usePullToRefresh } from './useApi';
-import { Tables, TablesInsert, TablesUpdate, UserType } from '@/services/supabase';
 import { getDemoWorkspace } from '@/services/demo/demoWorkspace';
-import { useLiveRaces } from './useRaceResults';
-import { createLogger } from '@/lib/utils/logger';
+import { TablesInsert, TablesUpdate, UserType } from '@/services/supabase';
 import type { AiCoachAnalysisSummary, RaceTimerSessionSummary } from '@/types/raceAnalysis';
+import { useCallback, useEffect, useState } from 'react';
+import { useApi, useMutation, usePullToRefresh } from './useApi';
+import { useLiveRaces } from './useRaceResults';
 
 const logger = createLogger('useData');
 
@@ -579,14 +579,17 @@ export function useDashboardData() {
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   // Find the next race (first future race)
-  // Compare dates only (ignore time) to avoid issues with races at midnight
+  // race.date is already an ISO datetime string (e.g., "2025-12-02T10:00:00.000Z")
+  // that includes the race start time
   const now = new Date();
-  const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const nextRaceIndex = mappedRaces.findIndex((race: any) => {
-    const raceDate = new Date(race.date);
-    const raceDateOnly = new Date(raceDate.getFullYear(), raceDate.getMonth(), raceDate.getDate());
-    return raceDateOnly >= todayDateOnly;
+    // Parse the full race datetime from ISO string
+    const raceDateTime = new Date(race.date);
+    
+    // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
+    const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
+    return raceEndEstimate > now;
   });
   const nextRace = nextRaceIndex >= 0 ? mappedRaces[nextRaceIndex] : null;
 
@@ -594,7 +597,15 @@ export function useDashboardData() {
   const recentRaces = mappedRaces;
 
   if (isDemo && demoWorkspace) {
-    const demoNextRace = demoWorkspace.races.length > 0 ? demoWorkspace.races[0] : null;
+    // Find the next upcoming race in demo data (not just the first one)
+    const demoNow = new Date();
+    const demoNextRaceIndex = demoWorkspace.races.findIndex((race: any) => {
+      const raceDateTime = new Date(race.date || race.startTime);
+      // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
+      const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
+      return raceEndEstimate > demoNow;
+    });
+    const demoNextRace = demoNextRaceIndex >= 0 ? demoWorkspace.races[demoNextRaceIndex] : null;
 
     return {
       profile: demoWorkspace.profile,

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
@@ -52,7 +52,7 @@ interface NextRace {
 
 export default function SailorOnboardingComprehensive() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, fetchUserProfile } = useAuth();
   const params = useLocalSearchParams();
   const [isMounted, setIsMounted] = useState(true);
 
@@ -141,6 +141,18 @@ export default function SailorOnboardingComprehensive() {
     upcomingRaces.length > 0 ? upcomingRaces.map((_: any, idx: number) => idx) : []
   ); // Track which races user wants to keep
 
+  // AI processing states
+  const [isProcessingSiNor, setIsProcessingSiNor] = useState(false);
+  const [extractedSiNorData, setExtractedSiNorData] = useState<{
+    raceName?: string;
+    date?: string;
+    startTime?: string;
+    location?: string;
+    marks?: string[];
+    courseDescription?: string;
+    windLimits?: string;
+  } | null>(null);
+
   // Debug: Log race data on mount
   React.useEffect(() => {
     if (upcomingRaces.length > 0) {
@@ -148,6 +160,53 @@ export default function SailorOnboardingComprehensive() {
   }, []);
 
   const [submitting, setSubmitting] = useState(false);
+
+  // Process SI/NOR text with AI when user pastes
+  const handleSiNorPaste = async (text: string) => {
+    setSiNorPasteData(text);
+    
+    // Only process if we have meaningful content (more than ~50 chars)
+    if (text.length < 50) {
+      setExtractedSiNorData(null);
+      return;
+    }
+
+    setIsProcessingSiNor(true);
+    try {
+      // Call edge function to extract race info from SI/NOR
+      const { data, error } = await supabase.functions.invoke('extract-race-info', {
+        body: { text, type: 'si_nor' },
+      });
+
+      if (error) {
+        console.warn('[SailorOnboarding] SI/NOR extraction error:', error);
+        return;
+      }
+
+      if (data?.success && data?.extracted) {
+        console.log('[SailorOnboarding] Extracted SI/NOR data:', data.extracted);
+        setExtractedSiNorData(data.extracted);
+        
+        // Auto-fill next race fields if empty
+        if (data.extracted.raceName && !nextRace.name) {
+          setNextRace(prev => ({ ...prev, name: data.extracted.raceName }));
+        }
+        if (data.extracted.date && !nextRace.date) {
+          setNextRace(prev => ({ ...prev, date: data.extracted.date }));
+        }
+        if (data.extracted.startTime && !nextRace.startTime) {
+          setNextRace(prev => ({ ...prev, startTime: data.extracted.startTime }));
+        }
+        if (data.extracted.location && !nextRace.location) {
+          setNextRace(prev => ({ ...prev, location: data.extracted.location }));
+        }
+      }
+    } catch (err) {
+      console.error('[SailorOnboarding] SI/NOR extraction failed:', err);
+    } finally {
+      setIsProcessingSiNor(false);
+    }
+  };
 
   // Select race as "next race" and populate form
   const selectAsNextRace = (race: any, index: number) => {
@@ -262,46 +321,58 @@ export default function SailorOnboardingComprehensive() {
     };
   };
 
+  // State for validation errors display
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
   const handleSubmit = async () => {
+    console.log('[SailorOnboarding] handleSubmit called');
     const validation = validateForm();
+    console.log('[SailorOnboarding] Validation result:', validation);
 
     if (!validation.valid) {
-      Alert.alert(
-        'Missing Required Information',
-        `Please provide:\n• ${validation.errors.join('\n• ')}`
-      );
+      console.log('[SailorOnboarding] Validation failed:', validation.errors);
+      setValidationErrors(validation.errors);
+      // Use window.alert as fallback on web where Alert.alert may not work
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert(`Missing Required Information:\n• ${validation.errors.join('\n• ')}`);
+      } else {
+        Alert.alert(
+          'Missing Required Information',
+          `Please provide:\n• ${validation.errors.join('\n• ')}`
+        );
+      }
       return;
     }
+
+    setValidationErrors([]);
 
     if (!user?.id) {
-      Alert.alert('Error', 'User not authenticated');
+      console.log('[SailorOnboarding] No user ID');
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert('User not authenticated. Please sign in.');
+      } else {
+        Alert.alert('Error', 'User not authenticated');
+      }
       return;
     }
 
+    console.log('[SailorOnboarding] Starting submission for user:', user.id);
     setSubmitting(true);
 
     try {
-
-      // Update user profile with onboarding data
-      const profileUpdates = {
-        full_name: fullName || null,
+      // Update user profile - only update columns that exist in the users table
+      // Note: onboarding_data and onboarding_step columns don't exist, so we skip them
+      const profileUpdates: Record<string, any> = {
         onboarding_completed: true,
-        onboarding_step: 'completed',
-        // Store as JSON metadata for now
-        onboarding_data: {
-          primary_role: primaryRole,
-          years_sailing: parseInt(yearsSailing) || 0,
-          experience_level: experienceLevel,
-          home_venue: homeVenue || null,
-          boats: boats.filter(b => b.className.trim() && b.sailNumber.trim()),
-          clubs,
-          documents,
-          next_race: nextRace,
-          calendar_paste_data: calendarPasteData || null,
-          si_nor_paste_data: siNorPasteData || null,
-          race_area_image_url: raceAreaImageUri || null,
-        }
+        user_type: 'sailor',
       };
+
+      // Only update full_name if user provided one (avoid NOT NULL constraint violation)
+      if (fullName && fullName.trim()) {
+        profileUpdates.full_name = fullName.trim();
+      }
+
+      console.log('[SailorOnboarding] Updating user profile:', profileUpdates);
 
       const { error: userUpdateError } = await supabase
         .from('users')
@@ -309,20 +380,87 @@ export default function SailorOnboardingComprehensive() {
         .eq('id', user.id);
 
       if (userUpdateError) {
-
+        console.error('[SailorOnboarding] User update error:', userUpdateError);
         throw userUpdateError;
       }
 
+      console.log('[SailorOnboarding] Profile updated successfully');
+      
+      // Save boats to sailor_boats table if any valid boats provided
+      const validBoats = boats.filter(b => b.className.trim() && b.sailNumber.trim());
+      if (validBoats.length > 0) {
+        console.log('[SailorOnboarding] Saving boats:', validBoats.length);
+        
+        for (let i = 0; i < validBoats.length; i++) {
+          const boat = validBoats[i];
+          try {
+            // First, find or create the boat class
+            let classId: string | null = null;
+            
+            const { data: existingClass } = await supabase
+              .from('boat_classes')
+              .select('id')
+              .ilike('name', boat.className.trim())
+              .maybeSingle();
+            
+            if (existingClass) {
+              classId = existingClass.id;
+            } else {
+              // Create the boat class if it doesn't exist
+              const { data: newClass } = await supabase
+                .from('boat_classes')
+                .insert({ name: boat.className.trim() })
+                .select('id')
+                .single();
+              
+              if (newClass) {
+                classId = newClass.id;
+              }
+            }
+            
+            if (classId) {
+              // Insert the boat
+              await supabase
+                .from('sailor_boats')
+                .upsert({
+                  sailor_id: user.id,
+                  class_id: classId,
+                  name: boat.boatName?.trim() || boat.className.trim(),
+                  sail_number: boat.sailNumber.trim(),
+                  is_primary: i === 0,
+                  status: 'active',
+                }, {
+                  onConflict: 'sailor_id,class_id',
+                });
+            }
+          } catch (boatError) {
+            console.warn('[SailorOnboarding] Error saving boat:', boatError);
+            // Continue with other boats even if one fails
+          }
+        }
+        console.log('[SailorOnboarding] Boats saved');
+      }
+
+      // Refresh the auth context so it picks up the new user_type
+      console.log('[SailorOnboarding] Refreshing user profile in auth context');
+      await fetchUserProfile(user.id);
+      console.log('[SailorOnboarding] Auth context refreshed');
+
       // Only navigate if component is still mounted
       if (isMounted) {
-
+        console.log('[SailorOnboarding] Navigating to races');
         router.replace('/(tabs)/races');
       }
     } catch (error: any) {
-
+      console.error('[SailorOnboarding] Submit error:', error);
       // Only show alert if component is still mounted
       if (isMounted) {
-        Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
+        const errorMsg = error.message || 'Failed to save profile. Please try again.';
+        if (typeof window !== 'undefined' && window.alert) {
+          window.alert(`Error: ${errorMsg}`);
+        } else {
+          Alert.alert('Error', errorMsg);
+        }
       }
     } finally {
       // Always reset submitting state if still mounted
@@ -866,12 +1004,47 @@ export default function SailorOnboardingComprehensive() {
               </Text>
               <TextInput
                 value={siNorPasteData}
-                onChangeText={setSiNorPasteData}
+                onChangeText={handleSiNorPaste}
                 placeholder="Paste sailing instructions or NOR text here...&#10;AI will extract course details, marks, timing, etc."
                 multiline
                 numberOfLines={6}
                 className="bg-white border border-purple-300 rounded-lg px-3 py-2 text-sm min-h-[120px]"
               />
+              {/* AI Processing Status */}
+              {isProcessingSiNor && (
+                <View className="flex-row items-center gap-2 mt-2 px-2">
+                  <Loader size={14} color="#7C3AED" />
+                  <Text className="text-purple-600 text-xs">
+                    AI is extracting race information...
+                  </Text>
+                </View>
+              )}
+              {/* Extracted Data Preview */}
+              {extractedSiNorData && !isProcessingSiNor && (
+                <View className="mt-2 bg-green-50 border border-green-200 rounded-lg p-3">
+                  <Text className="text-green-800 font-semibold text-sm mb-1">
+                    ✓ AI Extracted:
+                  </Text>
+                  {extractedSiNorData.raceName && (
+                    <Text className="text-green-700 text-xs">• Race: {extractedSiNorData.raceName}</Text>
+                  )}
+                  {extractedSiNorData.date && (
+                    <Text className="text-green-700 text-xs">• Date: {extractedSiNorData.date}</Text>
+                  )}
+                  {extractedSiNorData.startTime && (
+                    <Text className="text-green-700 text-xs">• Start: {extractedSiNorData.startTime}</Text>
+                  )}
+                  {extractedSiNorData.location && (
+                    <Text className="text-green-700 text-xs">• Location: {extractedSiNorData.location}</Text>
+                  )}
+                  {extractedSiNorData.marks && extractedSiNorData.marks.length > 0 && (
+                    <Text className="text-green-700 text-xs">• Marks: {extractedSiNorData.marks.join(', ')}</Text>
+                  )}
+                  <Text className="text-green-600 text-xs italic mt-1">
+                    Fields auto-filled below (if empty). Edit as needed.
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Race Area Image */}
@@ -972,27 +1145,49 @@ export default function SailorOnboardingComprehensive() {
           </View>
         </View>
 
+        {/* Validation Errors Display */}
+        {validationErrors.length > 0 && (
+          <View className="mt-4 mb-2 bg-red-50 border border-red-200 rounded-xl p-4">
+            <Text className="text-red-800 font-bold mb-2">Please complete required fields:</Text>
+            {validationErrors.map((error, idx) => (
+              <Text key={idx} className="text-red-700 text-sm">• {error}</Text>
+            ))}
+          </View>
+        )}
+
         {/* Submit Button */}
-        <View className="mt-6">
-          <Pressable
-            onPress={handleSubmit}
+        <View className="mt-6 mb-8">
+          <TouchableOpacity
+            onPress={() => {
+              console.log('[SailorOnboarding] Button pressed!');
+              handleSubmit();
+            }}
             disabled={submitting}
-            className={`py-4 px-6 rounded-xl flex-row items-center justify-center gap-2 ${
-              submitting ? 'bg-gray-400' : 'bg-sky-600 active:bg-sky-700'
-            }`}
+            activeOpacity={0.8}
+            style={{
+              backgroundColor: submitting ? '#9CA3AF' : '#0284C7',
+              paddingVertical: 16,
+              paddingHorizontal: 24,
+              borderRadius: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              ...(Platform.OS === 'web' ? { cursor: submitting ? 'not-allowed' : 'pointer' } : {}),
+            }}
           >
             {submitting ? (
               <>
                 <Loader size={20} color="white" />
-                <Text className="text-white font-bold text-lg">Processing...</Text>
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Processing...</Text>
               </>
             ) : (
               <>
-                <Text className="text-white font-bold text-lg">Continue to Setup</Text>
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Continue to Setup</Text>
                 <ChevronRight size={20} color="white" />
               </>
             )}
-          </Pressable>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>

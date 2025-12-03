@@ -202,7 +202,6 @@ export function PlanModeContent({
           badgeVariant="success"
           priority={8}
           defaultExpanded={shouldExpandPostRace}
-          forceExpanded={shouldExpandPostRace}
         >
           {sections.postRaceAnalysis}
         </CollapsibleSection>

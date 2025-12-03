@@ -14,7 +14,6 @@ import { router } from 'expo-router';
 import { EnhancedRaceCard } from '@/components/races';
 import {
   RaceDetailMapHero,
-  RaceOverviewCard,
   TimingCard,
   WeatherCard,
   TideCard,
@@ -187,16 +186,6 @@ export default function RaceDetailDemoScreen() {
           racingAreaPolygon={MOCK_RACING_AREA_POLYGON}
         />
 
-        {/* Race Overview */}
-        <RaceOverviewCard
-          raceId={selectedRaceId}
-          raceName={selectedRace?.name || 'Unknown Race'}
-          startTime={selectedRace?.startTime?.toISOString()}
-          boatClass="Dragon"
-          venue={{ name: selectedRace?.venue }}
-          onRegenerateStrategy={() => logger.debug('Regenerate strategy')}
-        />
-
         {/* Timing & Start Sequence */}
         <TimingCard
           startSequence={[
@@ -277,13 +266,14 @@ export default function RaceDetailDemoScreen() {
           onJoinFleet={(fleetId) => logger.debug('Joined fleet:', fleetId)}
         />
 
-        {/* 📄 RACE DOCUMENTS CARD */}
+        {/* 📄 RACE DOCUMENTS CARD - Disabled (requires authentication)
         <RaceDocumentsCard
           raceId={selectedRaceId}
           onUpload={() => logger.debug('Upload document')}
           onDocumentPress={(doc) => logger.debug('Document pressed:', doc)}
           onShareWithFleet={(docId) => logger.debug('Share with fleet:', docId)}
         />
+        */}
 
         {/* Bottom spacing */}
         <View style={styles.bottomSpacer} />

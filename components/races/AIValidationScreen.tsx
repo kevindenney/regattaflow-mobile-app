@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Platform,
 } from 'react-native';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
 import { ValidationSummary } from './ValidationSummary';
@@ -264,7 +265,7 @@ export function AIValidationScreen({
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.title}>Verify Extracted Data</Text>
-          <Text style={styles.subtitle}>Review and correct AI-extracted information</Text>
+          <Text style={styles.subtitle}>Review data, then click "Confirm & Create" below</Text>
         </View>
       </View>
 
@@ -277,6 +278,17 @@ export function AIValidationScreen({
         {/* Validation Summary */}
         <View style={styles.summaryContainer}>
           <ValidationSummary {...stats} />
+        </View>
+
+        {/* Action Banner */}
+        <View style={styles.actionBanner}>
+          <CheckCircle size={20} color="#059669" strokeWidth={2} />
+          <View style={styles.actionBannerText}>
+            <Text style={styles.actionBannerTitle}>Ready to Apply</Text>
+            <Text style={styles.actionBannerSubtitle}>
+              Review the fields below, make any edits, then scroll down and click "Confirm & Create"
+            </Text>
+          </View>
         </View>
 
         {/* Field Groups */}
@@ -430,9 +442,35 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 100, // Extra space so content doesn't hide behind footer
   },
   summaryContainer: {
+    marginBottom: 16,
+  },
+  actionBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#d1fae5',
+    borderWidth: 2,
+    borderColor: '#6ee7b7',
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 24,
+  },
+  actionBannerText: {
+    flex: 1,
+  },
+  actionBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#065f46',
+    marginBottom: 4,
+  },
+  actionBannerSubtitle: {
+    fontSize: 14,
+    color: '#047857',
+    lineHeight: 20,
   },
   fieldGroup: {
     backgroundColor: '#ffffff',
@@ -468,6 +506,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 16,
+    paddingBottom: Platform.OS === 'web' ? 80 : 16, // Extra padding for tab bar on web
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',

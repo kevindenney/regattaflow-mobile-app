@@ -134,7 +134,22 @@ class GPSTrackerService {
     try {
       // Stop location updates
       if (this.subscription) {
-        this.subscription.remove();
+        try {
+          if (typeof this.subscription.remove === 'function') {
+            this.subscription.remove();
+          } else if (typeof (this.subscription as any)?.unsubscribe === 'function') {
+            // Some web implementations expose an unsubscribe method instead
+            (this.subscription as any).unsubscribe();
+          } else {
+            const watchId = (this.subscription as any)?._id ?? (this.subscription as any)?._watchId;
+            if (typeof watchId === 'number' && typeof navigator !== 'undefined' && navigator.geolocation?.clearWatch) {
+              navigator.geolocation.clearWatch(watchId);
+            }
+          }
+        } catch (removeError) {
+          // Expo web can throw if LocationEventEmitter.removeSubscription is missing; swallow so stopTracking still completes
+          console.warn('Failed to remove location subscription cleanly', removeError);
+        }
         this.subscription = null;
       }
 

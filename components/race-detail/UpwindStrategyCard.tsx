@@ -4,14 +4,14 @@
  * Shows favored sides, shift playing tactics, theory + execution for each beat
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StrategyCard } from './StrategyCard';
-import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
-import { createLogger } from '@/lib/utils/logger';
+import { supabase } from '@/services/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StrategyCard } from './StrategyCard';
 
 const logger = createLogger('UpwindStrategyCard');
 
@@ -77,11 +77,7 @@ export function UpwindStrategyCard({
   }, [loading]);
 
   const loadUpwindStrategy = useCallback(async () => {
-    console.log('[UpwindStrategyCard] Loading strategy for raceId:', raceId);
-    console.log('[UpwindStrategyCard] Current user:', user?.id);
-
     if (!user) {
-      console.log('[UpwindStrategyCard] No user found, skipping load');
       setLoading(false);
       return;
     }
@@ -90,23 +86,12 @@ export function UpwindStrategyCard({
       setLoading(true);
       setError(null);
 
-      console.log('[UpwindStrategyCard] Querying race_strategies table with:', {
-        regatta_id: raceId,
-        user_id: user.id
-      });
-
       const { data, error: fetchError } = await supabase
         .from('race_strategies')
         .select('strategy_content')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
-
-      console.log('[UpwindStrategyCard] Query result:', {
-        data: data ? 'Data received' : 'No data',
-        error: fetchError,
-        hasStrategyContent: !!data?.strategy_content
-      });
 
       if (fetchError) {
         console.error('[UpwindStrategyCard] Fetch error:', fetchError);
@@ -115,13 +100,6 @@ export function UpwindStrategyCard({
 
       if (data && data.strategy_content) {
         const strategyContent = data.strategy_content as any;
-        console.log('[UpwindStrategyCard] Strategy content structure:', {
-          hasTacticalPlan: !!strategyContent.tacticalPlan,
-          hasRecommendations: !!strategyContent.tacticalPlan?.recommendations,
-          recommendationsCount: strategyContent.tacticalPlan?.recommendations?.length || 0,
-          hasFullAIStrategy: !!strategyContent.fullAIStrategy,
-          hasBeatStrategy: !!strategyContent.fullAIStrategy?.strategy?.beatStrategy
-        });
 
         let upwindBeats: BeatRecommendation[] = [];
 
@@ -130,12 +108,9 @@ export function UpwindStrategyCard({
           upwindBeats = strategyContent.tacticalPlan.recommendations.filter(
             (rec: BeatRecommendation) => rec.leg.toLowerCase().includes('upwind')
           );
-          console.log('[UpwindStrategyCard] Found upwind beats from tacticalPlan:', upwindBeats.length);
         }
         // Fallback to old structure: fullAIStrategy.strategy.beatStrategy
         else if (strategyContent.fullAIStrategy?.strategy?.beatStrategy) {
-          console.log('[UpwindStrategyCard] Using fullAIStrategy.strategy.beatStrategy (legacy format)');
-
           // Transform beatStrategy to BeatRecommendation format
           const beatStrategy = strategyContent.fullAIStrategy.strategy.beatStrategy;
           upwindBeats = beatStrategy.map((beat: any, index: number) => ({
@@ -151,12 +126,9 @@ export function UpwindStrategyCard({
             theory: beat.theory,
             execution: beat.execution
           }));
-          console.log('[UpwindStrategyCard] Transformed beat strategy to upwind beats:', upwindBeats.length);
         }
         // Also check startStrategy as a fallback
         else if (strategyContent.startStrategy) {
-          console.log('[UpwindStrategyCard] Only startStrategy found, creating single beat from start');
-
           // Create a single beat recommendation from start strategy
           upwindBeats = [{
             leg: 'First Upwind Leg',
@@ -171,18 +143,14 @@ export function UpwindStrategyCard({
             theory: strategyContent.startStrategy.reasoning,
             execution: strategyContent.startStrategy.approach
           }];
-          console.log('[UpwindStrategyCard] Created beat from startStrategy');
         }
 
         if (upwindBeats.length > 0) {
-          console.log('[UpwindStrategyCard] Final upwind beats:', upwindBeats);
           setBeats(upwindBeats);
         } else {
-          console.warn('[UpwindStrategyCard] No upwind strategy found in any format');
           setError('No upwind strategy found. Generate your tactical plan first.');
         }
       } else {
-        console.warn('[UpwindStrategyCard] No data or strategy_content found');
         setError('No strategy found. Generate your tactical plan first.');
       }
     } catch (err) {
@@ -207,8 +175,7 @@ export function UpwindStrategyCard({
           table: 'race_strategies',
           filter: `regatta_id=eq.${raceId}`,
         },
-        (payload) => {
-          console.log('[UpwindStrategyCard] Realtime update received:', payload);
+        () => {
           // Reload strategy when it changes
           loadUpwindStrategy();
         }
@@ -219,7 +186,6 @@ export function UpwindStrategyCard({
     // This handles the case where strategy is generated after component mounts
     const pollInterval = setInterval(() => {
       if (beatsRef.current.length === 0 && !loadingRef.current) {
-        console.log('[UpwindStrategyCard] Polling for strategy updates...');
         loadUpwindStrategy();
       }
     }, 3000);
@@ -231,14 +197,15 @@ export function UpwindStrategyCard({
   }, [raceId, loadUpwindStrategy]); // Only depend on raceId and loadUpwindStrategy
 
   // Load user's manual strategy
+  // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   useEffect(() => {
-    if (!sailorId || !raceEventId) return;
+    if (!user?.id || !raceEventId) return;
 
     const loadUserStrategy = async () => {
       try {
         const prep = await strategicPlanningService.getPreparationWithStrategy(
           raceEventId,
-          sailorId
+          user.id // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         );
         if (prep?.upwind_strategy) {
           setUserStrategy(prep.upwind_strategy);
@@ -249,18 +216,19 @@ export function UpwindStrategyCard({
     };
 
     loadUserStrategy();
-  }, [sailorId, raceEventId]);
+  }, [user?.id, raceEventId]);
 
   // Auto-save user's strategy on change
+  // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   const handleUserStrategyChange = async (text: string) => {
     setUserStrategy(text);
-    if (!sailorId || !raceEventId) return;
+    if (!user?.id || !raceEventId) return;
 
     setSavingUserStrategy(true);
     try {
       await strategicPlanningService.updatePhaseStrategy(
         raceEventId,
-        sailorId,
+        user.id, // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         'upwindStrategy',
         text
       );
@@ -304,7 +272,8 @@ export function UpwindStrategyCard({
   };
 
   const renderUpwindContent = () => {
-    if (loading) {
+    // Only show spinner on initial load when we have no data
+    if (loading && beats.length === 0) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#3B82F6" />
@@ -312,7 +281,8 @@ export function UpwindStrategyCard({
       );
     }
 
-    if (error || beats.length === 0) {
+    // If we have no data but finished loading, show error/empty state
+    if (beats.length === 0) {
       return (
         <View style={styles.emptyState}>
           <MaterialCommunityIcons name="sail-boat" size={48} color="#CBD5E1" />
@@ -412,7 +382,7 @@ export function UpwindStrategyCard({
         ))}
 
         {/* User Strategy Input Section */}
-        {sailorId && raceEventId && (
+        {user?.id && raceEventId && (
           <View style={styles.userStrategySection}>
             <View style={styles.userStrategyHeader}>
               <Text style={styles.userStrategyLabel}>Your Strategy Notes</Text>

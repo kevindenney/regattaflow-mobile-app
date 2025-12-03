@@ -1,0 +1,367 @@
+{
+  "event": {
+    "name": "2027 Hong Kong Dragon World Championship",
+    "shortName": "Dragon Worlds 2027",
+    "slug": "dragon-worlds-2027",
+    "description": "The prestigious Dragon World Championship comes to Hong Kong for the first time in 98 years, hosted by the Royal Hong Kong Yacht Club at Clearwater Bay. Join the world's top Dragon sailors for nine days of championship racing in the South China Sea.",
+    "eventType": "world_championship",
+    "status": "registration_open",
+    "startDate": "2026-11-21T02:00:00.000Z",
+    "endDate": "2026-11-29T10:00:00.000Z",
+    "registrationOpens": "2026-02-01T00:00:00.000Z",
+    "registrationCloses": "2026-10-15T23:59:59.000Z",
+    "entryFee": 9500,
+    "currency": "HKD",
+    "expectedFleetSize": 65,
+    "maxEntries": 80,
+    "website": "https://www.dragonworld2027.com",
+    "eventHashtag": "#DragonWorlds2027",
+    "coordinates": {
+      "lat": 22.2685,
+      "lng": 114.2897
+    },
+    "venueName": "Clearwater Bay Golf & Country Club",
+    "venueDescription": "Marina with 300 berths, dining facilities, and spacious event areas. Racing in the South China Sea near the Ninepins Islands.",
+    "racingArea": {
+      "name": "South China Sea - Ninepins",
+      "description": "The racecourse is located in the South China Sea near the Ninepins Islands, site of the 2015 Etchells World Championship",
+      "bounds": {
+        "north": 22.35,
+        "south": 22.18,
+        "east": 114.40,
+        "west": 114.25
+      }
+    },
+    "expectedConditions": {
+      "windRange": "8-18 knots",
+      "windDirection": "North-East Monsoon",
+      "temperature": "18-25°C",
+      "description": "November brings moderate to fresh breezes, clear skies, and comfortable temperatures ideal for championship racing"
+    },
+    "sponsors": [
+      "International Dragon Association",
+      "Hong Kong Dragon Association", 
+      "Sailing Federation of Hong Kong, China"
+    ],
+    "ambassadors": [
+      {
+        "name": "Karl Kwok",
+        "country": "HKG",
+        "role": "Event Ambassador",
+        "bio": "Legendary offshore sailor and Hong Kong sailing pioneer"
+      },
+      {
+        "name": "Lowell Chang",
+        "country": "HKG", 
+        "role": "Honorary Chairman",
+        "bio": "Vice Patron at RHKYC, driving force behind bringing the championship to Hong Kong"
+      }
+    ]
+  },
+  "relatedEvents": [
+    {
+      "name": "2026 Asia Pacific Dragon Championship",
+      "slug": "apac-dragon-2026",
+      "startDate": "2026-11-17T02:00:00.000Z",
+      "endDate": "2026-11-21T10:00:00.000Z",
+      "description": "Warm-up regatta immediately preceding the World Championship"
+    }
+  ],
+  "racingSchedule": [
+    {
+      "date": "2026-11-21",
+      "day": "Saturday",
+      "activity": "Registration & Practice Race",
+      "startTime": "10:00",
+      "notes": "Boat measurement and equipment check"
+    },
+    {
+      "date": "2026-11-22",
+      "day": "Sunday", 
+      "activity": "Opening Ceremony & Practice",
+      "startTime": "09:00",
+      "notes": "Official opening at Kellett Island Clubhouse"
+    },
+    {
+      "date": "2026-11-23",
+      "day": "Monday",
+      "activity": "Racing Day 1",
+      "startTime": "11:00",
+      "races": 2,
+      "firstWarning": "10:55"
+    },
+    {
+      "date": "2026-11-24",
+      "day": "Tuesday",
+      "activity": "Racing Day 2", 
+      "startTime": "11:00",
+      "races": 2,
+      "firstWarning": "10:55"
+    },
+    {
+      "date": "2026-11-25",
+      "day": "Wednesday",
+      "activity": "Reserve Day / Social Program",
+      "startTime": "10:00",
+      "notes": "Harbor tour and cultural activities"
+    },
+    {
+      "date": "2026-11-26",
+      "day": "Thursday",
+      "activity": "Racing Day 3",
+      "startTime": "11:00", 
+      "races": 2,
+      "firstWarning": "10:55"
+    },
+    {
+      "date": "2026-11-27",
+      "day": "Friday",
+      "activity": "Racing Day 4",
+      "startTime": "11:00",
+      "races": 2,
+      "firstWarning": "10:55"
+    },
+    {
+      "date": "2026-11-28",
+      "day": "Saturday",
+      "activity": "Racing Day 5 (Finals)",
+      "startTime": "11:00",
+      "races": 2,
+      "firstWarning": "10:55"
+    },
+    {
+      "date": "2026-11-29",
+      "day": "Sunday",
+      "activity": "Prize Giving & Closing Ceremony",
+      "startTime": "14:00",
+      "notes": "Farewell lunch at RHKYC Kellett Island"
+    }
+  ],
+  "documents": [
+    {
+      "slug": "dragon-worlds-2027-nor",
+      "title": "2027 Dragon World Championship - Notice of Race",
+      "documentType": "notice_of_race",
+      "publishDate": "2026-06-01",
+      "url": "https://www.dragonworld2027.com/media/nor-2027.pdf"
+    },
+    {
+      "slug": "dragon-worlds-2027-si",
+      "title": "2027 Dragon World Championship - Sailing Instructions",
+      "documentType": "sailing_instructions", 
+      "publishDate": "2026-10-15",
+      "url": "https://www.dragonworld2027.com/media/si-2027.pdf"
+    },
+    {
+      "slug": "dragon-worlds-2027-shipping",
+      "title": "Boat Shipping Guide",
+      "documentType": "bulletin",
+      "publishDate": "2026-03-15",
+      "url": "https://www.dragonworld2027.com/media/shipping-guide.pdf"
+    },
+    {
+      "slug": "dragon-worlds-2027-charter",
+      "title": "Charter Boat Information",
+      "documentType": "bulletin",
+      "publishDate": "2026-04-01", 
+      "url": "https://www.dragonworld2027.com/media/charter-boats.pdf"
+    }
+  ],
+  "raceCommittee": {
+    "principalRaceOfficer": {
+      "name": "Stuart Childerley",
+      "country": "GBR",
+      "credentials": ["World Sailing International Race Officer", "Two-time Finn Olympian", "Two-time Etchells World Champion"],
+      "bio": "Renowned for his expertise in complex racing conditions and fair course management"
+    },
+    "chiefMeasurer": {
+      "name": "Joop Doomernik",
+      "country": "NED",
+      "role": "Chief Measurer",
+      "credentials": ["IDA Technical Committee", "Dragon Class Expert"],
+      "bio": "Expert yachtbuilder with decades of Dragon class measurement experience"
+    },
+    "juryChairman": {
+      "name": "To Be Announced",
+      "country": "TBA",
+      "credentials": ["World Sailing International Judge"]
+    },
+    "committeeBoatName": "Voyager",
+    "vhfChannel": "72",
+    "backupChannel": "69",
+    "safetyChannel": "VHF 16"
+  },
+  "charterBoats": {
+    "available": 20,
+    "priceRange": {
+      "min": 3500,
+      "max": 9000,
+      "currency": "USD"
+    },
+    "note": "Prices vary depending on boat age and charter duration. Contact organizers for availability."
+  },
+  "shipping": {
+    "subsidized": true,
+    "note": "RHKYC and sponsors will subsidise shipping and logistics of transporting your Dragon in and out of Hong Kong",
+    "routes": [
+      {
+        "from": "Europe (Rotterdam, Hamburg, Antwerp, Felixstowe)",
+        "transitDays": "30-45",
+        "notes": "Via Suez Canal or Cape route"
+      },
+      {
+        "from": "Mediterranean (Fos Sur Mer, Valencia, Genoa)",
+        "transitDays": "30-45",
+        "notes": "Via Suez Canal"
+      },
+      {
+        "from": "Australia (Fremantle, Melbourne)",
+        "transitDays": "15-25"
+      },
+      {
+        "from": "Japan (Osaka)",
+        "transitDays": "3-5"
+      }
+    ]
+  },
+  "hongKongDragonFleet": {
+    "name": "Hong Kong Dragon Association",
+    "fleetSize": 28,
+    "history": "Third oldest Dragon fleet in the world, established at RHKYC",
+    "practiceNight": "Wednesday",
+    "recentResults": ["2024 Asia Pacific Champions", "Host fleet for 2027 Worlds"],
+    "boats": [
+      {
+        "sailNumber": "HKG 88",
+        "boatName": "Doubloon",
+        "owner": "Demo Sailor",
+        "yearBuilt": 2022,
+        "builder": "Petticrows"
+      },
+      {
+        "sailNumber": "HKG 188",
+        "boatName": "Golden Dragon",
+        "owner": "Sarah Chen",
+        "yearBuilt": 2021,
+        "builder": "Petticrows"
+      },
+      {
+        "sailNumber": "HKG 68",
+        "boatName": "Lucky Star",
+        "owner": "James Wong",
+        "yearBuilt": 2020,
+        "builder": "Petticrows"
+      },
+      {
+        "sailNumber": "HKG 128",
+        "boatName": "Phoenix Rising",
+        "owner": "Michael Kwok",
+        "yearBuilt": 2023,
+        "builder": "Petticrows"
+      },
+      {
+        "sailNumber": "HKG 168",
+        "boatName": "Jade Empress",
+        "owner": "William Lee",
+        "yearBuilt": 2019,
+        "builder": "Petticrows"
+      }
+    ]
+  },
+  "testUserRoles": {
+    "demoSailor": {
+      "email": "demo-sailor@regattaflow.app",
+      "role": "competitor",
+      "boatName": "Doubloon",
+      "sailNumber": "HKG 88",
+      "registrationStatus": "confirmed",
+      "crewMembers": [
+        {
+          "name": "Tommy Chan",
+          "role": "tactician",
+          "experience": "12 years Dragon sailing"
+        },
+        {
+          "name": "Lisa Wong",
+          "role": "trimmer", 
+          "experience": "8 years Dragon sailing"
+        }
+      ]
+    },
+    "sarahChenCoach": {
+      "email": "sarah.chen@sailing.com",
+      "role": "competitor",
+      "secondaryRole": "dragon_fleet_captain",
+      "boatName": "Golden Dragon",
+      "sailNumber": "HKG 188",
+      "registrationStatus": "confirmed",
+      "credentials": ["RHKYC Dragon Fleet Captain", "Hong Kong Dragon Association Committee"],
+      "crewMembers": [
+        {
+          "name": "David Hui",
+          "role": "tactician",
+          "experience": "15 years Dragon sailing"
+        },
+        {
+          "name": "Jenny Lau",
+          "role": "trimmer",
+          "experience": "10 years Dragon sailing"
+        }
+      ]
+    },
+    "demoClub": {
+      "email": "demo-club@regattaflow.app",
+      "role": "race_committee",
+      "positions": ["Race Officer", "Results Coordinator"],
+      "accessLevel": "admin",
+      "responsibilities": [
+        "Race management and scoring",
+        "Results publication",
+        "Protest coordination",
+        "Start line management"
+      ]
+    }
+  },
+  "internationalEntries": [
+    {
+      "country": "GER",
+      "expectedBoats": 8,
+      "notableEntrants": ["Current European Champion"]
+    },
+    {
+      "country": "GBR",
+      "expectedBoats": 6,
+      "notableEntrants": ["Multiple Gold Cup winners"]
+    },
+    {
+      "country": "NED",
+      "expectedBoats": 5
+    },
+    {
+      "country": "SUI",
+      "expectedBoats": 4
+    },
+    {
+      "country": "FRA",
+      "expectedBoats": 4
+    },
+    {
+      "country": "AUS",
+      "expectedBoats": 3
+    },
+    {
+      "country": "JPN",
+      "expectedBoats": 2
+    },
+    {
+      "country": "USA",
+      "expectedBoats": 2
+    },
+    {
+      "country": "HKG",
+      "expectedBoats": 12,
+      "notableEntrants": ["Host fleet - Hong Kong Dragon Association"]
+    }
+  ]
+}
+

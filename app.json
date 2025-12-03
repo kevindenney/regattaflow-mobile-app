@@ -81,7 +81,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "useMockWeather": true
+      "useMockWeather": false
     }
   }
 }

@@ -24,6 +24,7 @@ import { supabase } from '@/services/supabase';
 import { Audio } from 'expo-av';
 import ProtestModal from '@/components/race-control/ProtestModal';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
+import CrewManifestTab from '@/components/race-control/CrewManifestTab';
 
 // Types
 interface Regatta {
@@ -96,7 +97,7 @@ export default function RaceControlScreen() {
   const [startTime, setStartTime] = useState<Date | null>(null);
 
   // UI State
-  const [activeTab, setActiveTab] = useState<'timer' | 'finishes' | 'flags' | 'protests'>('timer');
+  const [activeTab, setActiveTab] = useState<'timer' | 'finishes' | 'flags' | 'protests' | 'crew'>('timer');
   const [showProtestModal, setShowProtestModal] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<RaceEntry | null>(null);
   const [finishQueue, setFinishQueue] = useState<string[]>([]); // Entry IDs in finish order
@@ -765,6 +766,7 @@ export default function RaceControlScreen() {
           { key: 'finishes', label: 'Finishes', icon: 'flag' },
           { key: 'flags', label: 'Flags', icon: 'flag-variant' },
           { key: 'protests', label: 'Protests', icon: 'gavel' },
+          { key: 'crew', label: 'Crew', icon: 'account-group' },
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}
@@ -789,6 +791,7 @@ export default function RaceControlScreen() {
         {activeTab === 'finishes' && renderFinishesTab()}
         {activeTab === 'flags' && renderFlagsTab()}
         {activeTab === 'protests' && renderProtestsTab()}
+        {activeTab === 'crew' && <CrewManifestTab raceId={id!} />}
       </ScrollView>
 
       {/* Protest Modal */}

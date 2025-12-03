@@ -2,15 +2,17 @@
  * Fleet Competitors Card
  * Shows other boats/sailors competing in this race
  * Enables fleet connectivity and coordination
+ * Now shows ALL matching fleets and includes race registration
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking, TextInput, Modal } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
 import { FleetDiscoveryService, Fleet } from '@/services/FleetDiscoveryService';
 import { raceParticipantService, ParticipantWithProfile } from '@/services/RaceParticipantService';
 import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
 
 interface RaceParticipant {
   id: string;
@@ -25,37 +27,55 @@ interface RaceParticipant {
 interface FleetRacersCardProps {
   raceId: string;
   venueId?: string;
+  clubId?: string;
   classId?: string;
   onJoinFleet?: (fleetId: string) => void;
+  onRegister?: () => void;
 }
 
-export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: FleetRacersCardProps) {
+export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet, onRegister }: FleetRacersCardProps) {
   const { user } = useAuth();
   const [participants, setParticipants] = useState<RaceParticipant[]>([]);
-  const [suggestedFleet, setSuggestedFleet] = useState<Fleet | null>(null);
-  const [isFleetMember, setIsFleetMember] = useState(false);
+  // Now stores ALL available fleets, not just one
+  const [availableFleets, setAvailableFleets] = useState<Fleet[]>([]);
+  const [userFleetMemberships, setUserFleetMemberships] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [expandedView, setExpandedView] = useState(false);
+  const [showFleetsExpanded, setShowFleetsExpanded] = useState(false);
+  
+  // Registration state
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registeringRace, setRegisteringRace] = useState(false);
+  const [registrationForm, setRegistrationForm] = useState({
+    boatName: '',
+    sailNumber: '',
+    status: 'registered' as 'registered' | 'confirmed' | 'tentative',
+    visibility: 'public' as 'public' | 'fleet' | 'private',
+    fleetId: undefined as string | undefined,
+  });
+
+  useEffect(() => {
+    loadAvailableFleets();
+  }, [classId, venueId, clubId, user?.id]);
 
   useEffect(() => {
     loadParticipants();
-    loadSuggestedFleet();
-  }, [raceId, classId, user?.id]);
+    checkUserRegistration();
+  }, [raceId, user?.id]);
 
   const loadParticipants = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !raceId) return;
 
     try {
       setLoading(true);
-
-      // Fetch real competitors from database
+      console.debug('[FleetRacersCard] loading competitors', { raceId });
       const competitors = await raceParticipantService.getRaceCompetitors(
         raceId,
         user.id,
-        isFleetMember
+        userFleetMemberships.size > 0
       );
 
-      // Map to local RaceParticipant interface
       const mapped: RaceParticipant[] = competitors.map(c => ({
         id: c.id,
         name: c.profile?.name || 'Unknown Sailor',
@@ -66,57 +86,150 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
         visibility: c.visibility,
       }));
 
+      console.debug('[FleetRacersCard] competitors result', { raceId, count: mapped.length });
       setParticipants(mapped);
     } catch (error) {
       console.error('Error loading participants:', error);
-      // Fallback to empty array on error
       setParticipants([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadSuggestedFleet = async () => {
-    if (!user?.id || !classId) return;
-
+  const checkUserRegistration = async () => {
+    if (!user?.id || !raceId) return;
+    
     try {
-      // Get fleets for this class
-      const fleets = await FleetDiscoveryService.discoverFleets({
-        classId,
-        visibility: 'public',
-      });
-
-      if (fleets.length > 0) {
-        const fleet = fleets[0]; // Use the first matching fleet
-        setSuggestedFleet(fleet);
-
-        // Check if user is already a member
-        const isMember = await FleetDiscoveryService.isMember(user.id, fleet.id);
-        setIsFleetMember(isMember);
-      }
+      const { data } = await supabase
+        .from('race_participants')
+        .select('id')
+        .eq('regatta_id', raceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      setIsRegistered(!!data);
     } catch (error) {
-      console.error('Error loading fleet:', error);
+      console.error('Error checking registration:', error);
     }
   };
 
-  const handleJoinFleet = async () => {
-    if (!user?.id || !suggestedFleet) return;
+  const loadAvailableFleets = async () => {
+    if (!user?.id) return;
 
     try {
-      await FleetDiscoveryService.joinFleet(user.id, suggestedFleet.id, true);
-      setIsFleetMember(true);
-      Alert.alert('Success', `You've joined ${suggestedFleet.name}!`);
-      onJoinFleet?.(suggestedFleet.id);
+      let fleets: Fleet[] = [];
+      const memberships = new Set<string>();
+
+      // 1. First try: Get fleets matching the boat class
+      if (classId) {
+        const classFleets = await FleetDiscoveryService.discoverFleets(
+          undefined, // venueId
+          classId,   // classId
+          10         // limit
+        );
+        fleets = [...classFleets];
+      }
+
+      // 2. Second try: Get fleets from the same club
+      if (clubId && fleets.length < 5) {
+        try {
+          const clubFleets = await FleetDiscoveryService.discoverFleetsByClub(clubId, 10);
+          // Add club fleets that aren't already in the list
+          clubFleets.forEach(cf => {
+            if (!fleets.find(f => f.id === cf.id)) {
+              fleets.push(cf);
+            }
+          });
+        } catch (e) {
+          console.debug('[FleetRacersCard] Could not load club fleets:', e);
+        }
+      }
+
+      // 3. Third try: Get fleets from the same venue
+      if (venueId && fleets.length < 5) {
+        try {
+          const venueFleets = await FleetDiscoveryService.discoverFleetsByVenue(venueId, 10);
+          // Add venue fleets that aren't already in the list
+          venueFleets.forEach(vf => {
+            if (!fleets.find(f => f.id === vf.id)) {
+              fleets.push(vf);
+            }
+          });
+        } catch (e) {
+          console.debug('[FleetRacersCard] Could not load venue fleets:', e);
+        }
+      }
+
+      // Check membership for each fleet
+      for (const fleet of fleets) {
+        try {
+          const isMember = await FleetDiscoveryService.isMember(user.id, fleet.id);
+          if (isMember) {
+            memberships.add(fleet.id);
+          }
+        } catch (e) {
+          // Ignore membership check errors
+        }
+      }
+
+      setAvailableFleets(fleets);
+      setUserFleetMemberships(memberships);
+    } catch (error) {
+      console.error('Error loading fleets:', error);
+    }
+  };
+
+  const handleJoinFleet = async (fleet: Fleet) => {
+    if (!user?.id) return;
+
+    try {
+      await FleetDiscoveryService.joinFleet(user.id, fleet.id, true);
+      setUserFleetMemberships(prev => new Set([...prev, fleet.id]));
+      Alert.alert('Success', `You've joined ${fleet.name}!`);
+      onJoinFleet?.(fleet.id);
     } catch (error) {
       console.error('Error joining fleet:', error);
       Alert.alert('Error', 'Failed to join fleet');
     }
   };
 
-  const handleOpenWhatsApp = () => {
-    if (!suggestedFleet?.whatsapp_link) return;
+  const handleRegisterForRace = async () => {
+    if (!user?.id || !raceId) return;
 
-    Linking.openURL(suggestedFleet.whatsapp_link).catch(() => {
+    try {
+      setRegisteringRace(true);
+
+      const { error } = await supabase
+        .from('race_participants')
+        .insert({
+          regatta_id: raceId,
+          user_id: user.id,
+          boat_name: registrationForm.boatName || null,
+          sail_number: registrationForm.sailNumber || null,
+          status: registrationForm.status,
+          visibility: registrationForm.visibility,
+          fleet_id: registrationForm.fleetId || null,
+        });
+
+      if (error) throw error;
+
+      setIsRegistered(true);
+      setShowRegisterModal(false);
+      Alert.alert('Success', 'You are now registered for this race!');
+      loadParticipants(); // Refresh the list
+      onRegister?.();
+    } catch (error: any) {
+      console.error('Error registering for race:', error);
+      Alert.alert('Error', error.message || 'Failed to register for race');
+    } finally {
+      setRegisteringRace(false);
+    }
+  };
+
+  const handleOpenWhatsApp = (fleet: Fleet) => {
+    if (!fleet.whatsapp_link) return;
+
+    Linking.openURL(fleet.whatsapp_link).catch(() => {
       Alert.alert('Error', 'Could not open WhatsApp group');
     });
   };
@@ -143,9 +256,11 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
     }
   };
 
-  const visibleParticipants = participants.filter((p) => p.visibility === 'public' || isFleetMember);
+  const isAnyFleetMember = userFleetMemberships.size > 0;
+  const visibleParticipants = participants.filter((p) => p.visibility === 'public' || isAnyFleetMember);
   const confirmedCount = visibleParticipants.filter((p) => p.status === 'confirmed').length;
   const displayParticipants = expandedView ? visibleParticipants : visibleParticipants.slice(0, 3);
+  const displayFleets = showFleetsExpanded ? availableFleets : availableFleets.slice(0, 2);
 
   return (
     <View style={styles.card}>
@@ -159,30 +274,91 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
         </View>
       </View>
 
-      {/* Fleet Discovery Banner */}
-      {suggestedFleet && !isFleetMember && (
-        <View style={styles.fleetBanner}>
-          <View style={styles.fleetBannerContent}>
-            <MaterialCommunityIcons name="account-group" size={20} color={colors.primary[600]} />
-            <View style={styles.fleetBannerText}>
-              <Text style={styles.fleetBannerTitle}>{suggestedFleet.name}</Text>
-              <Text style={styles.fleetBannerSubtitle}>
-                {confirmedCount} members racing • {suggestedFleet.member_count} total members
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.joinFleetButton} onPress={handleJoinFleet}>
-            <Ionicons name="add-circle" size={18} color={colors.background.primary} />
-            <Text style={styles.joinFleetButtonText}>Join</Text>
-          </TouchableOpacity>
+      {/* Race Registration Button */}
+      {!isRegistered ? (
+        <TouchableOpacity 
+          style={styles.registerButton}
+          onPress={() => setShowRegisterModal(true)}
+        >
+          <Ionicons name="add-circle" size={20} color={colors.background.primary} />
+          <Text style={styles.registerButtonText}>Register for This Race</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.registeredBadge}>
+          <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
+          <Text style={styles.registeredText}>You're registered for this race</Text>
         </View>
       )}
 
-      {/* Fleet Member Badge */}
-      {isFleetMember && suggestedFleet && (
-        <View style={styles.memberBadge}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
-          <Text style={styles.memberText}>You're a member of {suggestedFleet.name}</Text>
+      {/* All Available Fleets */}
+      {availableFleets.length > 0 && (
+        <View style={styles.fleetsSection}>
+          <Text style={styles.fleetsSectionTitle}>
+            {availableFleets.length} Fleet{availableFleets.length !== 1 ? 's' : ''} Available
+          </Text>
+          
+          {displayFleets.map((fleet) => {
+            const isMember = userFleetMemberships.has(fleet.id);
+            return (
+              <View key={fleet.id} style={styles.fleetBanner}>
+                <View style={styles.fleetBannerContent}>
+                  <MaterialCommunityIcons name="account-group" size={20} color={colors.primary[600]} />
+                  <View style={styles.fleetBannerText}>
+                    <Text style={styles.fleetBannerTitle}>{fleet.name}</Text>
+                    <Text style={styles.fleetBannerSubtitle}>
+                      {fleet.member_count || 0} members
+                      {fleet.boat_class?.name && ` • ${fleet.boat_class.name}`}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.fleetActions}>
+                  {isMember ? (
+                    <>
+                      <View style={styles.memberBadgeSmall}>
+                        <Ionicons name="checkmark-circle" size={14} color={colors.success[600]} />
+                        <Text style={styles.memberTextSmall}>Joined</Text>
+                      </View>
+                      {fleet.whatsapp_link && (
+                        <TouchableOpacity 
+                          style={styles.whatsappButtonSmall}
+                          onPress={() => handleOpenWhatsApp(fleet)}
+                        >
+                          <MaterialCommunityIcons name="whatsapp" size={16} color="#25D366" />
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  ) : (
+                    <TouchableOpacity 
+                      style={styles.joinFleetButton} 
+                      onPress={() => handleJoinFleet(fleet)}
+                    >
+                      <Ionicons name="add-circle" size={16} color={colors.background.primary} />
+                      <Text style={styles.joinFleetButtonText}>Join</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+
+          {/* Show More Fleets */}
+          {availableFleets.length > 2 && (
+            <TouchableOpacity
+              style={styles.showMoreButton}
+              onPress={() => setShowFleetsExpanded(!showFleetsExpanded)}
+            >
+              <Text style={styles.showMoreText}>
+                {showFleetsExpanded
+                  ? 'Show Less Fleets'
+                  : `Show ${availableFleets.length - 2} More Fleets`}
+              </Text>
+              <Ionicons
+                name={showFleetsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={colors.primary[600]}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -236,7 +412,7 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
             ))}
           </ScrollView>
 
-          {/* Show More/Less */}
+          {/* Show More/Less Participants */}
           {visibleParticipants.length > 3 && (
             <TouchableOpacity
               style={styles.showMoreButton}
@@ -257,16 +433,6 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
         </>
       )}
 
-      {/* Fleet Actions */}
-      {isFleetMember && suggestedFleet?.whatsapp_link && (
-        <View style={styles.fleetActions}>
-          <TouchableOpacity style={styles.whatsappButton} onPress={handleOpenWhatsApp}>
-            <MaterialCommunityIcons name="whatsapp" size={18} color="#25D366" />
-            <Text style={styles.whatsappButtonText}>Fleet Group Chat</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Summary */}
       <View style={styles.summary}>
         <View style={styles.summaryItem}>
@@ -279,6 +445,148 @@ export function FleetRacersCard({ raceId, venueId, classId, onJoinFleet }: Fleet
           <Text style={styles.summaryText}>{visibleParticipants.length} total racers</Text>
         </View>
       </View>
+
+      {/* Registration Modal */}
+      <Modal
+        visible={showRegisterModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowRegisterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Register for Race</Text>
+              <TouchableOpacity onPress={() => setShowRegisterModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Boat Name (optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g., Sea Breeze"
+                value={registrationForm.boatName}
+                onChangeText={(text) => setRegistrationForm(prev => ({ ...prev, boatName: text }))}
+              />
+
+              <Text style={styles.inputLabel}>Sail Number (optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g., HKG 1234"
+                value={registrationForm.sailNumber}
+                onChangeText={(text) => setRegistrationForm(prev => ({ ...prev, sailNumber: text }))}
+              />
+
+              <Text style={styles.inputLabel}>Status</Text>
+              <View style={styles.statusOptions}>
+                {(['confirmed', 'registered', 'tentative'] as const).map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[
+                      styles.statusOption,
+                      registrationForm.status === status && styles.statusOptionSelected
+                    ]}
+                    onPress={() => setRegistrationForm(prev => ({ ...prev, status }))}
+                  >
+                    <Ionicons 
+                      name={getStatusIcon(status)} 
+                      size={16} 
+                      color={registrationForm.status === status ? colors.background.primary : getStatusColor(status)} 
+                    />
+                    <Text style={[
+                      styles.statusOptionText,
+                      registrationForm.status === status && styles.statusOptionTextSelected
+                    ]}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Visibility</Text>
+              <View style={styles.visibilityOptions}>
+                {(['public', 'fleet', 'private'] as const).map((visibility) => (
+                  <TouchableOpacity
+                    key={visibility}
+                    style={[
+                      styles.visibilityOption,
+                      registrationForm.visibility === visibility && styles.visibilityOptionSelected
+                    ]}
+                    onPress={() => setRegistrationForm(prev => ({ ...prev, visibility }))}
+                  >
+                    <Ionicons 
+                      name={visibility === 'public' ? 'globe' : visibility === 'fleet' ? 'people' : 'lock-closed'} 
+                      size={16} 
+                      color={registrationForm.visibility === visibility ? colors.background.primary : colors.text.secondary} 
+                    />
+                    <Text style={[
+                      styles.visibilityOptionText,
+                      registrationForm.visibility === visibility && styles.visibilityOptionTextSelected
+                    ]}>
+                      {visibility.charAt(0).toUpperCase() + visibility.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {availableFleets.length > 0 && (
+                <>
+                  <Text style={styles.inputLabel}>Racing with Fleet (optional)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fleetSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.fleetOption,
+                        !registrationForm.fleetId && styles.fleetOptionSelected
+                      ]}
+                      onPress={() => setRegistrationForm(prev => ({ ...prev, fleetId: undefined }))}
+                    >
+                      <Text style={[
+                        styles.fleetOptionText,
+                        !registrationForm.fleetId && styles.fleetOptionTextSelected
+                      ]}>None</Text>
+                    </TouchableOpacity>
+                    {availableFleets.map((fleet) => (
+                      <TouchableOpacity
+                        key={fleet.id}
+                        style={[
+                          styles.fleetOption,
+                          registrationForm.fleetId === fleet.id && styles.fleetOptionSelected
+                        ]}
+                        onPress={() => setRegistrationForm(prev => ({ ...prev, fleetId: fleet.id }))}
+                      >
+                        <Text style={[
+                          styles.fleetOptionText,
+                          registrationForm.fleetId === fleet.id && styles.fleetOptionTextSelected
+                        ]}>{fleet.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setShowRegisterModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.submitButton, registeringRace && styles.submitButtonDisabled]}
+                onPress={handleRegisterForRace}
+                disabled={registeringRace}
+              >
+                <Text style={styles.submitButtonText}>
+                  {registeringRace ? 'Registering...' : 'Register'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -518,5 +826,225 @@ const styles = StyleSheet.create({
     width: 1,
     height: 20,
     backgroundColor: colors.border.light,
+  },
+  // Registration button styles
+  registerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary[600],
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 8,
+    marginBottom: Spacing.md,
+  },
+  registerButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.background.primary,
+  },
+  registeredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.success[50],
+    padding: Spacing.sm,
+    borderRadius: 8,
+    marginBottom: Spacing.md,
+  },
+  registeredText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.success[700],
+  },
+  // Fleets section styles
+  fleetsSection: {
+    marginBottom: Spacing.md,
+  },
+  fleetsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginBottom: Spacing.sm,
+  },
+  memberBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: colors.success[50],
+    borderRadius: 4,
+  },
+  memberTextSmall: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.success[700],
+  },
+  whatsappButtonSmall: {
+    padding: 6,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background.primary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  modalBody: {
+    padding: Spacing.md,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginBottom: 6,
+    marginTop: Spacing.sm,
+  },
+  textInput: {
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    fontSize: 15,
+    color: colors.text.primary,
+  },
+  statusOptions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  statusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: colors.background.secondary,
+  },
+  statusOptionSelected: {
+    backgroundColor: colors.primary[600],
+    borderColor: colors.primary[600],
+  },
+  statusOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  statusOptionTextSelected: {
+    color: colors.background.primary,
+  },
+  visibilityOptions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  visibilityOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: colors.background.secondary,
+  },
+  visibilityOptionSelected: {
+    backgroundColor: colors.primary[600],
+    borderColor: colors.primary[600],
+  },
+  visibilityOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  visibilityOptionTextSelected: {
+    color: colors.background.primary,
+  },
+  fleetSelector: {
+    flexDirection: 'row',
+    marginBottom: Spacing.sm,
+  },
+  fleetOption: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: colors.background.secondary,
+    marginRight: Spacing.sm,
+  },
+  fleetOptionSelected: {
+    backgroundColor: colors.primary[600],
+    borderColor: colors.primary[600],
+  },
+  fleetOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  fleetOptionTextSelected: {
+    color: colors.background.primary,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  submitButton: {
+    flex: 2,
+    paddingVertical: Spacing.sm,
+    borderRadius: 8,
+    backgroundColor: colors.primary[600],
+    alignItems: 'center',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.background.primary,
   },
 });

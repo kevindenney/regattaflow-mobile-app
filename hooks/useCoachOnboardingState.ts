@@ -55,11 +55,21 @@ export interface CoachExpertiseData {
   specialties: string[]; // e.g., ['dragon', 'swan', 'j_boats']
 }
 
+export interface CoachPaymentSetupData {
+  stripeOnboardingStarted: boolean;
+  stripeOnboardingComplete: boolean;
+  stripeOnboardingSkipped: boolean;
+  stripeAccountId?: string;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
+}
+
 export interface CoachOnboardingState {
   welcome: CoachWelcomeData | null;
   expertise: CoachExpertiseData | null;
   availability: CoachAvailabilityData | null;
   pricing: CoachPricingData | null;
+  paymentSetup: CoachPaymentSetupData | null;
   currentStep: number;
   loading: boolean;
   saving: boolean;
@@ -75,6 +85,7 @@ export const useCoachOnboardingState = () => {
     expertise: null,
     availability: null,
     pricing: null,
+    paymentSetup: null,
     currentStep: 0,
     loading: true,
     saving: false,
@@ -91,7 +102,7 @@ export const useCoachOnboardingState = () => {
     if (!state.loading) {
       saveStateToStorage();
     }
-  }, [state.welcome, state.expertise, state.availability, state.pricing, state.currentStep]);
+  }, [state.welcome, state.expertise, state.availability, state.pricing, state.paymentSetup, state.currentStep]);
 
   const loadState = async () => {
     try {
@@ -155,6 +166,14 @@ export const useCoachOnboardingState = () => {
                 ten: profile.coach_services.ten_session_price?.toString() || '',
               },
             } : null,
+            paymentSetup: {
+              stripeOnboardingStarted: !!profile.stripe_account_id,
+              stripeOnboardingComplete: profile.stripe_onboarding_complete || false,
+              stripeOnboardingSkipped: profile.stripe_onboarding_skipped || false,
+              stripeAccountId: profile.stripe_account_id || undefined,
+              chargesEnabled: profile.stripe_charges_enabled || false,
+              payoutsEnabled: profile.stripe_payouts_enabled || false,
+            },
             loading: false,
           }));
         }
@@ -174,6 +193,7 @@ export const useCoachOnboardingState = () => {
         expertise: state.expertise,
         availability: state.availability,
         pricing: state.pricing,
+        paymentSetup: state.paymentSetup,
         currentStep: state.currentStep,
       }));
     } catch (error) {
@@ -195,6 +215,21 @@ export const useCoachOnboardingState = () => {
 
   const updatePricing = useCallback((data: CoachPricingData) => {
     setState(prev => ({ ...prev, pricing: data, currentStep: Math.max(prev.currentStep, 4) }));
+  }, []);
+
+  const updatePaymentSetup = useCallback((data: Partial<CoachPaymentSetupData>) => {
+    setState(prev => ({
+      ...prev,
+      paymentSetup: {
+        stripeOnboardingStarted: data.stripeOnboardingStarted ?? prev.paymentSetup?.stripeOnboardingStarted ?? false,
+        stripeOnboardingComplete: data.stripeOnboardingComplete ?? prev.paymentSetup?.stripeOnboardingComplete ?? false,
+        stripeOnboardingSkipped: data.stripeOnboardingSkipped ?? prev.paymentSetup?.stripeOnboardingSkipped ?? false,
+        stripeAccountId: data.stripeAccountId ?? prev.paymentSetup?.stripeAccountId,
+        chargesEnabled: data.chargesEnabled ?? prev.paymentSetup?.chargesEnabled,
+        payoutsEnabled: data.payoutsEnabled ?? prev.paymentSetup?.payoutsEnabled,
+      },
+      currentStep: Math.max(prev.currentStep, 5),
+    }));
   }, []);
 
   const saveToSupabase = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
@@ -330,6 +365,7 @@ export const useCoachOnboardingState = () => {
       expertise: null,
       availability: null,
       pricing: null,
+      paymentSetup: null,
       currentStep: 0,
       loading: false,
       saving: false,
@@ -343,6 +379,7 @@ export const useCoachOnboardingState = () => {
     updateExpertise,
     updateAvailability,
     updatePricing,
+    updatePaymentSetup,
     saveToSupabase,
     publishProfile,
     clearState,

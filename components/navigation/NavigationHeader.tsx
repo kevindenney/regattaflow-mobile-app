@@ -262,22 +262,6 @@ export function NavigationHeader({
                   styles.dropdownItem,
                   pressed && styles.dropdownItemPressed
                 ]}
-                onPress={() => handleNavigation('/(tabs)/dashboard')}
-              >
-                <Ionicons name="apps" size={20} color="#374151" />
-                <Text style={styles.dropdownItemText}>
-                  {userType === 'sailor' && 'Sailor Dashboard'}
-                  {userType === 'coach' && 'Coach Dashboard'}
-                  {userType === 'club' && 'Club Dashboard'}
-                  {!userType && 'Dashboard'}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dropdownItem,
-                  pressed && styles.dropdownItemPressed
-                ]}
                 onPress={() => handleNavigation('/(tabs)/settings')}
               >
                 <Ionicons name="settings-outline" size={20} color="#374151" />

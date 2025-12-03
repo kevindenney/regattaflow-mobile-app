@@ -21,6 +21,28 @@ export const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
   gpsTrack,
   weather,
 }) => {
+  // Show empty state if no GPS track data
+  if (!gpsTrack || gpsTrack.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.sectionTitle}>Performance Metrics</Text>
+        <View style={styles.emptyState}>
+          <Ionicons name="analytics-outline" size={48} color="#CBD5E1" />
+          <Text style={styles.emptyTitle}>No GPS Track Data</Text>
+          <Text style={styles.emptyDescription}>
+            Record a GPS track during your race to see detailed performance metrics including speed analysis, VMG, distance sailed, and time breakdown.
+          </Text>
+          <View style={styles.emptyHint}>
+            <Ionicons name="information-circle-outline" size={16} color="#64748B" />
+            <Text style={styles.emptyHintText}>
+              Start the race timer with GPS tracking enabled to collect data
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   // Calculate metrics
   const metrics = calculatePerformanceMetrics(gpsTrack, weather?.wind?.direction);
 
@@ -269,5 +291,43 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Empty state styles
+  emptyState: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 400,
+  },
+  emptyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  emptyHintText: {
+    fontSize: 13,
+    color: '#64748B',
   },
 });

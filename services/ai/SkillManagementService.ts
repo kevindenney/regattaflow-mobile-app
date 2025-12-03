@@ -542,6 +542,24 @@ function resolveBuiltInSkill(skillName: string): { key: BuiltInSkillKey; definit
   return null;
 }
 
+function getPreconfiguredSkillId(skillKey: BuiltInSkillKey): string | null {
+  const candidate = SKILL_REGISTRY[skillKey];
+  if (!candidate) {
+    return null;
+  }
+
+  if (candidate.startsWith('skill_builtin_')) {
+    return candidate;
+  }
+
+  // Anthropic-issued skill IDs always begin with skill_0 and include base62 characters
+  if (/^skill_0[0-9A-Za-z]+$/.test(candidate)) {
+    return candidate;
+  }
+
+  return null;
+}
+
 export interface SkillMetadata {
   id: string;
   name: string;
@@ -562,6 +580,7 @@ export class SkillManagementService {
   private remoteSkillDisableReason: string | null = null;
   private remoteSkillNoticeLogged = false;
   private loggedSkipForSkill = new Set<string>();
+  private loggedPreconfiguredSkill = new Set<string>();
 
   constructor() {
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -605,7 +624,7 @@ export class SkillManagementService {
   /**
    * Call the Anthropic Skills proxy Edge Function
    */
-  private async callSkillsProxy(action: string, params: Record<string, any> = {}): Promise<any> {
+  private async callSkillsProxy(action: string, params: Record<string, any> = {}): Promise<any | null> {
     if (!this.remoteSkillProxyEnabled) {
       throw new Error(this.remoteSkillDisableReason || 'Skill proxy disabled');
     }
@@ -641,12 +660,18 @@ export class SkillManagementService {
           normalizedMessage.includes('function not found')
         ) {
           this.disableRemoteSkills('Skill proxy edge function not deployed on this Supabase project');
+          this.logRemoteSkillsDisabled();
+          return null;
         } else if (response.status === 401 || response.status === 403) {
           this.disableRemoteSkills('Skill proxy access denied (check Supabase anon key permissions)');
+          this.logRemoteSkillsDisabled();
+          return null;
         } else if (response.status >= 500) {
           this.disableRemoteSkills(
             `Skill proxy returned server error (HTTP ${response.status}). Check Supabase Edge Function logs.`
           );
+          this.logRemoteSkillsDisabled();
+          return null;
         }
 
         throw new Error(`Anthropic API error: ${errorMessage}`);
@@ -657,6 +682,8 @@ export class SkillManagementService {
       if (error?.message?.includes('Failed to fetch') ||
           error?.message?.includes('Network request failed')) {
         this.disableRemoteSkills('Skill proxy unreachable (offline or blocked network)', error);
+        this.logRemoteSkillsDisabled();
+        return null;
       }
       throw error;
     }
@@ -698,6 +725,11 @@ export class SkillManagementService {
         description,
         content
       });
+
+      if (!response) {
+        this.logRemoteSkillsDisabled();
+        return null;
+      }
 
       const skillId = (response as any).id;
 
@@ -775,6 +807,10 @@ export class SkillManagementService {
       logger.debug('Listing all skills via proxy');
 
       const response = await this.callSkillsProxy('list_skills');
+      if (!response) {
+        this.logRemoteSkillsDisabled();
+        return Array.from(this.skillCache.values());
+      }
 
       const skills = (response as any).data || [];
 
@@ -906,6 +942,17 @@ export class SkillManagementService {
 
   private async initializeSkillInternal(skillKey: BuiltInSkillKey): Promise<string | null> {
     await this.ensureInitialized();
+
+    const preconfiguredId = getPreconfiguredSkillId(skillKey);
+    if (preconfiguredId) {
+      if (!this.loggedPreconfiguredSkill.has(skillKey)) {
+        this.loggedPreconfiguredSkill.add(skillKey);
+        logger.debug(
+          `Using preconfigured skill ID for '${skillKey}' (${preconfiguredId}) - skipping remote initialization`
+        );
+      }
+      return preconfiguredId;
+    }
 
     if (!this.remoteSkillProxyEnabled) {
       this.logRemoteSkillsDisabled();

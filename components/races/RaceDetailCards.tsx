@@ -10,7 +10,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 // Direct imports to avoid circular dependency
 import { RaceMapCard } from '@/components/race-detail/map/RaceMapCard';
-import { RaceOverviewCard } from '@/components/race-detail/RaceOverviewCard';
 import { StartStrategyCard } from '@/components/race-detail/StartStrategyCard';
 import { TimingCard } from '@/components/race-detail/TimingCard';
 import { WeatherCard } from '@/components/race-detail/WeatherCard';

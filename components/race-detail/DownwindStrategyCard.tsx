@@ -4,14 +4,14 @@
  * Shows favored sides, VMG optimization, shift detection for each run
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StrategyCard } from './StrategyCard';
-import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
-import { createLogger } from '@/lib/utils/logger';
+import { supabase } from '@/services/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StrategyCard } from './StrategyCard';
 
 const logger = createLogger('DownwindStrategyCard');
 
@@ -59,11 +59,7 @@ export function DownwindStrategyCard({
   }, [loading]);
 
   const loadDownwindStrategy = useCallback(async () => {
-    console.log('[DownwindStrategyCard] Loading strategy for raceId:', raceId);
-    console.log('[DownwindStrategyCard] Current user:', user?.id);
-
     if (!user) {
-      console.log('[DownwindStrategyCard] No user found, skipping load');
       setLoading(false);
       return;
     }
@@ -72,23 +68,12 @@ export function DownwindStrategyCard({
       setLoading(true);
       setError(null);
 
-      console.log('[DownwindStrategyCard] Querying race_strategies table with:', {
-        regatta_id: raceId,
-        user_id: user.id
-      });
-
       const { data, error: fetchError } = await supabase
         .from('race_strategies')
         .select('strategy_content')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
-
-      console.log('[DownwindStrategyCard] Query result:', {
-        data: data ? 'Data received' : 'No data',
-        error: fetchError,
-        hasStrategyContent: !!data?.strategy_content
-      });
 
       if (fetchError) {
         console.error('[DownwindStrategyCard] Fetch error:', fetchError);
@@ -97,13 +82,6 @@ export function DownwindStrategyCard({
 
       if (data && data.strategy_content) {
         const strategyContent = data.strategy_content as any;
-        console.log('[DownwindStrategyCard] Strategy content structure:', {
-          hasTacticalPlan: !!strategyContent.tacticalPlan,
-          hasRecommendations: !!strategyContent.tacticalPlan?.recommendations,
-          recommendationsCount: strategyContent.tacticalPlan?.recommendations?.length || 0,
-          hasFullAIStrategy: !!strategyContent.fullAIStrategy,
-          hasRunStrategy: !!strategyContent.fullAIStrategy?.strategy?.runStrategy
-        });
 
         let downwindRuns: RunRecommendation[] = [];
 
@@ -112,12 +90,9 @@ export function DownwindStrategyCard({
           downwindRuns = strategyContent.tacticalPlan.recommendations.filter(
             (rec: RunRecommendation) => rec.leg.toLowerCase().includes('downwind')
           );
-          console.log('[DownwindStrategyCard] Found downwind runs from tacticalPlan:', downwindRuns.length);
         }
         // Fallback to old structure: fullAIStrategy.strategy.runStrategy
         else if (strategyContent.fullAIStrategy?.strategy?.runStrategy) {
-          console.log('[DownwindStrategyCard] Using fullAIStrategy.strategy.runStrategy (legacy format)');
-
           // Transform runStrategy to RunRecommendation format
           const runStrategy = strategyContent.fullAIStrategy.strategy.runStrategy;
           downwindRuns = runStrategy.map((run: any, index: number) => ({
@@ -133,18 +108,14 @@ export function DownwindStrategyCard({
             theory: run.theory,
             execution: run.execution
           }));
-          console.log('[DownwindStrategyCard] Transformed run strategy to downwind runs:', downwindRuns.length);
         }
 
         if (downwindRuns.length > 0) {
-          console.log('[DownwindStrategyCard] Final downwind runs:', downwindRuns);
           setRuns(downwindRuns);
         } else {
-          console.warn('[DownwindStrategyCard] No downwind strategy found in any format');
           setError('No downwind strategy found. Generate your tactical plan first.');
         }
       } else {
-        console.warn('[DownwindStrategyCard] No data or strategy_content found');
         setError('No strategy found. Generate your tactical plan first.');
       }
     } catch (err) {
@@ -169,8 +140,7 @@ export function DownwindStrategyCard({
           table: 'race_strategies',
           filter: `regatta_id=eq.${raceId}`,
         },
-        (payload) => {
-          console.log('[DownwindStrategyCard] Realtime update received:', payload);
+        () => {
           // Reload strategy when it changes
           loadDownwindStrategy();
         }
@@ -181,7 +151,6 @@ export function DownwindStrategyCard({
     // This handles the case where strategy is generated after component mounts
     const pollInterval = setInterval(() => {
       if (runsRef.current.length === 0 && !loadingRef.current) {
-        console.log('[DownwindStrategyCard] Polling for strategy updates...');
         loadDownwindStrategy();
       }
     }, 3000);
@@ -193,14 +162,15 @@ export function DownwindStrategyCard({
   }, [raceId, loadDownwindStrategy]); // Only depend on raceId and loadDownwindStrategy
 
   // Load user's manual strategy
+  // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   useEffect(() => {
-    if (!sailorId || !raceEventId) return;
+    if (!user?.id || !raceEventId) return;
 
     const loadUserStrategy = async () => {
       try {
         const prep = await strategicPlanningService.getPreparationWithStrategy(
           raceEventId,
-          sailorId
+          user.id // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         );
         if (prep?.downwind_strategy) {
           setUserStrategy(prep.downwind_strategy);
@@ -211,18 +181,19 @@ export function DownwindStrategyCard({
     };
 
     loadUserStrategy();
-  }, [sailorId, raceEventId]);
+  }, [user?.id, raceEventId]);
 
   // Auto-save user's strategy on change
+  // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   const handleUserStrategyChange = async (text: string) => {
     setUserStrategy(text);
-    if (!sailorId || !raceEventId) return;
+    if (!user?.id || !raceEventId) return;
 
     setSavingUserStrategy(true);
     try {
       await strategicPlanningService.updatePhaseStrategy(
         raceEventId,
-        sailorId,
+        user.id, // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         'downwindStrategy',
         text
       );
@@ -266,7 +237,8 @@ export function DownwindStrategyCard({
   };
 
   const renderDownwindContent = () => {
-    if (loading) {
+    // Only show spinner on initial load when we have no data
+    if (loading && runs.length === 0) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#3B82F6" />
@@ -274,7 +246,8 @@ export function DownwindStrategyCard({
       );
     }
 
-    if (error || runs.length === 0) {
+    // If we have no data but finished loading, show error/empty state
+    if (runs.length === 0) {
       return (
         <View style={styles.emptyState}>
           <MaterialCommunityIcons name="run-fast" size={48} color="#CBD5E1" />
@@ -382,7 +355,7 @@ export function DownwindStrategyCard({
         ))}
 
         {/* User Strategy Input Section */}
-        {sailorId && raceEventId && (
+        {user?.id && raceEventId && (
           <View style={styles.userStrategySection}>
             <View style={styles.userStrategyHeader}>
               <Text style={styles.userStrategyLabel}>Your Strategy Notes</Text>

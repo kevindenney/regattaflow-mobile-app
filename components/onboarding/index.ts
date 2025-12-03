@@ -17,3 +17,6 @@ export { OnboardingProgress } from './OnboardingProgress';
 export { OnboardingCompletion } from './OnboardingCompletion';
 export { OnboardingDataTally } from './OnboardingDataTally';
 export { OnboardingSummary } from './OnboardingSummary';
+
+// Sailor onboarding components
+export { SailorSubscriptionChoice } from './SailorSubscriptionChoice';

@@ -131,15 +131,10 @@ export function RaceTimer({
 
   // Calculate countdown
   useEffect(() => {
-    if (raceDateTimeMs === null) {
-      setTimeUntilRace((prev) => {
-        if (prev && prev.days === 0 && prev.hours === 0 && prev.minutes === 0 && prev.seconds === 0) {
-          return prev;
-        }
-        return { days: 0, hours: 0, minutes: 0, seconds: 0 };
-      });
-      return;
-    }
+    // If we don't have a valid race date/time, don't start the countdown loop.
+    // A missing/invalid timestamp was causing setState to run on every render, triggering
+    // a maximum update depth error when races were created without a start time.
+    if (raceDateTimeMs === null) return;
 
     const calculateCountdown = () => {
       const now = Date.now();
@@ -228,12 +223,11 @@ export function RaceTimer({
 
     try {
       // Stop GPS tracking (this also saves track points)
-      const trackPoints = await gpsTracker.stopTracking();
-
+      await gpsTracker.stopTracking();
 
       setIsTracking(false);
 
-      // Trigger post-race interview
+      // Always open post-race interview - user can skip from there
       onRaceComplete(sessionId);
     } catch (error: any) {
       console.error('Error stopping race timer:', error);
@@ -255,33 +249,31 @@ export function RaceTimer({
   // Show tracking UI when race is active
   if (isTracking) {
     return (
-      <View className="bg-green-600 rounded-lg p-4">
-        <View className="flex-row items-center justify-between mb-2">
-          <View className="flex-row items-center">
-            <Navigation color="white" size={20} />
-            <Text className="text-white font-bold text-lg ml-2">Race In Progress</Text>
+      <View className="bg-green-600 rounded-lg p-3">
+        <View className="flex-row items-center justify-between">
+          {/* Left: elapsed time and GPS count */}
+          <View className="flex-row items-center gap-4">
+            <View className="flex-row items-center">
+              <Navigation color="white" size={16} />
+              <Text className="text-white text-xl font-bold ml-2">
+                {formatElapsedTime(elapsedSeconds)}
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              <Text className="text-white/80 text-xs mr-1">GPS:</Text>
+              <Text className="text-white font-bold">{gpsPointCount}</Text>
+            </View>
           </View>
+          
+          {/* Right: stop button */}
           <TouchableOpacity
             onPress={handleStopRace}
             className="bg-red-600 rounded-full p-2"
             accessibilityLabel="Stop race timer"
             accessibilityHint="Stop GPS tracking and complete the race"
           >
-            <Square color="white" size={24} fill="white" />
+            <Square color="white" size={18} fill="white" />
           </TouchableOpacity>
-        </View>
-
-        <View className="flex-row justify-between items-center">
-          <View>
-            <Text className="text-white text-3xl font-bold">
-              {formatElapsedTime(elapsedSeconds)}
-            </Text>
-            <Text className="text-white/80 text-sm">Elapsed Time</Text>
-          </View>
-          <View className="items-end">
-            <Text className="text-white text-2xl font-bold">{gpsPointCount}</Text>
-            <Text className="text-white/80 text-sm">GPS Points</Text>
-          </View>
         </View>
       </View>
     );
@@ -290,51 +282,50 @@ export function RaceTimer({
   // Show countdown UI when race hasn't started
   const { days, hours, minutes, seconds } = timeUntilRace;
   const isRaceDay = days === 0;
+  const isReadyToStart = isRaceDay && hours === 0 && minutes === 0;
 
   return (
     <TouchableOpacity
       onPress={handleStartRace}
-      className={`rounded-lg p-4 ${isRaceDay ? 'bg-sky-600' : 'bg-gray-700'}`}
+      className={`rounded-lg p-3 ${isReadyToStart ? 'bg-green-600' : isRaceDay ? 'bg-sky-600' : 'bg-gray-700'}`}
       accessibilityLabel={`Race countdown: ${days} days, ${hours} hours, ${minutes} minutes`}
       accessibilityHint="Tap to start race timer and GPS tracking"
     >
-      <View className="flex-row items-center justify-between mb-2">
-        <Text className="text-white font-bold text-lg">Race Countdown</Text>
-        {isRaceDay && (
-          <View className="bg-white rounded-full p-2">
-            <Play color="#0284c7" size={20} />
-          </View>
-        )}
-      </View>
-
-      <View className="flex-row justify-around">
-        {days > 0 && (
-          <View className="items-center">
-            <Text className="text-white text-3xl font-bold">{days}</Text>
-            <Text className="text-white/80 text-sm">{days === 1 ? 'day' : 'days'}</Text>
-          </View>
-        )}
-        <View className="items-center">
-          <Text className="text-white text-3xl font-bold">{hours}</Text>
-          <Text className="text-white/80 text-sm">{hours === 1 ? 'hour' : 'hours'}</Text>
+      <View className="flex-row items-center justify-between">
+        {/* Left side: countdown or ready message */}
+        <View className="flex-1">
+          {isReadyToStart ? (
+            <Text className="text-white font-bold text-base">Ready to Race!</Text>
+          ) : (
+            <View className="flex-row items-baseline gap-1">
+              {days > 0 && (
+                <>
+                  <Text className="text-white text-xl font-bold">{days}</Text>
+                  <Text className="text-white/80 text-xs mr-2">{days === 1 ? 'day' : 'days'}</Text>
+                </>
+              )}
+              <Text className="text-white text-xl font-bold">{hours}</Text>
+              <Text className="text-white/80 text-xs mr-1">h</Text>
+              <Text className="text-white text-xl font-bold">{minutes}</Text>
+              <Text className="text-white/80 text-xs mr-1">m</Text>
+              {isRaceDay && (
+                <>
+                  <Text className="text-white text-xl font-bold">{seconds}</Text>
+                  <Text className="text-white/80 text-xs">s</Text>
+                </>
+              )}
+            </View>
+          )}
+          <Text className="text-white/70 text-xs mt-0.5">
+            {isReadyToStart ? 'Tap to start GPS tracking' : 'Tap when ready to start'}
+          </Text>
         </View>
-        <View className="items-center">
-          <Text className="text-white text-3xl font-bold">{minutes}</Text>
-          <Text className="text-white/80 text-sm">{minutes === 1 ? 'min' : 'mins'}</Text>
+        
+        {/* Right side: play button */}
+        <View className={`rounded-full p-2 ${isReadyToStart ? 'bg-white' : 'bg-white/20'}`}>
+          <Play color={isReadyToStart ? '#16a34a' : 'white'} size={18} fill={isReadyToStart ? '#16a34a' : 'transparent'} />
         </View>
-        {isRaceDay && (
-          <View className="items-center">
-            <Text className="text-white text-3xl font-bold">{seconds}</Text>
-            <Text className="text-white/80 text-sm">{seconds === 1 ? 'sec' : 'secs'}</Text>
-          </View>
-        )}
       </View>
-
-      {isRaceDay && (
-        <Text className="text-white/90 text-center text-sm mt-2">
-          Tap to start race timer →
-        </Text>
-      )}
     </TouchableOpacity>
   );
 }

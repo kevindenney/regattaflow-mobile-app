@@ -262,7 +262,14 @@ export default function FleetOverviewScreen() {
           if (whatsappLink) {
             Linking.openURL(whatsappLink).catch(err => {
               console.warn('Unable to open WhatsApp link:', err);
+              Alert.alert('Error', 'Unable to open WhatsApp link');
             });
+          } else {
+            Alert.alert(
+              'No WhatsApp Group',
+              `${overview?.fleet?.name || 'This fleet'} doesn't have a WhatsApp group linked yet. Fleet captains can add one in fleet settings.`,
+              [{ text: 'OK' }]
+            );
           }
         },
       },

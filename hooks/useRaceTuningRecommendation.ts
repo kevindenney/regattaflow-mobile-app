@@ -102,7 +102,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const [error, setError] = useState<Error | null>(null);
 
   const fetchRecommendation = useCallback(async () => {
-    logger.debug('Fetch called with:', {
+    console.log('🎣 [useRaceTuningRecommendation] Fetch called with:', {
       enabled,
       classId,
       className,
@@ -115,7 +115,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     });
 
     if (!enabled || (!classId && !className)) {
-      logger.debug('Skipping fetch:', {
+      console.log('⏭️ [useRaceTuningRecommendation] Skipping fetch:', {
         enabled,
         hasClassId: !!classId,
         hasClassName: !!className
@@ -128,7 +128,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     setError(null);
 
     try {
-      logger.debug('Calling raceTuningService.getRecommendations...');
+      console.log('📞 [useRaceTuningRecommendation] Calling raceTuningService.getRecommendations...');
       const [result] = await raceTuningService.getRecommendations({
         classId,
         className,
@@ -143,10 +143,16 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
         pointsOfSail,
         limit,
       });
-      logger.debug('Got result summary:', result ? `Found recommendation: ${result.guideTitle}` : 'No recommendation returned');
+      console.log('📦 [useRaceTuningRecommendation] Got result:', result ? {
+        guideTitle: result.guideTitle,
+        guideSource: result.guideSource,
+        sectionTitle: result.sectionTitle,
+        isAIGenerated: result.isAIGenerated,
+        settingsCount: result.settings?.length
+      } : 'No recommendation returned');
       setRecommendation(result ?? null);
     } catch (err) {
-      logger.error('Failed to load tuning recommendation:', err);
+      console.error('❌ [useRaceTuningRecommendation] Failed to load tuning recommendation:', err);
       setError(err as Error);
       setRecommendation(null);
     } finally {

@@ -105,8 +105,8 @@ const CoachOnboardingExpertise = () => {
       <View className="px-4 pt-4 bg-white">
         <OnboardingProgress
           currentStep={2}
-          totalSteps={5}
-          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Review']}
+          totalSteps={6}
+          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Payments', 'Review']}
           color="#059669"
           showStepLabels={false}
         />

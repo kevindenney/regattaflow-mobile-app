@@ -1,14 +1,15 @@
 /**
  * Contingency Plans Card
- * Shows scenario-based contingency plans for race conditions
+ * Shows AI-generated scenario-based contingency plans based on weather forecast and venue conditions
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
+import { supabase } from '@/services/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-interface ContingencyScenario {
+export interface ContingencyScenario {
   scenario: string;
   trigger: string;
   action: string;
@@ -20,40 +21,96 @@ interface ContingencyPlansCardProps {
   scenarios?: ContingencyScenario[];
 }
 
-const DEFAULT_SCENARIOS: ContingencyScenario[] = [
-  {
-    scenario: 'Wind shifts left 10°+',
-    trigger: 'Persistent wind direction change',
-    action: 'Tack immediately and protect left side of course',
-    priority: 'high',
-  },
-  {
-    scenario: 'Current reverses',
-    trigger: 'Tide changes during race',
-    action: 'Favor port tack and adjust laylines accordingly',
-    priority: 'high',
-  },
-  {
-    scenario: 'Wind drops below 8 knots',
-    trigger: 'Light air conditions develop',
-    action: 'Prioritize clear air over position, sail more conservatively',
-    priority: 'medium',
-  },
-  {
-    scenario: 'General recall',
-    trigger: 'OCS or black flag',
-    action: 'Conservative restart, ensure clean start over aggressive position',
-    priority: 'high',
-  },
-  {
-    scenario: 'Wind increases above 20 knots',
-    trigger: 'Heavy weather develops',
-    action: 'Reef if needed, focus on boat handling and safety',
-    priority: 'high',
-  },
-];
+// Empty state - no default scenarios, we want AI-generated ones
+const EMPTY_SCENARIOS: ContingencyScenario[] = [];
 
-export function ContingencyPlansCard({ raceId, scenarios = DEFAULT_SCENARIOS }: ContingencyPlansCardProps) {
+export function ContingencyPlansCard({ raceId, scenarios: propScenarios }: ContingencyPlansCardProps) {
+  const [scenarios, setScenarios] = useState<ContingencyScenario[]>(propScenarios || EMPTY_SCENARIOS);
+  const [loading, setLoading] = useState(!propScenarios);
+  const [isAIGenerated, setIsAIGenerated] = useState(false);
+
+  useEffect(() => {
+    // If scenarios were passed as props, use those
+    if (propScenarios && propScenarios.length > 0) {
+      setScenarios(propScenarios);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise, try to load from the race's strategy_content
+    async function loadContingencies() {
+      if (!raceId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Load from race_strategies table (regatta_id = raceId)
+        const { data: planData, error: planError } = await supabase
+          .from('race_strategies')
+          .select('strategy_content')
+          .eq('regatta_id', raceId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (planData?.strategy_content) {
+          const content = planData.strategy_content as any;
+          
+          // Check for AI-generated contingencies in fullAIStrategy
+          if (content.fullAIStrategy?.contingencies?.rawScenarios) {
+            const rawScenarios = content.fullAIStrategy.contingencies.rawScenarios;
+            setScenarios(rawScenarios.map((s: any) => ({
+              scenario: s.scenario,
+              trigger: s.trigger,
+              action: s.action,
+              priority: s.priority || 'medium'
+            })));
+            setIsAIGenerated(true);
+            setLoading(false);
+            return;
+          }
+
+          // Fallback: convert structured contingencies to scenarios
+          if (content.fullAIStrategy?.contingencies) {
+            const contingencies = content.fullAIStrategy.contingencies;
+            const extractedScenarios: ContingencyScenario[] = [];
+
+            // Extract from each category
+            const categories = ['windShift', 'windDrop', 'windIncrease', 'currentChange', 'equipmentIssue'];
+            for (const category of categories) {
+              const items = contingencies[category] || [];
+              for (const item of items) {
+                extractedScenarios.push({
+                  scenario: item.conditions?.[0] || category.replace(/([A-Z])/g, ' $1').trim(),
+                  trigger: item.rationale || item.conditions?.[0] || '',
+                  action: item.action,
+                  priority: item.priority === 'critical' ? 'high' : item.priority === 'important' ? 'medium' : 'low'
+                });
+              }
+            }
+
+            if (extractedScenarios.length > 0) {
+              setScenarios(extractedScenarios);
+              setIsAIGenerated(true);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
+        // No AI-generated contingencies found
+        setScenarios(EMPTY_SCENARIOS);
+        setLoading(false);
+      } catch (error) {
+        console.warn('[ContingencyPlansCard] Error loading contingencies:', error);
+        setScenarios(EMPTY_SCENARIOS);
+        setLoading(false);
+      }
+    }
+
+    loadContingencies();
+  }, [raceId, propScenarios]);
   const getPriorityColor = (priority: ContingencyScenario['priority']) => {
     switch (priority) {
       case 'high':
@@ -76,6 +133,45 @@ export function ContingencyPlansCard({ raceId, scenarios = DEFAULT_SCENARIOS }: 
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <MaterialCommunityIcons name="shield-alert" size={24} color={colors.warning[600]} />
+            <Text style={styles.title}>Contingency Plans</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.primary[600]} />
+          <Text style={styles.loadingText}>Loading AI-generated contingencies...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Empty state - no contingencies generated yet
+  if (scenarios.length === 0) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <MaterialCommunityIcons name="shield-alert" size={24} color={colors.warning[600]} />
+            <Text style={styles.title}>Contingency Plans</Text>
+          </View>
+        </View>
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="shield-outline" size={48} color={colors.text.tertiary} />
+          <Text style={styles.emptyTitle}>No Contingency Plans Yet</Text>
+          <Text style={styles.emptyDescription}>
+            Contingency plans will be generated by AI when you generate a race strategy. They'll be tailored to the specific weather forecast and venue conditions.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -83,8 +179,16 @@ export function ContingencyPlansCard({ raceId, scenarios = DEFAULT_SCENARIOS }: 
           <MaterialCommunityIcons name="shield-alert" size={24} color={colors.warning[600]} />
           <Text style={styles.title}>Contingency Plans</Text>
         </View>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{scenarios.length} scenarios</Text>
+        <View style={styles.headerRight}>
+          {isAIGenerated && (
+            <View style={styles.aiBadge}>
+              <MaterialCommunityIcons name="brain" size={14} color={colors.ai[700]} />
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+          )}
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{scenarios.length} scenarios</Text>
+          </View>
         </View>
       </View>
 
@@ -149,6 +253,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
   title: {
     fontSize: 18,
     fontWeight: '700',
@@ -164,6 +273,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.warning[700],
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.ai[100],
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  aiBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.ai[700],
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.lg,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: colors.text.tertiary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   scenariosList: {
     maxHeight: 400,

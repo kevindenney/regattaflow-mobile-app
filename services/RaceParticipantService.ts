@@ -178,11 +178,7 @@ class RaceParticipantService {
         .select(
           `
           *,
-          profiles:user_id (
-            id,
-            full_name,
-            avatar_url
-          )
+          user:user_id (*)
         `
         )
         .eq('regatta_id', regattaId);
@@ -211,11 +207,16 @@ class RaceParticipantService {
 
       return (data || []).map((item) => ({
         ...this.mapParticipant(item),
-        profile: item.profiles
+        profile: item.user
           ? {
-              id: item.profiles.id,
-              name: item.profiles.full_name || item.profiles.id,
-              avatar: item.profiles.avatar_url,
+              id: item.user.id,
+              name: item.user.full_name || item.user.display_name || item.user.id,
+              avatar:
+                item.user.avatar_url ||
+                item.user.profile_image_url ||
+                item.user.photo_url ||
+                item.user.avatar ||
+                undefined,
             }
           : undefined,
       }));

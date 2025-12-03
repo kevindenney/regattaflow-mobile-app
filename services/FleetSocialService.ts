@@ -87,9 +87,83 @@ export interface CreateCommentParams {
   parentCommentId?: string;
 }
 
+export interface CreateNotificationParams {
+  userId: string;
+  fleetId: string;
+  notificationType: NotificationType;
+  actorId?: string | null;
+  relatedPostId?: string | null;
+  relatedCommentId?: string | null;
+  message?: string | null;
+  isRead?: boolean;
+}
+
 class FleetSocialService {
   private fleetSocialEnabled = true;
   private fleetSocialWarningLogged = false;
+
+  /**
+   * Re-enable fleet social features after they were disabled due to an error.
+   * Call this after database schema has been fixed.
+   */
+  resetFleetSocialState(): void {
+    this.fleetSocialEnabled = true;
+    this.fleetSocialWarningLogged = false;
+    console.log('[FleetSocialService] Fleet social features re-enabled');
+  }
+
+  // ==========================================
+  // HELPER METHODS
+  // ==========================================
+
+  /**
+   * Fetch user data for author information
+   * Works around PostgREST schema cache issues with auth.users joins
+   */
+  private async getUserData(userId: string): Promise<{ id: string; name: string; avatar_url?: string } | null> {
+    try {
+      // Query the profiles table instead of using admin API
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, first_name, last_name, email, avatar_url')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        // Fallback: try the users table
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('id, full_name, email')
+          .eq('id', userId)
+          .single();
+
+        if (userError || !user) {
+          console.warn('[FleetSocialService] Could not fetch user data:', error, userError);
+          return null;
+        }
+
+        return {
+          id: user.id,
+          name: user.full_name || user.email || 'Unknown',
+        };
+      }
+
+      if (profile) {
+        const name = profile.full_name || 
+          [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 
+          profile.email || 
+          'Unknown';
+        return {
+          id: profile.id,
+          name,
+          avatar_url: profile.avatar_url || undefined,
+        };
+      }
+    } catch (err) {
+      console.warn('[FleetSocialService] Could not fetch user data:', err);
+    }
+    return null;
+  }
 
   // ==========================================
   // POSTS
@@ -111,7 +185,6 @@ class FleetSocialService {
       .from('fleet_posts')
       .select(`
         *,
-        author:author_id (id, full_name, avatar_url),
         likes:fleet_post_likes(count),
         comments:fleet_post_comments(count),
         shares:fleet_post_shares(count)
@@ -166,6 +239,47 @@ class FleetSocialService {
       userBookmarks = new Set(bookmarksRes.data?.map(b => b.post_id) || []);
     }
 
+    // Fetch author data for all unique author IDs
+    const authorIds = [...new Set((data || []).map(p => p.author_id))];
+    const authorsMap = new Map<string, { id: string; name: string; avatar_url?: string }>();
+
+    if (authorIds.length > 0) {
+      // First try profiles table
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, first_name, last_name, email, avatar_url')
+        .in('id', authorIds);
+
+      // Then try users table for any missing
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, full_name, email')
+        .in('id', authorIds);
+
+      // Build map from profiles first
+      profiles?.forEach(profile => {
+        const name = profile.full_name || 
+          [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 
+          profile.email || 
+          'Unknown';
+        authorsMap.set(profile.id, {
+          id: profile.id,
+          name,
+          avatar_url: profile.avatar_url || undefined,
+        });
+      });
+
+      // Fill in from users table for any not in profiles
+      users?.forEach(user => {
+        if (!authorsMap.has(user.id)) {
+          authorsMap.set(user.id, {
+            id: user.id,
+            name: user.full_name || user.email || 'Unknown',
+          });
+        }
+      });
+    }
+
     return (data || []).map(post => ({
       id: post.id,
       fleetId: post.fleet_id,
@@ -177,11 +291,7 @@ class FleetSocialService {
       isPinned: post.is_pinned,
       createdAt: post.created_at,
       updatedAt: post.updated_at,
-      author: post.author ? {
-        id: post.author.id,
-        name: post.author.full_name || 'Unknown',
-        avatar_url: post.author.avatar_url,
-      } : undefined,
+      author: authorsMap.get(post.author_id),
       likesCount: Array.isArray(post.likes) ? post.likes.length : (post.likes?.[0]?.count || 0),
       commentsCount: Array.isArray(post.comments) ? post.comments.length : (post.comments?.[0]?.count || 0),
       sharesCount: Array.isArray(post.shares) ? post.shares.length : (post.shares?.[0]?.count || 0),
@@ -208,10 +318,7 @@ class FleetSocialService {
         metadata: params.metadata || {},
         visibility: params.visibility || 'fleet',
       })
-      .select(`
-        *,
-        author:author_id (id, full_name, avatar_url)
-      `)
+      .select()
       .single();
 
     if (error) {
@@ -222,10 +329,14 @@ class FleetSocialService {
       throw error;
     }
 
+    // Fetch author data separately
+    const author = await this.getUserData(userData.user.id);
+
     // Notify fleet members based on post type
     this.notifyOnNewPost(data.id, data.fleet_id, data.post_type);
+    this.notifyMentions(data.id, data.fleet_id, params.metadata, userData.user.id);
 
-    return this.mapPost(data);
+    return this.mapPost({ ...data, author });
   }
 
   async updatePost(postId: string, updates: {
@@ -304,6 +415,28 @@ class FleetSocialService {
       console.error('Error liking post:', error);
       throw error;
     }
+
+    // Notify post author about the like (best-effort)
+    try {
+      const { data: postInfo } = await supabase
+        .from('fleet_posts')
+        .select('author_id, fleet_id')
+        .eq('id', postId)
+        .single();
+
+      if (postInfo && postInfo.author_id && postInfo.author_id !== userData.user.id) {
+        await this.createNotification({
+          userId: postInfo.author_id,
+          fleetId: postInfo.fleet_id,
+          notificationType: 'post_like',
+          actorId: userData.user.id,
+          relatedPostId: postId,
+          message: 'Your post was liked',
+        });
+      }
+    } catch (notificationError) {
+      console.error('Error creating like notification:', notificationError);
+    }
   }
 
   async unlikePost(postId: string): Promise<void> {
@@ -340,10 +473,7 @@ class FleetSocialService {
 
     const { data, error } = await supabase
       .from('fleet_post_comments')
-      .select(`
-        *,
-        author:author_id (id, full_name, avatar_url)
-      `)
+      .select()
       .eq('post_id', postId)
       .order('created_at', { ascending: true });
 
@@ -355,6 +485,23 @@ class FleetSocialService {
       throw error;
     }
 
+    // Fetch author data for all unique author IDs
+    const authorIds = [...new Set((data || []).map(c => c.author_id))];
+    const authorsMap = new Map<string, { id: string; name: string; avatar_url?: string }>();
+
+    if (authorIds.length > 0) {
+      const { data: { users } } = await supabase.auth.admin.listUsers();
+      const relevantUsers = users?.filter(u => authorIds.includes(u.id)) || [];
+
+      relevantUsers.forEach(user => {
+        authorsMap.set(user.id, {
+          id: user.id,
+          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'Unknown',
+          avatar_url: user.user_metadata?.avatar_url,
+        });
+      });
+    }
+
     return (data || []).map(comment => ({
       id: comment.id,
       postId: comment.post_id,
@@ -363,11 +510,7 @@ class FleetSocialService {
       parentCommentId: comment.parent_comment_id,
       createdAt: comment.created_at,
       updatedAt: comment.updated_at,
-      author: comment.author ? {
-        id: comment.author.id,
-        name: comment.author.full_name || 'Unknown',
-        avatar_url: comment.author.avatar_url,
-      } : undefined,
+      author: authorsMap.get(comment.author_id),
     }));
   }
 
@@ -387,10 +530,7 @@ class FleetSocialService {
         content: params.content,
         parent_comment_id: params.parentCommentId || null,
       })
-      .select(`
-        *,
-        author:author_id (id, full_name, avatar_url)
-      `)
+      .select()
       .single();
 
     if (error) {
@@ -401,6 +541,35 @@ class FleetSocialService {
       throw error;
     }
 
+    // Fetch author data separately
+    const author = await this.getUserData(userData.user.id);
+
+    // Notify post author about new comment (best-effort, non-blocking)
+    try {
+      const { data: postInfo } = await supabase
+        .from('fleet_posts')
+        .select('author_id, fleet_id, metadata')
+        .eq('id', params.postId)
+        .single();
+
+      if (postInfo && postInfo.author_id && postInfo.author_id !== userData.user.id) {
+        await this.createNotification({
+          userId: postInfo.author_id,
+          fleetId: postInfo.fleet_id,
+          notificationType: 'post_comment',
+          actorId: userData.user.id,
+          relatedPostId: params.postId,
+          relatedCommentId: data.id,
+          message: 'New comment on your post',
+        });
+      }
+
+      // Mention notifications (if comment metadata includes mentions)
+      this.notifyMentions(params.postId, postInfo?.fleet_id, (params as any)?.metadata, userData.user.id);
+    } catch (notificationError) {
+      console.error('Error creating comment notification:', notificationError);
+    }
+
     return {
       id: data.id,
       postId: data.post_id,
@@ -409,11 +578,7 @@ class FleetSocialService {
       parentCommentId: data.parent_comment_id,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      author: data.author ? {
-        id: data.author.id,
-        name: data.author.full_name || 'Unknown',
-        avatar_url: data.author.avatar_url,
-      } : undefined,
+      author,
     };
   }
 
@@ -497,14 +662,9 @@ class FleetSocialService {
 
     const { data, error } = await supabase
       .from('fleet_post_bookmarks')
-      .select(`
-        post:post_id (
-          *,
-          author:author_id (id, full_name, avatar_url)
-        )
-      `)
+      .select('post_id, created_at')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false});
 
     if (error) {
       if (this.handleFleetSocialTableError(error, 'loading bookmarked posts')) {
@@ -514,9 +674,38 @@ class FleetSocialService {
       throw error;
     }
 
-    return (data || [])
-      .filter(item => item.post)
-      .map(item => this.mapPost(item.post));
+    // Fetch the posts separately
+    const postIds = (data || []).map(b => b.post_id);
+    if (postIds.length === 0) return [];
+
+    const { data: posts, error: postsError } = await supabase
+      .from('fleet_posts')
+      .select()
+      .in('id', postIds);
+
+    if (postsError) {
+      console.error('Error fetching bookmarked posts details:', postsError);
+      return [];
+    }
+
+    // Fetch author data
+    const authorIds = [...new Set((posts || []).map(p => p.author_id))];
+    const authorsMap = new Map<string, { id: string; name: string; avatar_url?: string }>();
+
+    if (authorIds.length > 0) {
+      const { data: { users } } = await supabase.auth.admin.listUsers();
+      const relevantUsers = users?.filter(u => authorIds.includes(u.id)) || [];
+
+      relevantUsers.forEach(user => {
+        authorsMap.set(user.id, {
+          id: user.id,
+          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'Unknown',
+          avatar_url: user.user_metadata?.avatar_url,
+        });
+      });
+    }
+
+    return (posts || []).map(post => this.mapPost({ ...post, author: authorsMap.get(post.author_id) }));
   }
 
   // ==========================================
@@ -649,15 +838,13 @@ class FleetSocialService {
           // Fetch full post with author data
           const { data } = await supabase
             .from('fleet_posts')
-            .select(`
-              *,
-              author:author_id (id, full_name, avatar_url)
-            `)
+            .select()
             .eq('id', payload.new.id)
             .single();
 
           if (data) {
-            callback(this.mapPost(data));
+            const author = await this.getUserData(data.author_id);
+            callback(this.mapPost({ ...data, author }));
           }
         }
       )
@@ -742,12 +929,21 @@ class FleetSocialService {
     if (!error) return false;
     const code = error.code;
     const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
-    return (
-      code === 'PGRST205' ||
-      code === '42P01' ||
-      message.includes('fleet_posts') ||
-      message.includes('fleet_post_')
-    );
+    
+    // Only treat as "table missing" for specific PostgREST/Postgres errors:
+    // PGRST205 = Could not find a relationship (missing foreign key)
+    // 42P01 = undefined_table
+    // PGRST116 = The result contains 0 rows (not an error, just empty)
+    
+    // Check for actual schema/table issues, not just any 400 error
+    const isSchemaError = 
+      code === 'PGRST205' ||  // relationship not found
+      code === '42P01' ||     // undefined table
+      code === 'PGRST204' ||  // column not found
+      (message.includes('relation') && message.includes('does not exist')) ||
+      (message.includes('column') && message.includes('does not exist'));
+    
+    return isSchemaError;
   }
 
   private handleFleetSocialTableError(error: any, context: string): boolean {
@@ -788,6 +984,98 @@ class FleetSocialService {
     };
   }
 
+  /**
+   * Best-effort mention notifications based on metadata. Expects metadata.mentions as an array of user IDs.
+   */
+  private async notifyMentions(
+    postId: string,
+    fleetId: string,
+    metadata: Record<string, any> | undefined,
+    actorId: string
+  ) {
+    if (!metadata || !Array.isArray(metadata.mentions) || metadata.mentions.length === 0) {
+      return;
+    }
+
+    const uniqueMentions = Array.from(new Set(metadata.mentions)).filter((id) => id && id !== actorId);
+    if (uniqueMentions.length === 0) return;
+
+    await Promise.all(
+      uniqueMentions.map((userId) =>
+        this.createNotification({
+          userId,
+          fleetId,
+          notificationType: 'mention',
+          actorId,
+          relatedPostId: postId,
+          message: 'You were mentioned in a post',
+        }).catch((err) => console.error('Error notifying mention', userId, err))
+      )
+    );
+  }
+
+  private mapNotification(data: any): FleetNotification {
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fleetId: data.fleet_id,
+      notificationType: data.notification_type,
+      relatedPostId: data.related_post_id,
+      relatedCommentId: data.related_comment_id,
+      actorId: data.actor_id,
+      message: data.message,
+      isRead: data.is_read,
+      createdAt: data.created_at,
+      actor: data.actor ? {
+        id: data.actor.id,
+        name: data.actor.full_name || 'Unknown',
+        avatar_url: data.actor.avatar_url,
+      } : undefined,
+      fleet: data.fleet ? {
+        id: data.fleet.id,
+        name: data.fleet.name,
+      } : undefined,
+    };
+  }
+
+  async createNotification(params: CreateNotificationParams): Promise<FleetNotification> {
+    if (!this.ensureFleetSocialAvailable()) {
+      throw this.fleetSocialDisabledError();
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+    const actorId = params.actorId !== undefined ? params.actorId : userData.user?.id ?? null;
+
+    const { data, error } = await supabase
+      .from('fleet_notifications')
+      .insert({
+        user_id: params.userId,
+        fleet_id: params.fleetId,
+        notification_type: params.notificationType,
+        actor_id: actorId,
+        related_post_id: params.relatedPostId ?? null,
+        related_comment_id: params.relatedCommentId ?? null,
+        message: params.message ?? null,
+        is_read: params.isRead ?? false,
+      })
+      .select(`
+        *,
+        actor:actor_id (id, full_name, avatar_url),
+        fleet:fleet_id (id, name)
+      `)
+      .single();
+
+    if (error) {
+      if (this.handleFleetSocialTableError(error, 'creating a notification')) {
+        throw this.fleetSocialDisabledError();
+      }
+      console.error('Error creating notification:', error);
+      throw error;
+    }
+
+    return this.mapNotification(data);
+  }
+
   private async notifyOnNewPost(postId: string, fleetId: string, postType: PostType): Promise<void> {
     // Get fleet followers who want notifications for this post type
     const { data: followers } = await supabase
@@ -822,21 +1110,23 @@ class FleetSocialService {
         shouldNotify = () => true;
     }
 
-    // Create notifications for eligible followers
-    const notifications = followers
-      .filter(shouldNotify)
-      .map(f => ({
-        user_id: f.follower_id,
-        fleet_id: fleetId,
-        notification_type: notificationType,
-        actor_id: actorId,
-        related_post_id: postId,
-        is_read: false,
-      }));
+    // Create notifications for eligible followers (best-effort)
+    const targets = followers.filter(shouldNotify);
+    if (targets.length === 0) return;
 
-    if (notifications.length > 0) {
-      await supabase.from('fleet_notifications').insert(notifications);
-    }
+    await Promise.all(
+      targets.map((f) =>
+        this.createNotification({
+          userId: f.follower_id,
+          fleetId,
+          notificationType,
+          actorId: actorId ?? null,
+          relatedPostId: postId,
+        }).catch((err) => {
+          console.error('Error notifying follower', f.follower_id, err);
+        })
+      )
+    );
   }
 }
 

@@ -131,10 +131,11 @@ export function RaceDocumentsCard({
           <Ionicons name="documents" size={24} color={colors.primary[600]} />
           <Text style={styles.title}>Documents</Text>
         </View>
-        <TouchableOpacity style={styles.uploadButton} onPress={onUpload}>
+        {/* Upload button disabled - requires authentication */}
+        {/* <TouchableOpacity style={styles.uploadButton} onPress={onUpload}>
           <Ionicons name="cloud-upload" size={18} color={colors.primary[600]} />
           <Text style={styles.uploadButtonText}>Upload</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       {isLoading ? (

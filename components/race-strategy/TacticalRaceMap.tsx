@@ -500,6 +500,7 @@ export default function TacticalRaceMap({
   const lastRacingAreaSignatureRef = useRef<string | null>(null);
   const lastDrawingModeRef = useRef<boolean>(false);
   const lastMapLoadedRef = useRef<boolean>(false);
+  const lastRecenterTsRef = useRef<number>(0);
 
   // Draggable marks state
   const [isDraggingMark, setIsDraggingMark] = useState(false);
@@ -539,6 +540,9 @@ export default function TacticalRaceMap({
 
   // Track the last applied initial racing area to prevent repeated state churn
   const lastInitialAreaKeyRef = useRef<string | null>(null);
+  const racingAreaPointsSignature = useMemo(() => {
+    return racingAreaPoints.map(([lng, lat]) => `${lng.toFixed(6)}:${lat.toFixed(6)}`).join('|');
+  }, [racingAreaPoints]);
 
   // Normalize incoming racing area for comparison
   const normalizedInitialArea = useMemo(() => {
@@ -591,7 +595,7 @@ export default function TacticalRaceMap({
     if (isDifferent) {
       setRacingAreaPoints(coordinates);
     }
-  }, [normalizedInitialArea, racingAreaPoints.length, racingAreaPoints]);
+  }, [normalizedInitialArea, racingAreaPointsSignature]);
 
   // Notify parent of point count changes
   useEffect(() => {
@@ -1275,6 +1279,12 @@ export default function TacticalRaceMap({
       return;
     }
 
+    // Throttle recentering to avoid jitter when upstream props bounce between identical values
+    const now = Date.now();
+    if (now - lastRecenterTsRef.current < 1500) {
+      return;
+    }
+    lastRecenterTsRef.current = now;
     lastCenterRef.current = targetCenter;
 
     try {
@@ -1283,7 +1293,7 @@ export default function TacticalRaceMap({
       } else {
         map.easeTo({
           center: targetCenter,
-          duration: 1000,
+          duration: 800,
           essential: true,
         });
       }
