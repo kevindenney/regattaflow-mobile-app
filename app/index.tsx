@@ -45,6 +45,9 @@ export default function LandingPage() {
   return (
     <Container style={containerStyle}>
       <Head>
+        {/* Google Search Console Verification */}
+        <meta name="google-site-verification" content="n53JxiUdY0k_64zSxt07pdPyM1kBuYhSRrXvDLzA_vE" />
+        
         <title>RegattaFlow - AI-Powered Sailing Race Strategy & Performance</title>
         <meta name="description" content="Master sailing race strategy with AI-powered venue intelligence, real-time wind analysis, and personalized coaching. Track performance, plan races, and outsmart the competition." />
         <meta name="keywords" content="sailing, regatta, race strategy, sailing coach, wind shifts, venue intelligence, race planning, sailing performance, yacht racing, dinghy racing" />
