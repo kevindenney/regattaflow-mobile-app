@@ -189,10 +189,8 @@ export default function RootLayout() {
       // Register Service Worker for offline bathymetry tile caching (prod only)
       if ('serviceWorker' in navigator) {
         if (process.env.NODE_ENV === 'production') {
-          // Use base path for service worker (supports /regattaflow base path)
-          const basePath = window.location.pathname.startsWith('/regattaflow') ? '/regattaflow' : '';
           navigator.serviceWorker
-            .register(`${basePath}/bathymetry-sw.js`)
+            .register('/bathymetry-sw.js')
             .catch((error) => {
               console.warn('[BathymetrySW] Failed to register service worker', error);
             });

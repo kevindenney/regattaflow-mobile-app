@@ -55,7 +55,7 @@ module.exports = {
       description:
         'AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide',
       lang: 'en',
-      scope: '/regattaflow/',
+      scope: '/',
       themeColor: '#0066CC',
       backgroundColor: '#ffffff',
       display: 'standalone',
@@ -64,7 +64,6 @@ module.exports = {
     plugins: ['expo-router'],
     experiments: {
       typedRoutes: true,
-      baseUrl: '/regattaflow',
     },
     // Expose environment variables via Constants.expoConfig.extra
     extra: {
