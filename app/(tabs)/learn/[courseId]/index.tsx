@@ -18,7 +18,9 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Linking } from 'react-native';
 import { LearningService, type LearningCourse, type LearningModule, type LearningLesson } from '@/services/LearningService';
+import { coursePaymentService } from '@/services/CoursePaymentService';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function CourseDetailScreen() {
@@ -73,27 +75,87 @@ export default function CourseDetailScreen() {
     });
   };
 
+  const [purchasing, setPurchasing] = useState(false);
+
   const handleEnroll = async () => {
     if (!courseId || !user?.id) return;
     
     try {
+      setPurchasing(true);
+      
       // Check if course requires payment
       if (course?.price_cents && course.price_cents > 0) {
-        // TODO: Navigate to checkout when Stripe integration is ready
-        // For now, show an alert
-        Alert.alert(
-          'Payment Required',
-          `This course costs ${formatPrice(course.price_cents)}. Checkout integration coming soon!`
+        // Initiate Stripe checkout
+        const result = await coursePaymentService.purchaseCourse(
+          user.id,
+          courseId
         );
+
+        if (result.error) {
+          Alert.alert('Error', result.error);
+          return;
+        }
+
+        if (result.free) {
+          // Free course enrollment succeeded
+          setEnrolled(true);
+          Alert.alert('Success', 'You are now enrolled in this course!');
+          return;
+        }
+
+        if (result.url) {
+          // Redirect to Stripe checkout
+          if (Platform.OS === 'web') {
+            window.location.href = result.url;
+          } else {
+            // On native, open in browser
+            const supported = await Linking.canOpenURL(result.url);
+            if (supported) {
+              await Linking.openURL(result.url);
+            } else {
+              Alert.alert('Error', 'Unable to open checkout page');
+            }
+          }
+        }
       } else {
         // Free course - enroll directly
         await LearningService.enrollInCourse(user.id, courseId);
         setEnrolled(true);
+        Alert.alert('Success', 'You are now enrolled in this free course!');
       }
     } catch (err) {
       console.error('[CourseDetail] Failed to enroll:', err);
+      Alert.alert('Error', 'Failed to process enrollment. Please try again.');
+    } finally {
+      setPurchasing(false);
     }
   };
+
+  // Check for purchase success from URL params (after Stripe redirect)
+  useEffect(() => {
+    const checkPurchaseSuccess = async () => {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+        const purchaseStatus = urlParams.get('purchase');
+        
+        if (sessionId && courseId) {
+          const verified = await coursePaymentService.verifyPurchase(sessionId, courseId);
+          if (verified) {
+            setEnrolled(true);
+            // Clean URL
+            window.history.replaceState({}, '', window.location.pathname);
+            Alert.alert('Success', 'Your purchase is complete! You now have access to this course.');
+          }
+        } else if (purchaseStatus === 'cancelled') {
+          // Clean URL
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
+    };
+    
+    checkPurchaseSuccess();
+  }, [courseId]);
 
   const formatDuration = (minutes: number) => {
     if (minutes < 60) return `${minutes} min`;
@@ -320,14 +382,24 @@ export default function CourseDetailScreen() {
             <Text style={styles.enrolledText}>Enrolled</Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.enrollButton} onPress={handleEnroll}>
-            <Text style={styles.enrollButtonText}>
-              {course.price_cents && course.price_cents > 0 
-                ? `Enroll for ${formatPrice(course.price_cents)}`
-                : 'Enroll for Free'
-              }
-            </Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+          <TouchableOpacity 
+            style={[styles.enrollButton, purchasing && styles.enrollButtonDisabled]} 
+            onPress={handleEnroll}
+            disabled={purchasing}
+          >
+            {purchasing ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.enrollButtonText}>
+                  {course.price_cents && course.price_cents > 0 
+                    ? `Enroll for ${formatPrice(course.price_cents)}`
+                    : 'Enroll for Free'
+                  }
+                </Text>
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+              </>
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -655,6 +727,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
     paddingVertical: 14,
     borderRadius: 10,
+  },
+  enrollButtonDisabled: {
+    opacity: 0.7,
   },
   enrollButtonText: {
     fontSize: 16,

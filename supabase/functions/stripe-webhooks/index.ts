@@ -65,6 +65,11 @@ serve(async (req: Request) => {
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
 
+      // Checkout Session Events
+      case 'checkout.session.completed':
+        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+        break;
+
       // Invoice Events
       case 'invoice.paid':
         await handleInvoicePaid(event.data.object as Stripe.Invoice);
@@ -171,6 +176,87 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       console.error('Failed to update user subscription:', error);
     }
   }
+
+  // Handle course purchase
+  if (metadata.type === 'course_purchase' && metadata.course_id && metadata.user_id) {
+    await handleCoursePurchaseSuccess(
+      metadata.course_id,
+      metadata.user_id,
+      paymentIntent.id,
+      paymentIntent.amount
+    );
+  }
+}
+
+/**
+ * Handle successful course purchase
+ */
+async function handleCoursePurchaseSuccess(
+  courseId: string,
+  userId: string,
+  paymentIntentId: string,
+  amountPaid: number
+) {
+  console.log(`Course purchase succeeded: course=${courseId}, user=${userId}`);
+
+  // Create enrollment record
+  const { data: enrollment, error: enrollError } = await supabase
+    .from('learning_enrollments')
+    .upsert({
+      user_id: userId,
+      course_id: courseId,
+      stripe_payment_id: paymentIntentId,
+      amount_paid_cents: amountPaid,
+      access_type: 'purchase',
+      enrolled_at: new Date().toISOString(),
+    }, {
+      onConflict: 'user_id,course_id',
+    })
+    .select()
+    .single();
+
+  if (enrollError) {
+    console.error('Failed to create enrollment:', enrollError);
+    return;
+  }
+
+  console.log(`Enrollment created: ${enrollment?.id}`);
+
+  // Get course and user info for email
+  const { data: course } = await supabase
+    .from('learning_courses')
+    .select('title')
+    .eq('id', courseId)
+    .single();
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('email, full_name')
+    .eq('id', userId)
+    .single();
+
+  // Send confirmation email
+  if (user?.email) {
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: user.email,
+          subject: `Course Access Confirmed: ${course?.title || 'Your Course'}`,
+          html: `
+            <h2>Welcome to Your New Course!</h2>
+            <p>Hi ${user.full_name || 'Sailor'},</p>
+            <p>Your payment has been received and you now have access to:</p>
+            <h3>${course?.title || 'Your Course'}</h3>
+            <p>Start learning now and improve your racing skills!</p>
+            <p><a href="https://regattaflow.com/learn/${courseId}" style="display:inline-block;background-color:#3B82F6;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;">Start Learning</a></p>
+            <p>Thank you for choosing RegattaFlow!</p>
+          `,
+        },
+      });
+    } catch (emailError) {
+      console.error('Failed to send course confirmation email:', emailError);
+    }
+  }
 }
 
 /**
@@ -198,6 +284,30 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
         payment_status: 'failed',
       })
       .eq('id', metadata.session_id);
+  }
+}
+
+/**
+ * Handle checkout session completed
+ */
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  console.log(`Checkout session completed: ${session.id}`);
+  const metadata = session.metadata || {};
+
+  // Handle course purchase checkout
+  if (metadata.type === 'course_purchase' && metadata.course_id && metadata.user_id) {
+    // The payment_intent.succeeded event will handle the enrollment
+    // But we can also handle it here as a backup
+    console.log(`Course checkout completed: course=${metadata.course_id}, user=${metadata.user_id}`);
+    
+    // Update enrollment with checkout session ID if it exists
+    await supabase
+      .from('learning_enrollments')
+      .update({
+        stripe_checkout_session_id: session.id,
+      })
+      .eq('user_id', metadata.user_id)
+      .eq('course_id', metadata.course_id);
   }
 }
 
