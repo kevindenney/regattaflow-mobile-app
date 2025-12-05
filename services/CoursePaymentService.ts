@@ -110,8 +110,13 @@ export class CoursePaymentService {
     cancelUrl?: string
   ): Promise<CoursePaymentResult> {
     try {
+      console.log('[CoursePaymentService] purchaseCourse called', { userId, courseId });
+      
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('[CoursePaymentService] Got session:', !!session);
+      
       if (!session) {
+        console.log('[CoursePaymentService] No session - not authenticated');
         return { success: false, error: 'Not authenticated' };
       }
 
@@ -123,6 +128,13 @@ export class CoursePaymentService {
       const finalSuccessUrl = successUrl || `${baseUrl}/learn/${courseId}?purchase=success`;
       const finalCancelUrl = cancelUrl || `${baseUrl}/learn/${courseId}?purchase=cancelled`;
 
+      console.log('[CoursePaymentService] Calling course-checkout edge function...', {
+        userId,
+        courseId,
+        successUrl: finalSuccessUrl,
+        cancelUrl: finalCancelUrl,
+      });
+      
       logger.debug('Creating course checkout session', { userId, courseId });
 
       // Call the course-checkout edge function
@@ -134,6 +146,8 @@ export class CoursePaymentService {
           cancelUrl: finalCancelUrl,
         },
       });
+      
+      console.log('[CoursePaymentService] Edge function response:', { data, error });
 
       if (error) {
         logger.error('Course checkout error:', error);

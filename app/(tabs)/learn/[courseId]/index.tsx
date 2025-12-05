@@ -78,18 +78,25 @@ export default function CourseDetailScreen() {
   const [purchasing, setPurchasing] = useState(false);
 
   const handleEnroll = async () => {
-    if (!courseId || !user?.id) return;
+    console.log('[CourseDetail] handleEnroll called', { courseId, userId: user?.id });
+    if (!courseId || !user?.id) {
+      console.log('[CourseDetail] Missing courseId or userId');
+      return;
+    }
     
     try {
       setPurchasing(true);
+      console.log('[CourseDetail] Starting purchase flow', { price_cents: course?.price_cents });
       
       // Check if course requires payment
       if (course?.price_cents && course.price_cents > 0) {
+        console.log('[CourseDetail] Initiating Stripe checkout...');
         // Initiate Stripe checkout
         const result = await coursePaymentService.purchaseCourse(
           user.id,
           courseId
         );
+        console.log('[CourseDetail] Purchase result:', result);
 
         if (result.error) {
           Alert.alert('Error', result.error);
@@ -386,6 +393,11 @@ export default function CourseDetailScreen() {
             style={[styles.enrollButton, purchasing && styles.enrollButtonDisabled]} 
             onPress={handleEnroll}
             disabled={purchasing}
+            accessibilityRole="button"
+            accessibilityLabel={course.price_cents && course.price_cents > 0 
+              ? `Enroll for ${formatPrice(course.price_cents)}`
+              : 'Enroll for Free'
+            }
           >
             {purchasing ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
