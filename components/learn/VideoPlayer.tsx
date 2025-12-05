@@ -1,10 +1,10 @@
 /**
  * Video Player Component
- * Uses expo-av for video playback
+ * Uses expo-av for direct video playback or iframe embed for YouTube
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Text } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus, AVPlaybackSource } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -14,12 +14,67 @@ interface VideoPlayerProps {
   onProgress?: (percent: number) => void;
 }
 
+// Helper to detect YouTube URLs and extract video ID
+function getYouTubeVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/v\/([^&\n?#]+)/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+// Simple YouTube Player using iframe (works reliably on web)
+function YouTubePlayer({ videoId, onComplete }: { videoId: string; onComplete?: () => void }) {
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
+
+  if (Platform.OS !== 'web') {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="logo-youtube" size={48} color="#FF0000" />
+        <Text style={styles.errorText}>YouTube videos are best viewed on web</Text>
+        <Text style={styles.errorSubtext}>Video ID: {videoId}</Text>
+      </View>
+    );
+  }
+
+  // Use dangerouslySetInnerHTML to bypass React Native Web's View limitations
+  return (
+    <div 
+      style={{
+        width: '100%',
+        height: '100%',
+        minHeight: 400,
+        backgroundColor: '#000',
+      }}
+      dangerouslySetInnerHTML={{
+        __html: `<iframe 
+          src="${embedUrl}" 
+          style="width: 100%; height: 100%; border: none; min-height: 400px;"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+          title="Video lesson"
+        ></iframe>`
+      }}
+    />
+  );
+}
+
 export function VideoPlayer({ videoUrl, onComplete, onProgress }: VideoPlayerProps) {
   const videoRef = useRef<Video>(null);
   const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(true);
+
+  // Check if this is a YouTube URL
+  const youtubeVideoId = getYouTubeVideoId(videoUrl);
 
   useEffect(() => {
     // Hide controls after 3 seconds of inactivity
@@ -63,11 +118,6 @@ export function VideoPlayer({ videoUrl, onComplete, onProgress }: VideoPlayerPro
     setShowControls(true);
   };
 
-  const handleSeek = async (seconds: number) => {
-    if (!videoRef.current || !status?.isLoaded) return;
-    await videoRef.current.setPositionAsync(seconds * 1000);
-  };
-
   const formatTime = (millis: number) => {
     const totalSeconds = Math.floor(millis / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -86,6 +136,16 @@ export function VideoPlayer({ videoUrl, onComplete, onProgress }: VideoPlayerPro
     );
   }
 
+  // If it's a YouTube URL, use the simple YouTube player
+  if (youtubeVideoId) {
+    return (
+      <View style={styles.container}>
+        <YouTubePlayer videoId={youtubeVideoId} onComplete={onComplete} />
+      </View>
+    );
+  }
+
+  // Otherwise, use expo-av for direct video files
   const duration = status?.isLoaded ? status.durationMillis : 0;
   const position = status?.isLoaded ? status.positionMillis : 0;
   const progress = duration > 0 ? position / duration : 0;
@@ -105,7 +165,7 @@ export function VideoPlayer({ videoUrl, onComplete, onProgress }: VideoPlayerPro
           shouldPlay={false}
           isLooping={false}
           onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          useNativeControls={Platform.OS !== 'web'} // Native controls on mobile, custom on web
+          useNativeControls={Platform.OS !== 'web'}
         />
 
         {isLoading && (
@@ -161,6 +221,12 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  youtubeWrapper: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    minHeight: 300,
+    backgroundColor: '#000',
+  },
   loadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -214,10 +280,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
+    padding: 20,
   },
   errorText: {
     fontSize: 14,
     color: '#94A3B8',
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 12,
+    color: '#64748B',
   },
 });
-
