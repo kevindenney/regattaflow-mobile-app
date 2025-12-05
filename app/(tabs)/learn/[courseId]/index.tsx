@@ -34,9 +34,16 @@ export default function CourseDetailScreen() {
   useEffect(() => {
     if (courseId) {
       loadCourse();
-      checkEnrollment();
     }
   }, [courseId]);
+
+  // Check enrollment when user or courseId changes
+  useEffect(() => {
+    if (courseId && user?.id) {
+      console.log('[CourseDetail] Checking enrollment for user:', user.id, 'course:', courseId);
+      checkEnrollment();
+    }
+  }, [courseId, user?.id]);
 
   const loadCourse = async () => {
     if (!courseId) return;
@@ -55,10 +62,15 @@ export default function CourseDetailScreen() {
   };
 
   const checkEnrollment = async () => {
-    if (!courseId || !user?.id) return;
+    if (!courseId || !user?.id) {
+      console.log('[CourseDetail] Cannot check enrollment - missing courseId or user');
+      return;
+    }
     
     try {
+      console.log('[CourseDetail] Checking enrollment...');
       const isEnrolled = await LearningService.isEnrolled(user.id, courseId);
+      console.log('[CourseDetail] Enrollment status:', isEnrolled);
       setEnrolled(isEnrolled);
     } catch (err) {
       console.error('[CourseDetail] Failed to check enrollment:', err);

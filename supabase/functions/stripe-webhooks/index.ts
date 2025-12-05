@@ -296,11 +296,17 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 
   // Handle course purchase checkout
   if (metadata.type === 'course_purchase' && metadata.course_id && metadata.user_id) {
-    // The payment_intent.succeeded event will handle the enrollment
-    // But we can also handle it here as a backup
     console.log(`Course checkout completed: course=${metadata.course_id}, user=${metadata.user_id}`);
     
-    // Update enrollment with checkout session ID if it exists
+    // Create enrollment - checkout.session.completed is the primary event for course purchases
+    await handleCoursePurchaseSuccess(
+      metadata.course_id,
+      metadata.user_id,
+      session.payment_intent as string || session.id, // Use session ID if no payment intent
+      session.amount_total || 0
+    );
+    
+    // Also store the checkout session ID
     await supabase
       .from('learning_enrollments')
       .update({
