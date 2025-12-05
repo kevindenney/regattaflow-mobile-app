@@ -3,7 +3,7 @@
  * Displays and plays individual lessons (video, interactive, or text)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LearningService, type LearningCourse, type LearningLesson } from '@/services/LearningService';
+import { LessonProgressService } from '@/services/LessonProgressService';
 import { useAuth } from '@/providers/AuthProvider';
 import { LessonPlayer } from '@/components/learn';
 
@@ -29,6 +30,8 @@ export default function LessonPlayerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [enrolled, setEnrolled] = useState(false);
   const [canAccess, setCanAccess] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [marking, setMarking] = useState(false);
 
   useEffect(() => {
     if (courseId && lessonId && user?.id) {
@@ -75,6 +78,12 @@ export default function LessonPlayerScreen() {
 
       if (!hasAccess) {
         setError('This lesson requires enrollment. Please enroll in the course first.');
+      } else {
+        // Mark lesson as started and check completion status
+        await LessonProgressService.markLessonStarted(user.id, lessonId);
+        const progress = await LessonProgressService.getLessonProgress(user.id, lessonId);
+        setIsCompleted(progress?.is_completed || false);
+        console.log('[LessonPlayer] Progress loaded - isCompleted:', progress?.is_completed);
       }
     } catch (err) {
       console.error('[LessonPlayer] Failed to load lesson:', err);
@@ -84,27 +93,54 @@ export default function LessonPlayerScreen() {
     }
   };
 
-  const handleComplete = async () => {
-    if (!lessonId || !user?.id) return;
+  const handleComplete = useCallback(async () => {
+    if (!lessonId || !user?.id || marking) return;
 
     try {
-      await LearningService.markLessonComplete(user.id, lessonId);
-      Alert.alert('Lesson Complete!', 'Great job completing this lesson.');
-      // Navigate back to course detail page
-      if (courseId) {
-        router.push(`/(tabs)/learn/${courseId}`);
+      setMarking(true);
+      const success = await LessonProgressService.markLessonCompleted(user.id, lessonId);
+      
+      if (success) {
+        setIsCompleted(true);
+        Alert.alert(
+          '🎉 Lesson Complete!',
+          'Great job! Your progress has been saved.',
+          [
+            {
+              text: 'Continue to Course',
+              onPress: () => {
+                if (courseId) {
+                  router.push(`/(tabs)/learn/${courseId}`);
+                } else {
+                  router.back();
+                }
+              },
+            },
+            {
+              text: 'Stay Here',
+              style: 'cancel',
+            },
+          ]
+        );
       } else {
-        router.back();
+        Alert.alert('Error', 'Failed to save progress. Please try again.');
       }
     } catch (err) {
       console.error('[LessonPlayer] Failed to mark complete:', err);
+      Alert.alert('Error', 'Failed to save progress. Please try again.');
+    } finally {
+      setMarking(false);
     }
-  };
+  }, [lessonId, user?.id, courseId, marking]);
 
-  const handleProgress = (percent: number) => {
-    // TODO: Update lesson progress in real-time
-    console.log('[LessonPlayer] Progress:', percent);
-  };
+  const handleProgress = useCallback(async (percent: number) => {
+    // For interactive lessons, record interactions
+    if (lesson?.lesson_type === 'interactive' && user?.id && lessonId) {
+      await LessonProgressService.recordInteraction(user.id, lessonId, {
+        progress_percent: percent,
+      });
+    }
+  }, [lesson?.lesson_type, user?.id, lessonId]);
 
   if (loading) {
     return (
@@ -211,10 +247,27 @@ export default function LessonPlayerScreen() {
       {/* Footer Actions */}
       {canAccess && (
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
-            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-            <Text style={styles.completeButtonText}>Mark as Complete</Text>
-          </TouchableOpacity>
+          {isCompleted ? (
+            <View style={styles.completedBadge}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={styles.completedBadgeText}>Lesson Completed</Text>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.completeButton, marking && styles.completeButtonDisabled]} 
+              onPress={handleComplete}
+              disabled={marking}
+            >
+              {marking ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                  <Text style={styles.completeButtonText}>Mark as Complete</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </SafeAreaView>
@@ -335,10 +388,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
   },
+  completeButtonDisabled: {
+    opacity: 0.7,
+  },
   completeButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  completedBadgeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#065F46',
   },
 });
 

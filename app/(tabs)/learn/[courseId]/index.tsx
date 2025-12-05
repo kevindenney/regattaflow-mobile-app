@@ -20,6 +20,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Linking } from 'react-native';
 import { LearningService, type LearningCourse, type LearningModule, type LearningLesson } from '@/services/LearningService';
+import { LessonProgressService, type LessonProgress } from '@/services/LessonProgressService';
 import { coursePaymentService } from '@/services/CoursePaymentService';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -30,6 +31,8 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enrolled, setEnrolled] = useState(false);
+  const [lessonProgress, setLessonProgress] = useState<Map<string, LessonProgress>>(new Map());
+  const [courseProgress, setCourseProgress] = useState(0);
 
   useEffect(() => {
     if (courseId) {
@@ -72,8 +75,35 @@ export default function CourseDetailScreen() {
       const isEnrolled = await LearningService.isEnrolled(user.id, courseId);
       console.log('[CourseDetail] Enrollment status:', isEnrolled);
       setEnrolled(isEnrolled);
+      
+      // If enrolled, load progress
+      if (isEnrolled) {
+        await loadLessonProgress();
+      }
     } catch (err) {
       console.error('[CourseDetail] Failed to check enrollment:', err);
+    }
+  };
+
+  const loadLessonProgress = async () => {
+    if (!courseId || !user?.id) return;
+    
+    try {
+      // Get course progress summary
+      const summary = await LessonProgressService.getCourseProgressSummary(user.id, courseId);
+      if (summary) {
+        setCourseProgress(summary.progress_percent);
+      }
+      
+      // Get individual lesson progress
+      const progress = await LessonProgressService.getCourseProgress(user.id, courseId);
+      const progressMap = new Map<string, LessonProgress>();
+      progress.forEach(p => {
+        progressMap.set(p.lesson_id, p);
+      });
+      setLessonProgress(progressMap);
+    } catch (err) {
+      console.error('[CourseDetail] Failed to load lesson progress:', err);
     }
   };
 
@@ -212,51 +242,77 @@ export default function CourseDetailScreen() {
 
         {lessons.length > 0 && (
           <View style={styles.lessonsList}>
-            {lessons.map((lesson, index) => (
-              <TouchableOpacity
-                key={lesson.id}
-                style={[
-                  styles.lessonItem,
-                  index < lessons.length - 1 && styles.lessonItemBorder,
-                ]}
-                onPress={() => handleLessonPress(lesson)}
-                disabled={!enrolled && !lesson.is_free_preview}
-              >
-                <View style={styles.lessonItemLeft}>
-                  <View style={[
-                    styles.lessonNumber,
-                    lesson.is_free_preview && styles.lessonNumberFree,
-                  ]}>
-                    <Text style={styles.lessonNumberText}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.lessonItemText}>
-                    <Text style={styles.lessonTitle}>{lesson.title}</Text>
-                    {lesson.description && (
-                      <Text style={styles.lessonDescription} numberOfLines={1}>
-                        {lesson.description}
-                      </Text>
-                    )}
-                    <View style={styles.lessonMeta}>
-                      <Ionicons name="time-outline" size={12} color="#64748B" />
-                      <Text style={styles.lessonMetaText}>
-                        {Math.floor((lesson.duration_seconds || 0) / 60)} min
-                      </Text>
-                      {lesson.is_free_preview && (
-                        <>
-                          <Text style={styles.lessonMetaSeparator}>•</Text>
-                          <Text style={styles.lessonFreeBadge}>Free Preview</Text>
-                        </>
+            {lessons.map((lesson, index) => {
+              const progress = lessonProgress.get(lesson.id);
+              const isLessonCompleted = progress?.is_completed || false;
+              
+              return (
+                <TouchableOpacity
+                  key={lesson.id}
+                  style={[
+                    styles.lessonItem,
+                    index < lessons.length - 1 && styles.lessonItemBorder,
+                  ]}
+                  onPress={() => handleLessonPress(lesson)}
+                  disabled={!enrolled && !lesson.is_free_preview}
+                >
+                  <View style={styles.lessonItemLeft}>
+                    <View style={[
+                      styles.lessonNumber,
+                      lesson.is_free_preview && styles.lessonNumberFree,
+                      isLessonCompleted && styles.lessonNumberCompleted,
+                    ]}>
+                      {isLessonCompleted ? (
+                        <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                      ) : (
+                        <Text style={[
+                          styles.lessonNumberText,
+                          isLessonCompleted && styles.lessonNumberTextCompleted,
+                        ]}>
+                          {index + 1}
+                        </Text>
                       )}
                     </View>
+                    <View style={styles.lessonItemText}>
+                      <Text style={[
+                        styles.lessonTitle,
+                        isLessonCompleted && styles.lessonTitleCompleted,
+                      ]}>
+                        {lesson.title}
+                      </Text>
+                      {lesson.description && (
+                        <Text style={styles.lessonDescription} numberOfLines={1}>
+                          {lesson.description}
+                        </Text>
+                      )}
+                      <View style={styles.lessonMeta}>
+                        <Ionicons name="time-outline" size={12} color="#64748B" />
+                        <Text style={styles.lessonMetaText}>
+                          {Math.floor((lesson.duration_seconds || 0) / 60)} min
+                        </Text>
+                        {lesson.is_free_preview && (
+                          <>
+                            <Text style={styles.lessonMetaSeparator}>•</Text>
+                            <Text style={styles.lessonFreeBadge}>Free Preview</Text>
+                          </>
+                        )}
+                        {isLessonCompleted && (
+                          <>
+                            <Text style={styles.lessonMetaSeparator}>•</Text>
+                            <Text style={styles.lessonCompletedBadge}>Completed</Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
                   </View>
-                </View>
-                <Ionicons 
-                  name={enrolled || lesson.is_free_preview ? "play-circle-outline" : "lock-closed-outline"} 
-                  size={24} 
-                  color={enrolled || lesson.is_free_preview ? "#3B82F6" : "#94A3B8"} 
-                />
-              </TouchableOpacity>
-            ))}
+                  <Ionicons 
+                    name={isLessonCompleted ? "checkmark-circle" : (enrolled || lesson.is_free_preview ? "play-circle-outline" : "lock-closed-outline")} 
+                    size={24} 
+                    color={isLessonCompleted ? "#10B981" : (enrolled || lesson.is_free_preview ? "#3B82F6" : "#94A3B8")} 
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
       </View>
@@ -396,9 +452,19 @@ export default function CourseDetailScreen() {
       {/* Enroll CTA */}
       <View style={styles.ctaContainer}>
         {enrolled ? (
-          <View style={styles.enrolledBadge}>
-            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-            <Text style={styles.enrolledText}>Enrolled</Text>
+          <View style={styles.enrolledContainer}>
+            <View style={styles.enrolledBadge}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={styles.enrolledText}>Enrolled</Text>
+              {courseProgress > 0 && (
+                <Text style={styles.progressBadge}>{courseProgress}% complete</Text>
+              )}
+            </View>
+            {courseProgress > 0 && courseProgress < 100 && (
+              <View style={styles.progressBarSmall}>
+                <View style={[styles.progressBarFill, { width: `${courseProgress}%` }]} />
+              </View>
+            )}
           </View>
         ) : (
           <TouchableOpacity 
@@ -720,6 +786,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3B82F6',
   },
+  lessonCompletedBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  lessonNumberCompleted: {
+    backgroundColor: '#10B981',
+  },
+  lessonNumberTextCompleted: {
+    color: '#FFFFFF',
+  },
+  lessonTitleCompleted: {
+    color: '#64748B',
+  },
   emptyModules: {
     padding: 32,
     alignItems: 'center',
@@ -764,6 +844,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  enrolledContainer: {
+    flex: 1,
+  },
   enrolledBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -777,6 +860,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#065F46',
+  },
+  progressBadge: {
+    fontSize: 12,
+    color: '#047857',
+    marginLeft: 4,
+  },
+  progressBarSmall: {
+    height: 4,
+    backgroundColor: '#A7F3D0',
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 2,
   },
 });
 
