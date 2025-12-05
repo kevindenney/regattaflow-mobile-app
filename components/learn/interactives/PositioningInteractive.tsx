@@ -290,8 +290,9 @@ const styles = StyleSheet.create({
   },
   svgContainer: {
     width: '100%',
-    minHeight: 200,
-    maxHeight: 300,
+    aspectRatio: 16 / 9,
+    minHeight: 300,
+    maxHeight: 500,
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     overflow: 'hidden',
