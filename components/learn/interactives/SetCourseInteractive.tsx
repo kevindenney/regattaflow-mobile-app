@@ -421,13 +421,13 @@ const styles = StyleSheet.create({
   },
   svgContainer: {
     width: '100%',
-    minHeight: 200, // Minimum height for SVG
-    maxHeight: 300, // Maximum height to leave room for info and controls
+    aspectRatio: 800 / 450, // Match SVG viewBox ratio
+    minHeight: 280,
+    maxHeight: Platform.OS === 'web' ? 450 : 350, // More height on web
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     overflow: 'hidden',
     marginBottom: 16,
-    flex: Platform.OS === 'web' ? 0 : 1, // Don't flex on web, let content determine size
   },
   infoContainer: {
     marginBottom: 16,

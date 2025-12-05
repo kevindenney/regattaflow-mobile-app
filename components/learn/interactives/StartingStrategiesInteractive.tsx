@@ -251,8 +251,9 @@ const styles = StyleSheet.create({
   },
   svgContainer: {
     width: '100%',
-    minHeight: 200,
-    maxHeight: 300,
+    aspectRatio: 800 / 450,
+    minHeight: 280,
+    maxHeight: Platform.OS === 'web' ? 450 : 350,
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     overflow: 'hidden',
