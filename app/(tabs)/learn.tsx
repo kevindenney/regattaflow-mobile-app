@@ -24,11 +24,30 @@ export default function LearnScreen() {
   const [courses, setCourses] = useState<LearningCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasProSubscription, setHasProSubscription] = useState(false);
 
   useEffect(() => {
     console.log('[Learn] Component mounted, starting loadCourses...');
     loadCourses();
   }, []);
+
+  // Check subscription when user is available
+  useEffect(() => {
+    if (user?.id) {
+      checkSubscription();
+    }
+  }, [user?.id]);
+
+  const checkSubscription = async () => {
+    if (!user?.id) return;
+    try {
+      const { hasProAccess } = await LearningService.checkSubscriptionAccess(user.id);
+      setHasProSubscription(hasProAccess);
+      console.log('[Learn] Pro subscription:', hasProAccess);
+    } catch (err) {
+      console.error('[Learn] Failed to check subscription:', err);
+    }
+  };
 
   const loadCourses = async () => {
     console.log('[Learn] loadCourses called');
@@ -138,7 +157,14 @@ export default function LearnScreen() {
         </View>
 
         <View style={styles.courseCardFooter}>
-          <Text style={styles.priceText}>{formatPrice(course.price_cents)}</Text>
+          {hasProSubscription && course.price_cents && course.price_cents > 0 ? (
+            <View style={styles.proIncludedBadge}>
+              <Ionicons name="star" size={14} color="#8B5CF6" />
+              <Text style={styles.proIncludedText}>Included with Pro</Text>
+            </View>
+          ) : (
+            <Text style={styles.priceText}>{formatPrice(course.price_cents)}</Text>
+          )}
           <Ionicons name="chevron-forward" size={20} color="#3B82F6" />
         </View>
       </TouchableOpacity>
@@ -356,6 +382,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#3B82F6',
+  },
+  proIncludedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  proIncludedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8B5CF6',
   },
   emptyState: {
     alignItems: 'center',

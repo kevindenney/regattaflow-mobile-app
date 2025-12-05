@@ -71,9 +71,13 @@ export default function LessonPlayerScreen() {
       const isEnrolled = await LearningService.isEnrolled(user.id, courseId);
       setEnrolled(isEnrolled);
 
-      // Check if user can access (enrolled or free preview)
-      const hasAccess = isEnrolled || foundLesson.is_free_preview;
-      console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'is_free_preview:', foundLesson.is_free_preview, 'hasAccess:', hasAccess);
+      // Check subscription access
+      const { hasProAccess } = await LearningService.checkSubscriptionAccess(user.id);
+      console.log('[LessonPlayer] Pro access:', hasProAccess);
+
+      // Check if user can access (enrolled, has Pro subscription, or free preview)
+      const hasAccess = isEnrolled || hasProAccess || foundLesson.is_free_preview;
+      console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'hasProAccess:', hasProAccess, 'is_free_preview:', foundLesson.is_free_preview, 'hasAccess:', hasAccess);
       setCanAccess(hasAccess);
 
       if (!hasAccess) {

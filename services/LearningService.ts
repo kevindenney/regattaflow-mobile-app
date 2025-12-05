@@ -568,21 +568,54 @@ export class LearningService {
   }
 
   /**
+   * Pro subscription tiers that get all courses included
+   */
+  static readonly PRO_TIERS = ['sailor_pro', 'championship', 'professional'];
+
+  /**
+   * Check user's subscription tier and if they have Pro access
+   */
+  static async checkSubscriptionAccess(userId: string): Promise<{
+    tier: string;
+    hasProAccess: boolean;
+    subscriptionStatus: string;
+  }> {
+    try {
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('subscription_tier, subscription_status')
+        .eq('id', userId)
+        .single();
+
+      if (error || !user) {
+        return { tier: 'free', hasProAccess: false, subscriptionStatus: 'inactive' };
+      }
+
+      const tier = user.subscription_tier || 'free';
+      const status = user.subscription_status || 'inactive';
+      const hasProAccess = this.PRO_TIERS.includes(tier) && status === 'active';
+
+      return {
+        tier,
+        hasProAccess,
+        subscriptionStatus: status,
+      };
+    } catch (error) {
+      logger.error('checkSubscriptionAccess error:', error);
+      return { tier: 'free', hasProAccess: false, subscriptionStatus: 'inactive' };
+    }
+  }
+
+  /**
    * Check if a user can access a course (enrolled OR has subscription)
    */
   static async canAccessCourse(userId: string, courseId: string): Promise<boolean> {
     try {
-      // Get user's subscription tier
-      const { data: user } = await supabase
-        .from('users')
-        .select('subscription_tier')
-        .eq('id', userId)
-        .single();
-
-      const userTier = user?.subscription_tier || 'free';
+      // Check subscription access
+      const { hasProAccess } = await this.checkSubscriptionAccess(userId);
 
       // Pro+ subscribers can access all courses
-      if (['sailor_pro', 'championship', 'professional'].includes(userTier)) {
+      if (hasProAccess) {
         return true;
       }
 
@@ -590,6 +623,46 @@ export class LearningService {
       return this.isEnrolled(userId, courseId);
     } catch (error) {
       logger.error('canAccessCourse error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Enroll a Pro subscriber in a course for free
+   */
+  static async enrollProSubscriber(userId: string, courseId: string): Promise<boolean> {
+    try {
+      const { hasProAccess } = await this.checkSubscriptionAccess(userId);
+      
+      if (!hasProAccess) {
+        logger.error('User does not have Pro subscription');
+        return false;
+      }
+
+      // Check if already enrolled
+      const isAlreadyEnrolled = await this.isEnrolled(userId, courseId);
+      if (isAlreadyEnrolled) {
+        return true;
+      }
+
+      // Create enrollment with subscription access type
+      const { error } = await supabase
+        .from('learning_enrollments')
+        .insert({
+          user_id: userId,
+          course_id: courseId,
+          access_type: 'subscription',
+          enrolled_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        logger.error('Failed to enroll Pro subscriber:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('enrollProSubscriber error:', error);
       return false;
     }
   }

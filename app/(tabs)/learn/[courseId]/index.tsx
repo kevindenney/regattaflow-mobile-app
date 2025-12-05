@@ -33,6 +33,8 @@ export default function CourseDetailScreen() {
   const [enrolled, setEnrolled] = useState(false);
   const [lessonProgress, setLessonProgress] = useState<Map<string, LessonProgress>>(new Map());
   const [courseProgress, setCourseProgress] = useState(0);
+  const [hasProSubscription, setHasProSubscription] = useState(false);
+  const [userSubscriptionTier, setUserSubscriptionTier] = useState<string>('free');
 
   useEffect(() => {
     if (courseId) {
@@ -72,12 +74,19 @@ export default function CourseDetailScreen() {
     
     try {
       console.log('[CourseDetail] Checking enrollment...');
+      
+      // Check subscription tier
+      const { hasProAccess, tier } = await LearningService.checkSubscriptionAccess(user.id);
+      setHasProSubscription(hasProAccess);
+      setUserSubscriptionTier(tier);
+      console.log('[CourseDetail] Subscription status - tier:', tier, 'hasProAccess:', hasProAccess);
+      
       const isEnrolled = await LearningService.isEnrolled(user.id, courseId);
       console.log('[CourseDetail] Enrollment status:', isEnrolled);
       setEnrolled(isEnrolled);
       
-      // If enrolled, load progress
-      if (isEnrolled) {
+      // If enrolled or has Pro access, load progress
+      if (isEnrolled || hasProAccess) {
         await loadLessonProgress();
       }
     } catch (err) {
@@ -120,7 +129,7 @@ export default function CourseDetailScreen() {
   const [purchasing, setPurchasing] = useState(false);
 
   const handleEnroll = async () => {
-    console.log('[CourseDetail] handleEnroll called', { courseId, userId: user?.id });
+    console.log('[CourseDetail] handleEnroll called', { courseId, userId: user?.id, hasProSubscription });
     if (!courseId || !user?.id) {
       console.log('[CourseDetail] Missing courseId or userId');
       return;
@@ -128,6 +137,21 @@ export default function CourseDetailScreen() {
     
     try {
       setPurchasing(true);
+      
+      // Pro subscribers get free access
+      if (hasProSubscription) {
+        console.log('[CourseDetail] Pro subscriber - enrolling for free');
+        const success = await LearningService.enrollProSubscriber(user.id, courseId);
+        if (success) {
+          setEnrolled(true);
+          await loadLessonProgress();
+          Alert.alert('Success!', 'You now have access to this course with your Pro subscription.');
+        } else {
+          Alert.alert('Error', 'Failed to enroll. Please try again.');
+        }
+        return;
+      }
+      
       console.log('[CourseDetail] Starting purchase flow', { price_cents: course?.price_cents });
       
       // Check if course requires payment
@@ -467,30 +491,47 @@ export default function CourseDetailScreen() {
             )}
           </View>
         ) : (
-          <TouchableOpacity 
-            style={[styles.enrollButton, purchasing && styles.enrollButtonDisabled]} 
-            onPress={handleEnroll}
-            disabled={purchasing}
-            accessibilityRole="button"
-            accessibilityLabel={course.price_cents && course.price_cents > 0 
-              ? `Enroll for ${formatPrice(course.price_cents)}`
-              : 'Enroll for Free'
-            }
-          >
-            {purchasing ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Text style={styles.enrollButtonText}>
-                  {course.price_cents && course.price_cents > 0 
-                    ? `Enroll for ${formatPrice(course.price_cents)}`
-                    : 'Enroll for Free'
-                  }
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-              </>
+          <View style={styles.ctaButtonContainer}>
+            {/* Show Pro badge if user has Pro subscription */}
+            {hasProSubscription && course.price_cents && course.price_cents > 0 && (
+              <View style={styles.proBadge}>
+                <Ionicons name="star" size={14} color="#8B5CF6" />
+                <Text style={styles.proBadgeText}>Included with your Pro subscription</Text>
+              </View>
             )}
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                styles.enrollButton, 
+                purchasing && styles.enrollButtonDisabled,
+                hasProSubscription && styles.enrollButtonPro,
+              ]} 
+              onPress={handleEnroll}
+              disabled={purchasing}
+              accessibilityRole="button"
+              accessibilityLabel={hasProSubscription 
+                ? 'Start Course - Included with Pro'
+                : course.price_cents && course.price_cents > 0 
+                  ? `Enroll for ${formatPrice(course.price_cents)}`
+                  : 'Enroll for Free'
+              }
+            >
+              {purchasing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.enrollButtonText}>
+                    {hasProSubscription
+                      ? 'Start Course'
+                      : course.price_cents && course.price_cents > 0 
+                        ? `Enroll for ${formatPrice(course.price_cents)}`
+                        : 'Enroll for Free'
+                    }
+                  </Text>
+                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     </SafeAreaView>
@@ -827,6 +868,21 @@ const styles = StyleSheet.create({
       boxShadow: '0px -2px 10px rgba(0, 0, 0, 0.1)',
     }),
   },
+  ctaButtonContainer: {
+    flex: 1,
+  },
+  proBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  proBadgeText: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
   enrollButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -835,6 +891,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
     paddingVertical: 14,
     borderRadius: 10,
+  },
+  enrollButtonPro: {
+    backgroundColor: '#8B5CF6',
   },
   enrollButtonDisabled: {
     opacity: 0.7,
