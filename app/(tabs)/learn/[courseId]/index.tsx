@@ -88,19 +88,32 @@ export default function CourseDetailScreen() {
     try {
       console.log('[CourseDetail] Checking enrollment...');
       
-      // Check subscription tier
-      const { hasProAccess, tier } = await LearningService.checkSubscriptionAccess(user.id);
+      // Check subscription tier with timeout
+      const subscriptionPromise = Promise.race([
+        LearningService.checkSubscriptionAccess(user.id),
+        new Promise<{ hasProAccess: boolean; tier: string }>((resolve) => 
+          setTimeout(() => resolve({ hasProAccess: false, tier: 'free' }), 10000)
+        )
+      ]);
+      const { hasProAccess, tier } = await subscriptionPromise;
       setHasProSubscription(hasProAccess);
       setUserSubscriptionTier(tier);
       console.log('[CourseDetail] Subscription status - tier:', tier, 'hasProAccess:', hasProAccess);
       
-      const isEnrolled = await LearningService.isEnrolled(user.id, courseId);
+      // Check enrollment with timeout
+      const enrollmentPromise = Promise.race([
+        LearningService.isEnrolled(user.id, courseId),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
+      ]);
+      const isEnrolled = await enrollmentPromise;
       console.log('[CourseDetail] Enrollment status:', isEnrolled);
       setEnrolled(isEnrolled);
       
-      // If enrolled or has Pro access, load progress
+      // If enrolled or has Pro access, load progress (non-blocking)
       if (isEnrolled || hasProAccess) {
-        await loadLessonProgress();
+        loadLessonProgress().catch((err) => {
+          console.warn('[CourseDetail] Failed to load progress:', err);
+        });
       }
     } catch (err) {
       console.error('[CourseDetail] Failed to check enrollment:', err);

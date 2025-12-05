@@ -46,52 +46,83 @@ export default function LessonPlayerScreen() {
       setLoading(true);
       setError(null);
 
-      // Load course with modules and lessons
-      const courseData = await LearningService.getCourse(courseId);
-      if (!courseData) {
-        setError('Course not found');
-        return;
-      }
-      setCourse(courseData);
+      // Wrap ALL async operations in a single timeout to prevent indefinite hanging
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+      );
 
-      // Find the lesson
-      const foundLesson = courseData.learning_modules
-        ?.flatMap((module) => module.learning_lessons || [])
-        .find((l) => l.id === lessonId);
+      const loadAllData = async () => {
+        // Load course with modules and lessons
+        console.log('[LessonPlayer] Loading course...');
+        const courseData = await LearningService.getCourse(courseId);
+        if (!courseData) {
+          throw new Error('Course not found');
+        }
+        setCourse(courseData);
 
-      console.log('[LessonPlayer] Found lesson:', foundLesson?.title, 'is_free_preview:', foundLesson?.is_free_preview);
+        // Find the lesson
+        const foundLesson = courseData.learning_modules
+          ?.flatMap((module) => module.learning_lessons || [])
+          .find((l) => l.id === lessonId);
 
-      if (!foundLesson) {
-        setError('Lesson not found');
-        return;
-      }
-      setLesson(foundLesson);
+        console.log('[LessonPlayer] Found lesson:', foundLesson?.title, 'is_free_preview:', foundLesson?.is_free_preview);
 
-      // Check enrollment and access
-      const isEnrolled = await LearningService.isEnrolled(user.id, courseId);
-      setEnrolled(isEnrolled);
+        if (!foundLesson) {
+          throw new Error('Lesson not found');
+        }
+        setLesson(foundLesson);
 
-      // Check subscription access
-      const { hasProAccess } = await LearningService.checkSubscriptionAccess(user.id);
-      console.log('[LessonPlayer] Pro access:', hasProAccess);
+        // Check enrollment and access with individual timeouts
+        console.log('[LessonPlayer] Checking enrollment...');
+        const enrollmentPromise = Promise.race([
+          LearningService.isEnrolled(user.id, courseId),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
+        ]);
+        const isEnrolled = await enrollmentPromise;
+        setEnrolled(isEnrolled);
+        console.log('[LessonPlayer] Enrolled:', isEnrolled);
 
-      // Check if user can access (enrolled, has Pro subscription, or free preview)
-      const hasAccess = isEnrolled || hasProAccess || foundLesson.is_free_preview;
-      console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'hasProAccess:', hasProAccess, 'is_free_preview:', foundLesson.is_free_preview, 'hasAccess:', hasAccess);
-      setCanAccess(hasAccess);
+        // Check subscription access
+        console.log('[LessonPlayer] Checking subscription...');
+        const subscriptionPromise = Promise.race([
+          LearningService.checkSubscriptionAccess(user.id),
+          new Promise<{ hasProAccess: boolean }>((resolve) => 
+            setTimeout(() => resolve({ hasProAccess: false }), 10000)
+          )
+        ]);
+        const { hasProAccess } = await subscriptionPromise;
+        console.log('[LessonPlayer] Pro access:', hasProAccess);
 
-      if (!hasAccess) {
-        setError('This lesson requires enrollment. Please enroll in the course first.');
-      } else {
-        // Mark lesson as started and check completion status
-        await LessonProgressService.markLessonStarted(user.id, lessonId);
-        const progress = await LessonProgressService.getLessonProgress(user.id, lessonId);
+        // Check if user can access (enrolled, has Pro subscription, or free preview)
+        const hasAccess = isEnrolled || hasProAccess || foundLesson.is_free_preview;
+        console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'hasProAccess:', hasProAccess, 'is_free_preview:', foundLesson.is_free_preview, 'hasAccess:', hasAccess);
+        setCanAccess(hasAccess);
+
+        if (!hasAccess) {
+          throw new Error('This lesson requires enrollment. Please enroll in the course first.');
+        }
+
+        // Mark lesson as started - don't block on this
+        console.log('[LessonPlayer] Marking lesson started...');
+        LessonProgressService.markLessonStarted(user.id, lessonId).catch((err) => {
+          console.warn('[LessonPlayer] Failed to mark lesson started:', err);
+        });
+
+        // Check completion status with timeout
+        console.log('[LessonPlayer] Getting progress...');
+        const progressPromise = Promise.race([
+          LessonProgressService.getLessonProgress(user.id, lessonId),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
+        ]);
+        const progress = await progressPromise;
         setIsCompleted(progress?.is_completed || false);
         console.log('[LessonPlayer] Progress loaded - isCompleted:', progress?.is_completed);
-      }
-    } catch (err) {
+      };
+
+      await Promise.race([loadAllData(), timeoutPromise]);
+    } catch (err: any) {
       console.error('[LessonPlayer] Failed to load lesson:', err);
-      setError('Unable to load lesson. Please try again.');
+      setError(err?.message || 'Unable to load lesson. Please try again.');
     } finally {
       setLoading(false);
     }
