@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   loadingState: {
     flex: 1,
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
   },
   ctaContainer: {
     position: 'absolute',
-    bottom: 0,
+    bottom: Platform.OS === 'web' ? 70 : 0, // Account for tab bar on web
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
@@ -717,7 +717,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
+    zIndex: 100,
     ...(Platform.OS === 'ios' && { paddingBottom: 34 }),
+    ...(Platform.OS === 'web' && { 
+      boxShadow: '0px -2px 10px rgba(0, 0, 0, 0.1)',
+    }),
   },
   enrollButton: {
     flexDirection: 'row',
