@@ -56,9 +56,9 @@ export default function LearnScreen() {
       setError(null);
       console.log('[Learn] Calling LearningService.getCourses()...');
       
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging (30s to allow for Supabase cold starts)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 10000)
+        setTimeout(() => reject(new Error('Request timeout')), 30000)
       );
       
       const coursesPromise = LearningService.getCourses();

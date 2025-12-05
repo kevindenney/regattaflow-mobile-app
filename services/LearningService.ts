@@ -179,8 +179,8 @@ export class LearningService {
         setTimeout(() => {
           const duration = Date.now() - startTime;
           logger.error(`getCourses: Query timed out after ${duration}ms`);
-          reject(new Error(`Supabase query timeout after 15 seconds`));
-        }, 15000)
+          reject(new Error(`Supabase query timeout after 25 seconds`));
+        }, 25000)
       );
       
       const result = await Promise.race([
