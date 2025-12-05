@@ -56,11 +56,24 @@ export default function CourseDetailScreen() {
     try {
       setLoading(true);
       setError(null);
-      const courseData = await LearningService.getCourse(courseId);
+      
+      // Add timeout to prevent hanging (45s to allow for multiple Supabase queries)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 45000)
+      );
+      
+      const courseData = await Promise.race([
+        LearningService.getCourse(courseId),
+        timeoutPromise,
+      ]) as LearningCourse | null;
+      
       setCourse(courseData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[CourseDetail] Failed to load course:', err);
-      setError('Unable to load course. Please try again.');
+      const errorMessage = err?.message?.includes('timeout') 
+        ? 'Request timed out. Please check your connection.'
+        : 'Unable to load course. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

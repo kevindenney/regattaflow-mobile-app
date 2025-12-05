@@ -280,7 +280,7 @@ export class LearningService {
         .single();
 
       const courseTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Course query timed out after 15 seconds')), 15000)
+        setTimeout(() => reject(new Error('Course query timed out after 20 seconds')), 20000)
       );
 
       const { data: courseData, error: courseError } = await Promise.race([
@@ -312,7 +312,7 @@ export class LearningService {
         .order('order_index', { ascending: true });
 
       const modulesTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Modules query timed out after 10 seconds')), 10000)
+        setTimeout(() => reject(new Error('Modules query timed out after 15 seconds')), 15000)
       );
 
       const { data: modulesData, error: modulesError } = await Promise.race([
@@ -345,7 +345,7 @@ export class LearningService {
         .order('order_index', { ascending: true });
 
       const lessonsTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Lessons query timed out after 10 seconds')), 10000)
+        setTimeout(() => reject(new Error('Lessons query timed out after 15 seconds')), 15000)
       );
 
       const { data: lessonsData, error: lessonsError } = await Promise.race([
