@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 800 / 450,
     minHeight: 280,
-    maxHeight: Platform.OS === 'web' ? 450 : 350,
+    maxHeight: 500,
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     overflow: 'hidden',

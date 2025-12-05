@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 800 / 450, // Match SVG viewBox ratio
     minHeight: 280,
-    maxHeight: Platform.OS === 'web' ? 450 : 350, // More height on web
+    maxHeight: 500, // Increased from 300
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     overflow: 'hidden',
