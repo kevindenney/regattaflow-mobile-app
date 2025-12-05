@@ -28,6 +28,7 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
     case 'sailor':
       return [
         { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
+        { name: 'learn', title: 'Learn', icon: 'school-outline', iconFocused: 'school' },
         { name: 'courses', title: 'Courses', icon: 'map-outline', iconFocused: 'map' },
         { name: 'boat/index', title: 'Boats', icon: 'boat-outline', iconFocused: 'boat' },
         { name: 'venue', title: 'Venues', icon: 'location-outline', iconFocused: 'location' },
@@ -235,6 +236,7 @@ function TabLayoutInner() {
   const boatTab = findTab('boat/index');
   const profileTab = findTab('profile');
   const settingsTab = findTab('settings');
+  const learnTab = findTab('learn');
   const coursesTab = findTab('courses');
   const venueTab = findTab('venue');
   const strategyTab = findTab('strategy');
@@ -303,7 +305,22 @@ function TabLayoutInner() {
             tabBarButton: isTabVisible('races') ? undefined : () => null,
           }}
         />
-        {/* Tab 2: Courses */}
+        {/* Tab 2: Learn */}
+        <Tabs.Screen
+          name="learn"
+          options={{
+            title: learnTab?.title ?? 'Learn',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(learnTab, focused, learnTab?.iconFocused ?? 'school', learnTab?.icon ?? 'school-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: isTabVisible('learn') ? undefined : () => null,
+          }}
+        />
+        {/* Tab 3: Courses (Race Courses) */}
         <Tabs.Screen
           name="courses"
           options={{
