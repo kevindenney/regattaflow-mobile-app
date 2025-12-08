@@ -295,7 +295,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307', // Using cheapest model for document parsing (3x savings)
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -374,7 +374,7 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307', // Using cheapest model for document parsing (3x savings)
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{

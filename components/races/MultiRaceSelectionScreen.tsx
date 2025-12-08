@@ -210,11 +210,22 @@ export function MultiRaceSelectionScreen({
           </View>
         ))}
 
-        {/* Info Box */}
+        {/* Info Box - Different text based on selection count */}
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            💡 <Text style={styles.bold}>Next Step:</Text> After confirming, you'll review and edit each race's details
-            before they're added to your calendar.
+            {selectedIndices.size === 1 ? (
+              <>
+                💡 <Text style={styles.bold}>Single Race:</Text> You'll review and edit the race details before it's added to your calendar.
+              </>
+            ) : selectedIndices.size > 1 ? (
+              <>
+                💡 <Text style={styles.bold}>Multiple Races:</Text> All {selectedIndices.size} races will be created with extracted details. You can edit each one individually from your Races tab.
+              </>
+            ) : (
+              <>
+                💡 <Text style={styles.bold}>Tip:</Text> Select at least one race to continue.
+              </>
+            )}
           </Text>
         </View>
       </ScrollView>
@@ -237,7 +248,11 @@ export function MultiRaceSelectionScreen({
           ]}
         >
           <Text style={styles.footerButtonTextConfirm}>
-            Continue with {selectedIndices.size} {selectedIndices.size === 1 ? 'Race' : 'Races'}
+            {selectedIndices.size === 0 
+              ? 'Select Races'
+              : selectedIndices.size === 1 
+                ? 'Review & Add Race'
+                : `Add ${selectedIndices.size} Races`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -252,7 +267,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#3B82F6',
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : Platform.OS === 'web' ? 20 : 20,
     paddingBottom: 20,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -278,6 +293,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+    // Add padding at bottom for fixed footer + tab bar on web
+    paddingBottom: Platform.OS === 'web' ? 180 : 16,
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',
@@ -429,9 +446,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 16,
+    paddingBottom: Platform.OS === 'web' ? 24 : 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
+    flexShrink: 0,
+    minHeight: 80,
+    // Fix footer above tab bar on web
+    ...(Platform.OS === 'web' ? {
+      position: 'fixed' as const,
+      bottom: 70, // Account for tab bar height
+      left: 0,
+      right: 0,
+      zIndex: 100,
+    } : {}),
   },
   footerButton: {
     flex: 1,

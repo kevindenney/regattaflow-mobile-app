@@ -4,9 +4,27 @@
  * Subscription Service
  * Marine-grade subscription management for professional sailing platform
  * Handles native in-app purchases and subscription lifecycle
+ * 
+ * NOTE: expo-in-app-purchases was deprecated in SDK 50. 
+ * Using mock implementation until expo-iap is configured.
  */
 
-import * as InAppPurchases from 'expo-in-app-purchases';
+// Mock InAppPurchases until expo-iap is properly configured
+const InAppPurchases = {
+  IAPResponseCode: {
+    OK: 0,
+    USER_CANCELED: 1,
+    ERROR: 2,
+  },
+  connectAsync: async () => {},
+  disconnectAsync: async () => {},
+  getProductsAsync: async (_ids: string[]) => ({ results: [], responseCode: 0 }),
+  purchaseItemAsync: async (_id: string) => ({ responseCode: 1, results: [], errorCode: null }),
+  getPurchaseHistoryAsync: async () => ({ responseCode: 0, results: [] }),
+  finishTransactionAsync: async (_purchase: any, _consume: boolean) => {},
+  setPurchaseListener: (_callback: any) => {},
+};
+
 import { Platform, Alert } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';

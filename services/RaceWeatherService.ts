@@ -12,6 +12,7 @@ import { regionalWeatherService } from './weather/RegionalWeatherService';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import type { WeatherData } from './weather/RegionalWeatherService';
 import { createLogger } from '@/lib/utils/logger';
+import { HKTidalCurrentService } from './weather/HKTidalCurrentService';
 
 export interface RaceWeatherMetadata {
   wind: {
@@ -23,6 +24,15 @@ export interface RaceWeatherMetadata {
     state: 'flooding' | 'ebbing' | 'slack' | 'high' | 'low';
     height: number;
     direction?: string;
+  };
+  // Enhanced tidal current info (from HK Hydrographic Office integration)
+  tidalCurrent?: {
+    speed: number;          // in knots
+    direction: number;      // in degrees
+    state: 'flood' | 'ebb' | 'slack';
+    summary?: string;
+    strategicNotes?: string[];
+    officialDataUrl?: string;  // Link to HK Hydro Office
   };
   fetchedAt: string;
   provider: string;
@@ -86,12 +96,47 @@ export class RaceWeatherService {
         ? this.combineDateWithTimeZone(raceDate, options.warningSignalTime, venue.timeZone || 'UTC') ?? new Date(raceDate)
         : new Date(raceDate);
 
-      return this.fetchWeatherForRace(venue, targetDate.toISOString());
+      // Fetch base weather data
+      const weatherMetadata = await this.fetchWeatherForRace(venue, targetDate.toISOString());
+      
+      // For Hong Kong waters, enhance with HK Hydrographic Office tidal current data
+      if (weatherMetadata && this.isHongKongWaters(lat, lng)) {
+        try {
+          const currentSummary = await HKTidalCurrentService.getRaceCurrentSummary(
+            lat,
+            lng,
+            targetDate,
+            120 // Assume 2 hour race duration
+          );
+          
+          weatherMetadata.tidalCurrent = {
+            speed: currentSummary.atStart.speed,
+            direction: currentSummary.atStart.direction,
+            state: currentSummary.atStart.state,
+            summary: currentSummary.summary,
+            strategicNotes: currentSummary.strategicNotes,
+            officialDataUrl: currentSummary.officialDataUrl,
+          };
+          
+          logger.debug('[RaceWeatherService] Added HK tidal current data:', weatherMetadata.tidalCurrent);
+        } catch (currentError) {
+          logger.debug('[RaceWeatherService] Could not fetch HK tidal current:', currentError);
+        }
+      }
+      
+      return weatherMetadata;
 
     } catch (error: any) {
       console.error('[RaceWeatherService] Error fetching weather by coordinates:', error.message);
       return null;
     }
+  }
+  
+  /**
+   * Check if coordinates are in Hong Kong waters
+   */
+  private static isHongKongWaters(lat: number, lng: number): boolean {
+    return lat >= 22.0 && lat <= 22.6 && lng >= 113.8 && lng <= 114.5;
   }
 
   /**

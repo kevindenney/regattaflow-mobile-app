@@ -2,6 +2,15 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import { skillManagementService } from './SkillManagementService';
 import { createLogger } from '@/lib/utils/logger';
+import { cachedAICall } from '@/lib/utils/aiCache';
+import { 
+  withAIFallback, 
+  generateMockRigTuning, 
+  isAIInFallbackMode,
+  isCreditExhaustedError,
+  activateFallbackMode
+} from '@/lib/utils/aiFallback';
+import { BOAT_TUNING_SKILL_CONTENT } from '@/skills/tuning-guides/boatTuningSkill';
 import type {
   RaceTuningRequest,
   RaceTuningRecommendation,
@@ -94,22 +103,31 @@ class RaceTuningEngine {
   }
 
   /**
-   * NEW: Generate AI-only recommendations without any tuning guides
+   * Generate AI-only recommendations without any tuning guides
+   * Uses skill content as system prompt to reduce tokens (~60% savings)
+   * Includes caching (10 min) and fallback when credits exhausted
    */
   async generateAIOnlyRecommendations(request: RaceTuningRequest): Promise<RaceTuningRecommendation[]> {
     logger.debug('generateAIOnlyRecommendations invoked', {
       hasValidApiKey: this.hasValidApiKey,
     });
 
+    // Check if we're in fallback mode due to credit exhaustion
+    if (isAIInFallbackMode()) {
+      logger.info('Using fallback mode for rig tuning (credits exhausted)');
+      const mockRec = generateMockRigTuning({
+        className: request.className || request.classId,
+        windSpeed: request.averageWindSpeed,
+      });
+      return [this.transformAIOnlyRecommendation(mockRec)];
+    }
+
     if (!this.hasValidApiKey) {
       logger.warn('AI rig tuning unavailable: No Anthropic API key configured');
       return [];
     }
 
-    logger.debug('Starting AI-only rig tuning generation; ensuring skill is initialized');
     await this.ensureSkillInitialized();
-
-    logger.debug('Skill initialization complete');
 
     const {
       classId,
@@ -137,102 +155,61 @@ class RaceTuningEngine {
       currentDirection
     };
 
-    logger.debug('Weather context for AI-only tuning', weatherContext);
-    logger.debug('AI-only tuning metadata', {
+    // Cache key for this specific request (10 min TTL)
+    const cacheKey = {
+      type: 'rig-tuning',
+      classId: classId || className,
+      windSpeed: Math.round(averageWindSpeed || 0),
+      pointsOfSail,
+    };
+
+    logger.debug('AI-only tuning request', {
       boatClass: className || classId,
       pointsOfSail,
+      windSpeed: averageWindSpeed,
     });
 
-    const instruction = `You are the Rig Tuning Analyst skill with deep expertise in boat-specific sail trim and rig setup.
+    // Use cached response if available (saves ~$0.01-0.02 per request)
+    return cachedAICall(
+      cacheKey,
+      async () => this.callAIForTuning(className || classId || 'Unknown', pointsOfSail, weatherContext),
+      10 * 60 * 1000 // 10 minute cache
+    );
+  }
 
-IMPORTANT: NO uploaded tuning guide exists for this boat class. Generate physics-based, intelligent rig tuning recommendations using your sailing knowledge.
+  /**
+   * Internal method to call AI for tuning recommendations
+   * Uses skill content as system prompt to reduce tokens
+   */
+  private async callAIForTuning(
+    boatClass: string,
+    pointsOfSail: string,
+    weatherContext: Record<string, any>
+  ): Promise<RaceTuningRecommendation[]> {
+    // Minimal user prompt - skill content handles the context (saves ~60% tokens)
+    const userPrompt = `Generate rig tuning for:
+- Boat: ${boatClass}
+- Point of Sail: ${pointsOfSail}
+- Conditions: ${JSON.stringify(weatherContext)}
 
-Boat Class: ${className || classId || 'Unknown'}
-Point of Sail: ${pointsOfSail}
-Weather Forecast: ${JSON.stringify(weatherContext, null, 2)}
+Return JSON array with ONE recommendation. No guides uploaded - use physics-based reasoning.`;
 
-Return a JSON array with ONE recommendation object:
-{
-  "source": "ai-generated",
-  "className": "${className || classId}",
-  "confidence": 0.7,
-  "isAIGenerated": true,
-  "guideTitle": "AI Rig Tuning Analysis",
-  "guideSource": "RegattaFlow AI Rig Tuning Analyst",
-  "sectionTitle": "Race Day Setup for [conditions]",
-  "conditionSummary": "Brief summary of weather conditions",
-  "settings": [
-    {
-      "key": "shrouds",
-      "label": "Shroud Tension",
-      "value": "Specific recommendation with units",
-      "reasoning": "Why this setting for these conditions"
-    },
-    {
-      "key": "forestay",
-      "label": "Forestay",
-      "value": "Specific recommendation",
-      "reasoning": "Brief explanation"
-    },
-    {
-      "key": "backstay",
-      "label": "Backstay",
-      "value": "Usage guidance",
-      "reasoning": "Tactical notes"
-    },
-    {
-      "key": "vang",
-      "label": "Vang",
-      "value": "Setup guidance",
-      "reasoning": "Point of sail specific"
-    },
-    {
-      "key": "outhaul",
-      "label": "Outhaul",
-      "value": "Position guidance",
-      "reasoning": "Depth control reasoning"
-    }
-  ],
-  "weatherSpecificNotes": [
-    "Note about wave conditions impact",
-    "Note about gust response",
-    "Note about current/tide if relevant"
-  ],
-  "caveats": [
-    "These are AI-generated recommendations based on class standards and physics",
-    "Actual boat setup may vary based on your specific rig package and crew weight",
-    "Consider uploading your boat-specific tuning guide for precise recommendations"
-  ]
-}
-
-Rules:
-- Base recommendations on standard sailing physics and rig tuning principles
-- Use typical class settings if you have knowledge of this boat class
-- Explain your reasoning for each setting
-- Be honest about confidence level (typically 0.70-0.80 for AI-only)
-- Include actionable settings with specific values or clear guidance
-- Mention the value of uploading boat-specific guides in caveats
-- Return ONLY the JSON array, no markdown or extra text
-
-Generate the recommendation now:`;
-
-    logger.debug('Calling Anthropic API for AI-only recommendations', {
-      model: 'claude-3-5-haiku-20241022',
+    logger.debug('Calling Anthropic API with skill system prompt', {
+      model: 'claude-3-5-haiku-latest',
+      systemPromptLength: BOAT_TUNING_SKILL_CONTENT.length,
+      userPromptLength: userPrompt.length,
     });
 
     try {
-      const response = await this.anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-20241022',
+      const response = await this.anthropic.messages.create({
+        model: 'claude-3-5-haiku-latest',
         max_tokens: 2000,
         temperature: 0.5,
-        betas: ['code-execution-2025-08-25'],
-        tools: [{
-          type: 'code_execution_20250825',
-          name: 'code_execution'
-        }],
+        // Use skill content as system prompt - reduces user prompt by ~60%
+        system: BOAT_TUNING_SKILL_CONTENT,
         messages: [{
           role: 'user',
-          content: instruction
+          content: userPrompt
         }]
       });
 
@@ -240,7 +217,6 @@ Generate the recommendation now:`;
         id: response.id,
         model: response.model,
         stopReason: response.stop_reason,
-        contentBlocks: response.content?.length || 0,
       });
 
       const textBlocks = (response.content as Array<{ type: string; text?: string }>)
@@ -249,49 +225,35 @@ Generate the recommendation now:`;
         .filter(Boolean);
 
       const combinedText = textBlocks.join('\n').trim();
-      logger.debug('Anthropic response text summary', {
-        blockCount: textBlocks.length,
-        combinedLength: combinedText.length,
-        preview: combinedText.substring(0, 200) + '...',
-      });
 
       if (!combinedText) {
-        logger.error('Anthropic response contained no content');
         throw new Error('AI rig tuning returned no content');
       }
 
-      logger.debug('Searching Anthropic response for JSON array');
       const jsonMatch = combinedText.match(/\[[\s\S]*\]/);
-
       if (!jsonMatch) {
-        logger.error('Unable to locate JSON array in Anthropic response', { combinedText });
         throw new Error('Unable to parse JSON from AI rig tuning response');
       }
 
-      logger.debug('JSON array located; parsing response');
       const parsed = JSON.parse(jsonMatch[0]);
-
-      logger.debug('Parsed Anthropic payload', {
-        isArray: Array.isArray(parsed),
-        length: Array.isArray(parsed) ? parsed.length : 0,
-        firstItem: Array.isArray(parsed) ? parsed[0] : null,
-      });
-
       if (!Array.isArray(parsed)) {
-        logger.error('Parsed Anthropic result is not an array');
         throw new Error('AI rig tuning response was not an array');
       }
 
-      logger.debug('Transforming AI-only recommendations');
-      const recommendations = parsed.map(item => this.transformAIOnlyRecommendation(item));
-
-      logger.debug('AI-only recommendation transformation complete', {
-        count: recommendations.length,
-      });
-
-      return recommendations;
+      return parsed.map(item => this.transformAIOnlyRecommendation(item));
     } catch (error) {
-      logger.error('AI-only rig tuning generation failed', error);
+      // Handle credit exhaustion gracefully
+      if (isCreditExhaustedError(error)) {
+        activateFallbackMode('Anthropic API credit balance too low');
+        logger.warn('Activating fallback mode due to credit exhaustion');
+        const mockRec = generateMockRigTuning({
+          className: boatClass,
+          windSpeed: weatherContext.windSpeed,
+        });
+        return [this.transformAIOnlyRecommendation(mockRec)];
+      }
+      
+      logger.error('AI rig tuning generation failed', error);
       throw error;
     }
   }

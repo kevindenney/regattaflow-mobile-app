@@ -64,7 +64,7 @@
     "@react-navigation/native": "^7.1.18",
     "@react-three/fiber": "^9.4.0",
     "@shopify/flash-list": "^2.0.2",
-    "@stripe/stripe-react-native": "^0.50.3",
+    "@stripe/stripe-react-native": "^0.57.0",
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-query": "^5.90.5",
     "@turf/centroid": "^7.2.0",

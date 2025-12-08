@@ -48,7 +48,17 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
       setError(null);
 
       logger.debug('[loadSuggestions] Fetching suggestions for user:', user.id);
-      const data = await raceSuggestionService.getSuggestionsForUser(user.id);
+      
+      // Add timeout to prevent hanging - suggestions are nice-to-have, not critical
+      const timeoutMs = 8000;
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Suggestions request timed out')), timeoutMs)
+      );
+      
+      const data = await Promise.race([
+        raceSuggestionService.getSuggestionsForUser(user.id),
+        timeoutPromise
+      ]);
 
       logger.debug('[loadSuggestions] Received suggestions:', {
         total: data.total,
@@ -68,6 +78,8 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
     } catch (err) {
       logger.error('[loadSuggestions] Error loading suggestions:', err);
       setError(err as Error);
+      // Set empty suggestions on error so UI doesn't stay in loading state
+      setSuggestions({ clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 });
     } finally {
       logger.debug('[loadSuggestions] Load complete, setting loading to false');
       setLoading(false);

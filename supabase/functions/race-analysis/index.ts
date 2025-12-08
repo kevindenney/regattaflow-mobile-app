@@ -201,7 +201,7 @@ Deno.serve(async (req: Request) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-3-5-haiku-latest', // Switched from Sonnet 4 (75% cost savings)
         max_tokens: 4096,
         messages: [{
           role: 'user',

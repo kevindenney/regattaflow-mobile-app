@@ -1,12 +1,15 @@
 /**
  * Comprehensive Race Entry Screen
  * Full-featured race strategy planning interface with CourseSetupPrompt (Phase 2)
+ * 
+ * PROTECTED: Requires authentication to access
  */
 
-import React, { useState } from 'react';
-import { View, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Platform, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
 import {
   ComprehensiveRaceEntry,
   CourseSetupPrompt,
@@ -18,6 +21,35 @@ const logger = createLogger('ComprehensiveRaceAdd');
 export default function ComprehensiveRaceAddScreen() {
   const router = useRouter();
   const { editId } = useLocalSearchParams<{ editId?: string }>();
+  const { ready, signedIn } = useAuth();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (ready && !signedIn) {
+      logger.debug('[ComprehensiveRaceAdd] User not authenticated, redirecting to login');
+      router.replace('/(auth)/login');
+    }
+  }, [ready, signedIn, router]);
+
+  // Show loading while checking auth
+  if (!ready) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // Don't render if not signed in (will redirect)
+  if (!signedIn) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={styles.loadingText}>Redirecting to login...</Text>
+      </View>
+    );
+  }
 
   // CourseSetupPrompt state (Phase 2)
   const [showCourseSetup, setShowCourseSetup] = useState(false);
@@ -128,3 +160,17 @@ export default function ComprehensiveRaceAddScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#64748B',
+  },
+});

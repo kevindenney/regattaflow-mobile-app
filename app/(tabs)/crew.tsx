@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -13,10 +13,11 @@ import { useSailorDashboardData } from '@/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { CrewMember } from '@/services/crewManagementService';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 export default function CrewScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const sailorData = useSailorDashboardData();
   const searchParams = useLocalSearchParams<{
     fromRaceId?: string | string[];
@@ -32,6 +33,8 @@ export default function CrewScreen() {
   const getParam = (value?: string | string[]) =>
     Array.isArray(value) ? value[0] : value;
 
+  const fromRaceId = getParam(searchParams.fromRaceId);
+
   const routeContext = useMemo(() => {
     const classId = getParam(searchParams.classId);
     const className = getParam(searchParams.className);
@@ -45,6 +48,15 @@ export default function CrewScreen() {
       raceDate: raceDate ?? undefined,
     };
   }, [searchParams]);
+
+  const handleBackToRace = useCallback(() => {
+    if (fromRaceId) {
+      router.push({
+        pathname: '/(tabs)/race/scrollable/[id]',
+        params: { id: fromRaceId },
+      });
+    }
+  }, [fromRaceId, router]);
 
   const fallbackClasses = useMemo(() => {
     if (!routeContext.classId) return [];
@@ -126,16 +138,34 @@ export default function CrewScreen() {
   return (
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        {routeContext.classId && (
+        {fromRaceId && (
           <View style={styles.contextBanner}>
-            <Text style={styles.contextTitle}>
-              Managing crew for {routeContext.raceName || routeContext.className || 'selected race'}
-            </Text>
-            {formattedRaceDate && (
-              <Text style={styles.contextSubtitle}>
-                Race date: {formattedRaceDate}
-              </Text>
-            )}
+            <View style={styles.contextBannerContent}>
+              <TouchableOpacity
+                style={styles.backToRaceButton}
+                onPress={handleBackToRace}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="arrow-back" size={20} color="#1D4ED8" />
+              </TouchableOpacity>
+              <View style={styles.contextBannerText}>
+                <Text style={styles.contextTitle}>
+                  Managing crew for {routeContext.raceName || routeContext.className || 'selected race'}
+                </Text>
+                {formattedRaceDate && (
+                  <Text style={styles.contextSubtitle}>
+                    Race date: {formattedRaceDate}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.backToRaceLinkButton}
+              onPress={handleBackToRace}
+            >
+              <Text style={styles.backToRaceLinkText}>Back to Race</Text>
+              <Ionicons name="chevron-forward" size={16} color="#1D4ED8" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -277,7 +307,39 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#BFDBFE',
+    gap: 12,
+  },
+  contextBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  contextBannerText: {
+    flex: 1,
     gap: 4,
+  },
+  backToRaceButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backToRaceLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#BFDBFE',
+    borderRadius: 6,
+  },
+  backToRaceLinkText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1D4ED8',
   },
   contextTitle: {
     fontSize: 16,

@@ -85,6 +85,10 @@ export interface ExtractedData {
   expectedWindSpeedMin?: number;
   expectedWindSpeedMax?: number;
   startAreaName?: string;
+  
+  // === FINISH AREA ===
+  finishAreaName?: string;
+  finishAreaDescription?: string;
 
   // === GPS MARKS & COURSE LAYOUT ===
   marks?: Array<{

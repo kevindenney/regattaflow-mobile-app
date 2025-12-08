@@ -17,6 +17,9 @@ export { ExtractionStatusBadge } from './ExtractionStatusBadge';
 export { EnhancedRaceCard } from './EnhancedRaceCard';
 export { CountdownTimer } from './CountdownTimer';
 export { StartSequenceTimer } from './StartSequenceTimer';
+export { MyStartSection } from './MyStartSection';
+export { ExternalResourceLinks } from './ExternalResourceLinks';
+export { ActualRigSettings } from './ActualRigSettings';
 export { ConditionBadge } from './ConditionBadge';
 export { AddRaceBottomSheet } from './AddRaceBottomSheet';
 export { RaceDetailCards } from './RaceDetailCards';
@@ -55,6 +58,7 @@ export { RegattaFlowPlaybookCoaching } from './RegattaFlowPlaybookCoaching';
 
 // Race Learning & Insights Components
 export { RaceLearningInsights, PreRaceReminderCard } from './RaceLearningInsights';
+export { RacePrepLearningCard } from './RacePrepLearningCard';
 export { StrategyPhaseSuggestion } from './StrategyPhaseSuggestion';
 
 // Re-export types
@@ -63,3 +67,4 @@ export type { ExtractedData, FieldConfidenceMap, MultiRaceExtractedData } from '
 export type { ExtractionMetadata } from './ComprehensiveRaceEntry';
 export type { TacticalTactic, TacticalPlaybookProps } from './TacticalPlaybook';
 export type { TacticalCoachingProps } from '@/types/raceAnalysis';
+export type { StartSequenceEntry } from './MyStartSection';

@@ -192,9 +192,28 @@ export default function LearnScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading courses...</Text>
+        <View style={styles.listContent}>
+          {/* Skeleton loading - shows instantly for perceived performance */}
+          {[1, 2].map((i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <View style={styles.skeletonHeader}>
+                <View style={styles.skeletonBadge} />
+                <View style={styles.skeletonBadgeSmall} />
+              </View>
+              <View style={styles.skeletonContent}>
+                <View style={styles.skeletonTitle} />
+                <View style={styles.skeletonDescription} />
+                <View style={styles.skeletonDescription} />
+                <View style={styles.skeletonMeta}>
+                  <View style={styles.skeletonMetaItem} />
+                  <View style={styles.skeletonMetaItem} />
+                </View>
+              </View>
+              <View style={styles.skeletonFooter}>
+                <View style={styles.skeletonPrice} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : error ? (
         <View style={styles.errorState}>
@@ -414,6 +433,84 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     maxWidth: 300,
+  },
+  // Skeleton loading styles
+  skeletonCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          elevation: 3,
+        }),
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+  },
+  skeletonBadge: {
+    width: 70,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: '#E2E8F0',
+  },
+  skeletonBadgeSmall: {
+    width: 80,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: '#E2E8F0',
+  },
+  skeletonContent: {
+    padding: 16,
+  },
+  skeletonTitle: {
+    width: '70%',
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  skeletonDescription: {
+    width: '100%',
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: '#F1F5F9',
+    marginBottom: 8,
+  },
+  skeletonMeta: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+  },
+  skeletonMetaItem: {
+    width: 80,
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: '#F1F5F9',
+  },
+  skeletonFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  skeletonPrice: {
+    width: 60,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: '#E2E8F0',
   },
 });
 

@@ -74,7 +74,7 @@ class TuningGuideExtractionService {
       const prompt = `...`;
 
       const message = await genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307', // Using cheapest model for extraction (3x savings)
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -139,7 +139,7 @@ class TuningGuideExtractionService {
       const prompt = `...`;
 
       const message = await genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307', // Using cheapest model for extraction (3x savings)
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{

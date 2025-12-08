@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Image } from '@/components/ui';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/providers/AuthProvider';
 import { 
 MapPin, Anchor, Users, Calendar, CheckCircle, Circle, ChevronRight, 
 Download, FileText, Clock, CheckCircle2, XCircle, Edit3, CalendarDays,
@@ -8,6 +10,10 @@ Wifi, WifiOff, RefreshCw, Trophy
 } from 'lucide-react-native';
 
 export default function ReviewScreen() {
+const router = useRouter();
+const { updateUserProfile } = useAuth();
+const [isCompleting, setIsCompleting] = useState(false);
+
 // Mock data from previous screens
 const [location, setLocation] = useState({
 name: 'Royal Hong Kong Yacht Club',
@@ -103,6 +109,23 @@ setTimeout(() => {
 setRaceCalendarStatus('imported');
 setIsSyncing(false);
 }, 2000);
+};
+
+const handleCompleteSetup = async () => {
+setIsCompleting(true);
+try {
+// Mark onboarding as complete
+await updateUserProfile({
+onboarding_completed: true,
+});
+
+// Navigate to the main dashboard
+router.replace('/(tabs)/dashboard');
+} catch (error) {
+console.error('Error completing setup:', error);
+Alert.alert('Error', 'Failed to complete setup. Please try again.');
+setIsCompleting(false);
+}
 };
 
 const handleRemoveClub = (clubId: string) => {
@@ -427,13 +450,25 @@ disabled={isSyncing}
 {/* Bottom Action */}
 <View className="px-4 py-4 border-t border-gray-200 bg-white">
 <TouchableOpacity 
-className="bg-blue-600 rounded-xl py-4 flex-row items-center justify-center"
-onPress={() => {/* Navigate to next screen */}}
+className={`rounded-xl py-4 flex-row items-center justify-center ${isCompleting ? 'bg-blue-400' : 'bg-blue-600'}`}
+onPress={handleCompleteSetup}
+disabled={isCompleting}
 >
+{isCompleting ? (
+<>
+<ActivityIndicator size="small" color="white" />
+<Text className="text-white font-semibold text-lg ml-2">
+Completing...
+</Text>
+</>
+) : (
+<>
 <Text className="text-white font-semibold text-lg">
 Complete Setup
 </Text>
 <ChevronRight size={20} color="white" className="ml-2" />
+</>
+)}
 </TouchableOpacity>
 </View>
 </View>

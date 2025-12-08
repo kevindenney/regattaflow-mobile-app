@@ -48,12 +48,16 @@ serve(async (req) => {
 
     console.log(`[pdf-proxy] Fetching: ${targetUrl}`)
 
-    // Fetch the PDF from the target URL
+    // Fetch the PDF from the target URL with browser-like headers
     const response = await fetch(targetUrl, {
       headers: {
-        'User-Agent': 'RegattaFlow/1.0 (PDF Extraction Service)',
-        'Accept': 'application/pdf,*/*',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/pdf,application/octet-stream,*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
       },
+      redirect: 'follow', // Follow redirects
     })
 
     if (!response.ok) {
@@ -70,19 +74,64 @@ serve(async (req) => {
     }
 
     // Get the content type from the response
-    const contentType = response.headers.get('content-type') || 'application/pdf'
+    const contentType = response.headers.get('content-type') || ''
+    console.log(`[pdf-proxy] Response content-type: ${contentType}`)
 
-    // Stream the PDF back to the client
-    const blob = await response.blob()
+    // Get the response as array buffer first
+    const arrayBuffer = await response.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
+    
+    console.log(`[pdf-proxy] Fetched ${arrayBuffer.byteLength} bytes`)
+    
+    // Check if it's actually a PDF by looking at the magic bytes
+    // PDF files start with "%PDF-"
+    const isPdf = bytes.length >= 5 && 
+      bytes[0] === 0x25 && // %
+      bytes[1] === 0x50 && // P
+      bytes[2] === 0x44 && // D
+      bytes[3] === 0x46 && // F
+      bytes[4] === 0x2D    // -
 
-    console.log(`[pdf-proxy] Successfully fetched ${blob.size} bytes`)
+    // Log first 100 bytes for debugging
+    const firstBytes = Array.from(bytes.slice(0, 100))
+      .map(b => String.fromCharCode(b))
+      .join('')
+    console.log(`[pdf-proxy] First 100 chars: ${firstBytes.substring(0, 100)}`)
 
-    return new Response(blob, {
+    if (!isPdf) {
+      // Check if it's HTML (common for login pages, errors, redirects)
+      const isHtml = firstBytes.includes('<!DOCTYPE') || 
+                     firstBytes.includes('<html') || 
+                     firstBytes.includes('<HTML')
+      
+      if (isHtml) {
+        console.error('[pdf-proxy] Received HTML instead of PDF - likely a login page or redirect')
+        return new Response(
+          JSON.stringify({
+            error: 'The server returned an HTML page instead of a PDF. This usually means the PDF requires authentication or the URL redirects to a login page.',
+            hint: 'Try downloading the PDF manually and uploading it directly.',
+            receivedContentType: contentType,
+            firstChars: firstBytes.substring(0, 200),
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        )
+      }
+      
+      // Not a PDF and not HTML - might be binary but corrupt
+      console.warn('[pdf-proxy] Response does not appear to be a valid PDF')
+    }
+
+    // Return the data
+    return new Response(arrayBuffer, {
       status: 200,
       headers: {
         ...corsHeaders,
-        'Content-Type': contentType,
-        'Content-Length': blob.size.toString(),
+        'Content-Type': isPdf ? 'application/pdf' : (contentType || 'application/octet-stream'),
+        'Content-Length': arrayBuffer.byteLength.toString(),
+        'X-PDF-Detected': isPdf ? 'true' : 'false',
       },
     })
 

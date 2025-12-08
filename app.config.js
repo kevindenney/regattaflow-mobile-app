@@ -10,6 +10,7 @@ module.exports = {
   expo: {
     name: 'regattaflow-app',
     slug: 'regattaflow-app',
+    owner: 'denneyke',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/images/icon.png',
@@ -32,6 +33,7 @@ module.exports = {
       },
     },
     android: {
+      package: 'com.regattaflow.app',
       adaptiveIcon: {
         backgroundColor: '#E6F4FE',
         foregroundImage: './assets/images/android-icon-foreground.png',
@@ -61,13 +63,22 @@ module.exports = {
       display: 'standalone',
       orientation: 'portrait',
     },
-    plugins: ['expo-router'],
+    plugins: [
+      'expo-router',
+      './plugins/withAndroidDependencyFix',
+    ],
+    updates: {
+      enabled: false,
+    },
     experiments: {
       typedRoutes: true,
       baseUrl: '/regattaflow',
     },
     // Expose environment variables via Constants.expoConfig.extra
     extra: {
+      eas: {
+        projectId: 'bab702c1-4ae8-42aa-ae6a-7982de755dd7',
+      },
       stormglassApiKey: process.env.EXPO_PUBLIC_STORMGLASS_API_KEY,
       openWeatherMapApiKey: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,

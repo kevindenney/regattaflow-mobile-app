@@ -276,6 +276,8 @@ export const STARTING_SEQUENCE_QUIZ = [
       { id: 'c', text: 'There is an emergency', isCorrect: false },
       { id: 'd', text: 'The course has been shortened', isCorrect: false },
     ],
+    explanation: 'The orange flag indicates the RC (Race Committee) boat is "on station" and marks one end of the starting line. This is your signal that the starting area is set up and ready.',
+    hint: 'Think about what you need to know before the sequence begins...',
   },
   {
     id: 'q2',
@@ -286,6 +288,8 @@ export const STARTING_SEQUENCE_QUIZ = [
       { id: 'c', text: '4 minutes', isCorrect: false },
       { id: 'd', text: '5 minutes', isCorrect: true },
     ],
+    explanation: 'The Warning Signal is given 5 minutes before the start. This is when your class flag goes up with one horn sound. Remember: 5-4-1-0 is the standard sequence!',
+    hint: 'The standard sequence is 5-4-1-0. When does it begin?',
   },
   {
     id: 'q3',
@@ -296,6 +300,8 @@ export const STARTING_SEQUENCE_QUIZ = [
       { id: 'c', text: 'P flag (Preparatory)', isCorrect: true },
       { id: 'd', text: 'Black flag', isCorrect: false },
     ],
+    explanation: 'The P flag (blue and white "Papa" flag) is the standard Preparatory signal at 4 minutes. Other flags like I, Z, or Black may replace it to indicate special rules.',
+    hint: 'The "P" in Preparatory is a clue...',
   },
   {
     id: 'q4',
@@ -306,6 +312,8 @@ export const STARTING_SEQUENCE_QUIZ = [
       { id: 'c', text: 'Only the orange flag is dropped', isCorrect: false },
       { id: 'd', text: 'A new flag is raised', isCorrect: false },
     ],
+    explanation: 'At the start signal (0:00), both the Class flag and P flag are dropped simultaneously with one horn sound. The orange flag stays up as it marks the RC boat position.',
+    hint: 'Flags that went UP during the sequence come DOWN at the start...',
   },
   {
     id: 'q5',
@@ -316,6 +324,8 @@ export const STARTING_SEQUENCE_QUIZ = [
       { id: 'c', text: 'Turn upwind and accelerate toward the starting line', isCorrect: true },
       { id: 'd', text: 'Tack back and forth', isCorrect: false },
     ],
+    explanation: 'In the final 30 seconds, turn onto your close-hauled course and accelerate! You want to cross the line at full speed. Time your approach so your bow crosses right at the gun.',
+    hint: 'You want maximum speed when crossing the line...',
   },
 ];
 

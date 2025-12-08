@@ -128,6 +128,29 @@ export default function LessonPlayerScreen() {
     }
   };
 
+  // Find the next lesson in the course
+  const getNextLesson = useCallback(() => {
+    if (!course || !lessonId) return null;
+    
+    const allLessons = course.learning_modules
+      ?.flatMap((module) => module.learning_lessons || [])
+      .sort((a, b) => {
+        // Sort by module order, then lesson order
+        const moduleA = course.learning_modules?.find(m => m.learning_lessons?.some(l => l.id === a.id));
+        const moduleB = course.learning_modules?.find(m => m.learning_lessons?.some(l => l.id === b.id));
+        if (moduleA?.order_index !== moduleB?.order_index) {
+          return (moduleA?.order_index || 0) - (moduleB?.order_index || 0);
+        }
+        return (a.order_index || 0) - (b.order_index || 0);
+      }) || [];
+    
+    const currentIndex = allLessons.findIndex(l => l.id === lessonId);
+    if (currentIndex >= 0 && currentIndex < allLessons.length - 1) {
+      return allLessons[currentIndex + 1];
+    }
+    return null;
+  }, [course, lessonId]);
+
   const handleComplete = useCallback(async () => {
     if (!lessonId || !user?.id || marking) return;
 
@@ -137,25 +160,49 @@ export default function LessonPlayerScreen() {
       
       if (success) {
         setIsCompleted(true);
+        
+        const nextLesson = getNextLesson();
+        
+        // On web, navigate directly to next lesson (Alert doesn't work well on web)
+        if (Platform.OS === 'web') {
+          if (nextLesson) {
+            router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
+          } else {
+            router.push(`/(tabs)/learn/${courseId}`);
+          }
+          return;
+        }
+        
+        // On native, show alert with options
+        const alertButtons: any[] = [];
+        
+        if (nextLesson) {
+          alertButtons.push({
+            text: 'Next Lesson →',
+            onPress: () => {
+              router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
+            },
+          });
+        }
+        
+        alertButtons.push({
+          text: 'Back to Course',
+          onPress: () => {
+            if (courseId) {
+              router.push(`/(tabs)/learn/${courseId}`);
+            } else {
+              router.back();
+            }
+          },
+          style: nextLesson ? 'cancel' : 'default',
+        });
+        
         Alert.alert(
           '🎉 Lesson Complete!',
-          'Great job! Your progress has been saved.',
-          [
-            {
-              text: 'Continue to Course',
-              onPress: () => {
-                if (courseId) {
-                  router.push(`/(tabs)/learn/${courseId}`);
-                } else {
-                  router.back();
-                }
-              },
-            },
-            {
-              text: 'Stay Here',
-              style: 'cancel',
-            },
-          ]
+          nextLesson 
+            ? `Great job! Ready for "${nextLesson.title}"?` 
+            : 'Great job! You\'ve completed all lessons in this course!',
+          alertButtons
         );
       } else {
         Alert.alert('Error', 'Failed to save progress. Please try again.');
@@ -166,7 +213,7 @@ export default function LessonPlayerScreen() {
     } finally {
       setMarking(false);
     }
-  }, [lessonId, user?.id, courseId, marking]);
+  }, [lessonId, user?.id, courseId, marking, getNextLesson]);
 
   const handleProgress = useCallback(async (percent: number) => {
     // For interactive lessons, record interactions

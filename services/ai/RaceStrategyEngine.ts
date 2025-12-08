@@ -12,6 +12,13 @@ import type {
   TacticalRecommendation
 } from '@/lib/types/ai-knowledge';
 import { createLogger } from '@/lib/utils/logger';
+import { cachedAICall } from '@/lib/utils/aiCache';
+import { 
+  isAIInFallbackMode,
+  isCreditExhaustedError,
+  activateFallbackMode,
+  generateMockStrategy
+} from '@/lib/utils/aiFallback';
 import Anthropic from '@anthropic-ai/sdk';
 import Constants from 'expo-constants';
 import { DocumentProcessingService } from './DocumentProcessingService';
@@ -314,22 +321,38 @@ export class RaceStrategyEngine {
             .join(' • ')
         : null;
 
-      // Step 2: Generate educational insights for venue
-      const educationalInsights = await sailingEducationService.getEducationallyEnhancedStrategy(
-        `General race strategy for ${raceContext.raceName} at ${venue.name}`,
+      // Step 2-3: Generate strategy with caching (10 min TTL)
+      // This saves ~$0.01-0.05 per repeated request
+      const cacheKey = {
+        type: 'venue-strategy',
         venueId,
-        { conditions: currentConditions, venue }
-      );
+        raceName: raceContext.raceName,
+        windSpeed: Math.round(currentConditions.wind.speed),
+        windDir: Math.round(currentConditions.wind.direction / 10) * 10, // Round to nearest 10°
+      };
 
-      // Step 3: Generate AI strategy using venue intelligence and conditions
-      const strategy = await this.generateVenueStrategyWithAI(
-        currentConditions,
-        venue,
-        educationalInsights,
-        {
-          ...raceContext,
-          racingAreaSummary: polygonSummary ?? undefined
-        }
+      const strategy = await cachedAICall(
+        cacheKey,
+        async () => {
+          // Step 2: Generate educational insights for venue
+          const educationalInsights = await sailingEducationService.getEducationallyEnhancedStrategy(
+            `General race strategy for ${raceContext.raceName} at ${venue.name}`,
+            venueId,
+            { conditions: currentConditions, venue }
+          );
+
+          // Step 3: Generate AI strategy using venue intelligence and conditions
+          return this.generateVenueStrategyWithAI(
+            currentConditions,
+            venue,
+            educationalInsights,
+            {
+              ...raceContext,
+              racingAreaSummary: polygonSummary ?? undefined
+            }
+          );
+        },
+        10 * 60 * 1000 // 10 minute cache
       );
 
       // Step 4: Generate contingency plans
@@ -430,15 +453,22 @@ export class RaceStrategyEngine {
     educationalInsights: any,
     raceContext: any
   ): Promise<RaceStrategy['strategy']> {
-    // DEV MODE: Return mock strategy if no valid API key
-    if (!this.hasValidApiKey) {
-      console.log('🔧 DEV MODE: Using mock strategy (no valid API key)');
-      logger.debug('🔧 Dev mode: Generating mock venue-based strategy');
+    // Check if we're in fallback mode due to credit exhaustion
+    if (isAIInFallbackMode()) {
+      logger.info('Using fallback mode for race strategy (credits exhausted)');
       return this.generateMockVenueStrategy(conditions, venue, raceContext);
     }
 
-    console.log('🤖 CALLING REAL ANTHROPIC API for venue-based strategy');
-    console.log('Race:', raceContext.raceName, 'Venue:', venue.name);
+    // DEV MODE: Return mock strategy if no valid API key
+    if (!this.hasValidApiKey) {
+      logger.debug('Dev mode: Generating mock venue-based strategy');
+      return this.generateMockVenueStrategy(conditions, venue, raceContext);
+    }
+
+    logger.debug('Calling Anthropic API for venue-based strategy', {
+      race: raceContext.raceName,
+      venue: venue.name,
+    });
 
     const userDefinedRacingArea = raceContext.racingAreaSummary
       ? `\nUSER-DEFINED RACING AREA:\n- Polygon vertices: ${raceContext.racingAreaSummary}\n- Treat edges as potential current relief and compression lines.\n`
@@ -602,7 +632,13 @@ CRITICAL OUTPUT RULES:
       return strategy;
 
     } catch (error) {
-      console.error('❌ Anthropic API call failed:', error);
+      // Handle credit exhaustion gracefully
+      if (isCreditExhaustedError(error)) {
+        activateFallbackMode('Anthropic API credit balance too low');
+        logger.warn('Activating fallback mode due to credit exhaustion');
+        return this.generateMockVenueStrategy(conditions, venue, raceContext);
+      }
+
       logger.error('API call failed:', error);
       throw error;
     }

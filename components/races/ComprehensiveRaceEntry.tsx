@@ -51,6 +51,9 @@ import { BoatSelector } from './BoatSelector';
 import { MultiRaceSelectionScreen } from './MultiRaceSelectionScreen';
 import { RaceSuggestionsDrawer } from './RaceSuggestionsDrawer';
 import { VenueLocationPicker } from './VenueLocationPicker';
+import { RacePrepLearningCard } from './RacePrepLearningCard';
+import { RigTuningCard } from '@/components/race-detail/RigTuningCard';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
@@ -71,6 +74,7 @@ interface StartSequence {
   class: string;
   warning: string;
   start: string;
+  flag?: string; // Class flag (e.g., "Numeral 3", "Alpha")
 }
 
 interface MarkBoat {
@@ -147,6 +151,8 @@ export function ComprehensiveRaceEntry({
   // Multi-Race Selection (Phase 3)
   const [showMultiRaceSelection, setShowMultiRaceSelection] = useState(false);
   const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
+  const [isCreatingMultipleRaces, setIsCreatingMultipleRaces] = useState(false);
+  const [multiRaceProgress, setMultiRaceProgress] = useState<{ current: number; total: number; raceName: string } | null>(null);
 
   // Track documents to upload after race creation
   const [pendingDocuments, setPendingDocuments] = useState<Array<{
@@ -189,6 +195,11 @@ export function ComprehensiveRaceEntry({
   const [startAreaDescription, setStartAreaDescription] = useState('');
   const [startLineLength, setStartLineLength] = useState('');
   const [potentialCourses, setPotentialCourses] = useState<string[]>([]);
+  
+  // Finish Area
+  const [finishAreaName, setFinishAreaName] = useState('');
+  const [finishAreaDescription, setFinishAreaDescription] = useState('');
+  const [finishAreaCoordinates, setFinishAreaCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [courseSelectionCriteria, setCourseSelectionCriteria] = useState('');
   const [courseDiagramUrl, setCourseDiagramUrl] = useState('');
 
@@ -254,6 +265,23 @@ export function ComprehensiveRaceEntry({
     weather_fetched_at?: string;
     weather_confidence?: number;
   } | null>(null);
+
+  // Rig Tuning Recommendation - automatically shows when forecast & boat class are available
+  const tuningBoatClass = classSuggestion?.name || classDivisions?.[0]?.name || undefined;
+  const tuningWindSpeed = expectedWindSpeedMin ? parseInt(expectedWindSpeedMin) : 
+                          expectedWindSpeedMax ? parseInt(expectedWindSpeedMax) : undefined;
+  
+  const {
+    recommendation: rigTuningRecommendation,
+    loading: rigTuningLoading,
+    refresh: refreshRigTuning,
+  } = useRaceTuningRecommendation({
+    className: tuningBoatClass,
+    averageWindSpeed: tuningWindSpeed,
+    windMin: expectedWindSpeedMin ? parseInt(expectedWindSpeedMin) : undefined,
+    windMax: expectedWindSpeedMax ? parseInt(expectedWindSpeedMax) : undefined,
+    enabled: !!(tuningBoatClass && tuningWindSpeed),
+  });
 
   // NOR Document Fields
   const [supplementarySIUrl, setSupplementarySIUrl] = useState('');
@@ -393,6 +421,11 @@ export function ComprehensiveRaceEntry({
         if (race.potential_courses) setPotentialCourses(race.potential_courses);
         if (race.course_selection_criteria) setCourseSelectionCriteria(race.course_selection_criteria);
         if (race.course_diagram_url) setCourseDiagramUrl(race.course_diagram_url);
+        
+        // Finish area
+        if (race.finish_area_name) setFinishAreaName(race.finish_area_name);
+        if (race.finish_area_description) setFinishAreaDescription(race.finish_area_description);
+        if (race.finish_area_coordinates) setFinishAreaCoordinates(race.finish_area_coordinates);
 
         // Populate rules & penalties (from top-level fields)
         if (race.scoring_system) setScoringSystem(race.scoring_system);
@@ -782,6 +815,16 @@ export function ComprehensiveRaceEntry({
    * Fetch a remote PDF with graceful fallback when the origin blocks CORS requests in web builds.
    */
   const fetchPdfBlobWithFallback = async (url: string) => {
+    // Helper to add timeout to any promise
+    const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s (${label})`)), ms)
+        ),
+      ]);
+    };
+
     const attemptFetch = async (targetUrl: string, viaProxy: string | null) => {
       logger.debug('[fetchPdfBlobWithFallback] Attempting fetch', {
         url: targetUrl,
@@ -798,10 +841,38 @@ export function ComprehensiveRaceEntry({
         }
       }
 
-      const response = await fetch(targetUrl, { headers });
+      // Use 12 second timeout for proxy requests, 25 seconds for direct
+      const timeoutMs = viaProxy ? 12000 : 25000;
+      const response = await withTimeout(
+        fetch(targetUrl, { headers }),
+        timeoutMs,
+        viaProxy || 'direct'
+      );
 
+      // Check content type first to see if proxy returned JSON error
+      const responseContentType = response.headers.get('content-type') || '';
+      
       if (!response.ok) {
+        // Try to parse JSON error from proxy
+        if (responseContentType.includes('application/json')) {
+          try {
+            const errorJson = await response.json();
+            const errorMsg = errorJson.error || `Failed to fetch PDF: ${response.status}`;
+            const hint = errorJson.hint || '';
+            throw new Error(hint ? `${errorMsg}\n\n${hint}` : errorMsg);
+          } catch (jsonError) {
+            // If JSON parse fails, fall through to default error
+          }
+        }
         throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+      }
+
+      // Even with 200 OK, check if it's a JSON error (shouldn't happen with updated proxy)
+      if (responseContentType.includes('application/json')) {
+        const jsonResponse = await response.json();
+        if (jsonResponse.error) {
+          throw new Error(jsonResponse.error);
+        }
       }
 
       const blob = await response.blob();
@@ -809,7 +880,7 @@ export function ComprehensiveRaceEntry({
 
       return {
         blob,
-        contentType: response.headers.get('content-type') || '',
+        contentType: responseContentType,
         viaProxy,
       };
     };
@@ -855,9 +926,12 @@ export function ComprehensiveRaceEntry({
       for (const proxy of proxies) {
         try {
           logger.warn('[fetchPdfBlobWithFallback] Using proxy due to direct fetch failure:', proxy.name);
+          console.log(`🔄 Trying proxy: ${proxy.name}`);
           const proxiedUrl = proxy.buildUrl(url);
           return await attemptFetch(proxiedUrl, proxy.name);
-        } catch (proxyError) {
+        } catch (proxyError: any) {
+          const errorMsg = proxyError?.message || String(proxyError);
+          console.error(`❌ Proxy ${proxy.name} failed:`, errorMsg);
           logger.error('[fetchPdfBlobWithFallback] Proxy fetch failed:', proxy.name, proxyError);
           lastProxyError = proxyError;
         }
@@ -913,54 +987,82 @@ export function ComprehensiveRaceEntry({
 
     let documentText = text;
 
-    // Check if input is a URL
-    const urlRegex = /^https?:\/\//i;
-    if (urlRegex.test(text.trim())) {
-      logger.debug('[extractFromText] Detected URL input:', text.trim());
+    // Extract all URLs from the text (handles multiple URLs pasted together)
+    const urlPattern = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+    const urls = text.match(urlPattern) || [];
+    
+    if (urls.length > 0) {
+      logger.debug('[extractFromText] Detected URL input(s):', urls);
 
       try {
-        const url = text.trim();
-        const { blob, contentType, viaProxy } = await fetchPdfBlobWithFallback(url);
-        logger.debug('[extractFromText] Content-Type:', contentType || '(none provided)', '| Source:', viaProxy ? `proxy:${viaProxy}` : 'direct');
+        const extractedTexts: string[] = [];
+        const successfulUrls: string[] = [];
+        const failedUrls: { url: string; error: string }[] = [];
+        
+        // Process each URL
+        for (const url of urls) {
+          try {
+            logger.debug(`[extractFromText] Processing URL: ${url}`);
+            const { blob, contentType, viaProxy } = await fetchPdfBlobWithFallback(url);
+            logger.debug('[extractFromText] Content-Type:', contentType || '(none provided)', '| Source:', viaProxy ? `proxy:${viaProxy}` : 'direct');
 
-        const isPdfContentType = contentType?.toLowerCase().includes('pdf');
-        const looksLikePdf = isPdfContentType || url.toLowerCase().endsWith('.pdf');
+            const isPdfContentType = contentType?.toLowerCase().includes('pdf');
+            const looksLikePdf = isPdfContentType || url.toLowerCase().endsWith('.pdf');
 
-        if (!looksLikePdf) {
-          Alert.alert(
-            'Invalid File Type',
-            `Expected a PDF but received ${contentType || 'unknown content type'}. Please provide a direct link to a PDF document.`
-          );
-          setExtracting(false);
-          return;
+            if (!looksLikePdf) {
+              failedUrls.push({ url, error: `Not a PDF (received ${contentType || 'unknown'})` });
+              continue;
+            }
+
+            const blobUrl = URL.createObjectURL(blob);
+
+            logger.debug('[extractFromText] PDF downloaded, extracting text...');
+
+            // Extract text from PDF
+            const extractionResult = await PDFExtractionService.extractText(blobUrl, {
+              maxPages: 50,
+            });
+
+            // Clean up blob URL
+            URL.revokeObjectURL(blobUrl);
+
+            if (!extractionResult.success || !extractionResult.text) {
+              failedUrls.push({ url, error: extractionResult.error || 'Extraction failed' });
+              continue;
+            }
+
+            const urlFilename = url.split('/').pop() || 'document.pdf';
+            extractedTexts.push(`=== PDF: ${decodeURIComponent(urlFilename)} ===\n\n${extractionResult.text}`);
+            successfulUrls.push(url);
+            logger.debug('[extractFromText] PDF text extracted successfully:', extractionResult.text.length, 'characters');
+          } catch (urlError: any) {
+            failedUrls.push({ url, error: urlError.message || 'Unknown error' });
+            logger.error(`[extractFromText] Failed to process URL: ${url}`, urlError);
+          }
         }
-
-        const blobUrl = URL.createObjectURL(blob);
-
-        logger.debug('[extractFromText] PDF downloaded, extracting text...');
-
-        // Extract text from PDF
-        const extractionResult = await PDFExtractionService.extractText(blobUrl, {
-          maxPages: 50,
-        });
-
-        // Clean up blob URL
-        URL.revokeObjectURL(blobUrl);
-
-        if (!extractionResult.success || !extractionResult.text) {
-          throw new Error(extractionResult.error || 'Failed to extract text from PDF');
+        
+        // Handle results
+        if (extractedTexts.length === 0) {
+          const errorDetails = failedUrls.map(f => `• ${f.url.split('/').pop()}: ${f.error}`).join('\n');
+          throw new Error(`Failed to extract text from any PDF.\n\n${errorDetails}`);
         }
-
-        documentText = extractionResult.text;
-        logger.debug('[extractFromText] PDF text extracted successfully:', documentText.length, 'characters');
-
+        
+        // Combine all extracted texts
+        documentText = extractedTexts.join('\n\n' + '='.repeat(50) + '\n\n');
+        
         // Update the text area with extracted content
-        const urlFilename = url.split('/').pop() || 'document.pdf';
-        setFreeformText(`=== PDF FROM URL (${urlFilename}) ===\n\n${documentText}`);
+        const summary = urls.length === 1 
+          ? `PDF extracted successfully`
+          : `Extracted ${successfulUrls.length}/${urls.length} PDFs${failedUrls.length > 0 ? ` (${failedUrls.length} failed)` : ''}`;
+        setFreeformText(`=== ${summary} ===\n\n${documentText}`);
 
       } catch (error: any) {
         console.error('[extractFromText] URL fetch/extraction error:', error);
-        Alert.alert('PDF Fetch Failed', error.message || 'Could not fetch or extract PDF from URL. Please check the URL and try again.');
+        console.error('[extractFromText] Error message:', error?.message);
+        const errorMsg = error.message || 'Could not fetch or extract PDF from URL. Please check the URL and try again.';
+        // Alert.alert may not work on web, so also log prominently
+        console.error('❌ PDF FETCH FAILED:', errorMsg);
+        Alert.alert('PDF Fetch Failed', errorMsg);
         setExtracting(false);
         return;
       }
@@ -1193,6 +1295,10 @@ export function ComprehensiveRaceEntry({
     if (validatedData.potentialCourses) setPotentialCourses(validatedData.potentialCourses || []);
     if (validatedData.courseSelectionCriteria) setCourseSelectionCriteria(validatedData.courseSelectionCriteria || '');
     if (validatedData.courseDiagramUrl) setCourseDiagramUrl(validatedData.courseDiagramUrl || '');
+    
+    // Finish area
+    if (validatedData.finishAreaName) setFinishAreaName(validatedData.finishAreaName);
+    if (validatedData.finishAreaDescription) setFinishAreaDescription(validatedData.finishAreaDescription || '');
 
     // Rules
     if (validatedData.scoringSystem) setScoringSystem(validatedData.scoringSystem || '');
@@ -1296,6 +1402,185 @@ export function ComprehensiveRaceEntry({
     setShowValidationScreen(false);
     setExtractedDataForValidation(null);
     setConfidenceScoresForValidation({});
+  };
+
+  /**
+   * Create a single race from extracted data
+   * Used by batch multi-race creation
+   */
+  const createRaceFromExtractedData = async (raceData: ExtractedData): Promise<string | null> => {
+    console.log('📋 [CREATE] createRaceFromExtractedData STARTED for:', raceData.raceName);
+    
+    if (!user?.id) {
+      console.log('❌ [CREATE] No user found - aborting');
+      logger.error('[createRaceFromExtractedData] No user found');
+      return null;
+    }
+    console.log('✅ [CREATE] User found:', user.id);
+
+    // Validate minimum required fields
+    if (!raceData.raceName?.trim()) {
+      console.log('❌ [CREATE] Race has no name - skipping');
+      logger.warn('[createRaceFromExtractedData] Skipping race with no name');
+      return null;
+    }
+    console.log('✅ [CREATE] Race name validated:', raceData.raceName);
+
+    try {
+      // Skip weather fetch for batch creation - it can be fetched later when viewing race
+      // This significantly speeds up batch race creation
+      const venueName = raceData.venue || raceData.venueVariant || 'Unknown Venue';
+      console.log('📍 [CREATE] Venue:', venueName);
+
+      const insertData = {
+        created_by: user.id,
+        name: raceData.raceName.trim(),
+        start_date: raceData.raceDate || null,
+        description: raceData.description?.trim() || null,
+        metadata: {
+          venue_name: venueName,
+          wind: { direction: 'Variable', speedMin: 8, speedMax: 15 },
+          tide: { state: 'slack' as const, height: 1.0 },
+          series_name: raceData.raceSeriesName || null,
+        },
+        status: 'planned',
+        warning_signal_time: raceData.warningSignalTime || null,
+        vhf_channel: raceData.vhfChannel || null,
+        safety_channel: raceData.safetyChannel || 'VHF 16',
+        race_officer: raceData.raceOfficer || null,
+        scoring_system: raceData.scoringSystem || 'Low Point',
+        sailing_instructions_url: null,
+        notice_of_race_url: null,
+        event_series_name: raceData.raceSeriesName || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      console.log('💾 [CREATE] About to insert into Supabase...');
+      console.log('💾 [CREATE] Insert data keys:', Object.keys(insertData));
+      
+      // Try a simpler approach - just do the insert directly
+      console.log('💾 [CREATE] Calling supabase.from("regattas").insert()...');
+      
+      const { data, error } = await supabase
+        .from('regattas')
+        .insert(insertData)
+        .select('id')
+        .single();
+
+      console.log('💾 [CREATE] Supabase insert completed!');
+      console.log('💾 [CREATE] Error:', error);
+      console.log('💾 [CREATE] Data:', data);
+
+      if (error) {
+        console.log('❌ [CREATE] Supabase insert FAILED:', error.message);
+        logger.error('[createRaceFromExtractedData] Insert error:', error);
+        return null;
+      }
+      
+      console.log('✅ [CREATE] Race inserted successfully with ID:', data?.id);
+
+      logger.debug('[createRaceFromExtractedData] Created race:', data.id, raceData.raceName);
+      return data.id;
+    } catch (error) {
+      logger.error('[createRaceFromExtractedData] Error:', error);
+      return null;
+    }
+  };
+
+  /**
+   * Batch create multiple races from selection
+   */
+  const handleBatchCreateRaces = async (selectedRaces: ExtractedData[]) => {
+    console.log('🚀 [BATCH] handleBatchCreateRaces STARTED with', selectedRaces.length, 'races');
+    logger.debug('[handleBatchCreateRaces] Creating', selectedRaces.length, 'races');
+    
+    setIsCreatingMultipleRaces(true);
+    const createdRaceIds: string[] = [];
+    const failedRaces: string[] = [];
+
+    try {
+      for (let i = 0; i < selectedRaces.length; i++) {
+        const race = selectedRaces[i];
+        console.log(`🏁 [BATCH] Processing race ${i + 1}/${selectedRaces.length}:`, race.raceName);
+        
+        setMultiRaceProgress({
+          current: i + 1,
+          total: selectedRaces.length,
+          raceName: race.raceName || `Race ${i + 1}`,
+        });
+
+        console.log(`📝 [BATCH] Calling createRaceFromExtractedData for:`, race.raceName);
+        const raceId = await createRaceFromExtractedData(race);
+        console.log(`✅ [BATCH] createRaceFromExtractedData returned:`, raceId);
+        
+        if (raceId) {
+          createdRaceIds.push(raceId);
+          console.log(`✅ [BATCH] Race created successfully:`, raceId);
+        } else {
+          failedRaces.push(race.raceName || `Race ${i + 1}`);
+          console.log(`❌ [BATCH] Race creation failed for:`, race.raceName);
+        }
+      }
+
+      // Show results
+      setIsCreatingMultipleRaces(false);
+      setMultiRaceProgress(null);
+      setShowMultiRaceSelection(false);
+      setMultiRaceData(null);
+
+      if (createdRaceIds.length === selectedRaces.length) {
+        // All succeeded - show message and navigate
+        const message = `Successfully added ${createdRaceIds.length} races to your calendar!`;
+        if (Platform.OS === 'web') {
+          window.alert(message);
+          router.replace('/(tabs)/races');
+        } else {
+          Alert.alert(
+            'Races Created!',
+            message,
+            [{
+              text: 'View Races',
+              onPress: () => router.replace('/(tabs)/races'),
+            }]
+          );
+        }
+      } else if (createdRaceIds.length > 0) {
+        // Some failed
+        const message = `Created ${createdRaceIds.length} of ${selectedRaces.length} races.\n\nFailed: ${failedRaces.join(', ')}`;
+        if (Platform.OS === 'web') {
+          window.alert(message);
+          router.replace('/(tabs)/races');
+        } else {
+          Alert.alert(
+            'Partially Complete',
+            message,
+            [{
+              text: 'View Races',
+              onPress: () => router.replace('/(tabs)/races'),
+            }]
+          );
+        }
+      } else {
+        // All failed
+        const errorMsg = 'Failed to create races. Please try again or add them manually.';
+        if (Platform.OS === 'web') {
+          window.alert(errorMsg);
+        } else {
+          Alert.alert('Error', errorMsg);
+        }
+      }
+    } catch (error) {
+      logger.error('[handleBatchCreateRaces] Error:', error);
+      setIsCreatingMultipleRaces(false);
+      setMultiRaceProgress(null);
+      const errorMsg = 'An error occurred while creating races. Please try again.';
+      if (Platform.OS === 'web') {
+        window.alert(errorMsg);
+      } else {
+        Alert.alert('Error', errorMsg);
+      }
+    }
   };
 
   const handleHeaderBack = useCallback(() => {
@@ -1871,6 +2156,11 @@ export function ComprehensiveRaceEntry({
         potential_courses: potentialCourses.length > 0 ? potentialCourses : null,
         course_selection_criteria: courseSelectionCriteria.trim() || null,
         course_diagram_url: courseDiagramUrl.trim() || null,
+        
+        // Finish area
+        finish_area_name: finishAreaName.trim() || null,
+        finish_area_description: finishAreaDescription.trim() || null,
+        finish_area_coordinates: finishAreaCoordinates || null,
         // Save racing area polygon as GeoJSON for display on race detail map
         racing_area_polygon: racingAreaPolygon && racingAreaPolygon.length >= 3 ? {
           type: 'Polygon',
@@ -2213,7 +2503,7 @@ export function ComprehensiveRaceEntry({
   };
 
   const addStartSequence = () => {
-    setStartSequence([...startSequence, { class: '', warning: '', start: '' }]);
+    setStartSequence([...startSequence, { class: '', warning: '', start: '', flag: '' }]);
   };
 
   const removeStartSequence = (index: number) => {
@@ -2345,20 +2635,78 @@ export function ComprehensiveRaceEntry({
 
   // Phase 3: Show multi-race selection screen if active
   if (showMultiRaceSelection && multiRaceData) {
+    // Show progress overlay if creating multiple races
+    if (isCreatingMultipleRaces && multiRaceProgress) {
+      return (
+        <View className="flex-1 bg-gray-900/95 items-center justify-center px-8">
+          <View className="bg-white rounded-2xl p-8 w-full max-w-sm items-center">
+            <ActivityIndicator size="large" color="#3B82F6" />
+            <Text className="text-xl font-bold text-gray-900 mt-6 text-center">
+              Creating Races...
+            </Text>
+            <Text className="text-base text-gray-600 mt-2 text-center">
+              {multiRaceProgress.current} of {multiRaceProgress.total}
+            </Text>
+            <Text className="text-sm text-gray-500 mt-1 text-center">
+              {multiRaceProgress.raceName}
+            </Text>
+            <View className="w-full bg-gray-200 rounded-full h-2 mt-6">
+              <View 
+                className="bg-blue-500 h-2 rounded-full" 
+                style={{ width: `${(multiRaceProgress.current / multiRaceProgress.total) * 100}%` }}
+              />
+            </View>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <MultiRaceSelectionScreen
         extractedData={multiRaceData}
         onConfirm={(selectedRaces) => {
           logger.debug('[MultiRaceSelection] User selected', selectedRaces.length, 'races');
-          // For now, just show the first race in validation screen
-          // TODO: Handle creating multiple races
-          if (selectedRaces.length > 0) {
+          
+          if (selectedRaces.length === 0) {
+            if (Platform.OS === 'web') {
+              window.alert('Please select at least one race to create.');
+            } else {
+              Alert.alert('No Races Selected', 'Please select at least one race to create.');
+            }
+            return;
+          }
+
+          if (selectedRaces.length === 1) {
+            // Single race selected - go through validation flow
             setExtractedDataForValidation(selectedRaces[0]);
             setConfidenceScoresForValidation(selectedRaces[0].confidenceScores || {});
             setShowMultiRaceSelection(false);
             setShowValidationScreen(true);
           } else {
-            Alert.alert('No Races Selected', 'Please select at least one race to create.');
+            // Multiple races - confirm batch creation
+            if (Platform.OS === 'web') {
+              const confirmed = window.confirm(
+                `You've selected ${selectedRaces.length} races from this document.\n\nEach race will be created with the extracted details. You can edit them individually after creation.\n\nCreate ${selectedRaces.length} races?`
+              );
+              if (confirmed) {
+                handleBatchCreateRaces(selectedRaces);
+              }
+            } else {
+              Alert.alert(
+                'Create Multiple Races',
+                `You've selected ${selectedRaces.length} races from this document.\n\nEach race will be created with the extracted details. You can edit them individually after creation.`,
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
+                  },
+                  {
+                    text: `Create ${selectedRaces.length} Races`,
+                    onPress: () => handleBatchCreateRaces(selectedRaces),
+                  },
+                ]
+              );
+            }
           }
         }}
         onCancel={() => {
@@ -2692,6 +3040,12 @@ export function ComprehensiveRaceEntry({
         )}
         </View>
 
+        {/* Race Prep Learning Card - Shows insights from past races */}
+        <RacePrepLearningCard
+          venueName={venue}
+          windSpeed={expectedWindSpeedMin ? parseInt(expectedWindSpeedMin) : expectedWindSpeedMax ? parseInt(expectedWindSpeedMax) : undefined}
+        />
+
         {/* Extracted Marks Display */}
         {extractedDataForValidation?.marks && extractedDataForValidation.marks.length > 0 && (
           <View className="bg-green-50 border-2 border-green-300 rounded-xl p-4 mb-6">
@@ -2981,40 +3335,54 @@ export function ComprehensiveRaceEntry({
             {/* Start Sequence Details */}
             <Text className="text-sm font-semibold text-gray-700 mb-2">Start Sequence</Text>
             {startSequence.map((seq, idx) => (
-              <View key={idx} className="flex-row gap-2 mb-2">
-                <TextInput
-                  value={seq.class}
-                  onChangeText={(text) => {
-                    const newSeq = [...startSequence];
-                    newSeq[idx].class = text;
-                    setStartSequence(newSeq);
-                  }}
-                  placeholder="Class"
-                  className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-                <TextInput
-                  value={seq.warning}
-                  onChangeText={(text) => {
-                    const newSeq = [...startSequence];
-                    newSeq[idx].warning = text;
-                    setStartSequence(newSeq);
-                  }}
-                  placeholder="Warning"
-                  className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-                <TextInput
-                  value={seq.start}
-                  onChangeText={(text) => {
-                    const newSeq = [...startSequence];
-                    newSeq[idx].start = text;
-                    setStartSequence(newSeq);
-                  }}
-                  placeholder="Start"
-                  className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-                <Pressable onPress={() => removeStartSequence(idx)} className="justify-center">
-                  <X size={20} color="#DC2626" />
-                </Pressable>
+              <View key={idx} className="mb-3">
+                <View className="flex-row gap-2 mb-1">
+                  <TextInput
+                    value={seq.class}
+                    onChangeText={(text) => {
+                      const newSeq = [...startSequence];
+                      newSeq[idx].class = text;
+                      setStartSequence(newSeq);
+                    }}
+                    placeholder="Class (e.g., Dragon)"
+                    className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <TextInput
+                    value={seq.flag || ''}
+                    onChangeText={(text) => {
+                      const newSeq = [...startSequence];
+                      newSeq[idx].flag = text;
+                      setStartSequence(newSeq);
+                    }}
+                    placeholder="Flag (e.g., Numeral 3)"
+                    className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <Pressable onPress={() => removeStartSequence(idx)} className="justify-center">
+                    <X size={20} color="#DC2626" />
+                  </Pressable>
+                </View>
+                <View className="flex-row gap-2">
+                  <TextInput
+                    value={seq.warning}
+                    onChangeText={(text) => {
+                      const newSeq = [...startSequence];
+                      newSeq[idx].warning = text;
+                      setStartSequence(newSeq);
+                    }}
+                    placeholder="Warning (e.g., 10:55)"
+                    className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <TextInput
+                    value={seq.start}
+                    onChangeText={(text) => {
+                      const newSeq = [...startSequence];
+                      newSeq[idx].start = text;
+                      setStartSequence(newSeq);
+                    }}
+                    placeholder="Start (e.g., 11:00)"
+                    className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                </View>
               </View>
             ))}
             <Pressable onPress={addStartSequence} className="flex-row items-center gap-2 mt-2">
@@ -3102,6 +3470,19 @@ export function ComprehensiveRaceEntry({
               keyboardType: 'numeric',
               placeholder: '100',
             })}
+            
+            {/* Finish Area */}
+            <View className="mt-4 mb-2">
+              <Text className="text-sm font-semibold text-gray-700">Finish Area</Text>
+            </View>
+            {renderInputField('Finish Area Name', finishAreaName, setFinishAreaName, {
+              placeholder: 'Finish Area Alpha',
+            })}
+            {renderInputField('Finish Area Description', finishAreaDescription, setFinishAreaDescription, {
+              placeholder: 'Between committee boat and pin mark',
+              multiline: true,
+            })}
+            
             {renderInputField('Course Selection Criteria', courseSelectionCriteria, setCourseSelectionCriteria, {
               placeholder: 'Based on wind direction and strength',
               multiline: true,
@@ -3267,6 +3648,39 @@ export function ComprehensiveRaceEntry({
             {renderInputField('Tide at Start', tideAtStart, setTideAtStart, {
               placeholder: 'High tide +2:30',
             })}
+          </View>
+        )}
+
+        {/* Rig Tuning - Shows when boat class and wind forecast are available */}
+        {tuningBoatClass && tuningWindSpeed && (
+          <View className="mb-4">
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center gap-2">
+                <MaterialCommunityIcons name="wrench-clock" size={20} color="#059669" />
+                <Text className="text-base font-bold text-green-800">Rig Tuning for {tuningBoatClass}</Text>
+              </View>
+              {tuningWindSpeed && (
+                <View className="bg-sky-100 px-2 py-1 rounded-full">
+                  <Text className="text-xs font-semibold text-sky-700">{tuningWindSpeed} kts forecast</Text>
+                </View>
+              )}
+            </View>
+            
+            <RigTuningCard
+              raceId={existingRaceId || 'new-race'}
+              boatClassName={tuningBoatClass}
+              recommendation={rigTuningRecommendation}
+              loading={rigTuningLoading}
+              onRefresh={refreshRigTuning}
+            />
+            
+            {!rigTuningRecommendation && !rigTuningLoading && (
+              <View className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
+                <Text className="text-sm text-amber-800">
+                  No tuning guide found for {tuningBoatClass}. Add a tuning guide in Settings → Boat to unlock race-day rig checklists.
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -3509,13 +3923,13 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Spacer for floating button */}
-        <View className="h-24" />
+        {/* Spacer for floating button + tab bar */}
+        <View className="h-40" />
       </ScrollView>
 
       {/* Floating Action Buttons */}
       <View 
-        className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3"
+        className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 pb-20"
         style={{ 
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },

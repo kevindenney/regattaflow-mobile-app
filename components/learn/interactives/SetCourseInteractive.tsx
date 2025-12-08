@@ -15,8 +15,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Marker, Polygon, Pattern } from 'react-native-svg';
 import type { CourseStep } from './data/setCourseData';
-import { SET_COURSE_SEQUENCE_STEPS } from './data/setCourseData';
+import { SET_COURSE_SEQUENCE_STEPS, SET_COURSE_QUIZ } from './data/setCourseData';
 import { PowerboatSVG } from './shared';
+
+// Quiz state interface
+interface QuizAnswer {
+  questionId: string;
+  selectedOptionId: string | null;
+  isCorrect: boolean | null;
+}
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -33,6 +40,14 @@ export function SetCourseInteractive({
 }: SetCourseInteractiveProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const currentStep = externalStep || SET_COURSE_SEQUENCE_STEPS[currentStepIndex];
+  
+  // Deep Dive state
+  const [showDeepDive, setShowDeepDive] = useState(false);
+  
+  // Quiz state
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const isLastStep = currentStepIndex === SET_COURSE_SEQUENCE_STEPS.length - 1;
 
   // Course path animation (still using reanimated for strokeDashoffset)
   const coursePathLength = useSharedValue(0);
@@ -107,7 +122,8 @@ export function SetCourseInteractive({
 
     // Animate course path drawing
     if (visualState.coursePath?.opacity) {
-      coursePathLength.value = withTiming(1, { duration: 3000 });
+      // Slow draw animation - 6 seconds to trace the full course
+      coursePathLength.value = withTiming(1, { duration: 6000 });
     } else {
       coursePathLength.value = 0;
     }
@@ -143,9 +159,9 @@ export function SetCourseInteractive({
     }
   }, []);
 
-  // Animated props for Path (strokeDashoffset)
+  // Animated props for Path (strokeDashoffset) - creates "drawing" effect
   const coursePathDashProps = useAnimatedProps(() => ({
-    strokeDashoffset: (1 - coursePathLength.value) * 1000,
+    strokeDashoffset: (1 - coursePathLength.value) * 1500,
   }));
 
 
@@ -158,8 +174,12 @@ export function SetCourseInteractive({
       setCurrentStepIndex(nextIndex);
       onStepChange?.(SET_COURSE_SEQUENCE_STEPS[nextIndex]);
     } else {
-      console.log('[SetCourseInteractive] ✅ Complete!');
-      onComplete?.();
+      console.log('[SetCourseInteractive] ✅ Complete! onComplete defined:', !!onComplete);
+      if (onComplete) {
+        onComplete();
+      } else {
+        console.log('[SetCourseInteractive] ⚠️ onComplete is undefined!');
+      }
     }
   };
 
@@ -171,8 +191,61 @@ export function SetCourseInteractive({
     }
   };
 
-  // Course path SVG path
-  const coursePathD = "M 400 350 L 400 115 C 400 95 385 100 380 100 L 420 100 C 415 100 400 95 400 115 L 400 280 C 400 300 385 300 375 300 L 425 300 C 415 300 400 300 400 280 L 400 100 L 400 350";
+  // Quiz handlers
+  const handleQuizAnswer = (questionId: string, optionId: string) => {
+    const question = SET_COURSE_QUIZ.find(q => q.id === questionId);
+    const option = question?.options.find(o => o.id === optionId);
+    const isCorrect = option?.isCorrect ?? false;
+    
+    setQuizAnswers(prev => {
+      const existing = prev.findIndex(a => a.questionId === questionId);
+      const newAnswer: QuizAnswer = { questionId, selectedOptionId: optionId, isCorrect };
+      
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = newAnswer;
+        return updated;
+      }
+      return [...prev, newAnswer];
+    });
+  };
+
+  const getQuizScore = () => {
+    const correct = quizAnswers.filter(a => a.isCorrect).length;
+    return { correct, total: SET_COURSE_QUIZ.length };
+  };
+
+  const resetQuiz = () => {
+    setQuizAnswers([]);
+  };
+
+  // Course path segments for animation with arrows
+  // Port rounding = leave mark to port = go around RIGHT side of mark
+  // Marks: Windward (400,100) r=8, Left Gate (350,300) r=8, Right Gate (450,300) r=8
+  
+  // Segment 1: Start to Windward Mark (upwind leg 1)
+  const segment1 = "M 400 350 L 415 120";
+  
+  // Segment 2: Round windward mark (port rounding - go right side, curve left)
+  const segment2 = "M 415 120 Q 420 100, 420 90 Q 420 80, 400 80 Q 380 80, 380 90 Q 380 100, 385 115";
+  
+  // Segment 3: Down to left gate mark (downwind leg)
+  const segment3 = "M 385 115 L 340 280";
+  
+  // Segment 4: Round left gate mark (port rounding)
+  const segment4 = "M 340 280 Q 335 290, 335 300 Q 335 315, 350 320 Q 365 320, 370 310";
+  
+  // Segment 5: Back up to windward mark (upwind leg 2)
+  const segment5 = "M 370 310 L 420 120";
+  
+  // Segment 6: Round windward mark again (port rounding)
+  const segment6 = "M 420 120 Q 425 100, 425 90 Q 425 75, 400 75 Q 375 75, 375 95 Q 375 110, 390 130";
+  
+  // Segment 7: Down to finish line
+  const segment7 = "M 390 130 L 540 350";
+  
+  // Combined path for single drawing
+  const coursePathD = `${segment1} ${segment2.replace('M', 'L').replace(/^L \d+ \d+/, '')} ${segment3.replace('M', 'L').replace(/^L \d+ \d+/, '')} ${segment4.replace('M', 'L').replace(/^L \d+ \d+/, '')} ${segment5.replace('M', 'L').replace(/^L \d+ \d+/, '')} ${segment6.replace('M', 'L').replace(/^L \d+ \d+/, '')} ${segment7.replace('M', 'L').replace(/^L \d+ \d+/, '')}`;
 
   return (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
@@ -197,15 +270,15 @@ export function SetCourseInteractive({
           {/* Wind indicator */}
           {Platform.OS === 'web' ? (
             <G opacity={opacities.wind} data-animated-opacity="true">
-              <Line x1="400" y1="20" x2="400" y2="70" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
-              <SvgText x="400" y="15" textAnchor="middle" fontSize="18" fontWeight="bold" fill="#000">
+              <Line x1="400" y1="25" x2="400" y2="55" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
+              <SvgText x="400" y="18" textAnchor="middle" fontSize="16" fontWeight="bold" fill="#000">
                 WIND
               </SvgText>
             </G>
           ) : (
             <AnimatedG animatedProps={windProps}>
-              <Line x1="400" y1="20" x2="400" y2="70" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
-              <SvgText x="400" y="15" textAnchor="middle" fontSize="18" fontWeight="bold" fill="#000">
+              <Line x1="400" y1="25" x2="400" y2="55" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
+              <SvgText x="400" y="18" textAnchor="middle" fontSize="16" fontWeight="bold" fill="#000">
                 WIND
               </SvgText>
             </AnimatedG>
@@ -243,10 +316,16 @@ export function SetCourseInteractive({
           {Platform.OS === 'web' ? (
             <G opacity={opacities.pin} data-animated-opacity="true">
               <Circle cx="300" cy="350" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
+              <SvgText x="300" y="375" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
+                Pin
+              </SvgText>
             </G>
           ) : (
             <AnimatedG animatedProps={pinProps}>
               <Circle cx="300" cy="350" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
+              <SvgText x="300" y="375" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
+                Pin
+              </SvgText>
             </AnimatedG>
           )}
 
@@ -289,22 +368,33 @@ export function SetCourseInteractive({
           {/* Course Path */}
           {Platform.OS === 'web' ? (
             <G opacity={opacities.coursePath} data-animated-opacity="true">
+              {/* Main path - animated drawing */}
               <AnimatedPath
                 d={coursePathD}
-                stroke="yellow"
+                stroke="#FFD700"
                 strokeWidth="4"
-                strokeDasharray="15, 10"
+                strokeDasharray="1500"
                 fill="none"
                 animatedProps={coursePathDashProps}
               />
+              {/* Start label */}
+              <G transform="translate(400, 360)">
+                <Circle r="12" fill="#22C55E" stroke="white" strokeWidth="2" />
+                <SvgText y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="white">S</SvgText>
+              </G>
+              {/* Finish label */}
+              <G transform="translate(540, 360)">
+                <Circle r="12" fill="#EF4444" stroke="white" strokeWidth="2" />
+                <SvgText y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="white">F</SvgText>
+              </G>
             </G>
           ) : (
             <AnimatedG animatedProps={coursePathPropsAnimated}>
               <AnimatedPath
                 d={coursePathD}
-                stroke="yellow"
+                stroke="#FFD700"
                 strokeWidth="4"
-                strokeDasharray="15, 10"
+                strokeDasharray="1500"
                 fill="none"
                 animatedProps={coursePathDashProps}
               />
@@ -350,14 +440,39 @@ export function SetCourseInteractive({
       <View style={styles.infoContainer}>
         <Text style={styles.stepLabel}>{currentStep.label}</Text>
         <Text style={styles.stepDescription}>{currentStep.description}</Text>
+        
+        {/* Deep Dive Toggle */}
         {currentStep.details && currentStep.details.length > 0 && (
-          <View style={styles.detailsContainer}>
-            {currentStep.details.map((detail, index) => (
-              <View key={index} style={styles.detailItem}>
-                <Ionicons name="information-circle-outline" size={16} color="#3B82F6" />
-                <Text style={styles.detailText}>{detail}</Text>
+          <View style={styles.deepDiveSection}>
+            <TouchableOpacity 
+              style={styles.deepDiveButton}
+              onPress={() => setShowDeepDive(!showDeepDive)}
+            >
+              <Ionicons 
+                name={showDeepDive ? 'chevron-up' : 'bulb'} 
+                size={20} 
+                color="#8B5CF6" 
+              />
+              <Text style={styles.deepDiveButtonText}>
+                {showDeepDive ? 'Hide Deep Dive' : 'Deep Dive: Learn More'}
+              </Text>
+              <Ionicons 
+                name={showDeepDive ? 'chevron-up' : 'chevron-down'} 
+                size={16} 
+                color="#8B5CF6" 
+              />
+            </TouchableOpacity>
+            
+            {showDeepDive && (
+              <View style={styles.deepDiveContent}>
+                {currentStep.details.map((detail, index) => (
+                  <View key={index} style={styles.deepDiveItem}>
+                    <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
+                    <Text style={styles.deepDiveItemText}>{detail}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
+            )}
           </View>
         )}
       </View>
@@ -386,11 +501,136 @@ export function SetCourseInteractive({
           onPress={handleNext}
         >
           <Text style={[styles.navButtonText, styles.navButtonTextPrimary]}>
-            {currentStepIndex === SET_COURSE_SEQUENCE_STEPS.length - 1 ? 'Complete' : 'Next'}
+            {isLastStep ? 'Next Lesson' : 'Next'}
           </Text>
-          <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+          <Ionicons name={isLastStep ? 'arrow-forward' : 'chevron-forward'} size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Quiz Prompt - Show after completing all steps */}
+      {isLastStep && !showQuiz && (
+        <View style={styles.quizPrompt}>
+          <View style={styles.quizPromptContent}>
+            <Ionicons name="school" size={32} color="#3B82F6" />
+            <Text style={styles.quizPromptTitle}>Test Your Knowledge?</Text>
+            <Text style={styles.quizPromptText}>
+              Take a quick quiz to check your understanding of course setup before moving on.
+            </Text>
+            <View style={styles.quizPromptButtons}>
+              <TouchableOpacity 
+                style={styles.quizPromptButtonSecondary}
+                onPress={onComplete}
+              >
+                <Text style={styles.quizPromptButtonSecondaryText}>Skip Quiz</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.quizPromptButtonPrimary}
+                onPress={() => setShowQuiz(true)}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+                <Text style={styles.quizPromptButtonPrimaryText}>Take Quiz</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Quiz Section - Show when user chooses to take quiz */}
+      {showQuiz && (
+        <View style={styles.quizSection}>
+          <Text style={styles.quizTitle}>Test Your Knowledge</Text>
+          <Text style={styles.quizSubtitle}>Answer these questions to check your understanding of course setup.</Text>
+          
+          {SET_COURSE_QUIZ.map((question, qIndex) => {
+            const answer = quizAnswers.find(a => a.questionId === question.id);
+            
+            return (
+              <View key={question.id} style={styles.questionCard}>
+                <Text style={styles.questionNumber}>Question {qIndex + 1}</Text>
+                <Text style={styles.questionText}>{question.question}</Text>
+                
+                <View style={styles.optionsContainer}>
+                  {question.options.map(option => {
+                    const isSelected = answer?.selectedOptionId === option.id;
+                    const showResult = isSelected && answer?.isCorrect !== null;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[
+                          styles.optionButton,
+                          isSelected && styles.optionSelected,
+                          showResult && answer?.isCorrect && styles.optionCorrect,
+                          showResult && !answer?.isCorrect && styles.optionIncorrect,
+                        ]}
+                        onPress={() => handleQuizAnswer(question.id, option.id)}
+                        disabled={answer?.isCorrect === true}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          isSelected && styles.optionTextSelected,
+                        ]}>
+                          {option.text}
+                        </Text>
+                        {showResult && answer?.isCorrect && (
+                          <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+                        )}
+                        {showResult && !answer?.isCorrect && (
+                          <Ionicons name="close-circle" size={20} color="#EF4444" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                
+                {/* Feedback after answering */}
+                {answer && (
+                  <View style={[
+                    styles.feedbackBox,
+                    answer.isCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect
+                  ]}>
+                    <View style={styles.feedbackHeader}>
+                      <Ionicons 
+                        name={answer.isCorrect ? 'checkmark-circle' : 'bulb'} 
+                        size={20} 
+                        color={answer.isCorrect ? '#166534' : '#92400E'} 
+                      />
+                      <Text style={[
+                        styles.feedbackTitle,
+                        answer.isCorrect ? styles.feedbackTitleCorrect : styles.feedbackTitleIncorrect
+                      ]}>
+                        {answer.isCorrect ? 'Correct! 🎉' : 'Not quite - try again!'}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.feedbackText,
+                      answer.isCorrect ? styles.feedbackTextCorrect : styles.feedbackTextIncorrect
+                    ]}>
+                      {answer.isCorrect 
+                        ? question.explanation 
+                        : question.hint || 'Think about what you learned in the steps above.'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+          
+          {/* Quiz Results */}
+          {quizAnswers.filter(a => a.isCorrect).length === SET_COURSE_QUIZ.length && (
+            <View style={styles.quizResults}>
+              <Text style={styles.quizResultsTitle}>Quiz Complete! 🎉</Text>
+              <Text style={styles.quizResultsScore}>
+                You got {getQuizScore().correct} out of {getQuizScore().total} correct
+              </Text>
+              <TouchableOpacity style={styles.retryButton} onPress={resetQuiz}>
+                <Ionicons name="refresh" size={18} color="#3B82F6" />
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
       </View>
     </ScrollView>
   );
@@ -501,6 +741,254 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
     fontWeight: '500',
+  },
+  // Deep Dive Styles
+  deepDiveSection: {
+    marginTop: 12,
+  },
+  deepDiveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3E8FF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 8,
+  },
+  deepDiveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#8B5CF6',
+  },
+  deepDiveContent: {
+    marginTop: 12,
+    backgroundColor: '#FEFCE8',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FDE047',
+    gap: 10,
+  },
+  deepDiveItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  deepDiveItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#713F12',
+    lineHeight: 20,
+  },
+  // Quiz Prompt Styles
+  quizPrompt: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 2,
+    borderTopColor: '#E2E8F0',
+  },
+  quizPromptContent: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  quizPromptTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E40AF',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  quizPromptText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  quizPromptButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quizPromptButtonSecondary: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  quizPromptButtonSecondaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  quizPromptButtonPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#3B82F6',
+  },
+  quizPromptButtonPrimaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Quiz Styles
+  quizSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 2,
+    borderTopColor: '#E2E8F0',
+  },
+  quizTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  quizSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  questionCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  questionNumber: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  questionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  optionsContainer: {
+    gap: 8,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionSelected: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#EFF6FF',
+  },
+  optionCorrect: {
+    borderColor: '#22C55E',
+    backgroundColor: '#F0FDF4',
+  },
+  optionIncorrect: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  optionText: {
+    fontSize: 14,
+    color: '#334155',
+    flex: 1,
+  },
+  optionTextSelected: {
+    color: '#1E40AF',
+    fontWeight: '500',
+  },
+  feedbackBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  feedbackCorrect: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  feedbackIncorrect: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  feedbackTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  feedbackTitleCorrect: {
+    color: '#166534',
+  },
+  feedbackTitleIncorrect: {
+    color: '#92400E',
+  },
+  feedbackText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  feedbackTextCorrect: {
+    color: '#166534',
+  },
+  feedbackTextIncorrect: {
+    color: '#92400E',
+  },
+  quizResults: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  quizResultsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E40AF',
+    marginBottom: 8,
+  },
+  quizResultsScore: {
+    fontSize: 16,
+    color: '#3B82F6',
+    marginBottom: 16,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
 });
 

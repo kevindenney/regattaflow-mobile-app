@@ -64,6 +64,9 @@ export function StartingSequenceInteractive({
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
   const [showQuizResults, setShowQuizResults] = useState(false);
   
+  // Deep Dive state
+  const [showDeepDive, setShowDeepDive] = useState(false);
+  
   // Audio sounds
   const [sounds, setSounds] = useState<{ [key: string]: Audio.Sound | null }>({});
   
@@ -637,6 +640,44 @@ export function StartingSequenceInteractive({
               }}
             />
           </View>
+          
+          {/* Deep Dive Section - shows additional details for current step */}
+          {currentStepInfo?.details && currentStepInfo.details.length > 0 && (
+            <View style={styles.deepDiveSection}>
+              <TouchableOpacity 
+                style={styles.deepDiveButton}
+                onPress={() => setShowDeepDive(!showDeepDive)}
+              >
+                <Ionicons 
+                  name={showDeepDive ? 'chevron-up' : 'bulb'} 
+                  size={20} 
+                  color="#8B5CF6" 
+                />
+                <Text style={styles.deepDiveButtonText}>
+                  {showDeepDive ? 'Hide Deep Dive' : 'Deep Dive: Learn More'}
+                </Text>
+                <Ionicons 
+                  name={showDeepDive ? 'chevron-up' : 'chevron-down'} 
+                  size={16} 
+                  color="#8B5CF6" 
+                />
+              </TouchableOpacity>
+              
+              {showDeepDive && (
+                <View style={styles.deepDiveContent}>
+                  <Text style={styles.deepDiveTitle}>
+                    {currentStepInfo.label || 'Additional Details'}
+                  </Text>
+                  {currentStepInfo.details.map((detail, index) => (
+                    <View key={index} style={styles.deepDiveItem}>
+                      <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
+                      <Text style={styles.deepDiveItemText}>{detail}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Quiz Section */}
@@ -667,7 +708,7 @@ export function StartingSequenceInteractive({
                           showResult && !answer?.isCorrect && styles.optionIncorrect,
                         ]}
                         onPress={() => handleQuizAnswer(question.id, option.id)}
-                        disabled={answer?.selectedOptionId !== null}
+                        disabled={answer?.isCorrect === true}
                       >
                         <Text style={[
                           styles.optionText,
@@ -675,17 +716,54 @@ export function StartingSequenceInteractive({
                         ]}>
                           {option.text}
                         </Text>
-                        {showResult && (
+                        {showResult && answer?.isCorrect && (
                           <Ionicons 
-                            name={answer?.isCorrect ? 'checkmark-circle' : 'close-circle'} 
+                            name="checkmark-circle"
                             size={20} 
-                            color={answer?.isCorrect ? '#22C55E' : '#EF4444'} 
+                            color="#22C55E"
+                          />
+                        )}
+                        {showResult && !answer?.isCorrect && (
+                          <Ionicons 
+                            name="close-circle"
+                            size={20} 
+                            color="#EF4444"
                           />
                         )}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
+                
+                {/* Feedback after answering */}
+                {answer && (
+                  <View style={[
+                    styles.feedbackBox,
+                    answer.isCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect
+                  ]}>
+                    <View style={styles.feedbackHeader}>
+                      <Ionicons 
+                        name={answer.isCorrect ? 'checkmark-circle' : 'bulb'} 
+                        size={20} 
+                        color={answer.isCorrect ? '#166534' : '#92400E'} 
+                      />
+                      <Text style={[
+                        styles.feedbackTitle,
+                        answer.isCorrect ? styles.feedbackTitleCorrect : styles.feedbackTitleIncorrect
+                      ]}>
+                        {answer.isCorrect ? 'Correct! 🎉' : 'Not quite - try again!'}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.feedbackText,
+                      answer.isCorrect ? styles.feedbackTextCorrect : styles.feedbackTextIncorrect
+                    ]}>
+                      {answer.isCorrect 
+                        ? question.explanation 
+                        : question.hint || 'Think about what you learned in the lesson above.'}
+                    </Text>
+                  </View>
+                )}
               </View>
             );
           })}
@@ -817,6 +895,51 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: 300,
   },
+  // Deep Dive Section Styles
+  deepDiveSection: {
+    marginTop: 16,
+  },
+  deepDiveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3E8FF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 8,
+  },
+  deepDiveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#8B5CF6',
+  },
+  deepDiveContent: {
+    marginTop: 12,
+    backgroundColor: '#FEFCE8',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FDE047',
+  },
+  deepDiveTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#854D0E',
+    marginBottom: 12,
+  },
+  deepDiveItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    gap: 10,
+  },
+  deepDiveItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#713F12',
+    lineHeight: 20,
+  },
   // Quiz Section Styles
   quizSection: {
     marginTop: 32,
@@ -881,6 +1004,46 @@ const styles = StyleSheet.create({
   optionIncorrect: {
     borderColor: '#EF4444',
     backgroundColor: '#FEF2F2',
+  },
+  feedbackBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  feedbackCorrect: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  feedbackIncorrect: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  feedbackTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  feedbackTitleCorrect: {
+    color: '#166534',
+  },
+  feedbackTitleIncorrect: {
+    color: '#92400E',
+  },
+  feedbackText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  feedbackTextCorrect: {
+    color: '#166534',
+  },
+  feedbackTextIncorrect: {
+    color: '#92400E',
   },
   optionText: {
     fontSize: 14,

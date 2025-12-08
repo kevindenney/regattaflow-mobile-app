@@ -15,6 +15,7 @@ config.resolver = {
 
 const defaultResolveRequest = config.resolver.resolveRequest;
 const nullLoaderShimPath = path.resolve(__dirname, 'metro.loaders-null-loader.js');
+const webWorkerMockPath = path.resolve(__dirname, 'mocks/web-worker-mock.js');
 
 const zustandCjsRedirects = {
   'zustand/middleware': path.resolve(__dirname, 'node_modules', 'zustand', 'middleware.js'),
@@ -22,6 +23,14 @@ const zustandCjsRedirects = {
 };
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Mock web-worker for React Native (used by geotiff, not supported in RN)
+  if (moduleName === 'web-worker') {
+    return {
+      type: 'sourceFile',
+      filePath: webWorkerMockPath,
+    };
+  }
+
   if (
     moduleName === './null-loader.js' &&
     context.originModulePath?.includes('@loaders.gl/core/dist/index')
@@ -59,6 +68,31 @@ config.transformer = {
     },
   }),
 };
+
+// Exclude directories from file watcher to prevent constant re-bundling
+config.watcher = {
+  ...config.watcher,
+  additionalExts: ['mjs'],
+  watchman: {
+    ignore_dirs: [
+      '.git',
+      '.expo',
+      '.next',
+      'node_modules/.cache',
+      'coverage',
+      'dist',
+      '__tests__',
+    ],
+  },
+};
+
+// Blacklist patterns to prevent watching unnecessary files
+config.resolver.blockList = [
+  /\.git\/.*/,
+  /\.expo\/.*/,
+  /node_modules\/.*\/node_modules\/.*/,
+  /\.next\/.*/,
+];
 
 // Strip console.log statements in production builds
 if (process.env.NODE_ENV === 'production') {

@@ -41,6 +41,11 @@ export interface ComprehensiveRaceData {
   potentialCourses?: string[];
   courseSelectionCriteria?: string;
   courseDiagramUrl?: string;
+  
+  // Finish Area
+  finishAreaName?: string;
+  finishAreaDescription?: string;
+  finishAreaCoordinates?: { lat: number; lng: number };
 
   // Race Rules & Penalties
   scoringSystem?: string;

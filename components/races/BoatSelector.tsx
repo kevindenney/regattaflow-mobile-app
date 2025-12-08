@@ -42,73 +42,130 @@ export function BoatSelector({
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
 
   useEffect(() => {
-    loadBoats();
-  }, [user, classId]);
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const loadBoatsWithTimeout = async () => {
+      if (!user) {
+        logger.warn('No user found - cannot load boats');
+        console.log('🚢 [BoatSelector] No user found - cannot load boats');
+        if (isMounted) {
+          setLoading(false);
+          setError('Not authenticated');
+        }
+        return;
+      }
+
+      if (!user.id) {
+        logger.error('User object missing ID');
+        console.log('🚢 [BoatSelector] User object missing ID');
+        if (isMounted) {
+          setLoading(false);
+          setError('User ID not found');
+        }
+        return;
+      }
+
+      logger.debug(`Starting boat load for user: ${user.id}`);
+      console.log(`🚢 [BoatSelector] Loading boats for user: ${user.id} (${user.email})`);
+      
+      if (isMounted) {
+        setLoading(true);
+        setError(null);
+      }
+
+      // Set a timeout to prevent infinite loading
+      timeoutId = setTimeout(() => {
+        if (isMounted) {
+          console.log('🚢 [BoatSelector] Loading timed out after 10s');
+          setLoading(false);
+          setBoats([]);
+          // Don't set error - just allow proceeding without boat
+        }
+      }, 10000);
+
+      try {
+        let loadedBoats: SailorBoat[];
+
+        if (classId) {
+          logger.debug(`Loading boats for class: ${classId}`);
+          loadedBoats = await sailorBoatService.listBoatsForSailorClass(
+            user.id,
+            classId
+          );
+        } else {
+          logger.debug('Loading all boats');
+          loadedBoats = await sailorBoatService.listBoatsForSailor(user.id);
+        }
+
+        clearTimeout(timeoutId);
+
+        if (!isMounted) return;
+
+        logger.debug(`Successfully loaded ${loadedBoats.length} boats`);
+        console.log(`🚢 [BoatSelector] Successfully loaded ${loadedBoats.length} boats:`,
+          loadedBoats.map(b => `${b.name} (${b.boat_class?.name}) - Primary: ${b.is_primary}`));
+        setBoats(loadedBoats);
+        setError(null);
+
+        // Auto-select default boat if none selected
+        if (!selectedBoatId && loadedBoats.length > 0) {
+          const defaultBoat = loadedBoats.find((b) => b.is_primary);
+          if (defaultBoat) {
+            logger.debug(`Auto-selecting default boat: ${defaultBoat.id}`);
+            console.log(`🚢 [BoatSelector] Auto-selecting default boat: ${defaultBoat.name} (${defaultBoat.id})`);
+            onSelect(defaultBoat.id);
+          }
+        }
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (!isMounted) return;
+        
+        logger.error('Error loading boats', err);
+        setError(err.message || 'Failed to load boats');
+        logger.warn('User can still proceed without selecting a boat');
+        setBoats([]);
+      } finally {
+        if (isMounted) {
+          logger.debug('Boat loading complete, setting loading=false');
+          setLoading(false);
+        }
+      }
+    };
+
+    loadBoatsWithTimeout();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [user?.id, classId]);
 
   const loadBoats = async () => {
-    if (!user) {
-      logger.warn('No user found - cannot load boats');
-      console.log('🚢 [BoatSelector] No user found - cannot load boats');
-      setLoading(false);
-      setError('Not authenticated');
-      return;
-    }
-
-    if (!user.id) {
-      logger.error('User object missing ID');
-      console.log('🚢 [BoatSelector] User object missing ID');
-      setLoading(false);
-      setError('User ID not found');
-      return;
-    }
-
-    // NOTE: user.id is auth.users.id (not sailor_profiles.id)
-    // sailor_boats.sailor_id should reference auth.users.id
-    logger.debug(`Starting boat load for user: ${user.id}`);
-    console.log(`🚢 [BoatSelector] Loading boats for user: ${user.id} (${user.email})`);
+    // This is now just for manual retry
+    if (!user?.id) return;
+    
     setLoading(true);
     setError(null);
 
     try {
-      let loadedBoats: SailorBoat[];
+      const loadedBoats = classId
+        ? await sailorBoatService.listBoatsForSailorClass(user.id, classId)
+        : await sailorBoatService.listBoatsForSailor(user.id);
 
-      if (classId) {
-        // Filter by class if provided
-        logger.debug(`Loading boats for class: ${classId}`);
-        loadedBoats = await sailorBoatService.listBoatsForSailorClass(
-          user.id,
-          classId
-        );
-      } else {
-        // Get all boats
-        logger.debug('Loading all boats');
-        loadedBoats = await sailorBoatService.listBoatsForSailor(user.id);
-      }
-
-      logger.debug(`Successfully loaded ${loadedBoats.length} boats`);
-      console.log(`🚢 [BoatSelector] Successfully loaded ${loadedBoats.length} boats:`,
-        loadedBoats.map(b => `${b.name} (${b.boat_class?.name}) - Primary: ${b.is_primary}`));
       setBoats(loadedBoats);
-      setError(null); // Clear any previous errors
+      setError(null);
 
-      // Auto-select default boat if none selected
       if (!selectedBoatId && loadedBoats.length > 0) {
         const defaultBoat = loadedBoats.find((b) => b.is_primary);
         if (defaultBoat) {
-          logger.debug(`Auto-selecting default boat: ${defaultBoat.id}`);
-          console.log(`🚢 [BoatSelector] Auto-selecting default boat: ${defaultBoat.name} (${defaultBoat.id})`);
           onSelect(defaultBoat.id);
         }
       }
     } catch (err: any) {
-      logger.error('Error loading boats', err);
       setError(err.message || 'Failed to load boats');
-      // Don't show alert - just display error state
-      logger.warn('User can still proceed without selecting a boat');
-      // Still allow proceeding with empty boats list
       setBoats([]);
     } finally {
-      logger.debug('Boat loading complete, setting loading=false');
       setLoading(false);
     }
   };

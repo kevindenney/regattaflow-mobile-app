@@ -6,12 +6,37 @@
  * - Enrollments
  * - Progress tracking
  * - Access control
+ * 
+ * Performance optimizations:
+ * - In-memory cache for instant access
+ * - AsyncStorage persistence across sessions
+ * - Stale-while-revalidate pattern
+ * - Combined queries to reduce round trips
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('LearningService');
+
+// ============================================
+// CACHE CONFIGURATION
+// ============================================
+const CACHE_KEY = 'learning_courses_cache';
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes - courses don't change often
+const STALE_TTL = 60 * 60 * 1000; // 1 hour - show stale data while refreshing
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+// In-memory cache for instant access (survives component re-renders)
+let memoryCache: CacheEntry<LearningCourse[]> | null = null;
+// Cache for individual course details (keyed by courseId)
+const courseDetailCache = new Map<string, CacheEntry<LearningCourse>>();
+const COURSE_DETAIL_CACHE_KEY_PREFIX = 'learning_course_detail_';
 
 // ============================================
 // TYPES
@@ -134,256 +159,358 @@ export class LearningService {
   // COURSES
   // ==========================================
 
+  // ==========================================
+  // CACHE HELPERS
+  // ==========================================
+
   /**
-   * Get all published courses
+   * Get cached courses from memory or storage
+   */
+  private static async getCachedCourses(): Promise<{ data: LearningCourse[] | null; isStale: boolean }> {
+    const now = Date.now();
+
+    // Check memory cache first (instant)
+    if (memoryCache && (now - memoryCache.timestamp) < CACHE_TTL) {
+      logger.debug('getCourses: Using fresh memory cache');
+      return { data: memoryCache.data, isStale: false };
+    }
+
+    // Check if memory cache is stale but usable
+    if (memoryCache && (now - memoryCache.timestamp) < STALE_TTL) {
+      logger.debug('getCourses: Using stale memory cache');
+      return { data: memoryCache.data, isStale: true };
+    }
+
+    // Try AsyncStorage (persists across sessions)
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const entry: CacheEntry<LearningCourse[]> = JSON.parse(cached);
+        const age = now - entry.timestamp;
+
+        if (age < CACHE_TTL) {
+          memoryCache = entry; // Populate memory cache
+          logger.debug('getCourses: Using fresh storage cache');
+          return { data: entry.data, isStale: false };
+        }
+
+        if (age < STALE_TTL) {
+          memoryCache = entry;
+          logger.debug('getCourses: Using stale storage cache');
+          return { data: entry.data, isStale: true };
+        }
+      }
+    } catch (err) {
+      logger.warn('getCourses: Failed to read storage cache:', err);
+    }
+
+    return { data: null, isStale: false };
+  }
+
+  /**
+   * Save courses to cache
+   */
+  private static async setCachedCourses(courses: LearningCourse[]): Promise<void> {
+    const entry: CacheEntry<LearningCourse[]> = {
+      data: courses,
+      timestamp: Date.now(),
+    };
+
+    // Always update memory cache
+    memoryCache = entry;
+
+    // Persist to AsyncStorage (async, don't block)
+    AsyncStorage.setItem(CACHE_KEY, JSON.stringify(entry)).catch(err => {
+      logger.warn('getCourses: Failed to write storage cache:', err);
+    });
+  }
+
+  /**
+   * Clear courses cache (call after mutations)
+   */
+  static async clearCoursesCache(): Promise<void> {
+    memoryCache = null;
+    try {
+      await AsyncStorage.removeItem(CACHE_KEY);
+    } catch (err) {
+      logger.warn('clearCoursesCache: Failed to clear storage:', err);
+    }
+  }
+
+  // ==========================================
+  // COURSES
+  // ==========================================
+
+  /**
+   * Get all published courses with caching
+   * Uses stale-while-revalidate pattern for instant perceived performance
    */
   static async getCourses(filters?: CourseFilters): Promise<LearningCourse[]> {
+    const hasFilters = filters?.level || filters?.isFeatured || filters?.searchQuery;
+
+    // Only use cache for unfiltered requests
+    if (!hasFilters) {
+      const { data: cached, isStale } = await this.getCachedCourses();
+
+      if (cached && !isStale) {
+        logger.debug('getCourses: Returning fresh cached data');
+        return cached;
+      }
+
+      if (cached && isStale) {
+        logger.debug('getCourses: Returning stale data, refreshing in background');
+        // Return stale data immediately, refresh in background
+        this.fetchAndCacheCourses().catch(err => {
+          logger.warn('Background refresh failed:', err);
+        });
+        return cached;
+      }
+    }
+
+    // No cache or filtered request - fetch fresh
+    return this.fetchAndCacheCourses(filters);
+  }
+
+  /**
+   * Fetch courses from Supabase and update cache
+   * Uses single combined query for better performance
+   */
+  private static async fetchAndCacheCourses(filters?: CourseFilters): Promise<LearningCourse[]> {
     try {
-      logger.debug('getCourses: Starting query...');
-      
-      // Start with basic query to avoid nested query timeout issues
-      // Note: Diagnostic shows query works in ~600ms, so timeout might be network/browser issue
-      let basicQuery = supabase
+      logger.debug('fetchAndCacheCourses: Starting optimized query...');
+      const startTime = Date.now();
+
+      // Single combined query with modules (more efficient than 2 queries)
+      let query = supabase
         .from('learning_courses')
-        .select('*')
+        .select(`
+          *,
+          learning_modules (
+            id,
+            course_id,
+            title,
+            order_index
+          )
+        `)
         .eq('is_published', true)
         .order('order_index', { ascending: true });
 
       if (filters?.level) {
-        basicQuery = basicQuery.eq('level', filters.level);
+        query = query.eq('level', filters.level);
       }
 
       if (filters?.isFeatured) {
-        basicQuery = basicQuery.eq('is_featured', true);
+        query = query.eq('is_featured', true);
       }
 
       if (filters?.searchQuery) {
-        basicQuery = basicQuery.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`);
+        query = query.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`);
       }
 
-      // Add timeout using Promise.race with better error handling
-      logger.debug('getCourses: Executing query with 15s timeout...');
-      const startTime = Date.now();
-      
-      const queryPromise = basicQuery.then(result => {
-        const duration = Date.now() - startTime;
-        logger.debug(`getCourses: Query completed in ${duration}ms`);
-        return result;
-      }).catch(err => {
-        const duration = Date.now() - startTime;
-        logger.error(`getCourses: Query failed after ${duration}ms:`, err);
-        throw err;
-      });
-      
+      // Shorter timeout since we have cache fallback
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => {
-          const duration = Date.now() - startTime;
-          logger.error(`getCourses: Query timed out after ${duration}ms`);
-          reject(new Error(`Supabase query timeout after 25 seconds`));
-        }, 25000)
+        setTimeout(() => reject(new Error('Query timeout')), 15000)
       );
-      
-      const result = await Promise.race([
-        queryPromise,
-        timeoutPromise,
-      ]);
-      
-      const { data: coursesData, error: coursesError } = result as { data: any; error: any };
-      
-      logger.debug('getCourses: Query completed', { 
-        dataCount: coursesData?.length, 
-        error: coursesError?.message 
-      });
 
-      if (coursesError) {
-        logger.error('Error fetching courses:', coursesError);
-        throw coursesError;
+      const { data, error } = await Promise.race([query, timeoutPromise]) as any;
+
+      const duration = Date.now() - startTime;
+      logger.debug(`fetchAndCacheCourses: Completed in ${duration}ms, ${data?.length || 0} courses`);
+
+      if (error) {
+        throw error;
       }
 
-      if (!coursesData || coursesData.length === 0) {
-        return [];
+      const courses = (data || []).map((course: any) => ({
+        ...course,
+        learning_modules: course.learning_modules?.sort(
+          (a: any, b: any) => a.order_index - b.order_index
+        ) || [],
+      }));
+
+      // Cache unfiltered results
+      if (!filters?.level && !filters?.isFeatured && !filters?.searchQuery) {
+        await this.setCachedCourses(courses);
       }
 
-      // Try to fetch modules separately (more reliable than nested query)
-      try {
-        if (coursesData.length === 0) {
-          logger.debug('getCourses: No courses found, skipping modules fetch');
-          return [];
-        }
-
-        logger.debug('getCourses: Fetching modules for', coursesData.length, 'courses');
-        const courseIds = coursesData.map(c => c.id);
-        
-        const modulesQueryPromise = supabase
-          .from('learning_modules')
-          .select('id, course_id, title, order_index')
-          .in('course_id', courseIds)
-          .order('order_index', { ascending: true });
-        
-        const modulesTimeoutPromise = new Promise<{ data: null; error: { message: string } }>((_, reject) =>
-          setTimeout(() => reject(new Error('Modules query timeout after 10 seconds')), 10000)
-        );
-        
-        const { data: modulesData, error: modulesError } = await Promise.race([
-          modulesQueryPromise,
-          modulesTimeoutPromise,
-        ]) as { data: any; error: any };
-
-        if (modulesError) {
-          logger.warn('Error fetching modules (non-critical):', modulesError);
-          // Continue without modules
-        }
-
-        // Group modules by course_id
-        const modulesByCourse = new Map<string, LearningModule[]>();
-        if (modulesData) {
-          modulesData.forEach((module: any) => {
-            if (!modulesByCourse.has(module.course_id)) {
-              modulesByCourse.set(module.course_id, []);
-            }
-            modulesByCourse.get(module.course_id)!.push(module);
-          });
-        }
-
-        // Combine courses with their modules
-        return coursesData.map((course: any) => ({
-          ...course,
-          learning_modules: modulesByCourse.get(course.id) || [],
-        }));
-      } catch (modulesErr) {
-        logger.warn('Failed to fetch modules, returning courses without modules:', modulesErr);
-        // Return courses without modules
-        return coursesData.map((course: any) => ({
-          ...course,
-          learning_modules: [],
-        }));
-      }
+      return courses;
     } catch (error) {
-      logger.error('getCourses error:', error);
+      logger.error('fetchAndCacheCourses error:', error);
+
+      // On error, try to return stale cache as fallback
+      if (memoryCache) {
+        logger.warn('Returning stale cache due to fetch error');
+        return memoryCache.data;
+      }
+
       throw error;
     }
   }
 
+  // ==========================================
+  // COURSE DETAIL CACHE HELPERS
+  // ==========================================
+
+  /**
+   * Get cached course detail from memory or storage
+   */
+  private static async getCachedCourseDetail(courseId: string): Promise<{ data: LearningCourse | null; isStale: boolean }> {
+    const now = Date.now();
+
+    // Check memory cache first (instant)
+    const memEntry = courseDetailCache.get(courseId);
+    if (memEntry && (now - memEntry.timestamp) < CACHE_TTL) {
+      logger.debug('getCourse: Using fresh memory cache');
+      return { data: memEntry.data, isStale: false };
+    }
+
+    if (memEntry && (now - memEntry.timestamp) < STALE_TTL) {
+      logger.debug('getCourse: Using stale memory cache');
+      return { data: memEntry.data, isStale: true };
+    }
+
+    // Try AsyncStorage
+    try {
+      const cached = await AsyncStorage.getItem(COURSE_DETAIL_CACHE_KEY_PREFIX + courseId);
+      if (cached) {
+        const entry: CacheEntry<LearningCourse> = JSON.parse(cached);
+        const age = now - entry.timestamp;
+
+        if (age < CACHE_TTL) {
+          courseDetailCache.set(courseId, entry);
+          logger.debug('getCourse: Using fresh storage cache');
+          return { data: entry.data, isStale: false };
+        }
+
+        if (age < STALE_TTL) {
+          courseDetailCache.set(courseId, entry);
+          logger.debug('getCourse: Using stale storage cache');
+          return { data: entry.data, isStale: true };
+        }
+      }
+    } catch (err) {
+      logger.warn('getCourse: Failed to read storage cache:', err);
+    }
+
+    return { data: null, isStale: false };
+  }
+
+  /**
+   * Save course detail to cache
+   */
+  private static async setCachedCourseDetail(courseId: string, course: LearningCourse): Promise<void> {
+    const entry: CacheEntry<LearningCourse> = {
+      data: course,
+      timestamp: Date.now(),
+    };
+
+    courseDetailCache.set(courseId, entry);
+
+    // Persist to AsyncStorage (async, don't block)
+    AsyncStorage.setItem(
+      COURSE_DETAIL_CACHE_KEY_PREFIX + courseId,
+      JSON.stringify(entry)
+    ).catch(err => {
+      logger.warn('getCourse: Failed to write storage cache:', err);
+    });
+  }
+
   /**
    * Get a single course by ID with modules and lessons
+   * Uses caching with stale-while-revalidate for fast loading
    */
   static async getCourse(courseId: string): Promise<LearningCourse | null> {
+    // Check cache first
+    const { data: cached, isStale } = await this.getCachedCourseDetail(courseId);
+
+    if (cached && !isStale) {
+      logger.debug('getCourse: Returning fresh cached course');
+      return cached;
+    }
+
+    if (cached && isStale) {
+      logger.debug('getCourse: Returning stale cache, refreshing in background');
+      // Return stale data immediately, refresh in background
+      this.fetchAndCacheCourseDetail(courseId).catch(err => {
+        logger.warn('getCourse: Background refresh failed:', err);
+      });
+      return cached;
+    }
+
+    // No cache - fetch fresh
+    return this.fetchAndCacheCourseDetail(courseId);
+  }
+
+  /**
+   * Fetch course detail from Supabase with optimized single query
+   */
+  private static async fetchAndCacheCourseDetail(courseId: string): Promise<LearningCourse | null> {
     try {
-      logger.debug('getCourse: Starting fetch for course:', courseId);
-      
-      // Fetch course first (simple query, no nesting)
-      const coursePromise = supabase
+      logger.debug('fetchAndCacheCourseDetail: Starting optimized fetch for:', courseId);
+      const startTime = Date.now();
+
+      // Single combined query for course + modules + lessons
+      const query = supabase
         .from('learning_courses')
-        .select('*')
+        .select(`
+          *,
+          learning_modules (
+            *,
+            learning_lessons (*)
+          )
+        `)
         .eq('id', courseId)
         .eq('is_published', true)
         .single();
 
-      const courseTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Course query timed out after 20 seconds')), 20000)
+      // Shorter timeout since we have cache fallback
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Course query timed out')), 10000)
       );
 
-      const { data: courseData, error: courseError } = await Promise.race([
-        coursePromise,
-        courseTimeoutPromise,
-      ]);
+      const { data, error } = await Promise.race([query, timeoutPromise]) as any;
 
-      if (courseError) {
-        if (courseError.code === 'PGRST116') {
-          logger.debug('getCourse: Course not found');
+      const duration = Date.now() - startTime;
+      logger.debug(`fetchAndCacheCourseDetail: Completed in ${duration}ms`);
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          logger.debug('fetchAndCacheCourseDetail: Course not found');
           return null;
         }
-        logger.error('Error fetching course:', courseError);
-        throw courseError;
+        throw error;
       }
 
-      if (!courseData) {
-        logger.debug('getCourse: No course data returned');
+      if (!data) {
         return null;
       }
 
-      logger.debug('getCourse: Course fetched, now fetching modules...');
+      // Sort modules and lessons by order_index
+      const course: LearningCourse = {
+        ...data,
+        learning_modules: (data.learning_modules || [])
+          .sort((a: any, b: any) => a.order_index - b.order_index)
+          .map((module: any) => ({
+            ...module,
+            learning_lessons: (module.learning_lessons || [])
+              .sort((a: any, b: any) => a.order_index - b.order_index),
+          })),
+      };
 
-      // Fetch modules separately
-      const modulesPromise = supabase
-        .from('learning_modules')
-        .select('*')
-        .eq('course_id', courseId)
-        .order('order_index', { ascending: true });
+      // Cache the result
+      await this.setCachedCourseDetail(courseId, course);
 
-      const modulesTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Modules query timed out after 15 seconds')), 15000)
-      );
+      return course;
+    } catch (error) {
+      logger.error('fetchAndCacheCourseDetail error:', error);
 
-      const { data: modulesData, error: modulesError } = await Promise.race([
-        modulesPromise,
-        modulesTimeoutPromise,
-      ]);
-
-      if (modulesError) {
-        logger.warn('Error fetching modules (non-critical):', modulesError.message);
-        // Return course without modules if modules fail
-        return { ...courseData, learning_modules: [] } as LearningCourse;
+      // On error, try to return stale cache as fallback
+      const cachedEntry = courseDetailCache.get(courseId);
+      if (cachedEntry) {
+        logger.warn('Returning stale course cache due to fetch error');
+        return cachedEntry.data;
       }
 
-      logger.debug('getCourse: Modules fetched, now fetching lessons...', modulesData?.length || 0);
-
-      // Fetch lessons separately for all modules
-      const moduleIds = (modulesData || []).map(m => m.id);
-      if (moduleIds.length === 0) {
-        logger.debug('getCourse: No modules, returning course without lessons');
-        return {
-          ...courseData,
-          learning_modules: [],
-        } as LearningCourse;
-      }
-
-      const lessonsPromise = supabase
-        .from('learning_lessons')
-        .select('*')
-        .in('module_id', moduleIds)
-        .order('order_index', { ascending: true });
-
-      const lessonsTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Lessons query timed out after 15 seconds')), 15000)
-      );
-
-      const { data: lessonsData, error: lessonsError } = await Promise.race([
-        lessonsPromise,
-        lessonsTimeoutPromise,
-      ]);
-
-      if (lessonsError) {
-        logger.warn('Error fetching lessons (non-critical):', lessonsError.message);
-        // Return course with modules but no lessons
-        return {
-          ...courseData,
-          learning_modules: (modulesData || []).map(m => ({ ...m, learning_lessons: [] })),
-        } as LearningCourse;
-      }
-
-      // Combine modules and lessons
-      const lessonsByModule = new Map<string, LearningLesson[]>();
-      (lessonsData || []).forEach((lesson: any) => {
-        if (!lessonsByModule.has(lesson.module_id)) {
-          lessonsByModule.set(lesson.module_id, []);
-        }
-        lessonsByModule.get(lesson.module_id)!.push(lesson);
-      });
-
-      const modulesWithLessons = (modulesData || []).map((module: any) => ({
-        ...module,
-        learning_lessons: lessonsByModule.get(module.id) || [],
-      }));
-
-      logger.debug('getCourse: Successfully fetched course with', modulesWithLessons.length, 'modules');
-
-      return {
-        ...courseData,
-        learning_modules: modulesWithLessons,
-      } as LearningCourse;
-    } catch (error: any) {
-      logger.error('getCourse error:', error.message);
       throw error;
     }
   }

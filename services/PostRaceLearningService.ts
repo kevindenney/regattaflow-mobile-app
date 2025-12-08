@@ -535,6 +535,262 @@ class PostRaceLearningService {
     }
   }
 
+  /**
+   * Get venue-specific insights from past races at the same venue
+   */
+  async getVenueSpecificInsights(
+    userId: string,
+    venueName: string
+  ): Promise<{
+    raceCount: number;
+    insights: string[];
+    averagePerformance: number | null;
+    keyLearnings: string[];
+  }> {
+    try {
+      const sailorId = await this.getSailorProfileId(userId);
+      if (!sailorId || !venueName) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [] };
+      }
+
+      // Get all race analyses for this sailor
+      const analyses = await this.fetchRaceAnalyses(sailorId);
+      if (!analyses.length) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [] };
+      }
+
+      // Get races (regattas) that match the venue name
+      const { data: races, error } = await supabase
+        .from('regattas')
+        .select('id, name, venue_name, metadata')
+        .eq('created_by', userId)
+        .or(`venue_name.ilike.%${venueName}%,metadata->>venue_name.ilike.%${venueName}%`);
+
+      if (error || !races || races.length === 0) {
+        logger.debug('PostRaceLearningService: No races found for venue:', venueName);
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [] };
+      }
+
+      const raceIds = races.map((r: any) => r.id);
+      
+      // Filter analyses to only those from matching venues
+      const venueAnalyses = analyses.filter(a => raceIds.includes(a.race_id));
+      
+      if (venueAnalyses.length === 0) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [] };
+      }
+
+      // Calculate average overall performance at this venue
+      const overallRatings = venueAnalyses
+        .map(a => a.overall_satisfaction)
+        .filter((r): r is number => typeof r === 'number');
+      const averagePerformance = overallRatings.length > 0
+        ? Number((overallRatings.reduce((s, r) => s + r, 0) / overallRatings.length).toFixed(1))
+        : null;
+
+      // Collect key learnings from venue races
+      const keyLearnings = venueAnalyses
+        .flatMap(a => a.key_learnings ?? [])
+        .filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+        .slice(0, 5);
+
+      // Generate venue-specific insights
+      const insights: string[] = [];
+      
+      if (venueAnalyses.length >= 2) {
+        // Analyze start performance at venue
+        const startRatings = venueAnalyses.map(a => a.start_rating).filter((r): r is number => typeof r === 'number');
+        if (startRatings.length > 0) {
+          const avgStart = average(startRatings);
+          if (avgStart >= 4) {
+            insights.push(`Your starts at ${venueName} are strong (${avgStart.toFixed(1)} avg)`);
+          } else if (avgStart <= 3) {
+            insights.push(`Starts at ${venueName} need attention (${avgStart.toFixed(1)} avg)`);
+          }
+        }
+
+        // Analyze upwind performance at venue  
+        const upwindRatings = venueAnalyses.map(a => a.upwind_rating).filter((r): r is number => typeof r === 'number');
+        if (upwindRatings.length > 0) {
+          const avgUpwind = average(upwindRatings);
+          if (avgUpwind >= 4) {
+            insights.push(`You sail the upwind legs well at ${venueName}`);
+          } else if (avgUpwind <= 3) {
+            insights.push(`Focus on upwind technique at ${venueName}`);
+          }
+        }
+      }
+
+      if (venueAnalyses.length === 1) {
+        insights.push(`You have 1 previous race at ${venueName} to reference`);
+      } else if (venueAnalyses.length > 1) {
+        insights.push(`You've raced ${venueAnalyses.length} times at ${venueName}`);
+      }
+
+      return {
+        raceCount: venueAnalyses.length,
+        insights,
+        averagePerformance,
+        keyLearnings,
+      };
+    } catch (error) {
+      logger.error('PostRaceLearningService: Failed to get venue-specific insights', error);
+      return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [] };
+    }
+  }
+
+  /**
+   * Get conditions-specific insights from past races with similar wind conditions
+   */
+  async getConditionsSpecificInsights(
+    userId: string,
+    windSpeed: number,
+    windDirection?: number
+  ): Promise<{
+    raceCount: number;
+    insights: string[];
+    averagePerformance: number | null;
+    keyLearnings: string[];
+    conditionLabel: string;
+  }> {
+    try {
+      const sailorId = await this.getSailorProfileId(userId);
+      if (!sailorId) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [], conditionLabel: '' };
+      }
+
+      // Determine wind condition category
+      let conditionLabel: string;
+      let windMin: number;
+      let windMax: number;
+      
+      if (windSpeed <= 6) {
+        conditionLabel = 'light air';
+        windMin = 0;
+        windMax = 8;
+      } else if (windSpeed <= 12) {
+        conditionLabel = 'medium breeze';
+        windMin = 5;
+        windMax = 15;
+      } else if (windSpeed <= 20) {
+        conditionLabel = 'fresh breeze';
+        windMin = 10;
+        windMax = 22;
+      } else {
+        conditionLabel = 'heavy air';
+        windMin = 18;
+        windMax = 50;
+      }
+
+      // Get all race analyses for this sailor
+      const analyses = await this.fetchRaceAnalyses(sailorId);
+      if (!analyses.length) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [], conditionLabel };
+      }
+
+      // Get races with similar wind conditions from metadata
+      const { data: races, error } = await supabase
+        .from('regattas')
+        .select('id, name, metadata')
+        .eq('created_by', userId);
+
+      if (error || !races || races.length === 0) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [], conditionLabel };
+      }
+
+      // Filter races by wind speed range (from metadata)
+      const matchingRaces = races.filter((race: any) => {
+        const meta = race.metadata;
+        if (!meta) return false;
+        
+        // Check various wind metadata fields
+        const raceWindSpeed = 
+          meta.expected_wind_speed_min ?? 
+          meta.wind_speed ?? 
+          meta.wind?.speed ??
+          null;
+        
+        if (typeof raceWindSpeed !== 'number') return false;
+        
+        return raceWindSpeed >= windMin && raceWindSpeed <= windMax;
+      });
+
+      if (matchingRaces.length === 0) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [], conditionLabel };
+      }
+
+      const raceIds = matchingRaces.map((r: any) => r.id);
+      
+      // Filter analyses to only those from matching conditions
+      const conditionAnalyses = analyses.filter(a => raceIds.includes(a.race_id));
+      
+      if (conditionAnalyses.length === 0) {
+        return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [], conditionLabel };
+      }
+
+      // Calculate average overall performance in these conditions
+      const overallRatings = conditionAnalyses
+        .map(a => a.overall_satisfaction)
+        .filter((r): r is number => typeof r === 'number');
+      const averagePerformance = overallRatings.length > 0
+        ? Number((overallRatings.reduce((s, r) => s + r, 0) / overallRatings.length).toFixed(1))
+        : null;
+
+      // Collect key learnings from matching conditions
+      const keyLearnings = conditionAnalyses
+        .flatMap(a => a.key_learnings ?? [])
+        .filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+        .slice(0, 5);
+
+      // Generate condition-specific insights
+      const insights: string[] = [];
+      
+      if (conditionAnalyses.length >= 2) {
+        // For light air, check boat handling
+        if (windSpeed <= 6) {
+          const ratings = conditionAnalyses.map(a => a.upwind_rating).filter((r): r is number => typeof r === 'number');
+          if (ratings.length > 0 && average(ratings) <= 3) {
+            insights.push(`In light air, your upwind VMG tends to suffer - focus on sail trim and smooth tacks`);
+          }
+        }
+        
+        // For heavy air, check downwind
+        if (windSpeed >= 18) {
+          const ratings = conditionAnalyses.map(a => a.downwind_rating).filter((r): r is number => typeof r === 'number');
+          if (ratings.length > 0 && average(ratings) <= 3) {
+            insights.push(`In heavy air, your downwind legs need attention - consider more conservative angles`);
+          }
+        }
+        
+        // General performance insight
+        if (averagePerformance !== null) {
+          if (averagePerformance >= 4) {
+            insights.push(`You perform well in ${conditionLabel} (${averagePerformance} avg) - trust your instincts`);
+          } else if (averagePerformance <= 3) {
+            insights.push(`${conditionLabel} conditions have been challenging (${averagePerformance} avg) - review past notes`);
+          }
+        }
+      }
+
+      if (conditionAnalyses.length === 1) {
+        insights.push(`You have 1 race in similar ${conditionLabel} conditions to reference`);
+      } else if (conditionAnalyses.length > 1) {
+        insights.push(`You've raced ${conditionAnalyses.length} times in ${conditionLabel} conditions`);
+      }
+
+      return {
+        raceCount: conditionAnalyses.length,
+        insights,
+        averagePerformance,
+        keyLearnings,
+        conditionLabel,
+      };
+    } catch (error) {
+      logger.error('PostRaceLearningService: Failed to get conditions-specific insights', error);
+      return { raceCount: 0, insights: [], averagePerformance: null, keyLearnings: [], conditionLabel: '' };
+    }
+  }
+
   private async getSailorProfileId(userId: string): Promise<string | null> {
     try {
       const { data, error } = await supabase
