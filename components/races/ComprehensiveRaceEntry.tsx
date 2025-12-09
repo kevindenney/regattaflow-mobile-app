@@ -3273,17 +3273,21 @@ export function ComprehensiveRaceEntry({
 
             <Pressable
               onPress={() => setShowRacingAreaMap(!showRacingAreaMap)}
-              className="flex-row items-center justify-between p-3 bg-sky-50 border border-sky-200 rounded-lg mb-4"
+              className={`flex-row items-center justify-between p-3 border rounded-lg mb-4 ${
+                raceType === 'distance' 
+                  ? 'bg-purple-50 border-purple-200' 
+                  : 'bg-sky-50 border-sky-200'
+              }`}
             >
               <View className="flex-row items-center gap-2">
-                <MapPin size={18} color="#0284c7" />
-                <Text className="text-sm font-semibold text-sky-700">
-                  {showRacingAreaMap ? 'Hide' : 'Show'} Map & Define Racing Area
+                <MapPin size={18} color={raceType === 'distance' ? '#9333ea' : '#0284c7'} />
+                <Text className={`text-sm font-semibold ${raceType === 'distance' ? 'text-purple-700' : 'text-sky-700'}`}>
+                  {showRacingAreaMap ? 'Hide' : 'Show'} Map & {raceType === 'distance' ? 'Define Route' : 'Define Racing Area'}
                 </Text>
               </View>
               <ChevronDown
                 size={18}
-                color="#0284c7"
+                color={raceType === 'distance' ? '#9333ea' : '#0284c7'}
                 style={{
                   transform: [{ rotate: showRacingAreaMap ? '180deg' : '0deg' }],
                 }}
@@ -3293,10 +3297,12 @@ export function ComprehensiveRaceEntry({
             {showRacingAreaMap && (
               <View className="mb-4">
                 <Text className="text-sm font-semibold text-gray-700 mb-2">
-                  Racing Area Boundary
+                  {raceType === 'distance' ? 'Route Waypoints' : 'Racing Area Boundary'}
                 </Text>
                 <Text className="text-xs text-gray-500 mb-3">
-                  Click "Draw Racing Area" to define the general boundary where racing will occur. You can add specific course marks later.
+                  {raceType === 'distance' 
+                    ? 'Add waypoints to define the race route: Start → Waypoints → Finish. Click on the map to add each point in sequence.'
+                    : 'Click "Draw Racing Area" to define the general boundary where racing will occur. You can add specific course marks later.'}
                 </Text>
 
                 {/* Prepare race event data for map */}
