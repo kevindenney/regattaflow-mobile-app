@@ -57,6 +57,7 @@ import { RaceSuggestionsDrawer } from './RaceSuggestionsDrawer';
 import { VenueLocationPicker } from './VenueLocationPicker';
 import { RacePrepLearningCard } from './RacePrepLearningCard';
 import { RaceTypeSelector, type RaceType } from './RaceTypeSelector';
+import { DistanceRouteMap, type RouteWaypoint } from './DistanceRouteMap';
 import { RigTuningCard } from '@/components/race-detail/RigTuningCard';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { ExtractionPreferencesDialog, type ExtractionPreferences, DEFAULT_PREFERENCES } from './ExtractionPreferencesDialog';
@@ -352,14 +353,7 @@ export function ComprehensiveRaceEntry({
   const [cutOffPoints, setCutOffPoints] = useState<Array<{location: string; time: string}>>([]);
 
   // === Distance Racing Fields ===
-  const [routeWaypoints, setRouteWaypoints] = useState<Array<{
-    name: string;
-    latitude: number;
-    longitude: number;
-    type: 'start' | 'waypoint' | 'gate' | 'finish';
-    required: boolean;
-    passingSide?: 'port' | 'starboard' | 'either';
-  }>>([]);
+  const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
   const [totalDistanceNm, setTotalDistanceNm] = useState('');
   const [timeLimitHours, setTimeLimitHours] = useState('');
   const [startFinishSameLocation, setStartFinishSameLocation] = useState(true);
@@ -3296,99 +3290,120 @@ export function ComprehensiveRaceEntry({
 
             {showRacingAreaMap && (
               <View className="mb-4">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">
-                  {raceType === 'distance' ? 'Route Waypoints' : 'Racing Area Boundary'}
-                </Text>
-                <Text className="text-xs text-gray-500 mb-3">
-                  {raceType === 'distance' 
-                    ? 'Add waypoints to define the race route: Start → Waypoints → Finish. Click on the map to add each point in sequence.'
-                    : 'Click "Draw Racing Area" to define the general boundary where racing will occur. You can add specific course marks later.'}
-                </Text>
+                {/* DISTANCE RACING: Route Waypoint Map */}
+                {raceType === 'distance' ? (
+                  <>
+                    <DistanceRouteMap
+                      waypoints={routeWaypoints}
+                      onWaypointsChange={setRouteWaypoints}
+                      initialCenter={venueCoordinates || { lat: 22.28, lng: 114.16 }}
+                      onTotalDistanceChange={(distance) => setTotalDistanceNm(distance.toString())}
+                    />
+                    
+                    {routeWaypoints.length > 0 && (
+                      <View className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                        <Text className="text-sm font-semibold text-purple-800">
+                          ✅ Route Defined: {routeWaypoints.length} waypoints, {totalDistanceNm} nm
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  /* FLEET RACING: Racing Area Map */
+                  <>
+                    <Text className="text-sm font-semibold text-gray-700 mb-2">
+                      Racing Area Boundary
+                    </Text>
+                    <Text className="text-xs text-gray-500 mb-3">
+                      Click "Draw Racing Area" to define the general boundary where racing will occur. You can add specific course marks later.
+                    </Text>
 
-                {/* Prepare race event data for map */}
-                {(() => {
-                  // Convert extracted marks to CourseMark format (if any)
-                  const courseMarks: CourseMark[] = extractedDataForValidation?.marks
-                    ? extractedDataForValidation.marks.map((mark, idx) => ({
-                        id: `mark-${idx}`,
-                        race_event_id: 'temp-event-id',
-                        mark_name: mark.name || `Mark ${idx + 1}`,
-                        mark_type: (mark.type || 'windward') as any,
-                        position: null as any,
-                        coordinates_lat: (mark as any).latitude || (mark as any).coordinates?.lat || 0,
-                        coordinates_lng: (mark as any).longitude || (mark as any).coordinates?.lng || 0,
-                        sequence_number: idx + 1,
-                        rounding_direction: (mark as any).roundingDirection || 'port',
-                        extracted_from: 'ai_pdf',
-                        confidence_score: (mark as any).confidence || 0.8,
+                    {/* Prepare race event data for map */}
+                    {(() => {
+                      // Convert extracted marks to CourseMark format (if any)
+                      const courseMarks: CourseMark[] = extractedDataForValidation?.marks
+                        ? extractedDataForValidation.marks.map((mark, idx) => ({
+                            id: `mark-${idx}`,
+                            race_event_id: 'temp-event-id',
+                            mark_name: mark.name || `Mark ${idx + 1}`,
+                            mark_type: (mark.type || 'windward') as any,
+                            position: null as any,
+                            coordinates_lat: (mark as any).latitude || (mark as any).coordinates?.lat || 0,
+                            coordinates_lng: (mark as any).longitude || (mark as any).coordinates?.lng || 0,
+                            sequence_number: idx + 1,
+                            rounding_direction: (mark as any).roundingDirection || 'port',
+                            extracted_from: 'ai_pdf',
+                            confidence_score: (mark as any).confidence || 0.8,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                          }))
+                        : [];
+
+                      // Create mock race event for map (works with or without marks)
+                      // Safe date parsing - handle invalid dates
+                      let safeStartTime: string;
+                      try {
+                        if (raceDate && raceDate.trim()) {
+                          const parsedDate = new Date(raceDate);
+                          safeStartTime = isNaN(parsedDate.getTime())
+                            ? new Date().toISOString()
+                            : parsedDate.toISOString();
+                        } else {
+                          safeStartTime = new Date().toISOString();
+                        }
+                      } catch {
+                        safeStartTime = new Date().toISOString();
+                      }
+
+                      const mockRaceEvent: RaceEventWithDetails = {
+                        id: 'temp-event-id',
+                        user_id: user?.id || 'temp-user',
+                        race_name: raceName || 'New Race',
+                        race_series: null,
+                        boat_class: null,
+                        start_time: safeStartTime,
+                        racing_area_name: venue || null,
+                        extraction_status: 'completed',
+                        extraction_method: 'ai_auto',
+                        race_status: 'scheduled',
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
-                      }))
-                    : [];
+                        venue: venueCoordinates ? {
+                          id: 'temp-venue',
+                          name: venue,
+                          coordinates_lat: venueCoordinates.lat,
+                          coordinates_lng: venueCoordinates.lng,
+                          country: '',
+                          region: 'global',
+                        } : undefined,
+                      };
 
-                  // Create mock race event for map (works with or without marks)
-                  // Safe date parsing - handle invalid dates
-                  let safeStartTime: string;
-                  try {
-                    if (raceDate && raceDate.trim()) {
-                      const parsedDate = new Date(raceDate);
-                      safeStartTime = isNaN(parsedDate.getTime())
-                        ? new Date().toISOString()
-                        : parsedDate.toISOString();
-                    } else {
-                      safeStartTime = new Date().toISOString();
-                    }
-                  } catch {
-                    safeStartTime = new Date().toISOString();
-                  }
+                      return (
+                        <View style={{ height: 500 }}>
+                          <TacticalRaceMap
+                            raceEvent={mockRaceEvent}
+                            marks={courseMarks}
+                            onRacingAreaSelected={handleRacingAreaSelected}
+                            showControls={false}
+                            allowAreaSelection={true}
+                            externalLayers={{ depth: false }}
+                          />
+                        </View>
+                      );
+                    })()}
 
-                  const mockRaceEvent: RaceEventWithDetails = {
-                    id: 'temp-event-id',
-                    user_id: user?.id || 'temp-user',
-                    race_name: raceName || 'New Race',
-                    race_series: null,
-                    boat_class: null,
-                    start_time: safeStartTime,
-                    racing_area_name: venue || null,
-                    extraction_status: 'completed',
-                    extraction_method: 'ai_auto',
-                    race_status: 'scheduled',
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    venue: venueCoordinates ? {
-                      id: 'temp-venue',
-                      name: venue,
-                      coordinates_lat: venueCoordinates.lat,
-                      coordinates_lng: venueCoordinates.lng,
-                      country: '',
-                      region: 'global',
-                    } : undefined,
-                  };
-
-                  return (
-                    <View style={{ height: 500 }}>
-                      <TacticalRaceMap
-                        raceEvent={mockRaceEvent}
-                        marks={courseMarks}
-                        onRacingAreaSelected={handleRacingAreaSelected}
-                        showControls={false}
-                        allowAreaSelection={true}
-                        externalLayers={{ depth: false }}
-                      />
-                    </View>
-                  );
-                })()}
-
-                {/* Show selected polygon info */}
-                {racingAreaPolygon && (
-                  <View className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <Text className="text-sm font-semibold text-green-800">
-                      ✅ Racing Area Defined
-                    </Text>
-                    <Text className="text-xs text-green-700 mt-1">
-                      {racingAreaPolygon.length} boundary points captured. This will be saved with your race.
-                    </Text>
-                  </View>
+                    {/* Show selected polygon info */}
+                    {racingAreaPolygon && (
+                      <View className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <Text className="text-sm font-semibold text-green-800">
+                          ✅ Racing Area Defined
+                        </Text>
+                        <Text className="text-xs text-green-700 mt-1">
+                          {racingAreaPolygon.length} boundary points captured. This will be saved with your race.
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 )}
 
                 {/* Info message about course marks */}

@@ -66,9 +66,11 @@ export { StrategyPhaseSuggestion } from './StrategyPhaseSuggestion';
 // Race Type Components
 export { RaceTypeSelector, RaceTypeBadge } from './RaceTypeSelector';
 export { DistanceRaceCard } from './DistanceRaceCard';
+export { DistanceRouteMap } from './DistanceRouteMap';
 export { PreRaceBriefingCard } from './PreRaceBriefingCard';
 export type { RaceType } from './RaceTypeSelector';
-export type { RouteWaypoint, DistanceRaceCardProps } from './DistanceRaceCard';
+export type { RouteWaypoint } from './DistanceRouteMap';
+export type { DistanceRaceCardProps } from './DistanceRaceCard';
 
 // Re-export types
 export type { Document } from './DocumentList';

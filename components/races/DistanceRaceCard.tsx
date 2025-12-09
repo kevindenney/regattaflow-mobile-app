@@ -20,18 +20,9 @@ import {
 import { useRouter } from 'expo-router';
 import { RaceTypeBadge } from './RaceTypeSelector';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
+import type { RouteWaypoint } from './DistanceRouteMap';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Route waypoint structure
-export interface RouteWaypoint {
-  name: string;
-  latitude: number;
-  longitude: number;
-  type: 'start' | 'waypoint' | 'gate' | 'finish';
-  required: boolean;
-  passingSide?: 'port' | 'starboard' | 'either';
-}
 
 export interface DistanceRaceCardProps {
   id: string;
