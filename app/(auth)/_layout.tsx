@@ -1,5 +1,6 @@
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '@/providers/AuthProvider';
+import { SUPABASE_CONFIG_ERROR } from '@/services/supabase';
 import { router, Stack, useSegments } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
@@ -41,6 +42,28 @@ export default function AuthLayout() {
   const currentRoute = segments[segments.length - 1];
   const onboardingRoutes = ONBOARDING_ROUTES;
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Show config error immediately if Supabase can't initialize
+  if (SUPABASE_CONFIG_ERROR) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>⚠️ Configuration Error</Text>
+        <Text style={styles.errorText}>{SUPABASE_CONFIG_ERROR}</Text>
+        <Text style={styles.errorHint}>
+          Please ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY 
+          are set in your Vercel environment variables.
+        </Text>
+        {Platform.OS === 'web' && (
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => window.location.reload()}
+          >
+            <Text style={styles.retryText}>Refresh Page</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
 
   // Detect if auth is taking too long (potential config issue)
   useEffect(() => {
@@ -188,5 +211,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#DC2626',
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#B91C1C',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  errorHint: {
+    fontSize: 14,
+    color: '#7F1D1D',
+    textAlign: 'center',
+    marginBottom: 24,
+    maxWidth: 400,
+    lineHeight: 20,
   },
 });

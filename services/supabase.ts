@@ -5,18 +5,16 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+// Track config error for UI display
+export let SUPABASE_CONFIG_ERROR: string | null = null;
+
 if (!supabaseUrl || !supabaseAnonKey) {
   const missingVars = [];
   if (!supabaseUrl) missingVars.push('EXPO_PUBLIC_SUPABASE_URL');
   if (!supabaseAnonKey) missingVars.push('EXPO_PUBLIC_SUPABASE_ANON_KEY');
   
-  const errorMsg = `[SUPABASE] Missing required environment variables: ${missingVars.join(', ')}. App cannot initialize.`;
-  console.error(errorMsg);
-  
-  // In web/production, show a visible error
-  if (typeof window !== 'undefined') {
-    console.error('[SUPABASE] Environment config error - check Vercel environment variables');
-  }
+  SUPABASE_CONFIG_ERROR = `Missing environment variables: ${missingVars.join(', ')}`;
+  console.error('[SUPABASE]', SUPABASE_CONFIG_ERROR);
 }
 
 type SecureStoreModule = typeof import('expo-secure-store');
