@@ -2941,8 +2941,8 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Race Suggestions - Only show when there ARE suggestions */}
-        {!existingRaceId && suggestions && suggestions.length > 0 && (
+        {/* Race Suggestions - Only show when user has club/fleet suggestions */}
+        {!existingRaceId && suggestions && suggestions.total > 0 && (
           <RaceSuggestionsDrawer
             suggestions={suggestions}
             loading={suggestionsLoading}
