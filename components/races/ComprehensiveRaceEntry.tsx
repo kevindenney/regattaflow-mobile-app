@@ -2956,6 +2956,21 @@ export function ComprehensiveRaceEntry({
       </View>
 
       <ScrollView className="flex-1 px-4 py-4" showsVerticalScrollIndicator={false}>
+        {/* Race Type Selector - At the top for visibility */}
+        <View className="mb-6">
+          <RaceTypeSelector
+            value={raceType}
+            onChange={(type) => setRaceType(type)}
+          />
+          {raceType === 'distance' && (
+            <View className="bg-purple-50 border border-purple-200 rounded-lg p-3 mt-3">
+              <Text className="text-xs text-purple-700">
+                💡 Distance racing mode: The form will show route waypoints and time limits instead of mark roundings.
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* Course Ready Banner */}
         {initialCourseId && !existingRaceId && (
           <View className="bg-cyan-50 border-2 border-cyan-200 rounded-xl p-4 mb-4 flex-row items-start gap-3">
@@ -3319,14 +3334,6 @@ export function ComprehensiveRaceEntry({
           <View className="flex-1 h-px bg-gray-300" />
           <Text className="text-sm text-gray-500 font-semibold">OR FILL MANUALLY</Text>
           <View className="flex-1 h-px bg-gray-300" />
-        </View>
-
-        {/* Race Type Selector */}
-        <View className="mb-6">
-          <RaceTypeSelector
-            value={raceType}
-            onChange={(type) => setRaceType(type)}
-          />
         </View>
 
         {/* Basic Information */}
