@@ -2887,109 +2887,62 @@ export function ComprehensiveRaceEntry({
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-sky-600 pt-12 pb-6 px-4">
-        <View className="flex-row items-center justify-between mb-4">
+      {/* Compact Header */}
+      <View className="bg-sky-600 pt-12 pb-3 px-4">
+        <View className="flex-row items-center justify-between">
           <Pressable
             onPress={handleHeaderBack}
-            className="flex-row items-center gap-2 bg-white/10 rounded-full px-3 py-2"
+            className="flex-row items-center gap-1"
             accessibilityRole="button"
             accessibilityLabel="Go back"
             accessibilityHint="Return to the previous screen"
           >
-            <ChevronLeft color="#FFFFFF" size={18} />
-            <Text className="text-white font-semibold text-sm">Back</Text>
+            <ChevronLeft color="#FFFFFF" size={20} />
+            <Text className="text-white font-medium text-base">Back</Text>
           </Pressable>
-          <View className="bg-white rounded-full px-4 py-2 shadow-sm">
-            <Text
-              className="text-base font-black tracking-wide"
-              style={{ color: '#3B82F6' }}
-            >
-              RegattaFlow
+          
+          {/* Centered Title */}
+          <View className="absolute left-0 right-0 items-center pointer-events-none">
+            <Text className="text-white text-lg font-bold">
+              {existingRaceId ? 'Edit Race' : 'Add Race'}
             </Text>
           </View>
+          
+          {/* Right side - show race info badge if extracted */}
+          {raceName ? (
+            <View className="bg-white/20 rounded-lg px-2 py-1 max-w-[140px]">
+              <Text className="text-white text-xs font-medium" numberOfLines={1}>
+                {raceName}
+              </Text>
+            </View>
+          ) : (
+            <View style={{ width: 60 }} /> 
+          )}
         </View>
-        {/* Dynamic header - shows race info when extracted */}
-        {raceName ? (
-          <View>
-            <Text className="text-white/70 text-xs font-semibold uppercase tracking-wider">
-              {existingRaceId ? 'Editing' : 'Creating'}
-            </Text>
-            <Text className="text-white text-xl font-bold" numberOfLines={2}>
-              {raceName}
-            </Text>
-            {(raceDate || venue) && (
-              <View className="flex-row items-center gap-2 mt-1">
-                {raceDate && (
-                  <View className="flex-row items-center gap-1">
-                    <Calendar size={12} color="rgba(255,255,255,0.8)" />
-                    <Text className="text-white/80 text-xs">
-                      {new Date(raceDate).toLocaleDateString('en-US', { 
-                        weekday: 'short', 
-                        month: 'short', 
-                        day: 'numeric' 
-                      })}
-                    </Text>
-                  </View>
-                )}
-                {venue && (
-                  <View className="flex-row items-center gap-1">
-                    <MapPin size={12} color="rgba(255,255,255,0.8)" />
-                    <Text className="text-white/80 text-xs" numberOfLines={1}>
-                      {venue}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        ) : (
-          <View>
-            <Text className="text-white text-2xl font-bold">
-              {existingRaceId ? 'Edit' : 'Add'} Race
-            </Text>
-            <Text className="text-white/90 text-sm mt-1">
-              {extracting ? '✨ AI is extracting race details...' : 'Upload NOR/SI or enter details manually'}
-            </Text>
-          </View>
-        )}
       </View>
 
-      <ScrollView className="flex-1 px-4 py-4" showsVerticalScrollIndicator={false}>
-        {/* Race Type Selector - At the top for visibility */}
-        <View className="mb-6">
+      <ScrollView className="flex-1 px-4 pt-3 pb-4" showsVerticalScrollIndicator={false}>
+        {/* Race Type Selector - Compact version at top */}
+        <View className="mb-4">
           <RaceTypeSelector
             value={raceType}
             onChange={(type) => setRaceType(type)}
+            size="compact"
           />
-          {raceType === 'distance' && (
-            <View className="bg-purple-50 border border-purple-200 rounded-lg p-3 mt-3">
-              <Text className="text-xs text-purple-700">
-                💡 Distance racing mode: The form will show route waypoints and time limits instead of mark roundings.
-              </Text>
-            </View>
-          )}
         </View>
 
-        {/* Course Ready Banner */}
+        {/* Course Ready Banner - Only when applicable */}
         {initialCourseId && !existingRaceId && (
-          <View className="bg-cyan-50 border-2 border-cyan-200 rounded-xl p-4 mb-4 flex-row items-start gap-3">
-            <MapPin size={20} color="#0369A1" style={{ marginTop: 2 }} />
-            <View className="flex-1">
-              <Text className="text-base font-bold text-cyan-900 mb-1">
-                Course Ready to Apply
-              </Text>
-              <Text className="text-sm text-cyan-800">
-                {initialCourseName
-                  ? `We'll open the course selector after saving so you can apply ${initialCourseName}.`
-                  : 'We will open the course selector after saving so you can apply this course layout.'}
-              </Text>
-            </View>
+          <View className="bg-cyan-50 border border-cyan-200 rounded-lg p-3 mb-4 flex-row items-center gap-2">
+            <MapPin size={16} color="#0369A1" />
+            <Text className="text-sm text-cyan-800 flex-1">
+              Course "{initialCourseName}" ready to apply after saving
+            </Text>
           </View>
         )}
 
-        {/* Race Suggestions - Only show when creating a new race, not when editing */}
-        {!existingRaceId && (
+        {/* Race Suggestions - Only show when there ARE suggestions */}
+        {!existingRaceId && suggestions && suggestions.length > 0 && (
           <RaceSuggestionsDrawer
             suggestions={suggestions}
             loading={suggestionsLoading}
@@ -3000,84 +2953,47 @@ export function ComprehensiveRaceEntry({
           />
         )}
 
-        {/* AI Freeform Text Input - Collapsible */}
-        <View className="bg-gradient-to-r from-purple-50 to-sky-50 border-2 border-purple-200 rounded-xl mb-6 overflow-hidden">
-          <Pressable 
-            onPress={() => setAiQuickEntryExpanded(!aiQuickEntryExpanded)}
-            className="flex-row items-center justify-between p-4"
-          >
-            <View className="flex-row items-center gap-2">
-              <Sparkles size={20} color="#9333ea" />
-              <Text className="text-lg font-bold text-purple-900">
-                AI Quick Entry
-              </Text>
-              {!aiQuickEntryExpanded && (
-                <View className="bg-purple-200 px-2 py-0.5 rounded-full ml-2">
-                  <Text className="text-xs text-purple-800 font-medium">
-                    Paste NOR/SI to auto-fill
-                  </Text>
-                </View>
-              )}
-            </View>
-            <ChevronDown 
-              size={20} 
-              color="#9333ea" 
-              style={{ transform: [{ rotate: aiQuickEntryExpanded ? '180deg' : '0deg' }] }}
-            />
-          </Pressable>
-          
-          {aiQuickEntryExpanded && (
-          <View className="px-4 pb-4">
-          <Text className="text-sm text-purple-800 mb-2">
-            Upload PDF/document, paste a PDF URL, or paste text. AI will automatically extract and fill all fields below.
-          </Text>
-          <View className="bg-purple-100 rounded-lg p-3 mb-3">
-            <View className="flex-row items-start gap-2">
-              <AlertCircle size={16} color="#7c3aed" style={{ marginTop: 2 }} />
-              <View className="flex-1">
-                <Text className="text-xs font-semibold text-purple-900 mb-1">
-                  What AI Extracts
-                </Text>
-                <Text className="text-xs text-purple-800">
-                  AI will find: race name, date, time, venue, class, and course details. {'\n'}
-                  Note: Most clubs don't publish GPS coordinates—you'll add course marks in the Strategy tab.
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Upload Buttons - Supports Multiple Files */}
-          <View className="flex-row gap-2 mb-3">
-            {/* Upload Documents Button (All Types) */}
-            <Pressable
-              onPress={() => handleFileUpload('other')}
-              disabled={extracting}
-              className={`flex-1 items-center py-3 px-2 rounded-lg border-2 ${
-                extracting && currentDocType === 'other'
-                  ? 'bg-purple-100 border-purple-400'
-                  : 'bg-white border-purple-300'
-              }`}
+        {/* AI Quick Entry - Primary Action, Always Expanded */}
+        <View className="bg-white border border-purple-200 rounded-xl mb-4 overflow-hidden shadow-sm">
+          {/* Header - More compact */}
+          <View className="flex-row items-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-50 to-sky-50 border-b border-purple-100">
+            <Sparkles size={18} color="#9333ea" />
+            <Text className="text-base font-bold text-purple-900 flex-1">
+              AI Quick Entry
+            </Text>
+            <Pressable 
+              onPress={() => setAiQuickEntryExpanded(!aiQuickEntryExpanded)}
+              className="p-1"
             >
-              {extracting && currentDocType === 'other' ? (
-                <ActivityIndicator color="#9333ea" size="small" />
-              ) : (
-                <Upload size={24} color="#9333ea" />
-              )}
-              <Text className="text-purple-700 font-semibold text-xs mt-1 text-center">
-                Upload Documents
-              </Text>
-              <Text className="text-purple-600 text-[10px] mt-0.5 text-center">
-                (Select multiple)
-              </Text>
+              <ChevronDown 
+                size={18} 
+                color="#9333ea" 
+                style={{ transform: [{ rotate: aiQuickEntryExpanded ? '180deg' : '0deg' }] }}
+              />
             </Pressable>
           </View>
-
-          {/* Info about multi-document support */}
-          <View className="bg-purple-50 rounded-lg p-2 mb-3">
-            <Text className="text-xs text-purple-800 text-center">
-              💡 Select multiple documents at once! AI will automatically detect document types (NOR, SI, Appendix, etc.) and combine information.
+          
+          {aiQuickEntryExpanded && (
+          <View className="p-4">
+          {/* Upload Button - Primary CTA */}
+          <Pressable
+            onPress={() => handleFileUpload('other')}
+            disabled={extracting}
+            className={`flex-row items-center justify-center gap-2 py-3 px-4 rounded-lg mb-3 ${
+              extracting && currentDocType === 'other'
+                ? 'bg-purple-100'
+                : 'bg-purple-600'
+            }`}
+          >
+            {extracting && currentDocType === 'other' ? (
+              <ActivityIndicator color="#9333ea" size="small" />
+            ) : (
+              <Upload size={18} color="#FFFFFF" />
+            )}
+            <Text className={`font-semibold ${extracting && currentDocType === 'other' ? 'text-purple-700' : 'text-white'}`}>
+              {extracting && currentDocType === 'other' ? 'Processing...' : 'Upload NOR / SI Documents'}
             </Text>
-          </View>
+          </Pressable>
 
           {/* Uploaded Documents List */}
           {uploadedDocuments.length > 0 && (
