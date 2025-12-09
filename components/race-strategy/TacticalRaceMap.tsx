@@ -150,6 +150,8 @@ export default function TacticalRaceMap({
   const overlayRegistryRef = useRef<Record<string, { layers: string[]; sources: string[] }>>({});
   const overlaySignatureRef = useRef<Record<string, string>>({});
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapRetryCount, setMapRetryCount] = useState(0);
   const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   const [is3D, setIs3D] = useState(false); // Default to 2D
   const [showGlobalBathymetry, setShowGlobalBathymetry] = useState(false);
@@ -1234,10 +1236,13 @@ export default function TacticalRaceMap({
 
         map.on('error', (e: any) => {
           if (e?.error) {
+            logger.error('[TacticalRaceMap] Map error:', e.error);
           }
         });
       } catch (error) {
-        setMapLoaded(true); // Show error state
+        logger.error('[TacticalRaceMap] Failed to initialize map:', error);
+        setMapError(error instanceof Error ? error.message : 'Failed to load map');
+        setMapLoaded(true); // Hide loading overlay
       }
     };
 
@@ -1258,7 +1263,7 @@ export default function TacticalRaceMap({
         deckOverlayRef.current = null;
       }
     };
-  }, []);
+  }, [mapRetryCount]); // Re-run when retry is clicked
 
   // Recenter map when race venue or marks update (e.g., user selects a location)
   useEffect(() => {
@@ -3427,9 +3432,38 @@ function convertStrategicZonesToOverlay(
         />
 
         {/* Loading Overlay */}
-        {!mapLoaded && (
+        {!mapLoaded && !mapError && (
           <View style={styles.loadingOverlay}>
             <Text style={styles.loadingText}>🗺️ Loading tactical map...</Text>
+          </View>
+        )}
+        
+        {/* Error Overlay with Retry */}
+        {mapError && (
+          <View style={styles.loadingOverlay}>
+            <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+            <Text style={[styles.loadingText, { color: '#EF4444', marginTop: 8 }]}>
+              Failed to load map
+            </Text>
+            <Text style={{ fontSize: 12, color: '#6B7280', textAlign: 'center', marginTop: 4 }}>
+              {mapError}
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setMapError(null);
+                setMapLoaded(false);
+                setMapRetryCount(prev => prev + 1);
+              }}
+              style={{
+                marginTop: 12,
+                backgroundColor: '#3B82F6',
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 8,
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: '600' }}>Retry</Text>
+            </TouchableOpacity>
           </View>
         )}
 
