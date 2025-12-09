@@ -3164,11 +3164,7 @@ export function ComprehensiveRaceEntry({
         )}
         </View>
 
-        {/* Race Prep Learning Card - Shows insights from past races */}
-        <RacePrepLearningCard
-          venueName={venue}
-          windSpeed={expectedWindSpeedMin ? parseInt(expectedWindSpeedMin) : expectedWindSpeedMax ? parseInt(expectedWindSpeedMax) : undefined}
-        />
+        {/* Race Prep Learning Card - Removed from Add Race screen; shown on Race Detail screen instead */}
 
         {/* Extracted Marks Display */}
         {extractedDataForValidation?.marks && extractedDataForValidation.marks.length > 0 && (
