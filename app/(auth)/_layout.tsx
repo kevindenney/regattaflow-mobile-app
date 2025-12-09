@@ -1,7 +1,8 @@
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '@/providers/AuthProvider';
 import { router, Stack, useSegments } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
 const ONBOARDING_ROUTES = new Set([
   // New wizard-based club onboarding
@@ -39,6 +40,20 @@ export default function AuthLayout() {
   const segments = useSegments();
   const currentRoute = segments[segments.length - 1];
   const onboardingRoutes = ONBOARDING_ROUTES;
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Detect if auth is taking too long (potential config issue)
+  useEffect(() => {
+    if (state === 'checking') {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+        console.warn('[AUTH_LAYOUT] Auth initialization timeout - checking environment config');
+      }, 8000); // 8 second timeout
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [state]);
 
   // Imperative redirect for signed_out to prevent any rendering
   // EXCEPT for login and signup pages
@@ -63,9 +78,31 @@ export default function AuthLayout() {
     }
   }, [state, userType, currentRoute]);
 
-  // Don't render anything while checking
+  // Show loading indicator while checking auth state
   if (state === 'checking') {
-    return null;
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.loadingText}>
+          {loadingTimeout ? 'Still loading...' : 'Loading...'}
+        </Text>
+        {loadingTimeout && (
+          <View style={styles.timeoutContainer}>
+            <Text style={styles.timeoutText}>
+              Taking longer than expected. Check your network connection.
+            </Text>
+            {Platform.OS === 'web' && (
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={() => window.location.reload()}
+              >
+                <Text style={styles.retryText}>Refresh Page</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
   }
 
   // Allow rendering for login/signup pages even when signed out
@@ -117,3 +154,39 @@ export default function AuthLayout() {
   </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#64748B',
+  },
+  timeoutContainer: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  timeoutText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+});

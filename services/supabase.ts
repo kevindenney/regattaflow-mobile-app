@@ -1,6 +1,24 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 
+// Validate required environment variables at startup
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  const missingVars = [];
+  if (!supabaseUrl) missingVars.push('EXPO_PUBLIC_SUPABASE_URL');
+  if (!supabaseAnonKey) missingVars.push('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  
+  const errorMsg = `[SUPABASE] Missing required environment variables: ${missingVars.join(', ')}. App cannot initialize.`;
+  console.error(errorMsg);
+  
+  // In web/production, show a visible error
+  if (typeof window !== 'undefined') {
+    console.error('[SUPABASE] Environment config error - check Vercel environment variables');
+  }
+}
+
 type SecureStoreModule = typeof import('expo-secure-store');
 
 let SecureStore: SecureStoreModule | null = null;
@@ -69,8 +87,8 @@ export type UserType = 'sailor' | 'coach' | 'club' | null;
 export type UsersRow = { id: string; email: string | null; user_type: UserType; };
 
 export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL!,
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+  supabaseUrl || '',
+  supabaseAnonKey || '',
   {
     auth: {
       storage: ExpoSecureStorage,
@@ -643,12 +661,21 @@ export const queryWithRetry = async <T>(
 // Test connectivity to Supabase
 export const testSupabaseConnectivity = async (): Promise<{ success: boolean; duration: number; error?: string }> => {
   const start = Date.now();
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return {
+      success: false,
+      duration: 0,
+      error: 'Missing Supabase environment variables'
+    };
+  }
+  
   try {
-    const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
       method: 'GET',
       headers: {
-        'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`
       },
       signal: AbortSignal.timeout(5000)
     });
