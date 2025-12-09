@@ -77,14 +77,62 @@ export interface ExtractedData {
   specialDesignations?: Array<string>;
 
   // === COMMUNICATIONS ===
-  vhfChannel?: string;
+  vhfChannel?: string;  // Legacy single channel field
+  vhfChannels?: Array<{
+    channel: string;
+    purpose: string;      // e.g., "Inner Starting Line", "Outer Starting Line", "Safety"
+    classes?: string[];   // Which classes use this channel
+  }>;
   safetyChannel?: string;
   raceOfficer?: string;
 
-  // === WEATHER (legacy) ===
+  // === WEATHER (legacy - not displayed, weather fetched dynamically from coordinates) ===
   expectedWindSpeedMin?: number;
   expectedWindSpeedMax?: number;
+  
+  // === START AREA ===
   startAreaName?: string;
+  
+  // === MULTIPLE START LINES ===
+  startLines?: Array<{
+    name: string;
+    description?: string;
+    classes: string[];
+    vhfChannel?: string;
+    marks?: {
+      starboardEnd?: string;
+      portEnd?: string;
+    };
+    direction?: string;
+    startTimes?: Array<{
+      class: string;
+      flag: string;
+      time: string;
+    }>;
+  }>;
+  
+  // === RACING AREA ===
+  racingAreaName?: string;
+  racingAreaDescription?: string;
+  approximateDistance?: string;
+  
+  // === PROHIBITED AREAS ===
+  prohibitedAreas?: Array<{
+    name: string;
+    description?: string;
+    coordinates?: Array<{ lat: number; lng: number }>;
+    consequence?: string;
+  }>;
+  
+  // === COURSE GATES ===
+  gates?: Array<{
+    name: string;
+    description?: string;
+    orientation?: string;
+    portMark?: string;
+    starboardMark?: string;
+    canShortenHere?: boolean;
+  }>;
   
   // === FINISH AREA ===
   finishAreaName?: string;
@@ -140,15 +188,48 @@ interface AIValidationScreenProps {
   confidenceScores?: FieldConfidenceMap;
   onConfirm: (validatedData: ExtractedData) => void;
   onCancel: () => void;
+  userBoatClass?: string;  // For smart filtering
+  filterToUserClass?: boolean;  // Whether to filter by default
 }
+
+// Helper to check if a class name matches (case-insensitive, partial match)
+const classMatches = (classes: string[] | undefined, targetClass: string): boolean => {
+  if (!classes || classes.length === 0) return false;
+  const target = targetClass.toLowerCase();
+  return classes.some(c => 
+    c.toLowerCase().includes(target) || 
+    target.includes(c.toLowerCase())
+  );
+};
+
+// Filter start lines to show relevant ones first
+const filterStartLines = (
+  startLines: ExtractedData['startLines'], 
+  userClass: string | undefined,
+  filterEnabled: boolean
+) => {
+  if (!startLines || !userClass || !filterEnabled) return startLines;
+  
+  // Sort: matching classes first, then others
+  return [...startLines].sort((a, b) => {
+    const aMatches = classMatches(a.classes, userClass);
+    const bMatches = classMatches(b.classes, userClass);
+    if (aMatches && !bMatches) return -1;
+    if (!aMatches && bMatches) return 1;
+    return 0;
+  });
+};
 
 export function AIValidationScreen({
   extractedData,
   confidenceScores = {},
   onConfirm,
   onCancel,
+  userBoatClass,
+  filterToUserClass = false,
 }: AIValidationScreenProps) {
   const [data, setData] = useState<ExtractedData>(extractedData);
+  const [showMyClassOnly, setShowMyClassOnly] = useState(filterToUserClass);
 
   // Calculate validation statistics
   const getValidationStats = () => {
@@ -235,27 +316,20 @@ export function AIValidationScreen({
       title: 'Timing & Schedule',
       fields: [
         { key: 'warningSignalTime', label: 'Warning Signal Time', placeholder: 'HH:MM' },
-        { key: 'startAreaName', label: 'Start Area', placeholder: 'Start area name' },
       ],
     },
     {
       title: 'Communications',
       fields: [
-        { key: 'vhfChannel', label: 'VHF Channel', placeholder: 'e.g., 72' },
+        { key: 'vhfChannel', label: 'VHF Channel', placeholder: 'e.g., 72', isVhfChannels: true },
         { key: 'raceOfficer', label: 'Race Officer', placeholder: 'Officer name' },
-      ],
-    },
-    {
-      title: 'Conditions',
-      fields: [
-        { key: 'expectedWindSpeedMin', label: 'Min Wind Speed (kts)', placeholder: 'e.g., 10' },
-        { key: 'expectedWindSpeedMax', label: 'Max Wind Speed (kts)', placeholder: 'e.g., 18' },
       ],
     },
     {
       title: 'Rules & Scoring',
       fields: [
         { key: 'scoringSystem', label: 'Scoring System', placeholder: 'e.g., Low Point' },
+        { key: 'penaltySystem', label: 'Penalty System', placeholder: 'e.g., One-Turn Penalty' },
       ],
     },
   ];
@@ -299,19 +373,227 @@ export function AIValidationScreen({
         {fieldGroups.map((group, groupIndex) => (
           <View key={groupIndex} style={styles.fieldGroup}>
             <Text style={styles.groupTitle}>{group.title}</Text>
-            {group.fields.map((field) => (
-              <EditableField
-                key={field.key}
-                label={field.label}
-                value={String(data[field.key] || '')}
-                confidence={confidenceScores[field.key]}
-                onValueChange={(value) => handleFieldChange(field.key, value)}
-                placeholder={field.placeholder}
-                multiline={field.multiline}
-              />
-            ))}
+            {group.fields.map((field) => {
+              // Special handling for VHF channels - supports array or string
+              if (field.isVhfChannels) {
+                const vhfChannels = data.vhfChannels;
+                const legacyChannel = data.vhfChannel;
+                
+                // If we have an array of channels, render them nicely
+                if (vhfChannels && Array.isArray(vhfChannels) && vhfChannels.length > 0) {
+                  return (
+                    <View key={field.key} style={styles.vhfChannelsContainer}>
+                      <Text style={styles.fieldLabel}>VHF Channels</Text>
+                      <View style={styles.confidenceBadge}>
+                        <Text style={styles.confidenceText}>
+                          {Math.round((confidenceScores[field.key] || 0.95) * 100)}%
+                        </Text>
+                      </View>
+                      {vhfChannels.map((vhf, idx) => (
+                        <View key={idx} style={styles.vhfChannelCard}>
+                          <View style={styles.vhfChannelHeader}>
+                            <Text style={styles.vhfChannelNumber}>Ch {vhf.channel}</Text>
+                            <Text style={styles.vhfChannelPurpose}>{vhf.purpose}</Text>
+                          </View>
+                          {vhf.classes && vhf.classes.length > 0 && (
+                            <Text style={styles.vhfChannelClasses}>
+                              Classes: {vhf.classes.join(', ')}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  );
+                }
+                
+                // Fall back to legacy single channel display
+                const displayValue = typeof legacyChannel === 'string' 
+                  ? legacyChannel 
+                  : typeof legacyChannel === 'object' && legacyChannel !== null
+                    ? JSON.stringify(legacyChannel)
+                    : '';
+                    
+                return (
+                  <EditableField
+                    key={field.key}
+                    label={field.label}
+                    value={displayValue}
+                    confidence={confidenceScores[field.key]}
+                    onValueChange={(value) => handleFieldChange(field.key, value)}
+                    placeholder={field.placeholder}
+                    multiline={field.multiline}
+                  />
+                );
+              }
+              
+              // Standard field rendering
+              return (
+                <EditableField
+                  key={field.key}
+                  label={field.label}
+                  value={String(data[field.key] || '')}
+                  confidence={confidenceScores[field.key]}
+                  onValueChange={(value) => handleFieldChange(field.key, value)}
+                  placeholder={field.placeholder}
+                  multiline={field.multiline}
+                />
+              );
+            })}
           </View>
         ))}
+
+        {/* Multiple Start Lines */}
+        {data.startLines && data.startLines.length > 0 && (
+          <View style={styles.fieldGroup}>
+            <View style={styles.startLinesHeader}>
+              <Text style={styles.groupTitle}>🏁 Starting Lines ({data.startLines.length})</Text>
+              {userBoatClass && (
+                <TouchableOpacity
+                  style={[styles.filterToggle, showMyClassOnly && styles.filterToggleActive]}
+                  onPress={() => setShowMyClassOnly(!showMyClassOnly)}
+                >
+                  <Text style={[styles.filterToggleText, showMyClassOnly && styles.filterToggleTextActive]}>
+                    {showMyClassOnly ? `Showing: ${userBoatClass}` : 'Show All'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
+            {filterStartLines(data.startLines, userBoatClass, showMyClassOnly).map((line, index) => {
+              const isMyLine = userBoatClass && classMatches(line.classes, userBoatClass);
+              
+              return (
+                <View key={index} style={[styles.startLineCard, isMyLine && styles.startLineCardHighlighted]}>
+                  <View style={styles.startLineHeader}>
+                    <View style={styles.startLineNameContainer}>
+                      <Text style={styles.startLineName}>{line.name}</Text>
+                      {isMyLine && (
+                        <Text style={styles.myLineBadge}>YOUR LINE</Text>
+                      )}
+                    </View>
+                    {line.vhfChannel && (
+                      <Text style={styles.startLineVhf}>VHF {line.vhfChannel}</Text>
+                    )}
+                  </View>
+                  
+                  {line.description && (
+                    <Text style={styles.startLineDescription}>{line.description}</Text>
+                  )}
+                  
+                  {line.marks && (line.marks.starboardEnd || line.marks.portEnd) && (
+                    <View style={styles.startLineMarks}>
+                      {line.marks.starboardEnd && (
+                        <Text style={styles.startLineMark}>▶ Starboard: {line.marks.starboardEnd}</Text>
+                      )}
+                      {line.marks.portEnd && (
+                        <Text style={styles.startLineMark}>◀ Port: {line.marks.portEnd}</Text>
+                      )}
+                      {line.direction && (
+                        <Text style={styles.startLineDirection}>Direction: {line.direction}</Text>
+                      )}
+                    </View>
+                  )}
+                  
+                  {line.classes && line.classes.length > 0 && (
+                    <View style={styles.startLineClasses}>
+                      <Text style={styles.startLineClassesLabel}>Classes on this line:</Text>
+                      <Text style={styles.startLineClassesList}>
+                        {line.classes.map((cls, i) => (
+                          <Text key={i}>
+                            {i > 0 && ', '}
+                            <Text style={userBoatClass && cls.toLowerCase().includes(userBoatClass.toLowerCase()) ? styles.highlightedClass : undefined}>
+                              {cls}
+                            </Text>
+                          </Text>
+                        ))}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {line.startTimes && line.startTimes.length > 0 && (
+                    <View style={styles.startTimesContainer}>
+                      <Text style={styles.startTimesLabel}>Start Schedule:</Text>
+                      {(showMyClassOnly && userBoatClass
+                        ? line.startTimes.filter(st => 
+                            st.class.toLowerCase().includes(userBoatClass.toLowerCase()) ||
+                            userBoatClass.toLowerCase().includes(st.class.toLowerCase())
+                          )
+                        : line.startTimes.slice(0, 5)
+                      ).map((st, stIndex) => {
+                        const isMyClass = userBoatClass && (
+                          st.class.toLowerCase().includes(userBoatClass.toLowerCase()) ||
+                          userBoatClass.toLowerCase().includes(st.class.toLowerCase())
+                        );
+                        return (
+                          <View key={stIndex} style={[styles.startTimeRow, isMyClass && styles.startTimeRowHighlighted]}>
+                            <Text style={[styles.startTimeClass, isMyClass && styles.startTimeClassHighlighted]}>
+                              {st.class}
+                            </Text>
+                            <Text style={styles.startTimeFlag}>{st.flag}</Text>
+                            <Text style={[styles.startTimeTime, isMyClass && styles.startTimeTimeHighlighted]}>
+                              {st.time}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                      {!showMyClassOnly && line.startTimes.length > 5 && (
+                        <Text style={styles.startTimesMore}>
+                          +{line.startTimes.length - 5} more classes...
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Course Gates */}
+        {data.gates && data.gates.length > 0 && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.groupTitle}>🚪 Course Gates ({data.gates.length})</Text>
+            
+            {data.gates.map((gate, index) => (
+              <View key={index} style={styles.gateCard}>
+                <Text style={styles.gateName}>{gate.name}</Text>
+                {gate.orientation && (
+                  <Text style={styles.gateOrientation}>Orientation: {gate.orientation}</Text>
+                )}
+                {gate.description && (
+                  <Text style={styles.gateDescription}>{gate.description}</Text>
+                )}
+                {gate.canShortenHere && (
+                  <Text style={styles.gateShorten}>⚠️ Possible shortened course finish</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Prohibited Areas */}
+        {data.prohibitedAreas && data.prohibitedAreas.length > 0 && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.groupTitle}>⛔ Prohibited Areas ({data.prohibitedAreas.length})</Text>
+            
+            {data.prohibitedAreas.map((area, index) => (
+              <View key={index} style={styles.prohibitedAreaCard}>
+                <Text style={styles.prohibitedAreaName}>{area.name}</Text>
+                {area.description && (
+                  <Text style={styles.prohibitedAreaDescription}>{area.description}</Text>
+                )}
+                {area.consequence && (
+                  <Text style={styles.prohibitedAreaConsequence}>⚠️ {area.consequence}</Text>
+                )}
+                {area.coordinates && area.coordinates.length > 0 && (
+                  <Text style={styles.prohibitedAreaCoords}>
+                    📍 {area.coordinates.length} coordinate points
+                  </Text>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Course Marks & Racing Area */}
         {(data.marks && data.marks.length > 0) || data.racingArea ? (
@@ -628,5 +910,295 @@ const styles = StyleSheet.create({
     color: '#6366f1',
     marginTop: 12,
     fontStyle: 'italic',
+  },
+  // VHF Channels styles
+  vhfChannelsContainer: {
+    marginBottom: 12,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  confidenceBadge: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    backgroundColor: '#d1fae5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  confidenceText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  vhfChannelCard: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  vhfChannelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  vhfChannelNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#166534',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  vhfChannelPurpose: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#15803d',
+    flex: 1,
+  },
+  vhfChannelClasses: {
+    fontSize: 13,
+    color: '#4b5563',
+    marginTop: 6,
+    paddingLeft: 4,
+  },
+  // Start Lines styles
+  startLinesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  filterToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  filterToggleActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#3b82f6',
+  },
+  filterToggleText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  filterToggleTextActive: {
+    color: '#1d4ed8',
+  },
+  startLineCard: {
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
+  startLineCardHighlighted: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+    borderWidth: 2,
+  },
+  startLineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  startLineNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  startLineName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  myLineBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  startLineVhf: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  startLineDescription: {
+    fontSize: 13,
+    color: '#78350f',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  startLineMarks: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
+  },
+  startLineMark: {
+    fontSize: 13,
+    color: '#78350f',
+    marginBottom: 2,
+  },
+  startLineDirection: {
+    fontSize: 12,
+    color: '#92400e',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  startLineClasses: {
+    marginBottom: 8,
+  },
+  startLineClassesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 2,
+  },
+  startLineClassesList: {
+    fontSize: 13,
+    color: '#78350f',
+  },
+  startTimesContainer: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 6,
+    padding: 8,
+  },
+  startTimesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 6,
+  },
+  startTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  startTimeClass: {
+    flex: 2,
+    fontSize: 13,
+    color: '#78350f',
+  },
+  startTimeFlag: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400e',
+    textAlign: 'center',
+  },
+  startTimeTime: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#78350f',
+    textAlign: 'right',
+  },
+  startTimesMore: {
+    fontSize: 12,
+    color: '#b45309',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  startTimeRowHighlighted: {
+    backgroundColor: '#dcfce7',
+    borderRadius: 4,
+    marginHorizontal: -4,
+    paddingHorizontal: 4,
+  },
+  startTimeClassHighlighted: {
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  startTimeTimeHighlighted: {
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  highlightedClass: {
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  // Gate styles
+  gateCard: {
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  gateName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e40af',
+    marginBottom: 4,
+  },
+  gateOrientation: {
+    fontSize: 13,
+    color: '#3b82f6',
+  },
+  gateDescription: {
+    fontSize: 13,
+    color: '#1e3a8a',
+    marginTop: 4,
+  },
+  gateShorten: {
+    fontSize: 12,
+    color: '#ea580c',
+    fontWeight: '500',
+    marginTop: 6,
+  },
+  // Prohibited Areas styles
+  prohibitedAreaCard: {
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  prohibitedAreaName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#991b1b',
+    marginBottom: 4,
+  },
+  prohibitedAreaDescription: {
+    fontSize: 13,
+    color: '#7f1d1d',
+  },
+  prohibitedAreaConsequence: {
+    fontSize: 12,
+    color: '#dc2626',
+    fontWeight: '500',
+    marginTop: 6,
+  },
+  prohibitedAreaCoords: {
+    fontSize: 12,
+    color: '#b91c1c',
+    marginTop: 4,
+    fontFamily: 'monospace',
   },
 });

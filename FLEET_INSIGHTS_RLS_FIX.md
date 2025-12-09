@@ -61,7 +61,7 @@ You should see: "Success. No rows returned"
 
 ### 5. Test Fleet Insights
 1. Open RegattaFlow app
-2. Login as Demo Sailor (demo-sailor@regattaflow.app)
+2. Login as Demo Sailor (demo-sailor@regattaflow.io)
 3. Go to Races tab
 4. Select "Phyloong 5 & 6" race
 5. Expand "Post-Race Analysis" section

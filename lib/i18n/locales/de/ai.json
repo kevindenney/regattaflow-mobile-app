@@ -1,0 +1,49 @@
+{
+  "title": "KI-Coach",
+  "strategy": {
+    "title": "Wettfahrt-Strategie",
+    "generate": "Strategie generieren",
+    "generating": "Strategie wird generiert...",
+    "ready": "Ihre Strategie ist bereit",
+    "executiveSummary": "Zusammenfassung",
+    "venueAnalysis": "Revieranalyse",
+    "weatherSummary": "Wetterzusammenfassung",
+    "startStrategy": "Startstrategie",
+    "legByLeg": "Taktik pro Schlag",
+    "contingencies": "Alternativpläne",
+    "keyReminders": "Wichtige Hinweise"
+  },
+  "coaching": {
+    "title": "KI-Coaching",
+    "askQuestion": "Stellen Sie eine Frage...",
+    "thinking": "Denke nach...",
+    "suggestions": "Vorschläge",
+    "learnMore": "Mehr erfahren"
+  },
+  "debrief": {
+    "title": "Wettfahrt-Nachbesprechung",
+    "whatWentWell": "Was gut lief",
+    "improvements": "Verbesserungspotenzial",
+    "keyLessons": "Wichtige Erkenntnisse",
+    "practiceIdeas": "Trainingsideen"
+  },
+  "tuning": {
+    "title": "Bootstrimmung",
+    "recommendations": "Empfehlungen",
+    "forConditions": "Für aktuelle Bedingungen",
+    "rigSettings": "Rigg-Einstellungen",
+    "sailTrim": "Segeltrimmung"
+  },
+  "tokens": {
+    "usage": "KI-Nutzung",
+    "remaining": "{{count}} Token verbleibend",
+    "limit": "Monatliches Limit",
+    "unlimited": "Unbegrenzt"
+  },
+  "errors": {
+    "generationFailed": "Strategie konnte nicht generiert werden",
+    "limitReached": "Monatliches KI-Limit erreicht",
+    "tryAgain": "Bitte versuchen Sie es erneut"
+  }
+}
+

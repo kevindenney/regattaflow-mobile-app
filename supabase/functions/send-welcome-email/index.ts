@@ -6,7 +6,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const FROM_EMAIL = 'RegattaFlow <hello@regattaflow.app>';
+const FROM_EMAIL = 'RegattaFlow <hello@regattaflow.io>';
 
 interface WelcomeEmailRequest {
   email: string;
@@ -163,7 +163,7 @@ serve(async (req) => {
               <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                 <tr>
                   <td align="center">
-                    <a href="https://app.regattaflow.app/events" 
+                    <a href="https://app.regattaflow.io/events" 
                        style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
                       Go to Dashboard →
                     </a>
@@ -173,7 +173,7 @@ serve(async (req) => {
               
               <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0;">
                 Questions? Reply to this email or check out our 
-                <a href="https://regattaflow.app/docs" style="color: #0284c7;">documentation</a>.
+                <a href="https://regattaflow.io/docs" style="color: #0284c7;">documentation</a>.
               </p>
             </td>
           </tr>

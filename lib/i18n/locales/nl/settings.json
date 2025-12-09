@@ -1,0 +1,28 @@
+{
+  "title": "Instellingen",
+  "account": {
+    "title": "Account",
+    "profile": "Profiel",
+    "email": "E-mail",
+    "password": "Wachtwoord",
+    "change_password": "Wachtwoord wijzigen",
+    "sign_out": "Uitloggen",
+    "delete_account": "Account verwijderen"
+  },
+  "preferences": {
+    "title": "Voorkeuren",
+    "language": "Taal",
+    "units": "Eenheden",
+    "notifications": "Meldingen",
+    "theme": "Thema",
+    "dark_mode": "Donkere modus"
+  },
+  "about": {
+    "title": "Over",
+    "version": "Versie",
+    "privacy_policy": "Privacybeleid",
+    "terms_of_service": "Gebruiksvoorwaarden",
+    "contact_support": "Contact opnemen"
+  }
+}
+

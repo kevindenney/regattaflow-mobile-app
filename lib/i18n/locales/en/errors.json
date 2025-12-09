@@ -1,0 +1,53 @@
+{
+  "general": {
+    "unknown": "An unknown error occurred",
+    "network": "Network error. Please check your connection.",
+    "server": "Server error. Please try again later.",
+    "timeout": "Request timed out. Please try again.",
+    "notFound": "Not found",
+    "unauthorized": "You are not authorized to perform this action",
+    "forbidden": "Access denied",
+    "validation": "Please check your input"
+  },
+  "auth": {
+    "invalidCredentials": "Invalid email or password",
+    "emailInUse": "Email already in use",
+    "weakPassword": "Password is too weak",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "accountDisabled": "Your account has been disabled",
+    "invalidToken": "Invalid or expired token"
+  },
+  "races": {
+    "loadFailed": "Failed to load races",
+    "createFailed": "Failed to create race",
+    "updateFailed": "Failed to update race",
+    "deleteFailed": "Failed to delete race",
+    "registrationFailed": "Registration failed",
+    "alreadyRegistered": "You are already registered"
+  },
+  "scoring": {
+    "loadFailed": "Failed to load results",
+    "saveFailed": "Failed to save results",
+    "publishFailed": "Failed to publish results",
+    "calculationFailed": "Failed to calculate standings"
+  },
+  "ai": {
+    "generationFailed": "AI generation failed",
+    "limitReached": "AI usage limit reached",
+    "serviceUnavailable": "AI service temporarily unavailable"
+  },
+  "file": {
+    "uploadFailed": "File upload failed",
+    "downloadFailed": "File download failed",
+    "invalidFormat": "Invalid file format",
+    "tooLarge": "File is too large",
+    "importFailed": "Import failed",
+    "exportFailed": "Export failed"
+  },
+  "offline": {
+    "notAvailable": "This feature is not available offline",
+    "syncFailed": "Failed to sync data",
+    "pending": "Changes will sync when online"
+  }
+}
+

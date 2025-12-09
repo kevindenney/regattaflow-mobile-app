@@ -63,7 +63,7 @@ async function addDemoParticipants() {
     .select('id, email, full_name')
     .in('email', [
       'marcus.thompson@demo.regattaflow.com',
-      'demo-sailor@regattaflow.app',
+      'demo-sailor@regattaflow.io',
       'denneyke@gmail.com',
     ]);
 
@@ -84,7 +84,7 @@ async function addDemoParticipants() {
       registered_at: new Date().toISOString(),
     },
     {
-      user_id: users.find(u => u.email === 'demo-sailor@regattaflow.app')?.id,
+      user_id: users.find(u => u.email === 'demo-sailor@regattaflow.io')?.id,
       regatta_id: race.id,
       fleet_id: fleetId,
       boat_name: 'Lightning',

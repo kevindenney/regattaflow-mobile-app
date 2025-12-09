@@ -1,0 +1,28 @@
+{
+  "title": "Klasyfikacja",
+  "position": "Pozycja",
+  "points": "Punkty",
+  "total": "Suma",
+  "discard": "Odrzut",
+  "codes": {
+    "dnf": "DNF - Nie ukończył",
+    "dns": "DNS - Nie wystartował",
+    "dsq": "DSQ - Zdyskwalifikowany",
+    "ocs": "OCS - Na linii",
+    "bfd": "BFD - Czarna flaga",
+    "dnc": "DNC - Nie startował",
+    "rdg": "RDG - Zadośćuczynienie",
+    "scp": "SCP - Kara punktowa",
+    "ret": "RET - Wycofał się",
+    "raf": "RAF - Wycofał się przed startem"
+  },
+  "systems": {
+    "low_point": "Niskie punkty",
+    "high_point": "Wysokie punkty",
+    "bonus_point": "Punkty bonusowe"
+  },
+  "tie_break": "Rozstrzygnięcie",
+  "series_score": "Wynik serii",
+  "race_score": "Wynik regat"
+}
+

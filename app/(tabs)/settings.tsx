@@ -16,13 +16,22 @@ import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { ClubAiAssistant } from '@/components/ai/ClubAiAssistant';
+import { LanguageSelector } from '@/components/settings/LanguageSelector';
+import { useTranslation } from 'react-i18next';
+import { localeConfig, getCurrentLocale } from '@/lib/i18n';
 
 export default function SettingsScreen() {
   const { user, userProfile, clubProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
+  const { t } = useTranslation(['settings', 'common']);
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
   const [claimLoading, setClaimLoading] = useState(false);
+  const [languageVisible, setLanguageVisible] = useState(false);
+
+  // Get current language display name
+  const currentLocale = getCurrentLocale();
+  const currentLanguageName = localeConfig[currentLocale]?.nativeName || 'English';
 
   const isDemoProfile = useMemo(
     () =>
@@ -67,7 +76,7 @@ export default function SettingsScreen() {
     const fallbackEmail =
       userProfile?.email ||
       user?.email ||
-      `regatta-${user?.id ?? 'demo'}@demo.regattaflow.app`;
+      `regatta-${user?.id ?? 'demo'}@demo.regattaflow.io`;
 
     setClaimLoading(true);
     try {
@@ -232,9 +241,9 @@ export default function SettingsScreen() {
             />
             <SettingItem
               icon="language-outline"
-              title="Language"
-              subtitle="English"
-              onPress={() => Alert.alert('Coming Soon', 'Language settings will be available soon!')}
+              title={t('settings:preferences.language')}
+              subtitle={currentLanguageName}
+              onPress={() => setLanguageVisible(true)}
             />
             <SettingItem
               icon="moon-outline"
@@ -304,6 +313,12 @@ export default function SettingsScreen() {
           <Text style={styles.appInfoText}>© 2024 RegattaFlow Inc.</Text>
         </View>
       </ScrollView>
+
+      {/* Language Selector Modal */}
+      <LanguageSelector
+        visible={languageVisible}
+        onClose={() => setLanguageVisible(false)}
+      />
 
       <Modal
         visible={claimVisible}

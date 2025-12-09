@@ -1,0 +1,42 @@
+{
+  "title": "Regaty",
+  "upcoming": "Nadchodzące",
+  "past": "Zakończone",
+  "my_races": "Moje regaty",
+  "all_races": "Wszystkie regaty",
+  "add_race": "Dodaj regaty",
+  "edit_race": "Edytuj regaty",
+  "delete_race": "Usuń regaty",
+  "race_details": "Szczegóły regat",
+  "race_name": "Nazwa regat",
+  "race_date": "Data regat",
+  "race_time": "Czas startu",
+  "race_location": "Lokalizacja",
+  "race_course": "Trasa",
+  "race_class": "Klasa",
+  "race_fleet": "Flota",
+  "entries": "Zgłoszenia",
+  "results": "Wyniki",
+  "status": {
+    "scheduled": "Zaplanowane",
+    "in_progress": "W trakcie",
+    "completed": "Zakończone",
+    "cancelled": "Odwołane",
+    "postponed": "Przełożone"
+  },
+  "registration": {
+    "register": "Zarejestruj się",
+    "registered": "Zarejestrowany",
+    "withdraw": "Wycofaj się",
+    "registration_open": "Rejestracja otwarta",
+    "registration_closed": "Rejestracja zamknięta",
+    "deadline": "Termin rejestracji"
+  },
+  "sailwave": {
+    "import": "Importuj z Sailwave",
+    "export": "Eksportuj do Sailwave",
+    "import_success": "Import Sailwave powiódł się",
+    "import_error": "Błąd importu Sailwave"
+  }
+}
+

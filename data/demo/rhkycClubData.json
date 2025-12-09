@@ -112,7 +112,7 @@
   },
   "memberships": [
     {
-      "email": "demo-club@regattaflow.app",
+      "email": "demo-club@regattaflow.io",
       "role": "admin",
       "membershipType": "flag_officer",
       "status": "active",
@@ -478,7 +478,7 @@
         "recentHighlights": ["2025 Nations' Cup finalists"]
       },
       "members": [
-        { "email": "demo-club@regattaflow.app", "role": "owner" },
+        { "email": "demo-club@regattaflow.io", "role": "owner" },
         { "email": "coach.anderson@sailing.com", "role": "coach" }
       ]
     },

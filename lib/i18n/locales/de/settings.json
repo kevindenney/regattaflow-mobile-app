@@ -1,0 +1,61 @@
+{
+  "title": "Einstellungen",
+  "sections": {
+    "account": "Konto",
+    "preferences": "Einstellungen",
+    "notifications": "Benachrichtigungen",
+    "privacy": "Datenschutz",
+    "about": "Über uns",
+    "support": "Support"
+  },
+  "account": {
+    "profile": "Profil",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "changePassword": "Passwort ändern",
+    "subscription": "Abonnement",
+    "manageSubscription": "Abonnement verwalten",
+    "signOut": "Abmelden",
+    "deleteAccount": "Konto löschen"
+  },
+  "preferences": {
+    "language": "Sprache",
+    "units": "Einheiten",
+    "metric": "Metrisch",
+    "imperial": "Imperial",
+    "dateFormat": "Datumsformat",
+    "timeFormat": "Zeitformat",
+    "theme": "Design",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System"
+  },
+  "notifications": {
+    "push": "Push-Benachrichtigungen",
+    "email": "E-Mail-Benachrichtigungen",
+    "raceReminders": "Wettfahrt-Erinnerungen",
+    "results": "Ergebnis-Updates",
+    "notices": "Schwarzes Brett",
+    "weather": "Wetterwarnungen"
+  },
+  "privacy": {
+    "dataSharing": "Datenfreigabe",
+    "analytics": "Analyse",
+    "locationServices": "Standortdienste",
+    "exportData": "Meine Daten exportieren",
+    "privacyPolicy": "Datenschutzerklärung"
+  },
+  "about": {
+    "version": "Version",
+    "termsOfService": "Nutzungsbedingungen",
+    "licenses": "Lizenzen",
+    "rateApp": "App bewerten"
+  },
+  "support": {
+    "helpCenter": "Hilfecenter",
+    "contactUs": "Kontakt",
+    "reportBug": "Fehler melden",
+    "featureRequest": "Funktionswunsch"
+  }
+}
+

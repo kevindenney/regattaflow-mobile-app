@@ -1,0 +1,28 @@
+{
+  "title": "Paramètres",
+  "account": {
+    "title": "Compte",
+    "profile": "Profil",
+    "email": "Email",
+    "password": "Mot de passe",
+    "change_password": "Changer le mot de passe",
+    "sign_out": "Se déconnecter",
+    "delete_account": "Supprimer le compte"
+  },
+  "preferences": {
+    "title": "Préférences",
+    "language": "Langue",
+    "units": "Unités",
+    "notifications": "Notifications",
+    "theme": "Thème",
+    "dark_mode": "Mode sombre"
+  },
+  "about": {
+    "title": "À propos",
+    "version": "Version",
+    "privacy_policy": "Politique de confidentialité",
+    "terms_of_service": "Conditions d'utilisation",
+    "contact_support": "Contacter le support"
+  }
+}
+

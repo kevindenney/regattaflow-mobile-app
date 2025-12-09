@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Ett oväntat fel uppstod",
+    "network": "Nätverksfel. Kontrollera din anslutning.",
+    "timeout": "Begäran tog för lång tid. Försök igen.",
+    "server": "Serverfel. Försök igen senare.",
+    "not_found": "Hittades inte",
+    "unauthorized": "Ej behörig. Logga in.",
+    "forbidden": "Åtkomst nekad"
+  },
+  "auth": {
+    "invalid_credentials": "Ogiltig e-post eller lösenord",
+    "email_taken": "Denna e-postadress används redan",
+    "weak_password": "Lösenordet är för svagt",
+    "session_expired": "Din session har gått ut. Logga in igen."
+  },
+  "race": {
+    "not_found": "Kappsegling hittades inte",
+    "registration_closed": "Anmälan är stängd",
+    "already_registered": "Du är redan anmäld",
+    "cannot_withdraw": "Kan inte avanmäla"
+  },
+  "validation": {
+    "required_field": "Detta fält är obligatoriskt",
+    "invalid_email": "Ogiltig e-postadress",
+    "invalid_date": "Ogiltigt datum",
+    "invalid_time": "Ogiltig tid"
+  }
+}
+

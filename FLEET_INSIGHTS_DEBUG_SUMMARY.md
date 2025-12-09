@@ -31,7 +31,7 @@ File: `components/races/FleetPostRaceInsights.tsx`
 
 **Evidence from Database**:
 ```sql
--- Demo Sailor (demo-sailor@regattaflow.app) has sessions for:
+-- Demo Sailor (demo-sailor@regattaflow.io) has sessions for:
 - Regatta: "1"
 - Regatta: "Corinthian 3 & 4" (ID: 2972ea48-6893-4833-950c-ce8f78d073f0)
 

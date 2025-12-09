@@ -1,0 +1,42 @@
+{
+  "title": "Kappseglingar",
+  "upcoming": "Kommande",
+  "past": "Tidigare",
+  "my_races": "Mina kappseglingar",
+  "all_races": "Alla kappseglingar",
+  "add_race": "Lägg till kappsegling",
+  "edit_race": "Redigera kappsegling",
+  "delete_race": "Ta bort kappsegling",
+  "race_details": "Kappseglingdetaljer",
+  "race_name": "Kappseglingens namn",
+  "race_date": "Datum",
+  "race_time": "Starttid",
+  "race_location": "Plats",
+  "race_course": "Bana",
+  "race_class": "Klass",
+  "race_fleet": "Flotta",
+  "entries": "Anmälningar",
+  "results": "Resultat",
+  "status": {
+    "scheduled": "Schemalagd",
+    "in_progress": "Pågår",
+    "completed": "Avslutad",
+    "cancelled": "Inställd",
+    "postponed": "Uppskjuten"
+  },
+  "registration": {
+    "register": "Anmäl",
+    "registered": "Anmäld",
+    "withdraw": "Avanmäl",
+    "registration_open": "Anmälan öppen",
+    "registration_closed": "Anmälan stängd",
+    "deadline": "Anmälningsdeadline"
+  },
+  "sailwave": {
+    "import": "Importera från Sailwave",
+    "export": "Exportera till Sailwave",
+    "import_success": "Sailwave-import lyckades",
+    "import_error": "Sailwave-importfel"
+  }
+}
+

@@ -6,7 +6,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const FROM_EMAIL = 'RegattaFlow <hello@regattaflow.app>';
+const FROM_EMAIL = 'RegattaFlow <hello@regattaflow.io>';
 
 interface TrialReminderRequest {
   email: string;
@@ -138,7 +138,7 @@ serve(async (req) => {
               <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                 <tr>
                   <td align="center">
-                    <a href="https://app.regattaflow.app/subscription" 
+                    <a href="https://app.regattaflow.io/subscription" 
                        style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
                       Upgrade Now →
                     </a>

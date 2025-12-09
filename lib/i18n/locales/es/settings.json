@@ -1,0 +1,28 @@
+{
+  "title": "Ajustes",
+  "account": {
+    "title": "Cuenta",
+    "profile": "Perfil",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "change_password": "Cambiar contraseña",
+    "sign_out": "Cerrar sesión",
+    "delete_account": "Eliminar cuenta"
+  },
+  "preferences": {
+    "title": "Preferencias",
+    "language": "Idioma",
+    "units": "Unidades",
+    "notifications": "Notificaciones",
+    "theme": "Tema",
+    "dark_mode": "Modo oscuro"
+  },
+  "about": {
+    "title": "Acerca de",
+    "version": "Versión",
+    "privacy_policy": "Política de privacidad",
+    "terms_of_service": "Términos de servicio",
+    "contact_support": "Contactar soporte"
+  }
+}
+

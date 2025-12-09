@@ -1,0 +1,33 @@
+{
+  "assistant": {
+    "title": "AI Assistent",
+    "thinking": "Aan het denken...",
+    "analyzing": "Analyseren...",
+    "generating": "Genereren..."
+  },
+  "strategy": {
+    "title": "AI Strategie",
+    "pre_race": "Pre-wedstrijd analyse",
+    "tactical": "Tactische tips",
+    "weather_analysis": "Weeranalyse",
+    "current_analysis": "Stromingsanalyse",
+    "start_strategy": "Startstrategie",
+    "upwind_strategy": "Aan de wind strategie",
+    "downwind_strategy": "Voor de wind strategie",
+    "mark_rounding": "Boeirondingen"
+  },
+  "coaching": {
+    "title": "AI Coaching",
+    "post_race_debrief": "Nabespreking",
+    "performance_analysis": "Prestatieanalyse",
+    "improvement_tips": "Verbeterpunten",
+    "pattern_detection": "Patroonherkenning"
+  },
+  "tuning": {
+    "title": "AI Tuning",
+    "rig_tuning": "Mast afstelling",
+    "sail_trim": "Zeiltrim",
+    "boat_setup": "Boot setup"
+  }
+}
+

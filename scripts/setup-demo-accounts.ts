@@ -12,21 +12,21 @@ const DEMO_PASSWORD = 'Demo123!'; // Simple password for demo accounts
 
 const demoAccounts = [
   {
-    email: 'demo-sailor@regattaflow.app',
+    email: 'demo-sailor@regattaflow.io',
     password: DEMO_PASSWORD,
     firstName: 'Demo',
     lastName: 'Sailor',
     role: 'sailor',
   },
   {
-    email: 'demo-club@regattaflow.app',
+    email: 'demo-club@regattaflow.io',
     password: DEMO_PASSWORD,
     firstName: 'Demo',
     lastName: 'Club Manager',
     role: 'club_manager',
   },
   {
-    email: 'demo-coach@regattaflow.app',
+    email: 'demo-coach@regattaflow.io',
     password: DEMO_PASSWORD,
     firstName: 'Demo',
     lastName: 'Coach',

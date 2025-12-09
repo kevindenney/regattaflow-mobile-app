@@ -15,6 +15,9 @@ import {initializeBoatMutationHandlers} from '@/services/SailorBoatService';
 import {initializeRaceRegistrationMutationHandlers} from '@/services/RaceRegistrationService';
 import '@/global.css';
 
+// Initialize i18n (must be imported before any components that use translations)
+import '@/lib/i18n';
+
 let FontFaceObserverModule: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

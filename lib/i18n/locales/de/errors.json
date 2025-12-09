@@ -1,0 +1,53 @@
+{
+  "general": {
+    "unknown": "Ein unbekannter Fehler ist aufgetreten",
+    "network": "Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung.",
+    "server": "Serverfehler. Bitte versuchen Sie es später erneut.",
+    "timeout": "Zeitüberschreitung. Bitte versuchen Sie es erneut.",
+    "notFound": "Nicht gefunden",
+    "unauthorized": "Sie sind nicht berechtigt, diese Aktion durchzuführen",
+    "forbidden": "Zugriff verweigert",
+    "validation": "Bitte überprüfen Sie Ihre Eingabe"
+  },
+  "auth": {
+    "invalidCredentials": "Ungültige E-Mail oder Passwort",
+    "emailInUse": "E-Mail-Adresse wird bereits verwendet",
+    "weakPassword": "Passwort ist zu schwach",
+    "sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    "accountDisabled": "Ihr Konto wurde deaktiviert",
+    "invalidToken": "Ungültiges oder abgelaufenes Token"
+  },
+  "races": {
+    "loadFailed": "Wettfahrten konnten nicht geladen werden",
+    "createFailed": "Wettfahrt konnte nicht erstellt werden",
+    "updateFailed": "Wettfahrt konnte nicht aktualisiert werden",
+    "deleteFailed": "Wettfahrt konnte nicht gelöscht werden",
+    "registrationFailed": "Anmeldung fehlgeschlagen",
+    "alreadyRegistered": "Sie sind bereits angemeldet"
+  },
+  "scoring": {
+    "loadFailed": "Ergebnisse konnten nicht geladen werden",
+    "saveFailed": "Ergebnisse konnten nicht gespeichert werden",
+    "publishFailed": "Ergebnisse konnten nicht veröffentlicht werden",
+    "calculationFailed": "Wertung konnte nicht berechnet werden"
+  },
+  "ai": {
+    "generationFailed": "KI-Generierung fehlgeschlagen",
+    "limitReached": "KI-Nutzungslimit erreicht",
+    "serviceUnavailable": "KI-Dienst vorübergehend nicht verfügbar"
+  },
+  "file": {
+    "uploadFailed": "Datei-Upload fehlgeschlagen",
+    "downloadFailed": "Datei-Download fehlgeschlagen",
+    "invalidFormat": "Ungültiges Dateiformat",
+    "tooLarge": "Datei ist zu groß",
+    "importFailed": "Import fehlgeschlagen",
+    "exportFailed": "Export fehlgeschlagen"
+  },
+  "offline": {
+    "notAvailable": "Diese Funktion ist offline nicht verfügbar",
+    "syncFailed": "Daten konnten nicht synchronisiert werden",
+    "pending": "Änderungen werden synchronisiert, wenn Sie online sind"
+  }
+}
+

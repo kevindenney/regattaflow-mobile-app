@@ -1,0 +1,42 @@
+{
+  "title": "Kilpailut",
+  "upcoming": "Tulevat",
+  "past": "Menneet",
+  "my_races": "Omat kilpailut",
+  "all_races": "Kaikki kilpailut",
+  "add_race": "Lisää kilpailu",
+  "edit_race": "Muokkaa kilpailua",
+  "delete_race": "Poista kilpailu",
+  "race_details": "Kilpailun tiedot",
+  "race_name": "Kilpailun nimi",
+  "race_date": "Kilpailupäivä",
+  "race_time": "Lähtöaika",
+  "race_location": "Sijainti",
+  "race_course": "Rata",
+  "race_class": "Luokka",
+  "race_fleet": "Laivue",
+  "entries": "Ilmoittautumiset",
+  "results": "Tulokset",
+  "status": {
+    "scheduled": "Aikataulutettu",
+    "in_progress": "Käynnissä",
+    "completed": "Päättynyt",
+    "cancelled": "Peruttu",
+    "postponed": "Siirretty"
+  },
+  "registration": {
+    "register": "Ilmoittaudu",
+    "registered": "Ilmoittautunut",
+    "withdraw": "Peru ilmoittautuminen",
+    "registration_open": "Ilmoittautuminen auki",
+    "registration_closed": "Ilmoittautuminen suljettu",
+    "deadline": "Ilmoittautumisen määräaika"
+  },
+  "sailwave": {
+    "import": "Tuo Sailwavesta",
+    "export": "Vie Sailwaveen",
+    "import_success": "Sailwave-tuonti onnistui",
+    "import_error": "Sailwave-tuontivirhe"
+  }
+}
+

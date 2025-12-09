@@ -1,0 +1,28 @@
+{
+  "title": "Resultat",
+  "position": "Placering",
+  "points": "Poäng",
+  "total": "Totalt",
+  "discard": "Strykning",
+  "codes": {
+    "dnf": "DNF - Fullföljde ej",
+    "dns": "DNS - Startade ej",
+    "dsq": "DSQ - Diskvalificerad",
+    "ocs": "OCS - Över linjen",
+    "bfd": "BFD - Svart flagg",
+    "dnc": "DNC - Deltog ej",
+    "rdg": "RDG - Gottgörelse beviljad",
+    "scp": "SCP - Poängstraff",
+    "ret": "RET - Bröt",
+    "raf": "RAF - Bröt före start"
+  },
+  "systems": {
+    "low_point": "Låg poäng",
+    "high_point": "Hög poäng",
+    "bonus_point": "Bonuspoäng"
+  },
+  "tie_break": "Skiljeförfarande",
+  "series_score": "Seriepoäng",
+  "race_score": "Kappseglingpoäng"
+}
+

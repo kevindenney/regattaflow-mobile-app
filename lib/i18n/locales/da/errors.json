@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Der opstod en uventet fejl",
+    "network": "Netværksfejl. Tjek din forbindelse.",
+    "timeout": "Anmodning timeout. Prøv igen.",
+    "server": "Serverfejl. Prøv igen senere.",
+    "not_found": "Ikke fundet",
+    "unauthorized": "Ikke autoriseret. Log venligst ind.",
+    "forbidden": "Adgang nægtet"
+  },
+  "auth": {
+    "invalid_credentials": "Ugyldig e-mail eller adgangskode",
+    "email_taken": "Denne e-mailadresse er allerede i brug",
+    "weak_password": "Adgangskoden er for svag",
+    "session_expired": "Din session er udløbet. Log venligst ind igen."
+  },
+  "race": {
+    "not_found": "Kapsejlads ikke fundet",
+    "registration_closed": "Tilmelding er lukket",
+    "already_registered": "Du er allerede tilmeldt",
+    "cannot_withdraw": "Kan ikke framelde"
+  },
+  "validation": {
+    "required_field": "Dette felt er påkrævet",
+    "invalid_email": "Ugyldig e-mailadresse",
+    "invalid_date": "Ugyldig dato",
+    "invalid_time": "Ugyldig tid"
+  }
+}
+

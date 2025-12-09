@@ -1,0 +1,28 @@
+{
+  "title": "Indstillinger",
+  "account": {
+    "title": "Konto",
+    "profile": "Profil",
+    "email": "E-mail",
+    "password": "Adgangskode",
+    "change_password": "Skift adgangskode",
+    "sign_out": "Log ud",
+    "delete_account": "Slet konto"
+  },
+  "preferences": {
+    "title": "Præferencer",
+    "language": "Sprog",
+    "units": "Enheder",
+    "notifications": "Notifikationer",
+    "theme": "Tema",
+    "dark_mode": "Mørk tilstand"
+  },
+  "about": {
+    "title": "Om",
+    "version": "Version",
+    "privacy_policy": "Privatlivspolitik",
+    "terms_of_service": "Servicevilkår",
+    "contact_support": "Kontakt support"
+  }
+}
+

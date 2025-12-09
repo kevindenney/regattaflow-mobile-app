@@ -1,0 +1,42 @@
+{
+  "title": "Wedstrijden",
+  "upcoming": "Aankomend",
+  "past": "Afgelopen",
+  "my_races": "Mijn wedstrijden",
+  "all_races": "Alle wedstrijden",
+  "add_race": "Wedstrijd toevoegen",
+  "edit_race": "Wedstrijd bewerken",
+  "delete_race": "Wedstrijd verwijderen",
+  "race_details": "Wedstrijddetails",
+  "race_name": "Wedstrijdnaam",
+  "race_date": "Wedstrijddatum",
+  "race_time": "Starttijd",
+  "race_location": "Locatie",
+  "race_course": "Baan",
+  "race_class": "Klasse",
+  "race_fleet": "Vloot",
+  "entries": "Inschrijvingen",
+  "results": "Resultaten",
+  "status": {
+    "scheduled": "Gepland",
+    "in_progress": "Bezig",
+    "completed": "Voltooid",
+    "cancelled": "Geannuleerd",
+    "postponed": "Uitgesteld"
+  },
+  "registration": {
+    "register": "Inschrijven",
+    "registered": "Ingeschreven",
+    "withdraw": "Uitschrijven",
+    "registration_open": "Inschrijving open",
+    "registration_closed": "Inschrijving gesloten",
+    "deadline": "Inschrijfdeadline"
+  },
+  "sailwave": {
+    "import": "Importeren van Sailwave",
+    "export": "Exporteren naar Sailwave",
+    "import_success": "Sailwave import geslaagd",
+    "import_error": "Sailwave import fout"
+  }
+}
+

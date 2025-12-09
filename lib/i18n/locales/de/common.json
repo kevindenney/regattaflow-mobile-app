@@ -1,0 +1,92 @@
+{
+  "app": {
+    "name": "RegattaFlow",
+    "tagline": "KI-gestützte Segel-Intelligenz"
+  },
+  "actions": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "confirm": "Bestätigen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "done": "Fertig",
+    "retry": "Erneut versuchen",
+    "close": "Schließen",
+    "search": "Suchen",
+    "filter": "Filtern",
+    "sort": "Sortieren",
+    "refresh": "Aktualisieren",
+    "share": "Teilen",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "add": "Hinzufügen",
+    "remove": "Entfernen",
+    "view": "Anzeigen",
+    "select": "Auswählen",
+    "continue": "Fortfahren",
+    "submit": "Absenden",
+    "update": "Aktualisieren",
+    "create": "Erstellen",
+    "download": "Herunterladen",
+    "upload": "Hochladen",
+    "copy": "Kopieren",
+    "paste": "Einfügen",
+    "reset": "Zurücksetzen",
+    "apply": "Anwenden",
+    "clear": "Löschen"
+  },
+  "status": {
+    "loading": "Laden...",
+    "saving": "Speichern...",
+    "success": "Erfolgreich!",
+    "error": "Fehler",
+    "offline": "Sie sind offline",
+    "syncing": "Synchronisieren...",
+    "processing": "Verarbeiten...",
+    "complete": "Abgeschlossen",
+    "pending": "Ausstehend",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "draft": "Entwurf",
+    "published": "Veröffentlicht"
+  },
+  "time": {
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "tomorrow": "Morgen",
+    "now": "Jetzt",
+    "ago": "vor {{time}}",
+    "in": "in {{time}}",
+    "minutes_one": "{{count}} Minute",
+    "minutes_other": "{{count}} Minuten",
+    "hours_one": "{{count}} Stunde",
+    "hours_other": "{{count}} Stunden",
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tage",
+    "weeks_one": "{{count}} Woche",
+    "weeks_other": "{{count}} Wochen",
+    "months_one": "{{count}} Monat",
+    "months_other": "{{count}} Monate"
+  },
+  "validation": {
+    "required": "Dieses Feld ist erforderlich",
+    "email": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
+    "minLength": "Mindestens {{min}} Zeichen erforderlich",
+    "maxLength": "Maximal {{max}} Zeichen erlaubt",
+    "invalid": "Ungültiger Wert",
+    "passwordMismatch": "Passwörter stimmen nicht überein"
+  },
+  "empty": {
+    "noData": "Keine Daten verfügbar",
+    "noResults": "Keine Ergebnisse gefunden",
+    "noItems": "Keine Einträge vorhanden"
+  },
+  "confirm": {
+    "delete": "Möchten Sie dies wirklich löschen?",
+    "discard": "Änderungen verwerfen?",
+    "leave": "Möchten Sie wirklich verlassen?"
+  }
+}
+

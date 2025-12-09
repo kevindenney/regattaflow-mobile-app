@@ -12,7 +12,7 @@
       "scheme": "regattaflow",
       "hosts": [
         "auth",
-        "regattaflow.app"
+        "regattaflow.io"
       ]
     },
     "splash": {

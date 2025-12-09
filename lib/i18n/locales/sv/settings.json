@@ -1,0 +1,28 @@
+{
+  "title": "Inställningar",
+  "account": {
+    "title": "Konto",
+    "profile": "Profil",
+    "email": "E-post",
+    "password": "Lösenord",
+    "change_password": "Ändra lösenord",
+    "sign_out": "Logga ut",
+    "delete_account": "Ta bort konto"
+  },
+  "preferences": {
+    "title": "Inställningar",
+    "language": "Språk",
+    "units": "Enheter",
+    "notifications": "Aviseringar",
+    "theme": "Tema",
+    "dark_mode": "Mörkt läge"
+  },
+  "about": {
+    "title": "Om",
+    "version": "Version",
+    "privacy_policy": "Integritetspolicy",
+    "terms_of_service": "Användarvillkor",
+    "contact_support": "Kontakta support"
+  }
+}
+

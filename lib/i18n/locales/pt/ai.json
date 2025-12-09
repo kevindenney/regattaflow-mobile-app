@@ -1,0 +1,33 @@
+{
+  "assistant": {
+    "title": "Assistente IA",
+    "thinking": "A pensar...",
+    "analyzing": "A analisar...",
+    "generating": "A gerar..."
+  },
+  "strategy": {
+    "title": "Estratégia IA",
+    "pre_race": "Análise pré-regata",
+    "tactical": "Dicas táticas",
+    "weather_analysis": "Análise meteorológica",
+    "current_analysis": "Análise de correntes",
+    "start_strategy": "Estratégia de largada",
+    "upwind_strategy": "Estratégia de bolina",
+    "downwind_strategy": "Estratégia de popa",
+    "mark_rounding": "Contorno de bóias"
+  },
+  "coaching": {
+    "title": "Coaching IA",
+    "post_race_debrief": "Debriefing pós-regata",
+    "performance_analysis": "Análise de desempenho",
+    "improvement_tips": "Dicas de melhoria",
+    "pattern_detection": "Deteção de padrões"
+  },
+  "tuning": {
+    "title": "Afinação IA",
+    "rig_tuning": "Afinação do mastro",
+    "sail_trim": "Regulação das velas",
+    "boat_setup": "Configuração do barco"
+  }
+}
+

@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Er is een onverwachte fout opgetreden",
+    "network": "Netwerkfout. Controleer je verbinding.",
+    "timeout": "Verzoek verlopen. Probeer opnieuw.",
+    "server": "Serverfout. Probeer later opnieuw.",
+    "not_found": "Niet gevonden",
+    "unauthorized": "Niet geautoriseerd. Log in.",
+    "forbidden": "Toegang geweigerd"
+  },
+  "auth": {
+    "invalid_credentials": "Ongeldige e-mail of wachtwoord",
+    "email_taken": "Dit e-mailadres is al in gebruik",
+    "weak_password": "Wachtwoord is te zwak",
+    "session_expired": "Je sessie is verlopen. Log opnieuw in."
+  },
+  "race": {
+    "not_found": "Wedstrijd niet gevonden",
+    "registration_closed": "Inschrijving is gesloten",
+    "already_registered": "Je bent al ingeschreven",
+    "cannot_withdraw": "Uitschrijven niet mogelijk"
+  },
+  "validation": {
+    "required_field": "Dit veld is verplicht",
+    "invalid_email": "Ongeldig e-mailadres",
+    "invalid_date": "Ongeldige datum",
+    "invalid_time": "Ongeldige tijd"
+  }
+}
+

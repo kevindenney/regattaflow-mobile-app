@@ -20,7 +20,7 @@ async function linkDemoSailorToRace() {
 
   // Get demo sailor profile
   const { data: users } = await supabase.rpc('get_user_id_by_email', {
-    email_input: 'demo-sailor@regattaflow.app'
+    email_input: 'demo-sailor@regattaflow.io'
   }).single();
 
   const demoSailorUserId = 'f6f6a7f6-7755-412b-a87b-3a7617721cc7'; // From previous query

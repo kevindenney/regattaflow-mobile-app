@@ -44,7 +44,7 @@ const getApiBase = () => {
   // If we're on localhost (Expo dev) but env points to production, use local vercel dev server
   if (typeof window !== 'undefined') {
     const isLocalhost = window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1'
-    const isProductionApi = envApiBase.includes('vercel.app') || envApiBase.includes('regattaflow.app')
+    const isProductionApi = envApiBase.includes('vercel.app') || envApiBase.includes('regattaflow.io')
     
     if (isLocalhost && isProductionApi) {
       console.log('[AuthProvider] 🔄 Auto-switching to local vercel dev server (localhost:3000)')
@@ -708,7 +708,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     if (normalized.includes('@')) {
       return normalized
     }
-    return `${normalized}@users.regattaflow.app`
+    return `${normalized}@users.regattaflow.io`
   }
 
   const signIn = async (identifier: string, password: string) => {

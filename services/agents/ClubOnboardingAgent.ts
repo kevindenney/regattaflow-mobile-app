@@ -725,8 +725,8 @@ Returns recommended roles and invitation status.`,
             staffInvitations,
             workflowsConfigured: true,
             trainingResources: [
-              'https://regattaflow.app/training/race-officer-basics',
-              'https://regattaflow.app/training/multi-venue-management',
+              'https://regattaflow.io/training/race-officer-basics',
+              'https://regattaflow.io/training/multi-venue-management',
             ],
           };
         } catch (error: any) {
@@ -817,9 +817,9 @@ Welcome to the future of race management!`;
             celebrationMessage,
             dashboardUrl: '/club/dashboard',
             supportResources: {
-              videoTutorial: 'https://regattaflow.app/tutorials/getting-started',
-              documentation: 'https://regattaflow.app/docs',
-              supportEmail: 'support@regattaflow.app',
+              videoTutorial: 'https://regattaflow.io/tutorials/getting-started',
+              documentation: 'https://regattaflow.io/docs',
+              supportEmail: 'support@regattaflow.io',
             },
           };
         } catch (error: any) {

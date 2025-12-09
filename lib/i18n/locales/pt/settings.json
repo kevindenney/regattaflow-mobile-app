@@ -1,0 +1,28 @@
+{
+  "title": "Definições",
+  "account": {
+    "title": "Conta",
+    "profile": "Perfil",
+    "email": "Email",
+    "password": "Palavra-passe",
+    "change_password": "Alterar palavra-passe",
+    "sign_out": "Terminar sessão",
+    "delete_account": "Eliminar conta"
+  },
+  "preferences": {
+    "title": "Preferências",
+    "language": "Idioma",
+    "units": "Unidades",
+    "notifications": "Notificações",
+    "theme": "Tema",
+    "dark_mode": "Modo escuro"
+  },
+  "about": {
+    "title": "Sobre",
+    "version": "Versão",
+    "privacy_policy": "Política de privacidade",
+    "terms_of_service": "Termos de serviço",
+    "contact_support": "Contactar suporte"
+  }
+}
+

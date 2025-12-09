@@ -1,0 +1,58 @@
+{
+  "title": "Wertung",
+  "results": "Ergebnisse",
+  "standings": "Gesamtwertung",
+  "points": "Punkte",
+  "position": "Platz",
+  "totalPoints": "Gesamtpunkte",
+  "netPoints": "Nettopunkte",
+  "discards": "Streicher",
+  "systems": {
+    "title": "Wertungssystem",
+    "lowPoint": "Tiefpunktsystem",
+    "highPoint": "Hochpunktsystem",
+    "bonusPoint": "Bonuspunktsystem",
+    "custom": "Benutzerdefiniert"
+  },
+  "codes": {
+    "title": "Statuscodes",
+    "DNF": "Nicht beendet",
+    "DNS": "Nicht gestartet",
+    "DNC": "Nicht erschienen",
+    "DSQ": "Disqualifiziert",
+    "DNE": "Disqualifiziert (nicht streichbar)",
+    "OCS": "Frühstart",
+    "BFD": "Schwarze-Flagge-Disqualifikation",
+    "UFD": "U-Flagge-Disqualifikation",
+    "ZFP": "Z-Flagge-Strafe",
+    "SCP": "Wertungsstrafe",
+    "RET": "Aufgegeben",
+    "RAF": "Nach dem Ziel aufgegeben",
+    "RDG": "Wiedergutmachung gewährt",
+    "DPI": "Ermessensstrafe",
+    "NSC": "Bahn nicht gesegelt",
+    "TLE": "Zeitlimit überschritten",
+    "AVG": "Durchschnitt"
+  },
+  "actions": {
+    "enterResults": "Ergebnisse eingeben",
+    "publishResults": "Ergebnisse veröffentlichen",
+    "calculateStandings": "Wertung berechnen",
+    "applyPenalty": "Strafe anwenden",
+    "grantRedress": "Wiedergutmachung gewähren",
+    "exportResults": "Ergebnisse exportieren"
+  },
+  "publication": {
+    "provisional": "Vorläufig",
+    "final": "Endgültig",
+    "draft": "Entwurf",
+    "protestPeriod": "Protestfrist"
+  },
+  "tieBreak": {
+    "title": "Stichentscheid",
+    "lastRace": "Beste letzte Wettfahrt",
+    "mostFirsts": "Meiste erste Plätze",
+    "countback": "Rückrechnung"
+  }
+}
+

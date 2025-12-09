@@ -139,7 +139,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const pageResponse = await fetch(parsed.toString(), {
-      headers: { "User-Agent": "RegattaFlowBot/1.0 (+https://regattaflow.app)" },
+      headers: { "User-Agent": "RegattaFlowBot/1.0 (+https://regattaflow.io)" },
     });
 
     if (!pageResponse.ok) {

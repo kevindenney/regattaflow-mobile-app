@@ -1,0 +1,28 @@
+{
+  "title": "Impostazioni",
+  "account": {
+    "title": "Account",
+    "profile": "Profilo",
+    "email": "Email",
+    "password": "Password",
+    "change_password": "Cambia password",
+    "sign_out": "Esci",
+    "delete_account": "Elimina account"
+  },
+  "preferences": {
+    "title": "Preferenze",
+    "language": "Lingua",
+    "units": "Unità",
+    "notifications": "Notifiche",
+    "theme": "Tema",
+    "dark_mode": "Modalità scura"
+  },
+  "about": {
+    "title": "Informazioni",
+    "version": "Versione",
+    "privacy_policy": "Informativa privacy",
+    "terms_of_service": "Termini di servizio",
+    "contact_support": "Contatta supporto"
+  }
+}
+

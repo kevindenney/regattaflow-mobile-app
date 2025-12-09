@@ -1,0 +1,28 @@
+{
+  "title": "Ustawienia",
+  "account": {
+    "title": "Konto",
+    "profile": "Profil",
+    "email": "E-mail",
+    "password": "Hasło",
+    "change_password": "Zmień hasło",
+    "sign_out": "Wyloguj się",
+    "delete_account": "Usuń konto"
+  },
+  "preferences": {
+    "title": "Preferencje",
+    "language": "Język",
+    "units": "Jednostki",
+    "notifications": "Powiadomienia",
+    "theme": "Motyw",
+    "dark_mode": "Tryb ciemny"
+  },
+  "about": {
+    "title": "O aplikacji",
+    "version": "Wersja",
+    "privacy_policy": "Polityka prywatności",
+    "terms_of_service": "Regulamin",
+    "contact_support": "Kontakt z pomocą"
+  }
+}
+

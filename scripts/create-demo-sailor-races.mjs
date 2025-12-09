@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-const DEMO_SAILOR_EMAIL = 'demo-sailor@regattaflow.app';
+const DEMO_SAILOR_EMAIL = 'demo-sailor@regattaflow.io';
 
 async function createDemoRaces() {
   console.log('🏁 Creating demo races for demo sailor...\n');
@@ -141,7 +141,7 @@ async function createDemoRaces() {
 
   console.log('\n✨ Demo race created successfully!');
   console.log('\n📝 You can now:');
-  console.log('1. Login as demo-sailor@regattaflow.app');
+  console.log('1. Login as demo-sailor@regattaflow.io');
   console.log('2. Go to Races tab');
   console.log('3. Click on "2025 Hong Kong Open"');
   console.log('4. Add strategy notes in each phase');

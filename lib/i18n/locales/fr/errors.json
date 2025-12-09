@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Une erreur inattendue s'est produite",
+    "network": "Erreur réseau. Veuillez vérifier votre connexion.",
+    "timeout": "La demande a expiré. Veuillez réessayer.",
+    "server": "Erreur serveur. Veuillez réessayer plus tard.",
+    "not_found": "Non trouvé",
+    "unauthorized": "Non autorisé. Veuillez vous connecter.",
+    "forbidden": "Accès refusé"
+  },
+  "auth": {
+    "invalid_credentials": "Email ou mot de passe invalide",
+    "email_taken": "Cet email est déjà utilisé",
+    "weak_password": "Le mot de passe est trop faible",
+    "session_expired": "Votre session a expiré. Veuillez vous reconnecter."
+  },
+  "race": {
+    "not_found": "Régate non trouvée",
+    "registration_closed": "Les inscriptions sont fermées",
+    "already_registered": "Vous êtes déjà inscrit",
+    "cannot_withdraw": "Impossible de se désinscrire"
+  },
+  "validation": {
+    "required_field": "Ce champ est requis",
+    "invalid_email": "Adresse email invalide",
+    "invalid_date": "Date invalide",
+    "invalid_time": "Heure invalide"
+  }
+}
+

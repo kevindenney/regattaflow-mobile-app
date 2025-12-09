@@ -1,0 +1,33 @@
+{
+  "assistant": {
+    "title": "AI-avustaja",
+    "thinking": "Ajattelen...",
+    "analyzing": "Analysoidaan...",
+    "generating": "Luodaan..."
+  },
+  "strategy": {
+    "title": "AI-strategia",
+    "pre_race": "Ennen kilpailua -analyysi",
+    "tactical": "Taktiset vinkit",
+    "weather_analysis": "Sääanalyysi",
+    "current_analysis": "Virtausanalyysi",
+    "start_strategy": "Lähtöstrategia",
+    "upwind_strategy": "Luovistrategia",
+    "downwind_strategy": "Myötätuulistrategia",
+    "mark_rounding": "Poijun kierto"
+  },
+  "coaching": {
+    "title": "AI-valmennus",
+    "post_race_debrief": "Kilpailun jälkianalyysi",
+    "performance_analysis": "Suoritusanalyysi",
+    "improvement_tips": "Parannusvinkit",
+    "pattern_detection": "Kuvioiden tunnistus"
+  },
+  "tuning": {
+    "title": "AI-viritys",
+    "rig_tuning": "Mastoviritys",
+    "sail_trim": "Purjetrimmaus",
+    "boat_setup": "Veneen säätö"
+  }
+}
+

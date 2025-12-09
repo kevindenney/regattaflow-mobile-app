@@ -1,0 +1,28 @@
+{
+  "title": "Asetukset",
+  "account": {
+    "title": "Tili",
+    "profile": "Profiili",
+    "email": "Sähköposti",
+    "password": "Salasana",
+    "change_password": "Vaihda salasana",
+    "sign_out": "Kirjaudu ulos",
+    "delete_account": "Poista tili"
+  },
+  "preferences": {
+    "title": "Asetukset",
+    "language": "Kieli",
+    "units": "Yksiköt",
+    "notifications": "Ilmoitukset",
+    "theme": "Teema",
+    "dark_mode": "Tumma tila"
+  },
+  "about": {
+    "title": "Tietoja",
+    "version": "Versio",
+    "privacy_policy": "Tietosuojakäytäntö",
+    "terms_of_service": "Käyttöehdot",
+    "contact_support": "Ota yhteyttä tukeen"
+  }
+}
+

@@ -1,0 +1,31 @@
+{
+  "tabs": {
+    "home": "Home",
+    "races": "Races",
+    "venues": "Venues",
+    "learn": "Learn",
+    "settings": "Settings",
+    "profile": "Profile",
+    "club": "Club",
+    "fleet": "Fleet"
+  },
+  "headers": {
+    "dashboard": "Dashboard",
+    "myRaces": "My Races",
+    "raceDetail": "Race Details",
+    "venueDetail": "Venue Details",
+    "settings": "Settings",
+    "profile": "Profile",
+    "notifications": "Notifications",
+    "help": "Help",
+    "about": "About"
+  },
+  "menu": {
+    "signOut": "Sign Out",
+    "switchAccount": "Switch Account",
+    "preferences": "Preferences",
+    "support": "Support",
+    "feedback": "Feedback"
+  }
+}
+

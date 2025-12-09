@@ -21,16 +21,20 @@ import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import {
   AlertCircle,
+  Anchor,
   Calendar,
   ChevronDown,
   ChevronLeft,
   Clock,
   FileText,
   Flag,
+  Mail,
   MapPin,
   Navigation,
+  Phone,
   Plus,
   Radio,
+  Route,
   Sparkles,
   Upload,
   X,
@@ -52,8 +56,10 @@ import { MultiRaceSelectionScreen } from './MultiRaceSelectionScreen';
 import { RaceSuggestionsDrawer } from './RaceSuggestionsDrawer';
 import { VenueLocationPicker } from './VenueLocationPicker';
 import { RacePrepLearningCard } from './RacePrepLearningCard';
+import { RaceTypeSelector, type RaceType } from './RaceTypeSelector';
 import { RigTuningCard } from '@/components/race-detail/RigTuningCard';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { ExtractionPreferencesDialog, type ExtractionPreferences, DEFAULT_PREFERENCES } from './ExtractionPreferencesDialog';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
@@ -161,6 +167,14 @@ export function ComprehensiveRaceEntry({
     extractedText: string;
   }>>([]);
 
+  // Extraction preferences dialog
+  const [showExtractionPreferences, setShowExtractionPreferences] = useState(false);
+  const [extractionPreferences, setExtractionPreferences] = useState<ExtractionPreferences>(DEFAULT_PREFERENCES);
+  const [pendingExtractionText, setPendingExtractionText] = useState<string>('');
+
+  // Race Type (Fleet vs Distance)
+  const [raceType, setRaceType] = useState<'fleet' | 'distance'>('fleet');
+
   // Basic Information
   const [raceName, setRaceName] = useState('');
   const [raceDate, setRaceDate] = useState('');
@@ -184,6 +198,12 @@ export function ComprehensiveRaceEntry({
   const [vhfChannel, setVhfChannel] = useState('');
   const [vhfBackupChannel, setVhfBackupChannel] = useState('');
   const [safetyChannel, setSafetyChannel] = useState('VHF 16');
+  // Store full VHF channels array with purposes for metadata
+  const [vhfChannelsDetailed, setVhfChannelsDetailed] = useState<Array<{
+    channel: string;
+    purpose: string;
+    classes?: string[];
+  }>>([]);
   const [rcBoatName, setRcBoatName] = useState('');
   const [rcBoatPosition, setRcBoatPosition] = useState('');
   const [markBoats, setMarkBoats] = useState<MarkBoat[]>([]);
@@ -326,6 +346,39 @@ export function ComprehensiveRaceEntry({
   // Prizes
   const [prizesDescription, setPrizesDescription] = useState('');
   const [prizePresentationDetails, setPrizePresentationDetails] = useState('');
+
+  // === NEW: Time Limits ===
+  const [absoluteTimeLimit, setAbsoluteTimeLimit] = useState('');
+  const [cutOffPoints, setCutOffPoints] = useState<Array<{location: string; time: string}>>([]);
+
+  // === Distance Racing Fields ===
+  const [routeWaypoints, setRouteWaypoints] = useState<Array<{
+    name: string;
+    latitude: number;
+    longitude: number;
+    type: 'start' | 'waypoint' | 'gate' | 'finish';
+    required: boolean;
+    passingSide?: 'port' | 'starboard' | 'either';
+  }>>([]);
+  const [totalDistanceNm, setTotalDistanceNm] = useState('');
+  const [timeLimitHours, setTimeLimitHours] = useState('');
+  const [startFinishSameLocation, setStartFinishSameLocation] = useState(true);
+  const [finishVenue, setFinishVenue] = useState(''); // For point-to-point races
+
+  // === NEW: Race Office & Contacts ===
+  const [raceOfficeLocation, setRaceOfficeLocation] = useState('');
+  const [raceOfficePhone, setRaceOfficePhone] = useState<string[]>([]);
+  const [contactEmail, setContactEmail] = useState('');
+
+  // === NEW: Entry Information (from NOR) ===
+  const [entryFees, setEntryFees] = useState<Array<{type: string; amount: string; deadline?: string}>>([]);
+  const [eligibleClasses, setEligibleClasses] = useState<string[]>([]);
+  const [safetyBriefingDetails, setSafetyBriefingDetails] = useState('');
+
+  // === NEW: Prizegiving ===
+  const [prizegivingDate, setPrizegivingDate] = useState('');
+  const [prizegivingTime, setPrizegivingTime] = useState('');
+  const [prizegivingLocation, setPrizegivingLocation] = useState('');
 
   // Load existing race data if in edit mode
   useEffect(() => {
@@ -1155,8 +1208,17 @@ export function ComprehensiveRaceEntry({
 
   const handleExtractFromText = async () => {
     logger.debug('[handleExtractFromText] Button clicked!');
+    // Show preferences dialog first
+    setPendingExtractionText(freeformText);
+    setShowExtractionPreferences(true);
+  };
+
+  const handleExtractionPreferencesConfirm = async (preferences: ExtractionPreferences) => {
+    logger.debug('[handleExtractionPreferencesConfirm] Preferences:', preferences);
+    setExtractionPreferences(preferences);
+    setShowExtractionPreferences(false);
     setExtracting(true);
-    await extractFromText(freeformText);
+    await extractFromText(pendingExtractionText);
   };
 
   /**
@@ -1278,10 +1340,48 @@ export function ComprehensiveRaceEntry({
     if (validatedData.plannedFinishTime) setPlannedFinishTime(validatedData.plannedFinishTime);
     if (validatedData.timeLimitMinutes != null) setTimeLimitMinutes(validatedData.timeLimitMinutes.toString());
 
-    // Communications
-    if (validatedData.vhfChannel) setVhfChannel(validatedData.vhfChannel);
-    if (validatedData.vhfBackupChannel) setVhfBackupChannel(validatedData.vhfBackupChannel);
-    if (validatedData.safetyChannel) setSafetyChannel(validatedData.safetyChannel);
+    // Communications - handle multi-channel VHF array
+    if (validatedData.vhfChannels && Array.isArray(validatedData.vhfChannels) && validatedData.vhfChannels.length > 0) {
+      // Store the full detailed array for metadata
+      setVhfChannelsDetailed(validatedData.vhfChannels);
+      
+      // Find the primary/race committee channel, or use the first one
+      const primaryChannel = validatedData.vhfChannels.find(
+        ch => ch.purpose?.toLowerCase().includes('race committee') || 
+              ch.purpose?.toLowerCase().includes('inner') ||
+              !ch.purpose?.toLowerCase().includes('safety')
+      ) || validatedData.vhfChannels[0];
+      
+      // Set primary channel
+      if (primaryChannel) {
+        setVhfChannel(primaryChannel.channel);
+      }
+      
+      // Find backup channel (second non-safety channel, or outer starting line)
+      const backupChannel = validatedData.vhfChannels.find(
+        ch => ch !== primaryChannel && 
+              !ch.purpose?.toLowerCase().includes('safety') &&
+              ch.purpose?.toLowerCase().includes('outer')
+      );
+      if (backupChannel) {
+        setVhfBackupChannel(backupChannel.channel);
+      }
+      
+      // Find safety channel
+      const safetyVhf = validatedData.vhfChannels.find(
+        ch => ch.purpose?.toLowerCase().includes('safety') || 
+              ch.purpose?.toLowerCase().includes('watch') ||
+              ch.purpose?.toLowerCase().includes('listening')
+      );
+      if (safetyVhf) {
+        setSafetyChannel(`VHF ${safetyVhf.channel}`);
+      }
+    } else {
+      // Legacy single channel handling
+      if (validatedData.vhfChannel) setVhfChannel(validatedData.vhfChannel);
+      if (validatedData.vhfBackupChannel) setVhfBackupChannel(validatedData.vhfBackupChannel);
+      if (validatedData.safetyChannel) setSafetyChannel(validatedData.safetyChannel);
+    }
     if (validatedData.rcBoatName) setRcBoatName(validatedData.rcBoatName);
     if (validatedData.rcBoatPosition) setRcBoatPosition(validatedData.rcBoatPosition);
     if (validatedData.markBoats) setMarkBoats(validatedData.markBoats);
@@ -1376,8 +1476,36 @@ export function ComprehensiveRaceEntry({
     if (validatedData.prizesDescription) setPrizesDescription(validatedData.prizesDescription || '');
     if (validatedData.prizePresentationDetails) setPrizePresentationDetails(validatedData.prizePresentationDetails || '');
 
+    // === NEW FIELDS ===
+    // Time Limits
+    if (validatedData.absoluteTimeLimit) setAbsoluteTimeLimit(validatedData.absoluteTimeLimit);
+    if (validatedData.cutOffPoints && Array.isArray(validatedData.cutOffPoints)) {
+      setCutOffPoints(validatedData.cutOffPoints);
+    }
+    
+    // Race Office & Contacts
+    if (validatedData.raceOfficeLocation) setRaceOfficeLocation(validatedData.raceOfficeLocation);
+    if (validatedData.raceOfficePhone && Array.isArray(validatedData.raceOfficePhone)) {
+      setRaceOfficePhone(validatedData.raceOfficePhone);
+    }
+    if (validatedData.contactEmail) setContactEmail(validatedData.contactEmail);
+    
+    // Entry Information
+    if (validatedData.entryFees && Array.isArray(validatedData.entryFees)) {
+      setEntryFees(validatedData.entryFees);
+    }
+    if (validatedData.eligibleClasses && Array.isArray(validatedData.eligibleClasses)) {
+      setEligibleClasses(validatedData.eligibleClasses);
+    }
+    if (validatedData.safetyBriefingDetails) setSafetyBriefingDetails(validatedData.safetyBriefingDetails);
+    
+    // Prizegiving
+    if (validatedData.prizegivingDate) setPrizegivingDate(validatedData.prizegivingDate);
+    if (validatedData.prizegivingTime) setPrizegivingTime(validatedData.prizegivingTime);
+    if (validatedData.prizegivingLocation) setPrizegivingLocation(validatedData.prizegivingLocation);
+
     // Expand all sections so user can see extracted data
-    setExpandedSections(new Set(['basic', 'timing', 'comms', 'course', 'rules', 'fleet', 'weather', 'tactical', 'logistics']));
+    setExpandedSections(new Set(['basic', 'timing', 'comms', 'course', 'rules', 'fleet']));
 
     // Hide validation screen (but keep extractedDataForValidation for mark saving!)
     setShowValidationScreen(false);
@@ -2124,6 +2252,8 @@ export function ComprehensiveRaceEntry({
           weather_provider: weatherData?.provider,
           weather_fetched_at: weatherData?.fetchedAt,
           weather_confidence: weatherData?.confidence,
+          // Store full VHF channels array with purposes
+          vhf_channels: vhfChannelsDetailed.length > 0 ? vhfChannelsDetailed : undefined,
           ...(selectedClassId ? { class_id: selectedClassId } : {}),
           ...(primaryClassName ? { class_name: primaryClassName } : {}),
         },
@@ -2244,6 +2374,15 @@ export function ComprehensiveRaceEntry({
         // Prizes
         prizes_description: prizesDescription?.trim() || null,
         prize_presentation_details: prizePresentationDetails?.trim() || null,
+
+        // Race Type (Fleet vs Distance)
+        race_type: raceType,
+        
+        // Distance Racing Fields (only populated for distance races)
+        route_waypoints: raceType === 'distance' && routeWaypoints.length > 0 ? routeWaypoints : null,
+        total_distance_nm: raceType === 'distance' && totalDistanceNm ? parseFloat(totalDistanceNm) : null,
+        time_limit_hours: raceType === 'distance' && timeLimitHours ? parseFloat(timeLimitHours) : null,
+        start_finish_same_location: raceType === 'distance' ? startFinishSameLocation : null,
 
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -2633,6 +2772,20 @@ export function ComprehensiveRaceEntry({
     </View>
   );
 
+  // Get user's boat classes for extraction preferences
+  const userBoatClasses = classSuggestion?.name ? [classSuggestion.name] : [];
+
+  // Extraction Preferences Dialog
+  const extractionPreferencesDialog = (
+    <ExtractionPreferencesDialog
+      visible={showExtractionPreferences}
+      onClose={() => setShowExtractionPreferences(false)}
+      onConfirm={handleExtractionPreferencesConfirm}
+      userBoatClasses={userBoatClasses}
+      documentPreview={pendingExtractionText.slice(0, 200)}
+    />
+  );
+
   // Phase 3: Show multi-race selection screen if active
   if (showMultiRaceSelection && multiRaceData) {
     // Show progress overlay if creating multiple races
@@ -2726,6 +2879,8 @@ export function ComprehensiveRaceEntry({
         confidenceScores={confidenceScoresForValidation}
         onConfirm={handleValidationConfirm}
         onCancel={handleValidationCancel}
+        userBoatClass={extractionPreferences.userBoatClass || classSuggestion?.name}
+        filterToUserClass={extractionPreferences.filterToMyClass}
       />
     );
   }
@@ -2754,12 +2909,50 @@ export function ComprehensiveRaceEntry({
             </Text>
           </View>
         </View>
-        <Text className="text-white text-2xl font-bold">
-          {existingRaceId ? 'Edit' : 'Add'} Race
-        </Text>
-        <Text className="text-white/90 text-sm mt-1">
-          Complete race strategy planning
-        </Text>
+        {/* Dynamic header - shows race info when extracted */}
+        {raceName ? (
+          <View>
+            <Text className="text-white/70 text-xs font-semibold uppercase tracking-wider">
+              {existingRaceId ? 'Editing' : 'Creating'}
+            </Text>
+            <Text className="text-white text-xl font-bold" numberOfLines={2}>
+              {raceName}
+            </Text>
+            {(raceDate || venue) && (
+              <View className="flex-row items-center gap-2 mt-1">
+                {raceDate && (
+                  <View className="flex-row items-center gap-1">
+                    <Calendar size={12} color="rgba(255,255,255,0.8)" />
+                    <Text className="text-white/80 text-xs">
+                      {new Date(raceDate).toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </Text>
+                  </View>
+                )}
+                {venue && (
+                  <View className="flex-row items-center gap-1">
+                    <MapPin size={12} color="rgba(255,255,255,0.8)" />
+                    <Text className="text-white/80 text-xs" numberOfLines={1}>
+                      {venue}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        ) : (
+          <View>
+            <Text className="text-white text-2xl font-bold">
+              {existingRaceId ? 'Edit' : 'Add'} Race
+            </Text>
+            <Text className="text-white/90 text-sm mt-1">
+              {extracting ? '✨ AI is extracting race details...' : 'Upload NOR/SI or enter details manually'}
+            </Text>
+          </View>
+        )}
       </View>
 
       <ScrollView className="flex-1 px-4 py-4" showsVerticalScrollIndicator={false}>
@@ -3128,12 +3321,22 @@ export function ComprehensiveRaceEntry({
           <View className="flex-1 h-px bg-gray-300" />
         </View>
 
+        {/* Race Type Selector */}
+        <View className="mb-6">
+          <RaceTypeSelector
+            value={raceType}
+            onChange={(type) => setRaceType(type)}
+          />
+        </View>
+
         {/* Basic Information */}
         {renderSectionHeader('Basic Information', <Calendar size={20} color="#0284c7" />, 'basic', true)}
         {expandedSections.has('basic') && (
           <View className="mb-4">
             {renderInputField('Race Name', raceName, setRaceName, {
-              placeholder: 'e.g., Hong Kong Dragon Championship 2025',
+              placeholder: raceType === 'distance' 
+                ? 'e.g., Around Hong Kong Island Race 2025'
+                : 'e.g., Hong Kong Dragon Championship 2025',
               required: true,
             })}
             {renderInputField('Race Date', raceDate, setRaceDate, {
@@ -3392,22 +3595,214 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
+        {/* Distance Racing Section - Only shown for distance races */}
+        {raceType === 'distance' && (
+          <>
+            {renderSectionHeader('Route & Distance', <Navigation size={20} color="#7C3AED" />, 'distance')}
+            {expandedSections.has('distance') && (
+              <View className="mb-4">
+                {/* Total Distance */}
+                <View className="flex-row gap-3 mb-4">
+                  <View className="flex-1">
+                    {renderInputField('Total Distance (nm)', totalDistanceNm, setTotalDistanceNm, {
+                      keyboardType: 'numeric',
+                      placeholder: '45',
+                    })}
+                  </View>
+                  <View className="flex-1">
+                    {renderInputField('Time Limit (hours)', timeLimitHours, setTimeLimitHours, {
+                      keyboardType: 'numeric',
+                      placeholder: '12',
+                    })}
+                  </View>
+                </View>
+
+                {/* Start/Finish Location */}
+                <View className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
+                  <View className="flex-row items-center justify-between mb-2">
+                    <Text className="text-sm font-semibold text-purple-900">
+                      Start & Finish Location
+                    </Text>
+                    <Pressable
+                      onPress={() => setStartFinishSameLocation(!startFinishSameLocation)}
+                      className="flex-row items-center gap-2"
+                    >
+                      <View
+                        className={`w-5 h-5 rounded border-2 items-center justify-center ${
+                          startFinishSameLocation
+                            ? 'bg-purple-600 border-purple-600'
+                            : 'bg-white border-gray-300'
+                        }`}
+                      >
+                        {startFinishSameLocation && (
+                          <Text className="text-white text-xs font-bold">✓</Text>
+                        )}
+                      </View>
+                      <Text className="text-sm text-purple-700">Same location</Text>
+                    </Pressable>
+                  </View>
+                  
+                  {!startFinishSameLocation && (
+                    <View className="mt-2">
+                      {renderInputField('Finish Location', finishVenue, setFinishVenue, {
+                        placeholder: 'e.g., Middle Island Marina',
+                      })}
+                      <Text className="text-xs text-purple-600 mt-1">
+                        Start location is set in Basic Information above
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Route Waypoints */}
+                <Text className="text-sm font-semibold text-gray-700 mb-2">Route Waypoints</Text>
+                <Text className="text-xs text-gray-500 mb-3">
+                  Add waypoints, gates, and marks along the race route
+                </Text>
+                
+                {routeWaypoints.map((waypoint, idx) => (
+                  <View key={idx} className="mb-3 bg-gray-50 rounded-lg p-3">
+                    <View className="flex-row gap-2 mb-2">
+                      <TextInput
+                        value={waypoint.name}
+                        onChangeText={(text) => {
+                          const newWaypoints = [...routeWaypoints];
+                          newWaypoints[idx].name = text;
+                          setRouteWaypoints(newWaypoints);
+                        }}
+                        placeholder="Waypoint name"
+                        className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                      <View className="bg-purple-100 rounded-lg px-2 py-2">
+                        <Text className="text-xs font-semibold text-purple-700">
+                          {waypoint.type.toUpperCase()}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          const newWaypoints = routeWaypoints.filter((_, i) => i !== idx);
+                          setRouteWaypoints(newWaypoints);
+                        }}
+                        className="justify-center"
+                      >
+                        <X size={20} color="#DC2626" />
+                      </Pressable>
+                    </View>
+                    <View className="flex-row gap-2">
+                      <TextInput
+                        value={waypoint.latitude.toString()}
+                        onChangeText={(text) => {
+                          const newWaypoints = [...routeWaypoints];
+                          newWaypoints[idx].latitude = parseFloat(text) || 0;
+                          setRouteWaypoints(newWaypoints);
+                        }}
+                        placeholder="Latitude"
+                        keyboardType="numeric"
+                        className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                      <TextInput
+                        value={waypoint.longitude.toString()}
+                        onChangeText={(text) => {
+                          const newWaypoints = [...routeWaypoints];
+                          newWaypoints[idx].longitude = parseFloat(text) || 0;
+                          setRouteWaypoints(newWaypoints);
+                        }}
+                        placeholder="Longitude"
+                        keyboardType="numeric"
+                        className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                    </View>
+                  </View>
+                ))}
+
+                {/* Add Waypoint Buttons */}
+                <View className="flex-row flex-wrap gap-2 mt-2">
+                  {routeWaypoints.length === 0 && (
+                    <Pressable
+                      onPress={() => setRouteWaypoints([
+                        ...routeWaypoints,
+                        { name: 'Start', latitude: 0, longitude: 0, type: 'start', required: true }
+                      ])}
+                      className="flex-row items-center gap-1 bg-green-100 px-3 py-2 rounded-lg"
+                    >
+                      <Flag size={14} color="#059669" />
+                      <Text className="text-sm font-semibold text-green-700">Add Start</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    onPress={() => setRouteWaypoints([
+                      ...routeWaypoints,
+                      { name: '', latitude: 0, longitude: 0, type: 'waypoint', required: true }
+                    ])}
+                    className="flex-row items-center gap-1 bg-purple-100 px-3 py-2 rounded-lg"
+                  >
+                    <Plus size={14} color="#7C3AED" />
+                    <Text className="text-sm font-semibold text-purple-700">Add Waypoint</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setRouteWaypoints([
+                      ...routeWaypoints,
+                      { name: '', latitude: 0, longitude: 0, type: 'gate', required: true }
+                    ])}
+                    className="flex-row items-center gap-1 bg-amber-100 px-3 py-2 rounded-lg"
+                  >
+                    <Navigation size={14} color="#D97706" />
+                    <Text className="text-sm font-semibold text-amber-700">Add Gate</Text>
+                  </Pressable>
+                  {!routeWaypoints.find(w => w.type === 'finish') && (
+                    <Pressable
+                      onPress={() => setRouteWaypoints([
+                        ...routeWaypoints,
+                        { name: 'Finish', latitude: 0, longitude: 0, type: 'finish', required: true }
+                      ])}
+                      className="flex-row items-center gap-1 bg-red-100 px-3 py-2 rounded-lg"
+                    >
+                      <Anchor size={14} color="#DC2626" />
+                      <Text className="text-sm font-semibold text-red-700">Add Finish</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
         {/* Communications & Race Control */}
         {renderSectionHeader('Communications & Control', <Radio size={20} color="#0284c7" />, 'comms')}
         {expandedSections.has('comms') && (
           <View className="mb-4">
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                {renderInputField('VHF Channel', vhfChannel, setVhfChannel, {
-                  placeholder: '72',
-                })}
+            {/* Show detailed VHF channels if available */}
+            {vhfChannelsDetailed.length > 0 ? (
+              <View className="mb-4">
+                <Text className="text-sm font-semibold text-gray-700 mb-2">VHF Channels</Text>
+                {vhfChannelsDetailed.map((ch, idx) => (
+                  <View key={idx} className="flex-row items-center gap-2 mb-2 bg-sky-50 rounded-lg px-3 py-2">
+                    <View className="bg-sky-600 rounded-md px-2 py-1">
+                      <Text className="text-white font-bold text-sm">Ch {ch.channel}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-sm font-medium text-gray-800">{ch.purpose}</Text>
+                      {ch.classes && ch.classes.length > 0 && (
+                        <Text className="text-xs text-gray-500">{ch.classes.join(', ')}</Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
               </View>
-              <View className="flex-1">
-                {renderInputField('Backup Channel', vhfBackupChannel, setVhfBackupChannel, {
-                  placeholder: '73',
-                })}
+            ) : (
+              <View className="flex-row gap-3 mb-4">
+                <View className="flex-1">
+                  {renderInputField('VHF Channel', vhfChannel, setVhfChannel, {
+                    placeholder: '72',
+                  })}
+                </View>
+                <View className="flex-1">
+                  {renderInputField('Backup Channel', vhfBackupChannel, setVhfBackupChannel, {
+                    placeholder: '73',
+                  })}
+                </View>
               </View>
-            </View>
+            )}
 
             {renderInputField('RC Boat Name', rcBoatName, setRcBoatName, {
               placeholder: 'Committee Boat Alpha',
@@ -3459,37 +3854,135 @@ export function ComprehensiveRaceEntry({
         {renderSectionHeader('Course Details', <Navigation size={20} color="#0284c7" />, 'course')}
         {expandedSections.has('course') && (
           <View className="mb-4">
-            {renderInputField('Start Area Name', startAreaName, setStartAreaName, {
-              placeholder: 'Starting Area A',
-            })}
-            {renderInputField('Start Area Description', startAreaDescription, setStartAreaDescription, {
-              placeholder: 'Detailed location description',
-              multiline: true,
-            })}
-            {renderInputField('Start Line Length (m)', startLineLength, setStartLineLength, {
-              keyboardType: 'numeric',
-              placeholder: '100',
-            })}
+            {/* Start Lines are now shown via the StartLines extraction component above */}
             
             {/* Finish Area */}
-            <View className="mt-4 mb-2">
+            <View className="mb-2">
               <Text className="text-sm font-semibold text-gray-700">Finish Area</Text>
             </View>
             {renderInputField('Finish Area Name', finishAreaName, setFinishAreaName, {
-              placeholder: 'Finish Area Alpha',
+              placeholder: 'Club Finishing Line',
             })}
             {renderInputField('Finish Area Description', finishAreaDescription, setFinishAreaDescription, {
-              placeholder: 'Between committee boat and pin mark',
+              placeholder: 'Between ODM and IDM from west to east',
               multiline: true,
             })}
             
-            {renderInputField('Course Selection Criteria', courseSelectionCriteria, setCourseSelectionCriteria, {
-              placeholder: 'Based on wind direction and strength',
+            {renderInputField('Course Description', courseSelectionCriteria, setCourseSelectionCriteria, {
+              placeholder: 'Hong Kong Island to Starboard (26nm)',
               multiline: true,
             })}
             {renderInputField('Course Diagram URL', courseDiagramUrl, setCourseDiagramUrl, {
               placeholder: 'https://...',
             })}
+          </View>
+        )}
+
+        {/* Time Limits - Important for racers */}
+        {(absoluteTimeLimit || cutOffPoints.length > 0) && (
+          <View className="mb-4 bg-amber-50 rounded-xl p-4 border border-amber-200">
+            <View className="flex-row items-center gap-2 mb-3">
+              <AlertCircle size={18} color="#d97706" />
+              <Text className="text-base font-bold text-amber-800">Time Limits</Text>
+            </View>
+            
+            {absoluteTimeLimit && (
+              <View className="flex-row items-center gap-2 mb-2">
+                <View className="bg-amber-600 rounded-md px-2 py-1">
+                  <Text className="text-white font-bold text-sm">{absoluteTimeLimit}</Text>
+                </View>
+                <Text className="text-sm text-amber-700">Absolute time limit</Text>
+              </View>
+            )}
+            
+            {cutOffPoints.length > 0 && (
+              <View className="mt-2">
+                <Text className="text-xs font-semibold text-amber-600 mb-1">CUT-OFF POINTS</Text>
+                {cutOffPoints.map((point, idx) => (
+                  <View key={idx} className="flex-row items-center gap-2 mb-1">
+                    <View className="bg-amber-500 rounded px-2 py-0.5">
+                      <Text className="text-white font-semibold text-xs">{point.time}</Text>
+                    </View>
+                    <Text className="text-sm text-amber-700">{point.location}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Entry Information - From NOR */}
+        {(entryFees.length > 0 || eligibleClasses.length > 0 || safetyBriefingDetails) && (
+          <View className="mb-4 bg-green-50 rounded-xl p-4 border border-green-200">
+            <View className="flex-row items-center gap-2 mb-3">
+              <FileText size={18} color="#16a34a" />
+              <Text className="text-base font-bold text-green-800">Entry Information</Text>
+            </View>
+            
+            {/* Entry Fees */}
+            {entryFees.length > 0 && (
+              <View className="mb-3">
+                <Text className="text-xs font-semibold text-green-600 mb-2">ENTRY FEES</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {entryFees.map((fee, idx) => (
+                    <View key={idx} className="bg-white rounded-lg px-3 py-2 border border-green-200">
+                      <Text className="text-xs text-green-600 font-medium">{fee.type}</Text>
+                      <Text className="text-sm font-bold text-green-800">{fee.amount}</Text>
+                      {fee.deadline && (
+                        <Text className="text-xs text-green-500">by {fee.deadline}</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            
+            {/* Eligible Classes */}
+            {eligibleClasses.length > 0 && (
+              <View className="mb-3">
+                <Text className="text-xs font-semibold text-green-600 mb-1">ELIGIBLE CLASSES</Text>
+                <Text className="text-sm text-green-700">{eligibleClasses.join(' • ')}</Text>
+              </View>
+            )}
+            
+            {/* Safety Briefing */}
+            {safetyBriefingDetails && (
+              <View className="bg-white rounded-lg px-3 py-2 border border-green-200">
+                <Text className="text-xs font-semibold text-green-600">SAFETY BRIEFING</Text>
+                <Text className="text-sm text-green-800">{safetyBriefingDetails}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Race Office & Contacts */}
+        {(raceOfficeLocation || raceOfficePhone.length > 0 || contactEmail) && (
+          <View className="mb-4 bg-blue-50 rounded-xl p-4 border border-blue-200">
+            <View className="flex-row items-center gap-2 mb-3">
+              <Radio size={18} color="#2563eb" />
+              <Text className="text-base font-bold text-blue-800">Race Office</Text>
+            </View>
+            
+            {raceOfficeLocation && (
+              <View className="flex-row items-center gap-2 mb-2">
+                <MapPin size={14} color="#3b82f6" />
+                <Text className="text-sm text-blue-700">{raceOfficeLocation}</Text>
+              </View>
+            )}
+            
+            {raceOfficePhone.length > 0 && (
+              <View className="flex-row items-center gap-2 mb-2">
+                <Phone size={14} color="#3b82f6" />
+                <Text className="text-sm text-blue-700">{raceOfficePhone.join(' / ')}</Text>
+              </View>
+            )}
+            
+            {contactEmail && (
+              <View className="flex-row items-center gap-2">
+                <Mail size={14} color="#3b82f6" />
+                <Text className="text-sm text-blue-700">{contactEmail}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -3617,39 +4110,7 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Weather & Conditions */}
-        {renderSectionHeader('Weather & Conditions', <AlertCircle size={20} color="#0284c7" />, 'weather')}
-        {expandedSections.has('weather') && (
-          <View className="mb-4">
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                {renderInputField('Wind Dir (°)', expectedWindDirection, setExpectedWindDirection, {
-                  keyboardType: 'numeric',
-                  placeholder: '180',
-                })}
-              </View>
-              <View className="flex-1">
-                {renderInputField('Wind Min (kts)', expectedWindSpeedMin, setExpectedWindSpeedMin, {
-                  keyboardType: 'numeric',
-                  placeholder: '8',
-                })}
-              </View>
-              <View className="flex-1">
-                {renderInputField('Wind Max (kts)', expectedWindSpeedMax, setExpectedWindSpeedMax, {
-                  keyboardType: 'numeric',
-                  placeholder: '12',
-                })}
-              </View>
-            </View>
-
-            {renderInputField('Expected Conditions', expectedConditions, setExpectedConditions, {
-              placeholder: 'Light air, Moderate breeze, Strong winds',
-            })}
-            {renderInputField('Tide at Start', tideAtStart, setTideAtStart, {
-              placeholder: 'High tide +2:30',
-            })}
-          </View>
-        )}
+        {/* Weather info is fetched dynamically based on race area - no manual entry needed */}
 
         {/* Rig Tuning - Shows when boat class and wind forecast are available */}
         {tuningBoatClass && tuningWindSpeed && (
@@ -3684,149 +4145,15 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Tactical & Strategic Notes */}
-        {renderSectionHeader('Tactical Strategy', <Sparkles size={20} color="#0284c7" />, 'tactical')}
-        {expandedSections.has('tactical') && (
-          <View className="mb-4">
-            {renderInputField('Venue-Specific Notes', venueSpecificNotes, setVenueSpecificNotes, {
-              placeholder: 'Local knowledge, venue tactics...',
-              multiline: true,
-            })}
+        {/* Redundant sections removed - now shown in colored info cards above:
+            - Registration & Logistics → Entry Information card
+            - Governing Rules & Eligibility → Entry Information + Rules sections
+            - Event Schedule → Basic Info + Timing sections
+            - Course & Area Details → Course Details section
+            - Series Scoring → Rules & Penalties section
+        */}
 
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                {renderInputField('Favored Side', favoredSide, setFavoredSide, {
-                  placeholder: 'Left/Right/Middle',
-                })}
-              </View>
-              <View className="flex-1">
-                {renderInputField('Start Strategy', startStrategy, setStartStrategy, {
-                  placeholder: 'Pin/Boat/Middle',
-                })}
-              </View>
-            </View>
-
-            {renderInputField('Layline Strategy', laylineStrategy, setLaylineStrategy, {
-              placeholder: 'Conservative, Aggressive, Middle third',
-            })}
-          </View>
-        )}
-
-        {/* Registration & Logistics */}
-        {renderSectionHeader('Registration & Logistics', <Calendar size={20} color="#0284c7" />, 'logistics')}
-        {expandedSections.has('logistics') && (
-          <View className="mb-4">
-            {renderInputField('Registration Deadline', registrationDeadline, setRegistrationDeadline, {
-              placeholder: 'YYYY-MM-DD HH:MM',
-            })}
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-[2]">
-                {renderInputField('Entry Fee', entryFeeAmount, setEntryFeeAmount, {
-                  keyboardType: 'numeric',
-                  placeholder: '100',
-                })}
-              </View>
-              <View className="flex-1">
-                {renderInputField('Currency', entryFeeCurrency, setEntryFeeCurrency, {
-                  placeholder: 'USD',
-                })}
-              </View>
-            </View>
-
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                {renderInputField('Check-in Time', checkInTime, setCheckInTime, {
-                  placeholder: '08:00',
-                })}
-              </View>
-              <View className="flex-1">
-                {renderInputField('Briefing Time', skipperBriefingTime, setSkipperBriefingTime, {
-                  placeholder: '09:00',
-                })}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Governing Rules & Eligibility */}
-        {renderSectionHeader('Governing Rules & Eligibility', <FileText size={20} color="#0284c7" />, 'governing')}
-        {expandedSections.has('governing') && (
-          <View className="mb-4">
-            {renderInputField('Racing Rules System', racingRulesSystem, setRacingRulesSystem, {
-              placeholder: 'e.g., RRS 2021-2024',
-            })}
-            {renderInputField('Class Rules', classRules, setClassRules, {
-              placeholder: 'e.g., Dragon Class Rules',
-            })}
-            {renderInputField('Prescriptions', prescriptions, setPrescriptions, {
-              placeholder: 'e.g., HKSF Prescriptions',
-            })}
-            {renderInputField('Eligibility Requirements', eligibilityRequirements, setEligibilityRequirements, {
-              placeholder: 'Describe who can enter this race',
-              multiline: true,
-            })}
-            {renderInputField('Entry Form URL', entryFormUrl, setEntryFormUrl, {
-              placeholder: 'https://example.com/entry-form',
-            })}
-            {renderInputField('Entry Deadline', entryDeadline, setEntryDeadline, {
-              placeholder: 'YYYY-MM-DD HH:MM',
-            })}
-            {renderInputField('Late Entry Policy', lateEntryPolicy, setLateEntryPolicy, {
-              placeholder: 'Describe late entry policy',
-              multiline: true,
-            })}
-          </View>
-        )}
-
-        {/* Event Schedule */}
-        {renderSectionHeader('Event Schedule', <Calendar size={20} color="#0284c7" />, 'schedule')}
-        {expandedSections.has('schedule') && (
-          <View className="mb-4">
-            {renderInputField('Event Series Name', eventSeriesName, setEventSeriesName, {
-              placeholder: 'e.g., Croucher Series, Phyloong Series',
-            })}
-            {renderInputField('Event Type', eventType, setEventType, {
-              placeholder: 'e.g., Championship, Series Race',
-            })}
-            {renderInputField('Races Per Day', racesPerDay, setRacesPerDay, {
-              keyboardType: 'numeric',
-              placeholder: '2',
-            })}
-            {renderInputField('First Warning Signal', firstWarningSignal, setFirstWarningSignal, {
-              placeholder: '10:00',
-            })}
-          </View>
-        )}
-
-        {/* Enhanced Course Information */}
-        {renderSectionHeader('Course & Area Details', <Navigation size={20} color="#0284c7" />, 'courseDetails')}
-        {expandedSections.has('courseDetails') && (
-          <View className="mb-4">
-            {renderInputField('Course Attachment Reference', courseAttachmentReference, setCourseAttachmentReference, {
-              placeholder: 'e.g., SSI Attachment A',
-            })}
-            {renderInputField('Course Area Designation', courseAreaDesignation, setCourseAreaDesignation, {
-              placeholder: 'e.g., Port Shelter, Clearwater Bay',
-            })}
-          </View>
-        )}
-
-        {/* Enhanced Scoring */}
-        {renderSectionHeader('Series Scoring', <Flag size={20} color="#0284c7" />, 'scoring')}
-        {expandedSections.has('scoring') && (
-          <View className="mb-4">
-            {renderInputField('Series Races Required', seriesRacesRequired, setSeriesRacesRequired, {
-              keyboardType: 'numeric',
-              placeholder: 'Minimum races to constitute series',
-            })}
-            {renderInputField('Discards Policy', discardsPolicy, setDiscardsPolicy, {
-              placeholder: 'e.g., No discards, 1 discard after 4 races',
-              multiline: true,
-            })}
-          </View>
-        )}
-
-        {/* Safety & Insurance */}
+        {/* Safety & Insurance - Keep this as useful for manual entry */}
         {renderSectionHeader('Safety & Insurance', <AlertCircle size={20} color="#0284c7" />, 'safety')}
         {expandedSections.has('safety') && (
           <View className="mb-4">
@@ -3848,20 +4175,7 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Prizes */}
-        {renderSectionHeader('Prizes & Awards', <Sparkles size={20} color="#0284c7" />, 'prizes')}
-        {expandedSections.has('prizes') && (
-          <View className="mb-4">
-            {renderInputField('Prizes Description', prizesDescription, setPrizesDescription, {
-              placeholder: 'Describe prizes to be awarded',
-              multiline: true,
-            })}
-            {renderInputField('Prize Presentation Details', prizePresentationDetails, setPrizePresentationDetails, {
-              placeholder: 'Time and location of prize presentation',
-              multiline: true,
-            })}
-          </View>
-        )}
+        {/* Prizes typically in NOR, not SI - removed from extraction flow */}
 
         {/* Document References */}
         {renderSectionHeader('Document References', <Upload size={20} color="#0284c7" />, 'documents')}
@@ -3976,6 +4290,9 @@ export function ComprehensiveRaceEntry({
           </Pressable>
         </View>
       </View>
+
+      {/* Extraction Preferences Dialog */}
+      {extractionPreferencesDialog}
     </View>
   );
 }

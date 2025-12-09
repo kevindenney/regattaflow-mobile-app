@@ -1,0 +1,20 @@
+{
+  "tabs": {
+    "home": "Hem",
+    "races": "Kappseglingar",
+    "clubs": "Klubbar",
+    "boats": "Båtar",
+    "settings": "Inställningar"
+  },
+  "screens": {
+    "race_detail": "Kappseglingdetaljer",
+    "add_race": "Lägg till kappsegling",
+    "edit_race": "Redigera kappsegling",
+    "race_results": "Resultat",
+    "club_detail": "Klubbdetaljer",
+    "boat_detail": "Båtdetaljer",
+    "profile": "Profil",
+    "notifications": "Aviseringar"
+  }
+}
+

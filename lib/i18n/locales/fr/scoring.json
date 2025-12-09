@@ -1,0 +1,28 @@
+{
+  "title": "Classement",
+  "position": "Position",
+  "points": "Points",
+  "total": "Total",
+  "discard": "Écarté",
+  "codes": {
+    "dnf": "DNF - N'a pas terminé",
+    "dns": "DNS - N'a pas pris le départ",
+    "dsq": "DSQ - Disqualifié",
+    "ocs": "OCS - Sur la ligne",
+    "bfd": "BFD - Faux départ noir",
+    "dnc": "DNC - N'a pas participé",
+    "rdg": "RDG - Réparation accordée",
+    "scp": "SCP - Pénalité de score",
+    "ret": "RET - Abandon",
+    "raf": "RAF - Abandon avant le départ"
+  },
+  "systems": {
+    "low_point": "Score bas",
+    "high_point": "Score haut",
+    "bonus_point": "Points bonus"
+  },
+  "tie_break": "Départage",
+  "series_score": "Score de série",
+  "race_score": "Score de course"
+}
+

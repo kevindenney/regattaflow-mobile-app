@@ -28,6 +28,7 @@ import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { PlanModeContent } from '@/components/races/plan';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
 import { RaceCard } from '@/components/races/RaceCard';
+import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
 import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
@@ -1455,6 +1456,14 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
 
   // Real-time race updates
   const { liveRaces, loading: liveRacesLoading, refresh: refetchRaces } = useLiveRaces(user?.id);
+  
+  // Track if races have been loaded at least once to prevent flash of demo content
+  const hasLoadedRacesOnce = useRef(false);
+  useEffect(() => {
+    if (!liveRacesLoading && liveRaces !== undefined) {
+      hasLoadedRacesOnce.current = true;
+    }
+  }, [liveRacesLoading, liveRaces]);
 
   // Enrich races with real weather data
   const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
@@ -4362,8 +4371,11 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
   }
 
   // Loading state - AFTER all hooks
-  if (loading && !profile) {
-    logger.debug('Loading skeleton');
+  // Show skeleton if: 
+  // 1. Dashboard is loading and no profile yet, OR
+  // 2. User is signed in but races haven't loaded yet (prevents flash of demo content)
+  if ((loading && !profile) || (signedIn && liveRacesLoading && !hasLoadedRacesOnce.current)) {
+    logger.debug('Loading skeleton', { loading, hasProfile: !!profile, signedIn, liveRacesLoading, hasLoadedOnce: hasLoadedRacesOnce.current });
     return <DashboardSkeleton />;
   }
 
@@ -4518,35 +4530,65 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                     totalRaces: raceResult.totalRaces,
                   } : undefined;
 
-                  cardElements.push(
-                    <RaceCard
-                      key={race.id || index}
-                      id={race.id}
-                      name={race.name}
-                      venue={race.venue || 'Unknown Venue'}
-                      date={race.date || new Date().toISOString()}
-                      startTime={race.startTime || '10:00'}
-                      wind={race.wind}
-                      tide={race.tide}
-                      weatherStatus={race.weatherStatus}
-                      weatherError={race.weatherError}
-                      strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
-                      critical_details={race.critical_details}
-                      isPrimary={isNextRace}
-                      raceStatus={raceStatus}
-                      onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name, race.id)}
-                      isSelected={selectedRaceId === race.id}
-                      onSelect={() => {
-                        setHasManuallySelected(true);
-                        setSelectedRaceId(race.id);
-                      }}
-                      onEdit={race.created_by === user?.id ? () => handleEditRace(race.id) : undefined}
-                      onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
-                      onHide={race.created_by !== user?.id ? () => handleHideRace(race.id, race.name) : undefined}
-                      isDimmed={hasActiveRace && selectedRaceId !== race.id}
-                      results={resultsData}
-                    />,
-                  );
+                  // Render DistanceRaceCard for distance races, RaceCard for fleet races
+                  if (race.race_type === 'distance') {
+                    cardElements.push(
+                      <DistanceRaceCard
+                        key={race.id || index}
+                        id={race.id}
+                        name={race.name}
+                        date={race.date || new Date().toISOString()}
+                        startTime={race.startTime || '10:00'}
+                        startVenue={race.venue || 'Unknown Venue'}
+                        finishVenue={race.start_finish_same_location === false ? race.finish_venue : undefined}
+                        totalDistanceNm={race.total_distance_nm}
+                        timeLimitHours={race.time_limit_hours}
+                        routeWaypoints={race.route_waypoints}
+                        wind={race.wind}
+                        isPrimary={isNextRace}
+                        raceStatus={raceStatus}
+                        isSelected={selectedRaceId === race.id}
+                        onSelect={() => {
+                          setHasManuallySelected(true);
+                          setSelectedRaceId(race.id);
+                        }}
+                        onEdit={race.created_by === user?.id ? () => handleEditRace(race.id) : undefined}
+                        onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
+                        isDimmed={hasActiveRace && selectedRaceId !== race.id}
+                      />,
+                    );
+                  } else {
+                    // Default: Fleet racing card
+                    cardElements.push(
+                      <RaceCard
+                        key={race.id || index}
+                        id={race.id}
+                        name={race.name}
+                        venue={race.venue || 'Unknown Venue'}
+                        date={race.date || new Date().toISOString()}
+                        startTime={race.startTime || '10:00'}
+                        wind={race.wind}
+                        tide={race.tide}
+                        weatherStatus={race.weatherStatus}
+                        weatherError={race.weatherError}
+                        strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
+                        critical_details={race.critical_details}
+                        isPrimary={isNextRace}
+                        raceStatus={raceStatus}
+                        onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name, race.id)}
+                        isSelected={selectedRaceId === race.id}
+                        onSelect={() => {
+                          setHasManuallySelected(true);
+                          setSelectedRaceId(race.id);
+                        }}
+                        onEdit={race.created_by === user?.id ? () => handleEditRace(race.id) : undefined}
+                        onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
+                        onHide={race.created_by !== user?.id ? () => handleHideRace(race.id, race.name) : undefined}
+                        isDimmed={hasActiveRace && selectedRaceId !== race.id}
+                        results={resultsData}
+                      />,
+                    );
+                  }
                 });
 
                 if (!addRaceCardInserted) {

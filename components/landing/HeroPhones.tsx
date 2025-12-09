@@ -16,6 +16,9 @@ import { MiniSailorDashboard } from './MiniSailorDashboard';
 import { MiniCoachDashboard } from './MiniCoachDashboard';
 import { MiniClubDashboard } from './MiniClubDashboard';
 import { PricingSection } from './PricingSection';
+import { MissionSection } from './MissionSection';
+import { FounderSection } from './FounderSection';
+import { Footer } from './Footer';
 import { supabase } from '@/services/supabase';
 
 export function HeroPhones() {
@@ -162,23 +165,6 @@ export function HeroPhones() {
               </TouchableOpacity>
             </View>
 
-            {/* Stats */}
-            <View style={[styles.stats, isDesktop && styles.statsDesktop]}>
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>10K+</Text>
-                <Text style={styles.statLabel}>Sailors</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>500+</Text>
-                <Text style={styles.statLabel}>Clubs</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>50+</Text>
-                <Text style={styles.statLabel}>Countries</Text>
-              </View>
-            </View>
           </View>
 
           {/* Right Side - 3 Overlapping Phones */}
@@ -439,6 +425,15 @@ export function HeroPhones() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Mission Section */}
+      <MissionSection />
+
+      {/* Founder Section */}
+      <FounderSection />
+
+      {/* Footer */}
+      <Footer />
     </View>
   );
 }

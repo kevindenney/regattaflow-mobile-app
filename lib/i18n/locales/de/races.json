@@ -1,0 +1,67 @@
+{
+  "title": "Wettfahrten",
+  "race": "Wettfahrt",
+  "regatta": "Regatta",
+  "series": "Serie",
+  "event": "Veranstaltung",
+  "championship": "Meisterschaft",
+  "status": {
+    "scheduled": "Geplant",
+    "started": "Gestartet",
+    "completed": "Abgeschlossen",
+    "abandoned": "Abgebrochen",
+    "cancelled": "Abgesagt",
+    "postponed": "Verschoben"
+  },
+  "details": {
+    "startTime": "Startzeit",
+    "endTime": "Endzeit",
+    "venue": "Revier",
+    "course": "Bahn",
+    "fleet": "Flotte",
+    "division": "Division",
+    "class": "Klasse",
+    "competitors": "Teilnehmer",
+    "distance": "Distanz"
+  },
+  "conditions": {
+    "wind": "Wind",
+    "windDirection": "Windrichtung",
+    "windSpeed": "Windstärke",
+    "waves": "Wellen",
+    "current": "Strömung",
+    "visibility": "Sicht",
+    "temperature": "Temperatur"
+  },
+  "actions": {
+    "addRace": "Wettfahrt hinzufügen",
+    "editRace": "Wettfahrt bearbeiten",
+    "deleteRace": "Wettfahrt löschen",
+    "startRace": "Wettfahrt starten",
+    "finishRace": "Wettfahrt beenden",
+    "abandonRace": "Wettfahrt abbrechen",
+    "viewResults": "Ergebnisse anzeigen",
+    "enterResults": "Ergebnisse eingeben"
+  },
+  "registration": {
+    "register": "Anmelden",
+    "registered": "Angemeldet",
+    "notRegistered": "Nicht angemeldet",
+    "registrationOpen": "Anmeldung geöffnet",
+    "registrationClosed": "Anmeldung geschlossen",
+    "deadline": "Anmeldeschluss"
+  },
+  "sailwave": {
+    "import": "Aus Sailwave importieren",
+    "export": "Nach Sailwave exportieren",
+    "importSuccess": "Erfolgreich aus Sailwave importiert",
+    "importError": "Sailwave-Datei konnte nicht importiert werden",
+    "selectFile": "Wählen Sie eine .BLW-Datei"
+  },
+  "empty": {
+    "noRaces": "Keine Wettfahrten gefunden",
+    "noUpcoming": "Keine bevorstehenden Wettfahrten",
+    "noPast": "Keine vergangenen Wettfahrten"
+  }
+}
+

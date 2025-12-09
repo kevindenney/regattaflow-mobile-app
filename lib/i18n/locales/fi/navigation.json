@@ -1,0 +1,20 @@
+{
+  "tabs": {
+    "home": "Koti",
+    "races": "Kilpailut",
+    "clubs": "Pursiseurat",
+    "boats": "Veneet",
+    "settings": "Asetukset"
+  },
+  "screens": {
+    "race_detail": "Kilpailun tiedot",
+    "add_race": "Lisää kilpailu",
+    "edit_race": "Muokkaa kilpailua",
+    "race_results": "Tulokset",
+    "club_detail": "Pursiseuran tiedot",
+    "boat_detail": "Veneen tiedot",
+    "profile": "Profiili",
+    "notifications": "Ilmoitukset"
+  }
+}
+

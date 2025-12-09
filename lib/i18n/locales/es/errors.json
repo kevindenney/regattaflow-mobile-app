@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Se ha producido un error inesperado",
+    "network": "Error de red. Comprueba tu conexión.",
+    "timeout": "La solicitud ha expirado. Inténtalo de nuevo.",
+    "server": "Error del servidor. Inténtalo más tarde.",
+    "not_found": "No encontrado",
+    "unauthorized": "No autorizado. Por favor, inicia sesión.",
+    "forbidden": "Acceso denegado"
+  },
+  "auth": {
+    "invalid_credentials": "Email o contraseña no válidos",
+    "email_taken": "Este email ya está en uso",
+    "weak_password": "La contraseña es demasiado débil",
+    "session_expired": "Tu sesión ha expirado. Por favor, inicia sesión de nuevo."
+  },
+  "race": {
+    "not_found": "Regata no encontrada",
+    "registration_closed": "Las inscripciones están cerradas",
+    "already_registered": "Ya estás inscrito",
+    "cannot_withdraw": "No es posible retirarse"
+  },
+  "validation": {
+    "required_field": "Este campo es obligatorio",
+    "invalid_email": "Dirección de email no válida",
+    "invalid_date": "Fecha no válida",
+    "invalid_time": "Hora no válida"
+  }
+}
+

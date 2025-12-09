@@ -1,0 +1,31 @@
+{
+  "tabs": {
+    "home": "Start",
+    "races": "Wettfahrten",
+    "venues": "Reviere",
+    "learn": "Lernen",
+    "settings": "Einstellungen",
+    "profile": "Profil",
+    "club": "Verein",
+    "fleet": "Flotte"
+  },
+  "headers": {
+    "dashboard": "Übersicht",
+    "myRaces": "Meine Wettfahrten",
+    "raceDetail": "Wettfahrt-Details",
+    "venueDetail": "Revier-Details",
+    "settings": "Einstellungen",
+    "profile": "Profil",
+    "notifications": "Benachrichtigungen",
+    "help": "Hilfe",
+    "about": "Über uns"
+  },
+  "menu": {
+    "signOut": "Abmelden",
+    "switchAccount": "Konto wechseln",
+    "preferences": "Einstellungen",
+    "support": "Support",
+    "feedback": "Feedback"
+  }
+}
+

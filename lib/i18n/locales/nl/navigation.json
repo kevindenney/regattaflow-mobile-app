@@ -1,0 +1,20 @@
+{
+  "tabs": {
+    "home": "Home",
+    "races": "Wedstrijden",
+    "clubs": "Clubs",
+    "boats": "Boten",
+    "settings": "Instellingen"
+  },
+  "screens": {
+    "race_detail": "Wedstrijddetails",
+    "add_race": "Wedstrijd toevoegen",
+    "edit_race": "Wedstrijd bewerken",
+    "race_results": "Resultaten",
+    "club_detail": "Clubdetails",
+    "boat_detail": "Bootdetails",
+    "profile": "Profiel",
+    "notifications": "Meldingen"
+  }
+}
+

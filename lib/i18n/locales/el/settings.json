@@ -1,0 +1,28 @@
+{
+  "title": "Ρυθμίσεις",
+  "account": {
+    "title": "Λογαριασμός",
+    "profile": "Προφίλ",
+    "email": "Email",
+    "password": "Κωδικός",
+    "change_password": "Αλλαγή κωδικού",
+    "sign_out": "Αποσύνδεση",
+    "delete_account": "Διαγραφή λογαριασμού"
+  },
+  "preferences": {
+    "title": "Προτιμήσεις",
+    "language": "Γλώσσα",
+    "units": "Μονάδες",
+    "notifications": "Ειδοποιήσεις",
+    "theme": "Θέμα",
+    "dark_mode": "Σκοτεινή λειτουργία"
+  },
+  "about": {
+    "title": "Σχετικά",
+    "version": "Έκδοση",
+    "privacy_policy": "Πολιτική απορρήτου",
+    "terms_of_service": "Όροι υπηρεσίας",
+    "contact_support": "Επικοινωνία υποστήριξης"
+  }
+}
+

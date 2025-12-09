@@ -242,7 +242,7 @@ async function fixDemoUserData() {
   console.log('📊 Data Summary:');
   console.log('   • Sailor ID:', sailorId);
   console.log('   • User ID:', demoUserId);
-  console.log('   • Email: demo-sailor@regattaflow.app');
+  console.log('   • Email: demo-sailor@regattaflow.io');
   console.log('   • Records: 5 races');
   console.log('\n✨ Refresh the app to see the learning insights!');
 }

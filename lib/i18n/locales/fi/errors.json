@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Tapahtui odottamaton virhe",
+    "network": "Verkkovirhe. Tarkista yhteys.",
+    "timeout": "Pyyntö aikakatkaistiin. Yritä uudelleen.",
+    "server": "Palvelinvirhe. Yritä myöhemmin.",
+    "not_found": "Ei löytynyt",
+    "unauthorized": "Ei valtuuksia. Kirjaudu sisään.",
+    "forbidden": "Pääsy estetty"
+  },
+  "auth": {
+    "invalid_credentials": "Virheellinen sähköposti tai salasana",
+    "email_taken": "Tämä sähköposti on jo käytössä",
+    "weak_password": "Salasana on liian heikko",
+    "session_expired": "Istuntosi on vanhentunut. Kirjaudu uudelleen."
+  },
+  "race": {
+    "not_found": "Kilpailua ei löytynyt",
+    "registration_closed": "Ilmoittautuminen on suljettu",
+    "already_registered": "Olet jo ilmoittautunut",
+    "cannot_withdraw": "Peru ei onnistu"
+  },
+  "validation": {
+    "required_field": "Tämä kenttä on pakollinen",
+    "invalid_email": "Virheellinen sähköpostiosoite",
+    "invalid_date": "Virheellinen päivämäärä",
+    "invalid_time": "Virheellinen aika"
+  }
+}
+

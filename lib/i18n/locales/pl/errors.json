@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Wystąpił nieoczekiwany błąd",
+    "network": "Błąd sieci. Sprawdź połączenie.",
+    "timeout": "Przekroczono czas żądania. Spróbuj ponownie.",
+    "server": "Błąd serwera. Spróbuj później.",
+    "not_found": "Nie znaleziono",
+    "unauthorized": "Brak autoryzacji. Zaloguj się.",
+    "forbidden": "Dostęp zabroniony"
+  },
+  "auth": {
+    "invalid_credentials": "Nieprawidłowy e-mail lub hasło",
+    "email_taken": "Ten adres e-mail jest już używany",
+    "weak_password": "Hasło jest zbyt słabe",
+    "session_expired": "Sesja wygasła. Zaloguj się ponownie."
+  },
+  "race": {
+    "not_found": "Nie znaleziono regat",
+    "registration_closed": "Rejestracja zamknięta",
+    "already_registered": "Już jesteś zarejestrowany",
+    "cannot_withdraw": "Nie można się wycofać"
+  },
+  "validation": {
+    "required_field": "To pole jest wymagane",
+    "invalid_email": "Nieprawidłowy adres e-mail",
+    "invalid_date": "Nieprawidłowa data",
+    "invalid_time": "Nieprawidłowy czas"
+  }
+}
+

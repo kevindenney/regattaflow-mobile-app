@@ -50,7 +50,7 @@ const getOAuthConfig = (provider: string): OAuthConfig => {
 
     case 'apple':
       return {
-        clientId: process.env.EXPO_PUBLIC_APPLE_CLIENT_ID || 'regattaflow.app',
+        clientId: process.env.EXPO_PUBLIC_APPLE_CLIENT_ID || 'io.regattaflow.app',
         redirectUri,
         scopes: ['name', 'email'],
       };

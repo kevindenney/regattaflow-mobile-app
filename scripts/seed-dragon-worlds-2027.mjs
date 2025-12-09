@@ -120,7 +120,7 @@ async function setupDemoUsers() {
 
   // Demo Sailor
   users.demoSailor = await resolveOrCreateUser(
-    'demo-sailor@regattaflow.app',
+    'demo-sailor@regattaflow.io',
     'Demo Sailor',
     'sailor'
   );
@@ -134,7 +134,7 @@ async function setupDemoUsers() {
 
   // Demo Club (Race Committee)
   users.demoClub = await resolveOrCreateUser(
-    'demo-club@regattaflow.app',
+    'demo-club@regattaflow.io',
     'RHKYC Race Office',
     'club'
   );
@@ -791,16 +791,16 @@ async function main() {
     
     console.log('📧 Demo User Credentials:');
     console.log('─'.repeat(60));
-    console.log(`  Demo Sailor (Competitor)    demo-sailor@regattaflow.app    ${DEMO_PASSWORD}`);
+    console.log(`  Demo Sailor (Competitor)    demo-sailor@regattaflow.io    ${DEMO_PASSWORD}`);
     console.log(`  Sarah Chen (Fleet Captain)  sarah.chen@sailing.com         sailing123`);
-    console.log(`  Demo Club (Race Committee)  demo-club@regattaflow.app      ${DEMO_PASSWORD}`);
+    console.log(`  Demo Club (Race Committee)  demo-club@regattaflow.io      ${DEMO_PASSWORD}`);
     console.log(`  Coach Anderson              coach.anderson@sailing.com     sailing123`);
     console.log('─'.repeat(60));
     console.log('\n');
     
     console.log('🚀 What\'s Next:');
-    console.log('  1. Login as demo-sailor@regattaflow.app to see competitor view');
-    console.log('  2. Login as demo-club@regattaflow.app for race committee management');
+    console.log('  1. Login as demo-sailor@regattaflow.io to see competitor view');
+    console.log('  2. Login as demo-club@regattaflow.io for race committee management');
     console.log('  3. Login as sarah.chen@sailing.com for fleet captain features');
     console.log('  4. Check the Races tab to see Dragon Worlds 2027');
     console.log('\n');

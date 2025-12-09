@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { RaceCommsModal } from '@/components/ai/RaceCommsModal';
 import { useRaceCommsDraft } from '@/hooks/ai/useRaceCommsDraft';
+import { SailwaveImportModal } from '@/components/sailwave';
 
 const UPCOMING_RACES = [
   {
@@ -101,6 +102,7 @@ export default function RaceManagementScreen() {
   const [commsModalVisible, setCommsModalVisible] = useState(false);
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
   const [selectedRaceName, setSelectedRaceName] = useState<string | null>(null);
+  const [sailwaveModalVisible, setSailwaveModalVisible] = useState(false);
   const {
     draft: commsDraft,
     isGenerating: commsGenerating,
@@ -419,6 +421,13 @@ export default function RaceManagementScreen() {
               <Ionicons name="clipboard-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>Result templates</ThemedText>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.operationTile, styles.operationTileSailwave]}
+              onPress={() => setSailwaveModalVisible(true)}
+            >
+              <Ionicons name="swap-horizontal-outline" size={20} color="#059669" />
+              <ThemedText style={styles.operationLabelSailwave}>Sailwave Import</ThemedText>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -431,6 +440,18 @@ export default function RaceManagementScreen() {
         error={commsError}
         onGenerate={generateComms}
         lastGeneratedAt={commsGeneratedAt ?? null}
+      />
+      <SailwaveImportModal
+        visible={sailwaveModalVisible}
+        onClose={() => setSailwaveModalVisible(false)}
+        onImportComplete={(data) => {
+          setSailwaveModalVisible(false);
+          Alert.alert(
+            'Import Successful',
+            `Imported ${data.competitors?.length || 0} competitors and ${data.races?.length || 0} races from Sailwave.`,
+            [{ text: 'View Results', onPress: () => {} }]
+          );
+        }}
       />
     </ThemedView>
   );
@@ -786,5 +807,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#2563EB',
+  },
+  operationTileSailwave: {
+    borderColor: '#6EE7B7',
+    backgroundColor: '#ECFDF5',
+  },
+  operationLabelSailwave: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
   },
 });

@@ -11,7 +11,7 @@ BEGIN
     -- Get Demo Sailor's ID
     SELECT id INTO demo_sailor_id
     FROM auth.users
-    WHERE email = 'demo-sailor@regattaflow.app';
+    WHERE email = 'demo-sailor@regattaflow.io';
 
     IF demo_sailor_id IS NULL THEN
         RAISE EXCEPTION 'Demo Sailor not found';

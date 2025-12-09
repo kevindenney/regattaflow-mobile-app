@@ -1,0 +1,30 @@
+{
+  "general": {
+    "unknown": "Si è verificato un errore imprevisto",
+    "network": "Errore di rete. Controlla la tua connessione.",
+    "timeout": "Richiesta scaduta. Riprova.",
+    "server": "Errore del server. Riprova più tardi.",
+    "not_found": "Non trovato",
+    "unauthorized": "Non autorizzato. Effettua l'accesso.",
+    "forbidden": "Accesso negato"
+  },
+  "auth": {
+    "invalid_credentials": "Email o password non validi",
+    "email_taken": "Questa email è già in uso",
+    "weak_password": "Password troppo debole",
+    "session_expired": "Sessione scaduta. Effettua nuovamente l'accesso."
+  },
+  "race": {
+    "not_found": "Regata non trovata",
+    "registration_closed": "Iscrizioni chiuse",
+    "already_registered": "Sei già iscritto",
+    "cannot_withdraw": "Impossibile ritirarsi"
+  },
+  "validation": {
+    "required_field": "Questo campo è obbligatorio",
+    "invalid_email": "Indirizzo email non valido",
+    "invalid_date": "Data non valida",
+    "invalid_time": "Ora non valida"
+  }
+}
+

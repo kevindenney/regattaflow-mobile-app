@@ -1,0 +1,28 @@
+{
+  "title": "Klassement",
+  "position": "Positie",
+  "points": "Punten",
+  "total": "Totaal",
+  "discard": "Aflegger",
+  "codes": {
+    "dnf": "DNF - Niet gefinisht",
+    "dns": "DNS - Niet gestart",
+    "dsq": "DSQ - Gediskwalificeerd",
+    "ocs": "OCS - Over de lijn",
+    "bfd": "BFD - Zwarte vlag",
+    "dnc": "DNC - Niet gezeild",
+    "rdg": "RDG - Herstel toegekend",
+    "scp": "SCP - Scorepenalty",
+    "ret": "RET - Opgegeven",
+    "raf": "RAF - Opgegeven voor start"
+  },
+  "systems": {
+    "low_point": "Laag punten",
+    "high_point": "Hoog punten",
+    "bonus_point": "Bonuspunten"
+  },
+  "tie_break": "Beslissing",
+  "series_score": "Seriescore",
+  "race_score": "Wedstrijdscore"
+}
+

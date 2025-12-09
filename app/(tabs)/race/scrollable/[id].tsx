@@ -15,12 +15,18 @@ import {
   PostRaceAnalysisCard,
   PreRaceStrategySection,
   RaceDetailMapHero,
+  RaceInfoCards,
   RacePhaseHeader,
   RigTuningCard,
+  RouteMapCard,
   StartStrategyCard,
   UpwindStrategyCard,
+  WeatherAlongRouteCard,
   WindWeatherCard
 } from '@/components/race-detail';
+import { PreRaceBriefingCard } from '@/components/races';
+import { TrackImportModal, TracksCard } from '@/components/tracking';
+import { Track } from '@/services/tracking/types';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -59,6 +65,20 @@ interface RaceEvent {
     name?: string;
   };
   class_id?: string;
+  // Race Type (Fleet vs Distance)
+  race_type?: 'fleet' | 'distance';
+  // Distance racing fields
+  route_waypoints?: Array<{
+    name: string;
+    latitude: number;
+    longitude: number;
+    type: 'start' | 'waypoint' | 'gate' | 'finish';
+    required: boolean;
+    passingSide?: 'port' | 'starboard' | 'either';
+  }>;
+  total_distance_nm?: number;
+  time_limit_hours?: number;
+  start_finish_same_location?: boolean;
   metadata?: {
     wind?: {
       direction: string;
@@ -97,6 +117,8 @@ export default function RaceDetailScrollable() {
   const [drawingPolygon, setDrawingPolygon] = useState<Array<{lat: number, lng: number}>>([]);
   const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
   const [sailorId, setSailorId] = useState<string | null>(null);
+  const [showTrackImport, setShowTrackImport] = useState(false);
+  const [importedTracks, setImportedTracks] = useState<Track[]>([]);
   const lastCourseParam = useRef<string | null>(null);
 
   // Get real weather for course filtering
@@ -733,6 +755,36 @@ export default function RaceDetailScrollable() {
           )}
 
           {/* ============================================ */}
+          {/*  RACE INFORMATION CARDS                    */}
+          {/* ============================================ */}
+          <RaceInfoCards
+            // Time Limits
+            absoluteTimeLimit={race.metadata?.absoluteTimeLimit}
+            cutOffPoints={race.metadata?.cutOffPoints}
+            // Entry Info
+            entryFees={race.metadata?.entryFees}
+            entryDeadline={race.metadata?.entryDeadline}
+            eligibleClasses={race.metadata?.eligibleClasses}
+            // Race Office
+            raceOfficeLocation={race.metadata?.raceOfficeLocation}
+            raceOfficePhone={race.metadata?.raceOfficePhone}
+            raceOfficeEmail={race.metadata?.raceOfficeEmail}
+            // VHF Channels
+            vhfChannels={race.metadata?.vhfChannels}
+            vhfChannel={race.metadata?.vhfChannel}
+            vhfBackupChannel={race.metadata?.vhfBackupChannel}
+            safetyChannel={race.metadata?.safetyChannel}
+            // Documents
+            sailingInstructionsUrl={race.metadata?.sailingInstructionsUrl}
+            noticeOfRaceUrl={race.metadata?.noticeOfRaceUrl}
+            // Rules & Scoring
+            penaltySystem={race.metadata?.penaltySystem}
+            ocsPolicy={race.metadata?.ocsPolicy}
+            scoringSystem={race.metadata?.scoringSystem}
+            handicapSystem={race.metadata?.handicapSystem}
+          />
+
+          {/* ============================================ */}
           {/*  PRE-RACE STRATEGY SECTION                 */}
           {/* ============================================ */}
           <RacePhaseHeader
@@ -794,23 +846,55 @@ export default function RaceDetailScrollable() {
             } : undefined}
           />
 
-          {/* Upwind Strategy - Dedicated Beats Card */}
-          <UpwindStrategyCard
+          {/* Pre-Race Briefing Generator */}
+          <PreRaceBriefingCard
             raceId={race.id}
             raceName={race.race_name}
+            raceType={race.race_type || 'fleet'}
+            userBoatClass={race.boat_class?.name}
           />
 
-          {/* Downwind Strategy - Dedicated Runs Card */}
-          <DownwindStrategyCard
-            raceId={race.id}
-            raceName={race.race_name}
-          />
+          {/* Fleet Racing Strategy Cards - Only shown for fleet races */}
+          {(!race.race_type || race.race_type === 'fleet') && (
+            <>
+              {/* Upwind Strategy - Dedicated Beats Card */}
+              <UpwindStrategyCard
+                raceId={race.id}
+                raceName={race.race_name}
+              />
 
-          {/* Mark Rounding Strategy */}
-          <MarkRoundingCard
-            raceId={race.id}
-            raceName={race.race_name}
-          />
+              {/* Downwind Strategy - Dedicated Runs Card */}
+              <DownwindStrategyCard
+                raceId={race.id}
+                raceName={race.race_name}
+              />
+
+              {/* Mark Rounding Strategy */}
+              <MarkRoundingCard
+                raceId={race.id}
+                raceName={race.race_name}
+              />
+            </>
+          )}
+
+          {/* Distance Racing Cards - Only shown for distance races */}
+          {race.race_type === 'distance' && (
+            <>
+              {/* Route Map with Waypoints */}
+              <RouteMapCard
+                waypoints={race.route_waypoints || []}
+                totalDistanceNm={race.total_distance_nm}
+                raceName={race.race_name}
+              />
+
+              {/* Weather Along Route */}
+              <WeatherAlongRouteCard
+                waypoints={race.route_waypoints || []}
+                raceDate={race.start_time?.split('T')[0] || new Date().toISOString().split('T')[0]}
+                startTime={race.start_time?.split('T')[1]?.slice(0, 5) || '10:00'}
+              />
+            </>
+          )}
 
           {/* Weather & Conditions */}
           <WindWeatherCard
@@ -930,6 +1014,21 @@ export default function RaceDetailScrollable() {
           />
           */}
 
+          {/* GPS Tracks - Post-Race Analysis */}
+          <TracksCard
+            tracks={importedTracks}
+            onImportMore={() => setShowTrackImport(true)}
+            onRemoveTrack={(trackId) => {
+              setImportedTracks(prev => prev.filter(t => t.id !== trackId));
+            }}
+            onViewTrack={(track) => {
+              logger.debug('[RaceDetail] View track:', track.id);
+            }}
+            onAnalyze={() => {
+              logger.debug('[RaceDetail] Analyze tracks');
+            }}
+          />
+
           {/* Spacer for bottom */}
           <View style={styles.bottomSpacer} />
         </View>
@@ -959,6 +1058,17 @@ export default function RaceDetailScrollable() {
               <Text style={styles.menuItemText}>Export Strategy</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                setShowTrackImport(true);
+              }}
+            >
+              <MaterialCommunityIcons name="map-marker-path" size={20} color="#0F172A" />
+              <Text style={styles.menuItemText}>Import GPS Track</Text>
+            </TouchableOpacity>
+
             <View style={styles.menuDivider} />
 
             <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]}>
@@ -970,6 +1080,17 @@ export default function RaceDetailScrollable() {
           </View>
         </View>
       )}
+
+      {/* Track Import Modal */}
+      <TrackImportModal
+        visible={showTrackImport}
+        onClose={() => setShowTrackImport(false)}
+        onImportComplete={(tracks) => {
+          setImportedTracks(prev => [...prev, ...tracks]);
+          logger.debug('[RaceDetail] Imported tracks:', tracks.length);
+        }}
+        raceId={id}
+      />
     </SafeAreaView>
   );
 }

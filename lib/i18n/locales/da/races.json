@@ -1,0 +1,42 @@
+{
+  "title": "Kapsejladser",
+  "upcoming": "Kommende",
+  "past": "Tidligere",
+  "my_races": "Mine kapsejladser",
+  "all_races": "Alle kapsejladser",
+  "add_race": "Tilføj kapsejlads",
+  "edit_race": "Rediger kapsejlads",
+  "delete_race": "Slet kapsejlads",
+  "race_details": "Kapsejladsdetaljer",
+  "race_name": "Kapsejladsnavn",
+  "race_date": "Dato",
+  "race_time": "Starttid",
+  "race_location": "Placering",
+  "race_course": "Bane",
+  "race_class": "Klasse",
+  "race_fleet": "Flåde",
+  "entries": "Tilmeldinger",
+  "results": "Resultater",
+  "status": {
+    "scheduled": "Planlagt",
+    "in_progress": "I gang",
+    "completed": "Afsluttet",
+    "cancelled": "Aflyst",
+    "postponed": "Udsat"
+  },
+  "registration": {
+    "register": "Tilmeld",
+    "registered": "Tilmeldt",
+    "withdraw": "Frameld",
+    "registration_open": "Tilmelding åben",
+    "registration_closed": "Tilmelding lukket",
+    "deadline": "Tilmeldingsfrist"
+  },
+  "sailwave": {
+    "import": "Importer fra Sailwave",
+    "export": "Eksporter til Sailwave",
+    "import_success": "Sailwave-import lykkedes",
+    "import_error": "Sailwave-importfejl"
+  }
+}
+

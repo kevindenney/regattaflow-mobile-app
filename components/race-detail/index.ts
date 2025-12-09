@@ -50,6 +50,15 @@ export { ExecutionEvaluationCard } from './ExecutionEvaluationCard';
 export { PreRaceStrategySection } from './PreRaceStrategySection';
 export { StrategyPlanningCard } from './StrategyPlanningCard';
 
+// Distance Racing Components
+export { RouteMapCard } from './RouteMapCard';
+export { WeatherAlongRouteCard } from './WeatherAlongRouteCard';
+export type { RouteWaypoint } from './RouteMapCard';
+export type { WeatherAtPoint } from './WeatherAlongRouteCard';
+
+// Race Information Cards (beautiful info display)
+export { RaceInfoCards } from './RaceInfoCards';
+
 // Map components - NOTE: Import directly from '@/components/race-detail/map' for native apps only
 // react-native-maps doesn't support web, so these are not exported here to avoid bundler errors
 // export * from './map';

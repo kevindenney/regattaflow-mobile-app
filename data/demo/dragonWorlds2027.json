@@ -270,7 +270,7 @@
   },
   "testUserRoles": {
     "demoSailor": {
-      "email": "demo-sailor@regattaflow.app",
+      "email": "demo-sailor@regattaflow.io",
       "role": "competitor",
       "boatName": "Doubloon",
       "sailNumber": "HKG 88",
@@ -310,7 +310,7 @@
       ]
     },
     "demoClub": {
-      "email": "demo-club@regattaflow.app",
+      "email": "demo-club@regattaflow.io",
       "role": "race_committee",
       "positions": ["Race Officer", "Results Coordinator"],
       "accessLevel": "admin",

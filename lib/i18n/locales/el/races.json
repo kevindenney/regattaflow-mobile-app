@@ -1,0 +1,42 @@
+{
+  "title": "Αγώνες",
+  "upcoming": "Επερχόμενοι",
+  "past": "Ολοκληρωμένοι",
+  "my_races": "Οι αγώνες μου",
+  "all_races": "Όλοι οι αγώνες",
+  "add_race": "Προσθήκη αγώνα",
+  "edit_race": "Επεξεργασία αγώνα",
+  "delete_race": "Διαγραφή αγώνα",
+  "race_details": "Λεπτομέρειες αγώνα",
+  "race_name": "Όνομα αγώνα",
+  "race_date": "Ημερομηνία αγώνα",
+  "race_time": "Ώρα εκκίνησης",
+  "race_location": "Τοποθεσία",
+  "race_course": "Διαδρομή",
+  "race_class": "Κλάση",
+  "race_fleet": "Στόλος",
+  "entries": "Συμμετοχές",
+  "results": "Αποτελέσματα",
+  "status": {
+    "scheduled": "Προγραμματισμένος",
+    "in_progress": "Σε εξέλιξη",
+    "completed": "Ολοκληρωμένος",
+    "cancelled": "Ακυρωμένος",
+    "postponed": "Αναβλημένος"
+  },
+  "registration": {
+    "register": "Εγγραφή",
+    "registered": "Εγγεγραμμένος",
+    "withdraw": "Αποχώρηση",
+    "registration_open": "Εγγραφές ανοιχτές",
+    "registration_closed": "Εγγραφές κλειστές",
+    "deadline": "Προθεσμία εγγραφής"
+  },
+  "sailwave": {
+    "import": "Εισαγωγή από Sailwave",
+    "export": "Εξαγωγή σε Sailwave",
+    "import_success": "Επιτυχής εισαγωγή Sailwave",
+    "import_error": "Σφάλμα εισαγωγής Sailwave"
+  }
+}
+

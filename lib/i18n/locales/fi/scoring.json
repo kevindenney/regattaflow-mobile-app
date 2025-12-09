@@ -1,0 +1,28 @@
+{
+  "title": "Tulosluettelo",
+  "position": "Sijoitus",
+  "points": "Pisteet",
+  "total": "Yhteensä",
+  "discard": "Vähennys",
+  "codes": {
+    "dnf": "DNF - Ei maalissa",
+    "dns": "DNS - Ei lähtenyt",
+    "dsq": "DSQ - Hylätty",
+    "ocs": "OCS - Yli lähtöviivan",
+    "bfd": "BFD - Musta lippu",
+    "dnc": "DNC - Ei osallistunut",
+    "rdg": "RDG - Hyvitys myönnetty",
+    "scp": "SCP - Pistesakko",
+    "ret": "RET - Keskeytti",
+    "raf": "RAF - Keskeytti ennen lähtöä"
+  },
+  "systems": {
+    "low_point": "Matalapiste",
+    "high_point": "Korkeapiste",
+    "bonus_point": "Bonuspiste"
+  },
+  "tie_break": "Tasapelin ratkaisu",
+  "series_score": "Sarjapisteet",
+  "race_score": "Kilpailupisteet"
+}
+

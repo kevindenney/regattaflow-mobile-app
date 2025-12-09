@@ -43,6 +43,8 @@ export { MultiRaceSelectionScreen } from './MultiRaceSelectionScreen';
 export { FieldConfidenceBadge } from './FieldConfidenceBadge';
 export { EditableField } from './EditableField';
 export { ValidationSummary } from './ValidationSummary';
+export { ExtractionPreferencesDialog } from './ExtractionPreferencesDialog';
+export type { ExtractionPreferences } from './ExtractionPreferencesDialog';
 
 // Course Setup Components (Phase 2)
 export { CourseSetupPrompt } from './CourseSetupPrompt';
@@ -60,6 +62,13 @@ export { RegattaFlowPlaybookCoaching } from './RegattaFlowPlaybookCoaching';
 export { RaceLearningInsights, PreRaceReminderCard } from './RaceLearningInsights';
 export { RacePrepLearningCard } from './RacePrepLearningCard';
 export { StrategyPhaseSuggestion } from './StrategyPhaseSuggestion';
+
+// Race Type Components
+export { RaceTypeSelector, RaceTypeBadge } from './RaceTypeSelector';
+export { DistanceRaceCard } from './DistanceRaceCard';
+export { PreRaceBriefingCard } from './PreRaceBriefingCard';
+export type { RaceType } from './RaceTypeSelector';
+export type { RouteWaypoint, DistanceRaceCardProps } from './DistanceRaceCard';
 
 // Re-export types
 export type { Document } from './DocumentList';

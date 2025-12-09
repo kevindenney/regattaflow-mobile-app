@@ -1,0 +1,33 @@
+{
+  "assistant": {
+    "title": "Βοηθός AI",
+    "thinking": "Σκέφτομαι...",
+    "analyzing": "Ανάλυση...",
+    "generating": "Δημιουργία..."
+  },
+  "strategy": {
+    "title": "Στρατηγική AI",
+    "pre_race": "Προ-αγώνα ανάλυση",
+    "tactical": "Τακτικές συμβουλές",
+    "weather_analysis": "Ανάλυση καιρού",
+    "current_analysis": "Ανάλυση ρευμάτων",
+    "start_strategy": "Στρατηγική εκκίνησης",
+    "upwind_strategy": "Στρατηγική όρτσας",
+    "downwind_strategy": "Στρατηγική πρίμας",
+    "mark_rounding": "Στροφή σημάτων"
+  },
+  "coaching": {
+    "title": "Προπόνηση AI",
+    "post_race_debrief": "Μετά-αγώνα ανάλυση",
+    "performance_analysis": "Ανάλυση απόδοσης",
+    "improvement_tips": "Συμβουλές βελτίωσης",
+    "pattern_detection": "Ανίχνευση μοτίβων"
+  },
+  "tuning": {
+    "title": "Ρύθμιση AI",
+    "rig_tuning": "Ρύθμιση εξαρτίων",
+    "sail_trim": "Τρίμμα πανιών",
+    "boat_setup": "Ρύθμιση σκάφους"
+  }
+}
+

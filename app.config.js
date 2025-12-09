@@ -19,7 +19,7 @@ module.exports = {
     newArchEnabled: true,
     deep: {
       scheme: 'regattaflow',
-      hosts: ['auth', 'regattaflow.app'],
+      hosts: ['auth', 'regattaflow.io'],
     },
     splash: {
       image: './assets/images/splash-icon.png',
@@ -57,7 +57,7 @@ module.exports = {
       description:
         'AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide',
       lang: 'en',
-      scope: '/regattaflow/',
+      scope: '/',
       themeColor: '#0066CC',
       backgroundColor: '#ffffff',
       display: 'standalone',
@@ -72,7 +72,6 @@ module.exports = {
     },
     experiments: {
       typedRoutes: true,
-      baseUrl: '/regattaflow',
     },
     // Expose environment variables via Constants.expoConfig.extra
     extra: {

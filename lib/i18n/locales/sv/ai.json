@@ -1,0 +1,33 @@
+{
+  "assistant": {
+    "title": "AI-assistent",
+    "thinking": "Tänker...",
+    "analyzing": "Analyserar...",
+    "generating": "Genererar..."
+  },
+  "strategy": {
+    "title": "AI-strategi",
+    "pre_race": "Förhandsanalys",
+    "tactical": "Taktiska tips",
+    "weather_analysis": "Väderanalys",
+    "current_analysis": "Strömanalys",
+    "start_strategy": "Startstrategi",
+    "upwind_strategy": "Krysstrategi",
+    "downwind_strategy": "Undanvindsstrategi",
+    "mark_rounding": "Märkrundning"
+  },
+  "coaching": {
+    "title": "AI-coaching",
+    "post_race_debrief": "Eftergenomgång",
+    "performance_analysis": "Prestationsanalys",
+    "improvement_tips": "Förbättringstips",
+    "pattern_detection": "Mönsterigenkänning"
+  },
+  "tuning": {
+    "title": "AI-trimning",
+    "rig_tuning": "Riggtrimning",
+    "sail_trim": "Segeltrim",
+    "boat_setup": "Båtinställning"
+  }
+}
+

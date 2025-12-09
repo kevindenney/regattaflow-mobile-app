@@ -1,0 +1,28 @@
+{
+  "title": "Resultatliste",
+  "position": "Placering",
+  "points": "Point",
+  "total": "Total",
+  "discard": "Fradrag",
+  "codes": {
+    "dnf": "DNF - Fuldførte ikke",
+    "dns": "DNS - Startede ikke",
+    "dsq": "DSQ - Diskvalificeret",
+    "ocs": "OCS - Over linjen",
+    "bfd": "BFD - Sort flag",
+    "dnc": "DNC - Deltog ikke",
+    "rdg": "RDG - Godtgørelse givet",
+    "scp": "SCP - Pointstraf",
+    "ret": "RET - Udgået",
+    "raf": "RAF - Udgået før start"
+  },
+  "systems": {
+    "low_point": "Lavpoint",
+    "high_point": "Højpoint",
+    "bonus_point": "Bonuspoint"
+  },
+  "tie_break": "Pointlighed",
+  "series_score": "Seriescoring",
+  "race_score": "Kapsejladsscoring"
+}
+

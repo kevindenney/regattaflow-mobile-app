@@ -10,17 +10,17 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const demoUsers = [
   {
-    email: 'demo-sailor@regattaflow.app',
+    email: 'demo-sailor@regattaflow.io',
     full_name: 'Demo Sailor',
     user_type: 'sailor',
   },
   {
-    email: 'demo-club@regattaflow.app',
+    email: 'demo-club@regattaflow.io',
     full_name: 'Demo Club Manager',
     user_type: 'club',
   },
   {
-    email: 'demo-coach@regattaflow.app',
+    email: 'demo-coach@regattaflow.io',
     full_name: 'Demo Coach',
     user_type: 'coach',
   },
@@ -77,7 +77,7 @@ async function fixDemoUserTypes() {
   const { data: verifyData, error: verifyError } = await supabase
     .from('users')
     .select('email, full_name, user_type, onboarding_completed')
-    .like('email', 'demo-%@regattaflow.app')
+    .like('email', 'demo-%@regattaflow.io')
     .order('email');
 
   if (verifyError) {

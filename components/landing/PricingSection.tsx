@@ -307,7 +307,7 @@ function ClubsPricing({ isDesktop }: { isDesktop: boolean }) {
           onPress={() => {
             if (Platform.OS === 'web') {
               // Open email client or contact form
-              window.location.href = 'mailto:sales@regattaflow.com?subject=Club Enterprise Inquiry';
+              window.location.href = 'mailto:sales@regattaflow.io?subject=Club Enterprise Inquiry';
             }
           }}
         >

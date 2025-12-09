@@ -1,0 +1,20 @@
+{
+  "tabs": {
+    "home": "Główna",
+    "races": "Regaty",
+    "clubs": "Kluby",
+    "boats": "Łodzie",
+    "settings": "Ustawienia"
+  },
+  "screens": {
+    "race_detail": "Szczegóły regat",
+    "add_race": "Dodaj regaty",
+    "edit_race": "Edytuj regaty",
+    "race_results": "Wyniki",
+    "club_detail": "Szczegóły klubu",
+    "boat_detail": "Szczegóły łodzi",
+    "profile": "Profil",
+    "notifications": "Powiadomienia"
+  }
+}
+

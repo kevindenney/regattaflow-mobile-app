@@ -8,6 +8,9 @@ import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 export interface ComprehensiveRaceData {
+  // Race Type - determines UI and strategy approach
+  raceType?: 'fleet' | 'distance';  // 'fleet' = buoy racing, 'distance' = offshore/passage
+  
   // Basic Information
   raceName: string;
   raceDate: string;
@@ -25,9 +28,14 @@ export interface ComprehensiveRaceData {
   timeLimitMinutes?: number;
 
   // Communications & Control
-  vhfChannel?: string;
+  vhfChannel?: string;  // Legacy single channel (deprecated, use vhfChannels)
   vhfBackupChannel?: string;
   safetyChannel?: string;
+  vhfChannels?: Array<{
+    channel: string;
+    purpose: string;      // e.g., "Inner Starting Line", "Outer Starting Line", "Safety", "Race Committee"
+    classes?: string[];   // Which classes use this channel, e.g., ["Dragon", "J/80", "Fast Fleet"]
+  }>;
   rcBoatName?: string;
   rcBoatPosition?: string;
   markBoats?: Array<{ mark: string; boat: string; position: string }>;
@@ -35,12 +43,54 @@ export interface ComprehensiveRaceData {
   protestCommittee?: string;
 
   // Course & Start Area
-  startAreaName?: string;
+  startAreaName?: string;  // Legacy single start area (deprecated)
   startAreaDescription?: string;
   startLineLength?: number;
+  
+  // Multiple Start Lines (for races with Inner/Outer lines, different class starts)
+  startLines?: Array<{
+    name: string;           // "Inner Starting Line", "Outer Starting Line"
+    description?: string;   // How to start (e.g., "west to east between IDM and ODM")
+    classes: string[];      // Which classes use this line ["Dragon", "J/80", "Etchells"]
+    vhfChannel?: string;    // VHF channel for this line
+    marks?: {
+      starboardEnd?: string; // e.g., "Starter's Box", "Kellett VIII"
+      portEnd?: string;      // e.g., "ODM", "orange inflatable buoy"
+    };
+    direction?: string;     // e.g., "W-E"
+    startTimes?: Array<{    // Start times for classes on this line
+      class: string;
+      flag: string;
+      time: string;
+    }>;
+  }>;
+  
   potentialCourses?: string[];
   courseSelectionCriteria?: string;
   courseDiagramUrl?: string;
+  
+  // Racing Area (overall geographic bounds)
+  racingAreaName?: string;        // e.g., "Hong Kong Island"
+  racingAreaDescription?: string; // e.g., "Hong Kong Island to Starboard"
+  approximateDistance?: string;   // e.g., "26nm"
+  
+  // Prohibited Areas (TSS, military zones, etc.)
+  prohibitedAreas?: Array<{
+    name: string;
+    description?: string;
+    coordinates?: Array<{ lat: number; lng: number }>;
+    consequence?: string;  // e.g., "disqualified without a hearing"
+  }>;
+  
+  // Course Gates
+  gates?: Array<{
+    name: string;           // e.g., "Stanley Bay GATE"
+    description?: string;
+    orientation?: string;   // e.g., "SE-NW"
+    portMark?: string;
+    starboardMark?: string;
+    canShortenHere?: boolean;
+  }>;
   
   // Finish Area
   finishAreaName?: string;
@@ -147,6 +197,45 @@ export interface ComprehensiveRaceData {
     beat?: { distance: number; unit: string }; // e.g., { distance: 1.2, unit: "nm" }
     run?: { distance: number; unit: string };
   };
+
+  // ============================================
+  // Distance Racing Fields (when raceType === 'distance')
+  // ============================================
+  
+  // Route waypoints for distance/offshore races
+  routeWaypoints?: Array<{
+    name: string;
+    latitude: number;
+    longitude: number;
+    type: 'start' | 'waypoint' | 'gate' | 'finish';
+    required: boolean;
+    passingSide?: 'port' | 'starboard' | 'either';
+    notes?: string;  // e.g., "Leave to port", "Rounding mark"
+  }>;
+  
+  // Total race distance in nautical miles
+  totalDistanceNm?: number;
+  
+  // Time limit in hours for distance races
+  timeLimitHours?: number;
+  
+  // Whether start and finish are at same location (circumnavigation vs point-to-point)
+  startFinishSameLocation?: boolean;
+  
+  // Tide gates - optimal timing windows based on tidal currents
+  tideGates?: Array<{
+    location: string;
+    optimalPassingTime: string;  // ISO time or relative time
+    currentDirection: 'favorable' | 'adverse';
+    notes?: string;
+  }>;
+  
+  // Shipping/traffic separation schemes to avoid or navigate
+  trafficSeparationSchemes?: Array<{
+    name: string;
+    crossingStrategy?: string;
+    coordinates?: Array<{ lat: number; lng: number }>;
+  }>;
 }
 
 const logger = createLogger('ComprehensiveRaceExtractionAgent');

@@ -1,0 +1,20 @@
+{
+  "tabs": {
+    "home": "Hjem",
+    "races": "Kapsejladser",
+    "clubs": "Klubber",
+    "boats": "Både",
+    "settings": "Indstillinger"
+  },
+  "screens": {
+    "race_detail": "Kapsejladsdetaljer",
+    "add_race": "Tilføj kapsejlads",
+    "edit_race": "Rediger kapsejlads",
+    "race_results": "Resultater",
+    "club_detail": "Klubdetaljer",
+    "boat_detail": "Båddetaljer",
+    "profile": "Profil",
+    "notifications": "Notifikationer"
+  }
+}
+
