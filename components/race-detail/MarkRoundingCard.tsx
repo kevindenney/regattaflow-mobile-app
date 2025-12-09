@@ -51,6 +51,9 @@ export function MarkRoundingCard({
   // Use refs to track state for polling without triggering re-renders
   const roundingsRef = useRef<MarkRounding[]>([]);
   const loadingRef = useRef(true);
+  const hasLoadedRef = useRef(false);
+  const pollCountRef = useRef(0);
+  const MAX_POLLS = 20; // Stop polling after 20 attempts (60+ seconds with exponential backoff)
 
   // Update refs when state changes
   useEffect(() => {
@@ -109,8 +112,19 @@ export function MarkRoundingCard({
     }
   }, [user, raceId]);
 
+  // Store loadMarkRoundings in a ref to avoid effect re-runs
+  const loadMarkRoundingsRef = useRef(loadMarkRoundings);
   useEffect(() => {
-    loadMarkRoundings();
+    loadMarkRoundingsRef.current = loadMarkRoundings;
+  }, [loadMarkRoundings]);
+
+  useEffect(() => {
+    // Reset poll count when race changes
+    pollCountRef.current = 0;
+    hasLoadedRef.current = false;
+    
+    // Initial load
+    loadMarkRoundingsRef.current();
 
     // Subscribe to realtime changes for this race's strategy
     const subscription = supabase
@@ -126,25 +140,35 @@ export function MarkRoundingCard({
         (payload) => {
           console.log('[MarkRoundingCard] Realtime update received:', payload);
           // Reload strategy when it changes
-          loadMarkRoundings();
+          loadMarkRoundingsRef.current();
         }
       )
       .subscribe();
 
-    // Poll for strategy updates every 3 seconds if no data yet
+    // Poll for strategy updates with exponential backoff if no data yet
     // This handles the case where strategy is generated after component mounts
-    const pollInterval = setInterval(() => {
-      if (roundingsRef.current.length === 0 && !loadingRef.current) {
-        console.log('[MarkRoundingCard] Polling for strategy updates...');
-        loadMarkRoundings();
+    // Stop polling after MAX_POLLS attempts to prevent infinite polling
+    // Use exponential backoff: 2s, 3s, 4s, 5s... to be patient with AI generation
+    let pollInterval: NodeJS.Timeout;
+    const pollWithBackoff = () => {
+      if (roundingsRef.current.length === 0 && !loadingRef.current && pollCountRef.current < MAX_POLLS) {
+        pollCountRef.current += 1;
+        const nextDelay = Math.min(2000 + pollCountRef.current * 1000, 10000); // 2s to 10s max
+        console.log(`[MarkRoundingCard] Polling for strategy updates... (${pollCountRef.current}/${MAX_POLLS}, next in ${nextDelay/1000}s)`);
+        loadMarkRoundingsRef.current();
+        pollInterval = setTimeout(pollWithBackoff, nextDelay);
+      } else if (pollCountRef.current >= MAX_POLLS) {
+        console.log('[MarkRoundingCard] Max poll attempts reached, stopping polling');
       }
-    }, 3000);
+    };
+    // Start polling after initial delay (give StartStrategyCard time to begin generating)
+    pollInterval = setTimeout(pollWithBackoff, 3000);
 
     return () => {
       subscription.unsubscribe();
-      clearInterval(pollInterval);
+      clearTimeout(pollInterval);
     };
-  }, [raceId, loadMarkRoundings]);
+  }, [raceId]); // Only re-run when raceId changes, not when loadMarkRoundings changes
 
   // Load user's manual strategy for marks
   useEffect(() => {

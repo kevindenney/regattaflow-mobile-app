@@ -573,6 +573,39 @@ export function ComprehensiveRaceEntry({
           });
         }
 
+        // === Distance Racing Fields ===
+        // Load race_type from database, or auto-detect from race name
+        const detectDistanceRace = (name: string): boolean => {
+          const distanceKeywords = [
+            'offshore', 'passage', 'ocean', 'distance', 'around', 'island',
+            'transpac', 'fastnet', 'sydney hobart', 'rolex', 'middle sea', 
+            'giraglia', 'bermuda', 'coastal', 'regatta cup'
+          ];
+          const lowerName = (name || '').toLowerCase();
+          return distanceKeywords.some(kw => lowerName.includes(kw));
+        };
+
+        // Set race type - use DB value, or auto-detect from name
+        if (race.race_type) {
+          setRaceType(race.race_type);
+        } else if (detectDistanceRace(race.name)) {
+          // Auto-detect distance race from name
+          setRaceType('distance');
+          logger.debug('[ComprehensiveRaceEntry] Auto-detected distance race from name:', race.name);
+        }
+
+        // Load route waypoints for distance races
+        if (race.route_waypoints && Array.isArray(race.route_waypoints)) {
+          setRouteWaypoints(race.route_waypoints);
+        }
+
+        // Load other distance racing fields
+        if (race.total_distance_nm) setTotalDistanceNm(race.total_distance_nm.toString());
+        if (race.time_limit_hours) setTimeLimitHours(race.time_limit_hours.toString());
+        if (race.start_finish_same_location !== undefined) {
+          setStartFinishSameLocation(race.start_finish_same_location);
+        }
+
         logger.debug('[ComprehensiveRaceEntry] Race data loaded successfully');
       } catch (err: any) {
         console.error('[ComprehensiveRaceEntry] Error loading race:', err);

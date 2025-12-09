@@ -15,10 +15,7 @@ const SHADOWS: Record<ShadowLevel, Record<string, unknown>> = {
         elevation: 1,
       },
       web: {
-        shadowColor: 'rgba(15, 23, 42, 0.08)',
-        shadowOpacity: 0.08,
-        shadowRadius: 2,
-        shadowOffset: { width: 0, height: 1 },
+        boxShadow: '0px 1px 2px rgba(15, 23, 42, 0.08)',
       },
       default: {
         shadowColor: '#0f172a',
@@ -39,10 +36,7 @@ const SHADOWS: Record<ShadowLevel, Record<string, unknown>> = {
         elevation: 2,
       },
       web: {
-        shadowColor: 'rgba(15, 23, 42, 0.12)',
-        shadowOpacity: 0.12,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
+        boxShadow: '0px 2px 4px rgba(15, 23, 42, 0.12)',
       },
       default: {
         shadowColor: '#0f172a',
@@ -63,10 +57,7 @@ const SHADOWS: Record<ShadowLevel, Record<string, unknown>> = {
         elevation: 4,
       },
       web: {
-        shadowColor: 'rgba(15, 23, 42, 0.16)',
-        shadowOpacity: 0.16,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 4 },
+        boxShadow: '0px 4px 6px rgba(15, 23, 42, 0.16)',
       },
       default: {
         shadowColor: '#0f172a',
@@ -87,10 +78,7 @@ const SHADOWS: Record<ShadowLevel, Record<string, unknown>> = {
         elevation: 8,
       },
       web: {
-        shadowColor: 'rgba(15, 23, 42, 0.2)',
-        shadowOpacity: 0.2,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
+        boxShadow: '0px 6px 12px rgba(15, 23, 42, 0.2)',
       },
       default: {
         shadowColor: '#0f172a',

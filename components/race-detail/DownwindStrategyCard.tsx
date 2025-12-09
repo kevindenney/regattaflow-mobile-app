@@ -48,6 +48,8 @@ export function DownwindStrategyCard({
   // Use refs to track state for polling without triggering re-renders
   const runsRef = useRef<RunRecommendation[]>([]);
   const loadingRef = useRef(true);
+  const pollCountRef = useRef(0);
+  const MAX_POLLS = 20; // Stop polling after 20 attempts
 
   // Update refs when state changes
   useEffect(() => {
@@ -147,17 +149,29 @@ export function DownwindStrategyCard({
       )
       .subscribe();
 
-    // Poll for strategy updates every 3 seconds if no data yet
+    // Poll for strategy updates with exponential backoff if no data yet
     // This handles the case where strategy is generated after component mounts
-    const pollInterval = setInterval(() => {
-      if (runsRef.current.length === 0 && !loadingRef.current) {
+    // Reset poll count when race changes
+    pollCountRef.current = 0;
+    
+    let pollInterval: NodeJS.Timeout;
+    const pollWithBackoff = () => {
+      if (runsRef.current.length === 0 && !loadingRef.current && pollCountRef.current < MAX_POLLS) {
+        pollCountRef.current += 1;
+        const nextDelay = Math.min(2000 + pollCountRef.current * 1000, 10000); // 2s to 10s max
+        console.log(`[DownwindStrategyCard] Polling for strategy updates... (${pollCountRef.current}/${MAX_POLLS}, next in ${nextDelay/1000}s)`);
         loadDownwindStrategy();
+        pollInterval = setTimeout(pollWithBackoff, nextDelay);
+      } else if (pollCountRef.current >= MAX_POLLS) {
+        console.log('[DownwindStrategyCard] Max poll attempts reached, stopping polling');
       }
-    }, 3000);
+    };
+    // Start polling after initial delay (give StartStrategyCard time to begin generating)
+    pollInterval = setTimeout(pollWithBackoff, 3000);
 
     return () => {
       subscription.unsubscribe();
-      clearInterval(pollInterval);
+      clearTimeout(pollInterval);
     };
   }, [raceId, loadDownwindStrategy]); // Only depend on raceId and loadDownwindStrategy
 

@@ -95,6 +95,7 @@ export interface RaceCardProps {
   showTimelineIndicator?: boolean; // True to show the "now" timeline indicator on the left
   isDimmed?: boolean; // True when another race is selected and this one should recede
   results?: RaceResultData; // Results data for completed races
+  venueCoordinates?: { lat: number; lng: number } | null; // Coordinates for weather fetching
 }
 
 export function RaceCard({
@@ -120,6 +121,7 @@ export function RaceCard({
   showTimelineIndicator = false,
   isDimmed = false,
   results,
+  venueCoordinates,
 }: RaceCardProps) {
   const router = useRouter();
   const editHandler = onEdit ?? null;
@@ -176,20 +178,44 @@ export function RaceCard({
   }, [raceStatus, isMock, daysUntilRace]);
 
   // Fetch live forecast for races within 7 days
+  // Uses coordinates when available (same as RaceConditionsCard) for consistency
   const fetchLiveForecast = useCallback(async () => {
-    if (!shouldUseLiveForecast || !venue || liveForecastLoading) return;
+    if (!shouldUseLiveForecast || liveForecastLoading) return;
+    // Need either coordinates or venue name to fetch weather
+    if (!venueCoordinates && !venue) return;
 
     setLiveForecastLoading(true);
     try {
-      logger.debug(`[RaceCard] Fetching live forecast for ${name} (${daysUntilRace} days away)`);
+      logger.debug(`[RaceCard] Fetching live forecast for ${name} (${daysUntilRace} days away)`, {
+        hasCoordinates: !!venueCoordinates,
+        venue,
+      });
       
       const warningSignalTime =
         critical_details?.warning_signal ||
         (typeof startTime === 'string' && startTime.includes(':') && startTime.length <= 8 ? startTime : null);
 
-      const weatherData = await RaceWeatherService.fetchWeatherByVenueName(venue, date, {
-        warningSignalTime,
-      });
+      let weatherData = null;
+
+      // Prefer coordinates-based fetching (same method as RaceConditionsCard)
+      if (venueCoordinates) {
+        logger.debug(`[RaceCard] Using coordinates: ${venueCoordinates.lat}, ${venueCoordinates.lng}`);
+        weatherData = await RaceWeatherService.fetchWeatherByCoordinates(
+          venueCoordinates.lat,
+          venueCoordinates.lng,
+          date,
+          venue,
+          { warningSignalTime }
+        );
+      }
+
+      // Fall back to venue name lookup if coordinates failed or weren't available
+      if (!weatherData && venue) {
+        logger.debug(`[RaceCard] Falling back to venue name lookup: ${venue}`);
+        weatherData = await RaceWeatherService.fetchWeatherByVenueName(venue, date, {
+          warningSignalTime,
+        });
+      }
 
       if (weatherData) {
         setCurrentWind(weatherData.wind);
@@ -214,20 +240,34 @@ export function RaceCard({
     } finally {
       setLiveForecastLoading(false);
     }
-  }, [shouldUseLiveForecast, venue, date, startTime, critical_details?.warning_signal, name, daysUntilRace, wind, tide, weatherStatus, liveForecastLoading]);
+  }, [shouldUseLiveForecast, venue, venueCoordinates, date, startTime, critical_details?.warning_signal, name, daysUntilRace, wind, tide, weatherStatus, liveForecastLoading]);
 
   // Auto-fetch live forecast on mount for races within 7 days
+  // Uses props data directly when available (from useEnrichedRaces) to match RaceConditionsCard
   useEffect(() => {
-    if (shouldUseLiveForecast && !isLiveForecast && !liveForecastLoading) {
-      fetchLiveForecast();
-    } else if (!shouldUseLiveForecast) {
-      // For races >7 days or past, use saved data
+    // For races within 7 days
+    if (shouldUseLiveForecast) {
+      // If we have valid weather data from props (from useEnrichedRaces), use it
+      const hasValidProps = wind?.direction && wind?.speedMin !== undefined && wind?.speedMax !== undefined;
+      if (hasValidProps) {
+        // Use the enriched weather data from props (already live from useEnrichedRaces)
+        setCurrentWind(wind);
+        setCurrentTide(tide);
+        setCurrentWeatherStatus('available');
+        setIsLiveForecast(true);
+      } else if (!isLiveForecast && !liveForecastLoading) {
+        // Only fetch if we don't have valid props AND haven't already fetched
+        fetchLiveForecast();
+      }
+    } else {
+      // For races >7 days or past, use saved data from props
       setCurrentWind(wind);
       setCurrentTide(tide);
       setCurrentWeatherStatus(weatherStatus);
       setIsLiveForecast(false);
     }
-  }, [shouldUseLiveForecast]); // Only re-run when shouldUseLiveForecast changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldUseLiveForecast, wind?.direction, wind?.speedMin, wind?.speedMax, tide?.state, tide?.height]);
 
   // Sync props to state when they change (for races NOT using live forecast)
   useEffect(() => {

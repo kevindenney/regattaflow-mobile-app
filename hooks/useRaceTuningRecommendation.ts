@@ -3,7 +3,7 @@
  * Normalizes the RaceTuningService response for UI components.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSetting } from '@/services/RaceTuningService';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -100,6 +100,13 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const [recommendation, setRecommendation] = useState<RaceTuningRecommendation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  
+  // Use refs to track if we've already fetched with these params
+  const hasFetchedRef = useRef(false);
+  const lastFetchKeyRef = useRef<string>('');
+  
+  // Create a stable key for the current params
+  const fetchKey = `${enabled}-${classId}-${className}-${averageWindSpeed}-${windMin}-${windMax}`;
 
   const fetchRecommendation = useCallback(async () => {
     console.log('🎣 [useRaceTuningRecommendation] Fetch called with:', {
@@ -161,21 +168,28 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   }, [enabled, classId, className, averageWindSpeed, windMin, windMax, windDirection, gusts, waveHeight, currentSpeed, currentDirection, pointsOfSail, limit]);
 
   useEffect(() => {
+    // Only fetch if the key parameters have changed
+    if (lastFetchKeyRef.current === fetchKey && hasFetchedRef.current) {
+      return;
+    }
+    
+    lastFetchKeyRef.current = fetchKey;
+    hasFetchedRef.current = true;
+    
     let cancelled = false;
 
     const run = async () => {
-      await fetchRecommendation();
+      if (!cancelled) {
+        await fetchRecommendation();
+      }
     };
 
     run();
 
     return () => {
       cancelled = true;
-      if (cancelled) {
-        // Best effort cleanup by ignoring late state updates; fetchRecommendation handles classId/enabled guards
-      }
     };
-  }, [fetchRecommendation]);
+  }, [fetchKey, fetchRecommendation]);
 
   const settings = useMemo(() => {
     if (!recommendation) return [];

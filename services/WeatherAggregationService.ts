@@ -20,28 +20,33 @@ import {
   ConfidenceLevel
 } from '@/types/environmental';
 import { StormGlassService } from './weather/StormGlassService';
+import { OpenMeteoService } from './weather/OpenMeteoService';
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 
 // Regional weather provider configuration
+// OpenMeteo is FREE and primary for weather/waves
+// StormGlass is only used for tide data (to minimize quota usage)
 const REGIONAL_PROVIDERS = {
-  'asia_pacific': ['StormGlass', 'HKO', 'JMA', 'BOM', 'OpenWeatherMap'],
-  'europe': ['StormGlass', 'ECMWF', 'Met_Office', 'Meteo_France', 'OpenWeatherMap'],
-  'north_america': ['StormGlass', 'NOAA', 'Environment_Canada', 'OpenWeatherMap'],
-  'south_america': ['StormGlass', 'OpenWeatherMap'],
-  'africa': ['StormGlass', 'OpenWeatherMap'],
-  'middle_east': ['StormGlass', 'OpenWeatherMap'],
-  'global': ['StormGlass', 'OpenWeatherMap']
+  'asia_pacific': ['OpenMeteo', 'HKO', 'NOAA', 'OpenWeatherMap'],
+  'europe': ['OpenMeteo', 'ECMWF', 'Met_Office', 'Meteo_France', 'OpenWeatherMap'],
+  'north_america': ['OpenMeteo', 'NOAA', 'Environment_Canada', 'OpenWeatherMap'],
+  'south_america': ['OpenMeteo', 'OpenWeatherMap'],
+  'africa': ['OpenMeteo', 'OpenWeatherMap'],
+  'middle_east': ['OpenMeteo', 'OpenWeatherMap'],
+  'global': ['OpenMeteo', 'OpenWeatherMap']
 };
 
 export class WeatherAggregationService {
   private providers: string[];
   private venueRegion: string;
   private stormGlassService: StormGlassService | null;
+  private openMeteoService: OpenMeteoService;
 
   constructor(venue: { region?: string; country?: string }) {
     this.venueRegion = venue.region || 'global';
     this.providers = this.selectProvidersForRegion(this.venueRegion);
     this.stormGlassService = this.createStormGlassService();
+    this.openMeteoService = new OpenMeteoService();
   }
 
   /**
@@ -182,6 +187,8 @@ export class WeatherAggregationService {
     const lng = venue.coordinates_lng;
 
     switch (provider) {
+      case 'OpenMeteo':
+        return this.fetchOpenMeteo(lat, lng, time);
       case 'StormGlass':
         return this.fetchStormGlass(lat, lng, time);
       case 'HKO':
@@ -209,6 +216,68 @@ export class WeatherAggregationService {
       timeout: 10000,
       retryAttempts: 2,
     });
+  }
+
+  /**
+   * Open-Meteo API (FREE - primary provider for weather/waves)
+   */
+  private async fetchOpenMeteo(lat: number, lng: number, time: Date): Promise<WeatherForecast | null> {
+    try {
+      const weather = await this.openMeteoService.getWeatherAtTime(
+        { latitude: lat, longitude: lng },
+        time
+      );
+
+      if (!weather) {
+        return null;
+      }
+
+      return this.transformOpenMeteoForecast(weather);
+    } catch (error) {
+      console.warn('[WeatherAggregationService] Open-Meteo provider failed', error);
+      return null;
+    }
+  }
+
+  private transformOpenMeteoForecast(weather: AdvancedWeatherConditions): WeatherForecast {
+    const confidenceRatio = weather.forecast?.confidence ?? 0.85;
+    const confidence: ConfidenceLevel = confidenceRatio >= 0.75
+      ? ConfidenceLevel.HIGH
+      : confidenceRatio >= 0.5
+        ? ConfidenceLevel.MEDIUM
+        : ConfidenceLevel.LOW;
+
+    const wind: WindData = {
+      speed: weather.wind?.speed ?? 0,
+      direction: weather.wind?.direction ?? 0,
+      gust: weather.wind?.gusts ?? undefined,
+    };
+
+    // Note: Open-Meteo doesn't provide tide data, leave undefined
+    // Tide data should be fetched separately from StormGlass when needed
+    const tide: TideData | undefined = undefined;
+
+    const wave: WaveData | undefined = weather.waves
+      ? {
+          height: weather.waves.height ?? 0,
+          period: weather.waves.period ?? 0,
+          direction: weather.waves.direction ?? 0,
+          swell_height: weather.waves.swellHeight,
+          swell_direction: weather.waves.swellDirection,
+        }
+      : undefined;
+
+    return {
+      time: (weather.timestamp ?? new Date()).toISOString(),
+      wind,
+      tide,
+      wave,
+      temperature: weather.temperature ?? weather.temperatureProfile?.air,
+      pressure: weather.pressure?.sealevel,
+      cloud_cover: weather.cloudCover ?? weather.cloudLayerProfile?.total,
+      confidence,
+      provider: 'OpenMeteo',
+    };
   }
 
   private async fetchStormGlass(lat: number, lng: number, time: Date): Promise<WeatherForecast | null> {

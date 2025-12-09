@@ -167,6 +167,31 @@ Each skill has its own directory containing a `SKILL.md` file with YAML frontmat
 
 ---
 
+### 13. **Long Distance Racing Analyst** 🆕
+📁 `skills/long-distance-racing-analyst/SKILL.md`
+
+**Purpose**: Expert offshore and distance racing strategist for passage planning, weather routing, crew management, night sailing, and multi-day race optimization
+
+**Key Features**:
+- Weather strategy and routing (sail the wind, not the forecast)
+- VMG optimization for distance races
+- Night racing protocols and watch systems (3×4hr day, 4×3hr night)
+- Crew fatigue management and nutrition strategy
+- Navigation and passage planning with decision gates
+- Heavy weather tactics and sail reduction guidelines
+- Safety protocols (MOB, storm procedures)
+- Finishing strategy for distance races
+
+**Unique Capabilities**:
+- Multi-day race planning and execution
+- Weather system tracking and routing
+- Crew energy management as competitive resource
+- Strategic decision gates with pre-planned contingencies
+
+**Champion Wisdom Included**: Harold Cudmore, Gary Jobson, Chris Bouzaid, Stan Honey
+
+---
+
 ## How Skills Are Used
 
 ### In Code

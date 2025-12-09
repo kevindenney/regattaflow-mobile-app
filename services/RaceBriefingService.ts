@@ -212,8 +212,12 @@ class RaceBriefingServiceClass {
       // Generate AI strategy if enabled
       if (includeStrategy && useAI) {
         const aiStrategy = await this.generateAIStrategy(race, weatherData, raceType);
-        if (aiStrategy) {
+        if (aiStrategy && aiStrategy.keyPoints && aiStrategy.keyPoints.length > 0) {
           briefing.strategy = aiStrategy;
+        } else {
+          // AI failed or returned empty - fall back to basic strategy
+          logger.warn('[generateBriefing] AI strategy failed or empty, using basic strategy');
+          briefing.strategy = this.buildBasicStrategy(race, raceType);
         }
       } else {
         // Basic strategy without AI
@@ -357,21 +361,51 @@ class RaceBriefingServiceClass {
         options: ['Pin (port bias)', 'Boat (starboard bias)', 'Middle (best clear air)'],
       });
     } else {
+      // Distance Racing Strategy
+      const waypoints = race.route_waypoints || [];
+      const totalDistance = race.total_distance_nm || 0;
+      
       keyPoints.push({
         title: 'Route Planning',
-        content: 'Optimize for VMG and favorable current',
+        content: totalDistance > 0 
+          ? `Optimize ${totalDistance}nm course for VMG. ${waypoints.length > 2 ? `Key waypoints: ${waypoints.slice(1, -1).map((w: any) => w.name).join(', ')}` : 'Plan each leg carefully.'}`
+          : 'Optimize for VMG and favorable current',
         priority: 'critical',
       });
+      
       keyPoints.push({
-        title: 'Tide Strategy',
-        content: 'Time waypoint passages for favorable current',
+        title: 'Tide & Current Strategy',
+        content: 'Time waypoint passages for favorable current. Check tide tables for each leg.',
+        priority: 'critical',
+      });
+      
+      keyPoints.push({
+        title: 'Weather Monitoring',
+        content: 'Track wind shifts throughout the race. Be prepared to adjust sail trim for changing conditions.',
         priority: 'important',
       });
       
+      if (totalDistance > 15) {
+        keyPoints.push({
+          title: 'Pacing & Energy',
+          content: 'This is a longer race - pace yourself and maintain focus for the duration.',
+          priority: 'important',
+        });
+      }
+      
       decisionPoints.push({
-        question: 'Start aggressively or conservatively?',
-        options: ['Push hard early', 'Pace for the long haul', 'Tactical start based on fleet'],
+        question: 'Start strategy?',
+        options: ['Push hard early for position', 'Conservative start, pace for distance', 'Tactical start based on fleet positions'],
       });
+      
+      decisionPoints.push({
+        question: 'Route choice at key waypoints?',
+        options: ['Inside/coastal (shorter but potentially lighter wind)', 'Outside/offshore (more wind but longer)', 'Sail the rhumb line'],
+      });
+      
+      if (race.time_limit_hours) {
+        warnings.push(`Time limit: ${race.time_limit_hours} hours. Plan your pace accordingly.`);
+      }
     }
 
     // Add any venue-specific warnings

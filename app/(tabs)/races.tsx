@@ -1,17 +1,20 @@
 import {
-    ContingencyPlansCard,
-    CrewEquipmentCard,
-    DownwindStrategyCard,
-    FleetRacersCard,
-    MarkRoundingCard,
-    PostRaceAnalysisCard,
-    PreRaceStrategySection,
-    RaceConditionsCard,
-    RaceDetailMapHero,
-    RacePhaseHeader,
-    RigTuningCard,
-    StartStrategyCard,
-    UpwindStrategyCard
+  ContingencyPlansCard,
+  CourseSelector,
+  CrewEquipmentCard,
+  DownwindStrategyCard,
+  FleetRacersCard,
+  MarkRoundingCard,
+  PostRaceAnalysisCard,
+  PreRaceStrategySection,
+  RaceConditionsCard,
+  RaceDetailMapHero,
+  RacePhaseHeader,
+  RigTuningCard,
+  RouteMapCard,
+  StartStrategyCard,
+  UpwindStrategyCard,
+  WeatherAlongRouteCard
 } from '@/components/race-detail';
 import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/race-detail/RaceDocumentsCard';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
@@ -23,12 +26,13 @@ import { TacticalInsights } from '@/components/races/TacticalInsights';
 import { StrategySharingModal } from '@/components/coaching/StrategySharingModal';
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
+import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
 import { FleetPostRaceInsights } from '@/components/races/FleetPostRaceInsights';
 import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { PlanModeContent } from '@/components/races/plan';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
+import { PreRaceBriefingCard } from '@/components/races/PreRaceBriefingCard';
 import { RaceCard } from '@/components/races/RaceCard';
-import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
 import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
@@ -43,7 +47,7 @@ import { useEnrichedRaces } from '@/hooks/useEnrichedRaces';
 import { useOffline } from '@/hooks/useOffline';
 import { useRacePhaseDetection } from '@/hooks/useRacePhaseDetection';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
-import { useLiveRaces, withdrawFromRace, useUserRaceResults, type UserRaceResult } from '@/hooks/useRaceResults';
+import { useLiveRaces, useUserRaceResults, withdrawFromRace } from '@/hooks/useRaceResults';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { useVenueDetection } from '@/hooks/useVenueDetection';
@@ -61,16 +65,16 @@ import { useRaceConditions } from '@/stores/raceConditionsStore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-    AlertTriangle,
-    Bell,
-    Calendar,
-    ChevronRight,
-    MapPin,
-    Navigation,
-    Plus,
-    TrendingUp,
-    Users,
-    X
+  AlertTriangle,
+  Bell,
+  Calendar,
+  ChevronRight,
+  MapPin,
+  Navigation,
+  Plus,
+  TrendingUp,
+  Users,
+  X
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
@@ -2556,6 +2560,7 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
   }, []);
 
   const selectedRaceVenueCoordinates = useMemo(() => {
+    // 1. First check explicit venue_lat/venue_lng
     if (selectedRaceData?.metadata?.venue_lat && selectedRaceData?.metadata?.venue_lng) {
       return {
         lat: selectedRaceData.metadata.venue_lat,
@@ -2563,12 +2568,47 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
       };
     }
 
+    // 2. Check racing_area_coordinates (common format from race creation)
+    const racingAreaCoords = selectedRaceData?.metadata?.racing_area_coordinates;
+    if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
+      return {
+        lat: racingAreaCoords.lat,
+        lng: racingAreaCoords.lng,
+      };
+    }
+
+    // 3. Check venue_coordinates (alternate format)
+    const venueCoords = selectedRaceData?.metadata?.venue_coordinates;
+    if (venueCoords?.lat && venueCoords?.lng) {
+      return {
+        lat: venueCoords.lat,
+        lng: venueCoords.lng,
+      };
+    }
+
+    // 4. Check route_waypoints (distance racing) - use first waypoint or centroid
+    const waypoints = selectedRaceData?.route_waypoints;
+    if (Array.isArray(waypoints) && waypoints.length > 0) {
+      // Filter to waypoints with valid coordinates
+      const validWaypoints = waypoints.filter(
+        (wp: any) => typeof wp.latitude === 'number' && typeof wp.longitude === 'number'
+      );
+      if (validWaypoints.length > 0) {
+        // Use centroid of all waypoints for weather (covers the race area)
+        const lat = validWaypoints.reduce((sum: number, wp: any) => sum + wp.latitude, 0) / validWaypoints.length;
+        const lng = validWaypoints.reduce((sum: number, wp: any) => sum + wp.longitude, 0) / validWaypoints.length;
+        return { lat, lng };
+      }
+    }
+
+    // 5. Check currently drawing racing area
     if (drawingRacingArea.length > 0) {
       const lat = drawingRacingArea.reduce((sum, point) => sum + point.lat, 0) / drawingRacingArea.length;
       const lng = drawingRacingArea.reduce((sum, point) => sum + point.lng, 0) / drawingRacingArea.length;
       return { lat, lng };
     }
 
+    // 6. Calculate centroid from saved racing_area_polygon
     const polygon = selectedRaceData?.racing_area_polygon?.coordinates?.[0];
     if (Array.isArray(polygon) && polygon.length > 0) {
       const coords = polygon
@@ -2581,15 +2621,24 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
       }
     }
 
-    if (selectedRaceData?.metadata?.venue_name) {
-      return {
-        lat: selectedRaceData?.metadata?.venue_lat ?? 22.2650,
-        lng: selectedRaceData?.metadata?.venue_lng ?? 114.2620,
-      };
-    }
-
+    // 7. No coordinates found - return undefined (don't fallback to default Hong Kong coords)
     return undefined;
   }, [drawingRacingArea, selectedRaceData]);
+
+  // Get enriched weather data for the selected race from safeRecentRaces
+  // This ensures RaceConditionsCard uses the same fresh weather data as RaceCard
+  const selectedRaceEnrichedWeather = useMemo(() => {
+    if (!selectedRaceId) return null;
+    const enrichedRace = safeRecentRaces.find((r: any) => r.id === selectedRaceId);
+    if (enrichedRace) {
+      return {
+        wind: enrichedRace.wind || null,
+        tide: enrichedRace.tide || null,
+        weatherFetchedAt: enrichedRace.weatherFetchedAt || null,
+      };
+    }
+    return null;
+  }, [selectedRaceId, safeRecentRaces]);
 
   // Memoized navigation handlers
   const handleVenuePress = useCallback(() => {
@@ -4573,6 +4622,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         weatherError={race.weatherError}
                         strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
                         critical_details={race.critical_details}
+                        venueCoordinates={race.venueCoordinates}
                         isPrimary={isNextRace}
                         raceStatus={raceStatus}
                         onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name, race.id)}
@@ -4623,135 +4673,321 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   courseAndStrategy: (
                     <>
 
-                {/* Tactical Race Map */}
-                <RaceDetailMapHero
-                  race={{
-                    id: selectedRaceData.id,
-                    race_name: selectedRaceData.name,
-                    start_time: selectedRaceData.start_date,
-                    venue: selectedRaceData.metadata?.venue_name ? {
-                      name: selectedRaceData.metadata.venue_name,
-                      coordinates_lat: selectedRaceData.metadata?.venue_lat || 22.2650,
-                      coordinates_lng: selectedRaceData.metadata?.venue_lng || 114.2620,
-                    } : undefined,
-                    racing_area_polygon: selectedRaceData.racing_area_polygon,
-                    boat_class: selectedRaceData.metadata?.class_name ? {
-                      name: selectedRaceData.metadata.class_name
-                    } : undefined,
-                  }}
-                  marks={selectedRaceMarks}
-                  compact={false}
-                  racingAreaPolygon={
-                    drawingRacingArea.length > 0
-                      ? drawingRacingArea
-                      : selectedRaceData.racing_area_polygon?.coordinates?.[0]?.map((coord: number[]) => ({
-                          lat: coord[1],
-                          lng: coord[0]
-                        }))
-                  }
-                  onRacingAreaChange={handleRacingAreaChange}
-                  onSaveRacingArea={handleSaveRacingArea}
-                  onMarkAdded={handleMarkAdded}
-                  onMarkUpdated={handleMarkUpdated}
-                  onMarkDeleted={handleMarkDeleted}
-                  onMarksBulkUpdate={handleBulkMarksUpdate}
-                />
+                {/* ============================================ */}
+                {/* DISTANCE RACING vs FLEET RACING CONTENT    */}
+                {/* ============================================ */}
+                {selectedRaceData.race_type === 'distance' ? (
+                  <>
+                    {/* Distance Racing: Course Selection */}
+                    <View style={{ marginBottom: 16, marginHorizontal: 16 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Course Setup
+                      </Text>
+                      <CourseSelector
+                        venueId={selectedRaceData.metadata?.venue_id}
+                        venueName={selectedRaceData.metadata?.venue_name}
+                        venueCoordinates={selectedRaceData.metadata?.venue_lat && selectedRaceData.metadata?.venue_lng ? {
+                          lat: selectedRaceData.metadata.venue_lat,
+                          lng: selectedRaceData.metadata.venue_lng,
+                        } : undefined}
+                        currentWindDirection={selectedRaceData.metadata?.expected_wind_direction}
+                        currentWindSpeed={selectedRaceData.metadata?.expected_wind_speed}
+                        onCourseSelected={async (marks) => {
+                          // Convert marks to route waypoints format for distance racing
+                          // Preserve the original type from the mark (gate, start, finish, etc.)
+                          const waypoints = marks.map((mark) => {
+                            // Map mark types to waypoint types
+                            let waypointType: 'start' | 'waypoint' | 'gate' | 'finish' = 'waypoint';
+                            const markType = mark.type?.toLowerCase() || '';
+                            
+                            if (markType === 'committee_boat' || markType.includes('start')) {
+                              waypointType = 'start';
+                            } else if (markType === 'finish' || markType.includes('finish')) {
+                              waypointType = 'finish';
+                            } else if (markType.includes('gate')) {
+                              waypointType = 'gate';
+                            }
+                            
+                            return {
+                              name: mark.name,
+                              latitude: mark.latitude,
+                              longitude: mark.longitude,
+                              type: waypointType,
+                              required: true,
+                              passingSide: mark.passingSide,
+                              notes: mark.notes,
+                            };
+                          });
+                          
+                          // Update route waypoints in selectedRaceData (local state)
+                          setSelectedRaceData((prev: any) => ({
+                            ...prev,
+                            route_waypoints: waypoints,
+                          }));
+                          
+                          // Persist waypoints to database
+                          if (selectedRaceData?.id) {
+                            try {
+                              const { error } = await supabase
+                                .from('regattas')
+                                .update({ 
+                                  route_waypoints: waypoints,
+                                  updated_at: new Date().toISOString(),
+                                })
+                                .eq('id', selectedRaceData.id);
+                              
+                              if (error) {
+                                logger.error('[races] Error saving waypoints to database:', error);
+                              } else {
+                                logger.info('[races] Waypoints saved to database for race:', selectedRaceData.id);
+                              }
+                            } catch (err) {
+                              logger.error('[races] Exception saving waypoints:', err);
+                            }
+                          }
+                          
+                          logger.info('[races] Course template selected for distance race:', marks.length, 'waypoints');
+                        }}
+                        raceType="distance"
+                      />
+                    </View>
+
+                    {/* Distance Racing: Pre-Race Briefing */}
+                    <PreRaceBriefingCard
+                      raceId={selectedRaceData.id}
+                      raceName={selectedRaceData.name}
+                      raceDate={selectedRaceData.start_date}
+                      venueName={selectedRaceData.metadata?.venue_name}
+                      boatClassName={selectedRaceData.metadata?.class_name}
+                      routeWaypoints={selectedRaceData.route_waypoints}
+                      totalDistanceNm={selectedRaceData.total_distance_nm}
+                    />
+
+                    {/* Distance Racing: Route Map with Waypoints */}
+                    <RouteMapCard
+                      waypoints={selectedRaceData.route_waypoints || []}
+                      totalDistanceNm={selectedRaceData.total_distance_nm}
+                      raceId={selectedRaceData.id}
+                      onEditRoute={selectedRaceData.created_by === user?.id ? () => {
+                        router.push(`/race/edit/${selectedRaceData.id}`);
+                      } : undefined}
+                    />
+
+                    {/* Distance Racing: Weather Along Route */}
+                    <WeatherAlongRouteCard
+                      waypoints={selectedRaceData.route_waypoints || []}
+                      raceDate={selectedRaceData.start_date}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* Fleet Racing: Course Selection */}
+                    <View style={{ marginBottom: 16, marginHorizontal: 16 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Course Setup
+                      </Text>
+                      <CourseSelector
+                        venueId={selectedRaceData.metadata?.venue_id}
+                        venueName={selectedRaceData.metadata?.venue_name}
+                        venueCoordinates={selectedRaceData.metadata?.venue_lat && selectedRaceData.metadata?.venue_lng ? {
+                          lat: selectedRaceData.metadata.venue_lat,
+                          lng: selectedRaceData.metadata.venue_lng,
+                        } : undefined}
+                        currentWindDirection={selectedRaceData.metadata?.expected_wind_direction}
+                        currentWindSpeed={selectedRaceData.metadata?.expected_wind_speed}
+                        onCourseSelected={async (marks) => {
+                          // Update marks state
+                          setSelectedRaceMarks(marks);
+                          logger.info('[races] Course template selected with marks:', marks.length);
+                          
+                          // Save marks to database for fleet racing
+                          if (selectedRaceData?.id && marks.length > 0) {
+                            try {
+                              // Ensure race_event_id exists
+                              const raceEventId = await ensureRaceEventId();
+                              if (!raceEventId) {
+                                logger.error('[races] Could not get race_event_id for saving marks');
+                                return;
+                              }
+                              
+                              // Delete existing marks for this race first
+                              const { error: deleteError } = await supabase
+                                .from('race_marks')
+                                .delete()
+                                .eq('race_event_id', raceEventId);
+                              
+                              if (deleteError) {
+                                logger.error('[races] Error deleting old marks:', deleteError);
+                              }
+                              
+                              // Insert new marks
+                              const marksToInsert = marks.map((mark, index) => ({
+                                race_event_id: raceEventId,
+                                name: mark.name || `Mark ${index + 1}`,
+                                mark_type: mark.type || 'custom',
+                                latitude: mark.latitude,
+                                longitude: mark.longitude,
+                                sequence_order: index + 1,
+                              }));
+                              
+                              const { error: insertError } = await supabase
+                                .from('race_marks')
+                                .insert(marksToInsert);
+                              
+                              if (insertError) {
+                                logger.error('[races] Error saving marks to database:', insertError);
+                              } else {
+                                logger.info('[races] Marks saved to database for race:', selectedRaceData.id);
+                              }
+                            } catch (err) {
+                              logger.error('[races] Exception saving marks:', err);
+                            }
+                          }
+                        }}
+                        raceType="fleet"
+                      />
+                    </View>
+
+                    {/* Fleet Racing: Tactical Race Map */}
+                    <RaceDetailMapHero
+                      race={{
+                        id: selectedRaceData.id,
+                        race_name: selectedRaceData.name,
+                        start_time: selectedRaceData.start_date,
+                        venue: selectedRaceData.metadata?.venue_name ? {
+                          name: selectedRaceData.metadata.venue_name,
+                          coordinates_lat: selectedRaceData.metadata?.venue_lat || 22.2650,
+                          coordinates_lng: selectedRaceData.metadata?.venue_lng || 114.2620,
+                        } : undefined,
+                        racing_area_polygon: selectedRaceData.racing_area_polygon,
+                        boat_class: selectedRaceData.metadata?.class_name ? {
+                          name: selectedRaceData.metadata.class_name
+                        } : undefined,
+                      }}
+                      marks={selectedRaceMarks}
+                      compact={false}
+                      racingAreaPolygon={
+                        drawingRacingArea.length > 0
+                          ? drawingRacingArea
+                          : selectedRaceData.racing_area_polygon?.coordinates?.[0]?.map((coord: number[]) => ({
+                              lat: coord[1],
+                              lng: coord[0]
+                            }))
+                      }
+                      onRacingAreaChange={handleRacingAreaChange}
+                      onSaveRacingArea={handleSaveRacingArea}
+                      onMarkAdded={handleMarkAdded}
+                      onMarkUpdated={handleMarkUpdated}
+                      onMarkDeleted={handleMarkDeleted}
+                      onMarksBulkUpdate={handleBulkMarksUpdate}
+                    />
+                  </>
+                )}
 
                 {/* ============================================ */}
                 {/*  PRE-RACE STRATEGY SECTION                 */}
                 {/* ============================================ */}
-                <RacePhaseHeader
-                  icon="chess-knight"
-                  title="Pre-Race Strategy"
-                  subtitle="AI-generated plan based on conditions"
-                  badge="Ready"
-                  phase="upcoming"
-                />
+                {/* Fleet Racing AI Coach - Only for fleet races */}
+                {selectedRaceData.race_type !== 'distance' && (
+                  <>
+                    <RacePhaseHeader
+                      icon="chess-knight"
+                      title="Pre-Race Strategy"
+                      subtitle="AI-generated plan based on conditions"
+                      badge="Ready"
+                      phase="upcoming"
+                    />
 
-                {/* AI Race Coach - Unified Strategy Section (Redesigned) */}
-                <PreRaceStrategySection
-                  raceId={selectedRaceData.id}
-                  raceData={{
-                    name: selectedRaceData.name,
-                    startTime: selectedRaceData.start_date,
-                    fleetSize: selectedRaceData.metadata?.fleet_size,
-                    course: selectedRaceData.metadata?.course_type,
-                    marks: selectedRaceMarks,
-                    weather: {
-                      windSpeed: selectedRaceData.metadata?.expected_wind_speed,
-                      windDirection: selectedRaceData.metadata?.expected_wind_direction,
-                    },
-                    venue: selectedRaceData.metadata?.venue_name ? {
-                      name: selectedRaceData.metadata.venue_name,
-                      lat: selectedRaceData.metadata.venue_lat,
-                      lng: selectedRaceData.metadata.venue_lng,
-                    } : undefined,
-                  }}
-                  racePhase={
-                    selectedRaceData.raceStatus === 'in_progress' ? 'racing' :
-                    selectedRaceData.raceStatus === 'completed' ? 'post-race' :
-                    'pre-race'
-                  }
-                  onSkillInvoked={(skillId, advice) => {
-                    logger.info('AI Skill invoked:', skillId, advice.primary);
-                  }}
-                />
+                    {/* AI Race Coach - Unified Strategy Section (Redesigned) */}
+                    <PreRaceStrategySection
+                      raceId={selectedRaceData.id}
+                      raceData={{
+                        name: selectedRaceData.name,
+                        startTime: selectedRaceData.start_date,
+                        fleetSize: selectedRaceData.metadata?.fleet_size,
+                        course: selectedRaceData.metadata?.course_type,
+                        marks: selectedRaceMarks,
+                        weather: {
+                          windSpeed: selectedRaceData.metadata?.expected_wind_speed,
+                          windDirection: selectedRaceData.metadata?.expected_wind_direction,
+                        },
+                        venue: selectedRaceData.metadata?.venue_name ? {
+                          name: selectedRaceData.metadata.venue_name,
+                          lat: selectedRaceData.metadata.venue_lat,
+                          lng: selectedRaceData.metadata.venue_lng,
+                        } : undefined,
+                      }}
+                      racePhase={
+                        selectedRaceData.raceStatus === 'in_progress' ? 'racing' :
+                        selectedRaceData.raceStatus === 'completed' ? 'post-race' :
+                        'pre-race'
+                      }
+                      onSkillInvoked={(skillId, advice) => {
+                        logger.info('AI Skill invoked:', skillId, advice.primary);
+                      }}
+                    />
+                  </>
+                )}
 
+                {/* Fleet Racing Strategy Cards - Only shown for fleet races */}
+                {selectedRaceData.race_type !== 'distance' && (
+                  <>
+                    {/* Start Strategy */}
+                    <StartStrategyCard
+                      raceId={selectedRaceData.id}
+                      raceName={selectedRaceData.name}
+                      raceStartTime={selectedRaceData.start_date}
+                      venueId={selectedRaceData.metadata?.venue_id}
+                      venueName={selectedRaceData.metadata?.venue_name}
+                      venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
+                        lat: selectedRaceData.metadata.venue_lat,
+                        lng: selectedRaceData.metadata.venue_lng
+                      } : undefined}
+                      racingAreaPolygon={
+                        Array.isArray(selectedRaceData.racing_area_polygon?.coordinates?.[0]) &&
+                        selectedRaceData.racing_area_polygon.coordinates[0].length >= 3
+                          ? selectedRaceData.racing_area_polygon.coordinates[0]
+                              .slice(
+                                0,
+                                selectedRaceData.racing_area_polygon.coordinates[0].length - 1
+                              )
+                              .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }))
+                          : undefined
+                      }
+                      sailorId={sailorId}
+                      raceEventId={selectedRaceData.id}
+                    />
 
-                {/* Start Strategy */}
-                <StartStrategyCard
-                  raceId={selectedRaceData.id}
-                  raceName={selectedRaceData.name}
-                  raceStartTime={selectedRaceData.start_date}
-                  venueId={selectedRaceData.metadata?.venue_id}
-                  venueName={selectedRaceData.metadata?.venue_name}
-                  venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
-                    lat: selectedRaceData.metadata.venue_lat,
-                    lng: selectedRaceData.metadata.venue_lng
-                  } : undefined}
-                  racingAreaPolygon={
-                    Array.isArray(selectedRaceData.racing_area_polygon?.coordinates?.[0]) &&
-                    selectedRaceData.racing_area_polygon.coordinates[0].length >= 3
-                      ? selectedRaceData.racing_area_polygon.coordinates[0]
-                          .slice(
-                            0,
-                            selectedRaceData.racing_area_polygon.coordinates[0].length - 1
-                          )
-                          .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }))
-                      : undefined
-                  }
-                  sailorId={sailorId}
-                  raceEventId={selectedRaceData.id}
-                />
+                    {/* Upwind Strategy - Dedicated Beats Card */}
+                    <UpwindStrategyCard
+                      raceId={selectedRaceData.id}
+                      raceName={selectedRaceData.name}
+                      sailorId={sailorId}
+                      raceEventId={selectedRaceData.id}
+                    />
 
-                {/* Upwind Strategy - Dedicated Beats Card */}
-                <UpwindStrategyCard
-                  raceId={selectedRaceData.id}
-                  raceName={selectedRaceData.name}
-                  sailorId={sailorId}
-                  raceEventId={selectedRaceData.id}
-                />
+                    {/* Downwind Strategy - Dedicated Runs Card */}
+                    <DownwindStrategyCard
+                      raceId={selectedRaceData.id}
+                      raceName={selectedRaceData.name}
+                      sailorId={sailorId}
+                      raceEventId={selectedRaceData.id}
+                    />
 
-                {/* Downwind Strategy - Dedicated Runs Card */}
-                <DownwindStrategyCard
-                  raceId={selectedRaceData.id}
-                  raceName={selectedRaceData.name}
-                  sailorId={sailorId}
-                  raceEventId={selectedRaceData.id}
-                />
+                    {/* Mark Rounding Strategy */}
+                    <MarkRoundingCard
+                      raceId={selectedRaceData.id}
+                      raceName={selectedRaceData.name}
+                      sailorId={sailorId}
+                      raceEventId={selectedRaceData.id}
+                    />
 
-                      {/* Mark Rounding Strategy */}
-                      <MarkRoundingCard
-                        raceId={selectedRaceData.id}
-                        raceName={selectedRaceData.name}
-                        sailorId={sailorId}
-                        raceEventId={selectedRaceData.id}
-                      />
-
-                      {/* Contingency Plans - What-if scenarios */}
-                      <ContingencyPlansCard
-                        raceId={selectedRaceData.id}
-                      />
+                    {/* Contingency Plans - What-if scenarios */}
+                    <ContingencyPlansCard
+                      raceId={selectedRaceData.id}
+                    />
+                  </>
+                )}
 
                       {/* Share Strategy */}
                       {sailorId && selectedRaceData?.id && (
@@ -4785,25 +5021,22 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       <RaceConditionsCard
                         raceId={selectedRaceData.id}
                         raceTime={selectedRaceData.start_date}
-                        venueCoordinates={selectedRaceData.metadata?.venue_lat ? {
-                          lat: selectedRaceData.metadata.venue_lat,
-                          lng: selectedRaceData.metadata.venue_lng
-                        } : undefined}
-                        venue={selectedRaceData.metadata?.venue_lat ? {
-                          id: `venue-${selectedRaceData.metadata.venue_lat}-${selectedRaceData.metadata.venue_lng}`,
+                        venueCoordinates={selectedRaceVenueCoordinates}
+                        venue={selectedRaceVenueCoordinates ? {
+                          id: `venue-${selectedRaceVenueCoordinates.lat}-${selectedRaceVenueCoordinates.lng}`,
                           name: selectedRaceData.metadata?.venue_name || 'Race Venue',
                           coordinates: {
-                            latitude: selectedRaceData.metadata.venue_lat,
-                            longitude: selectedRaceData.metadata.venue_lng
+                            latitude: selectedRaceVenueCoordinates.lat,
+                            longitude: selectedRaceVenueCoordinates.lng
                           },
                           region: 'asia_pacific',
                           country: 'HK'
                         } : undefined}
                         warningSignalTime={selectedRaceData.warning_signal_time}
                         expectedDurationMinutes={selectedRaceData.time_limit_minutes || 90}
-                        savedWind={selectedRaceData.metadata?.wind}
-                        savedTide={selectedRaceData.metadata?.tide}
-                        savedWeatherFetchedAt={selectedRaceData.metadata?.weather_fetched_at}
+                        savedWind={selectedRaceEnrichedWeather?.wind || selectedRaceData.metadata?.wind}
+                        savedTide={selectedRaceEnrichedWeather?.tide || selectedRaceData.metadata?.tide}
+                        savedWeatherFetchedAt={selectedRaceEnrichedWeather?.weatherFetchedAt || selectedRaceData.metadata?.weather_fetched_at}
                         raceStatus={selectedRaceData.raceStatus}
                       />
                     </>

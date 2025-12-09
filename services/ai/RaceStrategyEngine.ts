@@ -23,7 +23,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import Constants from 'expo-constants';
 import { DocumentProcessingService } from './DocumentProcessingService';
 import { sailingEducationService } from './SailingEducationService';
-import { skillManagementService } from './SkillManagementService';
+import { skillManagementService, detectRaceType, SKILL_REGISTRY } from './SkillManagementService';
 
 export interface RaceConditions {
   wind: {
@@ -115,7 +115,8 @@ export class RaceStrategyEngine {
   private anthropic: Anthropic;
   private documentProcessor: DocumentProcessingService;
   private venueDatabase: Map<string, VenueIntelligence> = new Map();
-  private customSkillId: string | null = null; // Will be set after uploading skill
+  private customSkillId: string | null = null; // Fleet racing skill (race-strategy-analyst)
+  private distanceSkillId: string | null = null; // Distance/offshore racing skill (long-distance-racing-analyst)
   private skillInitialized: boolean = false;
 
   private hasValidApiKey: boolean = false;
@@ -164,30 +165,61 @@ export class RaceStrategyEngine {
   }
 
   /**
-   * Initialize the race-strategy-analyst Claude Skill
-   * This runs asynchronously and sets the customSkillId when ready
+   * Initialize Claude Skills for both fleet racing and distance/offshore racing
+   * This runs asynchronously and sets skill IDs when ready
    */
   private async initializeSkill(): Promise<void> {
     try {
+      // Initialize fleet racing skill (race-strategy-analyst)
+      const fleetSkillId = await skillManagementService.initializeRaceStrategySkill();
+      if (fleetSkillId) {
+        this.customSkillId = fleetSkillId;
+        logger.debug(`✅ Fleet racing skill initialized: ${fleetSkillId}`);
+      }
 
-      const skillId = await skillManagementService.initializeRaceStrategySkill();
+      // Initialize distance/offshore racing skill (long-distance-racing-analyst)
+      const distanceSkillId = SKILL_REGISTRY['long-distance-racing-analyst'];
+      if (distanceSkillId && !distanceSkillId.startsWith('skill_builtin')) {
+        this.distanceSkillId = distanceSkillId;
+        logger.debug(`✅ Distance racing skill initialized: ${distanceSkillId}`);
+      }
 
-      if (skillId) {
-        this.customSkillId = skillId;
+      if (this.customSkillId || this.distanceSkillId) {
         this.skillInitialized = true;
-        logger.debug(`✅ Race strategy skill initialized: ${skillId}`);
-        console.log(`✅ RaceStrategyEngine: Using Claude Skill for optimized strategies (60% token savings!)`);
+        console.log(`✅ RaceStrategyEngine: Skills initialized`);
+        if (this.customSkillId) console.log(`   • Fleet racing: ${this.customSkillId}`);
+        if (this.distanceSkillId) console.log(`   • Distance/offshore: ${this.distanceSkillId}`);
       } else {
-        logger.debug('ℹ️  No skill found - using full prompt mode (still excellent quality)');
-        console.log('ℹ️  RaceStrategyEngine: No Claude Skill found - strategies will use full prompts');
+        logger.debug('ℹ️  No skills found - using full prompt mode (still excellent quality)');
+        console.log('ℹ️  RaceStrategyEngine: No Claude Skills found - strategies will use full prompts');
         console.log('   This is totally fine! Strategies are still comprehensive and high-quality.');
-        console.log('   Skills are just an optional optimization that reduces API costs.');
       }
     } catch (error) {
       logger.error('Skill initialization failed:', error);
       console.warn('⚠️ RaceStrategyEngine: Skill initialization failed, continuing without skills');
       console.log('   Strategies will still work great using full prompts instead of skills');
     }
+  }
+
+  /**
+   * Get the appropriate skill ID based on race type
+   * Returns distance skill for offshore/passage races, fleet skill for buoy racing
+   */
+  getSkillForRaceType(raceContext: {
+    courseLengthNm?: number;
+    estimatedDurationHours?: number;
+    waypoints?: number;
+    raceType?: string;
+    raceName?: string;
+  }): string | null {
+    const raceType = detectRaceType(raceContext);
+    
+    if (raceType === 'distance' && this.distanceSkillId) {
+      logger.debug(`🌊 Using distance racing skill for ${raceContext.raceName || 'race'}`);
+      return this.distanceSkillId;
+    }
+    
+    return this.customSkillId;
   }
 
   /**
@@ -331,26 +363,28 @@ export class RaceStrategyEngine {
         windDir: Math.round(currentConditions.wind.direction / 10) * 10, // Round to nearest 10°
       };
 
-      const strategy = await cachedAICall(
+      const { strategy, educationalInsights } = await cachedAICall(
         cacheKey,
         async () => {
           // Step 2: Generate educational insights for venue
-          const educationalInsights = await sailingEducationService.getEducationallyEnhancedStrategy(
+          const insights = await sailingEducationService.getEducationallyEnhancedStrategy(
             `General race strategy for ${raceContext.raceName} at ${venue.name}`,
             venueId,
             { conditions: currentConditions, venue }
           );
 
           // Step 3: Generate AI strategy using venue intelligence and conditions
-          return this.generateVenueStrategyWithAI(
+          const strategyResult = await this.generateVenueStrategyWithAI(
             currentConditions,
             venue,
-            educationalInsights,
+            insights,
             {
               ...raceContext,
               racingAreaSummary: polygonSummary ?? undefined
             }
           );
+
+          return { strategy: strategyResult, educationalInsights: insights };
         },
         10 * 60 * 1000 // 10 minute cache
       );
@@ -425,7 +459,7 @@ export class RaceStrategyEngine {
         courseExtraction: genericCourseExtraction,
         strategy,
         contingencies,
-        insights: educationalInsights.insights,
+        insights: educationalInsights?.insights ?? [],
         confidence: 0.7, // Lower confidence without specific course details
         generatedAt: new Date(),
         simulationResults: {
@@ -574,24 +608,33 @@ CRITICAL OUTPUT RULES:
 - Do NOT call any tools or code execution helpers.
 - If uncertain, return the best-effort JSON structure above.`;
 
+    // Select appropriate skill based on race type (fleet vs distance/offshore)
+    const selectedSkillId = this.getSkillForRaceType({
+      raceName: raceContext?.raceName,
+      raceType: raceContext?.raceType,
+      estimatedDurationHours: raceContext?.estimatedDurationHours
+    });
+
     try {
       const response = await this.anthropic.beta.messages.create({
         model: 'claude-3-5-haiku-latest', // Claude Haiku - cost-effective for strategy generation
         max_tokens: 4000,
         temperature: 0.7,
-        betas: this.customSkillId
+        betas: selectedSkillId
           ? ['code-execution-2025-08-25', 'skills-2025-10-02']
           : ['code-execution-2025-08-25'], // Only include skills beta if we have a skill
 
         // CLAUDE SKILLS (Optional) 🎉
-        // Using custom race-strategy-analyst skill with RegattaFlow Playbook + RegattaFlow Coach frameworks
+        // Dynamically selects between:
+        // - race-strategy-analyst (fleet/buoy racing)
+        // - long-distance-racing-analyst (offshore/passage racing)
         // This reduces prompt tokens by ~60% and improves consistency
         // If no skill is available, the full prompt works just as well (just uses more tokens)
-        ...(this.customSkillId && {
+        ...(selectedSkillId && {
           container: {
             skills: [{
               type: 'custom',
-              skill_id: this.customSkillId,
+              skill_id: selectedSkillId,
               version: 'latest'
             }]
           }
@@ -792,6 +835,15 @@ CRITICAL OUTPUT RULES:
 
     const strategyPrompt = this.buildStrategyPrompt(course, conditions, venue, educationalInsights, raceContext);
 
+    // Select appropriate skill based on race type (fleet vs distance/offshore)
+    const selectedSkillId = this.getSkillForRaceType({
+      raceName: raceContext?.raceName,
+      raceType: raceContext?.raceType,
+      courseLengthNm: course?.totalDistanceNm,
+      waypoints: course?.marks?.length,
+      estimatedDurationHours: raceContext?.estimatedDurationHours
+    });
+
     try {
       // Using Claude 3.5 Haiku for cost optimization (12x cheaper than Sonnet)
       // Excellent for structured strategy generation tasks
@@ -799,19 +851,21 @@ CRITICAL OUTPUT RULES:
         model: 'claude-3-5-haiku-latest',
         max_tokens: 2048,
         temperature: 0.3, // Creative but consistent strategy generation
-        betas: this.customSkillId
+        betas: selectedSkillId
           ? ['code-execution-2025-08-25', 'skills-2025-10-02']
           : ['code-execution-2025-08-25'], // Only include skills beta if we have a skill
 
         // CLAUDE SKILLS (Optional) 🎉
-        // Using custom race-strategy-analyst skill with RegattaFlow Playbook + RegattaFlow Coach frameworks
+        // Dynamically selects between:
+        // - race-strategy-analyst (fleet/buoy racing)
+        // - long-distance-racing-analyst (offshore/passage racing)
         // This reduces prompt tokens by ~60% (massive cost savings on Haiku!)
         // If no skill is available, the full prompt works just as well (just uses more tokens)
-        ...(this.customSkillId && {
+        ...(selectedSkillId && {
           container: {
             skills: [{
               type: 'custom',
-              skill_id: this.customSkillId,
+              skill_id: selectedSkillId,
               version: 'latest'
             }]
           }

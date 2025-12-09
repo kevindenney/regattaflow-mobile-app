@@ -85,11 +85,35 @@ export function DistanceRouteMap({
 }: DistanceRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const maplibreRef = useRef<any>(null); // Store maplibre module reference
   const markersRef = useRef<any[]>([]);
   const polylineRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [isAddingWaypoint, setIsAddingWaypoint] = useState(false);
-  const [nextWaypointType, setNextWaypointType] = useState<RouteWaypoint['type']>('waypoint');
+  const [isAddingWaypoint, setIsAddingWaypoint] = useState(true); // Start in add mode
+  const [nextWaypointType, setNextWaypointType] = useState<RouteWaypoint['type']>('start'); // Start with 'start' waypoint
+  
+  // Refs to track current state for event handlers (closures capture stale values)
+  const isAddingWaypointRef = useRef(true);
+  const nextWaypointTypeRef = useRef<RouteWaypoint['type']>('start');
+  const waypointsRef = useRef<RouteWaypoint[]>(waypoints);
+  const onWaypointsChangeRef = useRef(onWaypointsChange);
+
+  // Keep refs in sync with state (for event handlers)
+  useEffect(() => {
+    isAddingWaypointRef.current = isAddingWaypoint;
+  }, [isAddingWaypoint]);
+  
+  useEffect(() => {
+    nextWaypointTypeRef.current = nextWaypointType;
+  }, [nextWaypointType]);
+  
+  useEffect(() => {
+    waypointsRef.current = waypoints;
+  }, [waypoints]);
+  
+  useEffect(() => {
+    onWaypointsChangeRef.current = onWaypointsChange;
+  }, [onWaypointsChange]);
 
   // Calculate and report total distance when waypoints change
   useEffect(() => {
@@ -105,6 +129,9 @@ export function DistanceRouteMap({
       try {
         const maplibregl = await import('maplibre-gl');
         await import('maplibre-gl/dist/maplibre-gl.css');
+        
+        // Store module reference for marker creation
+        maplibreRef.current = maplibregl.default;
 
         const map = new maplibregl.default.Map({
           container: mapContainerRef.current!,
@@ -148,12 +175,35 @@ export function DistanceRouteMap({
           });
         });
 
-        // Handle click to add waypoint
+        // Handle click to add waypoint - use refs for current state
         map.on('click', (e: any) => {
-          if (!isAddingWaypoint) return;
+          console.log('[DistanceRouteMap] Map clicked, isAddingWaypoint:', isAddingWaypointRef.current);
+          if (!isAddingWaypointRef.current) return;
           
           const { lng, lat } = e.lngLat;
-          addWaypoint(lat, lng);
+          console.log('[DistanceRouteMap] Adding waypoint at:', lat, lng, 'type:', nextWaypointTypeRef.current);
+          
+          // Create waypoint directly here to avoid stale closure issues
+          const currentWaypoints = waypointsRef.current;
+          const waypointType = nextWaypointTypeRef.current;
+          const newWaypoint: RouteWaypoint = {
+            id: `wp-${Date.now()}`,
+            name: waypointType === 'start' ? 'Start' :
+                  waypointType === 'finish' ? 'Finish' :
+                  waypointType === 'gate' ? `Gate ${currentWaypoints.filter(w => w.type === 'gate').length + 1}` :
+                  `Waypoint ${currentWaypoints.filter(w => w.type === 'waypoint').length + 1}`,
+            latitude: lat,
+            longitude: lng,
+            type: waypointType,
+            required: waypointType === 'start' || waypointType === 'finish',
+          };
+
+          onWaypointsChangeRef.current([...currentWaypoints, newWaypoint]);
+          
+          // Auto-advance to next logical type
+          if (waypointType === 'start') {
+            setNextWaypointType('waypoint');
+          }
         });
 
         return () => {
@@ -169,10 +219,9 @@ export function DistanceRouteMap({
 
   // Update map when waypoints change
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded) return;
+    if (!mapRef.current || !mapLoaded || !maplibreRef.current) return;
 
-    const maplibregl = (window as any).maplibregl;
-    if (!maplibregl) return;
+    console.log('[DistanceRouteMap] Updating markers for', waypoints.length, 'waypoints');
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.remove());
@@ -202,7 +251,7 @@ export function DistanceRouteMap({
                      wp.type === 'gate' ? 'G' : 
                      `${index}`;
 
-      const marker = new maplibregl.Marker({ element: el, draggable: true })
+      const marker = new maplibreRef.current.Marker({ element: el, draggable: true })
         .setLngLat([wp.longitude, wp.latitude])
         .addTo(mapRef.current);
 

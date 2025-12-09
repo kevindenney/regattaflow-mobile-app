@@ -257,6 +257,13 @@ export default function RaceDetailScrollable() {
           name: raceData.metadata?.class_name || undefined
         } : undefined,
         class_id: classIdFromMetadata,
+        // Race Type (Fleet vs Distance)
+        race_type: raceData.race_type || 'fleet',
+        // Distance racing fields
+        route_waypoints: raceData.route_waypoints,
+        total_distance_nm: raceData.total_distance_nm,
+        time_limit_hours: raceData.time_limit_hours,
+        start_finish_same_location: raceData.start_finish_same_location,
         metadata: raceData.metadata,
       };
 
@@ -346,41 +353,19 @@ export default function RaceDetailScrollable() {
     });
   }, [race]);
 
-  const averageWindSpeed = weather?.wind
-    ? (weather.wind.speedMin + weather.wind.speedMax) / 2
-    : undefined;
+  // Memoize weather-derived values to prevent unnecessary re-renders
+  const averageWindSpeed = useMemo(() => {
+    return weather?.wind
+      ? (weather.wind.speedMin + weather.wind.speedMax) / 2
+      : undefined;
+  }, [weather?.wind?.speedMin, weather?.wind?.speedMax]);
 
   // Extract additional weather data from raw forecast if available
-  const rawForecast = weather?.raw?.forecast?.[0];
-  const marineConditions = weather?.raw?.marineConditions;
+  const rawForecast = useMemo(() => weather?.raw?.forecast?.[0], [weather?.raw?.forecast]);
+  const marineConditions = useMemo(() => weather?.raw?.marineConditions, [weather?.raw?.marineConditions]);
 
-  // DEBUG: Log weather data structure (once per change)
-  useEffect(() => {
-    console.log('[RaceDetail] 🌤️ Weather data check:', {
-      hasWeather: !!weather,
-      hasRaw: !!weather?.raw,
-      hasForecast: !!weather?.raw?.forecast,
-      forecastLength: weather?.raw?.forecast?.length,
-      hasMarineConditions: !!weather?.raw?.marineConditions,
-      rawForecast: rawForecast ? {
-        windDirection: rawForecast.windDirection,
-        windGusts: rawForecast.windGusts,
-      } : null,
-      marineConditions: marineConditions ? {
-        waveHeight: marineConditions.significantWaveHeight,
-        currentSpeed: marineConditions.surfaceCurrents?.[0]?.speed,
-      } : null,
-      windMin: weather?.wind?.speedMin,
-      windMax: weather?.wind?.speedMax,
-      averageWindSpeed,
-    });
-  }, [weather, rawForecast, marineConditions, averageWindSpeed]);
-
-  const {
-    recommendation: tuningRecommendation,
-    loading: tuningLoading,
-    refresh: refreshTuning,
-  } = useRaceTuningRecommendation({
+  // Memoize tuning recommendation options to prevent hook from re-running
+  const tuningOptions = useMemo(() => ({
     classId: race?.class_id,
     className:
       race?.boat_class?.name ||
@@ -390,21 +375,61 @@ export default function RaceDetailScrollable() {
     averageWindSpeed,
     windMin: weather?.wind?.speedMin,
     windMax: weather?.wind?.speedMax,
-    windDirection: rawForecast?.windDirection, // Use numeric direction from raw
-    gusts: rawForecast?.windGusts || weather?.wind?.speedMax, // Use gusts from raw or fallback to speedMax
+    windDirection: rawForecast?.windDirection,
+    gusts: rawForecast?.windGusts || weather?.wind?.speedMax,
     waveHeight: marineConditions?.significantWaveHeight
       ? `${Math.round(marineConditions.significantWaveHeight * 10) / 10}m`
       : undefined,
     currentSpeed: marineConditions?.surfaceCurrents?.[0]?.speed,
     currentDirection: marineConditions?.surfaceCurrents?.[0]?.direction,
-    pointsOfSail: 'upwind',
+    pointsOfSail: 'upwind' as const,
     enabled: !!(
       race?.class_id ||
       race?.boat_class?.name ||
       (race as any)?.boat_class_name ||
       race?.metadata?.class_name
     ),
-  });
+  }), [
+    race?.class_id,
+    race?.boat_class?.name,
+    race?.metadata?.class_name,
+    averageWindSpeed,
+    weather?.wind?.speedMin,
+    weather?.wind?.speedMax,
+    rawForecast?.windDirection,
+    rawForecast?.windGusts,
+    marineConditions?.significantWaveHeight,
+    marineConditions?.surfaceCurrents,
+  ]);
+
+  // DEBUG: Log weather data structure (once per change) - reduced frequency
+  const weatherLogRef = useRef<string>('');
+  useEffect(() => {
+    const logKey = JSON.stringify({
+      hasWeather: !!weather,
+      windMin: weather?.wind?.speedMin,
+      windMax: weather?.wind?.speedMax,
+    });
+    if (logKey !== weatherLogRef.current) {
+      weatherLogRef.current = logKey;
+      console.log('[RaceDetail] 🌤️ Weather data check:', {
+        hasWeather: !!weather,
+        hasRaw: !!weather?.raw,
+        hasForecast: !!weather?.raw?.forecast,
+        forecastLength: weather?.raw?.forecast?.length,
+        hasMarineConditions: !!weather?.raw?.marineConditions,
+        windMin: weather?.wind?.speedMin,
+        windMax: weather?.wind?.speedMax,
+        averageWindSpeed,
+      });
+    }
+  }, [weather, averageWindSpeed]);
+
+  const {
+    recommendation: tuningRecommendation,
+    loading: tuningLoading,
+    refresh: refreshTuning,
+  } = useRaceTuningRecommendation(tuningOptions);
 
   useEffect(() => {
     const incomingCourseId = typeof courseId === 'string' ? courseId : null;
@@ -719,16 +744,18 @@ export default function RaceDetailScrollable() {
         )}
         scrollEventThrottle={16}
       >
-        {/* Map Hero Section */}
-        <RaceDetailMapHero
-          race={race}
-          racingAreaPolygon={drawingPolygon.length > 0 ? drawingPolygon : undefined}
-          marks={marks}
-          compact={mapCompact}
-          onFullscreen={handleFullscreen}
-          onRacingAreaChange={handleRacingAreaChange}
-          onSaveRacingArea={handleSaveRacingArea}
-        />
+        {/* Map Hero Section - Only for Fleet Racing */}
+        {(!race.race_type || race.race_type === 'fleet') && (
+          <RaceDetailMapHero
+            race={race}
+            racingAreaPolygon={drawingPolygon.length > 0 ? drawingPolygon : undefined}
+            marks={marks}
+            compact={mapCompact}
+            onFullscreen={handleFullscreen}
+            onRacingAreaChange={handleRacingAreaChange}
+            onSaveRacingArea={handleSaveRacingArea}
+          />
+        )}
 
         {/* Strategy Cards Section */}
         <View style={styles.cardsContainer}>

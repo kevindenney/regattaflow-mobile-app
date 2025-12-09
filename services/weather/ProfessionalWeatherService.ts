@@ -4,6 +4,7 @@ import type {
   WeatherAlert
 } from '@/lib/types/advanced-map';
 import { StormGlassService } from './StormGlassService';
+import { OpenMeteoService } from './OpenMeteoService';
 import { OpenWeatherMapProvider } from './OpenWeatherMapProvider';
 import type { WeatherForecast as EnvironmentalForecast } from '@/types/environmental';
 import { ConfidenceLevel } from '@/types/environmental';
@@ -12,21 +13,32 @@ export class ProfessionalWeatherService {
   private apiKeys: { [key: string]: string };
   private cache: Map<string, any> = new Map();
   private updateIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
-  private stormGlassService: StormGlassService;
+  private openMeteoService: OpenMeteoService;
+  private stormGlassService: StormGlassService | null;
   private openWeatherProvider: OpenWeatherMapProvider | null;
 
   constructor(apiKeys: { [key: string]: string }) {
     this.apiKeys = apiKeys;
 
-    // Initialize Storm Glass - comprehensive marine weather service
-    this.stormGlassService = new StormGlassService({
-      apiKey: apiKeys['stormglass'] || 'demo-key',
-      baseUrl: 'https://api.stormglass.io/v2',
-      timeout: 10000,
-      retryAttempts: 3
-    });
+    // Initialize Open-Meteo as PRIMARY weather source (FREE!)
+    this.openMeteoService = new OpenMeteoService();
 
-    // Initialize OpenWeatherMap as a cheaper global fallback provider
+    // Initialize Storm Glass ONLY for tide data (paid API - minimize usage)
+    const stormGlassKey = apiKeys['stormglass'];
+    if (stormGlassKey && stormGlassKey !== 'demo-key') {
+      this.stormGlassService = new StormGlassService({
+        apiKey: stormGlassKey,
+        baseUrl: 'https://api.stormglass.io/v2',
+        timeout: 10000,
+        retryAttempts: 2
+      });
+      console.info('[ProfessionalWeatherService] StormGlass configured for tide data only');
+    } else {
+      this.stormGlassService = null;
+      console.info('[ProfessionalWeatherService] StormGlass not configured - tide data unavailable');
+    }
+
+    // Initialize OpenWeatherMap as fallback
     this.openWeatherProvider = new OpenWeatherMapProvider(
       apiKeys['openweathermap']
     );
@@ -44,10 +56,11 @@ export class ProfessionalWeatherService {
   }
 
   /**
-   * Get comprehensive weather conditions from Storm Glass
+   * Get comprehensive weather conditions
+   * Uses Open-Meteo (FREE) for weather/waves, Storm Glass (paid) only for tides
    */
   async getAdvancedWeatherConditions(location: GeoLocation): Promise<AdvancedWeatherConditions> {
-    const cacheKey = `weather_${location.latitude}_${location.longitude}`;
+    const cacheKey = `weather_${location.latitude.toFixed(4)}_${location.longitude.toFixed(4)}`;
 
     if (this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey);
@@ -59,35 +72,41 @@ export class ProfessionalWeatherService {
     let weatherData: AdvancedWeatherConditions | null = null;
 
     try {
-      // Storm Glass provides comprehensive marine data (weather + tides + currents)
-      weatherData = await this.stormGlassService.getWeatherAtTime(location, new Date());
-
+      // PRIMARY: Open-Meteo for weather + waves (FREE - no quota limits!)
+      weatherData = await this.openMeteoService.getWeatherAtTime(location, new Date());
+      
       if (weatherData) {
-        // Enhance with tide extremes from Storm Glass
-        try {
-          const tideExtremes = await this.stormGlassService.getTideExtremes(location, 1);
-          const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > new Date());
-          const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > new Date());
+        console.info('[ProfessionalWeatherService] Weather from Open-Meteo (FREE)');
+        
+        // OPTIONAL: Add tide data from Storm Glass if available
+        // This is the ONLY Storm Glass API call - saves quota!
+        if (this.stormGlassService) {
+          try {
+            const tideExtremes = await this.stormGlassService.getTideExtremes(location, 1);
+            const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > new Date());
+            const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > new Date());
 
-          if (nextHigh || nextLow) {
-            weatherData.tide.nextHigh = nextHigh?.time;
-            weatherData.tide.nextLow = nextLow?.time;
+            if (nextHigh || nextLow) {
+              weatherData.tide.nextHigh = nextHigh?.time;
+              weatherData.tide.nextLow = nextLow?.time;
+            }
+
+            // Get current tide height
+            const tideHeight = await this.stormGlassService.getTideHeightAtTime(location, new Date());
+            weatherData.tide.height = tideHeight;
+
+            // Determine tide direction based on next extreme
+            if (nextHigh && nextLow) {
+              weatherData.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
+            }
+            console.info('[ProfessionalWeatherService] Tide data from Storm Glass');
+          } catch (tideError) {
+            console.warn('[ProfessionalWeatherService] Tide data fetch failed, using defaults');
           }
-
-          // Get current tide height
-          const tideHeight = await this.stormGlassService.getTideHeightAtTime(location, new Date());
-          weatherData.tide.height = tideHeight;
-
-          // Determine tide direction based on next extreme
-          if (nextHigh && nextLow) {
-            weatherData.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
-          }
-        } catch (tideError) {
-          console.warn('[ProfessionalWeatherService] Tide data fetch failed, using defaults');
         }
       }
     } catch (error) {
-      console.error('[ProfessionalWeatherService] Storm Glass error:', error);
+      console.error('[ProfessionalWeatherService] Open-Meteo error:', error);
     }
 
     if (!weatherData) {
@@ -104,8 +123,14 @@ export class ProfessionalWeatherService {
 
   /**
    * Convenience wrapper used by visualization components to render tidal current overlays.
+   * Note: This requires Storm Glass API (paid) - returns empty if not configured
    */
   async getTidalCurrents(bounds: BoundingBox): Promise<Array<{ time: Date; speed: number; direction: number }>> {
+    if (!this.stormGlassService) {
+      console.info('[ProfessionalWeatherService] Tidal currents unavailable - Storm Glass not configured');
+      return [];
+    }
+
     try {
       const centerLat = bounds.southwest.latitude + ((bounds.northeast.latitude - bounds.southwest.latitude) / 2);
       const centerLng = bounds.southwest.longitude + ((bounds.northeast.longitude - bounds.southwest.longitude) / 2);
@@ -128,25 +153,36 @@ export class ProfessionalWeatherService {
 
   /**
    * Get detailed marine forecasts for racing
+   * Uses Open-Meteo (FREE) for weather/waves, Storm Glass (paid) only for tides
    */
   async getMarineForecast(location: GeoLocation, hours: number = 72): Promise<AdvancedWeatherConditions[]> {
     try {
-      // Storm Glass provides comprehensive marine forecast
-      const forecasts = await this.stormGlassService.getMarineWeather(location, hours);
+      // PRIMARY: Open-Meteo for weather + waves (FREE!)
+      const forecasts = await this.openMeteoService.getMarineWeather(location, hours);
+      console.info(`[ProfessionalWeatherService] Marine forecast from Open-Meteo: ${forecasts.length} hours (FREE)`);
 
-      // Enhance with tide data for each forecast hour
-      const tideExtremes = await this.stormGlassService.getTideExtremes(location, Math.ceil(hours / 24));
+      // OPTIONAL: Enhance with tide data from Storm Glass (single API call for all hours!)
+      if (this.stormGlassService && forecasts.length > 0) {
+        try {
+          const tideExtremes = await this.stormGlassService.getTideExtremes(location, Math.ceil(hours / 24));
+          console.info(`[ProfessionalWeatherService] Tide extremes from Storm Glass: ${tideExtremes.length} events`);
 
-      for (const forecast of forecasts) {
-        const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > forecast.timestamp);
-        const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > forecast.timestamp);
+          for (const forecast of forecasts) {
+            if (!forecast.timestamp) continue;
+            
+            const nextHigh = tideExtremes.find(t => t.type === 'high' && t.time > forecast.timestamp);
+            const nextLow = tideExtremes.find(t => t.type === 'low' && t.time > forecast.timestamp);
 
-        if (nextHigh) forecast.tide.nextHigh = nextHigh.time;
-        if (nextLow) forecast.tide.nextLow = nextLow.time;
+            if (nextHigh) forecast.tide.nextHigh = nextHigh.time;
+            if (nextLow) forecast.tide.nextLow = nextLow.time;
 
-        // Determine tide direction
-        if (nextHigh && nextLow) {
-          forecast.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
+            // Determine tide direction
+            if (nextHigh && nextLow) {
+              forecast.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
+            }
+          }
+        } catch (tideError) {
+          console.warn('[ProfessionalWeatherService] Tide enhancement failed, forecasts will lack tide data');
         }
       }
 

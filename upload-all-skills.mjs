@@ -39,6 +39,7 @@ const SKILLS_TO_UPLOAD = [
   'upwind-tactical-combat',
   'mark-rounding-execution',
   'downwind-speed-and-position',
+  'long-distance-racing-analyst',
   // 'finishing-line-tactics', // Skip if problematic
 ];
 

@@ -72,30 +72,90 @@ export function useRaceWeather(
         throw new Error('Unable to fetch weather data');
       }
 
-      // Find forecast closest to race time
-      const raceForecast = weatherData.forecast.reduce((closest: typeof weatherData.forecast[0], forecast) => {
-        const forecastDiff = Math.abs(forecast.timestamp.getTime() - raceDateObj.getTime());
-        const closestDiff = Math.abs(closest.timestamp.getTime() - raceDateObj.getTime());
-        return forecastDiff < closestDiff ? forecast : closest;
+      // Calculate race window (typical fleet race: 90 minutes)
+      const RACE_DURATION_MS = 90 * 60 * 1000; // 90 minutes
+      const raceStartMs = raceDateObj.getTime();
+      const raceEndMs = raceStartMs + RACE_DURATION_MS;
+      
+      // Find forecasts that fall within the race window (or closest if none within)
+      const forecastsInRaceWindow = weatherData.forecast.filter(forecast => {
+        const forecastMs = forecast.timestamp.getTime();
+        // Include forecasts within 1 hour before start and up to end time
+        return forecastMs >= (raceStartMs - 60 * 60 * 1000) && forecastMs <= raceEndMs;
       });
-
+      
+      // If no forecasts in window, find closest ones
+      let relevantForecasts = forecastsInRaceWindow.length > 0 
+        ? forecastsInRaceWindow 
+        : weatherData.forecast.slice(0, 3); // Fallback to first 3 forecasts
+      
+      // If still none, use the single closest forecast
+      if (relevantForecasts.length === 0) {
+        const closestForecast = weatherData.forecast.reduce((closest, forecast) => {
+          const forecastDiff = Math.abs(forecast.timestamp.getTime() - raceDateObj.getTime());
+          const closestDiff = Math.abs(closest.timestamp.getTime() - raceDateObj.getTime());
+          return forecastDiff < closestDiff ? forecast : closest;
+        });
+        relevantForecasts = [closestForecast];
+      }
+      
+      // Calculate averages across the race window
+      const minWindSpeed = Math.min(...relevantForecasts.map(f => f.windSpeed));
+      const maxWindSpeed = Math.max(...relevantForecasts.map(f => f.windGusts || f.windSpeed * 1.2));
+      
+      // Calculate average wind direction (using circular mean)
+      const sinSum = relevantForecasts.reduce((sum, f) => sum + Math.sin(f.windDirection * Math.PI / 180), 0);
+      const cosSum = relevantForecasts.reduce((sum, f) => sum + Math.cos(f.windDirection * Math.PI / 180), 0);
+      const avgWindDirection = (Math.atan2(sinSum, cosSum) * 180 / Math.PI + 360) % 360;
+      
       // Convert wind direction from degrees to cardinal
-      const windDirection = degreesToCardinal(raceForecast.windDirection);
+      const windDirection = degreesToCardinal(avgWindDirection);
 
-      // Extract tide state from marine conditions
-      const tideState = weatherData.marineConditions.tidalState || 'slack';
+      // Calculate average current speed/direction from forecasts if available
+      const forecastsWithCurrent = relevantForecasts.filter(f => f.currentSpeed !== undefined && f.currentSpeed > 0);
+      let avgCurrentSpeed = 0;
+      let avgCurrentDirection = 0;
+      
+      if (forecastsWithCurrent.length > 0) {
+        avgCurrentSpeed = forecastsWithCurrent.reduce((sum, f) => sum + (f.currentSpeed || 0), 0) / forecastsWithCurrent.length;
+        // Calculate average current direction (circular mean)
+        const currentSinSum = forecastsWithCurrent.reduce((sum, f) => sum + Math.sin((f.currentDirection || 0) * Math.PI / 180), 0);
+        const currentCosSum = forecastsWithCurrent.reduce((sum, f) => sum + Math.cos((f.currentDirection || 0) * Math.PI / 180), 0);
+        avgCurrentDirection = (Math.atan2(currentSinSum, currentCosSum) * 180 / Math.PI + 360) % 360;
+      }
+
+      // Extract tide state from marine conditions, but use forecast data for better accuracy
+      let tideState = weatherData.marineConditions.tidalState || 'slack';
       const tideHeight = weatherData.marineConditions.tidalHeight || 1.0;
 
-      // Determine tide direction from current if available
-      const tideDirection = weatherData.marineConditions.surfaceCurrents?.[0]
-        ? degreesToCardinal(weatherData.marineConditions.surfaceCurrents[0].direction)
-        : undefined;
+      // If we have current data, try to determine tide state from current speed
+      if (avgCurrentSpeed > 0.5) {
+        // Current is moving - determine if flood or ebb based on typical patterns
+        const isFloodLike = avgCurrentDirection >= 0 && avgCurrentDirection <= 135;
+        tideState = isFloodLike ? 'flooding' : 'ebbing';
+      } else if (avgCurrentSpeed > 0 && avgCurrentSpeed <= 0.3) {
+        tideState = 'slack';
+      }
+
+      // Determine tide direction from average current direction
+      const tideDirection = avgCurrentSpeed > 0 
+        ? degreesToCardinal(avgCurrentDirection)
+        : (weatherData.marineConditions.surfaceCurrents?.[0]
+          ? degreesToCardinal(weatherData.marineConditions.surfaceCurrents[0].direction)
+          : undefined);
+
+      logger.debug(`[useRaceWeather] Calculated averages from ${relevantForecasts.length} forecasts:`, {
+        windRange: `${Math.round(minWindSpeed)}-${Math.round(maxWindSpeed)}`,
+        avgDirection: windDirection,
+        avgCurrentSpeed: Math.round(avgCurrentSpeed * 10) / 10,
+        tideState,
+      });
 
       setWeather({
         wind: {
           direction: windDirection,
-          speedMin: Math.round(raceForecast.windSpeed * 0.9), // Estimate range
-          speedMax: Math.round(raceForecast.windGusts || raceForecast.windSpeed * 1.2),
+          speedMin: Math.round(minWindSpeed),
+          speedMax: Math.round(maxWindSpeed),
         },
         tide: {
           state: tideState as 'flooding' | 'ebbing' | 'slack' | 'high' | 'low',

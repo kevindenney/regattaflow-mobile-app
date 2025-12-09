@@ -57,7 +57,62 @@ interface Race {
   } | null;
   weatherStatus?: 'loading' | 'available' | 'unavailable' | 'error' | 'too_far' | 'past' | 'no_venue';
   weatherError?: string;
+  venueCoordinates?: { lat: number; lng: number } | null;
   [key: string]: any;
+}
+
+/**
+ * Extract venue coordinates from regatta metadata
+ * Checks multiple possible locations where coordinates might be stored
+ */
+function extractVenueCoordinates(regatta: RegattaRaw): { lat: number; lng: number } | null {
+  const metadata = regatta.metadata;
+  if (!metadata) return null;
+
+  // 1. Check explicit venue_lat/venue_lng
+  if (typeof metadata.venue_lat === 'number' && typeof metadata.venue_lng === 'number') {
+    return { lat: metadata.venue_lat, lng: metadata.venue_lng };
+  }
+
+  // 2. Check racing_area_coordinates
+  const racingAreaCoords = metadata.racing_area_coordinates;
+  if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
+    return { lat: racingAreaCoords.lat, lng: racingAreaCoords.lng };
+  }
+
+  // 3. Check venue_coordinates
+  const venueCoords = metadata.venue_coordinates;
+  if (venueCoords?.lat && venueCoords?.lng) {
+    return { lat: venueCoords.lat, lng: venueCoords.lng };
+  }
+
+  // 4. Check route_waypoints (distance racing) - calculate centroid
+  const waypoints = regatta.route_waypoints;
+  if (Array.isArray(waypoints) && waypoints.length > 0) {
+    const validWaypoints = waypoints.filter(
+      (wp: any) => typeof wp.latitude === 'number' && typeof wp.longitude === 'number'
+    );
+    if (validWaypoints.length > 0) {
+      const lat = validWaypoints.reduce((sum: number, wp: any) => sum + wp.latitude, 0) / validWaypoints.length;
+      const lng = validWaypoints.reduce((sum: number, wp: any) => sum + wp.longitude, 0) / validWaypoints.length;
+      return { lat, lng };
+    }
+  }
+
+  // 5. Check racing_area_polygon - calculate centroid
+  const polygon = regatta.racing_area_polygon?.coordinates?.[0];
+  if (Array.isArray(polygon) && polygon.length > 0) {
+    const coords = polygon
+      .filter((coord: any) => Array.isArray(coord) && coord.length >= 2)
+      .map((coord: number[]) => ({ lat: coord[1], lng: coord[0] }));
+    if (coords.length > 0) {
+      const lat = coords.reduce((sum, point) => sum + point.lat, 0) / coords.length;
+      const lng = coords.reduce((sum, point) => sum + point.lng, 0) / coords.length;
+      return { lat, lng };
+    }
+  }
+
+  return null;
 }
 
 interface RegattaRaw {
@@ -141,7 +196,10 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         const venueName = regatta.metadata?.venue_name || 'Venue TBD';
         const raceDate = regatta.start_date;
 
-        // First, map to basic race format
+        // Extract venue coordinates from metadata (used for weather fetching)
+        const venueCoordinates = extractVenueCoordinates(regatta);
+
+        // First, map to basic race format - preserve created_by for edit permissions
         const baseRace: Race = {
           id: regatta.id,
           name: regatta.name,
@@ -152,6 +210,8 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           status: regatta.status || 'upcoming',
           strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
           critical_details: regatta.metadata?.critical_details,
+          created_by: regatta.created_by, // Preserve for edit/delete permission checks
+          venueCoordinates, // Include coordinates for weather fetching
         };
 
         // Check if metadata has wind/tide and if they're not placeholder values
@@ -257,10 +317,47 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           });
 
           // Try to use direct coordinates from race metadata first (faster and more reliable)
-          const coords = regatta.metadata?.racing_area_coordinates;
+          // Check multiple potential coordinate sources:
+          // 1. racing_area_coordinates (common for fleet races)
+          // 2. venue_lat/venue_lng (explicit venue coordinates)
+          // 3. venue_coordinates (alternate format)
+          // 4. route_waypoints (distance races - calculate centroid)
+          let coords: { lat: number; lng: number } | null = null;
+          
+          // 1. Check racing_area_coordinates
+          const racingAreaCoords = regatta.metadata?.racing_area_coordinates;
+          if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
+            coords = { lat: racingAreaCoords.lat, lng: racingAreaCoords.lng };
+          }
+          
+          // 2. Check venue_lat/venue_lng
+          if (!coords && regatta.metadata?.venue_lat && regatta.metadata?.venue_lng) {
+            coords = { lat: regatta.metadata.venue_lat, lng: regatta.metadata.venue_lng };
+          }
+          
+          // 3. Check venue_coordinates
+          const venueCoords = regatta.metadata?.venue_coordinates;
+          if (!coords && venueCoords?.lat && venueCoords?.lng) {
+            coords = { lat: venueCoords.lat, lng: venueCoords.lng };
+          }
+          
+          // 4. Check route_waypoints (distance racing) - calculate centroid
+          const waypoints = regatta.route_waypoints;
+          if (!coords && Array.isArray(waypoints) && waypoints.length > 0) {
+            const validWaypoints = waypoints.filter(
+              (wp: any) => typeof wp.latitude === 'number' && typeof wp.longitude === 'number'
+            );
+            if (validWaypoints.length > 0) {
+              const lat = validWaypoints.reduce((sum: number, wp: any) => sum + wp.latitude, 0) / validWaypoints.length;
+              const lng = validWaypoints.reduce((sum: number, wp: any) => sum + wp.longitude, 0) / validWaypoints.length;
+              coords = { lat, lng };
+              logger.debug(`[useEnrichedRaces] Using centroid of ${validWaypoints.length} waypoints for ${regatta.name}`);
+            }
+          }
+
           let weatherPromise;
 
-          if (coords?.lat && coords?.lng) {
+          if (coords) {
             logger.debug(`[useEnrichedRaces] Using direct coordinates for ${regatta.name}: ${coords.lat}, ${coords.lng}`);
             weatherPromise = RaceWeatherService.fetchWeatherByCoordinates(
               coords.lat,
@@ -365,6 +462,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         weatherError: 'Failed to load weather data',
         strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
         critical_details: regatta.metadata?.critical_details,
+        created_by: regatta.created_by, // Preserve for edit/delete permission checks
       })));
     } finally {
       setLoading(false);

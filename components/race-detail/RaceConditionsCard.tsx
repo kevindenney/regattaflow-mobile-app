@@ -6,6 +6,7 @@
 
 import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { useTidalIntel } from '@/hooks/useTidalIntel';
+import { TidalCurrentEstimator } from '@/services/tides/TidalCurrentEstimator';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -245,8 +246,10 @@ export function RaceConditionsCard({
     
     const points: ConditionsTimelinePoint[] = [];
     
-    // For past races, use saved data; for upcoming races, use live data
-    const windSource = isPastRace ? savedWind : realWeather?.wind;
+    // Use savedWind as primary source for consistency with summary/RaceCard display
+    // Fall back to realWeather only if savedWind is not available
+    // This ensures timeline matches the displayed wind range (e.g., 9-26 kts)
+    const windSource = savedWind || realWeather?.wind;
     const baseWind = windSource ? 
       Math.round((Math.min(windSource.speedMin, windSource.speedMax) + Math.max(windSource.speedMin, windSource.speedMax)) / 2) : 12;
     const baseDirection = windSource ? 
@@ -267,8 +270,28 @@ export function RaceConditionsCard({
     const marineConditions = isPastRace ? undefined : realWeather?.raw?.marineConditions;
     
     // Estimation helpers (same as before, condensed)
-    const estimateWindAtTime = (time: Date) => {
-      if (forecasts.length > 0) {
+    // Get wind range for synthesizing variation when no forecast data
+    const windMin = windSource?.speedMin ?? baseWind;
+    const windMax = windSource?.speedMax ?? baseWind;
+    const hasWindRange = windMax - windMin >= 3;
+    
+    const estimateWindAtTime = (time: Date, timelinePosition?: number) => {
+      // PRIORITY 1: If savedWind has a meaningful range, synthesize variation using that
+      // This ensures timeline matches the displayed wind range on the card (e.g., 9-26 kts)
+      // and avoids mismatch when live forecast differs from saved data
+      if (savedWind && hasWindRange && timelinePosition !== undefined) {
+        // Create a smooth wave pattern: starts at min, peaks mid-race, drops toward end
+        const waveValue = Math.sin(timelinePosition * Math.PI);
+        const speed = Math.round(windMin + (windMax - windMin) * waveValue * 0.8);
+        return { 
+          speed, 
+          direction: baseDirection, 
+          gusts: speed < windMax ? Math.round(speed * 1.15) : undefined 
+        };
+      }
+      
+      // PRIORITY 2: Use live forecast data if available and no savedWind
+      if (forecasts.length > 0 && !savedWind) {
         const timeMs = time.getTime();
         let before = forecasts[0], after = forecasts[forecasts.length - 1];
         for (let i = 0; i < forecasts.length - 1; i++) {
@@ -287,6 +310,8 @@ export function RaceConditionsCard({
           gusts: before.windGusts || after.windGusts ? Math.round((before.windGusts || before.windSpeed * 1.2) + ((after.windGusts || after.windSpeed * 1.2) - (before.windGusts || before.windSpeed * 1.2)) * p) : undefined
         };
       }
+      
+      // PRIORITY 3: Basic fallback with thermal effects
       const h = time.getHours();
       const thermal = h >= 10 && h <= 16 ? 1.15 : 1.0;
       const v = Math.sin(time.getTime() / (30 * 60 * 1000)) * 0.1;
@@ -309,7 +334,37 @@ export function RaceConditionsCard({
     };
     
     const estimateCurrentSpeed = (time: Date): number => {
-      const base = tidalIntel?.current?.speed ?? 0.5;
+      // Use sophisticated TidalCurrentEstimator for accurate current estimates
+      // Handles Hong Kong-specific patterns and spring/neap cycles
+      const coords = venueCoordinates || (venue?.coordinates ? {
+        lat: venue.coordinates.latitude,
+        lng: venue.coordinates.longitude
+      } : null);
+      
+      if (coords) {
+        const highTideExtreme = highTideTime && highTideHeight !== undefined
+          ? { type: 'high' as const, time: highTideTime, height: highTideHeight }
+          : null;
+        const lowTideExtreme = lowTideTime && lowTideHeight !== undefined
+          ? { type: 'low' as const, time: lowTideTime, height: lowTideHeight }
+          : null;
+        
+        const estimate = TidalCurrentEstimator.estimateCurrent(
+          coords.lat,
+          coords.lng,
+          time,
+          highTideExtreme,
+          lowTideExtreme,
+          tidalIntel?.current?.speed || null
+        );
+        
+        return estimate.speed;
+      }
+      
+      // Fallback to basic estimation if no coordinates
+      const base = (tidalIntel?.current?.speed && tidalIntel.current.speed > 0) 
+        ? tidalIntel.current.speed 
+        : 0.5;
       if (!highTideTime || !lowTideTime) return base;
       const timeMs = time.getTime();
       const minToHigh = Math.abs(highTideTime.getTime() - timeMs) / 60000;
@@ -320,6 +375,36 @@ export function RaceConditionsCard({
     };
     
     const estimateTidePhase = (time: Date): 'flood' | 'ebb' | 'slack' | 'high' | 'low' => {
+      // Use TidalCurrentEstimator for consistent phase calculation
+      const coords = venueCoordinates || (venue?.coordinates ? {
+        lat: venue.coordinates.latitude,
+        lng: venue.coordinates.longitude
+      } : null);
+      
+      if (coords) {
+        const highTideExtreme = highTideTime && highTideHeight !== undefined
+          ? { type: 'high' as const, time: highTideTime, height: highTideHeight }
+          : null;
+        const lowTideExtreme = lowTideTime && lowTideHeight !== undefined
+          ? { type: 'low' as const, time: lowTideTime, height: lowTideHeight }
+          : null;
+        
+        const estimate = TidalCurrentEstimator.estimateCurrent(
+          coords.lat,
+          coords.lng,
+          time,
+          highTideExtreme,
+          lowTideExtreme,
+          null
+        );
+        
+        // Map the phase to the expected format
+        if (estimate.phase === 'slack_high') return 'high';
+        if (estimate.phase === 'slack_low') return 'low';
+        return estimate.phase;
+      }
+      
+      // Fallback to basic calculation
       if (!highTideTime || !lowTideTime) return tidalIntel?.current?.flow || 'slack';
       const timeMs = time.getTime(), highMs = highTideTime.getTime(), lowMs = lowTideTime.getTime();
       if (highMs < lowMs) {
@@ -333,7 +418,7 @@ export function RaceConditionsCard({
       }
     };
     
-    const estimateWaves = (time: Date) => {
+    const estimateWaves = (time: Date, timelinePosition?: number) => {
       if (forecasts.length > 0) {
         const timeMs = time.getTime();
         let before = forecasts[0], after = forecasts[forecasts.length - 1];
@@ -347,13 +432,20 @@ export function RaceConditionsCard({
         const p = at !== bt ? (timeMs - bt) / (at - bt) : 0;
         return { height: Math.round(((before.waveHeight ?? 0.5) + ((after.waveHeight ?? 0.5) - (before.waveHeight ?? 0.5)) * p) * 10) / 10, period: before.wavePeriod || after.wavePeriod };
       }
-      const wind = estimateWindAtTime(time);
+      const wind = estimateWindAtTime(time, timelinePosition);
       return { height: Math.round((0.5 + wind.speed / 20 * 0.3) * 10) / 10, period: marineConditions?.swellPeriod ?? 5 };
     };
     
+    // Calculate timeline position (0-1) for a given time
+    const timelineSpan = finishTime.getTime() - timelineStart.getTime();
+    const getTimelinePosition = (time: Date) => {
+      return Math.max(0, Math.min(1, (time.getTime() - timelineStart.getTime()) / timelineSpan));
+    };
+    
     const addPoint = (time: Date, label: string, shortLabel: string, isRaceEvent?: boolean, eventType?: 'warning' | 'start' | 'finish') => {
-      const wind = estimateWindAtTime(time);
-      const waves = estimateWaves(time);
+      const position = getTimelinePosition(time);
+      const wind = estimateWindAtTime(time, position);
+      const waves = estimateWaves(time, position);
       points.push({
         time, label, shortLabel, isRaceEvent, eventType,
         windSpeed: wind.speed, windDirection: wind.direction, windGusts: wind.gusts,
@@ -388,10 +480,60 @@ export function RaceConditionsCard({
   }, [raceTime, warningSignalTime, expectedDurationMinutes, realWeather, tidalIntel, isPastRace, savedWind, savedTide]);
 
   // Extract data arrays for sparklines
-  const windSpeeds = conditionsTimeline.map(p => p.windSpeed);
+  const rawWindSpeeds = conditionsTimeline.map(p => p.windSpeed);
   const currentSpeeds = conditionsTimeline.map(p => p.currentSpeed ?? 0);
   const waveHeights = conditionsTimeline.map(p => p.waveHeight ?? 0);
   const tideHeights = conditionsTimeline.map(p => p.tideHeight ?? 0);
+  
+  // If wind speeds have no variation but savedWind has a range, synthesize variation
+  // This prevents flat sparklines when showing saved min/max range but computed average
+  const windSpeeds = useMemo(() => {
+    if (rawWindSpeeds.length < 2) return rawWindSpeeds;
+    
+    const rawMin = Math.min(...rawWindSpeeds);
+    const rawMax = Math.max(...rawWindSpeeds);
+    const hasRealVariation = rawMax - rawMin >= 2;
+    
+    // If we have real variation in the data, use it as-is
+    if (hasRealVariation) return rawWindSpeeds;
+    
+    // If savedWind has a meaningful range but computed data is flat, 
+    // synthesize a realistic variation pattern using the savedWind range
+    const savedMin = savedWind?.speedMin;
+    const savedMax = savedWind?.speedMax;
+    
+    if (savedMin !== undefined && savedMax !== undefined && savedMax - savedMin >= 3) {
+      const midpoint = (savedMin + savedMax) / 2;
+      const amplitude = (savedMax - savedMin) / 2;
+      
+      return rawWindSpeeds.map((_, index) => {
+        // Create a smooth wave pattern across the timeline
+        // Starts lower, builds to peak in middle, then drops
+        const progress = index / (rawWindSpeeds.length - 1);
+        const waveValue = Math.sin(progress * Math.PI);
+        return Math.round(midpoint - amplitude * 0.5 + amplitude * waveValue);
+      });
+    }
+    
+    return rawWindSpeeds;
+  }, [rawWindSpeeds, savedWind]);
+
+  // Get Hong Kong area profile for the venue (if applicable)
+  const hkAreaProfile = useMemo(() => {
+    const coords = venueCoordinates || (venue?.coordinates ? {
+      lat: venue.coordinates.latitude,
+      lng: venue.coordinates.longitude
+    } : null);
+    
+    if (!coords) return null;
+    return TidalCurrentEstimator.getNearestAreaProfile(coords.lat, coords.lng);
+  }, [venueCoordinates, venue?.coordinates]);
+
+  // Calculate spring/neap factor for display
+  const springNeapFactor = useMemo(() => {
+    if (!raceTime) return null;
+    return TidalCurrentEstimator.calculateSpringNeapFactor(new Date(raceTime));
+  }, [raceTime]);
 
   const getWindDir = (deg: number) => {
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -431,7 +573,23 @@ export function RaceConditionsCard({
 
     const first = conditionsTimeline[0];
     const last = conditionsTimeline[conditionsTimeline.length - 1];
-    const windRange = `${Math.min(...windSpeeds)}–${Math.max(...windSpeeds)}`;
+    
+    // Use savedWind/savedTide for summary display (to match race card which uses the same data)
+    // This ensures both components show consistent data from the same source
+    // For past races: use saved snapshot. For future races: savedWind should contain live data from useEnrichedRaces
+    const windMin = savedWind?.speedMin !== undefined 
+      ? Math.min(savedWind.speedMin, savedWind.speedMax)
+      : Math.min(...windSpeeds);
+    const windMax = savedWind?.speedMax !== undefined 
+      ? Math.max(savedWind.speedMin, savedWind.speedMax)
+      : Math.max(...windSpeeds);
+    const windRange = `${windMin}–${windMax}`;
+    
+    // Use saved wind direction to match race card
+    const summaryWindDirection = savedWind?.direction
+      ? savedWind.direction
+      : getWindDir(first.windDirection);
+    
     const currentRange = `${Math.min(...currentSpeeds).toFixed(1)}–${Math.max(...currentSpeeds).toFixed(1)}`;
     const waveRange = `${Math.min(...waveHeights).toFixed(1)}–${Math.max(...waveHeights).toFixed(1)}`;
 
@@ -511,8 +669,8 @@ export function RaceConditionsCard({
             </View>
             <View style={styles.summaryDirection}>
               <WindArrow direction={first.windDirection} />
-              <Text style={styles.directionText}>{getWindDir(first.windDirection)}</Text>
-              {first.windDirection !== last.windDirection && (
+              <Text style={styles.directionText}>{summaryWindDirection}</Text>
+              {first.windDirection !== last.windDirection && !realWeather?.wind?.direction && (
                 <>
                   <Text style={styles.directionArrow}>→</Text>
                   <Text style={styles.directionText}>{getWindDir(last.windDirection)}</Text>
@@ -525,6 +683,9 @@ export function RaceConditionsCard({
           <View style={styles.summaryRow}>
             <View style={styles.summaryLabel}>
               <Text style={styles.labelText}>Current</Text>
+              {hkAreaProfile && (
+                <Text style={styles.areaHint}>{hkAreaProfile.name.split(' ')[0]}</Text>
+              )}
             </View>
             <View style={styles.summarySparkline}>
               <Sparkline data={currentSpeeds} color="#10B981" width={100} height={24} highlightMax />
@@ -543,6 +704,16 @@ export function RaceConditionsCard({
               )}
             </View>
           </View>
+          
+          {/* Spring/Neap indicator for HK waters */}
+          {hkAreaProfile && springNeapFactor !== null && (
+            <View style={styles.tidalInfoRow}>
+              <Text style={styles.tidalInfoText}>
+                🌙 {springNeapFactor > 0.7 ? 'Spring tide' : springNeapFactor < 0.3 ? 'Neap tide' : 'Mid-cycle'} 
+                {' • Max current: ~'}{(hkAreaProfile.maxNeapCurrent + (hkAreaProfile.maxSpringCurrent - hkAreaProfile.maxNeapCurrent) * springNeapFactor).toFixed(1)} kts
+              </Text>
+            </View>
+          )}
 
           {/* Waves Summary */}
           <View style={styles.summaryRow}>
@@ -821,6 +992,24 @@ const styles = StyleSheet.create({
   periodText: {
     fontSize: 11,
     color: '#64748B',
+  },
+  areaHint: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '400',
+  },
+  tidalInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  tidalInfoText: {
+    fontSize: 10,
+    color: '#166534',
   },
   rangeText: {
     fontSize: 11,

@@ -288,6 +288,141 @@ export class CourseLibraryService {
   }
 
   /**
+   * Fetch all discoverable courses for a user at a venue
+   * Includes: user's own courses + venue's shared courses + public courses
+   */
+  static async fetchDiscoverableCourses(options: {
+    userId?: string;
+    venueId?: string;
+    raceType?: 'fleet' | 'distance';
+  } = {}): Promise<RaceCourse[]> {
+    console.log('[CourseLibraryService] fetchDiscoverableCourses called with:', options);
+    try {
+      // Build a query that gets:
+      // 1. User's own courses (any visibility)
+      // 2. Venue courses (visibility = 'venue' and matching venue_id)
+      // 3. Public courses (visibility = 'public')
+      
+      // Get user ID - prefer passed userId, then try session, with timeout
+      let currentUserId = options.userId;
+      
+      if (!currentUserId) {
+        console.log('[CourseLibraryService] Getting current user from session...');
+        try {
+          // Use getSession instead of getUser - it's synchronous if session exists
+          const { data: sessionData } = await Promise.race([
+            supabase.auth.getSession(),
+            new Promise<{ data: null }>((_, reject) => 
+              setTimeout(() => reject(new Error('Auth timeout')), 3000)
+            )
+          ]);
+          currentUserId = sessionData?.session?.user?.id;
+          console.log('[CourseLibraryService] Got user from session:', currentUserId);
+        } catch (authError) {
+          console.warn('[CourseLibraryService] Auth lookup failed/timed out, continuing without user filter:', authError);
+        }
+      }
+      
+      console.log('[CourseLibraryService] Using userId:', currentUserId);
+      console.log('[CourseLibraryService] Building query...');
+      
+      let query = supabase
+        .from('race_courses')
+        .select('*');
+      
+      // Build OR conditions
+      const orConditions: string[] = [];
+      
+      // Always include user's own courses
+      if (currentUserId) {
+        orConditions.push(`created_by.eq.${currentUserId}`);
+      }
+      
+      // Include venue-shared courses
+      if (options.venueId) {
+        orConditions.push(`and(visibility.eq.venue,venue_id.eq.${options.venueId})`);
+      }
+      
+      // Include public courses
+      orConditions.push('visibility.eq.public');
+      
+      console.log('[CourseLibraryService] OR conditions:', orConditions);
+      
+      if (orConditions.length > 0) {
+        query = query.or(orConditions.join(','));
+      }
+      
+      // Filter by race type if specified
+      if (options.raceType) {
+        query = query.eq('race_type', options.raceType);
+      }
+      
+      query = query
+        .order('last_used_date', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
+      
+      console.log('[CourseLibraryService] Executing query...');
+      
+      // Retry logic with exponential backoff
+      let lastError: Error | null = null;
+      const maxRetries = 2;
+      const timeoutMs = 15000; // 15 seconds timeout per attempt
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+          console.log(`[CourseLibraryService] Retry attempt ${attempt}/${maxRetries}...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // exponential backoff
+        }
+        
+        // Add timeout to query to prevent hanging
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        let didTimeout = false;
+        
+        const queryTimeout = new Promise<{ data: null, error: Error }>((resolve) => {
+          timeoutId = setTimeout(() => {
+            didTimeout = true;
+            console.error(`[CourseLibraryService] Query timed out after ${timeoutMs/1000} seconds (attempt ${attempt + 1})`);
+            resolve({ data: null, error: new Error('Query timeout') });
+          }, timeoutMs);
+        });
+        
+        const result = await Promise.race([query, queryTimeout]);
+        
+        // Clear timeout if query finished first
+        if (timeoutId && !didTimeout) {
+          clearTimeout(timeoutId);
+        }
+        
+        if (!didTimeout && result.data !== null) {
+          console.log('[CourseLibraryService] Query result:', { dataCount: result.data?.length, error: result.error });
+          
+          if (result.error) {
+            console.error('[CourseLibraryService] Query returned error:', result.error);
+            lastError = result.error;
+            continue; // retry on error
+          }
+          
+          // Success - process results
+          const uniqueCourses = new Map<string, RaceCourse>();
+          for (const course of (result.data || [])) {
+            uniqueCourses.set(course.id, course as RaceCourse);
+          }
+          return Array.from(uniqueCourses.values());
+        }
+        
+        lastError = result.error || new Error('Query timeout');
+      }
+      
+      // All retries failed
+      console.error('[CourseLibraryService] All query attempts failed:', lastError);
+      throw lastError || new Error('Query failed after retries');
+    } catch (error) {
+      console.error('[CourseLibraryService] Error in fetchDiscoverableCourses:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get recently used courses
    */
   static async getRecentlyUsed(

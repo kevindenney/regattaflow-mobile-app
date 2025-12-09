@@ -19,7 +19,8 @@ CREATE INDEX IF NOT EXISTS idx_crew_availability_status ON public.crew_availabil
 -- Enable RLS
 ALTER TABLE public.crew_availability ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies: Users can manage their own crew's availability
+-- RLS Policies: Users can manage their own crew's availability (idempotent)
+DROP POLICY IF EXISTS "Users can view their crew's availability" ON public.crew_availability;
 CREATE POLICY "Users can view their crew's availability"
   ON public.crew_availability
   FOR SELECT
@@ -30,6 +31,7 @@ CREATE POLICY "Users can view their crew's availability"
     )
   );
 
+DROP POLICY IF EXISTS "Users can insert their crew's availability" ON public.crew_availability;
 CREATE POLICY "Users can insert their crew's availability"
   ON public.crew_availability
   FOR INSERT
@@ -40,6 +42,7 @@ CREATE POLICY "Users can insert their crew's availability"
     )
   );
 
+DROP POLICY IF EXISTS "Users can update their crew's availability" ON public.crew_availability;
 CREATE POLICY "Users can update their crew's availability"
   ON public.crew_availability
   FOR UPDATE
@@ -50,6 +53,7 @@ CREATE POLICY "Users can update their crew's availability"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete their crew's availability" ON public.crew_availability;
 CREATE POLICY "Users can delete their crew's availability"
   ON public.crew_availability
   FOR DELETE
@@ -69,6 +73,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS crew_availability_updated_at ON public.crew_availability;
 CREATE TRIGGER crew_availability_updated_at
   BEFORE UPDATE ON public.crew_availability
   FOR EACH ROW

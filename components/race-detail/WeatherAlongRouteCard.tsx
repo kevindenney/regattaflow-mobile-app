@@ -4,8 +4,8 @@
  * Shows wind, conditions at start, waypoints, and finish
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { 
   Cloud, 
   Wind, 
@@ -18,6 +18,7 @@ import {
   Clock,
   RefreshCw
 } from 'lucide-react-native';
+import { RaceWeatherService } from '@/services/RaceWeatherService';
 
 export interface RouteWaypoint {
   name: string;
@@ -59,10 +60,14 @@ export function WeatherAlongRouteCard({
   waypoints,
   raceDate,
   startTime,
-  weatherData,
-  loading = false,
+  weatherData: externalWeatherData,
+  loading: externalLoading = false,
   onRefresh,
 }: WeatherAlongRouteCardProps) {
+  const [fetchedWeather, setFetchedWeather] = useState<WeatherAtPoint[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   // Get key points for weather (start, 1-2 mid-points, finish)
   const keyPoints = useMemo(() => {
     if (waypoints.length === 0) return [];
@@ -97,26 +102,97 @@ export function WeatherAlongRouteCard({
     return points;
   }, [waypoints]);
 
-  // Mock weather data for demonstration
-  const displayWeather = useMemo<WeatherAtPoint[]>(() => {
-    if (weatherData) return weatherData;
+  // Fetch real weather data for each key point
+  const fetchWeatherForWaypoints = useCallback(async () => {
+    if (keyPoints.length === 0) return;
     
-    // Generate placeholder data based on key points
+    setIsLoading(true);
+    setFetchError(null);
+    
+    try {
+      const weatherPromises = keyPoints.map(async (point, index) => {
+        try {
+          // Fetch weather for this waypoint's coordinates
+          const weather = await RaceWeatherService.fetchWeatherByCoordinates(
+            point.latitude,
+            point.longitude,
+            raceDate,
+            point.name || `Waypoint ${index + 1}`
+          );
+          
+          return {
+            location: point.name || `Waypoint ${index + 1}`,
+            locationType: point.type === 'finish' ? 'finish' as const : 
+                          point.type === 'start' ? 'start' as const : 'waypoint' as const,
+            coordinates: { lat: point.latitude, lng: point.longitude },
+            estimatedTime: index === 0 ? startTime : undefined,
+            wind: weather ? {
+              direction: weather.wind?.direction || 'Variable',
+              speed: weather.wind ? (weather.wind.speedMin + weather.wind.speedMax) / 2 : 0,
+              gusts: weather.wind?.speedMax,
+            } : undefined,
+            conditions: weather?.raw?.forecast?.[0]?.condition || 'Unknown',
+            temperature: weather?.raw?.forecast?.[0]?.temperature,
+          } as WeatherAtPoint;
+        } catch (err) {
+          console.warn(`[WeatherAlongRoute] Failed to fetch weather for ${point.name}:`, err);
+          // Return partial data on error
+          return {
+            location: point.name || `Waypoint ${index + 1}`,
+            locationType: point.type === 'finish' ? 'finish' as const : 
+                          point.type === 'start' ? 'start' as const : 'waypoint' as const,
+            coordinates: { lat: point.latitude, lng: point.longitude },
+            estimatedTime: index === 0 ? startTime : undefined,
+          } as WeatherAtPoint;
+        }
+      });
+      
+      const results = await Promise.all(weatherPromises);
+      setFetchedWeather(results);
+    } catch (error) {
+      console.error('[WeatherAlongRoute] Error fetching weather:', error);
+      setFetchError('Unable to load weather data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [keyPoints, raceDate, startTime]);
+
+  // Auto-fetch weather when key points change
+  useEffect(() => {
+    if (keyPoints.length > 0 && !externalWeatherData) {
+      fetchWeatherForWaypoints();
+    }
+  }, [keyPoints, externalWeatherData, fetchWeatherForWaypoints]);
+
+  // Determine which weather data to display
+  const displayWeather = useMemo<WeatherAtPoint[]>(() => {
+    // Prefer external data if provided
+    if (externalWeatherData && externalWeatherData.length > 0) {
+      return externalWeatherData;
+    }
+    // Use fetched data
+    if (fetchedWeather.length > 0) {
+      return fetchedWeather;
+    }
+    // Loading placeholder - show location names only
     return keyPoints.map((point, index) => ({
-      location: point.name,
-      locationType: point.type === 'finish' ? 'finish' : 
-                    point.type === 'start' ? 'start' : 'waypoint',
+      location: point.name || `Waypoint ${index + 1}`,
+      locationType: point.type === 'finish' ? 'finish' as const : 
+                    point.type === 'start' ? 'start' as const : 'waypoint' as const,
       coordinates: { lat: point.latitude, lng: point.longitude },
       estimatedTime: index === 0 ? startTime : undefined,
-      wind: {
-        direction: 'NE',
-        speed: 12 + Math.random() * 5,
-        gusts: 18 + Math.random() * 5,
-      },
-      conditions: ['Clear', 'Partly Cloudy', 'Overcast'][Math.floor(Math.random() * 3)],
-      temperature: 22 + Math.random() * 4,
     }));
-  }, [weatherData, keyPoints, startTime]);
+  }, [externalWeatherData, fetchedWeather, keyPoints, startTime]);
+
+  const loading = externalLoading || isLoading;
+  
+  const handleRefresh = useCallback(() => {
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      fetchWeatherForWaypoints();
+    }
+  }, [onRefresh, fetchWeatherForWaypoints]);
 
   // Get icon for location type
   const getLocationIcon = (type: WeatherAtPoint['locationType']) => {
@@ -167,14 +243,13 @@ export function WeatherAlongRouteCard({
           <Cloud size={20} color="#0284C7" />
           <Text style={styles.title}>Weather Along Route</Text>
         </View>
-        {onRefresh && (
+        <TouchableOpacity onPress={handleRefresh} disabled={loading}>
           <RefreshCw 
             size={18} 
-            color="#64748B" 
-            onPress={onRefresh}
+            color={loading ? "#94A3B8" : "#64748B"} 
             style={loading ? styles.refreshSpinning : undefined}
           />
-        )}
+        </TouchableOpacity>
       </View>
 
       {/* Race date/time context */}
@@ -296,17 +371,36 @@ export function WeatherAlongRouteCard({
         </ScrollView>
       )}
 
+      {/* Error message */}
+      {fetchError && (
+        <View style={styles.errorRow}>
+          <AlertTriangle size={14} color="#EF4444" />
+          <Text style={styles.errorText}>{fetchError}</Text>
+        </View>
+      )}
+
       {/* Weather summary/notes */}
       <View style={styles.summarySection}>
         <Text style={styles.summaryTitle}>Route Weather Summary</Text>
         <Text style={styles.summaryText}>
-          {displayWeather.length > 0 && displayWeather[0].wind
-            ? `Wind ${displayWeather[0].wind.direction} ${Math.round(displayWeather[0].wind.speed)}-${
-                displayWeather[displayWeather.length - 1]?.wind
-                  ? Math.round(displayWeather[displayWeather.length - 1].wind!.speed)
-                  : Math.round(displayWeather[0].wind.speed)
-              } kts along route`
-            : 'Weather data loading...'}
+          {loading
+            ? 'Fetching weather data...'
+            : displayWeather.length > 0 && displayWeather.some(w => w.wind)
+            ? (() => {
+                const windSpeeds = displayWeather
+                  .filter(w => w.wind?.speed)
+                  .map(w => w.wind!.speed);
+                const minWind = Math.round(Math.min(...windSpeeds));
+                const maxWind = Math.round(Math.max(...windSpeeds));
+                const directions = displayWeather
+                  .filter(w => w.wind?.direction)
+                  .map(w => w.wind!.direction);
+                const primaryDirection = directions[0] || 'Variable';
+                return minWind === maxWind
+                  ? `Wind ${primaryDirection} ${minWind} kts along route`
+                  : `Wind ${primaryDirection} ${minWind}-${maxWind} kts along route`;
+              })()
+            : 'No weather data available'}
         </Text>
       </View>
     </View>
@@ -506,6 +600,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94A3B8',
     textAlign: 'center',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    flex: 1,
   },
 });
 

@@ -607,6 +607,11 @@ export class RegionalWeatherService {
   private transformToWeatherForecast(weather: AdvancedWeatherConditions): WeatherForecast {
     const visibilityMeters = weather.visibility?.horizontal ?? 10000;
 
+    // Get current speed from weather.current (ocean currents) or tide data
+    // weather.current contains the tidal/ocean current data from StormGlass
+    const currentSpeedKnots = weather.current?.speed ?? weather.current?.knots ?? weather.tide?.speed ?? 0;
+    const currentDirection = weather.current?.direction ?? weather.tide?.direction ?? weather.waves?.direction ?? 0;
+
     return {
       timestamp: weather.timestamp ?? new Date(),
       windSpeed: Math.round(weather.wind?.speed ?? 0),
@@ -615,10 +620,10 @@ export class RegionalWeatherService {
       waveHeight: weather.waves?.height,
       wavePeriod: weather.waves?.period,
       waveDirection: weather.waves?.direction,
-      currentSpeed: weather.tide?.speed ? Math.round(weather.tide.speed * 10) / 10 : undefined,
-      currentDirection: weather.tide?.direction === 'flood' || weather.tide?.direction === 'ebb'
-        ? weather.wind?.direction ?? 0
-        : weather.waves?.direction,
+      currentSpeed: currentSpeedKnots > 0 ? Math.round(currentSpeedKnots * 10) / 10 : undefined,
+      currentDirection: typeof currentDirection === 'number' 
+        ? Math.round(currentDirection) 
+        : (currentDirection === 'flood' || currentDirection === 'ebb' ? weather.wind?.direction ?? 0 : undefined),
       airTemperature: weather.temperature ?? weather.temperatureProfile?.air ?? 20,
       waterTemperature: weather.temperatureProfile?.water,
       visibility: Math.round((visibilityMeters / 1000) * 10) / 10,

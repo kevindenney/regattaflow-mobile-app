@@ -5,7 +5,7 @@
  * Allows selecting a pre-defined course from the library to overlay on the race map
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CourseLibraryService } from '@/services/CourseLibraryService';
+import { CourseEntryPanel } from './CourseEntryPanel';
 import type { RaceCourse, Mark } from '@/types/courses';
 
 interface CourseSelectorProps {
@@ -28,6 +29,7 @@ interface CourseSelectorProps {
   currentWindSpeed?: number;
   autoSelectCourseId?: string;
   onAutoSelectComplete?: () => void;
+  raceType?: 'fleet' | 'distance';
 }
 
 const courseLibrary = require('@/data/race-courses.json');
@@ -264,12 +266,48 @@ export function CourseSelector({
   currentWindSpeed,
   autoSelectCourseId,
   onAutoSelectComplete,
+  raceType = 'fleet',
 }: CourseSelectorProps) {
   const [showModal, setShowModal] = useState(false);
   const [courses, setCourses] = useState<RaceCourse[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<RaceCourse | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingAutoCourseId, setPendingAutoCourseId] = useState<string | null>(null);
+  const [showEntryPanel, setShowEntryPanel] = useState(false);
+
+  // Handle waypoints extracted from CourseEntryPanel
+  const handleWaypointsExtracted = useCallback((waypoints: any[]) => {
+    // Convert waypoints to marks format, preserving original types
+    const marks: Mark[] = waypoints.map((wp, index) => {
+      // Determine mark type based on waypoint type
+      let markType: string;
+      const wpType = wp.type?.toLowerCase() || '';
+      
+      if (wpType === 'start') {
+        markType = 'committee_boat';
+      } else if (wpType === 'finish') {
+        markType = 'finish';
+      } else if (wpType === 'gate' || wpType.includes('gate')) {
+        markType = 'gate_left'; // Use gate_left as the gate marker type
+      } else {
+        markType = 'custom'; // For waypoints/marks
+      }
+      
+      return {
+        id: `extracted-${index}`,
+        name: wp.name,
+        type: markType,
+        latitude: wp.latitude,
+        longitude: wp.longitude,
+        passingSide: wp.passingSide,
+        notes: wp.notes,
+      };
+    });
+    
+    onCourseSelected(marks);
+    setShowModal(false);
+    setShowEntryPanel(false);
+  }, [onCourseSelected]);
 
   useEffect(() => {
     if (autoSelectCourseId) {
@@ -278,23 +316,34 @@ export function CourseSelector({
     }
   }, [autoSelectCourseId]);
 
-  useEffect(() => {
-    if (showModal) {
-      loadCourses();
-    }
-  }, [showModal, venueId, venueCoordinates, currentWindDirection, currentWindSpeed]);
-
-  const loadCourses = async () => {
+  const loadCourses = useCallback(async () => {
+    console.log('[CourseSelector] loadCourses called, venueId:', venueId, 'raceType:', raceType);
     try {
       setLoading(true);
 
-      // Fetch courses for this venue
+      // Fetch discoverable courses (user's own + venue shared + public)
       let fetchedCourses: RaceCourse[] = [];
-      if (venueId) {
-        fetchedCourses = await CourseLibraryService.fetchCourses({
-          venueId,
-          windDirection: currentWindDirection,
-          windSpeed: currentWindSpeed,
+      console.log('[CourseSelector] Calling fetchDiscoverableCourses...');
+      fetchedCourses = await CourseLibraryService.fetchDiscoverableCourses({
+        venueId,
+        raceType,
+      });
+      console.log('[CourseSelector] Got courses:', fetchedCourses.length);
+      
+      // Also apply wind filtering if specified
+      if (currentWindDirection !== undefined || currentWindSpeed !== undefined) {
+        fetchedCourses = fetchedCourses.filter((course) => {
+          const windDirOk = currentWindDirection === undefined ||
+            course.min_wind_direction == null ||
+            course.max_wind_direction == null ||
+            (course.min_wind_direction <= currentWindDirection && course.max_wind_direction >= currentWindDirection);
+          
+          const windSpeedOk = currentWindSpeed === undefined ||
+            course.min_wind_speed == null ||
+            course.max_wind_speed == null ||
+            (course.min_wind_speed <= currentWindSpeed && course.max_wind_speed >= currentWindSpeed);
+          
+          return windDirOk && windSpeedOk;
         });
       }
 
@@ -324,7 +373,13 @@ export function CourseSelector({
     } finally {
       setLoading(false);
     }
-  };
+  }, [venueId, venueCoordinates, currentWindDirection, currentWindSpeed, raceType, pendingAutoCourseId]);
+
+  useEffect(() => {
+    if (showModal) {
+      loadCourses();
+    }
+  }, [showModal, loadCourses]);
 
   const handleCourseSelect = async (
     course: RaceCourse,
@@ -431,18 +486,64 @@ export function CourseSelector({
               <ActivityIndicator size="large" color="#0066CC" />
               <Text style={styles.loadingText}>Loading courses...</Text>
             </View>
+          ) : showEntryPanel ? (
+            <ScrollView style={styles.entryPanelContainer}>
+              <CourseEntryPanel
+                onWaypointsExtracted={handleWaypointsExtracted}
+                raceType={raceType}
+                venueName={venueName}
+                venueId={venueId}
+                onCourseSaved={() => {
+                  // Reload courses after saving
+                  loadCourses();
+                  setShowEntryPanel(false);
+                }}
+              />
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => setShowEntryPanel(false)}
+              >
+                <MaterialCommunityIcons name="arrow-left" size={18} color="#64748B" />
+                <Text style={styles.backButtonText}>Back to Course List</Text>
+              </TouchableOpacity>
+            </ScrollView>
           ) : courses.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons name="map-marker-off" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTitle}>No Courses Available</Text>
-              <Text style={styles.emptyText}>
-                {venueId || venueCoordinates
-                  ? 'We do not have any templates for this location yet. Draw the course on the map or save one to the library to use it next time.'
-                  : 'Set a venue (or drop a racing area on the map) to unlock nearby templates, or draw a custom course.'}
-              </Text>
-            </View>
+            <ScrollView style={styles.emptyScrollContainer}>
+              <View style={styles.emptyContainer}>
+                <MaterialCommunityIcons name="map-marker-off" size={48} color="#CBD5E1" />
+                <Text style={styles.emptyTitle}>No Courses Available</Text>
+                <Text style={styles.emptyText}>
+                  {venueId || venueCoordinates
+                    ? 'No templates found for this location. Add course data below or draw on the map.'
+                    : 'Set a venue to unlock nearby templates, or add course data below.'}
+                </Text>
+              </View>
+              
+              {/* Course Entry Panel in empty state */}
+              <View style={styles.entryPanelWrapper}>
+                <CourseEntryPanel
+                  onWaypointsExtracted={handleWaypointsExtracted}
+                  raceType={raceType}
+                  venueName={venueName}
+                  venueId={venueId}
+                  onCourseSaved={() => {
+                    // Reload courses after saving
+                    loadCourses();
+                  }}
+                />
+              </View>
+            </ScrollView>
           ) : (
             <ScrollView style={styles.courseList}>
+              {/* Add Course Button */}
+              <TouchableOpacity
+                style={styles.addCourseButton}
+                onPress={() => setShowEntryPanel(true)}
+              >
+                <MaterialCommunityIcons name="plus-circle" size={20} color="#7C3AED" />
+                <Text style={styles.addCourseButtonText}>Add Course from URL, PDF, or Text</Text>
+              </TouchableOpacity>
+
               {courses.map((course) => (
                 <TouchableOpacity
                   key={course.id}
@@ -707,6 +808,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#475569',
     marginBottom: 8,
+  },
+  entryPanelContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  entryPanelWrapper: {
+    marginTop: 16,
+    marginBottom: 32,
+  },
+  emptyScrollContainer: {
+    flex: 1,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    marginTop: 16,
+    marginHorizontal: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    gap: 8,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  addCourseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    marginBottom: 16,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderStyle: 'dashed',
+    gap: 8,
+  },
+  addCourseButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
 });
 const haversineMeters = (lat1: number, lng1: number, lat2: number, lng2: number) => {

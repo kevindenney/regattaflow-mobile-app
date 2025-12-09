@@ -23,7 +23,8 @@ import { generateMockForecast, generateMockWeatherAtTime } from './mockWeatherDa
 
 const STORM_GLASS_BASE_URL = 'https://api.stormglass.io/v2';
 const DEFAULT_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
-const TIDE_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes
+const TIDE_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours - tides don't change fast!
+const TIDE_EXTREMES_CACHE_DURATION = 12 * 60 * 60 * 1000; // 12 hours - extremes are predictable
 
 // Check if we should use mock data (for development or when quota exceeded)
 // Only honor app.json's useMockWeather flag in non-production builds
@@ -237,22 +238,42 @@ export class StormGlassService {
 
   /**
    * Get tide extremes (high/low tide times and heights)
+   * @param location - Geographic coordinates
+   * @param days - Number of days to fetch (default: 7)
+   * @param referenceTime - Optional reference time to center the fetch around (defaults to now)
+   * 
+   * NOTE: This uses Storm Glass API quota. Cache is extended to 12 hours to minimize API calls.
+   * For weather data, use OpenMeteoService instead (FREE, no quota).
    */
-  async getTideExtremes(location: GeoLocation, days: number = 7): Promise<Array<{
+  async getTideExtremes(location: GeoLocation, days: number = 7, referenceTime?: Date): Promise<Array<{
     type: 'high' | 'low';
     time: Date;
     height: number;
   }>> {
-    const cacheKey = `tide_extremes_${location.latitude}_${location.longitude}_${days}`;
+    // Use reference time if provided, otherwise use current time
+    const centerTime = referenceTime || new Date();
+    
+    // Round location to 2 decimal places for better cache hit rate (still ~1km accuracy)
+    const roundedLat = Math.round(location.latitude * 100) / 100;
+    const roundedLng = Math.round(location.longitude * 100) / 100;
+    
+    // Round time to nearest 6 hours for better cache hit rate (tides are predictable)
+    const timeWindow = Math.floor(centerTime.getTime() / (6 * 60 * 60 * 1000));
+    const cacheKey = `tide_extremes_${roundedLat}_${roundedLng}_${days}_${timeWindow}`;
     const cached = this.getCached<Array<any>>(cacheKey);
 
     if (cached) {
+      console.info(`[StormGlassService] Tide extremes cache HIT - saved API call!`);
       return cached;
     }
 
     try {
-      const start = new Date();
-      const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+      console.info(`[StormGlassService] Fetching tide extremes (quota: ${this.rateLimit.requestCount}/${this.rateLimit.dailyQuota})`);
+      
+      // Fetch extremes starting 1 day before the reference time to ensure we have data
+      // for interpolation (need previous extreme to calculate current state)
+      const start = new Date(centerTime.getTime() - 24 * 60 * 60 * 1000);
+      const end = new Date(centerTime.getTime() + days * 24 * 60 * 60 * 1000);
 
       const response = await this.makeRequest<StormGlassTideExtremesResponse>(
         '/tide/extremes/point',
@@ -272,7 +293,8 @@ export class StormGlassService {
         height: extreme.height,
       }));
 
-      this.setCache(cacheKey, extremes, TIDE_CACHE_DURATION);
+      // Cache for 12 hours - tides are highly predictable!
+      this.setCache(cacheKey, extremes, TIDE_EXTREMES_CACHE_DURATION);
 
       return extremes;
     } catch (error) {
@@ -283,16 +305,28 @@ export class StormGlassService {
 
   /**
    * Get tide height at a specific time
+   * 
+   * NOTE: This uses Storm Glass API quota. Cache is extended to 6 hours for same location.
+   * For weather data, use OpenMeteoService instead (FREE, no quota).
    */
   async getTideHeightAtTime(location: GeoLocation, targetTime: Date): Promise<number> {
-    const cacheKey = `tide_height_${location.latitude}_${location.longitude}_${targetTime.getTime()}`;
+    // Round location to 2 decimal places for better cache hit rate
+    const roundedLat = Math.round(location.latitude * 100) / 100;
+    const roundedLng = Math.round(location.longitude * 100) / 100;
+    
+    // Round time to nearest hour for better cache hit rate
+    const timeHour = Math.floor(targetTime.getTime() / (60 * 60 * 1000));
+    const cacheKey = `tide_height_${roundedLat}_${roundedLng}_${timeHour}`;
     const cached = this.getCached<number>(cacheKey);
 
     if (cached !== null && cached !== undefined) {
+      console.info(`[StormGlassService] Tide height cache HIT - saved API call!`);
       return cached;
     }
 
     try {
+      console.info(`[StormGlassService] Fetching tide height (quota: ${this.rateLimit.requestCount}/${this.rateLimit.dailyQuota})`);
+      
       // Request 1 hour window
       const start = new Date(targetTime.getTime() - 30 * 60 * 1000);
       const end = new Date(targetTime.getTime() + 30 * 60 * 1000);
@@ -322,6 +356,7 @@ export class StormGlassService {
         }
       }
 
+      // Cache for 6 hours
       this.setCache(cacheKey, closestHeight, TIDE_CACHE_DURATION);
 
       return closestHeight;

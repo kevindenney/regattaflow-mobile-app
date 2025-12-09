@@ -279,7 +279,10 @@ export function StartStrategyCard({
       }
 
       // Generate venue-based strategy using AI
-      logger.info('[generateStrategy] Calling AI strategy engine');
+      const startTime = Date.now();
+      logger.info('[generateStrategy] Calling AI strategy engine - START', { venueId, raceName });
+      console.log('[StartStrategyCard] ⏳ Starting AI strategy generation...');
+      
       const aiStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
         venueId || 'hong-kong', // Default to Hong Kong if no venue
         conditions,
@@ -295,13 +298,16 @@ export function StartStrategyCard({
         }
       );
 
+      const elapsedTime = Date.now() - startTime;
       // Track if this strategy is personalized
       setIsPersonalized(!!sailorProfileForAI);
 
       logger.info('[generateStrategy] AI strategy received', {
         hasStrategy: !!aiStrategy,
-        hasStartStrategy: !!aiStrategy?.strategy?.startStrategy
+        hasStartStrategy: !!aiStrategy?.strategy?.startStrategy,
+        elapsedMs: elapsedTime
       });
+      console.log(`[StartStrategyCard] ✅ AI strategy generated in ${(elapsedTime / 1000).toFixed(1)}s`);
 
       // Extract start strategy from full AI strategy
       const startStrat = aiStrategy.strategy.startStrategy;

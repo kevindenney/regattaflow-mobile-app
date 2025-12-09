@@ -466,7 +466,55 @@ export const SKILL_REGISTRY = {
 
   // RegattaFlow Coach finishing tactics (built-in fallback until API upload succeeds)
   'finishing-line-tactics': 'skill_builtin_finishing_line_tactics',
+
+  // Long distance / offshore racing skill
+  'long-distance-racing-analyst': 'skill_01SKz4JZUgvufuxgkSMkVqXe',
 } as const;
+
+// Race Type Detection - determines if a race should use distance racing skill
+export type RaceType = 'fleet' | 'distance';
+
+export function detectRaceType(raceContext: {
+  courseLengthNm?: number;
+  estimatedDurationHours?: number;
+  waypoints?: number;
+  raceType?: string;
+  raceName?: string;
+}): RaceType {
+  // Explicit type takes precedence
+  if (raceContext.raceType === 'distance') return 'distance';
+  if (raceContext.raceType === 'fleet') return 'fleet';
+
+  // Check race name for keywords
+  const name = (raceContext.raceName || '').toLowerCase();
+  const distanceKeywords = ['offshore', 'passage', 'ocean', 'distance', 'around', 'transpac', 'fastnet', 'sydney hobart', 'rolex', 'middle sea', 'giraglia'];
+  if (distanceKeywords.some(kw => name.includes(kw))) {
+    return 'distance';
+  }
+
+  // Course length > 20nm suggests distance race
+  if (raceContext.courseLengthNm && raceContext.courseLengthNm > 20) {
+    return 'distance';
+  }
+
+  // Duration > 4 hours suggests distance race
+  if (raceContext.estimatedDurationHours && raceContext.estimatedDurationHours > 4) {
+    return 'distance';
+  }
+
+  // Many waypoints (> 3) suggests distance/passage race
+  if (raceContext.waypoints && raceContext.waypoints > 3) {
+    return 'distance';
+  }
+
+  return 'fleet';
+}
+
+// Race Type to Primary Skill Mapping
+export const RACE_TYPE_TO_SKILL: Record<RaceType, keyof typeof SKILL_REGISTRY> = {
+  'fleet': 'race-strategy-analyst',
+  'distance': 'long-distance-racing-analyst',
+};
 
 // Race Phase to Skill Mapping
 export const PHASE_TO_SKILLS: Record<RacePhase, (keyof typeof SKILL_REGISTRY)[]> = {

@@ -55,11 +55,24 @@ export function useApi<T>(
   const [data, setData] = useState<T | null>(initialData ?? null);
   const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
+  
+  // Use refs to avoid triggering re-renders when callbacks change
   const apiRef = useRef(apiFunction);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     apiRef.current = apiFunction;
   }, [apiFunction]);
+  
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
+  
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const fetchData = useCallback(async () => {
     logger.debug('fetchData called', { enabled });
@@ -83,27 +96,29 @@ export function useApi<T>(
       if (normalized.error) {
         logger.error('Error in result:', normalized.error);
         setError(normalized.error);
-        onError?.(normalized.error);
+        onErrorRef.current?.(normalized.error);
       }
 
       setData(normalized.data);
-      onSuccess?.(normalized.data);
+      onSuccessRef.current?.(normalized.data);
     } catch (err) {
       const typedError = err as Error;
       logger.error('Exception caught:', typedError);
       setError(typedError);
-      onError?.(typedError);
+      onErrorRef.current?.(typedError);
     } finally {
       setLoading(false);
     }
-  }, [enabled, onError, onSuccess]);
+  }, [enabled]); // Removed onError, onSuccess - using refs instead
 
   useEffect(() => {
-    logger.debug('useEffect triggered', { enabled });
-    if (enabled) {
+    logger.debug('useEffect triggered', { enabled, hasFetched: hasFetchedRef.current });
+    if (enabled && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       logger.debug('Triggering fetchData from useEffect');
       fetchData();
-    } else {
+    } else if (!enabled) {
+      hasFetchedRef.current = false;
       logger.debug('Skipping fetchData - not enabled');
     }
   }, [enabled, fetchData]);

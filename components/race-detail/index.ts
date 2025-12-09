@@ -5,6 +5,7 @@
 
 // Legacy components
 export { CourseSelector } from './CourseSelector';
+export { CourseEntryPanel } from './CourseEntryPanel';
 export { CurrentTideCard } from './CurrentTideCard';
 export { MarkManager } from './MarkManager';
 export { PostRaceAnalysisCard } from './PostRaceAnalysisCard';

@@ -85,8 +85,9 @@ export class TidalIntelService {
 
     try {
       // Get tide extremes and current height from Storm Glass
+      // Pass referenceTime so extremes are fetched around the race date, not just from today
       const [tideExtremes, currentHeight] = await Promise.all([
-        this.stormGlass.getTideExtremes(location, 2), // Get 2 days of extremes
+        this.stormGlass.getTideExtremes(location, 2, referenceTime), // Get 2 days of extremes around race time
         this.stormGlass.getTideHeightAtTime(location, referenceTime)
       ]);
 
