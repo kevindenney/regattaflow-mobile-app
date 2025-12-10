@@ -1,20 +1,23 @@
 /**
  * Rig Tuning Card
  * Displays race-specific rig settings sourced from tuning guides and matched to forecast conditions.
+ * Enhanced with equipment-aware recommendations.
  */
 
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import type { RaceTuningRecommendation } from '@/services/RaceTuningService';
 
 interface RigTuningCardProps {
   raceId: string;
   boatClassName?: string;
+  boatName?: string;  // NEW: Display which boat is being used
   recommendation?: RaceTuningRecommendation | null;
   loading?: boolean;
   onRefresh?: () => void;
+  onBoatPress?: () => void;  // NEW: Navigate to boat details
 }
 
 type CardStatus = 'ready' | 'generating' | 'not_set';
@@ -22,9 +25,11 @@ type CardStatus = 'ready' | 'generating' | 'not_set';
 export function RigTuningCard({
   raceId,
   boatClassName,
+  boatName,
   recommendation,
   loading = false,
   onRefresh,
+  onBoatPress,
 }: RigTuningCardProps) {
   const status: CardStatus = loading
     ? 'generating'
@@ -157,6 +162,54 @@ export function RigTuningCard({
                 </View>
               ))}
             </View>
+
+            {/* Equipment Context Badge */}
+            {recommendation.equipmentContext && (
+              <TouchableOpacity 
+                style={styles.equipmentBadge}
+                onPress={onBoatPress}
+                disabled={!onBoatPress}
+              >
+                <Ionicons name="boat-outline" size={16} color="#0D9488" />
+                <View style={styles.equipmentBadgeContent}>
+                  <Text style={styles.equipmentBadgeTitle}>
+                    Using: {recommendation.equipmentContext.boatName || 'Your Boat'}
+                  </Text>
+                  {recommendation.equipmentContext.mast?.manufacturer && (
+                    <Text style={styles.equipmentBadgeDetail}>
+                      {recommendation.equipmentContext.mast.manufacturer} mast
+                      {recommendation.equipmentContext.sails.length > 0 && 
+                        ` • ${recommendation.equipmentContext.sails[0]?.manufacturer || ''} sails`}
+                    </Text>
+                  )}
+                </View>
+                {onBoatPress && (
+                  <Ionicons name="chevron-forward" size={16} color="#0D9488" />
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Equipment-Specific Notes */}
+            {recommendation.equipmentSpecificNotes && recommendation.equipmentSpecificNotes.length > 0 && (
+              <View style={styles.equipmentNotes}>
+                <Ionicons name="information-circle" size={16} color="#0D9488" />
+                <View style={styles.equipmentNotesList}>
+                  {recommendation.equipmentSpecificNotes.map((note, idx) => (
+                    <Text key={idx} style={styles.equipmentNoteText}>• {note}</Text>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Maintenance Alert */}
+            {recommendation.equipmentContext?.hasMaintenanceAlerts && (
+              <View style={styles.maintenanceAlert}>
+                <Ionicons name="warning" size={16} color="#DC2626" />
+                <Text style={styles.maintenanceAlertText}>
+                  Equipment maintenance required - check before racing
+                </Text>
+              </View>
+            )}
 
             {recommendation.weatherSpecificNotes && recommendation.weatherSpecificNotes.length > 0 && (
               <View style={styles.weatherNotes}>
@@ -378,5 +431,61 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     color: '#64748B',
+  },
+  equipmentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#CCFBF1',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#5EEAD4',
+  },
+  equipmentBadgeContent: {
+    flex: 1,
+    gap: 2,
+  },
+  equipmentBadgeTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0D9488',
+  },
+  equipmentBadgeDetail: {
+    fontSize: 11,
+    color: '#14B8A6',
+  },
+  equipmentNotes: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#F0FDFA',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+  },
+  equipmentNotesList: {
+    flex: 1,
+    gap: 4,
+  },
+  equipmentNoteText: {
+    fontSize: 12,
+    color: '#0F766E',
+  },
+  maintenanceAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  maintenanceAlertText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DC2626',
+    flex: 1,
   },
 });

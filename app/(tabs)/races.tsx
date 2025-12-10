@@ -24,6 +24,7 @@ import { SplitTimesAnalysis } from '@/components/races/SplitTimesAnalysis';
 import { TacticalInsights } from '@/components/races/TacticalInsights';
 // LiveRaceTimer removed - timer is now only in the Race Card
 import { StrategySharingModal } from '@/components/coaching/StrategySharingModal';
+import { CommunityTipsCard } from '@/components/venue/CommunityTipsCard';
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
@@ -4579,8 +4580,24 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                     totalRaces: raceResult.totalRaces,
                   } : undefined;
 
+                  // Auto-detect distance races based on name patterns if race_type not set
+                  // Patterns: "Around...", "Round...", "Circumnavigation", "Offshore", "Distance Race", "Passage Race"
+                  const isDistanceRace = race.race_type === 'distance' || (
+                    race.name && (
+                      /\baround\b/i.test(race.name) ||           // "Around the Island", "Around Hong Kong"
+                      /\bround\s+the\b/i.test(race.name) ||      // "Round the Island"
+                      /circumnavigation/i.test(race.name) ||
+                      /\boffshore\b/i.test(race.name) ||
+                      /distance\s*race/i.test(race.name) ||
+                      /passage\s*race/i.test(race.name) ||
+                      /point.*to.*point/i.test(race.name) ||
+                      /ocean\s*race/i.test(race.name) ||
+                      /coastal\s*race/i.test(race.name)
+                    )
+                  );
+
                   // Render DistanceRaceCard for distance races, RaceCard for fleet races
-                  if (race.race_type === 'distance') {
+                  if (isDistanceRace) {
                     cardElements.push(
                       <DistanceRaceCard
                         key={race.id || index}
@@ -4594,6 +4611,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         timeLimitHours={race.time_limit_hours}
                         routeWaypoints={race.route_waypoints}
                         wind={race.wind}
+                        vhf_channel={race.vhf_channel || race.critical_details?.vhf_channel}
                         isPrimary={isNextRace}
                         raceStatus={raceStatus}
                         isSelected={selectedRaceId === race.id}
@@ -4622,6 +4640,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         weatherError={race.weatherError}
                         strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
                         critical_details={race.critical_details}
+                        vhf_channel={race.vhf_channel}
                         venueCoordinates={race.venueCoordinates}
                         isPrimary={isNextRace}
                         raceStatus={raceStatus}
@@ -4664,11 +4683,23 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
               </View>
             )}
 
-            {selectedRaceData && (
+            {selectedRaceData && (() => {
+              // Compute race status for the selected race
+              const isNextRace = safeNextRace?.id === selectedRaceData.id;
+              const selectedRaceStatus = getRaceStatus(
+                selectedRaceData.start_date || selectedRaceData.date || new Date().toISOString(),
+                isNextRace,
+                selectedRaceData.start_time || selectedRaceData.startTime
+              );
+              const isRacePast = selectedRaceStatus === 'past';
+              const isRaceFuture = selectedRaceStatus === 'future' || selectedRaceStatus === 'next';
+              
+              return (
               <PlanModeContent
                 raceData={selectedRaceData}
                 raceId={selectedRaceData.id}
-                hasPostRaceData={true}
+                raceStatus={isRacePast ? 'completed' : 'upcoming'}
+                hasPostRaceData={isRacePast}
                 sections={{
                   courseAndStrategy: (
                     <>
@@ -4752,16 +4783,18 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       />
                     </View>
 
-                    {/* Distance Racing: Pre-Race Briefing */}
-                    <PreRaceBriefingCard
-                      raceId={selectedRaceData.id}
-                      raceName={selectedRaceData.name}
-                      raceDate={selectedRaceData.start_date}
-                      venueName={selectedRaceData.metadata?.venue_name}
-                      boatClassName={selectedRaceData.metadata?.class_name}
-                      routeWaypoints={selectedRaceData.route_waypoints}
-                      totalDistanceNm={selectedRaceData.total_distance_nm}
-                    />
+                    {/* Distance Racing: Pre-Race Briefing - only for future races */}
+                    {isRaceFuture && (
+                      <PreRaceBriefingCard
+                        raceId={selectedRaceData.id}
+                        raceName={selectedRaceData.name}
+                        raceDate={selectedRaceData.start_date}
+                        venueName={selectedRaceData.metadata?.venue_name}
+                        boatClassName={selectedRaceData.metadata?.class_name}
+                        routeWaypoints={selectedRaceData.route_waypoints}
+                        totalDistanceNm={selectedRaceData.total_distance_nm}
+                      />
+                    )}
 
                     {/* Distance Racing: Route Map with Waypoints */}
                     <RouteMapCard
@@ -4887,8 +4920,9 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 {/* ============================================ */}
                 {/*  PRE-RACE STRATEGY SECTION                 */}
                 {/* ============================================ */}
-                {/* Fleet Racing AI Coach - Only for fleet races */}
-                {selectedRaceData.race_type !== 'distance' && (
+                {/* Fleet Racing AI Coach - Only for fleet races AND future races */}
+                {/* Hide AI strategy guidance for past races - no longer actionable */}
+                {selectedRaceData.race_type !== 'distance' && isRaceFuture && (
                   <>
                     <RacePhaseHeader
                       icon="chess-knight"
@@ -4929,8 +4963,9 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   </>
                 )}
 
-                {/* Fleet Racing Strategy Cards - Only shown for fleet races */}
-                {selectedRaceData.race_type !== 'distance' && (
+                {/* Fleet Racing Strategy Cards - Only shown for fleet races AND future races */}
+                {/* For past races: hide AI strategy guidance - no longer actionable */}
+                {selectedRaceData.race_type !== 'distance' && isRaceFuture && (
                   <>
                     {/* Start Strategy */}
                     <StartStrategyCard
@@ -4964,6 +4999,8 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       raceName={selectedRaceData.name}
                       sailorId={sailorId}
                       raceEventId={selectedRaceData.id}
+                      venueId={selectedRaceData.metadata?.venue_id}
+                      venueName={selectedRaceData.metadata?.venue_name}
                     />
 
                     {/* Downwind Strategy - Dedicated Runs Card */}
@@ -4973,6 +5010,15 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       sailorId={sailorId}
                       raceEventId={selectedRaceData.id}
                     />
+
+                    {/* Community Local Knowledge */}
+                    {selectedRaceData.metadata?.venue_id && selectedRaceData.metadata?.venue_name && (
+                      <CommunityTipsCard
+                        venueId={selectedRaceData.metadata.venue_id}
+                        venueName={selectedRaceData.metadata.venue_name}
+                        compact={true}
+                      />
+                    )}
 
                     {/* Mark Rounding Strategy */}
                     <MarkRoundingCard
@@ -4989,8 +5035,18 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   </>
                 )}
 
-                      {/* Share Strategy */}
-                      {sailorId && selectedRaceData?.id && (
+                      {/* Learning Patterns - For Future Races: Inform Strategy Planning */}
+                      {isRaceFuture && (
+                        <View className="mt-4">
+                          <Text className="text-sm font-semibold text-gray-700 mb-2 px-4">
+                            📊 Learning from Past Races
+                          </Text>
+                          <AIPatternDetection />
+                        </View>
+                      )}
+
+                      {/* Share Strategy - only for future races */}
+                      {isRaceFuture && sailorId && selectedRaceData?.id && (
                         <View style={{ marginTop: 16, marginBottom: 8 }}>
                           <TouchableOpacity
                             style={{
@@ -5043,7 +5099,8 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   ),
                   boatSetup: (
                     <>
-                      {!selectedRaceClassId && (
+                      {/* Class not set warning - only show for future races */}
+                      {isRaceFuture && !selectedRaceClassId && (
                         <View className="flex-row items-start gap-2 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
                           <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
                           <View className="flex-1">
@@ -5059,21 +5116,25 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         </View>
                       )}
 
-                      <RigTuningCard
-                        raceId={selectedRaceData.id}
-                        boatClassName={selectedRaceClassName}
-                        recommendation={selectedRaceTuningRecommendation}
-                        loading={selectedRaceTuningLoading}
-                        onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
-                      />
+                      {/* AI Rig Tuning Guidance - only show for future races */}
+                      {isRaceFuture && (
+                        <RigTuningCard
+                          raceId={selectedRaceData.id}
+                          boatClassName={selectedRaceClassName}
+                          recommendation={selectedRaceTuningRecommendation}
+                          loading={selectedRaceTuningLoading}
+                          onRefresh={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
+                        />
+                      )}
 
+                      {/* User's Rig & Sail Planner Notes - always show */}
                       <RigPlannerCard
                         presets={rigPresets}
                         selectedBand={selectedRigBand}
                         onSelectBand={(bandId) => setSelectedRigBand(bandId)}
                         notes={rigNotes}
                         onChangeNotes={setRigNotes}
-                        onOpenChat={handleOpenChatFromRigPlanner}
+                        onOpenChat={isRaceFuture ? handleOpenChatFromRigPlanner : undefined}
                       />
                     </>
                   ),
@@ -5167,7 +5228,8 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       </View>
                     </>
                   ),
-                  postRaceAnalysis: (
+                  // Only show Post-Race Analysis for past/completed races
+                  postRaceAnalysis: isRacePast ? (
                     <>
                       <PostRaceAnalysisCard
                         raceId={selectedRaceData.id}
@@ -5225,14 +5287,16 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                           }}
                         />
                       </View>
+                      {/* Learning Patterns - For Past Races: Analyze Performance */}
                       <View className="mt-4">
                         <AIPatternDetection />
                       </View>
                     </>
-                  ),
+                  ) : undefined,
                 }}
               />
-            )}
+              );
+            })()}
           </>
         ) : (
           // User has no races - show mock race cards horizontally

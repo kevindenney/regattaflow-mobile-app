@@ -57,16 +57,26 @@ export default function CoursesScreen() {
 
     setLoading(true);
     try {
-      const remoteCourses = await CourseLibraryService.fetchCourses({
-        clubId: userProfile?.club_id ?? undefined,
+      // Use fetchDiscoverableCourses to get user's own courses + club/public courses
+      const remoteCourses = await CourseLibraryService.fetchDiscoverableCourses({
+        userId: user.id,
       });
 
-      if (remoteCourses && remoteCourses.length > 0) {
-        setSavedCourses(remoteCourses);
-        setError(null);
-      } else {
-        setSavedCourses(fallbackCourses);
-      }
+      console.log('[Courses] Loaded courses from API:', remoteCourses.length);
+
+      // Combine remote courses with fallback courses (deduplicating by id)
+      const courseMap = new Map<string, RaceCourse>();
+      
+      // Add fallback courses first
+      fallbackCourses.forEach(course => courseMap.set(course.id, course));
+      
+      // Override with remote courses (they take priority)
+      remoteCourses.forEach(course => courseMap.set(course.id, course));
+      
+      const combinedCourses = Array.from(courseMap.values());
+      
+      setSavedCourses(combinedCourses);
+      setError(null);
     } catch (err) {
       console.error('[Courses] Failed to load courses:', err);
       setError('Unable to reach course library. Showing demo courses.');
@@ -74,7 +84,7 @@ export default function CoursesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [fallbackCourses, user?.id, userProfile?.club_id]);
+  }, [fallbackCourses, user?.id]);
 
   useEffect(() => {
     loadCourses();

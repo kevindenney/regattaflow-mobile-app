@@ -11,7 +11,7 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2, Trophy, Medal, Award, Pin } from 'lucide-react-native';
+import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2, Trophy, Medal, Award, Pin, Sailboat } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { calculateCountdown } from '@/constants/mockData';
 import { RaceTimer } from './RaceTimer';
@@ -83,6 +83,7 @@ export interface RaceCardProps {
     warning_signal?: string;
     first_start?: string;
   };
+  vhf_channel?: string | null; // VHF channel at top level (fallback)
   isPrimary?: boolean; // True for next race (largest card)
   isMock?: boolean; // True for mock data
   raceStatus?: 'past' | 'next' | 'future'; // Race timing status
@@ -109,6 +110,7 @@ export function RaceCard({
   weatherStatus,
   weatherError,
   critical_details,
+  vhf_channel,
   isPrimary = false,
   isMock = false,
   raceStatus = 'future',
@@ -123,11 +125,22 @@ export function RaceCard({
   results,
   venueCoordinates,
 }: RaceCardProps) {
+  // Debug: Log VHF channel data sources
+  React.useEffect(() => {
+    console.log(`📻 [RaceCard] ${name} VHF data:`, {
+      'critical_details.vhf_channel': critical_details?.vhf_channel,
+      'vhf_channel prop': vhf_channel,
+      'displayed': critical_details?.vhf_channel || vhf_channel || 'NONE',
+    });
+  }, [name, critical_details, vhf_channel]);
+
   const router = useRouter();
   const editHandler = onEdit ?? null;
   const deleteHandler = onDelete ?? null;
   const hideHandler = onHide ?? null;
-  const hasTopBadges = isSelected || isMock || raceStatus === 'next' || raceStatus === 'past';
+  // Always has fleet badge at top-left, plus status badges at top-right
+  const hasTopBadges = true; // Fleet badge is always shown
+  const hasStatusBadge = isSelected || isMock || raceStatus === 'next' || raceStatus === 'past';
 
   const menuItems = useMemo<CardMenuItem[]>(() => {
     const items: CardMenuItem[] = [];
@@ -418,7 +431,7 @@ export function RaceCard({
             styles.card,
             {
               width: cardWidth,
-              height: cardHeight,
+              minHeight: cardHeight,
               opacity: computedOpacity,
             },
             isPrimary && styles.primaryCard,
@@ -438,6 +451,13 @@ export function RaceCard({
         hitSlop={{ top: 0, bottom: 0, left: 0, right: 0 }}
       >
 
+      {/* Menu in upper right corner - absolute positioned */}
+      {menuItems.length > 0 && (
+        <View style={styles.menuContainer}>
+          <CardMenu items={menuItems} />
+        </View>
+      )}
+
       {isSelected && (
         <View style={styles.selectedPill}>
           <CheckCircle2 size={12} color="#1D4ED8" />
@@ -445,40 +465,42 @@ export function RaceCard({
         </View>
       )}
 
+      {/* Fleet Race Type Badge - positioned below Viewing pill when selected */}
+      <View style={[
+        styles.fleetBadge, 
+        isSelected && styles.fleetBadgeWithSelection
+      ]}>
+        <Sailboat size={10} color="#0369A1" />
+        <Text style={styles.fleetBadgeText}>FLEET</Text>
+      </View>
+
       {/* Mock Badge */}
       {isMock && (
-        <View style={[styles.mockBadge, menuItems.length > 0 && styles.badgeShifted]}>
+        <View style={styles.mockBadge}>
           <Text style={styles.mockBadgeText}>DEMO</Text>
         </View>
       )}
 
       {/* Race Status Badge */}
       {!isMock && raceStatus === 'next' && (
-        <View style={[styles.nextBadge, menuItems.length > 0 && styles.badgeShifted]}>
+        <View style={styles.nextBadge}>
           <Text style={styles.nextBadgeText}>⚡ NEXT RACE</Text>
         </View>
       )}
       {!isMock && raceStatus === 'past' && (
-        <View style={[styles.pastBadge, menuItems.length > 0 && styles.badgeShifted]}>
+        <View style={styles.pastBadge}>
           <Text style={styles.pastBadgeText}>✓ COMPLETED</Text>
         </View>
       )}
 
       {/* Header */}
       <View style={[styles.header, hasTopBadges && styles.headerWithBadges]}>
-        <View style={styles.headerTopRow}>
-          <Text
-            style={[styles.raceName, isPrimary && styles.primaryRaceName]}
-            numberOfLines={4}
-          >
-            {name}
-          </Text>
-          {menuItems.length > 0 && (
-            <View style={styles.menuTrigger}>
-              <CardMenu items={menuItems} />
-            </View>
-          )}
-        </View>
+        <Text
+          style={[styles.raceName, isPrimary && styles.primaryRaceName]}
+          numberOfLines={2}
+        >
+          {name}
+        </Text>
         <View style={styles.venueRow}>
           <MapPin size={12} color="#64748B" />
           <Text style={styles.venueText}>{venue}</Text>
@@ -498,17 +520,19 @@ export function RaceCard({
       </View>
 
       {/* Race Timer (Countdown or Active Timer) - Only show on upcoming races */}
-      {!isMock && raceStatus !== 'past' && onRaceComplete ? (
-        <View style={styles.timerContainer}>
-          <RaceTimer
-            raceId={id}
-            raceName={name}
-            raceDate={date}
-            raceTime={startTime}
-            onRaceComplete={onRaceComplete}
-          />
-        </View>
-      ) : raceStatus === 'past' ? (
+      {/* Fixed height container ensures consistent countdown positioning across cards */}
+      <View style={styles.countdownContainer}>
+        {!isMock && raceStatus !== 'past' && onRaceComplete ? (
+          <View style={styles.timerContainer}>
+            <RaceTimer
+              raceId={id}
+              raceName={name}
+              raceDate={date}
+              raceTime={startTime}
+              onRaceComplete={onRaceComplete}
+            />
+          </View>
+        ) : raceStatus === 'past' ? (
         /* Past race - show results or completion status */
         <View style={[styles.countdownSection, styles.pastCountdownSection]}>
           {results ? (
@@ -613,26 +637,33 @@ export function RaceCard({
             </View>
           </View>
         </View>
-      )}
+        )}
+      </View>
 
       {/* Critical Details - Enhanced with consistent visual hierarchy */}
+      {/* Flex: 1 ensures this section expands to fill remaining space */}
       <View style={styles.detailsSection}>
-        {/* Section Label based on data source */}
-        {raceStatus === 'past' ? (
-          <View style={styles.conditionsHeader}>
-            <Text style={styles.conditionsHeaderText}>RACE CONDITIONS</Text>
-          </View>
-        ) : !shouldUseLiveForecast && currentWind ? (
-          <View style={styles.savedForecastHeader}>
-            <Pin size={10} color="#64748B" />
-            <Text style={styles.savedForecastText}>Saved forecast</Text>
-          </View>
-        ) : isLiveForecast ? (
-          <View style={styles.liveForecastHeader}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveForecastText}>Live forecast</Text>
-          </View>
-        ) : null}
+        {/* Section Label based on data source - fixed height wrapper for consistency */}
+        <View style={styles.forecastHeaderWrapper}>
+          {raceStatus === 'past' ? (
+            <View style={styles.conditionsHeader}>
+              <Text style={styles.conditionsHeaderText}>RACE CONDITIONS</Text>
+            </View>
+          ) : !shouldUseLiveForecast && currentWind ? (
+            <View style={styles.savedForecastHeader}>
+              <Pin size={10} color="#64748B" />
+              <Text style={styles.savedForecastText}>Saved forecast</Text>
+            </View>
+          ) : isLiveForecast ? (
+            <View style={styles.liveForecastHeader}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveForecastText}>Live forecast</Text>
+            </View>
+          ) : (
+            /* Placeholder when no header to maintain consistent spacing */
+            <View style={styles.forecastHeaderPlaceholder} />
+          )}
+        </View>
         
         {/* Wind Conditions - Primary environmental data */}
         <View style={styles.environmentalCard}>
@@ -697,13 +728,19 @@ export function RaceCard({
           </View>
         </View>
 
-        {/* VHF Channel - Secondary information */}
-        {critical_details?.vhf_channel && (
-          <View style={styles.detailRow}>
-            <Radio size={12} color="#8B5CF6" />
-            <Text style={styles.detailText}>Ch {critical_details.vhf_channel}</Text>
+        {/* VHF Channel - Styled card for visibility */}
+        {(critical_details?.vhf_channel || vhf_channel) && (
+          <View style={styles.vhfCard}>
+            <View style={styles.vhfContent}>
+              <Radio size={14} color="#8B5CF6" strokeWidth={2.5} />
+              <View style={styles.vhfTextContainer}>
+                <Text style={styles.vhfLabel}>VHF CHANNEL</Text>
+                <Text style={styles.vhfValue}>Ch {critical_details?.vhf_channel || vhf_channel}</Text>
+              </View>
+            </View>
           </View>
         )}
+
       </View>
 
       {/* Start Sequence Timer - Only for upcoming races WITHOUT GPS tracking */}
@@ -780,6 +817,12 @@ const styles = StyleSheet.create({
     elevation: 6,
     transform: [{ translateY: -4 }, { scale: 1.02 }],
   },
+  menuContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 20,
+  },
   selectedPill: {
     position: 'absolute',
     top: 10,
@@ -799,6 +842,30 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginLeft: 4,
+  },
+  fleetBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    zIndex: 10,
+  },
+  fleetBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#0369A1',
+    letterSpacing: 0.5,
+  },
+  fleetBadgeWithSelection: {
+    top: 36, // Move below the "Viewing" pill
   },
   mockBadge: {
     position: 'absolute',
@@ -855,26 +922,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
   },
-  badgeShifted: {
-    right: 44,
-  },
   header: {
     marginBottom: 8,
     marginTop: 6,
-    paddingRight: 90, // Space for NEXT RACE badge
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    paddingRight: 30, // Space for menu
   },
   headerWithBadges: {
     paddingTop: 22,
-  },
-  menuTrigger: {
-    marginLeft: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    zIndex: 4,
   },
   raceName: {
     fontSize: 13,
@@ -1069,11 +1123,20 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   detailsSection: {
+    flex: 1, // Fill remaining card space for consistent layouts
     marginBottom: 8,
     gap: 6,
   },
+  // Fixed height wrapper for forecast headers ensures consistent card layouts
+  forecastHeaderWrapper: {
+    minHeight: 18, // Consistent height for all header states
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  forecastHeaderPlaceholder: {
+    height: 14, // Match header text line height
+  },
   conditionsHeader: {
-    marginBottom: 4,
   },
   conditionsHeaderText: {
     fontSize: 10,
@@ -1086,7 +1149,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 4,
   },
   savedForecastText: {
     fontSize: 9,
@@ -1098,7 +1160,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 4,
   },
   liveDot: {
     width: 6,
@@ -1168,6 +1229,11 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     fontWeight: '500',
   },
+  // Fixed height container for countdown/timer ensures consistent positioning across cards
+  countdownContainer: {
+    minHeight: 90, // Reserve consistent space for countdown/timer/results section
+    justifyContent: 'center',
+  },
   timerContainer: {
     marginBottom: 6,
   },
@@ -1192,5 +1258,32 @@ const styles = StyleSheet.create({
   },
   timelineIndicatorRight: {
     marginLeft: 12,
+  },
+  // VHF Channel card styles
+  vhfCard: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  vhfContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  vhfTextContainer: {
+    flex: 1,
+  },
+  vhfLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#7C3AED',
+    letterSpacing: 0.5,
+  },
+  vhfValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5B21B6',
   },
 });

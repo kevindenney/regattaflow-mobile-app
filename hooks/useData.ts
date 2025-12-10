@@ -93,7 +93,7 @@ export function useRaces() {
       try {
         const { data: rawData, error: dbError } = await api.supabase
           .from('regattas')
-          .select('id, name, start_date, end_date, metadata, created_by, created_at, updated_at')
+          .select('*')
           .eq('created_by', user.id)
           .order('start_date', { ascending: true })
           .limit(100); // Increased to support full season calendars (CSV imports)

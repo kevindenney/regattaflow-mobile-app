@@ -1,5 +1,6 @@
 // Legacy components
 export { RaceCard } from './RaceCard';
+export { RaceCardWithTuning } from './RaceCardWithTuning';
 export { AddRaceModal } from './AddRaceModal';
 export { RaceTimer } from './RaceTimer';
 export { PostRaceInterview } from './PostRaceInterview';

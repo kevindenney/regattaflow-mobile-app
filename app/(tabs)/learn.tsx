@@ -15,16 +15,32 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LearningService, type LearningCourse } from '@/services/LearningService';
 import { useAuth } from '@/providers/AuthProvider';
+import { InstagramExporter } from '@/components/learn';
+
+// System admin emails that can access content export features
+const ADMIN_EMAILS = [
+  '01kdenney@icloud.com',
+  'coachkdenney@icloud.com', 
+  'coach-test@regattaflow.com',
+  'kyle@regattaflow.com',
+  'admin@regattaflow.com',
+  // Add more admin emails as needed
+];
 
 export default function LearnScreen() {
-  const { user } = useAuth();
+  const { user, userType } = useAuth();
   const [courses, setCourses] = useState<LearningCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasProSubscription, setHasProSubscription] = useState(false);
+  const [showInstagramExporter, setShowInstagramExporter] = useState(false);
+
+  // System admins, coaches, and clubs can export content for Instagram
+  const isSystemAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
+  const canExportContent = isSystemAdmin || userType === 'coach' || userType === 'club';
 
   useEffect(() => {
     console.log('[Learn] Component mounted, starting loadCourses...');
@@ -187,9 +203,29 @@ export default function LearnScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Learn</Text>
-        <Text style={styles.headerSubtitle}>Interactive sailing courses</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>Learn</Text>
+            <Text style={styles.headerSubtitle}>Interactive sailing courses</Text>
+          </View>
+          {canExportContent && (
+            <TouchableOpacity
+              style={styles.instagramButton}
+              onPress={() => setShowInstagramExporter(true)}
+            >
+              <MaterialCommunityIcons name="instagram" size={22} color="#E4405F" />
+              <Text style={styles.instagramButtonText}>Share</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
+
+      {/* Instagram Exporter Modal */}
+      <InstagramExporter
+        visible={showInstagramExporter}
+        onClose={() => setShowInstagramExporter(false)}
+        skillName="mark-rounding-execution"
+      />
 
       {loading ? (
         <View style={styles.listContent}>
@@ -252,6 +288,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
@@ -261,6 +302,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     marginTop: 4,
+  },
+  instagramButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF5F7',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+  },
+  instagramButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#E4405F',
   },
   loadingState: {
     flex: 1,

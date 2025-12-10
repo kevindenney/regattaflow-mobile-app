@@ -21,7 +21,7 @@ import { useSavedVenues } from '@/hooks/useSavedVenues';
 import { useAuth } from '@/providers/AuthProvider';
 import { venueDetectionService } from '@/services/location/VenueDetectionService';
 import { VenueMapView } from '@/components/venue/VenueMapView';
-import { NetworkSidebar } from '@/components/venue/NetworkSidebar';
+import { QuickAccessPanel } from '@/components/venue/QuickAccessPanel';
 import { MapControls, MapLayers } from '@/components/venue/MapControls';
 import { VenueDetailsSheet } from '@/components/venue/VenueDetailsSheet';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
@@ -29,6 +29,14 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { VenueHeroCard } from '@/components/venue/VenueHeroCard';
 import { TravelResourceChips } from '@/components/venue/TravelResourceChips';
+import { LiveConditionsCard } from '@/components/venue/LiveConditionsCard';
+import { UpcomingRacesSection } from '@/components/venue/UpcomingRacesSection';
+import { TideCurrentPanel } from '@/components/venue/TideCurrentPanel';
+import { WindPatternCard } from '@/components/venue/WindPatternCard';
+import { FleetCommunityCard } from '@/components/venue/FleetCommunityCard';
+import { RacingIntelSection } from '@/components/venue/RacingIntelSection';
+import { VenueComparisonModal, CompareVenuesButton } from '@/components/venue/VenueComparisonModal';
+import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
 
 interface Venue {
   id: string;
@@ -43,7 +51,7 @@ interface Venue {
 export default function VenueIntelligenceScreen() {
   const { user } = useAuth();
   const { currentVenue: rawCurrentVenue, isDetecting, initializeDetection, setVenueManually } = useVenueIntelligence();
-  const { savedVenueIds, isLoading: savedVenuesLoading } = useSavedVenues();
+  const { savedVenueIds, isLoading: savedVenuesLoading, saveVenue, unsaveVenue, refreshSavedVenues } = useSavedVenues();
 
   // Transform SailingVenue to Venue type for compatibility
   const currentVenue = rawCurrentVenue ? {
@@ -58,9 +66,7 @@ export default function VenueIntelligenceScreen() {
 
 
   // UI State
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedVenueForSheet, setSelectedVenueForSheet] = useState<Venue | null>(null);
-  const [isThreeDEnabled, setIsThreeDEnabled] = useState(false);
   const [areLayersVisible, setAreLayersVisible] = useState(true);
   const [showOnlySavedVenues, setShowOnlySavedVenues] = useState(false);
   const [mapLayers, setMapLayers] = useState<MapLayers>({
@@ -73,7 +79,24 @@ export default function VenueIntelligenceScreen() {
     marinas: false,
     repair: false,
     engines: false,
+    // Racing layers
+    racingAreas: false,
+    courseMarks: false,
+    prohibitedZones: false,
+    currentArrows: false,
   });
+
+  // Venue comparison state
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [savedVenuesList, setSavedVenuesList] = useState<Venue[]>([]);
+
+  // Get live weather for current wind direction (for wind rose)
+  const { weather: liveWeather } = useVenueLiveWeather(
+    currentVenue?.coordinates_lat,
+    currentVenue?.coordinates_lng,
+    currentVenue?.id,
+    currentVenue?.name
+  );
 
   // AI Venue Detection State
   const [isDetectingVenue, setIsDetectingVenue] = useState(false);
@@ -319,6 +342,24 @@ export default function VenueIntelligenceScreen() {
     await handleAskAIAboutVenue(true); // Force refresh
   };
 
+  // Save or unsave current venue
+  const handleSaveVenue = async () => {
+    if (!currentVenue?.id) return;
+    
+    try {
+      if (savedVenueIds.has(currentVenue.id)) {
+        await unsaveVenue(currentVenue.id);
+        Alert.alert('Removed', `${currentVenue.name} removed from saved venues`);
+      } else {
+        await saveVenue(currentVenue.id);
+        Alert.alert('Saved!', `${currentVenue.name} added to your saved venues`);
+      }
+      refreshSavedVenues();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update saved venues');
+    }
+  };
+
   // Initialize venue detection
   useEffect(() => {
     const initVenue = async () => {
@@ -402,9 +443,14 @@ export default function VenueIntelligenceScreen() {
         />
       </View>
 
-      <View style={styles.overlayColumn}>
+      <View style={styles.overlayColumn} pointerEvents="box-none">
         {currentVenue ? (
-          <>
+          <ScrollView 
+            style={styles.overlayScroll} 
+            contentContainerStyle={styles.overlayScrollContent}
+            showsVerticalScrollIndicator={false}
+            pointerEvents="box-none"
+          >
             <VenueHeroCard
               venueName={currentVenue.name}
               country={currentVenue.country}
@@ -424,10 +470,51 @@ export default function VenueIntelligenceScreen() {
                 venueAnalysis?.recommendations?.racing ||
                 'Local sailing intel, service providers, and practice spots at a glance.'
               }
-              onSave={() => setShowOnlySavedVenues(true)}
+              onSave={handleSaveVenue}
               isSaved={savedVenueIds.has(currentVenue.id)}
               latitude={currentVenue.coordinates_lat}
               longitude={currentVenue.coordinates_lng}
+            />
+
+            {/* Live Weather Conditions */}
+            <LiveConditionsCard
+              latitude={currentVenue.coordinates_lat}
+              longitude={currentVenue.coordinates_lng}
+              venueId={currentVenue.id}
+              venueName={currentVenue.name}
+            />
+
+            {/* Tide & Current */}
+            <TideCurrentPanel
+              latitude={currentVenue.coordinates_lat}
+              longitude={currentVenue.coordinates_lng}
+            />
+
+            {/* Wind Patterns */}
+            <WindPatternCard
+              venueId={currentVenue.id}
+              venueName={currentVenue.name}
+              currentWindDirection={liveWeather?.windDirection}
+              currentWindSpeed={liveWeather?.windSpeed}
+            />
+
+            {/* Upcoming Races at Venue */}
+            <UpcomingRacesSection
+              venueId={currentVenue.id}
+              venueName={currentVenue.name}
+              limit={5}
+            />
+
+            {/* Active Fleets */}
+            <FleetCommunityCard
+              venueId={currentVenue.id}
+              venueName={currentVenue.name}
+            />
+
+            {/* Racing Intelligence */}
+            <RacingIntelSection
+              venueId={currentVenue.id}
+              venueName={currentVenue.name}
             />
 
             <TravelResourceChips
@@ -439,7 +526,15 @@ export default function VenueIntelligenceScreen() {
                 }))
               }
             />
-          </>
+
+            {/* Venue Comparison Button */}
+            {savedVenueIds.size >= 2 && (
+              <CompareVenuesButton
+                onPress={() => setShowComparisonModal(true)}
+                savedCount={savedVenueIds.size}
+              />
+            )}
+          </ScrollView>
         ) : (
           <View style={styles.discoveryCard}>
             <ThemedText style={styles.discoveryTitle}>Find your next sailing base</ThemedText>
@@ -465,32 +560,18 @@ export default function VenueIntelligenceScreen() {
         )}
       </View>
 
-      {/* Left Sidebar - Sailing Network */}
-      <NetworkSidebar
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        onPlacePress={(place) => {
-          // Convert NetworkPlace to Venue for compatibility with existing map
-          const venue = {
-            id: place.id,
-            name: place.name,
-            country: place.country,
-            region: place.location.region,
-            venue_type: place.type,
-            coordinates_lat: place.coordinates.lat,
-            coordinates_lng: place.coordinates.lng,
-          };
-          setSelectedVenueForSheet(venue);
-        }}
+      {/* Quick Access Panel - Venue Switcher */}
+      <QuickAccessPanel
+        savedVenueIds={savedVenueIds}
+        currentVenueId={currentVenue?.id}
+        onVenueSelect={(venueId) => setVenueManually(venueId)}
       />
 
       {/* Upper Right Map Controls */}
       <MapControls
-        onToggle3D={() => setIsThreeDEnabled(prev => !prev)}
         onToggleLayers={() => setAreLayersVisible(!areLayersVisible)}
         onToggleSavedVenues={() => setShowOnlySavedVenues(!showOnlySavedVenues)}
         onSearchNearby={initializeDetection}
-        is3DEnabled={isThreeDEnabled}
         areLayersVisible={areLayersVisible}
         showOnlySavedVenues={showOnlySavedVenues}
         savedVenuesCount={savedVenueIds.size}
@@ -784,6 +865,18 @@ export default function VenueIntelligenceScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Venue Comparison Modal */}
+      <VenueComparisonModal
+        visible={showComparisonModal}
+        onClose={() => setShowComparisonModal(false)}
+        venues={savedVenuesList}
+        currentVenueId={currentVenue?.id}
+        onSelectVenue={(venue) => {
+          setShowComparisonModal(false);
+          setVenueManually(venue.id);
+        }}
+      />
     </ThemedView>
   );
 }
@@ -799,10 +892,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Platform.OS === 'ios' ? 80 : 40,
     left: 20,
-    right: 20,
-    gap: 16,
+    width: 420,
+    maxHeight: '70%',
     zIndex: 90,
-    alignItems: 'flex-start',
+    pointerEvents: 'box-none',
+  },
+  overlayScroll: {
+    flex: 1,
+  },
+  overlayScrollContent: {
+    gap: 12,
+    paddingBottom: 20,
   },
   discoveryCard: {
     backgroundColor: 'rgba(255,255,255,0.95)',

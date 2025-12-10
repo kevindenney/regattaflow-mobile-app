@@ -10,6 +10,7 @@ import { createLogger } from '@/lib/utils/logger';
 export interface UseRaceTuningOptions {
   classId?: string | null;
   className?: string | null;
+  boatId?: string | null;  // NEW: Optional boat ID for equipment-aware recommendations
   averageWindSpeed?: number | null;
   windMin?: number | null;
   windMax?: number | null;
@@ -84,6 +85,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const {
     classId,
     className,
+    boatId,
     averageWindSpeed,
     windMin,
     windMax,
@@ -105,14 +107,15 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const hasFetchedRef = useRef(false);
   const lastFetchKeyRef = useRef<string>('');
   
-  // Create a stable key for the current params
-  const fetchKey = `${enabled}-${classId}-${className}-${averageWindSpeed}-${windMin}-${windMax}`;
+  // Create a stable key for the current params (include boatId for equipment-aware fetches)
+  const fetchKey = `${enabled}-${classId}-${className}-${boatId || 'no-boat'}-${averageWindSpeed}-${windMin}-${windMax}`;
 
   const fetchRecommendation = useCallback(async () => {
     console.log('🎣 [useRaceTuningRecommendation] Fetch called with:', {
       enabled,
       classId,
       className,
+      boatId,
       averageWindSpeed,
       windMin,
       windMax,
@@ -139,6 +142,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
       const [result] = await raceTuningService.getRecommendations({
         classId,
         className,
+        boatId,  // Pass boatId for equipment-aware recommendations
         averageWindSpeed: averageWindSpeed ?? undefined,
         windMin,
         windMax,
@@ -155,7 +159,9 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
         guideSource: result.guideSource,
         sectionTitle: result.sectionTitle,
         isAIGenerated: result.isAIGenerated,
-        settingsCount: result.settings?.length
+        settingsCount: result.settings?.length,
+        hasEquipmentContext: !!result.equipmentContext,
+        equipmentNotes: result.equipmentSpecificNotes?.length || 0
       } : 'No recommendation returned');
       setRecommendation(result ?? null);
     } catch (err) {
@@ -165,7 +171,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     } finally {
       setLoading(false);
     }
-  }, [enabled, classId, className, averageWindSpeed, windMin, windMax, windDirection, gusts, waveHeight, currentSpeed, currentDirection, pointsOfSail, limit]);
+  }, [enabled, classId, className, boatId, averageWindSpeed, windMin, windMax, windDirection, gusts, waveHeight, currentSpeed, currentDirection, pointsOfSail, limit]);
 
   useEffect(() => {
     // Only fetch if the key parameters have changed

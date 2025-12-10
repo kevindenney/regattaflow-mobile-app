@@ -73,6 +73,7 @@ export function StartStrategyCard({
   const [savingUserStrategy, setSavingUserStrategy] = useState(false);
   const [learningProfile, setLearningProfile] = useState<LearningProfile | null>(null);
   const [isPersonalized, setIsPersonalized] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
 
   const loadStrategy = useCallback(async () => {
     if (!user) return;
@@ -462,6 +463,79 @@ export function StartStrategyCard({
     }
   };
 
+  // Helper to convert degrees to compass direction
+  const degreesToCompass = (degrees: number): string => {
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 
+                        'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(degrees / 22.5) % 16;
+    return directions[index];
+  };
+
+  // Generate sailor-friendly explanation for why this end is favored
+  const generateWhyExplanation = (): string[] => {
+    if (!strategy) return [];
+    
+    const explanations: string[] = [];
+    const { favoredEnd, windDirection, currentDirection } = strategy;
+    
+    if (favoredEnd === 'boat') {
+      // Wind factor explanation
+      if (windDirection !== undefined) {
+        const compass = degreesToCompass(windDirection);
+        if (windDirection >= 180 && windDirection <= 270) {
+          explanations.push(`Wind from ${compass} (${windDirection}°) creates a starboard tack advantage — starting at the boat end gives you right-of-way over port tack boats.`);
+        } else if (windDirection > 270 || windDirection < 90) {
+          explanations.push(`Wind from ${compass} (${windDirection}°) may be veering right, making the starboard side of the course more favorable after the start.`);
+        } else {
+          explanations.push(`Wind from ${compass} (${windDirection}°) combined with local conditions favors the committee boat end.`);
+        }
+      }
+      
+      // Current factor explanation
+      if (currentDirection !== undefined) {
+        const currentCompass = degreesToCompass(currentDirection);
+        if (currentDirection >= 45 && currentDirection <= 135) {
+          explanations.push(`Easterly current (${currentCompass}, ${currentDirection}°) pushes boats to the left — starting at the boat end keeps you "up-current" with less sideways drift.`);
+        } else if (currentDirection >= 225 && currentDirection <= 315) {
+          explanations.push(`Westerly current (${currentCompass}, ${currentDirection}°) creates favorable positioning at the boat end for the first leg.`);
+        } else {
+          explanations.push(`Current from ${currentCompass} (${currentDirection}°) affects boat positioning — the boat end minimizes adverse current effects.`);
+        }
+      }
+      
+      explanations.push(`Combined advantage: Cleaner air off the line and better positioning toward the first mark.`);
+      
+    } else if (favoredEnd === 'pin') {
+      // Wind factor explanation
+      if (windDirection !== undefined) {
+        const compass = degreesToCompass(windDirection);
+        if (windDirection >= 90 && windDirection <= 180) {
+          explanations.push(`Wind from ${compass} (${windDirection}°) creates a port-favored line — starting at the pin gives you extra distance toward the windward mark.`);
+        } else {
+          explanations.push(`Wind from ${compass} (${windDirection}°) combined with line bias makes the pin end geometrically advantageous.`);
+        }
+      }
+      
+      // Current factor explanation
+      if (currentDirection !== undefined) {
+        const currentCompass = degreesToCompass(currentDirection);
+        explanations.push(`Current from ${currentCompass} (${currentDirection}°) favors the left side — the pin end sets you up for the advantageous side of the course.`);
+      }
+      
+      explanations.push(`Combined advantage: Shorter distance to the first mark and favorable positioning for the beat.`);
+      
+    } else {
+      // Middle
+      explanations.push(`Line appears relatively square — starting in the middle provides flexibility to go either direction.`);
+      explanations.push(`Middle starts offer cleaner air with more escape routes if congested at the ends.`);
+      if (windDirection !== undefined) {
+        explanations.push(`Wind shifts expected — a middle position lets you react to changes without committing early.`);
+      }
+    }
+    
+    return explanations;
+  };
+
   const renderStrategyContent = () => {
     // Show error state
     if (error) {
@@ -536,6 +610,34 @@ export function StartStrategyCard({
                 {strategy.favoredEnd.toUpperCase()} END
               </Text>
             </View>
+
+            {/* Why This End? - Expandable Explanation */}
+            <TouchableOpacity 
+              style={styles.whySection}
+              onPress={() => setShowExplanation(!showExplanation)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.whySectionHeader}>
+                <MaterialCommunityIcons name="lightbulb-outline" size={18} color="#F59E0B" />
+                <Text style={styles.whyTitle}>Why {strategy.favoredEnd} end?</Text>
+                <MaterialCommunityIcons 
+                  name={showExplanation ? "chevron-up" : "chevron-down"} 
+                  size={18} 
+                  color="#64748B" 
+                />
+              </View>
+            </TouchableOpacity>
+
+            {showExplanation && (
+              <View style={styles.explanationBox}>
+                {generateWhyExplanation().map((explanation, index) => (
+                  <View key={index} style={styles.explanationItem}>
+                    <Text style={styles.explanationBullet}>•</Text>
+                    <Text style={styles.explanationText}>{explanation}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {strategy.lineBias !== 0 && (
               <View style={styles.lineBiasContainer}>
@@ -756,6 +858,48 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontWeight: '600',
     marginTop: 4,
+  },
+  whySection: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    overflow: 'hidden',
+  },
+  whySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+  },
+  whyTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  explanationBox: {
+    backgroundColor: '#FEFCE8',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  explanationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  explanationBullet: {
+    fontSize: 14,
+    color: '#D97706',
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  explanationText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#78350F',
+    lineHeight: 20,
   },
   section: {
     gap: 8,

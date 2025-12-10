@@ -13,3 +13,9 @@ export { RigTuningControls } from './RigTuningControls';
 
 // Tuning Guides
 export { TuningGuideList } from './TuningGuideList';
+
+// Equipment Management
+export { BoatEquipmentInventory } from './BoatEquipmentInventory';
+export { EquipmentCard } from './EquipmentCard';
+export { AddEquipmentModal } from './AddEquipmentModal';
+export { MaintenanceGuideCard } from './MaintenanceGuideCard';

@@ -8,9 +8,14 @@ import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
 import { supabase } from '@/services/supabase';
+import { 
+  venueCommunityTipsService, 
+  VenueCommunityTip,
+  TIP_CATEGORIES 
+} from '@/services/venue/VenueCommunityTipsService';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StrategyCard } from './StrategyCard';
 
 const logger = createLogger('UpwindStrategyCard');
@@ -30,6 +35,8 @@ interface UpwindStrategyCardProps {
   raceName: string;
   sailorId?: string;
   raceEventId?: string;
+  venueId?: string;
+  venueName?: string;
 }
 
 const extractSideFromAction = (action: string): 'left' | 'right' | 'middle' | null => {
@@ -54,7 +61,9 @@ export function UpwindStrategyCard({
   raceId,
   raceName,
   sailorId,
-  raceEventId
+  raceEventId,
+  venueId,
+  venueName
 }: UpwindStrategyCardProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -62,6 +71,8 @@ export function UpwindStrategyCard({
   const [error, setError] = useState<string | null>(null);
   const [userStrategy, setUserStrategy] = useState('');
   const [savingUserStrategy, setSavingUserStrategy] = useState(false);
+  const [communityTips, setCommunityTips] = useState<VenueCommunityTip[]>([]);
+  const [showCommunityTips, setShowCommunityTips] = useState(false);
 
   // Use refs to track state for polling without triggering re-renders
   const beatsRef = useRef<BeatRecommendation[]>([]);
@@ -232,6 +243,32 @@ export function UpwindStrategyCard({
     loadUserStrategy();
   }, [user?.id, raceEventId]);
 
+  // Load community tips for the venue
+  useEffect(() => {
+    if (!venueId) return;
+
+    const loadCommunityTips = async () => {
+      try {
+        const tips = await venueCommunityTipsService.getTipsForVenue(venueId, {
+          category: 'tactical_tips', // Focus on upwind-relevant tips
+          limit: 5,
+          includeUserVotes: true
+        });
+        // Also get wind pattern tips
+        const windTips = await venueCommunityTipsService.getTipsForVenue(venueId, {
+          category: 'wind_patterns',
+          limit: 3,
+          includeUserVotes: true
+        });
+        setCommunityTips([...tips, ...windTips].slice(0, 5));
+      } catch (err) {
+        logger.warn('[UpwindStrategyCard] Error loading community tips', err);
+      }
+    };
+
+    loadCommunityTips();
+  }, [venueId]);
+
   // Auto-save user's strategy on change
   // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   const handleUserStrategyChange = async (text: string) => {
@@ -394,6 +431,64 @@ export function UpwindStrategyCard({
             </View>
           </View>
         ))}
+
+        {/* Community Local Knowledge Section */}
+        {communityTips.length > 0 && (
+          <View style={styles.communityTipsSection}>
+            <TouchableOpacity 
+              style={styles.communityTipsHeader}
+              onPress={() => setShowCommunityTips(!showCommunityTips)}
+            >
+              <View style={styles.communityTipsHeaderLeft}>
+                <MaterialCommunityIcons name="account-group" size={18} color="#8B5CF6" />
+                <Text style={styles.communityTipsLabel}>Community Local Knowledge</Text>
+              </View>
+              <View style={styles.communityTipsBadge}>
+                <Text style={styles.communityTipsBadgeText}>{communityTips.length} tips</Text>
+                <MaterialCommunityIcons 
+                  name={showCommunityTips ? "chevron-up" : "chevron-down"} 
+                  size={16} 
+                  color="#8B5CF6" 
+                />
+              </View>
+            </TouchableOpacity>
+            
+            {showCommunityTips && (
+              <View style={styles.communityTipsList}>
+                {communityTips.map((tip) => (
+                  <View key={tip.id} style={styles.communityTipItem}>
+                    <View style={styles.communityTipHeader}>
+                      <MaterialCommunityIcons 
+                        name={(TIP_CATEGORIES[tip.category]?.icon || 'lightbulb') as any}
+                        size={14}
+                        color="#64748B"
+                      />
+                      <Text style={styles.communityTipTitle}>{tip.title}</Text>
+                      {tip.verification_status === 'expert_verified' && (
+                        <MaterialCommunityIcons name="check-decagram" size={12} color="#10B981" />
+                      )}
+                      {tip.verification_status === 'community_verified' && (
+                        <MaterialCommunityIcons name="check-circle" size={12} color="#3B82F6" />
+                      )}
+                    </View>
+                    <Text style={styles.communityTipDescription}>{tip.description}</Text>
+                    <View style={styles.communityTipFooter}>
+                      <View style={styles.communityTipVotes}>
+                        <MaterialCommunityIcons name="thumb-up" size={12} color="#94A3B8" />
+                        <Text style={styles.communityTipVoteCount}>{tip.upvotes - tip.downvotes}</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+                {venueName && (
+                  <Text style={styles.communityTipsHint}>
+                    Tips from sailors who race at {venueName}
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* User Strategy Input Section */}
         {user?.id && raceEventId && (
@@ -594,5 +689,90 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     lineHeight: 20,
+  },
+  // Community Tips Styles
+  communityTipsSection: {
+    marginTop: 16,
+    backgroundColor: '#FAF5FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    overflow: 'hidden',
+  },
+  communityTipsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  communityTipsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  communityTipsLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  communityTipsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  communityTipsBadgeText: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
+  communityTipsList: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  communityTipItem: {
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    padding: 10,
+    gap: 4,
+  },
+  communityTipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  communityTipTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  communityTipDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+    marginLeft: 20,
+  },
+  communityTipFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 20,
+    marginTop: 4,
+  },
+  communityTipVotes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  communityTipVoteCount: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  communityTipsHint: {
+    fontSize: 11,
+    color: '#8B5CF6',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
 });

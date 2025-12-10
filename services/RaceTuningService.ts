@@ -2,16 +2,20 @@
  * Race Tuning Service
  * Builds race-ready rig tuning recommendations by blending extracted tuning guide content
  * with forecast conditions for the active boat class.
+ * 
+ * Enhanced: Now supports boat-specific equipment context for personalized recommendations.
  */
 
 import { tuningGuideService, type TuningGuide } from './tuningGuideService';
 import type { ExtractedSection } from './TuningGuideExtractionService';
 import { raceTuningEngine, type RaceTuningCandidate } from './ai/RaceTuningEngine';
+import { equipmentService, type BoatEquipment } from './EquipmentService';
 import { createLogger } from '@/lib/utils/logger';
 
 export interface RaceTuningRequest {
   classId?: string | null;
   className?: string | null;
+  boatId?: string | null;  // NEW: Optional boat ID for equipment-aware recommendations
   averageWindSpeed?: number | null;
   windMin?: number | null;
   windMax?: number | null;
@@ -22,6 +26,24 @@ export interface RaceTuningRequest {
   currentDirection?: number | null;
   pointsOfSail?: 'upwind' | 'downwind' | 'reach' | 'all';
   limit?: number;
+}
+
+export interface EquipmentContext {
+  boatId: string;
+  boatName?: string;
+  mast?: { manufacturer?: string; model?: string; type?: string };
+  shrouds?: { manufacturer?: string; type?: string };
+  forestay?: { manufacturer?: string; type?: string };
+  backstay?: { manufacturer?: string; type?: string };
+  sails: Array<{
+    type: string;
+    manufacturer?: string;
+    model?: string;
+    racesUsed?: number;
+    conditionRating?: number;
+  }>;
+  hasMaintenanceAlerts: boolean;
+  maintenanceAlerts?: string[];
 }
 
 export interface RaceTuningSetting {
@@ -44,6 +66,9 @@ export interface RaceTuningRecommendation {
   confidence?: number; // AI confidence score (0-1)
   weatherSpecificNotes?: string[]; // AI contextual notes
   caveats?: string[]; // Warnings or limitations
+  // NEW: Equipment-aware fields
+  equipmentContext?: EquipmentContext;
+  equipmentSpecificNotes?: string[]; // Notes specific to user's equipment
 }
 
 const logger = createLogger('RaceTuningService');
@@ -51,10 +76,102 @@ const logger = createLogger('RaceTuningService');
 class RaceTuningService {
   private readonly aiEngine = raceTuningEngine;
 
+  /**
+   * Get equipment context for a boat to personalize tuning recommendations
+   */
+  async getEquipmentContext(boatId: string): Promise<EquipmentContext | null> {
+    try {
+      const equipmentData = await equipmentService.getEquipmentContextForTuning(boatId);
+      const health = await equipmentService.getBoatEquipmentHealth(boatId);
+      const alerts = await equipmentService.getEquipmentRequiringAttention(boatId);
+      
+      // Get boat name
+      const boat = equipmentData.allEquipment[0]?.boat;
+      
+      return {
+        boatId,
+        boatName: boat?.name,
+        mast: equipmentData.mast ? {
+          manufacturer: equipmentData.mast.manufacturer,
+          model: equipmentData.mast.model,
+          type: equipmentData.mast.subcategory,
+        } : undefined,
+        shrouds: equipmentData.shrouds ? {
+          manufacturer: equipmentData.shrouds.manufacturer,
+          type: equipmentData.shrouds.subcategory,
+        } : undefined,
+        forestay: equipmentData.forestay ? {
+          manufacturer: equipmentData.forestay.manufacturer,
+          type: equipmentData.forestay.subcategory,
+        } : undefined,
+        backstay: equipmentData.backstay ? {
+          manufacturer: equipmentData.backstay.manufacturer,
+          type: equipmentData.backstay.subcategory,
+        } : undefined,
+        sails: equipmentData.sails.map(s => ({
+          type: s.category,
+          manufacturer: s.manufacturer,
+          model: s.model,
+          racesUsed: s.total_races_used,
+          conditionRating: s.condition_rating,
+        })),
+        hasMaintenanceAlerts: alerts.length > 0 || !health.race_ready,
+        maintenanceAlerts: alerts.map(a => 
+          `${a.custom_name}: ${a.next_maintenance_date ? `service due ${new Date(a.next_maintenance_date).toLocaleDateString()}` : 'needs attention'}`
+        ),
+      };
+    } catch (error) {
+      logger.error('Failed to get equipment context', { boatId, error });
+      return null;
+    }
+  }
+
+  /**
+   * Generate equipment-specific notes based on user's gear
+   */
+  private generateEquipmentSpecificNotes(
+    equipmentContext: EquipmentContext,
+    settings: RaceTuningSetting[]
+  ): string[] {
+    const notes: string[] = [];
+
+    // Mast-specific notes
+    if (equipmentContext.mast?.manufacturer) {
+      const mastMfr = equipmentContext.mast.manufacturer.toLowerCase();
+      if (mastMfr.includes('selden') || mastMfr.includes('seldén')) {
+        notes.push(`Your Seldén mast may require slightly different base settings - refer to Seldén tuning guide for specifics`);
+      } else if (mastMfr.includes('z-spar')) {
+        notes.push(`Z-Spars typically require more pre-bend - adjust backstay accordingly`);
+      }
+    }
+
+    // Sail-specific notes
+    const mainSail = equipmentContext.sails.find(s => s.type === 'mainsail');
+    if (mainSail) {
+      if (mainSail.racesUsed && mainSail.racesUsed > 100) {
+        notes.push(`Your mainsail has ${mainSail.racesUsed} races - consider slightly fuller entry settings to compensate for cloth stretch`);
+      }
+      if (mainSail.conditionRating && mainSail.conditionRating < 70) {
+        notes.push(`Main at ${mainSail.conditionRating}% condition - may need more halyard tension to maintain shape`);
+      }
+      if (mainSail.manufacturer) {
+        notes.push(`Settings optimized for ${mainSail.manufacturer} sails where possible`);
+      }
+    }
+
+    // Maintenance alerts
+    if (equipmentContext.hasMaintenanceAlerts && equipmentContext.maintenanceAlerts?.length) {
+      notes.push(`⚠️ Equipment alert: ${equipmentContext.maintenanceAlerts[0]}`);
+    }
+
+    return notes;
+  }
+
   async getRecommendations(request: RaceTuningRequest): Promise<RaceTuningRecommendation[]> {
     const {
       classId,
       className,
+      boatId,
       averageWindSpeed,
       windMin,
       windMax,
@@ -70,6 +187,7 @@ class RaceTuningService {
     console.log('🔧 [RaceTuningService] getRecommendations called', {
       classId,
       className,
+      boatId,
       averageWindSpeed,
       windMin,
       windMax,
@@ -81,6 +199,20 @@ class RaceTuningService {
       pointsOfSail,
       limit,
     });
+
+    // NEW: Get equipment context if boatId is provided
+    let equipmentContext: EquipmentContext | null = null;
+    if (boatId) {
+      equipmentContext = await this.getEquipmentContext(boatId);
+      if (equipmentContext) {
+        logger.debug('Equipment context loaded', {
+          boatName: equipmentContext.boatName,
+          hasMast: !!equipmentContext.mast,
+          sailCount: equipmentContext.sails.length,
+          hasAlerts: equipmentContext.hasMaintenanceAlerts,
+        });
+      }
+    }
 
     if (!classId && !className) {
       console.warn('⚠️ [RaceTuningService] No class reference provided, skipping tuning lookup');
@@ -166,7 +298,18 @@ class RaceTuningService {
         } : null
       });
 
-      return recommendations.filter(rec => rec.settings.length > 0);
+      // Enhance recommendations with equipment context if available
+      const filteredRecommendations = recommendations.filter(rec => rec.settings.length > 0);
+      
+      if (equipmentContext && filteredRecommendations.length > 0) {
+        return filteredRecommendations.map(rec => ({
+          ...rec,
+          equipmentContext,
+          equipmentSpecificNotes: this.generateEquipmentSpecificNotes(equipmentContext, rec.settings),
+        }));
+      }
+
+      return filteredRecommendations;
     } catch (error) {
       logger.error('Failed to load tuning recommendations', error);
       return [];

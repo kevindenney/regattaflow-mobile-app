@@ -74,6 +74,11 @@ export class SailingNetworkService {
         return [];
       }
 
+      // Try the view first, fallback to direct query if view doesn't exist
+      let data: any[] = [];
+      let error: any = null;
+
+      // First, try saved_venues_with_details view
       let query = supabase
         .from('saved_venues_with_details')
         .select('*')
@@ -84,7 +89,55 @@ export class SailingNetworkService {
       }
 
       const queryPromise = query.order('is_home_venue', { ascending: false });
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      const viewResult = await Promise.race([queryPromise, timeoutPromise]) as any;
+      
+      error = viewResult.error;
+      data = viewResult.data;
+
+      // If view doesn't exist, fall back to direct saved_venues query
+      if (error && (error.code === '42P01' || error.message?.includes('does not exist'))) {
+        logger.warn('saved_venues_with_details view not found, using fallback query');
+        
+        let fallbackQuery = supabase
+          .from('saved_venues')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (locationName) {
+          fallbackQuery = fallbackQuery.eq('location_name', locationName);
+        }
+
+        const fallbackResult = await Promise.race([
+          fallbackQuery.order('is_home_venue', { ascending: false }),
+          timeoutPromise
+        ]) as any;
+
+        if (fallbackResult.error) {
+          // If saved_venues table also doesn't exist, return empty
+          logger.debug('saved_venues table not found, returning empty network');
+          return [];
+        }
+
+        // Map fallback data (without venue details)
+        return (fallbackResult.data || []).map((item: any) => ({
+          id: item.venue_id || item.id,
+          type: (item.service_type || 'venue') as ServiceType,
+          name: item.location_name || 'Saved Venue',
+          country: item.location_region || 'Unknown',
+          location: {
+            name: item.location_name || '',
+            region: item.location_region || '',
+          },
+          coordinates: {
+            lat: 0,
+            lng: 0,
+          },
+          isSaved: true,
+          savedId: item.id,
+          notes: item.notes,
+          isHomeVenue: item.is_home_venue,
+        }));
+      }
 
       if (error) {
         logger.error('Failed to get network:', error);

@@ -20,6 +20,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -248,11 +249,12 @@ export default function EditBoatScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleCancel} style={styles.headerButton}>
@@ -272,7 +274,11 @@ export default function EditBoatScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={true}
+          contentContainerStyle={styles.scrollContent}
+          nestedScrollEnabled={true}>
           {/* Photo Upload */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Boat Photo</Text>
@@ -538,7 +544,41 @@ export default function EditBoatScreen() {
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+      
+      {/* Sticky Footer - Always render, styled for web */}
+      <View style={styles.stickyFooter}>
+        <Pressable 
+          style={({ pressed }) => [
+            styles.cancelFooterButton,
+            pressed && styles.cancelFooterButtonPressed
+          ]}
+          onPress={handleCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel editing boat"
+        >
+          <Text style={styles.cancelFooterText}>Cancel</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.saveFooterButton, 
+            loading && styles.saveFooterButtonDisabled,
+            pressed && !loading && styles.saveFooterButtonPressed
+          ]}
+          onPress={handleSave}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Save boat changes"
+          accessibilityState={{ disabled: loading }}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.saveFooterText}>Save Changes</Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -546,6 +586,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+    // Ensure container can contain absolutely positioned footer
+    ...(Platform.OS === 'web' && { position: 'relative' as any }),
+  },
+  safeArea: {
+    flex: 1,
   },
   keyboardView: {
     flex: 1,
@@ -587,6 +632,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    // Web-specific fix for scroll
+    ...(Platform.OS === 'web' ? { overflow: 'auto' as any } : {}),
+  },
+  scrollContent: {
+    paddingBottom: 150, // Ensure bottom content is visible above tab bar
+    flexGrow: 1,
   },
   section: {
     backgroundColor: '#FFFFFF',
@@ -782,6 +833,68 @@ const styles = StyleSheet.create({
     color: '#EF4444',
   },
   bottomSpacer: {
-    height: 32,
+    height: Platform.OS === 'web' ? 180 : 120, // Extra space for sticky footer on web
+  },
+  stickyFooter: {
+    ...(Platform.OS === 'web' ? {
+      position: 'fixed' as any,
+      bottom: 60, // Above tab bar
+      left: 0,
+      right: 0,
+      zIndex: 9999,
+      pointerEvents: 'auto' as any,
+    } : {
+      marginTop: 'auto',
+      paddingBottom: 20,
+    }),
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  cancelFooterButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    ...(Platform.OS === 'web' && { cursor: 'pointer' as any }),
+  },
+  cancelFooterButtonPressed: {
+    backgroundColor: '#F1F5F9',
+  },
+  cancelFooterText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  saveFooterButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    backgroundColor: '#3B82F6',
+    ...(Platform.OS === 'web' && { cursor: 'pointer' as any }),
+  },
+  saveFooterButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    ...(Platform.OS === 'web' && { cursor: 'not-allowed' as any }),
+  },
+  saveFooterButtonPressed: {
+    backgroundColor: '#2563EB',
+  },
+  saveFooterText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

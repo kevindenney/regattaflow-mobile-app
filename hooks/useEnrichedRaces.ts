@@ -45,6 +45,9 @@ interface Race {
   venue?: string;
   date: string;
   startTime?: string;
+  boatClass?: string;
+  classId?: string | null; // For rig tuning lookup
+  vhf_channel?: string | null; // VHF channel at top level
   wind?: {
     direction: string;
     speedMin: number;
@@ -58,6 +61,12 @@ interface Race {
   weatherStatus?: 'loading' | 'available' | 'unavailable' | 'error' | 'too_far' | 'past' | 'no_venue';
   weatherError?: string;
   venueCoordinates?: { lat: number; lng: number } | null;
+  critical_details?: {
+    vhf_channel?: string;
+    warning_signal?: string;
+    first_start?: string;
+    [key: string]: any;
+  };
   [key: string]: any;
 }
 
@@ -199,6 +208,62 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         // Extract venue coordinates from metadata (used for weather fetching)
         const venueCoordinates = extractVenueCoordinates(regatta);
 
+        // Extract VHF channel from multiple possible locations
+        // Check top-level column first (where ComprehensiveRaceEntry stores it)
+        const vhfChannel = 
+          regatta.vhf_channel ||  // Top-level database column
+          regatta.metadata?.vhf_channel ||
+          regatta.metadata?.critical_details?.vhf_channel ||
+          regatta.metadata?.communications?.vhf ||
+          // Also check for vhf_channels array (detailed multi-channel format)
+          (Array.isArray(regatta.metadata?.vhf_channels) && regatta.metadata.vhf_channels[0]?.channel) ||
+          null;
+
+        // Build critical_details ensuring VHF channel is included
+        const critical_details = {
+          ...regatta.metadata?.critical_details,
+          vhf_channel: vhfChannel,
+        };
+
+        // Extract class_id for rig tuning lookup
+        const classId = 
+          regatta.class_id ||
+          regatta.metadata?.class_id ||
+          regatta.metadata?.classId ||
+          null;
+
+        // Extract class name - try multiple sources including extracting from race name
+        let className = 
+          regatta.metadata?.class || 
+          regatta.metadata?.class_name ||
+          null;
+
+        // Fallback: Try to extract common boat class names from race name
+        if (!className && regatta.name) {
+          const raceNameLower = regatta.name.toLowerCase();
+          const knownClasses = ['dragon', 'j/80', 'j80', 'laser', 'optimist', 'rs21', 'etchells', 'farr 40', 'irc', 'orc', 'sportsboat'];
+          for (const knownClass of knownClasses) {
+            if (raceNameLower.includes(knownClass)) {
+              className = knownClass.charAt(0).toUpperCase() + knownClass.slice(1);
+              // Normalize some class names
+              if (className.toLowerCase() === 'j80') className = 'J/80';
+              break;
+            }
+          }
+        }
+
+        // Debug logging to understand what data we have - especially VHF
+        console.log(`📡 [useEnrichedRaces] Race "${regatta.name}" VHF sources:`, {
+          'regatta.vhf_channel': regatta.vhf_channel,
+          'metadata.vhf_channel': regatta.metadata?.vhf_channel,
+          'critical_details.vhf_channel': regatta.metadata?.critical_details?.vhf_channel,
+          'communications.vhf': regatta.metadata?.communications?.vhf,
+          'vhf_channels array': regatta.metadata?.vhf_channels,
+          'extracted vhfChannel': vhfChannel,
+          classId,
+          className,
+        });
+
         // First, map to basic race format - preserve created_by for edit permissions
         const baseRace: Race = {
           id: regatta.id,
@@ -206,10 +271,12 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           venue: venueName,
           date: raceDate,
           startTime: regatta.warning_signal_time || extract24HourTime(raceDate),
-          boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
+          boatClass: className || 'Class TBD', // Use extracted class name
+          classId, // Include class_id for rig tuning lookup
+          vhf_channel: vhfChannel, // VHF channel at top level for easy access
           status: regatta.status || 'upcoming',
           strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-          critical_details: regatta.metadata?.critical_details,
+          critical_details,
           created_by: regatta.created_by, // Preserve for edit/delete permission checks
           venueCoordinates, // Include coordinates for weather fetching
         };
@@ -448,22 +515,56 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
     } catch (error) {
       logger.error('[useEnrichedRaces] Error enriching races:', error);
       // Fall back to basic mapping with status indicators
-      setEnrichedRaces(races.map(regatta => ({
-        id: regatta.id,
-        name: regatta.name,
-        venue: regatta.metadata?.venue_name || 'Venue TBD',
-        date: regatta.start_date,
-        startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
-        status: regatta.status || 'upcoming',
-        wind: null,
-        tide: null,
-        weatherStatus: 'error' as const,
-        weatherError: 'Failed to load weather data',
-        strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-        critical_details: regatta.metadata?.critical_details,
-        created_by: regatta.created_by, // Preserve for edit/delete permission checks
-      })));
+      setEnrichedRaces(races.map(regatta => {
+        // Extract VHF channel from multiple possible locations
+        const vhfChannel = 
+          regatta.vhf_channel ||
+          regatta.metadata?.vhf_channel ||
+          regatta.metadata?.critical_details?.vhf_channel ||
+          regatta.metadata?.communications?.vhf ||
+          null;
+
+        // Extract class name - try multiple sources including extracting from race name
+        let className = 
+          regatta.metadata?.class || 
+          regatta.metadata?.class_name ||
+          null;
+
+        // Fallback: Try to extract common boat class names from race name
+        if (!className && regatta.name) {
+          const raceNameLower = regatta.name.toLowerCase();
+          const knownClasses = ['dragon', 'j/80', 'j80', 'laser', 'optimist', 'rs21', 'etchells', 'farr 40', 'irc', 'orc', 'sportsboat'];
+          for (const knownClass of knownClasses) {
+            if (raceNameLower.includes(knownClass)) {
+              className = knownClass.charAt(0).toUpperCase() + knownClass.slice(1);
+              if (className.toLowerCase() === 'j80') className = 'J/80';
+              break;
+            }
+          }
+        }
+
+        return {
+          id: regatta.id,
+          name: regatta.name,
+          venue: regatta.metadata?.venue_name || 'Venue TBD',
+          date: regatta.start_date,
+          startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          boatClass: className || 'Class TBD',
+          classId: regatta.class_id || regatta.metadata?.class_id || regatta.metadata?.classId || null,
+          vhf_channel: vhfChannel, // VHF channel at top level
+          status: regatta.status || 'upcoming',
+          wind: null,
+          tide: null,
+          weatherStatus: 'error' as const,
+          weatherError: 'Failed to load weather data',
+          strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
+          critical_details: {
+            ...regatta.metadata?.critical_details,
+            vhf_channel: vhfChannel,
+          },
+          created_by: regatta.created_by, // Preserve for edit/delete permission checks
+        };
+      }));
     } finally {
       setLoading(false);
     }

@@ -269,19 +269,7 @@ function TabLayoutInner() {
               isClubUser ? styles.tabBarClub : styles.tabBarDefault,
             ],
             tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
-            tabBarLabel: ({ color, focused }) => (
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.tabLabelBase,
-                  isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
-                  { color },
-                  isClubUser && focused && styles.tabLabelClubActive,
-                ]}
-              >
-                {labelText}
-              </Text>
-            ),
+            tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
             tabBarItemStyle: visible
               ? isClubUser
                 ? styles.tabItemClub
@@ -778,25 +766,25 @@ const styles = StyleSheet.create({
   tabBarBase: {
     borderTopWidth: 0,
     elevation: 0,
-    overflow: 'hidden',
     ...Platform.select({
       web: {
         boxShadow: 'none',
-        overflowX: 'hidden',
-        overflowY: 'hidden',
         touchAction: 'none',
         userSelect: 'none',
       } as any,
-      default: { shadowOpacity: 0 },
+      default: { 
+        shadowOpacity: 0,
+        overflow: 'hidden',
+      },
     }),
   },
   tabBarDefault: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    height: 68,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    height: 72,
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     ...Platform.select({
       web: {
         position: 'fixed',
@@ -846,9 +834,19 @@ const styles = StyleSheet.create({
   tabLabelDefault: {
     fontSize: 10,
     fontWeight: '500',
-    marginTop: 2,
-    marginBottom: 0,
+    marginTop: 4,
+    marginBottom: 4,
     letterSpacing: 0.15,
+    ...Platform.select({
+      web: {
+        display: 'block',
+        visibility: 'visible',
+        opacity: 1,
+        height: 'auto',
+        overflow: 'visible',
+      } as any,
+      default: {},
+    }),
   },
   tabLabelClub: {
     fontSize: 11,
@@ -861,14 +859,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabIconDefault: {
-    marginTop: 6,
+    marginTop: 2,
+    marginBottom: 2,
   },
   tabIconClub: {
     marginTop: 0,
     marginBottom: 0,
   },
   tabItemDefault: {
-    paddingVertical: 4,
+    paddingVertical: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabItemClub: {
     paddingVertical: 8,
@@ -917,13 +918,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 8,
-    paddingBottom: 0,
+    paddingTop: 2,
+    paddingBottom: 4,
   },
   hamburgerLabel: {
     fontSize: 10,
-    marginTop: 2,
-    marginBottom: 0,
+    marginTop: 4,
+    marginBottom: 4,
     fontWeight: '500',
   },
   menuOverlay: {

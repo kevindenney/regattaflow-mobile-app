@@ -38,19 +38,47 @@ export class SavedVenueService {
 
     if (!user) throw new Error('User not authenticated');
 
-    // Test: Query saved_venues table directly first
-
-    const { data: directData, error: directError } = await supabase
-      .from('saved_venues')
-      .select('*')
-      .eq('user_id', user.id);
-
+    // Try the view first
     const { data, error } = await supabase
       .from('saved_venues_with_details')
       .select('*')
       .eq('user_id', user.id)
       .order('is_home_venue', { ascending: false })
       .order('saved_at', { ascending: false });
+
+    // If view doesn't exist, fall back to direct table query
+    if (error && (error.code === '42P01' || error.message?.includes('does not exist'))) {
+      console.warn('[SavedVenueService] View not found, using fallback query');
+      
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('saved_venues')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_home_venue', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (fallbackError) {
+        // If table doesn't exist either, return empty array
+        if (fallbackError.code === '42P01' || fallbackError.message?.includes('does not exist')) {
+          console.warn('[SavedVenueService] saved_venues table not found');
+          return [];
+        }
+        throw fallbackError;
+      }
+
+      // Map fallback data to SavedVenueWithDetails format
+      return (fallbackData || []).map((item: any) => ({
+        id: item.venue_id || item.id,
+        name: item.location_name || 'Saved Venue',
+        coordinates: [0, 0] as [number, number],
+        saved_venue_id: item.id,
+        notes: item.notes,
+        is_home_venue: item.is_home_venue,
+        saved_at: item.created_at,
+        country: item.location_region,
+        region: item.location_region,
+      }));
+    }
 
     if (error) throw error;
     return data || [];
@@ -195,12 +223,45 @@ export class SavedVenueService {
 
     if (!user) return null;
 
+    // Try the view first
     const { data, error } = await supabase
       .from('saved_venues_with_details')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_home_venue', true)
       .maybeSingle();
+
+    // If view doesn't exist, fall back to direct table query
+    if (error && (error.code === '42P01' || error.message?.includes('does not exist'))) {
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('saved_venues')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_home_venue', true)
+        .maybeSingle();
+
+      if (fallbackError) {
+        if (fallbackError.code === '42P01' || fallbackError.message?.includes('does not exist')) {
+          return null;
+        }
+        throw fallbackError;
+      }
+
+      if (!fallbackData) return null;
+
+      // Map to SavedVenueWithDetails
+      return {
+        id: fallbackData.venue_id || fallbackData.id,
+        name: fallbackData.location_name || 'Home Venue',
+        coordinates: [0, 0] as [number, number],
+        saved_venue_id: fallbackData.id,
+        notes: fallbackData.notes,
+        is_home_venue: fallbackData.is_home_venue,
+        saved_at: fallbackData.created_at,
+        country: fallbackData.location_region,
+        region: fallbackData.location_region,
+      };
+    }
 
     if (error) throw error;
     return data;

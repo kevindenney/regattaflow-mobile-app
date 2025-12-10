@@ -26,6 +26,7 @@ import { MaintenanceSchedule } from '@/components/boats/MaintenanceSchedule';
 import { Boat3DViewer } from '@/components/boats/Boat3DViewer';
 import { RigTuningControls } from '@/components/boats/RigTuningControls';
 import { TuningGuideList } from '@/components/boats/TuningGuideList';
+import { BoatEquipmentInventory } from '@/components/boats/BoatEquipmentInventory';
 import { createLogger } from '@/lib/utils/logger';
 import { supabase } from '@/services/supabase';
 import { useBoatPerformanceStats } from '@/hooks/useBoatPerformanceStats';
@@ -431,10 +432,14 @@ export default function BoatDetailScreen() {
         {activeTab === 'sails' && <SailInventory boatId={boat.id} />}
         {activeTab === 'rigging' && <RiggingConfig boatId={boat.id} />}
         {activeTab === 'equipment' && (
-          <View style={styles.placeholderContainer}>
-            <Ionicons name="construct-outline" size={64} color="#CBD5E1" />
-            <Text style={styles.placeholderText}>Equipment coming soon</Text>
-          </View>
+          <BoatEquipmentInventory
+            boatId={boat.id}
+            classId={boat.classId}
+            onEquipmentPress={(equipment) => {
+              // TODO: Navigate to equipment detail or show modal
+              logger.debug('Equipment pressed:', equipment.id);
+            }}
+          />
         )}
         {activeTab === 'maintenance' && <MaintenanceSchedule boatId={boat.id} />}
         {activeTab === 'performance' && (

@@ -24,6 +24,7 @@ import Constants from 'expo-constants';
 import { DocumentProcessingService } from './DocumentProcessingService';
 import { sailingEducationService } from './SailingEducationService';
 import { skillManagementService, detectRaceType, SKILL_REGISTRY } from './SkillManagementService';
+import { venueCommunityTipsService } from '@/services/venue/VenueCommunityTipsService';
 
 export interface RaceConditions {
   wind: {
@@ -357,13 +358,14 @@ export class RaceStrategyEngine {
       // This saves ~$0.01-0.05 per repeated request
       const cacheKey = {
         type: 'venue-strategy',
+        version: 2, // Increment to invalidate old cache entries
         venueId,
         raceName: raceContext.raceName,
         windSpeed: Math.round(currentConditions.wind.speed),
         windDir: Math.round(currentConditions.wind.direction / 10) * 10, // Round to nearest 10°
       };
 
-      const { strategy, educationalInsights } = await cachedAICall(
+      const cachedResult = await cachedAICall(
         cacheKey,
         async () => {
           // Step 2: Generate educational insights for venue
@@ -388,6 +390,10 @@ export class RaceStrategyEngine {
         },
         10 * 60 * 1000 // 10 minute cache
       );
+
+      // Handle both old and new cache formats for backwards compatibility
+      const strategy = (cachedResult as any)?.strategy ?? cachedResult;
+      const educationalInsights = (cachedResult as any)?.educationalInsights ?? null;
 
       // Step 4: Generate contingency plans
 
@@ -513,6 +519,30 @@ export class RaceStrategyEngine {
       ? this.buildSailorProfilePromptSection(raceContext.sailorProfile)
       : '';
 
+    // NEW: Fetch community-contributed local knowledge tips relevant to current conditions
+    let communityTipsSection = '';
+    try {
+      const communityTips = await venueCommunityTipsService.getRelevantTipsForConditions(
+        venue.id,
+        {
+          wind_direction: conditions.wind.direction,
+          wind_speed: conditions.wind.speed,
+          tide_phase: conditions.current.tidePhase === 'slack' ? 'any' : conditions.current.tidePhase,
+        },
+        8 // Get top 8 most relevant tips
+      );
+      
+      if (communityTips.length > 0) {
+        communityTipsSection = '\n' + venueCommunityTipsService.formatTipsForAIPrompt(communityTips);
+        logger.debug(`Including ${communityTips.length} community tips in strategy prompt`);
+        
+        // Mark tips as used (async, non-blocking)
+        communityTips.forEach(tip => venueCommunityTipsService.markTipUsed(tip.id));
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch community tips, continuing without them:', error);
+    }
+
     const strategyPrompt = `Generate a comprehensive venue-based race strategy for ${raceContext.raceName} at ${venue.name}. Use your race strategy expertise to combine theory (what/why) with execution (how).
 
 VENUE INTELLIGENCE:
@@ -525,7 +555,7 @@ VENUE INTELLIGENCE:
 - Tactical Considerations: ${venue.localKnowledge.tacticalConsiderations.join('; ')}
 - Common Mistakes: ${venue.localKnowledge.commonMistakes.join('; ')}
 - Expert Tips: ${venue.localKnowledge.expertTips.join('; ')}
-${userDefinedRacingArea}
+${userDefinedRacingArea}${communityTipsSection}
 
 CURRENT CONDITIONS:
 - Wind: ${conditions.wind.speed} knots from ${conditions.wind.direction}°

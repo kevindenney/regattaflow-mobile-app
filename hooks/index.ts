@@ -15,6 +15,19 @@ export { useClaudeDraft } from './ai/useClaudeDraft';
 export { useAIChatSession } from './ai/useAIChatSession';
 export { useRaceCommsDraft } from './ai/useRaceCommsDraft';
 
+// Venue Racing Enhancement Hooks
+export { useVenueLiveWeather } from './useVenueLiveWeather';
+export type { LiveWeatherData, UseVenueLiveWeatherResult } from './useVenueLiveWeather';
+
+export { useVenueRaces } from './useVenueRaces';
+export type { VenueRace, UseVenueRacesResult } from './useVenueRaces';
+
+export { useVenueRacingAreas } from './useVenueRacingAreas';
+export type { VenueRacingArea, RacingAreaGeometry, UseVenueRacingAreasResult } from './useVenueRacingAreas';
+
+export { useVenueFleetInfo, getFrequencyLabel } from './useVenueFleetInfo';
+export type { VenueFleet, UseVenueFleetInfoResult } from './useVenueFleetInfo';
+
 export type {
   SailorDashboardData,
 } from './useSailorDashboardData';

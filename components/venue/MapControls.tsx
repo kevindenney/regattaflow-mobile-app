@@ -23,6 +23,11 @@ export interface MapLayers {
   marinas: boolean;
   repair: boolean;
   engines: boolean;
+  // Racing layers
+  racingAreas: boolean;
+  courseMarks: boolean;
+  prohibitedZones: boolean;
+  currentArrows: boolean;
 }
 
 interface MapControlsProps {
@@ -65,6 +70,11 @@ export function MapControls({
     marinas: false,
     repair: false,
     engines: false,
+    // Racing layers
+    racingAreas: false,
+    courseMarks: false,
+    prohibitedZones: false,
+    currentArrows: false,
   });
 
   const layers = externalLayers || internalLayers;
@@ -86,23 +96,6 @@ export function MapControls({
     <View style={styles.container}>
       {/* Main Control Bar */}
       <View style={styles.controlBar}>
-        {/* 3D/2D Toggle */}
-        {onToggle3D && (
-          <TouchableOpacity
-            style={[styles.controlButton, is3DEnabled && styles.controlButtonActive]}
-            onPress={onToggle3D}
-          >
-            <Ionicons
-              name="cube-outline"
-              size={20}
-              color={is3DEnabled ? '#007AFF' : '#333'}
-            />
-            <ThemedText style={[styles.buttonText, is3DEnabled && styles.buttonTextActive]}>
-              3D
-            </ThemedText>
-          </TouchableOpacity>
-        )}
-
         {/* Layers Toggle */}
         {onToggleLayers && (
           <TouchableOpacity
@@ -234,6 +227,41 @@ export function MapControls({
             </View>
             {layers.engines && <Ionicons name="checkmark" size={20} color="#8e8e93" />}
           </TouchableOpacity>
+
+          <View style={styles.layerMenuDivider} />
+          <ThemedText style={styles.layerSectionTitle}>Racing Intel</ThemedText>
+
+          <TouchableOpacity style={styles.layerMenuItem} onPress={() => toggleLayer('racingAreas')}>
+            <View style={styles.layerItemLeft}>
+              <Ionicons name="map-outline" size={18} color="#0284c7" />
+              <ThemedText style={styles.layerItemText}>Racing Areas</ThemedText>
+            </View>
+            {layers.racingAreas && <Ionicons name="checkmark" size={20} color="#0284c7" />}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.layerMenuItem} onPress={() => toggleLayer('courseMarks')}>
+            <View style={styles.layerItemLeft}>
+              <Ionicons name="flag-outline" size={18} color="#f97316" />
+              <ThemedText style={styles.layerItemText}>Course Marks</ThemedText>
+            </View>
+            {layers.courseMarks && <Ionicons name="checkmark" size={20} color="#f97316" />}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.layerMenuItem} onPress={() => toggleLayer('prohibitedZones')}>
+            <View style={styles.layerItemLeft}>
+              <Ionicons name="warning-outline" size={18} color="#dc2626" />
+              <ThemedText style={styles.layerItemText}>Prohibited Zones</ThemedText>
+            </View>
+            {layers.prohibitedZones && <Ionicons name="checkmark" size={20} color="#dc2626" />}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.layerMenuItem} onPress={() => toggleLayer('currentArrows')}>
+            <View style={styles.layerItemLeft}>
+              <Ionicons name="git-merge-outline" size={18} color="#0891b2" />
+              <ThemedText style={styles.layerItemText}>Current Arrows</ThemedText>
+            </View>
+            {layers.currentArrows && <Ionicons name="checkmark" size={20} color="#0891b2" />}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -351,6 +379,15 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#e1e5e9',
     marginVertical: 8,
+  },
+  layerSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 8,
+    marginBottom: 8,
   },
 
   // Quick Actions (Zoom Controls)
