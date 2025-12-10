@@ -1,3 +1,8 @@
+// 🔍 DEBUG: Track app initialization
+if (typeof window !== 'undefined') {
+  console.log('[RootLayout] 🚀 Module loading started - window exists');
+}
+
 import React, {useEffect} from 'react';
 import {Platform} from 'react-native';
 import {Stack} from 'expo-router';
@@ -17,6 +22,11 @@ import '@/global.css';
 
 // Initialize i18n (must be imported before any components that use translations)
 import '@/lib/i18n';
+
+// 🔍 DEBUG: Track module imports completed
+if (typeof window !== 'undefined') {
+  console.log('[RootLayout] ✅ All imports completed');
+}
 
 let FontFaceObserverModule: any = null;
 try {
@@ -75,13 +85,13 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
 
   console.error = (...args) => {
     // Suppress font loading timeout errors (non-critical)
+    // NOTE: We no longer suppress "Unexpected text node" to debug hydration issues
     if (
       typeof args[0] === 'string' &&
       (args[0].includes('timeout exceeded') ||
        args[0].includes('6000ms') ||
        args[0].includes('60000ms') ||
-       args[0].includes('fontfaceobserver') ||
-       args[0].includes('Unexpected text node'))
+       args[0].includes('fontfaceobserver'))
     ) {
       return;
     }
@@ -90,8 +100,7 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
         (args[0].message?.includes('timeout exceeded') ||
          args[0].message?.includes('6000ms') ||
          args[0].message?.includes('60000ms') ||
-         args[0].message?.includes('fontfaceobserver') ||
-         args[0].message?.includes('Unexpected text node'))) {
+         args[0].message?.includes('fontfaceobserver'))) {
       return;
     }
     originalError.apply(console, args);
@@ -189,6 +198,18 @@ export default function RootLayout() {
       `;
       document.head.appendChild(style);
 
+      // Set custom sailboat favicon (using data URI for reliable loading)
+      const sailboatSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230066CC"/><g transform="translate(5,4)"><path d="M11 3 L11 19 L4 19 Q4 10 11 3Z" fill="white"/><path d="M11 6 L11 16 L16 16 Q16 11 11 6Z" fill="white" opacity="0.85"/><path d="M3 20 L19 20 L17 24 L5 24 Z" fill="white"/></g></svg>`;
+      const existingFavicon = document.querySelector('link[rel="icon"]');
+      if (existingFavicon) {
+        existingFavicon.remove();
+      }
+      const favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      favicon.type = 'image/svg+xml';
+      favicon.href = `data:image/svg+xml,${sailboatSvg}`;
+      document.head.appendChild(favicon);
+
       // Register Service Worker for offline bathymetry tile caching (prod only)
       if ('serviceWorker' in navigator) {
         if (process.env.NODE_ENV === 'production') {
@@ -238,6 +259,10 @@ export default function RootLayout() {
       return () => {
         document.head.removeChild(style);
         document.removeEventListener('focusin', handleFocusIn, true);
+        const addedFavicon = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
+        if (addedFavicon) {
+          addedFavicon.remove();
+        }
       };
     }
   }, []);
