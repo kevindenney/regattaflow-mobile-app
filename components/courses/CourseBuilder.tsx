@@ -145,11 +145,11 @@ export function CourseBuilder({
     preferredDirection: initialCourse?.windRange?.preferredDirection ?? undefined,
   });
 
-  const panelHeight = useRef(new Animated.Value(panelExpanded ? 340 : 80)).current;
+  const panelHeight = useRef(new Animated.Value(panelExpanded ? 440 : 80)).current;
 
   useEffect(() => {
     Animated.spring(panelHeight, {
-      toValue: panelExpanded ? 340 : 80,
+      toValue: panelExpanded ? 440 : 80,
       useNativeDriver: false,
       friction: 12,
     }).start();
@@ -427,7 +427,8 @@ export function CourseBuilder({
           {/* Panel Content */}
           <ScrollView
             style={styles.panelScroll}
-            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.panelScrollContent}
+            showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
           >
             {/* Course Name Input */}
@@ -979,6 +980,10 @@ const styles = {
   panelScroll: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  panelScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   inputGroup: {
     marginTop: 16,

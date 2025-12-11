@@ -24,7 +24,7 @@ interface CourseSelectorProps {
   venueId?: string;
   venueName?: string;
   venueCoordinates?: { lat: number; lng: number };
-  onCourseSelected: (marks: Mark[]) => void;
+  onCourseSelected: (marks: Mark[], courseName?: string) => void;
   currentWindDirection?: number;
   currentWindSpeed?: number;
   autoSelectCourseId?: string;
@@ -403,8 +403,8 @@ export function CourseSelector({
       await CourseLibraryService.recordCourseUsage(course.id);
     }
 
-    // Pass marks to parent
-    onCourseSelected(marks);
+    // Pass marks and course name to parent
+    onCourseSelected(marks, course.name);
 
     setShowModal(false);
     onAutoSelectComplete?.();

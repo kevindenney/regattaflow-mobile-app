@@ -24,7 +24,7 @@ import {
   Timer,
   PlayCircle,
   ChevronRight,
-  Radio
+  Radio,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
@@ -45,6 +45,7 @@ export interface DistanceRaceCardProps {
   totalDistanceNm?: number;
   timeLimitHours?: number;
   routeWaypoints?: RouteWaypoint[];
+  courseName?: string | null; // Selected course name
   
   // Weather (at start location)
   wind?: {
@@ -77,6 +78,7 @@ export function DistanceRaceCard({
   totalDistanceNm,
   timeLimitHours,
   routeWaypoints = [],
+  courseName,
   wind,
   vhf_channel,
   isPrimary = false,
@@ -93,8 +95,8 @@ export function DistanceRaceCard({
   // Determine if it's a circumnavigation (same start/finish) or point-to-point
   const isSameStartFinish = !finishVenue || finishVenue === startVenue;
   
-  // Count waypoints
-  const waypointCount = routeWaypoints.filter(w => w.type === 'waypoint' || w.type === 'gate').length;
+  // Count waypoints (handle null/undefined)
+  const waypointCount = (routeWaypoints || []).filter(w => w.type === 'waypoint' || w.type === 'gate').length;
   
   // Format date
   const formattedDate = useMemo(() => {
@@ -244,6 +246,14 @@ export function DistanceRaceCard({
             <MapPin size={12} color="#64748B" />
             <Text style={styles.venueText}>{startVenue}</Text>
           </View>
+          
+          {/* Course Name - show if selected */}
+          {courseName && (
+            <View style={styles.courseRow}>
+              <Route size={12} color="#7C3AED" />
+              <Text style={styles.courseText}>{courseName}</Text>
+            </View>
+          )}
         
           {/* Countdown Section - Right after name/venue to match Fleet card */}
           {raceStatus !== 'past' ? (
@@ -513,6 +523,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#64748B',
+  },
+  courseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  courseText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   routeVisualization: {
     backgroundColor: 'rgba(255,255,255,0.7)',

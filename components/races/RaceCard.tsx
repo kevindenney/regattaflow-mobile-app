@@ -11,7 +11,7 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2, Trophy, Medal, Award, Pin, Sailboat } from 'lucide-react-native';
+import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2, Trophy, Medal, Award, Pin, Sailboat, Route } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { calculateCountdown } from '@/constants/mockData';
 import { RaceTimer } from './RaceTimer';
@@ -65,6 +65,7 @@ export interface RaceCardProps {
   venue: string;
   date: string; // ISO date
   startTime: string;
+  courseName?: string | null; // Selected course name (e.g., "Course A", "Windward-Leeward")
   wind?: {
     direction: string;
     speedMin: number;
@@ -105,6 +106,7 @@ export function RaceCard({
   venue,
   date,
   startTime,
+  courseName,
   wind,
   tide,
   weatherStatus,
@@ -505,6 +507,13 @@ export function RaceCard({
           <MapPin size={12} color="#64748B" />
           <Text style={styles.venueText}>{venue}</Text>
         </View>
+        {/* Course Name - show if selected */}
+        {courseName && (
+          <View style={styles.courseRow}>
+            <Route size={12} color="#7C3AED" />
+            <Text style={styles.courseText}>{courseName}</Text>
+          </View>
+        )}
         {/* Race Date & Time - only show when RaceTimer is NOT displayed */}
         {(isMock || raceStatus === 'past' || !onRaceComplete) && (
           <View style={styles.dateTimeRow}>
@@ -952,6 +961,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#64748B',
+  },
+  courseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  courseText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   dateTimeRow: {
     marginTop: 4,

@@ -83,8 +83,8 @@ type AuthCtx = {
   signIn: (identifier: string, password: string) => Promise<void>
   signUp: (email: string, username: string, password: string, persona: PersonaRole) => Promise<any>
   signOut: () => Promise<void>
-  signInWithGoogle: () => Promise<void>
-  signInWithApple: () => Promise<void>
+  signInWithGoogle: (persona?: PersonaRole) => Promise<void>
+  signInWithApple: (persona?: PersonaRole) => Promise<void>
   biometricAvailable: boolean
   biometricEnabled: boolean
   userProfile?: any
@@ -936,11 +936,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (persona?: PersonaRole) => {
     setLoading(true)
     try {
       authDebugLog('🔍 [LOGIN] Google sign-in button clicked')
-      authDebugLog('🔍 [LOGIN] Calling signInWithGoogle()')
+      authDebugLog('🔍 [LOGIN] Calling signInWithGoogle() with persona:', persona)
+
+      // Store the selected persona in localStorage before OAuth redirect
+      if (persona && typeof window !== 'undefined') {
+        localStorage.setItem('oauth_pending_persona', persona)
+        authDebugLog('🔍 [LOGIN] Stored pending persona in localStorage:', persona)
+      }
 
       if (Platform.OS === 'web') {
         // Dynamic origin configuration - works on any port
@@ -963,25 +969,52 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       }
     } catch (error) {
       console.error('🔍 [LOGIN] Google sign-in failed:', error)
+      // Clear the stored persona on error
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('oauth_pending_persona')
+      }
       throw error
     } finally {
       setLoading(false)
     }
   }
 
-  const signInWithApple = async () => {
+  const signInWithApple = async (persona?: PersonaRole) => {
     setLoading(true)
     try {
+      authDebugLog('🔍 [LOGIN] Apple sign-in button clicked')
+      authDebugLog('🔍 [LOGIN] Calling signInWithApple() with persona:', persona)
+
+      // Store the selected persona in localStorage before OAuth redirect
+      if (persona && typeof window !== 'undefined') {
+        localStorage.setItem('oauth_pending_persona', persona)
+        authDebugLog('🔍 [LOGIN] Stored pending persona in localStorage:', persona)
+      }
+
       if (Platform.OS === 'web') {
+        // Dynamic origin configuration - works on any port
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+        const redirectTo = `${currentOrigin}/callback`
+
         // For web, use Supabase's OAuth flow
         const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'apple'
+          provider: 'apple',
+          options: {
+            redirectTo
+          }
         })
         if (error) throw error
       } else {
         // For mobile, we'd need to implement the full OAuth flow
         throw new Error('Apple sign-in not yet implemented for mobile')
       }
+    } catch (error) {
+      console.error('🔍 [LOGIN] Apple sign-in failed:', error)
+      // Clear the stored persona on error
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('oauth_pending_persona')
+      }
+      throw error
     } finally {
       setLoading(false)
     }

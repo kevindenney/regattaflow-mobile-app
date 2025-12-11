@@ -8,6 +8,27 @@ import {createLogger} from '@/lib/utils/logger'
 
 const logger = createLogger('OAuthCallback')
 
+type PersonaRole = 'sailor' | 'coach' | 'club'
+
+// Storage key for pending persona from signup flow
+const OAUTH_PENDING_PERSONA_KEY = 'oauth_pending_persona'
+
+// Get and clear the pending persona from localStorage
+const getPendingPersona = (): PersonaRole | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const persona = localStorage.getItem(OAUTH_PENDING_PERSONA_KEY)
+    if (persona && ['sailor', 'coach', 'club'].includes(persona)) {
+      localStorage.removeItem(OAUTH_PENDING_PERSONA_KEY)
+      logger.info('Retrieved pending persona from localStorage:', persona)
+      return persona as PersonaRole
+    }
+  } catch (e) {
+    logger.warn('Failed to read pending persona from localStorage:', e)
+  }
+  return null
+}
+
 export default function Callback(){
   const ran = useRef(false)
   const [status, setStatus] = useState('Processing authentication...')
@@ -81,6 +102,10 @@ export default function Callback(){
         logger.error('History replace error:', e)
       }
 
+      // Check for pending persona from signup flow
+      const pendingPersona = getPendingPersona()
+      logger.info('Pending persona from signup:', pendingPersona)
+
       // Fetch user profile to determine routing with timeout
       try {
         logger.info('Fetching user profile for user:', session.user.id, session.user.email)
@@ -105,7 +130,36 @@ export default function Callback(){
           error: profileError
         })
 
-        if (profileError) {
+        // Determine the user type - use pending persona if profile doesn't have one yet
+        let effectiveUserType = profile?.user_type
+        const isNewUser = !profile || !profile.user_type
+
+        if (pendingPersona && isNewUser) {
+          logger.info('Applying pending persona to new OAuth user:', pendingPersona)
+          setStatus('Setting up your account...')
+
+          // Create or update the user profile with the selected persona
+          const profilePayload = {
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+            user_type: pendingPersona,
+            onboarding_completed: false, // They still need to go through persona-specific onboarding
+          }
+
+          const { error: upsertError } = await supabase
+            .from('users')
+            .upsert(profilePayload, { onConflict: 'id' })
+
+          if (upsertError) {
+            logger.error('Failed to save persona to profile:', upsertError)
+          } else {
+            logger.info('Successfully saved persona to profile:', pendingPersona)
+            effectiveUserType = pendingPersona
+          }
+        }
+
+        if (profileError && !pendingPersona) {
           logger.warn('Profile fetch error, routing to default dashboard:', profileError)
           setStatus('Setting up your account...')
           const destination = getDashboardRoute(null)
@@ -114,12 +168,34 @@ export default function Callback(){
           return
         }
 
-        const dest = getDashboardRoute(profile?.user_type ?? null)
-        logger.info('Redirecting to dashboard:', dest)
-        setStatus('Redirecting to dashboard...')
-        setTimeout(() => {
-          router.replace(dest as any)
-        }, 100)
+        // Route based on the effective user type
+        // If new user with persona, route to appropriate onboarding
+        if (pendingPersona && isNewUser) {
+          logger.info('Routing new OAuth user to onboarding for persona:', pendingPersona)
+          setStatus('Redirecting to setup...')
+          
+          let onboardingRoute: string
+          if (pendingPersona === 'sailor') {
+            onboardingRoute = '/(auth)/sailor-onboarding-comprehensive'
+          } else if (pendingPersona === 'coach') {
+            onboardingRoute = '/(auth)/coach-onboarding-welcome'
+          } else if (pendingPersona === 'club') {
+            onboardingRoute = '/(auth)/club-onboarding-chat'
+          } else {
+            onboardingRoute = getDashboardRoute(pendingPersona)
+          }
+          
+          setTimeout(() => {
+            router.replace(onboardingRoute as any)
+          }, 100)
+        } else {
+          const dest = getDashboardRoute(effectiveUserType ?? null)
+          logger.info('Redirecting to dashboard:', dest)
+          setStatus('Redirecting to dashboard...')
+          setTimeout(() => {
+            router.replace(dest as any)
+          }, 100)
+        }
       } catch (e) {
         logger.error('Profile fetch error:', e)
         setStatus('Setting up your account...')

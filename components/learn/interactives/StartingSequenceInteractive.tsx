@@ -457,228 +457,228 @@ export function StartingSequenceInteractive({
   return (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <View style={styles.container}>
-        {/* Animation + Info Panel Row */}
-        <View style={styles.mainRow}>
-          {/* SVG Animation */}
-          <View style={styles.svgWrapper}>
-            {/* Overlay - only covers animation area */}
-            {!hasUserInteracted && (
-              <View style={styles.overlay}>
-                <TouchableOpacity style={styles.startButton} onPress={handleInteraction}>
-                  <Ionicons name="play" size={24} color="#FFFFFF" />
-                  <Text style={styles.startButtonText}>Enable Audio and Start Lesson</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <View style={styles.svgContainer}>
-              <Svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox="0 0 800 450">
-                <Defs>
-                  <Pattern id="water-texture" patternUnits="userSpaceOnUse" width="40" height="20">
-                    <Path d="M 0 10 C 10 0, 30 0, 40 10 T 80 10" stroke="#99ccee" fill="none" strokeWidth="1" />
-                  </Pattern>
-                  <Marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-                    <Polygon points="0,0 10,3.5 0,7" fill="#000" />
-                  </Marker>
-                </Defs>
-                
-                {/* Water background */}
-                <Rect width="800" height="450" fill="#aaccff" />
-                <Rect width="800" height="450" fill="url(#water-texture)" />
-                
-                {/* Animated clouds (decorative) */}
-                <G opacity={0.7}>
-                  <Path d="M 50 40 Q 60 20 80 30 T 120 40 H 50 Z" fill="white" opacity={0.7} />
-                  <Path d="M 200 35 Q 215 15 235 25 T 280 35 H 200 Z" fill="white" opacity={0.6} />
-                  <Path d="M 450 45 Q 465 25 485 35 T 530 45 H 450 Z" fill="white" opacity={0.75} />
-                </G>
-                
-                {/* Pin end (orange buoy) */}
-                <Circle cx="200" cy="200" r="10" fill="orange" stroke="black" strokeWidth="2" />
-                <SvgText x="200" y="175" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                  Pin
-                </SvgText>
-                
-                {/* Start line - from pin buoy to RC boat orange flag (at ~630, 200) */}
-                <Line x1="200" y1="200" x2="630" y2="200" stroke="black" strokeWidth="2" strokeDasharray="5,5" />
-                <SvgText x="415" y="190" textAnchor="middle" fontSize="14" fontWeight="600" fill="#000">
-                  Start Line
-                </SvgText>
-                
-                {/* Laylines - showing the "box" area south of the start line */}
-                <G opacity={0.4}>
-                  {/* Pin layline - from east side of pin towards SOUTHEAST */}
-                  <Line x1="210" y1="200" x2="320" y2="380" stroke="black" strokeWidth="1" strokeDasharray="5,5" />
-                  {/* RC boat layline - from southwest edge of RC boat towards SOUTHEAST */}
-                  <Line x1="620" y1="210" x2="750" y2="380" stroke="black" strokeWidth="1" strokeDasharray="5,5" />
-                  <SvgText x="500" y="340" textAnchor="middle" fontSize="12" fontWeight="600" fill="#64748B" opacity={0.7}>
-                    The Box
-                  </SvgText>
-                </G>
-                
-                {/* Committee boat and flags */}
-                <G transform="translate(590, 180)">
-                  <PowerboatSVG 
-                    rotation={0} 
-                    orangeFlagState={flagStates.orange === 'UP' ? 'UP' : 'DOWN'}
-                    hideInfoBoard={false}
-                    scale={1}
-                    courseInfo={{
-                      type: 'W/L 2',
-                      direction: '360°',
-                      distance: '1.0 NM',
-                    }}
-                  />
-                  <Line x1="20" y1="5" x2="20" y2="-55" stroke="black" strokeWidth="2" />
-                  
-                  {/* Class Flag on flagpole */}
-                  {flagStates.class === 'UP' && (
-                    <G>
-                      <Rect x="-15" y="-55" width="25" height="20" fill="#FFFFFF" stroke="black" strokeWidth="1" />
-                      <Path d="M -15,-55 L 10,-35" stroke="#CC0000" strokeWidth="8" />
-                    </G>
-                  )}
-                  {/* Preparatory flags */}
-                  {PREP_FLAGS.map(opt => (
-                    flagStates[opt.flagId] === 'UP' && (
-                      <G key={opt.flagId}>
-                        <Rect
-                          x={opt.flagId === 'p' ? 25 : 60}
-                          y="-55"
-                          width="25"
-                          height="20"
-                          fill={opt.flagId === 'p' ? '#0066CC' : opt.flagId === 'i' ? '#FFCC00' : '#FF6600'}
-                          stroke="black"
-                          strokeWidth="1"
-                        />
-                        {opt.flagId === 'p' && (
-                          <Rect x="30" y="-50" width="15" height="10" fill="#FFFFFF" />
-                        )}
-                      </G>
-                    )
-                  ))}
-                </G>
-                
-                {/* Wind indicator */}
-                <G transform="translate(400, 50)">
-                  <Line x1="0" y1="0" x2="0" y2="50" stroke="#000" strokeWidth="2" markerEnd="url(#arrowhead)" />
-                  <SvgText x="0" y="-10" textAnchor="middle" fontSize="18" fontWeight="bold" fill="#000">
-                    WIND
-                  </SvgText>
-                </G>
-                
-                {/* Blue Racing Boat - Top-down view */}
-                <AnimatedG animatedProps={blueBoatProps}>
-                  <TopDownSailboatSVG 
-                    hullColor="#3B82F6" 
-                    rotation={blueBoatRotation}
-                    scale={0.7} 
-                    showWake={true}
-                    externalRotation={true}
-                  />
-                </AnimatedG>
-                
-                {/* Red Racing Boat - Top-down view */}
-                <AnimatedG animatedProps={redBoatProps}>
-                  <TopDownSailboatSVG 
-                    hullColor="#EF4444" 
-                    rotation={redBoatRotation}
-                    scale={0.7} 
-                    showWake={true}
-                    externalRotation={true}
-                  />
-                </AnimatedG>
-              </Svg>
-            </View>
-
-            {/* Controls */}
-            <View style={styles.controls}>
-              <TouchableOpacity
-                style={styles.playButton}
-                onPress={handlePlayPause}
-                disabled={!hasUserInteracted}
-              >
-                <Ionicons
-                  name={isPlaying ? 'pause' : 'play'}
-                  size={20}
-                  color={hasUserInteracted ? '#3B82F6' : '#94A3B8'}
-                />
+        {/* Unified sea-colored container with animation and timeline */}
+        <View style={styles.seaContainer}>
+          {/* Overlay - covers entire sea container */}
+          {!hasUserInteracted && (
+            <View style={styles.overlay}>
+              <TouchableOpacity style={styles.startButton} onPress={handleInteraction}>
+                <Ionicons name="play" size={24} color="#FFFFFF" />
+                <Text style={styles.startButtonText}>Enable Audio and Start Lesson</Text>
               </TouchableOpacity>
-              
-              <Text style={styles.timeDisplay}>
-                {time <= 0 ? '-' : ''}{formatTime(time)}
-              </Text>
+            </View>
+          )}
+          
+          {/* Animation + Timeline Row */}
+          <View style={styles.mainRow}>
+            {/* SVG Animation */}
+            <View style={styles.svgWrapper}>
+              <View style={styles.svgContainer}>
+                <Svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox="0 0 800 450">
+                  <Defs>
+                    <Pattern id="water-texture" patternUnits="userSpaceOnUse" width="40" height="20">
+                      <Path d="M 0 10 C 10 0, 30 0, 40 10 T 80 10" stroke="#99ccee" fill="none" strokeWidth="1" />
+                    </Pattern>
+                    <Marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                      <Polygon points="0,0 10,3.5 0,7" fill="#000" />
+                    </Marker>
+                  </Defs>
+                  
+                  {/* Water background - matches container */}
+                  <Rect width="800" height="450" fill="#aaccff" />
+                  <Rect width="800" height="450" fill="url(#water-texture)" />
+                  
+                  {/* Animated clouds (decorative) */}
+                  <G opacity={0.7}>
+                    <Path d="M 50 40 Q 60 20 80 30 T 120 40 H 50 Z" fill="white" opacity={0.7} />
+                    <Path d="M 200 35 Q 215 15 235 25 T 280 35 H 200 Z" fill="white" opacity={0.6} />
+                    <Path d="M 450 45 Q 465 25 485 35 T 530 45 H 450 Z" fill="white" opacity={0.75} />
+                  </G>
+                  
+                  {/* Pin end (orange buoy) */}
+                  <Circle cx="200" cy="200" r="10" fill="orange" stroke="black" strokeWidth="2" />
+                  <SvgText x="200" y="175" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
+                    Pin
+                  </SvgText>
+                  
+                  {/* Start line - from pin buoy to RC boat orange flag (at ~630, 200) */}
+                  <Line x1="200" y1="200" x2="630" y2="200" stroke="black" strokeWidth="2" strokeDasharray="5,5" />
+                  <SvgText x="415" y="190" textAnchor="middle" fontSize="14" fontWeight="600" fill="#000">
+                    Start Line
+                  </SvgText>
+                  
+                  {/* Laylines - showing the "box" area south of the start line */}
+                  <G opacity={0.4}>
+                    {/* Pin layline - from east side of pin towards SOUTHEAST */}
+                    <Line x1="210" y1="200" x2="320" y2="380" stroke="black" strokeWidth="1" strokeDasharray="5,5" />
+                    {/* RC boat layline - from southwest edge of RC boat towards SOUTHEAST */}
+                    <Line x1="620" y1="210" x2="750" y2="380" stroke="black" strokeWidth="1" strokeDasharray="5,5" />
+                    <SvgText x="500" y="340" textAnchor="middle" fontSize="12" fontWeight="600" fill="#64748B" opacity={0.7}>
+                      The Box
+                    </SvgText>
+                  </G>
+                  
+                  {/* Committee boat and flags */}
+                  <G transform="translate(590, 180)">
+                    <PowerboatSVG 
+                      rotation={0} 
+                      orangeFlagState={flagStates.orange === 'UP' ? 'UP' : 'DOWN'}
+                      hideInfoBoard={false}
+                      scale={1}
+                      courseInfo={{
+                        type: 'W/L 2',
+                        direction: '360°',
+                        distance: '1.0 NM',
+                      }}
+                    />
+                    <Line x1="20" y1="5" x2="20" y2="-55" stroke="black" strokeWidth="2" />
+                    
+                    {/* Class Flag on flagpole */}
+                    {flagStates.class === 'UP' && (
+                      <G>
+                        <Rect x="-15" y="-55" width="25" height="20" fill="#FFFFFF" stroke="black" strokeWidth="1" />
+                        <Path d="M -15,-55 L 10,-35" stroke="#CC0000" strokeWidth="8" />
+                      </G>
+                    )}
+                    {/* Preparatory flags */}
+                    {PREP_FLAGS.map(opt => (
+                      flagStates[opt.flagId] === 'UP' && (
+                        <G key={opt.flagId}>
+                          <Rect
+                            x={opt.flagId === 'p' ? 25 : 60}
+                            y="-55"
+                            width="25"
+                            height="20"
+                            fill={opt.flagId === 'p' ? '#0066CC' : opt.flagId === 'i' ? '#FFCC00' : '#FF6600'}
+                            stroke="black"
+                            strokeWidth="1"
+                          />
+                          {opt.flagId === 'p' && (
+                            <Rect x="30" y="-50" width="15" height="10" fill="#FFFFFF" />
+                          )}
+                        </G>
+                      )
+                    ))}
+                  </G>
+                  
+                  {/* Wind indicator */}
+                  <G transform="translate(400, 50)">
+                    <Line x1="0" y1="0" x2="0" y2="50" stroke="#000" strokeWidth="2" markerEnd="url(#arrowhead)" />
+                    <SvgText x="0" y="-10" textAnchor="middle" fontSize="18" fontWeight="bold" fill="#000">
+                      WIND
+                    </SvgText>
+                  </G>
+                  
+                  {/* Blue Racing Boat - Top-down view */}
+                  <AnimatedG animatedProps={blueBoatProps}>
+                    <TopDownSailboatSVG 
+                      hullColor="#3B82F6" 
+                      rotation={blueBoatRotation}
+                      scale={0.7} 
+                      showWake={true}
+                      externalRotation={true}
+                    />
+                  </AnimatedG>
+                  
+                  {/* Red Racing Boat - Top-down view */}
+                  <AnimatedG animatedProps={redBoatProps}>
+                    <TopDownSailboatSVG 
+                      hullColor="#EF4444" 
+                      rotation={redBoatRotation}
+                      scale={0.7} 
+                      showWake={true}
+                      externalRotation={true}
+                    />
+                  </AnimatedG>
+                </Svg>
+              </View>
+
+              {/* Controls */}
+              <View style={styles.controls}>
+                <TouchableOpacity
+                  style={styles.playButton}
+                  onPress={handlePlayPause}
+                  disabled={!hasUserInteracted}
+                >
+                  <Ionicons
+                    name={isPlaying ? 'pause' : 'play'}
+                    size={20}
+                    color={hasUserInteracted ? '#3B82F6' : '#94A3B8'}
+                  />
+                </TouchableOpacity>
+                
+                <Text style={styles.timeDisplay}>
+                  {time <= 0 ? '-' : ''}{formatTime(time)}
+                </Text>
+              </View>
+
+              {/* Custom Timeline Slider */}
+              <View style={styles.timelineSliderContainer}>
+                <CustomTimelineSlider
+                  min={-360}
+                  max={5}
+                  value={time}
+                  onChange={handleSliderChange}
+                  markers={timelineMarkers}
+                  disabled={!hasUserInteracted}
+                />
+              </View>
             </View>
 
-            {/* Custom Timeline Slider */}
-            <View style={styles.timelineSliderContainer}>
-              <CustomTimelineSlider
-                min={-360}
-                max={5}
-                value={time}
-                onChange={handleSliderChange}
-                markers={timelineMarkers}
-                disabled={!hasUserInteracted}
+            {/* Sequence Timeline Panel - integrated to the right */}
+            <View style={styles.timelinePanelWrapper}>
+              <StartProcedurePanel
+                currentTime={time}
+                processedSequence={actualProcessedSequence.filter(s => s.label)}
+                selectedPrepFlagId={selectedPrepFlagId}
+                onPrepFlagChange={setSelectedPrepFlagId}
+                explanation={currentStepInfo?.description || ''}
+                onTimeChange={(newTime) => {
+                  setTime(newTime);
+                  if (!hasUserInteracted) setHasUserInteracted(true);
+                }}
               />
             </View>
           </View>
-
         </View>
 
-        {/* Start Procedure Panel - Full width below animation */}
-        <View style={styles.procedureSection}>
-          <Text style={styles.sectionTitle}>Start Procedure Reference</Text>
-          <View style={styles.procedurePanelWrapper}>
-            <StartProcedurePanel
-              currentTime={time}
-              processedSequence={actualProcessedSequence.filter(s => s.label)}
-              selectedPrepFlagId={selectedPrepFlagId}
-              onPrepFlagChange={setSelectedPrepFlagId}
-              explanation={currentStepInfo?.description || ''}
-              onTimeChange={(newTime) => {
-                setTime(newTime);
-                if (!hasUserInteracted) setHasUserInteracted(true);
-              }}
-            />
-          </View>
-          
-          {/* Deep Dive Section - shows additional details for current step */}
-          {currentStepInfo?.details && currentStepInfo.details.length > 0 && (
-            <View style={styles.deepDiveSection}>
-              <TouchableOpacity 
-                style={styles.deepDiveButton}
-                onPress={() => setShowDeepDive(!showDeepDive)}
-              >
-                <Ionicons 
-                  name={showDeepDive ? 'chevron-up' : 'bulb'} 
-                  size={20} 
-                  color="#8B5CF6" 
-                />
-                <Text style={styles.deepDiveButtonText}>
-                  {showDeepDive ? 'Hide Deep Dive' : 'Deep Dive: Learn More'}
+        {/* Deep Dive Section - shows additional details for current step */}
+        {currentStepInfo?.details && currentStepInfo.details.length > 0 && (
+          <View style={styles.deepDiveSection}>
+            <TouchableOpacity 
+              style={styles.deepDiveButton}
+              onPress={() => setShowDeepDive(!showDeepDive)}
+            >
+              <Ionicons 
+                name={showDeepDive ? 'chevron-up' : 'bulb'} 
+                size={20} 
+                color="#8B5CF6" 
+              />
+              <Text style={styles.deepDiveButtonText}>
+                {showDeepDive ? 'Hide Deep Dive' : 'Deep Dive: Learn More'}
+              </Text>
+              <Ionicons 
+                name={showDeepDive ? 'chevron-up' : 'chevron-down'} 
+                size={16} 
+                color="#8B5CF6" 
+              />
+            </TouchableOpacity>
+            
+            {showDeepDive && (
+              <View style={styles.deepDiveContent}>
+                <Text style={styles.deepDiveTitle}>
+                  {currentStepInfo.label || 'Additional Details'}
                 </Text>
-                <Ionicons 
-                  name={showDeepDive ? 'chevron-up' : 'chevron-down'} 
-                  size={16} 
-                  color="#8B5CF6" 
-                />
-              </TouchableOpacity>
-              
-              {showDeepDive && (
-                <View style={styles.deepDiveContent}>
-                  <Text style={styles.deepDiveTitle}>
-                    {currentStepInfo.label || 'Additional Details'}
-                  </Text>
-                  {currentStepInfo.details.map((detail, index) => (
-                    <View key={index} style={styles.deepDiveItem}>
-                      <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
-                      <Text style={styles.deepDiveItemText}>{detail}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+                {currentStepInfo.details.map((detail, index) => (
+                  <View key={index} style={styles.deepDiveItem}>
+                    <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
+                    <Text style={styles.deepDiveItemText}>{detail}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Quiz Section */}
         <View style={styles.quizSection}>
@@ -801,8 +801,8 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 16,
     margin: 8,
+    overflow: 'hidden',
     ...(Platform.OS === 'web'
       ? { boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)' }
       : {
@@ -813,13 +813,25 @@ const styles = StyleSheet.create({
           elevation: 3,
         }),
   },
+  seaContainer: {
+    position: 'relative',
+    backgroundColor: '#8bb8f0',
+    borderRadius: 12,
+    padding: 16,
+    // Water wave pattern effect using gradient-like appearance
+    ...(Platform.OS === 'web'
+      ? { 
+          background: 'linear-gradient(135deg, #aaccff 0%, #8bb8f0 40%, #7aa5e0 70%, #6b9ad8 100%)',
+        }
+      : {}),
+  },
   overlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
@@ -833,6 +845,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 4px 16px rgba(59, 130, 246, 0.4)' }
+      : {
+          shadowColor: '#3B82F6',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.4,
+          shadowRadius: 8,
+          elevation: 6,
+        }),
   },
   startButtonText: {
     color: '#FFFFFF',
@@ -840,64 +861,97 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mainRow: {
-    flexDirection: 'column',
-    gap: 16,
+    flexDirection: SCREEN_WIDTH >= 900 ? 'row' : 'column',
+    gap: 12,
+    alignItems: 'stretch',
   },
   svgWrapper: {
-    width: '100%',
+    flex: SCREEN_WIDTH >= 900 ? 2 : undefined,
+    width: SCREEN_WIDTH >= 900 ? undefined : '100%',
     position: 'relative',
   },
   svgContainer: {
     width: '100%',
     aspectRatio: 16 / 9,
-    minHeight: 300,
-    maxHeight: 500,
-    backgroundColor: '#F3F4F6',
+    minHeight: 280,
+    maxHeight: 450,
+    backgroundColor: 'transparent',
     borderRadius: 8,
     overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.15,
+          shadowRadius: 4,
+          elevation: 4,
+        }),
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginTop: 12,
+    paddingHorizontal: 4,
   },
   playButton: {
-    padding: 8,
-    backgroundColor: '#F1F5F9',
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 8,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.15)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.15,
+          shadowRadius: 3,
+          elevation: 3,
+        }),
   },
   timeDisplay: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: '700',
     color: '#1E293B',
-    minWidth: 60,
+    minWidth: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
   timelineSliderContainer: {
     marginTop: 8,
     paddingHorizontal: 4,
   },
-  procedureSection: {
-    marginTop: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  procedurePanelWrapper: {
-    backgroundColor: '#F8FAFC',
+  timelinePanelWrapper: {
+    flex: SCREEN_WIDTH >= 900 ? 1 : undefined,
+    minWidth: SCREEN_WIDTH >= 900 ? 300 : undefined,
+    maxWidth: SCREEN_WIDTH >= 900 ? 360 : undefined,
+    backgroundColor: 'rgba(180, 210, 240, 0.45)',
     borderRadius: 12,
-    padding: 16,
-    minHeight: 300,
+    padding: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? { 
+          boxShadow: 'inset 0px 1px 3px rgba(255, 255, 255, 0.3), 0px 2px 8px rgba(0, 50, 100, 0.12)',
+          backdropFilter: 'blur(16px)',
+        }
+      : {
+          shadowColor: '#1E3A5F',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.12,
+          shadowRadius: 6,
+          elevation: 4,
+        }),
   },
   // Deep Dive Section Styles
   deepDiveSection: {
     marginTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   deepDiveButton: {
     flexDirection: 'row',
@@ -942,8 +996,9 @@ const styles = StyleSheet.create({
   },
   // Quiz Section Styles
   quizSection: {
-    marginTop: 32,
+    marginTop: 24,
     paddingTop: 24,
+    paddingHorizontal: 16,
     borderTopWidth: 2,
     borderTopColor: '#E2E8F0',
   },

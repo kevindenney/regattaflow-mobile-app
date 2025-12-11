@@ -4610,6 +4610,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         totalDistanceNm={race.total_distance_nm}
                         timeLimitHours={race.time_limit_hours}
                         routeWaypoints={race.route_waypoints}
+                        courseName={race.metadata?.selected_course_name}
                         wind={race.wind}
                         vhf_channel={race.vhf_channel || race.critical_details?.vhf_channel}
                         isPrimary={isNextRace}
@@ -4634,6 +4635,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         venue={race.venue || 'Unknown Venue'}
                         date={race.date || new Date().toISOString()}
                         startTime={race.startTime || '10:00'}
+                        courseName={race.metadata?.selected_course_name}
                         wind={race.wind}
                         tide={race.tide}
                         weatherStatus={race.weatherStatus}
@@ -4723,7 +4725,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         } : undefined}
                         currentWindDirection={selectedRaceData.metadata?.expected_wind_direction}
                         currentWindSpeed={selectedRaceData.metadata?.expected_wind_speed}
-                        onCourseSelected={async (marks) => {
+                        onCourseSelected={async (marks, courseName) => {
                           // Convert marks to route waypoints format for distance racing
                           // Preserve the original type from the mark (gate, start, finish, etc.)
                           const waypoints = marks.map((mark) => {
@@ -4750,19 +4752,27 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                             };
                           });
                           
-                          // Update route waypoints in selectedRaceData (local state)
+                          // Update route waypoints and course name in selectedRaceData (local state)
                           setSelectedRaceData((prev: any) => ({
                             ...prev,
                             route_waypoints: waypoints,
+                            metadata: {
+                              ...prev?.metadata,
+                              selected_course_name: courseName,
+                            },
                           }));
                           
-                          // Persist waypoints to database
+                          // Persist waypoints and course name to database
                           if (selectedRaceData?.id) {
                             try {
                               const { error } = await supabase
                                 .from('regattas')
                                 .update({ 
                                   route_waypoints: waypoints,
+                                  metadata: {
+                                    ...selectedRaceData.metadata,
+                                    selected_course_name: courseName,
+                                  },
                                   updated_at: new Date().toISOString(),
                                 })
                                 .eq('id', selectedRaceData.id);
@@ -4770,14 +4780,14 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                               if (error) {
                                 logger.error('[races] Error saving waypoints to database:', error);
                               } else {
-                                logger.info('[races] Waypoints saved to database for race:', selectedRaceData.id);
+                                logger.info('[races] Waypoints and course name saved to database for race:', selectedRaceData.id, courseName);
                               }
                             } catch (err) {
                               logger.error('[races] Exception saving waypoints:', err);
                             }
                           }
                           
-                          logger.info('[races] Course template selected for distance race:', marks.length, 'waypoints');
+                          logger.info('[races] Course template selected for distance race:', marks.length, 'waypoints, courseName:', courseName);
                         }}
                         raceType="distance"
                       />
@@ -4828,10 +4838,21 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         } : undefined}
                         currentWindDirection={selectedRaceData.metadata?.expected_wind_direction}
                         currentWindSpeed={selectedRaceData.metadata?.expected_wind_speed}
-                        onCourseSelected={async (marks) => {
+                        onCourseSelected={async (marks, courseName) => {
                           // Update marks state
                           setSelectedRaceMarks(marks);
-                          logger.info('[races] Course template selected with marks:', marks.length);
+                          logger.info('[races] Course template selected with marks:', marks.length, 'courseName:', courseName);
+                          
+                          // Update local state with course name
+                          if (courseName) {
+                            setSelectedRaceData((prev: any) => ({
+                              ...prev,
+                              metadata: {
+                                ...prev?.metadata,
+                                selected_course_name: courseName,
+                              },
+                            }));
+                          }
                           
                           // Save marks to database for fleet racing
                           if (selectedRaceData?.id && marks.length > 0) {
@@ -4871,6 +4892,26 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                                 logger.error('[races] Error saving marks to database:', insertError);
                               } else {
                                 logger.info('[races] Marks saved to database for race:', selectedRaceData.id);
+                              }
+                              
+                              // Save course name to race metadata
+                              if (courseName) {
+                                const { error: metadataError } = await supabase
+                                  .from('regattas')
+                                  .update({
+                                    metadata: {
+                                      ...selectedRaceData.metadata,
+                                      selected_course_name: courseName,
+                                    },
+                                    updated_at: new Date().toISOString(),
+                                  })
+                                  .eq('id', selectedRaceData.id);
+                                
+                                if (metadataError) {
+                                  logger.error('[races] Error saving course name to metadata:', metadataError);
+                                } else {
+                                  logger.info('[races] Course name saved to metadata:', courseName);
+                                }
                               }
                             } catch (err) {
                               logger.error('[races] Exception saving marks:', err);

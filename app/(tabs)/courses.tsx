@@ -109,19 +109,56 @@ export default function CoursesScreen() {
     const scope = userProfile?.club_id ? 'club' : 'personal';
     const clubId = userProfile?.club_id ?? undefined;
 
+    // Check if this is a real database course (UUID format) or a mock/local course
+    // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    const isUUID = editingCourseId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(editingCourseId);
+    const shouldUpdate = editingCourseId && isUUID;
+    const shouldCreate = user?.id && (!editingCourseId || !isUUID);
+
+    console.log('[Courses] handleSaveCourse called:', { 
+      editingCourseId, 
+      isUUID,
+      shouldUpdate,
+      shouldCreate,
+      scope, 
+      clubId, 
+      userId: user?.id 
+    });
+
     try {
       let persisted: RaceCourse | null = null;
 
-      if (editingCourseId) {
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Save operation timed out after 15 seconds')), 15000);
+      });
+
+      if (shouldUpdate) {
+        console.log('[Courses] Updating existing course:', editingCourseId);
         const updatePayload = buildUpdatePayloadFromDraft(draft, clubId);
-        persisted = await CourseLibraryService.updateCourse(editingCourseId, updatePayload);
-      } else if (user?.id) {
+        console.log('[Courses] Update payload:', JSON.stringify(updatePayload, null, 2));
+        persisted = await Promise.race([
+          CourseLibraryService.updateCourse(editingCourseId, updatePayload),
+          timeoutPromise,
+        ]);
+        console.log('[Courses] Update result:', persisted);
+      } else if (shouldCreate) {
+        console.log('[Courses] Creating new course for user:', user?.id, '(editingCourseId was non-UUID mock ID:', editingCourseId, ')');
         const createPayload = buildCreatePayloadFromDraft(draft, clubId);
-        persisted = await CourseLibraryService.saveCourse(createPayload, scope, user.id);
+        console.log('[Courses] Create payload:', JSON.stringify(createPayload, null, 2));
+        persisted = await Promise.race([
+          CourseLibraryService.saveCourse(createPayload, scope, user!.id),
+          timeoutPromise,
+        ]);
+        console.log('[Courses] Create result:', persisted);
+      } else {
+        console.warn('[Courses] No user.id - cannot save to database');
       }
 
       const fallbackCourse = draftToRaceCourse(draft, editingCourseId);
       const nextCourse = persisted ?? fallbackCourse;
+
+      console.log('[Courses] Save completed, updating state with:', nextCourse.id);
 
       setSavedCourses((prev) => {
         const copy = [...prev];
@@ -160,6 +197,7 @@ export default function CoursesScreen() {
       setEditingDraft(undefined);
       setEditingCourseId(undefined);
     } finally {
+      console.log('[Courses] Setting saving to false');
       setSaving(false);
     }
   };

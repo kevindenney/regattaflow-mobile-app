@@ -88,25 +88,43 @@ export default function CourseDetailScreen() {
     try {
       console.log('[CourseDetail] Checking enrollment...');
       
-      // Check subscription tier with timeout
+      // Run both queries in PARALLEL with 30-second timeout (was 10s, too short for slow connections)
+      const QUERY_TIMEOUT = 30000;
+      
       const subscriptionPromise = Promise.race([
         LearningService.checkSubscriptionAccess(user.id),
-        new Promise<{ hasProAccess: boolean; tier: string }>((resolve) => 
-          setTimeout(() => resolve({ hasProAccess: false, tier: 'free' }), 10000)
+        new Promise<{ hasProAccess: boolean; tier: string; timedOut?: boolean }>((resolve) => 
+          setTimeout(() => {
+            console.warn('[CourseDetail] Subscription check timed out after 30s');
+            resolve({ hasProAccess: false, tier: 'free', timedOut: true });
+          }, QUERY_TIMEOUT)
         )
       ]);
-      const { hasProAccess, tier } = await subscriptionPromise;
+      
+      const enrollmentPromise = Promise.race([
+        LearningService.isEnrolled(user.id, courseId).then(result => ({ isEnrolled: result, timedOut: false })),
+        new Promise<{ isEnrolled: boolean; timedOut: boolean }>((resolve) => 
+          setTimeout(() => {
+            console.warn('[CourseDetail] Enrollment check timed out after 30s');
+            resolve({ isEnrolled: false, timedOut: true });
+          }, QUERY_TIMEOUT)
+        )
+      ]);
+      
+      // Wait for BOTH queries in parallel
+      const [subscriptionResult, enrollmentResult] = await Promise.all([
+        subscriptionPromise,
+        enrollmentPromise
+      ]);
+      
+      const { hasProAccess, tier } = subscriptionResult;
       setHasProSubscription(hasProAccess);
       setUserSubscriptionTier(tier);
-      console.log('[CourseDetail] Subscription status - tier:', tier, 'hasProAccess:', hasProAccess);
+      console.log('[CourseDetail] Subscription status - tier:', tier, 'hasProAccess:', hasProAccess, 
+        'timedOut' in subscriptionResult ? `(timedOut: ${subscriptionResult.timedOut})` : '');
       
-      // Check enrollment with timeout
-      const enrollmentPromise = Promise.race([
-        LearningService.isEnrolled(user.id, courseId),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
-      ]);
-      const isEnrolled = await enrollmentPromise;
-      console.log('[CourseDetail] Enrollment status:', isEnrolled);
+      const { isEnrolled, timedOut } = enrollmentResult;
+      console.log('[CourseDetail] Enrollment status:', isEnrolled, timedOut ? '(TIMED OUT - may have access)' : '');
       setEnrolled(isEnrolled);
       
       // If enrolled or has Pro access, load progress (non-blocking)

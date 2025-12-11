@@ -424,11 +424,10 @@ export function InstagramExporter({
     
     return (
       <div style={{ 
-        position: 'fixed', 
+        position: 'absolute', 
         left: '-9999px', 
         top: 0,
-        zIndex: -1000,
-        visibility: 'hidden' as const,
+        pointerEvents: 'none' as const,
       }}>
         {slides.map((slide, idx) => (
           <div
@@ -439,6 +438,7 @@ export function InstagramExporter({
               height: slideHeight,
               overflow: 'hidden',
               marginBottom: 20,
+              background: '#0F172A',
             }}
           >
             <InstagramSlide

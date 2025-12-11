@@ -120,7 +120,8 @@ export default function SignUp() {
   const handleGoogleSignUp = async () => {
     setErrorMessage(null);
     try {
-      await signInWithGoogle();
+      // Pass the selected persona to Google sign-in
+      await signInWithGoogle(persona);
       // After Google auth, user will be redirected to callback which handles routing
     } catch (error: any) {
       console.error('[Signup] Google sign-up error:', error);
@@ -135,7 +136,8 @@ export default function SignUp() {
   const handleAppleSignUp = async () => {
     setErrorMessage(null);
     try {
-      await signInWithApple();
+      // Pass the selected persona to Apple sign-in
+      await signInWithApple(persona);
       // After Apple auth, user will be redirected to callback which handles routing
     } catch (error: any) {
       console.error('[Signup] Apple sign-up error:', error);
@@ -162,36 +164,6 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Social Sign-up Options */}
-        <View style={styles.socialContainer}>
-          <TouchableOpacity
-            style={[styles.socialButton, styles.googleButton, isLoading && styles.buttonDisabled]}
-            onPress={handleGoogleSignUp}
-            disabled={isLoading}
-          >
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {Platform.OS === 'ios' && (
-            <TouchableOpacity
-              style={[styles.socialButton, styles.appleButton, isLoading && styles.buttonDisabled]}
-              onPress={handleAppleSignUp}
-              disabled={isLoading}
-            >
-              <Text style={styles.appleIcon}></Text>
-              <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Divider */}
-        <View style={styles.dividerContainer}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>or sign up with email</Text>
-          <View style={styles.divider} />
-        </View>
 
         {/* Persona Selection */}
         <Text style={styles.sectionLabel}>I am a...</Text>
@@ -280,6 +252,36 @@ export default function SignUp() {
           </Text>
         </TouchableOpacity>
 
+        {/* Divider */}
+        <View style={styles.dividerContainer}>
+          <View style={styles.divider} />
+          <Text style={styles.dividerText}>or continue with</Text>
+          <View style={styles.divider} />
+        </View>
+
+        {/* Social Sign-up Options */}
+        <View style={styles.socialContainer}>
+          <TouchableOpacity
+            style={[styles.socialButton, styles.googleButton, isLoading && styles.buttonDisabled]}
+            onPress={handleGoogleSignUp}
+            disabled={isLoading}
+          >
+            <Text style={styles.googleIcon}>G</Text>
+            <Text style={styles.socialButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          {(Platform.OS === 'ios' || Platform.OS === 'web') && (
+            <TouchableOpacity
+              style={[styles.socialButton, styles.appleButton, isLoading && styles.buttonDisabled]}
+              onPress={handleAppleSignUp}
+              disabled={isLoading}
+            >
+              <Text style={styles.appleIcon}></Text>
+              <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Terms */}
         <Text style={styles.termsText}>
           By signing up, you agree to our{' '}
@@ -330,7 +332,7 @@ const styles = StyleSheet.create({
   
   // Social Buttons
   socialContainer: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   socialButton: {
     flexDirection: 'row',
@@ -373,7 +375,8 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginTop: 20,
+    marginBottom: 20,
   },
   divider: {
     flex: 1,
@@ -490,7 +493,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 8,
     lineHeight: 18,
   },
   termsLink: {

@@ -4,7 +4,7 @@
 
 | User | Email | Password | Type |
 |------|-------|----------|------|
-| **Demo Sailor** | demo-sailor@regattaflow.io | Demo123! | Sailor |
+| **Demo Sailor** | demo-sailor@regattaflow.app | Demo123! | Sailor |
 | **Sarah Chen** | sarah.chen@sailing.com | sailing123 | Sailor/Fleet Captain |
 | **Demo Club** | demo-club@regattaflow.io | Demo123! | Club (Race Committee) |
 | **Coach Anderson** | coach.anderson@sailing.com | sailing123 | Coach |
@@ -26,7 +26,7 @@
 ### Demo User Roles for Dragon Worlds 2027
 
 #### 1. Demo Sailor (Competitor) ⛵
-- **Email**: demo-sailor@regattaflow.io
+- **Email**: demo-sailor@regattaflow.app
 - **Password**: Demo123!
 - **Boat**: HKG 88 "Doubloon" (2022 Petticrows)
 - **Registration**: Confirmed for Dragon Worlds 2027
@@ -130,7 +130,7 @@ The Hong Kong Dragon Association is the host fleet for the 2027 World Championsh
 ## ⚡ Quick Tests
 
 ### Test Dragon Worlds 2027 Entry
-1. Login: `demo-sailor@regattaflow.io` / `Demo123!`
+1. Login: `demo-sailor@regattaflow.app` / `Demo123!`
 2. Navigate to: **Races** tab
 3. See: Dragon World Championship 2027
 4. Check: Registration status, crew, boat info

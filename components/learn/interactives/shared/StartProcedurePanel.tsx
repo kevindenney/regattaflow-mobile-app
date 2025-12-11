@@ -3,8 +3,8 @@
  * Shows detailed information about the starting sequence with flag graphics
  */
 
-import React from 'react';
-import { View, StyleSheet, Text, Platform, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useRef, useEffect, useCallback } from 'react';
+import { View, StyleSheet, Text, Platform, TouchableOpacity, ScrollView, LayoutChangeEvent } from 'react-native';
 import Svg, { Line, Rect, G, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import type { SequenceStep, FlagState } from '../data/startSequenceData';
@@ -145,14 +145,50 @@ export function StartProcedurePanel({
   explanation,
   onTimeChange,
 }: StartProcedurePanelProps) {
+  // Ref for the ScrollView to enable programmatic scrolling
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Track step positions for auto-scrolling
+  const stepPositionsRef = useRef<{ [key: number]: number }>({});
+  const lastActiveTimeRef = useRef<number | null>(null);
+  
   // Filter to show only main sequence steps (with labels)
   const mainSteps = processedSequence.filter(step => 
     step.label && 
     ['RC on Station', 'Warning Signal', 'Preparatory Signal', 'One Minute Signal', 'Start Signal'].includes(step.label)
   );
   
-  // Find active step
-  const activeStep = [...processedSequence].reverse().find(step => step.time <= currentTime) || processedSequence[0];
+  // Find active step - the most recent step that has occurred
+  const activeStep = [...mainSteps].reverse().find(step => step.time <= currentTime) || mainSteps[0];
+  
+  // Find the active step index for scrolling
+  const activeStepIndex = mainSteps.findIndex(step => step.time === activeStep?.time);
+
+  // Auto-scroll to active step when it changes
+  useEffect(() => {
+    if (activeStep && activeStep.time !== lastActiveTimeRef.current) {
+      lastActiveTimeRef.current = activeStep.time;
+      
+      // Get the position of the active step
+      const position = stepPositionsRef.current[activeStep.time];
+      
+      if (position !== undefined && scrollViewRef.current) {
+        // Scroll to center the active step in the view
+        // Account for some padding at the top
+        const scrollPosition = Math.max(0, position - 20);
+        scrollViewRef.current.scrollTo({ 
+          y: scrollPosition, 
+          animated: true 
+        });
+      }
+    }
+  }, [activeStep]);
+
+  // Callback to track step layout positions
+  const handleStepLayout = useCallback((stepTime: number, event: LayoutChangeEvent) => {
+    const { y } = event.nativeEvent.layout;
+    stepPositionsRef.current[stepTime] = y;
+  }, []);
 
   const formatTime = (seconds: number) => {
     // Guard against NaN or undefined
@@ -227,6 +263,7 @@ export function StartProcedurePanel({
         <Text style={styles.sectionTitle}>Sequence Timeline</Text>
         
         <ScrollView 
+          ref={scrollViewRef}
           style={styles.sequenceScroll} 
           nestedScrollEnabled={true}
           showsVerticalScrollIndicator={true}
@@ -244,6 +281,7 @@ export function StartProcedurePanel({
                   isPast && !isActive && styles.stepCardPast,
                 ]}
                 onPress={() => onTimeChange?.(step.time)}
+                onLayout={(event) => handleStepLayout(step.time, event)}
               >
                 <View style={styles.stepHeader}>
                   <MastGraphic visualState={step.visualState} />
@@ -303,30 +341,42 @@ export function StartProcedurePanel({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'transparent',
     borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#1E3A5F',
     marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   timeDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
+    backgroundColor: 'rgba(30, 58, 95, 0.9)',
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 2px 8px rgba(0, 30, 60, 0.25)' }
+      : {
+          shadowColor: '#0A1929',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 4,
+          elevation: 4,
+        }),
   },
   timeLabel: {
-    fontSize: 14,
-    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94C5E8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   timeValue: {
     fontSize: 28,
@@ -338,18 +388,19 @@ const styles = StyleSheet.create({
     color: '#22C55E',
   },
   timeValueEarly: {
-    color: '#94A3B8',
+    color: '#94C5E8',
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E3A5F',
     marginBottom: 4,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   sectionSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: 11,
+    color: '#4A6A8A',
     marginBottom: 8,
   },
   flagSelectorSection: {
@@ -361,67 +412,80 @@ const styles = StyleSheet.create({
   },
   flagOption: {
     alignItems: 'center',
-    padding: 8,
-    marginRight: 8,
-    borderRadius: 8,
+    padding: 6,
+    marginRight: 6,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: '#FFFFFF',
-    minWidth: 70,
+    borderColor: 'rgba(100, 150, 200, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    minWidth: 60,
   },
   flagOptionSelected: {
     borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(239, 246, 255, 0.9)',
   },
   flagOptionText: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 4,
-    fontWeight: '500',
+    fontSize: 10,
+    color: '#4A6A8A',
+    marginTop: 3,
+    fontWeight: '600',
   },
   flagOptionTextSelected: {
     color: '#1E40AF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   selectedFlagInfo: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 8,
-    padding: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(100, 150, 200, 0.3)',
   },
   selectedFlagName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E3A5F',
+    marginBottom: 3,
   },
   selectedFlagDesc: {
-    fontSize: 13,
-    color: '#475569',
-    lineHeight: 18,
+    fontSize: 12,
+    color: '#4A6A8A',
+    lineHeight: 16,
   },
   sequenceSection: {
-    marginBottom: 16,
+    marginBottom: 12,
     flex: 1,
   },
   sequenceScroll: {
-    maxHeight: 250,
+    maxHeight: 220,
   },
   stepCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     borderRadius: 8,
-    padding: 10,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    padding: 8,
+    marginTop: 5,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderLeftWidth: 3,
+    borderLeftColor: 'rgba(100, 150, 200, 0.5)',
   },
   stepCardActive: {
     borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(239, 246, 255, 0.9)',
+    borderLeftColor: '#3B82F6',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 2px 8px rgba(59, 130, 246, 0.25)' }
+      : {
+          shadowColor: '#3B82F6',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 4,
+          elevation: 3,
+        }),
   },
   stepCardPast: {
     opacity: 0.6,
+    borderLeftColor: 'rgba(100, 150, 200, 0.3)',
   },
   stepHeader: {
     flexDirection: 'row',
@@ -440,97 +504,104 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#334155',
+    color: '#1E3A5F',
   },
   stepLabelActive: {
     color: '#1E40AF',
+    fontWeight: '700',
   },
   stepTime: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4A6A8A',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   stepTimeActive: {
     color: '#3B82F6',
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
   },
   stepDescription: {
-    fontSize: 12,
-    color: '#475569',
+    fontSize: 11,
+    color: '#4A6A8A',
     marginTop: 4,
-    lineHeight: 16,
+    lineHeight: 15,
   },
   soundSignalContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
+    marginTop: 2,
   },
   longSound: {
-    width: 16,
-    height: 4,
-    backgroundColor: '#64748B',
+    width: 14,
+    height: 3,
+    backgroundColor: '#3B82F6',
     borderRadius: 2,
   },
   shortSound: {
-    width: 6,
-    height: 6,
-    backgroundColor: '#64748B',
+    width: 5,
+    height: 5,
+    backgroundColor: '#3B82F6',
     borderRadius: 3,
   },
   soundSignalText: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: 10,
+    color: '#4A6A8A',
     marginLeft: 4,
   },
   recallSection: {
     marginTop: 8,
-    paddingTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: 'rgba(59, 130, 246, 0.15)',
   },
   recallCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 5,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(100, 150, 200, 0.25)',
   },
   recallFlagIcon: {
-    width: 32,
-    height: 24,
-    borderRadius: 4,
+    width: 28,
+    height: 20,
+    borderRadius: 3,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1E293B',
-    marginRight: 10,
+    borderColor: '#1E3A5F',
+    marginRight: 8,
   },
   recallFlagX: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#EF4444',
   },
   recallFlagTriangle: {
-    fontSize: 14,
-    color: '#1E293B',
+    fontSize: 12,
+    color: '#1E3A5F',
   },
   recallInfo: {
     flex: 1,
   },
   recallTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E3A5F',
   },
   recallDesc: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
+    fontSize: 10,
+    color: '#4A6A8A',
+    marginTop: 1,
   },
 });
 
