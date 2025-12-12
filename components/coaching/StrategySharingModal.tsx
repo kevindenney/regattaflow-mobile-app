@@ -1,5 +1,5 @@
 import { createLogger } from '@/lib/utils/logger';
-import { RacePreparationWithStrategy, strategicPlanningService } from '@/services/StrategicPlanningService';
+import { PublicSharingStatus, RacePreparationWithStrategy, strategicPlanningService } from '@/services/StrategicPlanningService';
 import { supabase } from '@/services/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -86,6 +86,19 @@ interface RaceInfo {
   boatClass?: string;
   weather?: WeatherForecast;
   rigTuning?: RigTuning;
+  raceType?: 'fleet' | 'distance';
+  // Distance race specific
+  totalDistanceNm?: number;
+  waypoints?: Array<{ name: string; latitude: number; longitude: number; distanceFromPrev?: number }>;
+  // Additional race details
+  startTime?: string;
+  warningSignal?: string;
+  courseName?: string;
+  courseType?: string;
+  timeLimitHours?: number;
+  // AI/Strategy content
+  aiBriefing?: string;
+  aiRecommendations?: string[];
 }
 
 interface StrategySharingModalProps {
@@ -97,7 +110,7 @@ interface StrategySharingModalProps {
   raceInfo: RaceInfo;
 }
 
-type ShareTab = 'preview' | 'coach' | 'crew' | 'export';
+type ShareTab = 'preview' | 'public' | 'coach' | 'crew' | 'export';
 
 export function StrategySharingModal({
   visible,
@@ -107,6 +120,17 @@ export function StrategySharingModal({
   raceId,
   raceInfo,
 }: StrategySharingModalProps) {
+  // Debug: Log props on mount and changes
+  useEffect(() => {
+    logger.info('[StrategySharingModal] Props received:', {
+      visible,
+      sailorId,
+      raceId,
+      raceInfoId: raceInfo?.id,
+      raceInfoName: raceInfo?.name,
+    });
+  }, [visible, sailorId, raceId, raceInfo]);
+
   const [activeTab, setActiveTab] = useState<ShareTab>('preview');
   const [strategy, setStrategy] = useState<RacePreparationWithStrategy | null>(null);
   const [raceStrategy, setRaceStrategy] = useState<any>(null);
@@ -120,6 +144,13 @@ export function StrategySharingModal({
   const [userNotes, setUserNotes] = useState<string>('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [publicSharingStatus, setPublicSharingStatus] = useState<PublicSharingStatus>({
+    enabled: false,
+    token: null,
+    url: null,
+    sharedAt: null,
+  });
+  const [togglingPublicShare, setTogglingPublicShare] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -130,16 +161,37 @@ export function StrategySharingModal({
   const loadData = async () => {
     setLoading(true);
     try {
-      // Get the user_id from sailor_profiles (sailorId is sailor_profiles.id, not user_id)
+      // Get the user_id from sailor_profiles (sailorId might be sailor_profiles.id OR user_id)
       // This is needed because RLS policies use auth.uid() = sailor_id
+      let fetchedUserId: string | null = null;
+      
+      // First try looking up by sailor_profiles.id
       const { data: sailorProfile } = await supabase
         .from('sailor_profiles')
         .select('user_id')
         .eq('id', sailorId)
         .maybeSingle();
 
-      const fetchedUserId = sailorProfile?.user_id;
-      setUserId(fetchedUserId || null);
+      if (sailorProfile?.user_id) {
+        fetchedUserId = sailorProfile.user_id;
+      } else {
+        // If not found, try looking up by user_id (sailorId might already be the user_id)
+        const { data: profileByUserId } = await supabase
+          .from('sailor_profiles')
+          .select('user_id')
+          .eq('user_id', sailorId)
+          .maybeSingle();
+        
+        if (profileByUserId?.user_id) {
+          fetchedUserId = profileByUserId.user_id;
+        } else {
+          // Fallback: assume sailorId is the user_id directly
+          fetchedUserId = sailorId;
+        }
+      }
+      
+      setUserId(fetchedUserId);
+      logger.info('Resolved userId for sharing:', { sailorId, fetchedUserId });
 
       // Load strategy data from sailor_race_preparation using user_id (for RLS compatibility)
       if (fetchedUserId) {
@@ -217,6 +269,23 @@ export function StrategySharingModal({
         status: c.status as 'active' | 'pending',
       })) || [];
       setCrewMembers(crewList);
+
+      // Load public sharing status (in a separate try-catch to not block other data loading)
+      if (fetchedUserId) {
+        try {
+          const sharingStatus = await strategicPlanningService.getPublicSharingStatus(raceId, fetchedUserId);
+          setPublicSharingStatus(sharingStatus);
+        } catch (sharingError) {
+          // Public sharing columns may not exist yet - this is ok
+          logger.warn('Could not load public sharing status (migration may not be run):', sharingError);
+          setPublicSharingStatus({
+            enabled: false,
+            token: null,
+            url: null,
+            sharedAt: null,
+          });
+        }
+      }
 
     } catch (error) {
       logger.error('Failed to load sharing data:', error);
@@ -546,24 +615,49 @@ export function StrategySharingModal({
   };
 
   const renderStrategyPreview = () => {
-    const hasStrategy = strategy || raceStrategy || raceInfo.weather || raceInfo.rigTuning;
-    
-    if (!hasStrategy) {
-      return (
-        <View style={styles.emptyState}>
-          <MaterialCommunityIcons name="file-document-outline" size={64} color="#CBD5E1" />
-          <Text style={styles.emptyStateTitle}>No Strategy Yet</Text>
-          <Text style={styles.emptyStateText}>
-            Create your pre-race strategy notes first before sharing.
-          </Text>
-        </View>
-      );
-    }
+    // Check what content is available
+    const hasWeather = raceInfo.weather && (
+      raceInfo.weather.windSpeed !== undefined || 
+      raceInfo.weather.tideState ||
+      raceInfo.weather.temperature !== undefined
+    );
+    // Check both raceInfo.rigTuning (metadata) and strategy (user's notes)
+    const hasRigTuning = (raceInfo.rigTuning && (
+      raceInfo.rigTuning.preset || 
+      raceInfo.rigTuning.notes || 
+      raceInfo.rigTuning.settings
+    )) || (strategy && (
+      strategy.rig_tuning_strategy ||
+      strategy.rig_notes
+    ));
+    const hasUserStrategy = strategy && (
+      strategy.start_strategy ||
+      strategy.upwind_strategy ||
+      strategy.downwind_strategy ||
+      strategy.windward_mark_strategy ||
+      strategy.leeward_mark_strategy ||
+      strategy.finish_strategy
+    );
+    const hasAIStrategy = raceStrategy && (
+      raceStrategy.wind_strategy ||
+      raceStrategy.tide_strategy ||
+      raceStrategy.upwind_tactics ||
+      raceStrategy.downwind_tactics
+    );
+    const hasAIInsights = strategy?.ai_strategy_suggestions?.contextualInsights?.length > 0;
 
     return (
       <ScrollView style={styles.previewScroll} showsVerticalScrollIndicator={false}>
         {/* Race Header */}
         <View style={styles.previewHeader}>
+          {/* Race Type Badge */}
+          {raceInfo.raceType === 'distance' && (
+            <View style={styles.raceTypeBadge}>
+              <MaterialCommunityIcons name="sail-boat" size={14} color="#0369A1" />
+              <Text style={styles.raceTypeBadgeText}>Distance Race</Text>
+            </View>
+          )}
+          
           <Text style={styles.previewRaceName}>{raceInfo.name}</Text>
           <Text style={styles.previewRaceDate}>
             {new Date(raceInfo.date).toLocaleDateString('en-US', { 
@@ -572,132 +666,203 @@ export function StrategySharingModal({
               day: 'numeric' 
             })}
           </Text>
-          {raceInfo.venue && (
-            <Text style={styles.previewVenue}>📍 {raceInfo.venue}</Text>
-          )}
-          {raceInfo.boatClass && (
-            <Text style={styles.previewVenue}>⛵ {raceInfo.boatClass}</Text>
-          )}
+          
+          {/* Race Details Grid */}
+          <View style={styles.raceDetailsGrid}>
+            {raceInfo.venue && (
+              <View style={styles.raceDetailItem}>
+                <MaterialCommunityIcons name="map-marker" size={16} color="#6B7280" />
+                <Text style={styles.raceDetailText}>{raceInfo.venue}</Text>
+              </View>
+            )}
+            {raceInfo.boatClass && (
+              <View style={styles.raceDetailItem}>
+                <MaterialCommunityIcons name="sail-boat" size={16} color="#6B7280" />
+                <Text style={styles.raceDetailText}>{raceInfo.boatClass}</Text>
+              </View>
+            )}
+            {raceInfo.startTime && (
+              <View style={styles.raceDetailItem}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color="#6B7280" />
+                <Text style={styles.raceDetailText}>Start: {raceInfo.startTime}</Text>
+              </View>
+            )}
+            {raceInfo.totalDistanceNm && (
+              <View style={styles.raceDetailItem}>
+                <MaterialCommunityIcons name="map-marker-distance" size={16} color="#6B7280" />
+                <Text style={styles.raceDetailText}>{raceInfo.totalDistanceNm.toFixed(1)} nm</Text>
+              </View>
+            )}
+            {raceInfo.timeLimitHours && (
+              <View style={styles.raceDetailItem}>
+                <MaterialCommunityIcons name="timer-sand" size={16} color="#6B7280" />
+                <Text style={styles.raceDetailText}>Limit: {raceInfo.timeLimitHours}h</Text>
+              </View>
+            )}
+            {raceInfo.courseName && (
+              <View style={styles.raceDetailItem}>
+                <MaterialCommunityIcons name="flag-triangle" size={16} color="#6B7280" />
+                <Text style={styles.raceDetailText}>{raceInfo.courseName}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Strategy Completeness Summary */}
+        <View style={styles.completenessCard}>
+          <Text style={styles.completenessTitle}>Strategy Overview</Text>
+          <View style={styles.completenessGrid}>
+            <View style={styles.completenessItem}>
+              <MaterialCommunityIcons 
+                name={hasWeather ? 'check-circle' : 'circle-outline'} 
+                size={20} 
+                color={hasWeather ? '#10B981' : '#CBD5E1'} 
+              />
+              <Text style={[styles.completenessLabel, !hasWeather && styles.completenessLabelEmpty]}>
+                Weather
+              </Text>
+            </View>
+            <View style={styles.completenessItem}>
+              <MaterialCommunityIcons 
+                name={hasRigTuning ? 'check-circle' : 'circle-outline'} 
+                size={20} 
+                color={hasRigTuning ? '#10B981' : '#CBD5E1'} 
+              />
+              <Text style={[styles.completenessLabel, !hasRigTuning && styles.completenessLabelEmpty]}>
+                Rig Tuning
+              </Text>
+            </View>
+            <View style={styles.completenessItem}>
+              <MaterialCommunityIcons 
+                name={hasUserStrategy ? 'check-circle' : 'circle-outline'} 
+                size={20} 
+                color={hasUserStrategy ? '#10B981' : '#CBD5E1'} 
+              />
+              <Text style={[styles.completenessLabel, !hasUserStrategy && styles.completenessLabelEmpty]}>
+                Race Plan
+              </Text>
+            </View>
+            <View style={styles.completenessItem}>
+              <MaterialCommunityIcons 
+                name={(hasAIStrategy || hasAIInsights) ? 'check-circle' : 'circle-outline'} 
+                size={20} 
+                color={(hasAIStrategy || hasAIInsights) ? '#10B981' : '#CBD5E1'} 
+              />
+              <Text style={[styles.completenessLabel, !(hasAIStrategy || hasAIInsights) && styles.completenessLabelEmpty]}>
+                AI Insights
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Forecast Synopsis */}
-        {raceInfo.weather && (
+        {hasWeather ? (
           <View style={styles.strategySection}>
             <View style={styles.sectionHeader}>
               <MaterialCommunityIcons name="weather-partly-cloudy" size={18} color="#0EA5E9" />
               <Text style={[styles.sectionTitle, { color: '#0EA5E9' }]}>Forecast Synopsis</Text>
             </View>
             <View style={styles.forecastGrid}>
-              {raceInfo.weather.windSpeed !== undefined && (
+              {raceInfo.weather!.windSpeed !== undefined && (
                 <View style={styles.forecastItem}>
                   <MaterialCommunityIcons name="weather-windy" size={20} color="#64748B" />
                   <Text style={styles.forecastValue}>
-                    {raceInfo.weather.windSpeedMax 
-                      ? `${raceInfo.weather.windSpeed}-${raceInfo.weather.windSpeedMax}`
-                      : raceInfo.weather.windSpeed} kts
+                    {raceInfo.weather!.windSpeedMax 
+                      ? `${raceInfo.weather!.windSpeed}-${raceInfo.weather!.windSpeedMax}`
+                      : raceInfo.weather!.windSpeed} kts
                   </Text>
-                  {raceInfo.weather.windDirection && (
-                    <Text style={styles.forecastLabel}>{raceInfo.weather.windDirection}</Text>
+                  {raceInfo.weather!.windDirection && (
+                    <Text style={styles.forecastLabel}>{raceInfo.weather!.windDirection}</Text>
                   )}
                 </View>
               )}
-              {raceInfo.weather.tideState && (
+              {raceInfo.weather!.tideState && (
                 <View style={styles.forecastItem}>
                   <MaterialCommunityIcons name="waves" size={20} color="#64748B" />
-                  <Text style={styles.forecastValue}>{raceInfo.weather.tideState}</Text>
-                  {raceInfo.weather.tideHeight !== undefined && (
-                    <Text style={styles.forecastLabel}>{raceInfo.weather.tideHeight.toFixed(1)}m</Text>
+                  <Text style={styles.forecastValue}>{raceInfo.weather!.tideState}</Text>
+                  {raceInfo.weather!.tideHeight !== undefined && (
+                    <Text style={styles.forecastLabel}>{raceInfo.weather!.tideHeight.toFixed(1)}m</Text>
                   )}
                 </View>
               )}
-              {raceInfo.weather.currentSpeed !== undefined && raceInfo.weather.currentSpeed > 0 && (
+              {raceInfo.weather!.currentSpeed !== undefined && raceInfo.weather!.currentSpeed > 0 && (
                 <View style={styles.forecastItem}>
                   <MaterialCommunityIcons name="swap-horizontal" size={20} color="#64748B" />
-                  <Text style={styles.forecastValue}>{raceInfo.weather.currentSpeed.toFixed(1)} kts</Text>
-                  {raceInfo.weather.currentDirection && (
-                    <Text style={styles.forecastLabel}>{raceInfo.weather.currentDirection}</Text>
+                  <Text style={styles.forecastValue}>{raceInfo.weather!.currentSpeed.toFixed(1)} kts</Text>
+                  {raceInfo.weather!.currentDirection && (
+                    <Text style={styles.forecastLabel}>{raceInfo.weather!.currentDirection}</Text>
                   )}
                 </View>
               )}
-              {raceInfo.weather.waveHeight !== undefined && raceInfo.weather.waveHeight > 0 && (
+              {raceInfo.weather!.waveHeight !== undefined && raceInfo.weather!.waveHeight > 0 && (
                 <View style={styles.forecastItem}>
                   <MaterialCommunityIcons name="wave" size={20} color="#64748B" />
-                  <Text style={styles.forecastValue}>{raceInfo.weather.waveHeight.toFixed(1)}m</Text>
+                  <Text style={styles.forecastValue}>{raceInfo.weather!.waveHeight.toFixed(1)}m</Text>
                   <Text style={styles.forecastLabel}>waves</Text>
                 </View>
               )}
+              {raceInfo.weather!.temperature !== undefined && (
+                <View style={styles.forecastItem}>
+                  <MaterialCommunityIcons name="thermometer" size={20} color="#64748B" />
+                  <Text style={styles.forecastValue}>{raceInfo.weather!.temperature}°C</Text>
+                  <Text style={styles.forecastLabel}>temp</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.emptySectionCard}>
+            <MaterialCommunityIcons name="weather-partly-cloudy" size={24} color="#CBD5E1" />
+            <View style={styles.emptySectionContent}>
+              <Text style={styles.emptySectionTitle}>Weather Forecast</Text>
+              <Text style={styles.emptySectionHint}>Will show wind, tide, and conditions when available</Text>
             </View>
           </View>
         )}
 
         {/* Rig Tuning */}
-        {raceInfo.rigTuning && (
+        {hasRigTuning ? (
           <View style={styles.strategySection}>
             <View style={styles.sectionHeader}>
               <MaterialCommunityIcons name="cog" size={18} color="#F59E0B" />
               <Text style={[styles.sectionTitle, { color: '#F59E0B' }]}>Rig Tuning</Text>
             </View>
-            {raceInfo.rigTuning.preset && (
+            {raceInfo.rigTuning?.preset && (
               <Text style={styles.rigPreset}>{raceInfo.rigTuning.preset}</Text>
             )}
-            {raceInfo.rigTuning.windRange && (
+            {raceInfo.rigTuning?.windRange && (
               <Text style={styles.rigWindRange}>Wind Range: {raceInfo.rigTuning.windRange}</Text>
             )}
-            {raceInfo.rigTuning.settings && (
+            {raceInfo.rigTuning?.settings && (
               <View style={styles.rigSettingsGrid}>
-                {raceInfo.rigTuning.settings.upperShrouds && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Uppers</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.upperShrouds}</Text>
+                {Object.entries(raceInfo.rigTuning.settings).map(([key, value]) => value && (
+                  <View key={key} style={styles.rigSettingItem}>
+                    <Text style={styles.rigSettingLabel}>
+                      {key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                    </Text>
+                    <Text style={styles.rigSettingValue}>{value}</Text>
                   </View>
-                )}
-                {raceInfo.rigTuning.settings.lowerShrouds && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Lowers</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.lowerShrouds}</Text>
-                  </View>
-                )}
-                {raceInfo.rigTuning.settings.forestay && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Forestay</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.forestay}</Text>
-                  </View>
-                )}
-                {raceInfo.rigTuning.settings.backstay && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Backstay</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.backstay}</Text>
-                  </View>
-                )}
-                {raceInfo.rigTuning.settings.mast && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Mast</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.mast}</Text>
-                  </View>
-                )}
-                {raceInfo.rigTuning.settings.cunningham && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Cunningham</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.cunningham}</Text>
-                  </View>
-                )}
-                {raceInfo.rigTuning.settings.outhaul && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Outhaul</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.outhaul}</Text>
-                  </View>
-                )}
-                {raceInfo.rigTuning.settings.vang && (
-                  <View style={styles.rigSettingItem}>
-                    <Text style={styles.rigSettingLabel}>Vang</Text>
-                    <Text style={styles.rigSettingValue}>{raceInfo.rigTuning.settings.vang}</Text>
-                  </View>
-                )}
+                ))}
               </View>
             )}
-            {raceInfo.rigTuning.notes && (
+            {raceInfo.rigTuning?.notes && (
               <Text style={styles.rigNotes}>{raceInfo.rigTuning.notes}</Text>
             )}
+            {/* Also show strategy-based rig tuning notes */}
+            {strategy?.rig_tuning_strategy && (
+              <Text style={styles.rigNotes}>{strategy.rig_tuning_strategy}</Text>
+            )}
+            {strategy?.rig_notes && !strategy?.rig_tuning_strategy && (
+              <Text style={styles.rigNotes}>{strategy.rig_notes}</Text>
+            )}
+          </View>
+        ) : (
+          <View style={styles.emptySectionCard}>
+            <MaterialCommunityIcons name="cog" size={24} color="#CBD5E1" />
+            <View style={styles.emptySectionContent}>
+              <Text style={styles.emptySectionTitle}>Rig Tuning</Text>
+              <Text style={styles.emptySectionHint}>Will show rig settings and tuning notes</Text>
+            </View>
           </View>
         )}
 
@@ -725,24 +890,119 @@ export function StrategySharingModal({
           )}
         </View>
 
-        {/* User's Manual Strategy Entries */}
-        {strategy?.start_strategy && (
-          <StrategySection icon="flag-checkered" title="Start Strategy" content={strategy.start_strategy} />
-        )}
-        {strategy?.upwind_strategy && (
-          <StrategySection icon="arrow-up-bold" title="Upwind Strategy" content={strategy.upwind_strategy} />
-        )}
-        {strategy?.windward_mark_strategy && (
-          <StrategySection icon="rotate-right" title="Windward Mark" content={strategy.windward_mark_strategy} />
-        )}
-        {strategy?.downwind_strategy && (
-          <StrategySection icon="arrow-down-bold" title="Downwind Strategy" content={strategy.downwind_strategy} />
-        )}
-        {strategy?.leeward_mark_strategy && (
-          <StrategySection icon="rotate-left" title="Leeward Mark" content={strategy.leeward_mark_strategy} />
-        )}
-        {strategy?.finish_strategy && (
-          <StrategySection icon="trophy" title="Finish Strategy" content={strategy.finish_strategy} />
+        {/* Race Strategy - Different for Fleet vs Distance */}
+        {raceInfo.raceType === 'distance' ? (
+          // Distance Racing Strategy
+          <View style={styles.strategySection}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="map-marker-path" size={18} color="#3B82F6" />
+              <Text style={[styles.sectionTitle, { color: '#3B82F6' }]}>Distance Race Strategy</Text>
+            </View>
+
+            {/* Route Overview */}
+            {(raceInfo.totalDistanceNm || raceInfo.waypoints?.length) && (
+              <View style={styles.distanceOverview}>
+                {raceInfo.totalDistanceNm && (
+                  <View style={styles.distanceItem}>
+                    <MaterialCommunityIcons name="map-marker-distance" size={20} color="#0EA5E9" />
+                    <Text style={styles.distanceValue}>{raceInfo.totalDistanceNm.toFixed(1)} nm</Text>
+                  </View>
+                )}
+                {raceInfo.waypoints && raceInfo.waypoints.length > 0 && (
+                  <View style={styles.distanceItem}>
+                    <MaterialCommunityIcons name="map-marker-multiple" size={20} color="#0EA5E9" />
+                    <Text style={styles.distanceValue}>{raceInfo.waypoints.length} waypoints</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Waypoints List */}
+            {raceInfo.waypoints && raceInfo.waypoints.length > 0 && (
+              <View style={styles.waypointsList}>
+                {raceInfo.waypoints.map((wp, idx) => (
+                  <View key={idx} style={styles.waypointItem}>
+                    <Text style={styles.waypointNumber}>{idx + 1}</Text>
+                    <Text style={styles.waypointName}>{wp.name}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {strategy?.start_strategy ? (
+              <StrategyPhaseCard icon="flag-variant" title="Start / Departure" content={strategy.start_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="flag-variant" title="Start / Departure" />
+            )}
+
+            {strategy?.upwind_strategy ? (
+              <StrategyPhaseCard icon="weather-windy" title="Weather Routing" content={strategy.upwind_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="weather-windy" title="Weather Routing" />
+            )}
+
+            {strategy?.windward_mark_strategy ? (
+              <StrategyPhaseCard icon="waves" title="Tide Gates & Current" content={strategy.windward_mark_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="waves" title="Tide Gates & Current" />
+            )}
+
+            {strategy?.downwind_strategy ? (
+              <StrategyPhaseCard icon="account-group" title="Watch System / Crew" content={strategy.downwind_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="account-group" title="Watch System / Crew" />
+            )}
+
+            {strategy?.finish_strategy ? (
+              <StrategyPhaseCard icon="trophy" title="Finishing Strategy" content={strategy.finish_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="trophy" title="Finishing Strategy" />
+            )}
+          </View>
+        ) : (
+          // Fleet Racing Strategy (default)
+          <View style={styles.strategySection}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="flag-checkered" size={18} color="#3B82F6" />
+              <Text style={[styles.sectionTitle, { color: '#3B82F6' }]}>Race Phase Strategy</Text>
+            </View>
+
+            {strategy?.start_strategy ? (
+              <StrategyPhaseCard icon="flag-checkered" title="Start" content={strategy.start_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="flag-checkered" title="Start" />
+            )}
+
+            {strategy?.upwind_strategy ? (
+              <StrategyPhaseCard icon="arrow-up-bold" title="Upwind" content={strategy.upwind_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="arrow-up-bold" title="Upwind" />
+            )}
+
+            {strategy?.windward_mark_strategy ? (
+              <StrategyPhaseCard icon="rotate-right" title="Windward Mark" content={strategy.windward_mark_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="rotate-right" title="Windward Mark" />
+            )}
+
+            {strategy?.downwind_strategy ? (
+              <StrategyPhaseCard icon="arrow-down-bold" title="Downwind" content={strategy.downwind_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="arrow-down-bold" title="Downwind" />
+            )}
+
+            {strategy?.leeward_mark_strategy ? (
+              <StrategyPhaseCard icon="rotate-left" title="Leeward Mark" content={strategy.leeward_mark_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="rotate-left" title="Leeward Mark" />
+            )}
+
+            {strategy?.finish_strategy ? (
+              <StrategyPhaseCard icon="trophy" title="Finish" content={strategy.finish_strategy} />
+            ) : (
+              <StrategyPhasePlaceholder icon="trophy" title="Finish" />
+            )}
+          </View>
         )}
 
         {/* AI Strategic Recommendations */}
@@ -1016,8 +1276,204 @@ export function StrategySharingModal({
     </ScrollView>
   );
 
+  // Handle toggling public sharing
+  const handleTogglePublicSharing = async (enabled: boolean) => {
+    logger.info('handleTogglePublicSharing called:', { enabled, userId, raceId });
+
+    if (!userId) {
+      logger.error('Cannot toggle public sharing: userId is not set');
+      Alert.alert('Error', 'Unable to share. Please try reloading the page.');
+      return;
+    }
+
+    if (!raceId) {
+      logger.error('Cannot toggle public sharing: raceId is not set');
+      Alert.alert('Error', 'No race selected. Please try again.');
+      return;
+    }
+
+    setTogglingPublicShare(true);
+    try {
+      logger.info('Calling togglePublicSharing with:', { raceId, userId, enabled });
+      const status = await strategicPlanningService.togglePublicSharing(raceId, userId, enabled);
+      logger.info('Public sharing toggled successfully:', status);
+      setPublicSharingStatus(status);
+
+      if (enabled && status.url) {
+        Alert.alert(
+          'Public Link Created! 🔗',
+          `Anyone with this link can view your strategy (read-only).\n\n${status.url}`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
+      logger.error('Failed to toggle public sharing:', error);
+      const errorMessage = error?.message || 'Unknown error';
+      Alert.alert('Error', `Failed to update sharing settings: ${errorMessage}`);
+    } finally {
+      setTogglingPublicShare(false);
+    }
+  };
+
+  // Copy public link to clipboard
+  const handleCopyPublicLink = async () => {
+    if (!publicSharingStatus.url) return;
+    
+    try {
+      await Clipboard.setStringAsync(publicSharingStatus.url);
+      Alert.alert('Copied! ✅', 'Public link copied to clipboard');
+    } catch (error) {
+      logger.error('Failed to copy public link:', error);
+      Alert.alert('Error', 'Failed to copy link');
+    }
+  };
+
+  // Share public link via native share
+  const handleSharePublicLink = async () => {
+    if (!publicSharingStatus.url) return;
+    
+    const title = raceInfo.name ? `Race Strategy - ${raceInfo.name}` : 'Race Strategy';
+    
+    if (Platform.OS === 'web') {
+      if (navigator.share) {
+        await navigator.share({
+          title,
+          url: publicSharingStatus.url,
+        });
+      } else {
+        await handleCopyPublicLink();
+      }
+    } else {
+      await Share.share({
+        message: `Check out my race strategy: ${publicSharingStatus.url}`,
+        url: publicSharingStatus.url,
+      });
+    }
+    onShareComplete?.('external', 'Public Link');
+  };
+
+  const renderPublicTab = () => (
+    <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+      <Text style={styles.publicInstructions}>
+        Create a public link that anyone can view - no RegattaFlow account required.
+      </Text>
+
+      {/* Toggle Section */}
+      <View style={styles.publicToggleSection}>
+        <View style={styles.publicToggleHeader}>
+          <MaterialCommunityIcons 
+            name={publicSharingStatus.enabled ? 'link-variant' : 'link-variant-off'} 
+            size={24} 
+            color={publicSharingStatus.enabled ? '#10B981' : '#64748B'} 
+          />
+          <View style={styles.publicToggleInfo}>
+            <Text style={styles.publicToggleTitle}>Public Sharing</Text>
+            <Text style={styles.publicToggleSubtitle}>
+              {publicSharingStatus.enabled 
+                ? 'Anyone with the link can view your strategy' 
+                : 'Your strategy is private'}
+            </Text>
+          </View>
+        </View>
+        
+        <TouchableOpacity
+          style={[
+            styles.publicToggleButton,
+            publicSharingStatus.enabled && styles.publicToggleButtonEnabled,
+          ]}
+          onPress={() => handleTogglePublicSharing(!publicSharingStatus.enabled)}
+          disabled={togglingPublicShare}
+        >
+          {togglingPublicShare ? (
+            <ActivityIndicator size="small" color={publicSharingStatus.enabled ? '#10B981' : '#64748B'} />
+          ) : (
+            <Text style={[
+              styles.publicToggleButtonText,
+              publicSharingStatus.enabled && styles.publicToggleButtonTextEnabled,
+            ]}>
+              {publicSharingStatus.enabled ? 'Enabled' : 'Disabled'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Link Section - Only shown when enabled */}
+      {publicSharingStatus.enabled && publicSharingStatus.url && (
+        <>
+          <View style={styles.publicLinkSection}>
+            <Text style={styles.publicLinkLabel}>Your Public Link</Text>
+            <View style={styles.publicLinkBox}>
+              <MaterialCommunityIcons name="link" size={18} color="#3B82F6" />
+              <Text style={styles.publicLinkText} numberOfLines={1}>
+                {publicSharingStatus.url}
+              </Text>
+            </View>
+            
+            <View style={styles.publicLinkActions}>
+              <TouchableOpacity
+                style={styles.publicLinkActionButton}
+                onPress={handleCopyPublicLink}
+              >
+                <MaterialCommunityIcons name="content-copy" size={20} color="#3B82F6" />
+                <Text style={styles.publicLinkActionText}>Copy Link</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.publicLinkActionButton, styles.publicLinkActionButtonPrimary]}
+                onPress={handleSharePublicLink}
+              >
+                <MaterialCommunityIcons name="share-variant" size={20} color="white" />
+                <Text style={[styles.publicLinkActionText, styles.publicLinkActionTextPrimary]}>Share</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Info Cards */}
+          <View style={styles.publicInfoCard}>
+            <MaterialCommunityIcons name="eye" size={20} color="#64748B" />
+            <Text style={styles.publicInfoText}>
+              Viewers can see your full strategy including weather conditions, rig tuning, and tactical plans.
+            </Text>
+          </View>
+
+          <View style={styles.publicInfoCard}>
+            <MaterialCommunityIcons name="lock" size={20} color="#64748B" />
+            <Text style={styles.publicInfoText}>
+              Read-only access - viewers cannot edit or modify your strategy.
+            </Text>
+          </View>
+
+          <View style={styles.publicInfoCard}>
+            <MaterialCommunityIcons name="link-off" size={20} color="#64748B" />
+            <Text style={styles.publicInfoText}>
+              You can disable sharing anytime to revoke access to this link.
+            </Text>
+          </View>
+
+          {publicSharingStatus.sharedAt && (
+            <Text style={styles.publicSharedAt}>
+              Sharing enabled {new Date(publicSharingStatus.sharedAt).toLocaleDateString()}
+            </Text>
+          )}
+        </>
+      )}
+
+      {/* Empty state when disabled */}
+      {!publicSharingStatus.enabled && (
+        <View style={styles.publicDisabledState}>
+          <MaterialCommunityIcons name="earth-off" size={48} color="#CBD5E1" />
+          <Text style={styles.publicDisabledTitle}>Public Sharing Disabled</Text>
+          <Text style={styles.publicDisabledText}>
+            Enable public sharing above to generate a link you can share with anyone.
+          </Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+
   const tabs: { key: ShareTab; label: string; icon: string }[] = [
     { key: 'preview', label: 'Preview', icon: 'eye' },
+    { key: 'public', label: 'Public Link', icon: 'link-variant' },
     { key: 'coach', label: 'Coach', icon: 'school' },
     { key: 'crew', label: 'Crew', icon: 'account-group' },
     { key: 'export', label: 'Export', icon: 'export' },
@@ -1068,6 +1524,7 @@ export function StrategySharingModal({
         ) : (
           <View style={styles.content}>
             {activeTab === 'preview' && renderStrategyPreview()}
+            {activeTab === 'public' && renderPublicTab()}
             {activeTab === 'coach' && renderCoachTab()}
             {activeTab === 'crew' && renderCrewTab()}
             {activeTab === 'export' && renderExportTab()}
@@ -1079,9 +1536,9 @@ export function StrategySharingModal({
 }
 
 // Sub-components
-function StrategySection({ icon, title, content, isAI }: { 
-  icon: string; 
-  title: string; 
+function StrategySection({ icon, title, content, isAI }: {
+  icon: string;
+  title: string;
   content: string;
   isAI?: boolean;
 }) {
@@ -1097,6 +1554,36 @@ function StrategySection({ icon, title, content, isAI }: {
         )}
       </View>
       <Text style={styles.sectionContent}>{content}</Text>
+    </View>
+  );
+}
+
+function StrategyPhaseCard({ icon, title, content }: {
+  icon: string;
+  title: string;
+  content: string;
+}) {
+  return (
+    <View style={styles.phaseCard}>
+      <View style={styles.phaseCardHeader}>
+        <MaterialCommunityIcons name={icon as any} size={16} color="#3B82F6" />
+        <Text style={styles.phaseCardTitle}>{title}</Text>
+        <MaterialCommunityIcons name="check-circle" size={16} color="#10B981" />
+      </View>
+      <Text style={styles.phaseCardContent}>{content}</Text>
+    </View>
+  );
+}
+
+function StrategyPhasePlaceholder({ icon, title }: {
+  icon: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.phasePlaceholder}>
+      <MaterialCommunityIcons name={icon as any} size={16} color="#CBD5E1" />
+      <Text style={styles.phasePlaceholderTitle}>{title}</Text>
+      <Text style={styles.phasePlaceholderHint}>Not set</Text>
     </View>
   );
 }
@@ -1233,6 +1720,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
+  raceTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  raceTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0369A1',
+  },
+  raceDetailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  raceDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  raceDetailText: {
+    fontSize: 13,
+    color: '#64748B',
+  },
   strategySection: {
     backgroundColor: '#FFFFFF',
     padding: 16,
@@ -1358,6 +1876,51 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontStyle: 'italic',
     marginTop: 12,
+  },
+  // Distance race styles
+  distanceOverview: {
+    flexDirection: 'row',
+    gap: 24,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+  },
+  distanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  distanceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0369A1',
+  },
+  waypointsList: {
+    marginBottom: 16,
+  },
+  waypointItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  waypointNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#3B82F6',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  waypointName: {
+    fontSize: 14,
+    color: '#1E293B',
   },
   // AI recommendation styles
   aiRecommendation: {
@@ -1617,6 +2180,269 @@ const styles = StyleSheet.create({
     color: '#10B981',
     marginTop: 6,
     fontStyle: 'italic',
+  },
+  // Strategy Completeness Card
+  completenessCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  completenessTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 12,
+  },
+  completenessGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  completenessItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  completenessLabel: {
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '500',
+  },
+  completenessLabelEmpty: {
+    color: '#94A3B8',
+  },
+  // Empty Section Card
+  emptySectionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+  },
+  emptySectionContent: {
+    flex: 1,
+  },
+  emptySectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  emptySectionHint: {
+    fontSize: 12,
+    color: '#CBD5E1',
+    marginTop: 2,
+  },
+  // Phase Card Styles
+  phaseCard: {
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  phaseCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  phaseCardTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#166534',
+    flex: 1,
+  },
+  phaseCardContent: {
+    fontSize: 13,
+    color: '#15803D',
+    lineHeight: 18,
+  },
+  // Phase Placeholder Styles
+  phasePlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+  },
+  phasePlaceholderTitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    flex: 1,
+  },
+  phasePlaceholderHint: {
+    fontSize: 11,
+    color: '#CBD5E1',
+    fontStyle: 'italic',
+  },
+  // Public Link Tab Styles
+  publicInstructions: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  publicToggleSection: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  publicToggleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  publicToggleInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  publicToggleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  publicToggleSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  publicToggleButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  publicToggleButtonEnabled: {
+    backgroundColor: '#D1FAE5',
+    borderColor: '#10B981',
+  },
+  publicToggleButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  publicToggleButtonTextEnabled: {
+    color: '#059669',
+  },
+  publicLinkSection: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  publicLinkLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  publicLinkBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+    marginBottom: 12,
+  },
+  publicLinkText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#3B82F6',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  publicLinkActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  publicLinkActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  publicLinkActionButtonPrimary: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  publicLinkActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  publicLinkActionTextPrimary: {
+    color: 'white',
+  },
+  publicInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 12,
+  },
+  publicInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  publicSharedAt: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  publicDisabledState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+  publicDisabledTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 16,
+  },
+  publicDisabledText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
 });
 

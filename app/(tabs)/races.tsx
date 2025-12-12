@@ -1,20 +1,21 @@
 import {
-  ContingencyPlansCard,
-  CourseSelector,
-  CrewEquipmentCard,
-  DownwindStrategyCard,
-  FleetRacersCard,
-  MarkRoundingCard,
-  PostRaceAnalysisCard,
-  PreRaceStrategySection,
-  RaceConditionsCard,
-  RaceDetailMapHero,
-  RacePhaseHeader,
-  RigTuningCard,
-  RouteMapCard,
-  StartStrategyCard,
-  UpwindStrategyCard,
-  WeatherAlongRouteCard
+    ContingencyPlansCard,
+    CourseSelector,
+    CrewEquipmentCard,
+    DistanceRacingStrategyCard,
+    DownwindStrategyCard,
+    FleetRacersCard,
+    MarkRoundingCard,
+    PostRaceAnalysisCard,
+    PreRaceStrategySection,
+    RaceConditionsCard,
+    RaceDetailMapHero,
+    RacePhaseHeader,
+    RigTuningCard,
+    RouteMapCard,
+    StartStrategyCard,
+    UpwindStrategyCard,
+    WeatherAlongRouteCard
 } from '@/components/race-detail';
 import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/race-detail/RaceDocumentsCard';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
@@ -24,7 +25,6 @@ import { SplitTimesAnalysis } from '@/components/races/SplitTimesAnalysis';
 import { TacticalInsights } from '@/components/races/TacticalInsights';
 // LiveRaceTimer removed - timer is now only in the Race Card
 import { StrategySharingModal } from '@/components/coaching/StrategySharingModal';
-import { CommunityTipsCard } from '@/components/venue/CommunityTipsCard';
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
@@ -41,6 +41,7 @@ import { Card } from '@/components/ui/card';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
+import { CommunityTipsCard } from '@/components/venue/CommunityTipsCard';
 import { MOCK_RACES, calculateCountdown } from '@/constants/mockData';
 import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
 import { useDashboardData } from '@/hooks/useData';
@@ -66,16 +67,16 @@ import { useRaceConditions } from '@/stores/raceConditionsStore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  AlertTriangle,
-  Bell,
-  Calendar,
-  ChevronRight,
-  MapPin,
-  Navigation,
-  Plus,
-  TrendingUp,
-  Users,
-  X
+    AlertTriangle,
+    Bell,
+    Calendar,
+    ChevronRight,
+    MapPin,
+    Navigation,
+    Plus,
+    TrendingUp,
+    Users,
+    X
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
@@ -565,6 +566,67 @@ const MOCK_SPLIT_TIMES = [
   },
 ];
 
+/**
+ * Detect race type based on name patterns, explicit type, or distance
+ * Distance races have different strategic considerations than fleet races
+ */
+function detectRaceType(
+  raceName: string | undefined,
+  explicitType: 'fleet' | 'distance' | undefined,
+  totalDistanceNm: number | undefined
+): 'fleet' | 'distance' {
+  // 1. Explicit type takes priority
+  if (explicitType) {
+    return explicitType;
+  }
+
+  // 2. Check distance threshold
+  if (totalDistanceNm && totalDistanceNm > 10) {
+    return 'distance';
+  }
+
+  // 3. Smart name detection for distance races
+  if (raceName) {
+    const lowerName = raceName.toLowerCase();
+    const distanceKeywords = [
+      'around',
+      'island race',
+      'offshore',
+      'ocean race',
+      'ocean racing',
+      'coastal',
+      'passage',
+      'distance race',
+      'long distance',
+      'overnight',
+      'multi-day',
+      'transat',
+      'transpac',
+      'fastnet',
+      'rolex',
+      'sydney hobart',
+      'bermuda',
+      'nm race',
+      'mile race',
+    ];
+
+    // Check for distance keywords
+    for (const keyword of distanceKeywords) {
+      if (lowerName.includes(keyword)) {
+        return 'distance';
+      }
+    }
+
+    // Check for distance patterns like "25nm", "50 mile", "100 nautical"
+    if (/\d+\s*(nm|nautical|mile)/i.test(raceName)) {
+      return 'distance';
+    }
+  }
+
+  // Default to fleet racing
+  return 'fleet';
+}
+
 export default function RacesScreen() {
   const auth = useAuth();
   const { user, signedIn, ready, isDemoSession, userType } = auth;
@@ -630,6 +692,7 @@ export default function RacesScreen() {
   const [sailorId, setSailorId] = useState<string | null>(null);
   const [showCoachSelectionModal, setShowCoachSelectionModal] = useState(false);
   const [sharingStrategy, setSharingStrategy] = useState(false);
+  const [sharingRaceEventId, setSharingRaceEventId] = useState<string | null>(null);
   const updateRacePosition = useRaceConditions(state => state.updatePosition);
   const updateEnvironment = useRaceConditions(state => state.updateEnvironment);
   const updateCourse = useRaceConditions(state => state.updateCourse);
@@ -2366,6 +2429,60 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
     logger.debug('[ensureRaceEventId] Created new race_event', { raceEventId: newRaceEvent.id });
     return newRaceEvent.id;
   }, [selectedRaceData?.name, selectedRaceData?.start_date, selectedRaceId]);
+
+  // Handler to open strategy sharing modal (ensures race_event exists first)
+  const handleOpenStrategySharing = useCallback(async () => {
+    logger.info('[handleOpenStrategySharing] Called', { 
+      selectedRaceId, 
+      sailorId, 
+      selectedRaceData: !!selectedRaceData 
+    });
+    
+    if (!selectedRaceId) {
+      logger.warn('[handleOpenStrategySharing] No race selected');
+      Alert.alert('Error', 'Please select a race first.');
+      return;
+    }
+    
+    if (!sailorId) {
+      logger.warn('[handleOpenStrategySharing] No sailor ID');
+      Alert.alert('Error', 'Unable to identify your account. Please try refreshing the page.');
+      return;
+    }
+    
+    if (!selectedRaceData) {
+      logger.warn('[handleOpenStrategySharing] No race data');
+      Alert.alert('Error', 'Race data not loaded. Please try again.');
+      return;
+    }
+    
+    try {
+      setSharingStrategy(true);
+      logger.info('[handleOpenStrategySharing] Ensuring race_event exists for regatta:', selectedRaceId);
+      
+      const raceEventId = await ensureRaceEventId();
+      if (!raceEventId) {
+        logger.error('[handleOpenStrategySharing] Failed to get race_event_id');
+        Alert.alert('Error', 'Unable to prepare race for sharing. Please try again.');
+        return;
+      }
+      
+      logger.info('[handleOpenStrategySharing] Got race_event_id:', raceEventId, {
+        sailorId,
+        hasSelectedRaceData: !!selectedRaceData
+      });
+      
+      setSharingRaceEventId(raceEventId);
+      setShowCoachSelectionModal(true);
+      logger.info('[handleOpenStrategySharing] Modal should now be visible');
+    } catch (error) {
+      logger.error('[handleOpenStrategySharing] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Error', `Failed to prepare sharing: ${errorMessage}`);
+    } finally {
+      setSharingStrategy(false);
+    }
+  }, [selectedRaceId, sailorId, selectedRaceData, ensureRaceEventId]);
 
   const normalizeCourseMarkType = (type?: string | null): string => {
     if (!type) return 'custom';
@@ -4806,6 +4923,19 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       />
                     )}
 
+                    {/* Distance Racing: Strategy with AI suggestions and user notes */}
+                    {selectedRaceData.race_type === 'distance' && (
+                      <DistanceRacingStrategyCard
+                        raceId={selectedRaceData.id}
+                        raceName={selectedRaceData.name}
+                        raceEventId={selectedRaceData.race_event_id}
+                        routeWaypoints={selectedRaceData.route_waypoints || []}
+                        totalDistanceNm={selectedRaceData.total_distance_nm}
+                        raceDate={selectedRaceData.start_date}
+                        venueId={selectedRaceData.metadata?.venue_id}
+                      />
+                    )}
+
                     {/* Distance Racing: Route Map with Waypoints */}
                     <RouteMapCard
                       waypoints={selectedRaceData.route_waypoints || []}
@@ -4816,10 +4946,15 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       } : undefined}
                     />
 
-                    {/* Distance Racing: Weather Along Route */}
+                    {/* Distance Racing: Weather Along Route - uses same enriched weather as RaceConditionsCard */}
                     <WeatherAlongRouteCard
                       waypoints={selectedRaceData.route_waypoints || []}
-                      raceDate={selectedRaceData.start_date}
+                      raceDate={selectedRaceData.start_date?.split('T')[0] || new Date().toISOString().split('T')[0]}
+                      startTime={selectedRaceData.start_date?.split('T')[1]?.slice(0, 5) || selectedRaceData.warning_signal_time || '10:00'}
+                      sharedWeather={{
+                        wind: selectedRaceEnrichedWeather?.wind || selectedRaceData.metadata?.wind,
+                        tide: selectedRaceEnrichedWeather?.tide || selectedRaceData.metadata?.tide,
+                      }}
                     />
                   </>
                 ) : (
@@ -5100,7 +5235,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                               justifyContent: 'center',
                               gap: 8,
                             }}
-                            onPress={() => setShowCoachSelectionModal(true)}
+                            onPress={handleOpenStrategySharing}
                             disabled={sharingStrategy}
                           >
                             <MaterialCommunityIcons name="share-variant" size={20} color="white" />
@@ -5130,7 +5265,17 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                           country: 'HK'
                         } : undefined}
                         warningSignalTime={selectedRaceData.warning_signal_time}
-                        expectedDurationMinutes={selectedRaceData.time_limit_minutes || 90}
+                        expectedDurationMinutes={
+                          // For distance races: use time_limit_hours (in minutes) or estimate from distance
+                          // For fleet races: use time_limit_minutes or default 90 min
+                          selectedRaceData.race_type === 'distance'
+                            ? (selectedRaceData.time_limit_hours 
+                                ? selectedRaceData.time_limit_hours * 60 
+                                : selectedRaceData.total_distance_nm 
+                                  ? Math.round(selectedRaceData.total_distance_nm / 5 * 60) // ~5 knots avg speed
+                                  : 360) // Default 6 hours for distance races
+                            : (selectedRaceData.time_limit_minutes || 90)
+                        }
                         savedWind={selectedRaceEnrichedWeather?.wind || selectedRaceData.metadata?.wind}
                         savedTide={selectedRaceEnrichedWeather?.tide || selectedRaceData.metadata?.tide}
                         savedWeatherFetchedAt={selectedRaceEnrichedWeather?.weatherFetchedAt || selectedRaceData.metadata?.weather_fetched_at}
@@ -5566,31 +5711,46 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
       )}
 
       {/* Strategy Sharing Modal */}
-      {sailorId && selectedRaceData && (
+      {sailorId && selectedRaceData && sharingRaceEventId && (
         <StrategySharingModal
           visible={showCoachSelectionModal}
-          onClose={() => setShowCoachSelectionModal(false)}
+          onClose={() => {
+            setShowCoachSelectionModal(false);
+            setSharingRaceEventId(null);
+          }}
           onShareComplete={(shareType, recipientName) => {
             logger.info('Strategy shared:', { shareType, recipientName });
           }}
           sailorId={sailorId}
-          raceId={selectedRaceData.id}
+          raceId={sharingRaceEventId}
           raceInfo={{
             id: selectedRaceData.id,
             name: selectedRaceData.name || 'Race',
             date: selectedRaceData.start_date,
             venue: selectedRaceData.metadata?.venue_name,
             boatClass: selectedRaceData.metadata?.class_name,
-            weather: selectedRaceData.metadata?.wind ? {
-              windSpeed: selectedRaceData.metadata.wind.speedMin,
-              windSpeedMax: selectedRaceData.metadata.wind.speedMax,
-              windDirection: selectedRaceData.metadata.wind.direction,
-              tideState: selectedRaceData.metadata.tide?.state,
-              tideHeight: selectedRaceData.metadata.tide?.height,
-              currentSpeed: selectedRaceData.metadata.current?.speed,
-              currentDirection: selectedRaceData.metadata.current?.direction,
-              waveHeight: selectedRaceData.metadata.waves?.height,
-              temperature: selectedRaceData.metadata.weather?.temperature,
+            raceType: detectRaceType(
+              selectedRaceData.name,
+              selectedRaceData.metadata?.race_type,
+              selectedRaceData.metadata?.total_distance_nm || selectedRaceData.total_distance_nm
+            ),
+            totalDistanceNm: selectedRaceData.metadata?.total_distance_nm || selectedRaceData.total_distance_nm,
+            waypoints: selectedRaceData.route_waypoints || selectedRaceData.metadata?.waypoints,
+            startTime: selectedRaceData.start_date?.split('T')[1]?.slice(0, 5) || selectedRaceData.metadata?.start_time,
+            warningSignal: selectedRaceData.metadata?.warning_signal || selectedRaceData.warning_signal_time,
+            courseName: selectedRaceData.course_name || selectedRaceData.metadata?.course_name,
+            courseType: selectedRaceData.course_type || selectedRaceData.metadata?.course_type,
+            timeLimitHours: selectedRaceData.time_limit_hours || selectedRaceData.metadata?.time_limit_hours,
+            weather: (selectedRaceData.metadata?.wind || selectedRaceEnrichedWeather?.wind) ? {
+              windSpeed: selectedRaceEnrichedWeather?.wind?.speedMin || selectedRaceData.metadata?.wind?.speedMin,
+              windSpeedMax: selectedRaceEnrichedWeather?.wind?.speedMax || selectedRaceData.metadata?.wind?.speedMax,
+              windDirection: selectedRaceEnrichedWeather?.wind?.direction || selectedRaceData.metadata?.wind?.direction,
+              tideState: selectedRaceEnrichedWeather?.tide?.state || selectedRaceData.metadata?.tide?.state,
+              tideHeight: selectedRaceEnrichedWeather?.tide?.height || selectedRaceData.metadata?.tide?.height,
+              currentSpeed: selectedRaceData.metadata?.current?.speed,
+              currentDirection: selectedRaceData.metadata?.current?.direction,
+              waveHeight: selectedRaceData.metadata?.waves?.height,
+              temperature: selectedRaceData.metadata?.weather?.temperature,
             } : undefined,
             rigTuning: selectedRaceData.metadata?.rigTuning ? {
               preset: selectedRaceData.metadata.rigTuning.preset,

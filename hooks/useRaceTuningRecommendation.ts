@@ -3,9 +3,9 @@
  * Normalizes the RaceTuningService response for UI components.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSetting } from '@/services/RaceTuningService';
 import { createLogger } from '@/lib/utils/logger';
+import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSetting } from '@/services/RaceTuningService';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface UseRaceTuningOptions {
   classId?: string | null;
@@ -111,7 +111,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
   const fetchKey = `${enabled}-${classId}-${className}-${boatId || 'no-boat'}-${averageWindSpeed}-${windMin}-${windMax}`;
 
   const fetchRecommendation = useCallback(async () => {
-    console.log('🎣 [useRaceTuningRecommendation] Fetch called with:', {
+    logger.debug('🎣 Fetch called with:', {
       enabled,
       classId,
       className,
@@ -125,7 +125,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     });
 
     if (!enabled || (!classId && !className)) {
-      console.log('⏭️ [useRaceTuningRecommendation] Skipping fetch:', {
+      logger.debug('⏭️ Skipping fetch:', {
         enabled,
         hasClassId: !!classId,
         hasClassName: !!className
@@ -138,7 +138,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     setError(null);
 
     try {
-      console.log('📞 [useRaceTuningRecommendation] Calling raceTuningService.getRecommendations...');
+      logger.debug('📞 Calling raceTuningService.getRecommendations...');
       const [result] = await raceTuningService.getRecommendations({
         classId,
         className,
@@ -154,7 +154,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
         pointsOfSail,
         limit,
       });
-      console.log('📦 [useRaceTuningRecommendation] Got result:', result ? {
+      logger.debug('📦 Got result:', result ? {
         guideTitle: result.guideTitle,
         guideSource: result.guideSource,
         sectionTitle: result.sectionTitle,
@@ -165,7 +165,7 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
       } : 'No recommendation returned');
       setRecommendation(result ?? null);
     } catch (err) {
-      console.error('❌ [useRaceTuningRecommendation] Failed to load tuning recommendation:', err);
+      logger.error('❌ Failed to load tuning recommendation:', err);
       setError(err as Error);
       setRecommendation(null);
     } finally {

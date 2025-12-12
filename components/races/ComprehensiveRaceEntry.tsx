@@ -3,9 +3,11 @@
  * Complete race strategy planning interface with AI-powered auto-suggest
  */
 
+import { RigTuningCard } from '@/components/race-detail/RigTuningCard';
 import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
 import { Toast, ToastDescription, ToastTitle, useToast } from '@/components/ui/toast';
 import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
@@ -20,47 +22,44 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import {
-  AlertCircle,
-  Anchor,
-  Calendar,
-  ChevronDown,
-  ChevronLeft,
-  Clock,
-  FileText,
-  Flag,
-  Mail,
-  MapPin,
-  Navigation,
-  Phone,
-  Plus,
-  Radio,
-  Route,
-  Sparkles,
-  Upload,
-  X,
+    AlertCircle,
+    Anchor,
+    Calendar,
+    ChevronDown,
+    ChevronLeft,
+    Clock,
+    FileText,
+    Flag,
+    Mail,
+    MapPin,
+    Navigation,
+    Phone,
+    Plus,
+    Radio,
+    Sparkles,
+    Upload,
+    X
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View
 } from 'react-native';
 import { AIValidationScreen, type ExtractedData, type FieldConfidenceMap, type MultiRaceExtractedData } from './AIValidationScreen';
 import { BoatSelector } from './BoatSelector';
+import { DistanceRouteMap, type RouteWaypoint } from './DistanceRouteMap';
+import { DEFAULT_PREFERENCES, ExtractionPreferencesDialog, type ExtractionPreferences } from './ExtractionPreferencesDialog';
 import { MultiRaceSelectionScreen } from './MultiRaceSelectionScreen';
 import { RaceSuggestionsDrawer } from './RaceSuggestionsDrawer';
+import { RaceTypeSelector } from './RaceTypeSelector';
 import { VenueLocationPicker } from './VenueLocationPicker';
-import { RacePrepLearningCard } from './RacePrepLearningCard';
-import { RaceTypeSelector, type RaceType } from './RaceTypeSelector';
-import { DistanceRouteMap, type RouteWaypoint } from './DistanceRouteMap';
-import { RigTuningCard } from '@/components/race-detail/RigTuningCard';
-import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
-import { ExtractionPreferencesDialog, type ExtractionPreferences, DEFAULT_PREFERENCES } from './ExtractionPreferencesDialog';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
@@ -355,6 +354,12 @@ export function ComprehensiveRaceEntry({
   // === Distance Racing Fields ===
   const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
   const [totalDistanceNm, setTotalDistanceNm] = useState('');
+  const [isDistanceManuallySet, setIsDistanceManuallySet] = useState(false); // Track if user manually edited distance
+  const [calculatedDistanceNm, setCalculatedDistanceNm] = useState(''); // Store auto-calculated value separately
+  const [showWaypointReimportModal, setShowWaypointReimportModal] = useState(false);
+  const [waypointReimportText, setWaypointReimportText] = useState('');
+  const [waypointReimportUrl, setWaypointReimportUrl] = useState('');
+  const [reimportingWaypoints, setReimportingWaypoints] = useState(false);
   const [timeLimitHours, setTimeLimitHours] = useState('');
   const [startFinishSameLocation, setStartFinishSameLocation] = useState(true);
   const [finishVenue, setFinishVenue] = useState(''); // For point-to-point races
@@ -600,7 +605,11 @@ export function ComprehensiveRaceEntry({
         }
 
         // Load other distance racing fields
-        if (race.total_distance_nm) setTotalDistanceNm(race.total_distance_nm.toString());
+        if (race.total_distance_nm) {
+          setTotalDistanceNm(race.total_distance_nm.toString());
+          // Assume saved distance was manually set (user can reset if needed)
+          setIsDistanceManuallySet(true);
+        }
         if (race.time_limit_hours) setTimeLimitHours(race.time_limit_hours.toString());
         if (race.start_finish_same_location !== undefined) {
           setStartFinishSameLocation(race.start_finish_same_location);
@@ -1238,6 +1247,95 @@ export function ComprehensiveRaceEntry({
     // Show preferences dialog first
     setPendingExtractionText(freeformText);
     setShowExtractionPreferences(true);
+  };
+
+  // Re-import waypoints from text/URL (simplified extraction)
+  const handleReimportWaypoints = async () => {
+    if (!waypointReimportText.trim() && !waypointReimportUrl.trim()) {
+      Alert.alert('No Input', 'Please paste text or enter a URL to extract waypoints from');
+      return;
+    }
+
+    setReimportingWaypoints(true);
+    try {
+      const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      let textToExtract = waypointReimportText;
+
+      // If URL provided, fetch it first
+      if (waypointReimportUrl.trim()) {
+        try {
+          const { blob } = await fetchPdfBlobWithFallback(waypointReimportUrl.trim());
+          const blobUrl = URL.createObjectURL(blob);
+          const extractionResult = await PDFExtractionService.extractText(blobUrl, { maxPages: 50 });
+          URL.revokeObjectURL(blobUrl);
+          
+          if (extractionResult.success && extractionResult.text) {
+            textToExtract = extractionResult.text;
+          } else {
+            throw new Error('Failed to extract text from PDF');
+          }
+        } catch (error: any) {
+          Alert.alert('URL Error', error.message || 'Failed to fetch PDF from URL');
+          setReimportingWaypoints(false);
+          return;
+        }
+      }
+
+      // Extract waypoints using the extract-course-from-text function
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-course-from-text`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: textToExtract,
+          raceType: 'distance',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Extraction failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.waypoints && Array.isArray(result.waypoints) && result.waypoints.length > 0) {
+        // Convert extracted waypoints to RouteWaypoint format
+        const convertedWaypoints: RouteWaypoint[] = result.waypoints.map((wp: any, index: number) => ({
+          id: `wp-${Date.now()}-${index}`,
+          name: wp.name || `Waypoint ${index + 1}`,
+          latitude: wp.latitude,
+          longitude: wp.longitude,
+          type: wp.type === 'start' ? 'start' : 
+                wp.type === 'finish' ? 'finish' : 
+                wp.type === 'gate' ? 'gate' : 'waypoint',
+          required: wp.type === 'start' || wp.type === 'finish',
+        }));
+
+        setRouteWaypoints(convertedWaypoints);
+        
+        // Update distance if provided
+        if (result.totalDistanceNm) {
+          setTotalDistanceNm(result.totalDistanceNm.toString());
+        }
+
+        setShowWaypointReimportModal(false);
+        setWaypointReimportText('');
+        setWaypointReimportUrl('');
+        
+        Alert.alert('Success', `Imported ${convertedWaypoints.length} waypoints from document`);
+      } else {
+        Alert.alert('No Waypoints Found', 'Could not find any waypoints with coordinates in the provided text/URL');
+      }
+    } catch (error: any) {
+      console.error('[handleReimportWaypoints] Error:', error);
+      Alert.alert('Error', error.message || 'Failed to extract waypoints');
+    } finally {
+      setReimportingWaypoints(false);
+    }
   };
 
   const handleExtractionPreferencesConfirm = async (preferences: ExtractionPreferences) => {
@@ -3330,13 +3428,24 @@ export function ComprehensiveRaceEntry({
                       waypoints={routeWaypoints}
                       onWaypointsChange={setRouteWaypoints}
                       initialCenter={venueCoordinates || { lat: 22.28, lng: 114.16 }}
-                      onTotalDistanceChange={(distance) => setTotalDistanceNm(distance.toString())}
+                      onTotalDistanceChange={(distance) => {
+                        // Store the calculated distance
+                        setCalculatedDistanceNm(distance.toString());
+                        // Only auto-update if user hasn't manually set the distance
+                        if (!isDistanceManuallySet) {
+                          setTotalDistanceNm(distance.toString());
+                        }
+                      }}
+                      onReimportWaypoints={() => {
+                        // Show modal to re-import waypoints
+                        setShowWaypointReimportModal(true);
+                      }}
                     />
                     
                     {routeWaypoints.length > 0 && (
                       <View className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                         <Text className="text-sm font-semibold text-purple-800">
-                          ✅ Route Defined: {routeWaypoints.length} waypoints, {totalDistanceNm} nm
+                          ✅ Route Defined: {routeWaypoints.length} waypoints{totalDistanceNm ? `, ${totalDistanceNm} nm` : ''}
                         </Text>
                       </View>
                     )}
@@ -3577,10 +3686,33 @@ export function ComprehensiveRaceEntry({
                 {/* Total Distance */}
                 <View className="flex-row gap-3 mb-4">
                   <View className="flex-1">
-                    {renderInputField('Total Distance (nm)', totalDistanceNm, setTotalDistanceNm, {
+                    {renderInputField('Total Distance (nm)', totalDistanceNm, (value) => {
+                      setTotalDistanceNm(value);
+                      // Mark as manually set if user enters a different value than calculated
+                      if (value !== calculatedDistanceNm) {
+                        setIsDistanceManuallySet(true);
+                      }
+                    }, {
                       keyboardType: 'numeric',
                       placeholder: '45',
                     })}
+                    {/* Show helper text when manually overriding */}
+                    {isDistanceManuallySet && calculatedDistanceNm && totalDistanceNm !== calculatedDistanceNm && (
+                      <View className="flex-row items-center gap-2 mt-1">
+                        <Text className="text-xs text-purple-600">
+                          Waypoints: {calculatedDistanceNm} nm
+                        </Text>
+                        <Pressable
+                          onPress={() => {
+                            setTotalDistanceNm(calculatedDistanceNm);
+                            setIsDistanceManuallySet(false);
+                          }}
+                          className="px-2 py-0.5 bg-purple-100 rounded"
+                        >
+                          <Text className="text-xs text-purple-700 font-medium">Reset</Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
                   <View className="flex-1">
                     {renderInputField('Time Limit (hours)', timeLimitHours, setTimeLimitHours, {
@@ -4263,6 +4395,134 @@ export function ComprehensiveRaceEntry({
           </Pressable>
         </View>
       </View>
+
+      {/* Re-import Waypoints Modal */}
+      <Modal
+        visible={showWaypointReimportModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowWaypointReimportModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 16,
+            padding: 24,
+            width: '100%',
+            maxWidth: 500,
+            maxHeight: '80%',
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E293B' }}>
+                Re-import Waypoints
+              </Text>
+              <Pressable onPress={() => setShowWaypointReimportModal(false)}>
+                <X size={24} color="#64748B" />
+              </Pressable>
+            </View>
+
+            <Text style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
+              Paste text from SIs/NOR or enter a PDF URL to extract waypoints. This will replace your current waypoints.
+            </Text>
+
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8 }}>
+              Option 1: Paste Text
+            </Text>
+            <TextInput
+              value={waypointReimportText}
+              onChangeText={setWaypointReimportText}
+              placeholder="Paste sailing instructions text with waypoint coordinates..."
+              multiline
+              numberOfLines={4}
+              style={{
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 14,
+                color: '#1E293B',
+                marginBottom: 16,
+                minHeight: 100,
+                textAlignVertical: 'top',
+              }}
+            />
+
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8 }}>
+              Option 2: PDF URL
+            </Text>
+            <TextInput
+              value={waypointReimportUrl}
+              onChangeText={setWaypointReimportUrl}
+              placeholder="https://example.com/sailing-instructions.pdf"
+              style={{
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 14,
+                color: '#1E293B',
+                marginBottom: 20,
+              }}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'flex-end' }}>
+              <Pressable
+                onPress={() => {
+                  setShowWaypointReimportModal(false);
+                  setWaypointReimportText('');
+                  setWaypointReimportUrl('');
+                }}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#64748B' }}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleReimportWaypoints}
+                disabled={reimportingWaypoints || (!waypointReimportText.trim() && !waypointReimportUrl.trim())}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  backgroundColor: reimportingWaypoints || (!waypointReimportText.trim() && !waypointReimportUrl.trim()) ? '#CBD5E1' : '#9333ea',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                {reimportingWaypoints ? (
+                  <>
+                    <ActivityIndicator size="small" color="white" />
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: 'white' }}>
+                      Extracting...
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={16} color="white" />
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: 'white' }}>
+                      Import Waypoints
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Extraction Preferences Dialog */}
       {extractionPreferencesDialog}

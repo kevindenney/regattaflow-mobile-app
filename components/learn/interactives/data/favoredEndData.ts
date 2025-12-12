@@ -73,22 +73,25 @@ export const FAVORED_END_STEPS: FavoredEndCourseStep[] = [
   },
   {
     label: "Find the Midpoint",
-    description: "Identify the midpoint of the starting line as you sail parallel.",
+    description: "At the midpoint of the line, turn your bow toward the wind and coast to a stop straddling the line.",
     visualState: {
-      boat: { ...initialBoatState, opacity: 1, x: 400, y: 400, rotate: 90 },
+      // Boat at midpoint (x: 400), straddling the line (y: 250), pointing at wind (rotate: 0)
+      boat: { ...initialBoatState, opacity: 1, x: 400, y: 250, rotate: 0 },
       startLineGraphic: { ...initialLineState, opacity: 1, x1: 200, y1: 200, x2: 600, y2: 200 },
       rcBoatGraphic: { ...initialBoatState, opacity: 1, x: 590, y: 190, rotate: 0 },
       pinGraphic: { opacity: 1, cx: 200, cy: 200 },
       windArrow: { ...initialWindState, opacity: 1, rotate: 0 },
     },
-    details: ["Estimate the middle between the RC boat and the pin."],
+    details: ["Point your bow directly at the wind and let your sails luff to coast to a stop."],
     proTip: "Count the number of boat lengths from the pin to the RC to help estimate the midpoint more accurately.",
   },
   {
     label: "Turn and Coast",
     description: "At the midpoint, turn your boat towards the line and release your sails to coast.",
     visualState: {
-      boat: { opacity: 1, x: 400, y: 180, rotate: 0 },
+      // y: 250 places boat center on the start line (250 + 50 offset = 300 = line position)
+      // This shows half the boat above and half below the line
+      boat: { opacity: 1, x: 400, y: 250, rotate: 0 },
       startLineGraphic: { ...initialLineState, opacity: 1, x1: 200, y1: 200, x2: 600, y2: 200 },
       rcBoatGraphic: { ...initialBoatState, opacity: 1, x: 590, y: 190, rotate: 0 },
       pinGraphic: { opacity: 1, cx: 200, cy: 200 },
@@ -101,7 +104,8 @@ export const FAVORED_END_STEPS: FavoredEndCourseStep[] = [
     label: "Stop and Sight (Square Line)",
     description: "Coast to a stop, head-to-wind, perfectly on the line. If both ends seem equidistant, the line is square.",
     visualState: {
-      boat: { opacity: 1, x: 400, y: 180, rotate: 0 },
+      // Boat straddles the line - half above, half below
+      boat: { opacity: 1, x: 400, y: 250, rotate: 0 },
       startLineGraphic: { ...initialLineState, opacity: 1, x1: 200, y1: 200, x2: 600, y2: 200 },
       rcBoatGraphic: { ...initialBoatState, opacity: 1, x: 590, y: 190, rotate: 0 },
       pinGraphic: { opacity: 1, cx: 200, cy: 200 },
@@ -114,7 +118,7 @@ export const FAVORED_END_STEPS: FavoredEndCourseStep[] = [
     label: "Stop and Sight (Pin Favored)",
     description: "If the pin end appears closer, it's favored. This means the wind is coming more from the pin side of the line.",
     visualState: {
-      boat: { opacity: 1, x: 400, y: 200, rotate: -10 },
+      boat: { opacity: 1, x: 400, y: 250, rotate: -10 },
       startLineGraphic: { ...initialLineState, opacity: 1, x1: 200, y1: 200, x2: 600, y2: 200, rotate: 0 },
       secondaryLineGraphic: { opacity: 1, x1: 200, y1: 200, x2: 600, y2: 200, rotate: -10, label: "Shifted Line" },
       rcBoatGraphic: { ...initialBoatState, opacity: 1, x: 590, y: 190, rotate: 0 },
@@ -128,7 +132,7 @@ export const FAVORED_END_STEPS: FavoredEndCourseStep[] = [
     label: "Stop and Sight (RC Favored)",
     description: "If the RC end appears closer, it's favored. The wind is coming more from the RC boat side.",
     visualState: {
-      boat: { opacity: 1, x: 400, y: 200, rotate: 10 },
+      boat: { opacity: 1, x: 400, y: 250, rotate: 10 },
       startLineGraphic: { ...initialLineState, opacity: 1, x1: 200, y1: 200, x2: 600, y2: 200 },
       rcBoatGraphic: { ...initialBoatState, opacity: 1, x: 590, y: 190, rotate: 0 },
       pinGraphic: { opacity: 1, cx: 200, cy: 200 },

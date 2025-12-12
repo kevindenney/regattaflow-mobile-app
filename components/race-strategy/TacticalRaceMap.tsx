@@ -12,32 +12,31 @@
  * - Real-time weather integration via WeatherAggregationService
  */
 
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { MapboxOverlay } from '@deck.gl/mapbox';
-import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { createLogger } from '@/lib/utils/logger';
-import type {
-  CourseMark,
-  RaceEventWithDetails,
-  EnvironmentalIntelligence,
-  WindData,
-  TideData,
-  WaveData
-} from '@/types/raceEvents';
-import type { ParticleData, VisualizationLayers, OverlayPolygon } from '@/services/visualization/EnvironmentalVisualizationService';
-import type { UnderwaterAnalysis, StrategicZone, BathymetricData } from '@/types/bathymetry';
 import { buildEnvironmentalDeckLayers } from '@/components/map/layers/buildEnvironmentalDeckLayers';
-import { BathymetryTileService, getBathymetryColorScale } from '@/services/BathymetryTileService';
-import type { WeatherData } from '@/services/weather/RegionalWeatherService';
 import {
-  generateWaveDataPoints,
-  getWaveHeightHeatmapLayerSpec,
-  getSeaTemperatureGradientLayerSpec,
-  getPredictiveCurrentsLayerSpec,
-  type CurrentPrediction,
-  type TemperatureDataPoint,
+    generateWaveDataPoints,
+    getPredictiveCurrentsLayerSpec,
+    getSeaTemperatureGradientLayerSpec,
+    getWaveHeightHeatmapLayerSpec,
+    type CurrentPrediction,
+    type TemperatureDataPoint,
 } from '@/components/map/overlays';
+import { createLogger } from '@/lib/utils/logger';
+import { BathymetryTileService, getBathymetryColorScale } from '@/services/BathymetryTileService';
+import type { OverlayPolygon, ParticleData, VisualizationLayers } from '@/services/visualization/EnvironmentalVisualizationService';
+import type { WeatherData } from '@/services/weather/RegionalWeatherService';
+import type { StrategicZone, UnderwaterAnalysis } from '@/types/bathymetry';
+import type {
+    CourseMark,
+    EnvironmentalIntelligence,
+    RaceEventWithDetails,
+    TideData,
+    WindData
+} from '@/types/raceEvents';
+import { MapboxOverlay } from '@deck.gl/mapbox';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 const isWeb = Platform.OS === 'web';
 const logger = createLogger('TacticalRaceMap');
 const BATHYMETRY_LAYER_IDS = ['bathymetry-raster', 'bathymetry-fill', 'bathymetry-contours', 'bathymetry-labels'];
@@ -1180,21 +1179,53 @@ export default function TacticalRaceMap({
         // Map load handler
         map.on('load', async () => {
           if (isWeb) {
-            // Wait a bit for the map viewport to fully initialize before adding deck.gl overlay
-            // This prevents "Cannot read properties of null (reading 'id')" errors
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Wait for the map viewport to fully initialize before adding deck.gl overlay
+            // This prevents "Cannot read properties of null/undefined" errors
+            await new Promise(resolve => setTimeout(resolve, 200));
 
-            // Use non-interleaved overlay; MapLibre + DeckGL interleaved mode can emit null viewports
-            // which causes deck.gl to crash while reading viewport.id. Standard overlay mode keeps
-            // rendering stable across browsers and still supports interactive layers.
-            const overlay = new MapboxOverlay({ layers: [] });
-            overlay.setProps({
-              parameters: {
-                clearColor: [0, 0, 0, 0]
-              }
-            });
-            deckOverlayRef.current = overlay;
-            map.addControl(overlay);
+            // Ensure map is still valid and not destroyed
+            if (!mapRef.current || !mapContainerRef.current) {
+              logger.warn('Map was destroyed before deck.gl overlay could be added');
+              return;
+            }
+
+            // Ensure getProjection polyfill is properly set up for deck.gl compatibility
+            const mapInstance = mapRef.current as any;
+            if (typeof mapInstance.getProjection !== 'function') {
+              mapInstance.getProjection = () => ({
+                name: 'mercator',
+                project: (lngLat: any) => {
+                  if (!lngLat) return mapInstance.project({ lng: 0, lat: 0 });
+                  if (Array.isArray(lngLat) && lngLat.length >= 2) {
+                    return mapInstance.project({ lng: lngLat[0], lat: lngLat[1] });
+                  }
+                  const lng = lngLat.lng ?? lngLat.lon ?? lngLat.longitude ?? 0;
+                  const lat = lngLat.lat ?? lngLat.latitude ?? 0;
+                  return mapInstance.project({ lng, lat });
+                },
+                unproject: (point: any) => mapInstance.unproject(point),
+              });
+            }
+
+            try {
+              // Use non-interleaved overlay; MapLibre + DeckGL interleaved mode can emit null viewports
+              // which causes deck.gl to crash while reading viewport.id. Standard overlay mode keeps
+              // rendering stable across browsers and still supports interactive layers.
+              const overlay = new MapboxOverlay({ 
+                layers: [],
+                // Explicitly disable interleaved mode for MapLibre compatibility
+                interleaved: false,
+              });
+              overlay.setProps({
+                parameters: {
+                  clearColor: [0, 0, 0, 0]
+                }
+              });
+              deckOverlayRef.current = overlay;
+              mapInstance.addControl(overlay);
+            } catch (err) {
+              logger.error('Failed to add deck.gl overlay to map:', err);
+            }
           }
 
           setMapLoaded(true);

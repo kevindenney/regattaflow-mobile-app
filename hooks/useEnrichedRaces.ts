@@ -3,11 +3,11 @@
  * Fetches weather for races that don't have it in metadata
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { RaceWeatherService } from '@/services/RaceWeatherService';
-import type { RaceWeatherMetadata } from '@/services/RaceWeatherService';
 import { createLogger } from '@/lib/utils/logger';
+import type { RaceWeatherMetadata } from '@/services/RaceWeatherService';
+import { RaceWeatherService } from '@/services/RaceWeatherService';
 import { supabase } from '@/services/supabase';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const logger = createLogger('useEnrichedRaces');
 
@@ -253,7 +253,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         }
 
         // Debug logging to understand what data we have - especially VHF
-        console.log(`📡 [useEnrichedRaces] Race "${regatta.name}" VHF sources:`, {
+        logger.debug(`📡 Race "${regatta.name}" VHF sources:`, {
           'regatta.vhf_channel': regatta.vhf_channel,
           'metadata.vhf_channel': regatta.metadata?.vhf_channel,
           'critical_details.vhf_channel': regatta.metadata?.critical_details?.vhf_channel,
@@ -279,6 +279,14 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           critical_details,
           created_by: regatta.created_by, // Preserve for edit/delete permission checks
           venueCoordinates, // Include coordinates for weather fetching
+          // Distance racing fields
+          race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
+          total_distance_nm: regatta.total_distance_nm,
+          time_limit_hours: regatta.time_limit_hours,
+          time_limit_minutes: regatta.time_limit_minutes,
+          route_waypoints: regatta.route_waypoints,
+          start_finish_same_location: regatta.start_finish_same_location,
+          finish_venue: regatta.finish_venue,
         };
 
         // Check if metadata has wind/tide and if they're not placeholder values

@@ -20,6 +20,7 @@ export default function PublicLayout() {
         <Stack.Screen name="results/[regattaId]" />
         <Stack.Screen name="schedule/[regattaId]" />
         <Stack.Screen name="notices/[regattaId]" />
+        <Stack.Screen name="strategy/[token]" />
       </Stack>
     </View>
   );

@@ -4,8 +4,8 @@
  */
 
 // Legacy components
-export { CourseSelector } from './CourseSelector';
 export { CourseEntryPanel } from './CourseEntryPanel';
+export { CourseSelector } from './CourseSelector';
 export { CurrentTideCard } from './CurrentTideCard';
 export { MarkManager } from './MarkManager';
 export { PostRaceAnalysisCard } from './PostRaceAnalysisCard';
@@ -52,9 +52,10 @@ export { PreRaceStrategySection } from './PreRaceStrategySection';
 export { StrategyPlanningCard } from './StrategyPlanningCard';
 
 // Distance Racing Components
+export { DistanceRacingStrategyCard } from './DistanceRacingStrategyCard';
 export { RouteMapCard } from './RouteMapCard';
-export { WeatherAlongRouteCard } from './WeatherAlongRouteCard';
 export type { RouteWaypoint } from './RouteMapCard';
+export { WeatherAlongRouteCard } from './WeatherAlongRouteCard';
 export type { WeatherAtPoint } from './WeatherAlongRouteCard';
 
 // Race Information Cards (beautiful info display)

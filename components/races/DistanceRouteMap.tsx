@@ -5,9 +5,9 @@
  * Waypoints are connected by a polyline showing the race route.
  */
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, Platform, ScrollView } from 'react-native';
-import { MapPin, Navigation, Flag, Anchor, Trash2, RotateCcw, Plus } from 'lucide-react-native';
+import { Anchor, ArrowDown, ArrowUp, Check, Edit2, Flag, MapPin, Navigation, Plus, RotateCcw, Trash2, Upload, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
 
@@ -27,6 +27,7 @@ interface DistanceRouteMapProps {
   initialZoom?: number;
   totalDistanceNm?: number;
   onTotalDistanceChange?: (distance: number) => void;
+  onReimportWaypoints?: () => void; // Optional callback for re-importing waypoints
 }
 
 // Calculate distance between two points in nautical miles
@@ -82,6 +83,7 @@ export function DistanceRouteMap({
   initialCenter = { lat: 22.28, lng: 114.16 }, // Default: Hong Kong
   initialZoom = 10,
   onTotalDistanceChange,
+  onReimportWaypoints,
 }: DistanceRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -91,6 +93,9 @@ export function DistanceRouteMap({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isAddingWaypoint, setIsAddingWaypoint] = useState(true); // Start in add mode
   const [nextWaypointType, setNextWaypointType] = useState<RouteWaypoint['type']>('start'); // Start with 'start' waypoint
+  const [editingWaypoint, setEditingWaypoint] = useState<string | null>(null); // ID of waypoint being edited
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<RouteWaypoint['type']>('waypoint');
   
   // Refs to track current state for event handlers (closures capture stale values)
   const isAddingWaypointRef = useRef(true);
@@ -98,10 +103,29 @@ export function DistanceRouteMap({
   const waypointsRef = useRef<RouteWaypoint[]>(waypoints);
   const onWaypointsChangeRef = useRef(onWaypointsChange);
 
+  // Helper function to update map cursor
+  const updateMapCursor = useCallback((map: any, isAdding: boolean) => {
+    if (!map || !map.getCanvasContainer) return;
+    const canvas = map.getCanvasContainer();
+    if (canvas) {
+      canvas.style.cursor = isAdding ? 'crosshair' : 'grab';
+    }
+  }, []);
+
   // Keep refs in sync with state (for event handlers)
   useEffect(() => {
     isAddingWaypointRef.current = isAddingWaypoint;
-  }, [isAddingWaypoint]);
+    // Update cursor and drag behavior when adding mode changes
+    if (mapRef.current) {
+      updateMapCursor(mapRef.current, isAddingWaypoint);
+      // Enable/disable map panning based on mode
+      if (isAddingWaypoint) {
+        mapRef.current.dragPan.disable();
+      } else {
+        mapRef.current.dragPan.enable();
+      }
+    }
+  }, [isAddingWaypoint, updateMapCursor]);
   
   useEffect(() => {
     nextWaypointTypeRef.current = nextWaypointType;
@@ -142,7 +166,62 @@ export function DistanceRouteMap({
 
         map.addControl(new maplibregl.default.NavigationControl(), 'top-left');
 
+        // Set up click handler BEFORE map loads to ensure it's registered
+        // Handle click to add waypoint - use refs for current state
+        map.on('click', (e: any) => {
+          console.log('[DistanceRouteMap] Map clicked, isAddingWaypoint:', isAddingWaypointRef.current);
+          if (!isAddingWaypointRef.current) return;
+          
+          // Prevent default map behavior (panning) when adding waypoints
+          e.preventDefault?.();
+          
+          const { lng, lat } = e.lngLat;
+          console.log('[DistanceRouteMap] Adding waypoint at:', lat, lng, 'type:', nextWaypointTypeRef.current);
+          
+          // Create waypoint directly here to avoid stale closure issues
+          const currentWaypoints = waypointsRef.current;
+          const waypointType = nextWaypointTypeRef.current;
+          // Ensure waypoint name is always valid (no empty strings or special chars that could cause rendering issues)
+          const getWaypointName = () => {
+            if (waypointType === 'start') return 'Start';
+            if (waypointType === 'finish') return 'Finish';
+            if (waypointType === 'gate') {
+              const gateCount = currentWaypoints.filter(w => w.type === 'gate').length + 1;
+              return `Gate ${gateCount}`;
+            }
+            const waypointCount = currentWaypoints.filter(w => w.type === 'waypoint').length + 1;
+            return `Waypoint ${waypointCount}`;
+          };
+
+          const newWaypoint: RouteWaypoint = {
+            id: `wp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name: getWaypointName(),
+            latitude: lat,
+            longitude: lng,
+            type: waypointType,
+            required: waypointType === 'start' || waypointType === 'finish',
+          };
+
+          // Update waypoints - use requestAnimationFrame to ensure it happens after render
+          requestAnimationFrame(() => {
+            try {
+              onWaypointsChangeRef.current([...currentWaypoints, newWaypoint]);
+              
+              // Auto-advance to next logical type
+              if (waypointType === 'start') {
+                // Use setTimeout to avoid state update during render cycle
+                setTimeout(() => {
+                  setNextWaypointType('waypoint');
+                }, 0);
+              }
+            } catch (error) {
+              console.error('[DistanceRouteMap] Error updating waypoints:', error);
+            }
+          });
+        });
+
         map.on('load', () => {
+          console.log('[DistanceRouteMap] Map loaded, initializing...');
           mapRef.current = map;
           setMapLoaded(true);
           
@@ -173,36 +252,13 @@ export function DistanceRouteMap({
               'line-dasharray': [2, 1],
             },
           });
-        });
 
-        // Handle click to add waypoint - use refs for current state
-        map.on('click', (e: any) => {
-          console.log('[DistanceRouteMap] Map clicked, isAddingWaypoint:', isAddingWaypointRef.current);
-          if (!isAddingWaypointRef.current) return;
+          // Set initial cursor style
+          updateMapCursor(map, isAddingWaypointRef.current);
           
-          const { lng, lat } = e.lngLat;
-          console.log('[DistanceRouteMap] Adding waypoint at:', lat, lng, 'type:', nextWaypointTypeRef.current);
-          
-          // Create waypoint directly here to avoid stale closure issues
-          const currentWaypoints = waypointsRef.current;
-          const waypointType = nextWaypointTypeRef.current;
-          const newWaypoint: RouteWaypoint = {
-            id: `wp-${Date.now()}`,
-            name: waypointType === 'start' ? 'Start' :
-                  waypointType === 'finish' ? 'Finish' :
-                  waypointType === 'gate' ? `Gate ${currentWaypoints.filter(w => w.type === 'gate').length + 1}` :
-                  `Waypoint ${currentWaypoints.filter(w => w.type === 'waypoint').length + 1}`,
-            latitude: lat,
-            longitude: lng,
-            type: waypointType,
-            required: waypointType === 'start' || waypointType === 'finish',
-          };
-
-          onWaypointsChangeRef.current([...currentWaypoints, newWaypoint]);
-          
-          // Auto-advance to next logical type
-          if (waypointType === 'start') {
-            setNextWaypointType('waypoint');
+          // Disable map drag/pan when in add waypoint mode
+          if (isAddingWaypointRef.current) {
+            map.dragPan.disable();
           }
         });
 
@@ -217,56 +273,97 @@ export function DistanceRouteMap({
     initMap();
   }, [initialCenter, initialZoom]);
 
+  // Start editing a waypoint
+  const startEditWaypoint = useCallback((wp: RouteWaypoint) => {
+    setEditingWaypoint(wp.id);
+    setEditName(wp.name);
+    setEditType(wp.type);
+  }, []);
+
   // Update map when waypoints change
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded || !maplibreRef.current) return;
+    console.log('[DistanceRouteMap] Waypoints effect triggered:', {
+      waypointsCount: waypoints.length,
+      mapRef: !!mapRef.current,
+      mapLoaded,
+      maplibreRef: !!maplibreRef.current
+    });
+
+    if (!mapRef.current || !mapLoaded || !maplibreRef.current) {
+      console.log('[DistanceRouteMap] Map not ready, skipping marker update');
+      return;
+    }
 
     console.log('[DistanceRouteMap] Updating markers for', waypoints.length, 'waypoints');
 
     // Clear existing markers
-    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current.forEach(marker => {
+      try {
+        marker.remove();
+      } catch (e) {
+        console.warn('[DistanceRouteMap] Error removing marker:', e);
+      }
+    });
     markersRef.current = [];
 
     // Add markers for each waypoint
     waypoints.forEach((wp, index) => {
-      const el = document.createElement('div');
-      el.className = 'waypoint-marker';
-      el.style.cssText = `
-        width: 32px;
-        height: 32px;
-        background: ${WAYPOINT_TYPE_COLORS[wp.type]};
-        border: 3px solid white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 12px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        cursor: pointer;
-      `;
-      el.innerHTML = wp.type === 'start' ? 'S' : 
+      try {
+        const el = document.createElement('div');
+        el.className = 'waypoint-marker';
+        el.style.cssText = `
+          width: 32px;
+          height: 32px;
+          background: ${WAYPOINT_TYPE_COLORS[wp.type]};
+          border: 3px solid white;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: bold;
+          font-size: 12px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          cursor: pointer;
+          z-index: 1000;
+        `;
+        
+        // Set marker label
+        const label = wp.type === 'start' ? 'S' : 
                      wp.type === 'finish' ? 'F' : 
                      wp.type === 'gate' ? 'G' : 
-                     `${index}`;
+                     `${index + 1}`;
+        el.textContent = label; // Use textContent instead of innerHTML for safety
 
-      const marker = new maplibreRef.current.Marker({ element: el, draggable: true })
-        .setLngLat([wp.longitude, wp.latitude])
-        .addTo(mapRef.current);
+        const marker = new maplibreRef.current.Marker({ 
+          element: el, 
+          draggable: true 
+        })
+          .setLngLat([wp.longitude, wp.latitude])
+          .addTo(mapRef.current);
 
-      // Update waypoint position on drag
-      marker.on('dragend', () => {
-        const lngLat = marker.getLngLat();
-        const updated = waypoints.map((w, i) => 
-          i === index 
-            ? { ...w, latitude: lngLat.lat, longitude: lngLat.lng }
-            : w
-        );
-        onWaypointsChange(updated);
-      });
+        // Click marker to edit waypoint
+        el.addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent map click
+          startEditWaypoint(wp);
+        });
 
-      markersRef.current.push(marker);
+        // Update waypoint position on drag
+        marker.on('dragend', () => {
+          const lngLat = marker.getLngLat();
+          const updated = waypoints.map((w, i) => 
+            i === index 
+              ? { ...w, latitude: lngLat.lat, longitude: lngLat.lng }
+              : w
+          );
+          onWaypointsChange(updated);
+        });
+
+        markersRef.current.push(marker);
+        console.log('[DistanceRouteMap] Added marker for', wp.name, 'at', wp.latitude, wp.longitude);
+      } catch (error) {
+        console.error('[DistanceRouteMap] Error creating marker for waypoint', wp.name, ':', error);
+      }
     });
 
     // Update route line
@@ -328,6 +425,42 @@ export function DistanceRouteMap({
     onWaypointsChange(waypoints.filter(wp => wp.id !== id));
   }, [waypoints, onWaypointsChange]);
 
+  // Move waypoint up in order
+  const moveWaypointUp = useCallback((index: number) => {
+    if (index === 0) return; // Can't move first item up
+    const newWaypoints = [...waypoints];
+    [newWaypoints[index - 1], newWaypoints[index]] = [newWaypoints[index], newWaypoints[index - 1]];
+    onWaypointsChange(newWaypoints);
+  }, [waypoints, onWaypointsChange]);
+
+  // Move waypoint down in order
+  const moveWaypointDown = useCallback((index: number) => {
+    if (index === waypoints.length - 1) return; // Can't move last item down
+    const newWaypoints = [...waypoints];
+    [newWaypoints[index], newWaypoints[index + 1]] = [newWaypoints[index + 1], newWaypoints[index]];
+    onWaypointsChange(newWaypoints);
+  }, [waypoints, onWaypointsChange]);
+
+  // Save edited waypoint
+  const saveEditWaypoint = useCallback(() => {
+    if (!editingWaypoint || !editName.trim()) return;
+    
+    const updated = waypoints.map(wp => 
+      wp.id === editingWaypoint 
+        ? { ...wp, name: editName.trim(), type: editType }
+        : wp
+    );
+    onWaypointsChange(updated);
+    setEditingWaypoint(null);
+    setEditName('');
+  }, [editingWaypoint, editName, editType, waypoints, onWaypointsChange]);
+
+  // Cancel editing
+  const cancelEditWaypoint = useCallback(() => {
+    setEditingWaypoint(null);
+    setEditName('');
+  }, []);
+
   // Clear all waypoints
   const clearWaypoints = useCallback(() => {
     onWaypointsChange([]);
@@ -385,6 +518,16 @@ export function DistanceRouteMap({
             >
               <Trash2 size={16} color={waypoints.length === 0 ? '#9ca3af' : '#ef4444'} />
             </Pressable>
+            
+            {onReimportWaypoints && (
+              <Pressable
+                onPress={onReimportWaypoints}
+                className="p-2 rounded-lg bg-blue-100"
+                title="Re-import waypoints from SIs/NOR"
+              >
+                <Upload size={16} color="#2563eb" />
+              </Pressable>
+            )}
           </View>
           
           <View className="bg-white px-3 py-1 rounded-full border border-purple-200">
@@ -434,48 +577,261 @@ export function DistanceRouteMap({
         style={{ 
           height: 350, 
           width: '100%',
-          cursor: isAddingWaypoint ? 'crosshair' : 'grab',
+          position: 'relative',
         }} 
       />
       
-      {/* Waypoint List */}
+      {/* Waypoint List - Vertical for better visibility */}
       {waypoints.length > 0 && (
         <View className="bg-white border-t border-purple-200 p-3">
           <Text className="text-xs font-semibold text-gray-500 mb-2 uppercase">
-            Route ({waypoints.length} waypoints)
+            Route ({waypoints.length} waypoints) - Scroll to see all ↕
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-2">
-              {waypoints.map((wp, index) => (
+          <ScrollView 
+            style={{ maxHeight: 200 }} 
+            showsVerticalScrollIndicator={true}
+            nestedScrollEnabled={true}
+          >
+            {waypoints.map((wp, index) => (
+              <View 
+                key={wp.id}
+                className="flex-row items-center bg-gray-50 rounded-lg px-3 py-2 mb-2 border border-gray-200"
+              >
+                {/* Waypoint number */}
+                <Text className="text-xs font-bold text-gray-400 w-5 mr-2">{index + 1}.</Text>
+                
+                {/* Type indicator with color */}
                 <View 
-                  key={wp.id}
-                  className="flex-row items-center bg-gray-50 rounded-lg px-2 py-1 border border-gray-200"
+                  style={{ 
+                    width: 12, 
+                    height: 12, 
+                    borderRadius: 6, 
+                    backgroundColor: WAYPOINT_TYPE_COLORS[wp.type],
+                    marginRight: 8,
+                  }} 
+                />
+                
+                {/* Type label */}
+                <Text 
+                  className="text-xs font-semibold mr-2 w-16"
+                  style={{ color: WAYPOINT_TYPE_COLORS[wp.type] }}
                 >
-                  <View 
-                    style={{ 
-                      width: 8, 
-                      height: 8, 
-                      borderRadius: 4, 
-                      backgroundColor: WAYPOINT_TYPE_COLORS[wp.type],
-                      marginRight: 6,
-                    }} 
-                  />
-                  <Text className="text-xs text-gray-700 mr-2">{wp.name}</Text>
-                  {index < waypoints.length - 1 && (
-                    <Text className="text-xs text-gray-400 mr-2">→</Text>
-                  )}
+                  {wp.type.toUpperCase()}
+                </Text>
+                
+                {/* Name */}
+                <Text className="text-sm text-gray-700 flex-1" numberOfLines={1}>{wp.name}</Text>
+                
+                {/* Reorder buttons */}
+                <View className="flex-row mr-2">
                   <Pressable
-                    onPress={() => removeWaypoint(wp.id)}
-                    className="p-1"
+                    onPress={() => moveWaypointUp(index)}
+                    disabled={index === 0}
+                    className={`p-1 ${index === 0 ? 'opacity-30' : ''}`}
                   >
-                    <Trash2 size={12} color="#9ca3af" />
+                    <ArrowUp size={14} color={index === 0 ? "#9ca3af" : "#64748b"} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => moveWaypointDown(index)}
+                    disabled={index === waypoints.length - 1}
+                    className={`p-1 ${index === waypoints.length - 1 ? 'opacity-30' : ''}`}
+                  >
+                    <ArrowDown size={14} color={index === waypoints.length - 1 ? "#9ca3af" : "#64748b"} />
                   </Pressable>
                 </View>
-              ))}
-            </View>
+                
+                {/* Edit button */}
+                <Pressable
+                  onPress={() => startEditWaypoint(wp)}
+                  className="p-1 mr-1"
+                >
+                  <Edit2 size={14} color="#64748b" />
+                </Pressable>
+                
+                {/* Delete button */}
+                <Pressable
+                  onPress={() => removeWaypoint(wp.id)}
+                  className="p-1"
+                >
+                  <Trash2 size={14} color="#ef4444" />
+                </Pressable>
+              </View>
+            ))}
           </ScrollView>
+          <Text className="text-xs text-gray-400 mt-2 text-center">
+            💡 Tip: Use ↑↓ arrows to reorder • Drag markers on map to move • Click edit to rename/change type
+          </Text>
         </View>
       )}
+
+      {/* Edit Waypoint Modal */}
+      <Modal
+        visible={editingWaypoint !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelEditWaypoint}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 16,
+            padding: 20,
+            width: '100%',
+            maxWidth: 400,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+            elevation: 5,
+          }}>
+            <Text style={{
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#1E293B',
+              marginBottom: 16,
+            }}>
+              Edit Waypoint
+            </Text>
+
+            {/* Waypoint Name */}
+            <Text style={{
+              fontSize: 12,
+              fontWeight: '600',
+              color: '#64748B',
+              marginBottom: 6,
+            }}>
+              Name
+            </Text>
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Waypoint name"
+              style={{
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 14,
+                color: '#1E293B',
+                marginBottom: 16,
+              }}
+              autoFocus
+            />
+
+            {/* Waypoint Type */}
+            <Text style={{
+              fontSize: 12,
+              fontWeight: '600',
+              color: '#64748B',
+              marginBottom: 6,
+            }}>
+              Type
+            </Text>
+            <View style={{
+              flexDirection: 'row',
+              gap: 8,
+              marginBottom: 20,
+            }}>
+              {(['start', 'waypoint', 'gate', 'finish'] as const).map((type) => {
+                const Icon = WAYPOINT_TYPE_ICONS[type];
+                const isSelected = editType === type;
+                return (
+                  <Pressable
+                    key={type}
+                    onPress={() => setEditType(type)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      borderWidth: 1,
+                      borderColor: isSelected ? '#9333ea' : '#E2E8F0',
+                      backgroundColor: isSelected ? '#F3E8FF' : 'white',
+                    }}
+                  >
+                    <View 
+                      style={{ 
+                        width: 10, 
+                        height: 10, 
+                        borderRadius: 5, 
+                        backgroundColor: WAYPOINT_TYPE_COLORS[type] 
+                      }} 
+                    />
+                    <Text style={{
+                      fontSize: 11,
+                      fontWeight: isSelected ? '600' : '400',
+                      color: isSelected ? '#9333ea' : '#64748B',
+                      textTransform: 'capitalize',
+                    }}>
+                      {type}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{
+              flexDirection: 'row',
+              gap: 8,
+              justifyContent: 'flex-end',
+            }}>
+              <Pressable
+                onPress={cancelEditWaypoint}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                }}
+              >
+                <X size={16} color="#64748B" />
+                <Text style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: '#64748B',
+                }}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={saveEditWaypoint}
+                disabled={!editName.trim()}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  backgroundColor: editName.trim() ? '#9333ea' : '#CBD5E1',
+                }}
+              >
+                <Check size={16} color="white" />
+                <Text style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: 'white',
+                }}>
+                  Save
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       {/* Instructions */}
       {waypoints.length === 0 && !isAddingWaypoint && (

@@ -1,32 +1,21 @@
-// 🔍 DEBUG: Track app initialization
-if (typeof window !== 'undefined') {
-  console.log('[RootLayout] 🚀 Module loading started - window exists');
-}
-
-import React, {useEffect} from 'react';
-import {Platform} from 'react-native';
-import {Stack} from 'expo-router';
-import {AuthProvider, useAuth} from '@/providers/AuthProvider';
-import StripeProvider from '@/providers/StripeProvider';
-import {GluestackUIProvider} from '@/components/ui/gluestack-ui-provider';
-import {ErrorBoundary} from '@/components/ui/error';
-import {NetworkStatusBanner} from '@/components/ui/network';
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-import Splash from '@/components/Splash';
-import {initializeImageCache} from '@/lib/imageConfig';
-import {initializeMutationQueueHandlers} from '@/services/userManualClubsService';
-import {initializeCrewMutationHandlers} from '@/services/crewManagementService';
-import {initializeBoatMutationHandlers} from '@/services/SailorBoatService';
-import {initializeRaceRegistrationMutationHandlers} from '@/services/RaceRegistrationService';
+import { ErrorBoundary } from '@/components/ui/error';
+import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
+import { NetworkStatusBanner } from '@/components/ui/network';
 import '@/global.css';
+import { initializeImageCache } from '@/lib/imageConfig';
+import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import StripeProvider from '@/providers/StripeProvider';
+import { initializeCrewMutationHandlers } from '@/services/crewManagementService';
+import { initializeRaceRegistrationMutationHandlers } from '@/services/RaceRegistrationService';
+import { initializeBoatMutationHandlers } from '@/services/SailorBoatService';
+import { initializeMutationQueueHandlers } from '@/services/userManualClubsService';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 // Initialize i18n (must be imported before any components that use translations)
 import '@/lib/i18n';
-
-// 🔍 DEBUG: Track module imports completed
-if (typeof window !== 'undefined') {
-  console.log('[RootLayout] ✅ All imports completed');
-}
 
 let FontFaceObserverModule: any = null;
 try {
@@ -91,7 +80,9 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
       (args[0].includes('timeout exceeded') ||
        args[0].includes('6000ms') ||
        args[0].includes('60000ms') ||
-       args[0].includes('fontfaceobserver'))
+       args[0].includes('fontfaceobserver') ||
+       args[0].includes('"shadow*" style props are deprecated') ||
+       args[0].includes('"textShadow*" style props are deprecated'))
     ) {
       return;
     }
@@ -100,7 +91,9 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
         (args[0].message?.includes('timeout exceeded') ||
          args[0].message?.includes('6000ms') ||
          args[0].message?.includes('60000ms') ||
-         args[0].message?.includes('fontfaceobserver'))) {
+         args[0].message?.includes('fontfaceobserver') ||
+         args[0].message?.includes('shadow*') ||
+         args[0].message?.includes('textShadow*'))) {
       return;
     }
     originalError.apply(console, args);
@@ -117,13 +110,15 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
     }
   });
 
-  // Catch uncaught errors (including font loading)
+  // Catch uncaught errors (including font loading and shadow deprecation)
   window.addEventListener('error', (event) => {
     if (event.message?.includes('timeout exceeded') ||
         event.message?.includes('6000ms') ||
         event.message?.includes('60000ms') ||
         event.message?.includes('fontfaceobserver') ||
-        event.message?.includes('Unexpected text node')) {
+        event.message?.includes('Unexpected text node') ||
+        event.message?.includes('shadow*') ||
+        event.message?.includes('textShadow*')) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -131,7 +126,7 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
     }
   });
 
-  // Override ErrorUtils for React Native Web (suppress font loading errors in development)
+  // Override ErrorUtils for React Native Web (suppress font loading and shadow deprecation errors in development)
   if (typeof window !== 'undefined' && (window as any).ErrorUtils) {
     const originalReportError = (window as any).ErrorUtils.reportError;
     (window as any).ErrorUtils.reportError = function(error: Error) {
@@ -139,8 +134,10 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
           error.message?.includes('6000ms') ||
           error.message?.includes('60000ms') ||
           error.message?.includes('fontfaceobserver') ||
-          error.message?.includes('Unexpected text node')) {
-        // Silently ignore font loading timeouts
+          error.message?.includes('Unexpected text node') ||
+          error.message?.includes('shadow*') ||
+          error.message?.includes('textShadow*')) {
+        // Silently ignore font loading timeouts and shadow deprecation warnings
         return;
       }
       return originalReportError(error);

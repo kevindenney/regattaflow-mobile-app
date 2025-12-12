@@ -1,24 +1,28 @@
 /**
  * WeatherAlongRouteCard Component
- * Displays weather forecasts at key points along a distance race route
- * Shows wind, conditions at start, waypoints, and finish
+ * Displays weather forecasts at ALL waypoints along a distance race route
+ * Shows wind, conditions, temperature, waves, and current at each point
+ * Generates strategic and tactical advice for each waypoint using Claude AI
  */
 
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { 
-  Cloud, 
-  Wind, 
-  Droplets, 
-  Thermometer,
-  Navigation,
-  Flag,
-  Anchor,
-  AlertTriangle,
-  Clock,
-  RefreshCw
-} from 'lucide-react-native';
 import { RaceWeatherService } from '@/services/RaceWeatherService';
+import { RouteWaypointAdviceService, type WaypointAdvice } from '@/services/RouteWaypointAdviceService';
+import {
+    AlertTriangle,
+    Anchor,
+    Clock,
+    Cloud,
+    Flag,
+    Lightbulb,
+    Navigation,
+    RefreshCw,
+    Target,
+    Thermometer,
+    TrendingUp,
+    Wind
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface RouteWaypoint {
   name: string;
@@ -43,13 +47,39 @@ export interface WeatherAtPoint {
   currentDirection?: string;
   currentSpeed?: number;
   alerts?: string[];
+  advice?: WaypointAdvice;  // Strategic and tactical advice
+}
+
+// Shared weather from useRaceWeather hook (consistent with RaceConditionsCard)
+interface SharedWeatherData {
+  wind?: {
+    direction: string;
+    speedMin: number;
+    speedMax: number;
+  };
+  tide?: {
+    state: 'flooding' | 'ebbing' | 'slack' | 'high' | 'low';
+    height?: number;
+  };
+  raw?: {
+    forecast?: Array<{
+      condition?: string;
+      temperature?: number;
+    }>;
+    marineConditions?: {
+      waveHeight?: number;
+      swellHeight?: number;
+    };
+  };
 }
 
 interface WeatherAlongRouteCardProps {
   waypoints: RouteWaypoint[];
   raceDate: string;
   startTime: string;
-  // If weather data is pre-fetched, pass it here
+  // Shared weather data from useRaceWeather (preferred - avoids duplicate API calls)
+  sharedWeather?: SharedWeatherData | null;
+  // If weather data is pre-fetched as WeatherAtPoint[], pass it here
   weatherData?: WeatherAtPoint[];
   // Otherwise, we'll show a loading state
   loading?: boolean;
@@ -60,6 +90,7 @@ export function WeatherAlongRouteCard({
   waypoints,
   raceDate,
   startTime,
+  sharedWeather,
   weatherData: externalWeatherData,
   loading: externalLoading = false,
   onRefresh,
@@ -67,50 +98,37 @@ export function WeatherAlongRouteCard({
   const [fetchedWeather, setFetchedWeather] = useState<WeatherAtPoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [loadingAdvice, setLoadingAdvice] = useState<Set<string>>(new Set());
+  const [adviceMap, setAdviceMap] = useState<Map<string, WaypointAdvice>>(new Map());
 
-  // Get key points for weather (start, 1-2 mid-points, finish)
-  const keyPoints = useMemo(() => {
+  // Get ALL waypoints for weather (not just key points)
+  const allPoints = useMemo(() => {
     if (waypoints.length === 0) return [];
-    
-    const points: RouteWaypoint[] = [];
-    
-    // Always include start
-    const startWaypoint = waypoints.find(w => w.type === 'start');
-    if (startWaypoint) points.push(startWaypoint);
-    
-    // Include 1-2 waypoints in the middle
-    const middleWaypoints = waypoints.filter(
-      w => w.type === 'waypoint' || w.type === 'gate'
-    );
-    if (middleWaypoints.length > 0) {
-      // Take up to 2 evenly distributed middle points
-      if (middleWaypoints.length <= 2) {
-        points.push(...middleWaypoints);
-      } else {
-        const midIndex = Math.floor(middleWaypoints.length / 2);
-        points.push(middleWaypoints[0]);
-        points.push(middleWaypoints[midIndex]);
-      }
-    }
-    
-    // Always include finish
-    const finishWaypoint = waypoints.find(w => w.type === 'finish');
-    if (finishWaypoint && finishWaypoint !== startWaypoint) {
-      points.push(finishWaypoint);
-    }
-    
-    return points;
+    // Return all waypoints in order
+    return [...waypoints];
   }, [waypoints]);
 
-  // Fetch real weather data for each key point
+  // Calculate distance between two points (nautical miles)
+  const calculateDistance = useCallback((lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 3440; // Earth radius in nautical miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }, []);
+
+  // Fetch real weather data for ALL waypoints
   const fetchWeatherForWaypoints = useCallback(async () => {
-    if (keyPoints.length === 0) return;
+    if (allPoints.length === 0) return;
     
     setIsLoading(true);
     setFetchError(null);
     
     try {
-      const weatherPromises = keyPoints.map(async (point, index) => {
+      const weatherPromises = allPoints.map(async (point, index) => {
         try {
           // Fetch weather for this waypoint's coordinates
           const weather = await RaceWeatherService.fetchWeatherByCoordinates(
@@ -120,6 +138,41 @@ export function WeatherAlongRouteCard({
             point.name || `Waypoint ${index + 1}`
           );
           
+          // Calculate distances to previous and next waypoints
+          const previousWaypoint = index > 0 ? allPoints[index - 1] : undefined;
+          const nextWaypoint = index < allPoints.length - 1 ? allPoints[index + 1] : undefined;
+          
+          const previousDistance = previousWaypoint 
+            ? calculateDistance(
+                previousWaypoint.latitude, 
+                previousWaypoint.longitude,
+                point.latitude,
+                point.longitude
+              )
+            : undefined;
+          
+          const nextDistance = nextWaypoint
+            ? calculateDistance(
+                point.latitude,
+                point.longitude,
+                nextWaypoint.latitude,
+                nextWaypoint.longitude
+              )
+            : undefined;
+
+          // Calculate total distance remaining
+          let totalDistanceRemaining = 0;
+          for (let i = index + 1; i < allPoints.length; i++) {
+            if (i > 0) {
+              totalDistanceRemaining += calculateDistance(
+                allPoints[i - 1].latitude,
+                allPoints[i - 1].longitude,
+                allPoints[i].latitude,
+                allPoints[i].longitude
+              );
+            }
+          }
+
           return {
             location: point.name || `Waypoint ${index + 1}`,
             locationType: point.type === 'finish' ? 'finish' as const : 
@@ -133,7 +186,27 @@ export function WeatherAlongRouteCard({
             } : undefined,
             conditions: weather?.raw?.forecast?.[0]?.condition || 'Unknown',
             temperature: weather?.raw?.forecast?.[0]?.temperature,
-          } as WeatherAtPoint;
+            waveHeight: weather?.waveHeight,
+            currentDirection: weather?.current?.direction,
+            currentSpeed: weather?.current?.speed,
+            // Store context for advice generation (will be removed before display)
+            _adviceContext: {
+              name: point.name || `Waypoint ${index + 1}`,
+              type: point.type,
+              position: { lat: point.latitude, lng: point.longitude },
+              index,
+              totalWaypoints: allPoints.length,
+              previousWaypoint: previousWaypoint ? {
+                name: previousWaypoint.name || `Waypoint ${index}`,
+                distance: previousDistance || 0,
+              } : undefined,
+              nextWaypoint: nextWaypoint ? {
+                name: nextWaypoint.name || `Waypoint ${index + 2}`,
+                distance: nextDistance || 0,
+              } : undefined,
+              totalDistanceRemaining,
+            },
+          } as any; // Temporary type to include advice context
         } catch (err) {
           console.warn(`[WeatherAlongRoute] Failed to fetch weather for ${point.name}:`, err);
           // Return partial data on error
@@ -149,40 +222,299 @@ export function WeatherAlongRouteCard({
       
       const results = await Promise.all(weatherPromises);
       setFetchedWeather(results);
+      
+      // Generate advice for all waypoints
+      await generateAdviceForWaypoints(results);
     } catch (error) {
       console.error('[WeatherAlongRoute] Error fetching weather:', error);
       setFetchError('Unable to load weather data');
     } finally {
       setIsLoading(false);
     }
-  }, [keyPoints, raceDate, startTime]);
+  }, [allPoints, raceDate, startTime, calculateDistance]);
 
-  // Auto-fetch weather when key points change
+  // Generate strategic/tactical advice for waypoints
+  const generateAdviceForWaypoints = useCallback(async (weatherData: any[]) => {
+    const waypointsWithContext = weatherData.filter((w: any) => w._adviceContext);
+    if (waypointsWithContext.length === 0) return;
+
+    setLoadingAdvice(new Set(waypointsWithContext.map((w: any) => w.location)));
+
+    try {
+      const adviceContexts = waypointsWithContext.map((w: any) => ({
+        ...w._adviceContext,
+        weather: {
+          wind: w.wind,
+          conditions: w.conditions,
+          temperature: w.temperature,
+          waveHeight: w.waveHeight,
+          currentDirection: w.currentDirection,
+          currentSpeed: w.currentSpeed,
+        },
+        raceDate,
+        startTime,
+        estimatedArrivalTime: w.estimatedTime,
+      }));
+
+      const adviceResults = await RouteWaypointAdviceService.generateAdviceForAllWaypoints(adviceContexts);
+      
+      setAdviceMap(adviceResults);
+    } catch (error) {
+      console.error('[WeatherAlongRoute] Error generating advice:', error);
+    } finally {
+      setLoadingAdvice(new Set());
+    }
+  }, [raceDate, startTime]);
+
+  // Calculate total route distance
+  const totalRouteDistance = useMemo(() => {
+    let total = 0;
+    for (let i = 0; i < allPoints.length - 1; i++) {
+      total += calculateDistance(
+        allPoints[i].latitude, allPoints[i].longitude,
+        allPoints[i + 1].latitude, allPoints[i + 1].longitude
+      );
+    }
+    return total;
+  }, [allPoints, calculateDistance]);
+
+  // Generate weather data from shared weather with TIME-BASED wind variation
+  // This matches RaceConditionsCard's timeline which uses a sine wave pattern
+  const weatherFromShared = useMemo<WeatherAtPoint[]>(() => {
+    if (!sharedWeather?.wind || allPoints.length === 0) {
+      return [];
+    }
+    
+    // Check if wind has the expected shape (speedMin/speedMax or just speed)
+    const wind = sharedWeather.wind as any;
+    const speedMin = wind.speedMin ?? wind.speed ?? 0;
+    const speedMax = wind.speedMax ?? wind.speed ?? 0;
+    const direction = wind.direction ?? 'Variable';
+    const hasWindRange = speedMax - speedMin >= 3;
+
+    const condition = sharedWeather.raw?.forecast?.[0]?.condition || 'Unknown';
+    const temperature = sharedWeather.raw?.forecast?.[0]?.temperature;
+    const waveHeight = sharedWeather.raw?.marineConditions?.waveHeight || 
+                       sharedWeather.raw?.marineConditions?.swellHeight;
+
+    // Calculate cumulative distance to each waypoint for timeline positioning
+    const cumulativeDistances: number[] = [0];
+    for (let i = 1; i < allPoints.length; i++) {
+      const prev = allPoints[i - 1];
+      const curr = allPoints[i];
+      const legDistance = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+      cumulativeDistances.push(cumulativeDistances[i - 1] + legDistance);
+    }
+
+    // Average boat speed assumption (knots) - used for time estimation
+    const avgBoatSpeed = Math.max(4, Math.min(8, (speedMin + speedMax) / 4)); // Scale with wind
+
+    return allPoints.map((point, index) => {
+      // Calculate distance from previous waypoint
+      let distanceFromPrev = 0;
+      let totalDistanceRemaining = 0;
+      
+      if (index > 0) {
+        const prev = allPoints[index - 1];
+        distanceFromPrev = calculateDistance(prev.latitude, prev.longitude, point.latitude, point.longitude);
+      }
+      
+      // Calculate remaining distance
+      for (let i = index; i < allPoints.length - 1; i++) {
+        totalDistanceRemaining += calculateDistance(
+          allPoints[i].latitude, allPoints[i].longitude,
+          allPoints[i + 1].latitude, allPoints[i + 1].longitude
+        );
+      }
+
+      // Calculate estimated arrival time at this waypoint
+      const distanceToHere = cumulativeDistances[index];
+      const hoursToReach = distanceToHere / avgBoatSpeed;
+      
+      // Parse start time and calculate estimated arrival time at this waypoint
+      let estimatedTimeStr: string | undefined;
+      let arrivalTotalMinutes = 0;
+      
+      if (startTime) {
+        const [startHours, startMinutes] = startTime.split(':').map(Number);
+        if (!isNaN(startHours) && !isNaN(startMinutes)) {
+          arrivalTotalMinutes = startHours * 60 + startMinutes + Math.round(hoursToReach * 60);
+          const estHours = Math.floor(arrivalTotalMinutes / 60) % 24;
+          const estMinutes = arrivalTotalMinutes % 60;
+          estimatedTimeStr = `${estHours.toString().padStart(2, '0')}:${estMinutes.toString().padStart(2, '0')}`;
+        }
+      }
+
+      // Calculate wind speed using TIME-BASED position to match RaceConditionsCard
+      // RaceConditionsCard's timeline goes from -30min before start to expected finish
+      // We need to map our estimated arrival time to that same timeline
+      let windSpeedAtPoint: number;
+      let timelinePosition: number = index / Math.max(1, allPoints.length - 1); // Default based on waypoint index
+      
+      if (hasWindRange && startTime) {
+        const [startHours, startMinutes] = startTime.split(':').map(Number);
+        
+        if (!isNaN(startHours) && !isNaN(startMinutes)) {
+          // Calculate race duration based on total route distance and boat speed
+          const estimatedRaceDurationHours = totalRouteDistance / avgBoatSpeed;
+          const estimatedRaceDurationMinutes = estimatedRaceDurationHours * 60;
+          
+          // Timeline in RaceConditionsCard: starts 30min before warning, ends at finish
+          // Warning is typically 5 min before start, so timeline starts ~35 min before start
+          const timelineStartMinutes = -35; // 35 minutes before actual race start
+          const timelineEndMinutes = estimatedRaceDurationMinutes; // At finish
+          const timelineSpanMinutes = timelineEndMinutes - timelineStartMinutes;
+          
+          // Calculate how many minutes into the race we expect to be at this waypoint
+          const minutesIntoRace = hoursToReach * 60;
+          
+          // Map to timeline position (0 to 1)
+          timelinePosition = timelineSpanMinutes > 0 
+            ? (minutesIntoRace - timelineStartMinutes) / timelineSpanMinutes
+            : 0;
+          
+          // Clamp to valid range
+          const clampedPosition = Math.max(0, Math.min(1, timelinePosition));
+          
+          // Sine wave: starts at min, peaks at mid-timeline, returns to min
+          // This exactly matches RaceConditionsCard's estimateWindAtTime() logic
+          const waveValue = Math.sin(clampedPosition * Math.PI);
+          windSpeedAtPoint = Math.round(speedMin + (speedMax - speedMin) * waveValue);
+        } else {
+          // Fallback to average if time parsing fails
+          windSpeedAtPoint = Math.round((speedMin + speedMax) / 2);
+        }
+      } else if (hasWindRange) {
+        // Distance-based fallback when no start time
+        timelinePosition = totalRouteDistance > 0 
+          ? cumulativeDistances[index] / totalRouteDistance 
+          : index / Math.max(1, allPoints.length - 1);
+        const waveValue = Math.sin(timelinePosition * Math.PI);
+        windSpeedAtPoint = Math.round(speedMin + (speedMax - speedMin) * waveValue);
+      } else {
+        // No range, use average
+        windSpeedAtPoint = Math.round((speedMin + speedMax) / 2);
+      }
+
+      // Gusts are higher than base wind (only show if meaningful)
+      const gustsAtPoint = windSpeedAtPoint < speedMax 
+        ? Math.round(windSpeedAtPoint * 1.15) 
+        : undefined;
+
+      const locationType = point.type === 'start' ? 'start' 
+        : point.type === 'finish' ? 'finish' 
+        : 'waypoint';
+
+      return {
+        location: point.name,
+        locationType,
+        coordinates: { lat: point.latitude, lng: point.longitude },
+        estimatedTime: estimatedTimeStr,
+        wind: {
+          direction: direction,
+          speed: windSpeedAtPoint,
+          gusts: gustsAtPoint,
+        },
+        conditions: condition,
+        temperature,
+        waveHeight,
+        // Store context for advice generation
+        _adviceContext: {
+          name: point.name,
+          type: locationType,
+          position: { lat: point.latitude, lng: point.longitude },
+          index,
+          totalWaypoints: allPoints.length,
+          previousWaypoint: index > 0 ? {
+            name: allPoints[index - 1].name,
+            distance: distanceFromPrev,
+          } : undefined,
+          nextWaypoint: index < allPoints.length - 1 ? {
+            name: allPoints[index + 1].name,
+            distance: calculateDistance(
+              point.latitude, point.longitude,
+              allPoints[index + 1].latitude, allPoints[index + 1].longitude
+            ),
+          } : undefined,
+          totalDistanceRemaining,
+          timelinePosition,
+          estimatedArrivalTime: estimatedTimeStr,
+        },
+      } as WeatherAtPoint & { _adviceContext: any };
+    });
+  }, [sharedWeather, allPoints, calculateDistance, totalRouteDistance, startTime]);
+
+  // Clear fetched weather when shared weather becomes available (to use shared instead)
   useEffect(() => {
-    if (keyPoints.length > 0 && !externalWeatherData) {
+    if (sharedWeather?.wind && fetchedWeather.length > 0) {
+      setFetchedWeather([]);
+    }
+  }, [sharedWeather, fetchedWeather.length]);
+
+  // Auto-fetch weather when waypoints change (only if no shared weather with wind data)
+  useEffect(() => {
+    // Only fetch individually if:
+    // 1. We have waypoints
+    // 2. No external data provided
+    // 3. No shared weather with wind data (the key field we need)
+    const hasSharedWind = sharedWeather?.wind && (
+      (sharedWeather.wind as any).speedMin !== undefined || 
+      (sharedWeather.wind as any).speed !== undefined
+    );
+    
+    if (allPoints.length > 0 && !externalWeatherData && !hasSharedWind) {
       fetchWeatherForWaypoints();
     }
-  }, [keyPoints, externalWeatherData, fetchWeatherForWaypoints]);
+  }, [allPoints, externalWeatherData, sharedWeather, fetchWeatherForWaypoints]);
+
+  // Generate advice when we have weather from shared data
+  useEffect(() => {
+    if (weatherFromShared.length > 0 && adviceMap.size === 0) {
+      generateAdviceForWaypoints(weatherFromShared);
+    }
+  }, [weatherFromShared, adviceMap.size, generateAdviceForWaypoints]);
 
   // Determine which weather data to display
   const displayWeather = useMemo<WeatherAtPoint[]>(() => {
-    // Prefer external data if provided
+    // Priority 1: External WeatherAtPoint[] data
     if (externalWeatherData && externalWeatherData.length > 0) {
-      return externalWeatherData;
+      return externalWeatherData.map(w => ({
+        ...w,
+        advice: adviceMap.get(w.location),
+      }));
     }
-    // Use fetched data
+    
+    // Priority 2: Shared weather from useRaceWeather (consistent with RaceConditionsCard)
+    if (weatherFromShared.length > 0) {
+      return weatherFromShared.map((w: any) => {
+        const { _adviceContext, ...weatherData } = w;
+        return {
+          ...weatherData,
+          advice: adviceMap.get(w.location),
+        };
+      });
+    }
+    
+    // Priority 3: Individually fetched weather (fallback)
     if (fetchedWeather.length > 0) {
-      return fetchedWeather;
+      return fetchedWeather.map((w: any) => {
+        const { _adviceContext, ...weatherData } = w;
+        return {
+          ...weatherData,
+          advice: adviceMap.get(w.location),
+        };
+      }).filter((w: any) => w.location); // Remove any undefined entries
     }
     // Loading placeholder - show location names only
-    return keyPoints.map((point, index) => ({
+    return allPoints.map((point, index) => ({
       location: point.name || `Waypoint ${index + 1}`,
       locationType: point.type === 'finish' ? 'finish' as const : 
                     point.type === 'start' ? 'start' as const : 'waypoint' as const,
       coordinates: { lat: point.latitude, lng: point.longitude },
       estimatedTime: index === 0 ? startTime : undefined,
+      advice: adviceMap.get(point.name || `Waypoint ${index + 1}`),
     }));
-  }, [externalWeatherData, fetchedWeather, keyPoints, startTime]);
+  }, [externalWeatherData, fetchedWeather, allPoints, startTime, adviceMap]);
 
   const loading = externalLoading || isLoading;
   
@@ -366,6 +698,71 @@ export function WeatherAlongRouteCard({
                   ))}
                 </View>
               )}
+
+              {/* Strategic and Tactical Advice */}
+              {weather.advice && (
+                <View style={styles.adviceSection}>
+                  <View style={styles.adviceHeader}>
+                    <Lightbulb size={14} color="#7C3AED" />
+                    <Text style={styles.adviceTitle}>Strategy & Tactics</Text>
+                  </View>
+                  
+                  {/* Strategic Advice */}
+                  <View style={styles.adviceBlock}>
+                    <View style={styles.adviceBlockHeader}>
+                      <Target size={12} color="#0284C7" />
+                      <Text style={styles.adviceBlockTitle}>Strategic</Text>
+                    </View>
+                    <Text style={styles.adviceText} numberOfLines={3}>
+                      {weather.advice.strategic}
+                    </Text>
+                  </View>
+
+                  {/* Tactical Advice */}
+                  <View style={styles.adviceBlock}>
+                    <View style={styles.adviceBlockHeader}>
+                      <TrendingUp size={12} color="#10B981" />
+                      <Text style={styles.adviceBlockTitle}>Tactical</Text>
+                    </View>
+                    <Text style={styles.adviceText} numberOfLines={3}>
+                      {weather.advice.tactical}
+                    </Text>
+                  </View>
+
+                  {/* Key Considerations */}
+                  {weather.advice.keyConsiderations && weather.advice.keyConsiderations.length > 0 && (
+                    <View style={styles.considerationsList}>
+                      {weather.advice.keyConsiderations.slice(0, 2).map((consideration, idx) => (
+                        <View key={idx} style={styles.considerationItem}>
+                          <View style={styles.considerationDot} />
+                          <Text style={styles.considerationText} numberOfLines={1}>
+                            {consideration}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Priority Badge */}
+                  <View style={[
+                    styles.priorityBadge,
+                    weather.advice.priority === 'critical' && styles.priorityCritical,
+                    weather.advice.priority === 'important' && styles.priorityImportant,
+                  ]}>
+                    <Text style={styles.priorityText}>
+                      {weather.advice.priority.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Loading advice indicator */}
+              {loadingAdvice.has(weather.location) && !weather.advice && (
+                <View style={styles.adviceLoading}>
+                  <ActivityIndicator size="small" color="#7C3AED" />
+                  <Text style={styles.adviceLoadingText}>Generating advice...</Text>
+                </View>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -462,7 +859,7 @@ const styles = StyleSheet.create({
     paddingRight: 32,
   },
   weatherPoint: {
-    width: 140,
+    width: 200,
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 12,
@@ -615,6 +1012,94 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#EF4444',
     flex: 1,
+  },
+  adviceSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  adviceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  adviceTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  adviceBlock: {
+    marginBottom: 8,
+  },
+  adviceBlockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  adviceBlockTitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  adviceText: {
+    fontSize: 10,
+    color: '#475569',
+    lineHeight: 14,
+  },
+  considerationsList: {
+    marginTop: 6,
+    gap: 4,
+  },
+  considerationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  considerationDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#64748B',
+  },
+  considerationText: {
+    fontSize: 9,
+    color: '#64748B',
+    flex: 1,
+  },
+  priorityBadge: {
+    marginTop: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  priorityCritical: {
+    backgroundColor: '#FEF2F2',
+  },
+  priorityImportant: {
+    backgroundColor: '#FEF3C7',
+  },
+  priorityText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  adviceLoading: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  adviceLoadingText: {
+    fontSize: 10,
+    color: '#64748B',
   },
 });
 

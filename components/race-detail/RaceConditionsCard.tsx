@@ -281,8 +281,9 @@ export function RaceConditionsCard({
       // and avoids mismatch when live forecast differs from saved data
       if (savedWind && hasWindRange && timelinePosition !== undefined) {
         // Create a smooth wave pattern: starts at min, peaks mid-race, drops toward end
+        // Wave reaches full range so timeline matches the displayed header (e.g., 9-26 kts)
         const waveValue = Math.sin(timelinePosition * Math.PI);
-        const speed = Math.round(windMin + (windMax - windMin) * waveValue * 0.8);
+        const speed = Math.round(windMin + (windMax - windMin) * waveValue);
         return { 
           speed, 
           direction: baseDirection, 

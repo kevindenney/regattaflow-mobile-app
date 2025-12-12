@@ -9,17 +9,17 @@
  * - Races >7 days away: Show saved snapshot with "📌 Saved" indicator
  */
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { MapPin, Wind, Waves, Radio, RefreshCw, CheckCircle2, Trophy, Medal, Award, Pin, Sailboat, Route } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { calculateCountdown } from '@/constants/mockData';
-import { RaceTimer } from './RaceTimer';
-import { StartSequenceTimer } from './StartSequenceTimer';
+import { createLogger } from '@/lib/utils/logger';
 import { RaceWeatherService } from '@/services/RaceWeatherService';
 import { supabase } from '@/services/supabase';
-import { createLogger } from '@/lib/utils/logger';
-import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
+import { useRouter } from 'expo-router';
+import { Award, CheckCircle2, MapPin, Medal, Pin, Radio, RefreshCw, Route, Sailboat, Trophy, Waves, Wind } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { RaceTimer } from './RaceTimer';
+import { StartSequenceTimer } from './StartSequenceTimer';
 
 // Number of days within which we show live forecast
 const LIVE_FORECAST_DAYS = 7;
@@ -129,12 +129,12 @@ export function RaceCard({
 }: RaceCardProps) {
   // Debug: Log VHF channel data sources
   React.useEffect(() => {
-    console.log(`📻 [RaceCard] ${name} VHF data:`, {
+    logger.debug(`📻 ${name} VHF data:`, {
       'critical_details.vhf_channel': critical_details?.vhf_channel,
       'vhf_channel prop': vhf_channel,
       'displayed': critical_details?.vhf_channel || vhf_channel || 'NONE',
     });
-  }, [name, critical_details, vhf_channel]);
+  }, [name, critical_details, vhf_channel, logger]);
 
   const router = useRouter();
   const editHandler = onEdit ?? null;
@@ -361,10 +361,10 @@ export function RaceCard({
           .eq('id', id);
 
         if (error) {
-          console.error('[RaceCard] Error updating weather:', error);
+          logger.error('Error updating weather:', error);
           Alert.alert('Error', 'Failed to update weather data');
         } else {
-          logger.debug(`[RaceCard] Weather updated from ${weatherData.provider}`);
+          logger.debug(`Weather updated from ${weatherData.provider}`);
           Alert.alert('Success', `Weather updated from ${weatherData.provider}`);
         }
       } else {
@@ -372,7 +372,7 @@ export function RaceCard({
         Alert.alert('No Data', 'Weather data not available for this race');
       }
     } catch (error: any) {
-      console.error('[RaceCard] Error refreshing weather:', error);
+      logger.error('Error refreshing weather:', error);
       setCurrentWeatherStatus('error');
       Alert.alert('Error', error.message || 'Failed to refresh weather');
     } finally {
@@ -395,9 +395,9 @@ export function RaceCard({
 
     try {
       router.push(`/(tabs)/race/scrollable/${id}`);
-      logger.debug('[RaceCard] Navigation initiated successfully');
+      logger.debug('Navigation initiated successfully');
     } catch (error) {
-      console.error('[RaceCard] Navigation failed:', error);
+      logger.error('Navigation failed:', error);
     }
   };
 

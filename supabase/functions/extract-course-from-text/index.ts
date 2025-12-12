@@ -92,11 +92,29 @@ PASSING SIDE DETECTION:
 - "Round to Starboard" → passingSide: "starboard"
 - "Round to Port" → passingSide: "port"
 
+SPECIAL HANDLING FOR START/FINISH LINES:
+For distance races, if you see start/finish lines mentioned but without coordinates:
+1. Look for the course sequence - the first waypoint in the sequence should be preceded by a START waypoint
+2. The last waypoint in the sequence should be followed by a FINISH waypoint
+3. If start/finish lines are mentioned (e.g., "Starting Line W - E", "Finishing Line W - E"), create waypoints:
+   - START waypoint: Use the location of the first waypoint, or if the first waypoint has coordinates, place start slightly before it (e.g., 0.1nm west if first waypoint is east)
+   - FINISH waypoint: Use the location of the last waypoint, or if the last waypoint has coordinates, place finish slightly after it (e.g., 0.1nm east if last waypoint is west)
+4. For "W - E" lines, infer approximate positions based on the first/last waypoint locations
+
+Example:
+- If course says "Starting Line W - E" followed by "Chesterman Government Buoy N 22°11.20' E 114°12.00'"
+- Create: { "name": "Start", "type": "start", "latitude": 22.1867, "longitude": 114.15, "notes": "Starting Line W - E (inferred from course sequence)" }
+- If course says "Green Island Club Mark N 22°17.70' E 114°06.50'" followed by "Finishing Line W - E"
+- Create: { "name": "Finish", "type": "finish", "latitude": 22.295, "longitude": 114.12, "notes": "Finishing Line W - E (inferred from course sequence)" }
+
 Also extract:
 - "startFinishLocation": Name and coordinates of start/finish if mentioned (e.g., "RHKYC Kellett Island")
 - "raceDirection": "clockwise" or "counterclockwise" if mentioned (e.g., "Hong Kong Island to Starboard" = clockwise)
 
-REMEMBER: Only return waypoints with coordinates that APPEAR in the text. Do not invent coordinates.`;
+REMEMBER: 
+- For waypoints with coordinates: Extract them exactly as written
+- For start/finish lines without coordinates: Infer reasonable positions based on course sequence and first/last waypoint locations
+- Always include start and finish waypoints for distance races, even if coordinates must be inferred`;
 
 serve(async (req: Request) => {
   // Handle CORS preflight
@@ -200,8 +218,26 @@ serve(async (req: Request) => {
     // Add start/finish if detected
     const finalWaypoints: any[] = [];
     
-    if (result.startFinishLocation?.latitude && result.startFinishLocation?.longitude) {
-      // Add start point
+    // Check if we have start/finish waypoints already
+    const hasStart = validWaypoints.some(wp => wp.type === 'start');
+    const hasFinish = validWaypoints.some(wp => wp.type === 'finish');
+    
+    console.log('[extract-course-text] Start/finish detection:', { 
+      hasStart, 
+      hasFinish, 
+      validWaypointsCount: validWaypoints.length,
+      raceType 
+    });
+    
+    // Add start point
+    if (hasStart) {
+      // Start already in waypoints, add it first
+      const startWp = validWaypoints.find(wp => wp.type === 'start');
+      if (startWp) {
+        finalWaypoints.push(startWp);
+      }
+    } else if (result.startFinishLocation?.latitude && result.startFinishLocation?.longitude) {
+      // Use explicit start/finish location
       finalWaypoints.push({
         name: result.startFinishLocation.name || 'Start',
         latitude: result.startFinishLocation.latitude,
@@ -210,13 +246,48 @@ serve(async (req: Request) => {
         passingSide: null,
         notes: 'Race start',
       });
+    } else if (validWaypoints.length > 0 && raceType === 'distance') {
+      // For distance races, infer start from first waypoint
+      const firstWp = validWaypoints[0];
+      // Check if text mentions "Starting Line" or "Start" to confirm we should add it
+      const textLower = cleanContent.toLowerCase();
+      const hasStartLine = textLower.includes('starting line') || textLower.includes('start line') || 
+                          textLower.includes('inner or outer starting') || textLower.includes('outer starting');
+      
+      if (hasStartLine || !hasStart) {
+        // Place start slightly before first waypoint (west if line is W-E)
+        // For W-E lines, start should be west of first waypoint
+        const startLng = textLower.includes('w - e') || textLower.includes('w-e') 
+          ? firstWp.longitude - 0.05  // Slightly west
+          : firstWp.longitude - 0.02; // Default slight offset
+          
+        finalWaypoints.push({
+          name: 'Start',
+          latitude: firstWp.latitude,
+          longitude: startLng,
+          type: 'start',
+          passingSide: null,
+          notes: 'Starting Line (inferred from course sequence)',
+        });
+        console.log('[extract-course-text] Added inferred START waypoint');
+      }
     }
     
-    // Add extracted waypoints
-    finalWaypoints.push(...validWaypoints);
+    // Add extracted waypoints (excluding start/finish if we already added them)
+    const waypointsToAdd = validWaypoints.filter(wp => 
+      wp.type !== 'start' && wp.type !== 'finish'
+    );
+    finalWaypoints.push(...waypointsToAdd);
     
-    // Add finish point if start was added (same location for circumnavigation)
-    if (result.startFinishLocation?.latitude && result.startFinishLocation?.longitude) {
+    // Add finish point
+    if (hasFinish) {
+      // Finish already in waypoints, add it last
+      const finishWp = validWaypoints.find(wp => wp.type === 'finish');
+      if (finishWp) {
+        finalWaypoints.push(finishWp);
+      }
+    } else if (result.startFinishLocation?.latitude && result.startFinishLocation?.longitude) {
+      // Use explicit start/finish location (same as start for circumnavigation)
       finalWaypoints.push({
         name: result.startFinishLocation.name ? `${result.startFinishLocation.name} (Finish)` : 'Finish',
         latitude: result.startFinishLocation.latitude,
@@ -225,18 +296,50 @@ serve(async (req: Request) => {
         passingSide: null,
         notes: 'Race finish',
       });
+    } else if (validWaypoints.length > 0 && raceType === 'distance') {
+      // For distance races, infer finish from last waypoint
+      const lastWp = validWaypoints[validWaypoints.length - 1];
+      // Check if text mentions "Finishing Line" or "Finish" to confirm we should add it
+      const textLower = cleanContent.toLowerCase();
+      const hasFinishLine = textLower.includes('finishing line') || textLower.includes('finish line') ||
+                           textLower.includes('club finishing line');
+      
+      if (hasFinishLine || !hasFinish) {
+        // Place finish slightly after last waypoint (east if line is W-E)
+        // For W-E lines, finish should be east of last waypoint
+        const finishLng = textLower.includes('w - e') || textLower.includes('w-e')
+          ? lastWp.longitude + 0.05  // Slightly east
+          : lastWp.longitude + 0.02; // Default slight offset
+          
+        finalWaypoints.push({
+          name: 'Finish',
+          latitude: lastWp.latitude,
+          longitude: finishLng,
+          type: 'finish',
+          passingSide: null,
+          notes: 'Finishing Line (inferred from course sequence)',
+        });
+        console.log('[extract-course-text] Added inferred FINISH waypoint');
+      }
     }
 
-    // Sort waypoints by sequence order if provided, otherwise keep extraction order
-    if (finalWaypoints.some(wp => wp.sequenceOrder != null)) {
-      finalWaypoints.sort((a, b) => {
-        if (a.type === 'start') return -1;
-        if (b.type === 'start') return 1;
-        if (a.type === 'finish') return 1;
-        if (b.type === 'finish') return -1;
-        return (a.sequenceOrder || 999) - (b.sequenceOrder || 999);
-      });
-    }
+    // Always ensure start is first and finish is last
+    finalWaypoints.sort((a, b) => {
+      // Start always first
+      if (a.type === 'start') return -1;
+      if (b.type === 'start') return 1;
+      // Finish always last
+      if (a.type === 'finish') return 1;
+      if (b.type === 'finish') return -1;
+      // Use sequence order if provided
+      if (a.sequenceOrder != null && b.sequenceOrder != null) {
+        return a.sequenceOrder - b.sequenceOrder;
+      }
+      // Otherwise maintain relative order
+      return 0;
+    });
+    
+    console.log('[extract-course-text] Final waypoints order:', finalWaypoints.map(wp => ({ name: wp.name, type: wp.type })));
 
     console.log('[extract-course-text] Final waypoints:', finalWaypoints.length);
 

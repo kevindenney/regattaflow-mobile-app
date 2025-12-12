@@ -4,20 +4,19 @@
  * Shows waypoints, gates, start/finish locations on a map
  */
 
-import React, { useMemo, useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
-import { 
-  Map, 
-  Navigation, 
-  Flag, 
-  Anchor, 
-  Circle,
-  ArrowRight,
-  Route,
-  ChevronRight,
-  Info,
-  Pencil
+import {
+    Anchor,
+    ChevronRight,
+    Circle,
+    Flag,
+    Info,
+    Map,
+    Navigation,
+    Pencil,
+    Route
 } from 'lucide-react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export interface RouteWaypoint {
   name: string;
@@ -533,11 +532,16 @@ export function RouteMapCard({
 
       {/* Waypoint List */}
       <View style={styles.waypointSection}>
-        <Text style={styles.sectionTitle}>Route Waypoints</Text>
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Route Waypoints</Text>
+          {waypoints.length > 4 && (
+            <Text style={styles.scrollHint}>↓ Scroll for more</Text>
+          )}
+        </View>
         
         <ScrollView 
           style={styles.waypointList}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={true}
         >
           {waypoints.map((waypoint, index) => (
             <Pressable
@@ -714,13 +718,23 @@ const styles = StyleSheet.create({
   waypointSection: {
     marginBottom: 16,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
-    marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  scrollHint: {
+    fontSize: 11,
+    color: '#9333EA',
+    fontWeight: '500',
   },
   waypointList: {
     maxHeight: 300,

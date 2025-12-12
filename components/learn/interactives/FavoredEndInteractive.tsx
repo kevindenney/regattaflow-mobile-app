@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
   withRepeat,
   withSequence,
+  withDelay,
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
@@ -268,6 +269,8 @@ export function FavoredEndInteractive({
   
   // Track if boat should be animating (sailing parallel to line)
   const [isBoatSailing, setIsBoatSailing] = useState(false);
+  // Track if boat is transitioning from sailing to stopped
+  const [isBoatTransitioning, setIsBoatTransitioning] = useState(false);
   
   // Animation values for sailing
   const animatedBoatX = useSharedValue(0);
@@ -278,73 +281,76 @@ export function FavoredEndInteractive({
   const [animatedBoatRotationState, setAnimatedBoatRotationState] = useState(90);
 
   // Sailing animation - boat sails from port layline to starboard layline and back
+  // CRITICAL: All three animations (X, Y, rotation) must have exactly the same total cycle time
   useEffect(() => {
     if (isBoatSailing) {
       const sailDuration = 5000; // Time to sail one direction
-      const tackDuration = 1400; // Time for tacking turn
+      const tackDuration = 1500; // Time for tacking turn (must be same for all animations)
+      
+      // Total cycle = 2 * (sailDuration + tackDuration) = 2 * 6500 = 13000ms
       
       // Layline positions at boat's Y level (y=450)
-      // Port layline intersection: approximately x=280 (near pin)
-      // Starboard layline intersection: approximately x=680 (near RC)
-      const portLaylineX = 280;
-      const starboardLaylineX = 680;
+      const portLaylineX = 280;   // Near pin
+      const starboardLaylineX = 680; // Near RC boat
       
       // Start at port layline facing east (starboard tack)
       animatedBoatRotation.value = 90;
       animatedBoatX.value = portLaylineX;
       animatedBoatY.value = 0;
       
-      // Animate X: sail from port to starboard layline, then back
+      // Animate X: synchronized with rotation
+      // Each segment must match the rotation timing exactly
       animatedBoatX.value = withRepeat(
         withSequence(
-          // Sail east toward starboard layline
-          withTiming(starboardLaylineX - 30, { duration: sailDuration, easing: Easing.linear }),
-          // Slow down approaching layline
-          withTiming(starboardLaylineX, { duration: tackDuration * 0.3, easing: Easing.out(Easing.quad) }),
-          // Sail west toward port layline
-          withTiming(portLaylineX + 30, { duration: sailDuration, easing: Easing.linear }),
-          // Slow down approaching layline
-          withTiming(portLaylineX, { duration: tackDuration * 0.3, easing: Easing.out(Easing.quad) })
+          // Sail east (while rotation holds at 90°)
+          withTiming(starboardLaylineX, { duration: sailDuration, easing: Easing.linear }),
+          // Hold at starboard layline during tack (while rotation goes 90° → -90°)
+          withTiming(starboardLaylineX, { duration: tackDuration }),
+          // Sail west (while rotation holds at -90°)
+          withTiming(portLaylineX, { duration: sailDuration, easing: Easing.linear }),
+          // Hold at port layline during tack (while rotation goes -90° → 90°)
+          withTiming(portLaylineX, { duration: tackDuration })
         ),
         -1,
         false
       );
       
-      // Animate Y: boat rounds up during tack (moves toward wind/north)
+      // Animate Y: synchronized - boat moves north during tack
       animatedBoatY.value = withRepeat(
         withSequence(
-          // Sailing straight
+          // Sailing straight east
           withTiming(0, { duration: sailDuration }),
-          // Tacking - round up toward wind then bear away
-          withTiming(-35, { duration: tackDuration * 0.4, easing: Easing.out(Easing.ease) }),
-          withTiming(0, { duration: tackDuration * 0.6, easing: Easing.in(Easing.ease) }),
-          // Sailing straight
+          // Tacking at starboard layline - round up toward wind
+          withTiming(-40, { duration: tackDuration * 0.5, easing: Easing.out(Easing.ease) }),
+          withTiming(0, { duration: tackDuration * 0.5, easing: Easing.in(Easing.ease) }),
+          // Sailing straight west
           withTiming(0, { duration: sailDuration }),
-          // Tacking back
-          withTiming(-35, { duration: tackDuration * 0.4, easing: Easing.out(Easing.ease) }),
-          withTiming(0, { duration: tackDuration * 0.6, easing: Easing.in(Easing.ease) })
+          // Tacking at port layline - round up toward wind
+          withTiming(-40, { duration: tackDuration * 0.5, easing: Easing.out(Easing.ease) }),
+          withTiming(0, { duration: tackDuration * 0.5, easing: Easing.in(Easing.ease) })
         ),
         -1,
         false
       );
       
       // Animate rotation: smooth tacking through head-to-wind
+      // Tack duration split: 0.2 + 0.15 + 0.15 + 0.5 = 1.0 (must equal tackDuration)
       animatedBoatRotation.value = withRepeat(
         withSequence(
           // Sailing east on starboard tack (90°)
           withTiming(90, { duration: sailDuration }),
-          // Tack: 90° → 45° → 0° → -45° → -90°
-          withTiming(45, { duration: tackDuration * 0.15, easing: Easing.out(Easing.ease) }),
-          withTiming(0, { duration: tackDuration * 0.1, easing: Easing.linear }),
-          withTiming(-45, { duration: tackDuration * 0.1, easing: Easing.linear }),
-          withTiming(-90, { duration: tackDuration * 0.35, easing: Easing.in(Easing.ease) }),
+          // Tack at starboard layline: 90° → 0° → -90°
+          withTiming(45, { duration: tackDuration * 0.2, easing: Easing.out(Easing.ease) }),
+          withTiming(0, { duration: tackDuration * 0.15, easing: Easing.linear }), // Head to wind
+          withTiming(-45, { duration: tackDuration * 0.15, easing: Easing.linear }),
+          withTiming(-90, { duration: tackDuration * 0.5, easing: Easing.in(Easing.ease) }),
           // Sailing west on port tack (-90°)
           withTiming(-90, { duration: sailDuration }),
-          // Tack back: -90° → -45° → 0° → 45° → 90°
-          withTiming(-45, { duration: tackDuration * 0.15, easing: Easing.out(Easing.ease) }),
-          withTiming(0, { duration: tackDuration * 0.1, easing: Easing.linear }),
-          withTiming(45, { duration: tackDuration * 0.1, easing: Easing.linear }),
-          withTiming(90, { duration: tackDuration * 0.35, easing: Easing.in(Easing.ease) })
+          // Tack at port layline: -90° → 0° → 90°
+          withTiming(-45, { duration: tackDuration * 0.2, easing: Easing.out(Easing.ease) }),
+          withTiming(0, { duration: tackDuration * 0.15, easing: Easing.linear }), // Head to wind
+          withTiming(45, { duration: tackDuration * 0.15, easing: Easing.linear }),
+          withTiming(90, { duration: tackDuration * 0.5, easing: Easing.in(Easing.ease) })
         ),
         -1,
         false
@@ -385,6 +391,144 @@ export function FavoredEndInteractive({
       
       // Check if boat is sailing parallel to line (rotate = 90)
       const isSailingParallel = visualState.boat.rotate === 90;
+      
+      // If transitioning FROM sailing TO non-sailing, smoothly animate the boat to the target position
+      if (isBoatSailing && !isSailingParallel) {
+        // Cancel the sailing animation
+        cancelAnimation(animatedBoatX);
+        cancelAnimation(animatedBoatY);
+        cancelAnimation(animatedBoatRotation);
+        
+        // Mark as transitioning (keep using animated boat during transition)
+        setIsBoatTransitioning(true);
+        
+        // Capture current position
+        const startX = animatedBoatX.value;
+        const startY = animatedBoatY.value;
+        const startRotation = animatedBoatRotation.value;
+        
+        // Target position: midpoint (x=400), middle of boat just over the line, pointing at wind (rotate=0)
+        const SAILING_BASE_Y = 360;
+        const targetX = visualState.boat.x || 400;
+        // Final Y position = 270 (ORANGE boat position - middle of boat just over the line)
+        // targetY is relative to SAILING_BASE_Y, so: 270 - 360 = -90
+        const targetY = -90;
+        const targetRotation = visualState.boat.rotate || 0;
+        
+        // Manual frame-by-frame animation for precise control
+        const totalDuration = 4000; // 4 seconds total
+        const frameInterval = 30; // ~33fps
+        const totalFrames = totalDuration / frameInterval;
+        let currentFrame = 0;
+        
+        // Determine which direction the boat is facing (bow direction)
+        // Positive rotation (e.g., 90°) = facing east, negative (e.g., -90°) = facing west
+        const isFacingEast = startRotation > 0;
+        
+        // The boat must always move in the direction of its bow
+        // We need to reach X=targetX (midpoint) before/during the turn
+        // Then coast straight north (only Y changes) when pointing into the wind
+        
+        const animationInterval = setInterval(() => {
+          currentFrame++;
+          const progress = currentFrame / totalFrames;
+          
+          if (progress >= 1) {
+            // Animation complete
+            clearInterval(animationInterval);
+            animatedBoatX.value = targetX;
+            animatedBoatY.value = targetY;
+            animatedBoatRotation.value = targetRotation;
+            setAnimatedBoatRotationState(targetRotation);
+            // Keep isBoatTransitioning TRUE to continue using animated position
+            return;
+          }
+          
+          // Phase 1 (0-50%): Sail bow-forward toward the midpoint X position
+          // Phase 2 (50-80%): Round up into the wind - movement curves with the turn
+          // Phase 3 (80-100%): Coast straight north (bow-first into wind) onto the line
+          
+          let newX: number;
+          let newY: number;
+          let newRotation: number;
+          
+          if (progress < 0.6) {
+            // Phase 1: Sail bow-forward parallel to line for a longer distance
+            const phaseProgress = progress / 0.6; // 0 to 1 within this phase
+            // Sail a good distance (200 pixels) in bow direction before turning
+            const sailDistance = 200;
+            if (isFacingEast) {
+              // Facing east - sail east
+              newX = startX + sailDistance * phaseProgress;
+            } else {
+              // Facing west - sail west
+              newX = startX - sailDistance * phaseProgress;
+            }
+            newY = startY; // Stay level while sailing parallel
+            newRotation = startRotation; // Keep current heading
+          } else if (progress < 0.85) {
+            // Phase 2: Round up into the wind - the boat curves as it turns
+            // Movement follows the bow direction as rotation changes
+            const phaseProgress = (progress - 0.6) / 0.25; // 0 to 1 within this phase
+            
+            // Where Phase 1 ended
+            const sailDistance = 200;
+            const phase1EndX = isFacingEast ? startX + sailDistance : startX - sailDistance;
+            
+            // Rotation smoothly goes from startRotation toward 0
+            newRotation = startRotation * (1 - phaseProgress);
+            
+            // Convert rotation to radians for movement calculation
+            // 90° = pointing east, 0° = pointing north, -90° = pointing west
+            const rotationRad = (newRotation * Math.PI) / 180;
+            
+            // Speed decreases as we turn into the wind (boat slows down)
+            const speed = 3 * (1 - phaseProgress * 0.6); // Slowing down
+            
+            // Move in the direction of the bow - creates curved path
+            const xMovement = Math.sin(rotationRad) * speed * phaseProgress * 40;
+            const yMovement = -Math.cos(rotationRad) * speed * phaseProgress * 40;
+            
+            newX = phase1EndX + xMovement;
+            newY = startY + yMovement;
+          } else {
+            // Phase 3: Coast straight north (into the wind) onto the line
+            const phaseProgress = (progress - 0.85) / 0.15; // 0 to 1 within this phase
+            
+            // X moves to midpoint
+            const sailDistance = 200;
+            const phase1EndX = isFacingEast ? startX + sailDistance : startX - sailDistance;
+            // Phase 2 ended with some X movement, estimate it
+            const phase2EndX = phase1EndX + (isFacingEast ? 30 : -30);
+            newX = phase2EndX + (targetX - phase2EndX) * phaseProgress;
+            
+            // Y: Phase 2 ended around -40 from start, now coast to target (-90)
+            const phase2EndY = startY - 40;
+            newY = phase2EndY + (targetY - phase2EndY) * phaseProgress;
+            
+            // Rotation stays at 0 (pointing into wind)
+            newRotation = targetRotation;
+          }
+          
+          animatedBoatX.value = newX;
+          animatedBoatY.value = newY;
+          animatedBoatRotation.value = newRotation;
+          setAnimatedBoatRotationState(newRotation);
+        }, frameInterval);
+        
+        // Safety cleanup - ensure final position is set
+        // Keep isBoatTransitioning TRUE so we continue using the animated position
+        setTimeout(() => {
+          clearInterval(animationInterval);
+          // Force final position to be correct (Y=270 on screen, which is targetY=-90 relative to base 360)
+          animatedBoatX.value = targetX;
+          animatedBoatY.value = targetY; // -90, so screen Y = 360 + (-90) = 270
+          animatedBoatRotation.value = targetRotation;
+          setAnimatedBoatRotationState(targetRotation);
+          // DON'T set isBoatTransitioning to false - keep using animated position!
+        }, totalDuration + 100);
+      }
+      
       setIsBoatSailing(isSailingParallel);
     } else {
       setIsBoatSailing(false);
@@ -423,14 +567,18 @@ export function FavoredEndInteractive({
   
   // Animated props for sailing boat - combines position and rotation
   // Boat pivots around its center (25, 40)
+  // Base Y of 360 puts the boat about 60 pixels below the start line (y=300)
+  const SAILING_BASE_Y = 360;
   const sailingBoatProps = useAnimatedProps(() => ({
     opacity: 1,
-    transform: `translate(${animatedBoatX.value}, ${450 + animatedBoatY.value}) rotate(${animatedBoatRotation.value}, 25, 40)`,
+    transform: `translate(${animatedBoatX.value}, ${SAILING_BASE_Y + animatedBoatY.value}) rotate(${animatedBoatRotation.value}, 25, 40)`,
   }));
 
   const handleNext = () => {
     if (currentStepIndex < FAVORED_END_STEPS.length - 1) {
       const nextIndex = currentStepIndex + 1;
+      // Reset transitioning state for new step (unless it will trigger a new transition)
+      setIsBoatTransitioning(false);
       setCurrentStepIndex(nextIndex);
       onStepChange?.(FAVORED_END_STEPS[nextIndex]);
     } else {
@@ -441,6 +589,8 @@ export function FavoredEndInteractive({
   const handlePrevious = () => {
     if (currentStepIndex > 0) {
       const prevIndex = currentStepIndex - 1;
+      // Reset transitioning state for new step
+      setIsBoatTransitioning(false);
       setCurrentStepIndex(prevIndex);
       onStepChange?.(FAVORED_END_STEPS[prevIndex]);
     }
@@ -567,6 +717,18 @@ export function FavoredEndInteractive({
               <SvgText x="400" y="320" textAnchor="middle" fontSize="14" fontWeight="600" fill="#000">
                 Start Line
               </SvgText>
+              
+              {/* Midpoint marker on start line */}
+              <G opacity={0.7}>
+                {/* Vertical tick mark at midpoint */}
+                <Line x1="400" y1="295" x2="400" y2="305" stroke="#6366F1" strokeWidth="2" />
+                {/* Small circle at midpoint */}
+                <Circle cx="400" cy="300" r="4" fill="#6366F1" stroke="white" strokeWidth="1" />
+                {/* Midpoint label */}
+                <SvgText x="400" y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="#6366F1">
+                  Midpoint
+                </SvgText>
+              </G>
 
               {/* Secondary line (shifted) */}
               {secondaryLineState && secondaryLineState.opacity && (
@@ -600,8 +762,8 @@ export function FavoredEndInteractive({
                 <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
               </G>
 
-              {/* Sailboat - animated when sailing parallel to line */}
-              {isBoatSailing ? (
+              {/* Sailboat - animated when sailing parallel to line or transitioning */}
+              {(isBoatSailing || isBoatTransitioning) ? (
                 <AnimatedG animatedProps={sailingBoatProps}>
                   <TopDownSailboatSVG 
                     hullColor="#3B82F6" 

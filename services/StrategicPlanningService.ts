@@ -1,5 +1,5 @@
-import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { supabase } from './supabase';
 
 const logger = createLogger('StrategicPlanningService');
 
@@ -66,8 +66,23 @@ export interface RacePreparationWithStrategy {
   coach_id?: string;
   shared_at?: string;
 
+  // Public sharing
+  share_token?: string;
+  share_enabled?: boolean;
+  public_shared_at?: string;
+
   created_at?: string;
   updated_at?: string;
+}
+
+/**
+ * Public sharing status
+ */
+export interface PublicSharingStatus {
+  enabled: boolean;
+  token: string | null;
+  url: string | null;
+  sharedAt: string | null;
 }
 
 class StrategicPlanningService {
@@ -433,6 +448,352 @@ class StrategicPlanningService {
     return phaseChecks
       .filter((phase) => !phase.value || phase.value.trim().length === 0)
       .map((phase) => phase.name);
+  }
+
+  // ==========================================
+  // PUBLIC SHARING METHODS
+  // ==========================================
+
+  /**
+   * Generate a unique share token
+   */
+  private generateShareToken(): string {
+    // Generate a URL-safe random token (12 characters)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let token = '';
+    const array = new Uint8Array(12);
+    crypto.getRandomValues(array);
+    for (let i = 0; i < 12; i++) {
+      token += chars[array[i] % chars.length];
+    }
+    return token;
+  }
+
+  /**
+   * Get the base URL for public sharing
+   */
+  private getBaseUrl(): string {
+    // If running in browser, detect localhost and use current origin
+    if (typeof window !== 'undefined') {
+      const isLocalhost = 
+        window.location?.hostname === 'localhost' || 
+        window.location?.hostname === '127.0.0.1' ||
+        window.location?.hostname === '';
+      
+      if (isLocalhost) {
+        // Use current origin (e.g., http://localhost:8081)
+        return window.location.origin;
+      }
+    }
+    
+    // Use environment variable or fallback to production
+    return process.env.EXPO_PUBLIC_API_URL || 'https://regattaflow.com';
+  }
+
+  /**
+   * Get public sharing status for a preparation
+   */
+  async getPublicSharingStatus(
+    raceEventId: string,
+    sailorId: string
+  ): Promise<PublicSharingStatus> {
+    try {
+      // First check if the share columns exist by selecting from sailor_race_preparation
+      // If columns don't exist (migration not run), this will fail gracefully
+      const { data, error } = await supabase
+        .from('sailor_race_preparation')
+        .select('share_token, share_enabled, public_shared_at')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      if (error) {
+        // Check if error is due to missing columns (migration not run)
+        if (error.message?.includes('column') || error.code === '42703') {
+          logger.warn('Public sharing columns do not exist - migration may not be run yet');
+          return {
+            enabled: false,
+            token: null,
+            url: null,
+            sharedAt: null,
+          };
+        }
+        logger.error('Error fetching public sharing status:', error);
+        throw error;
+      }
+
+      if (!data) {
+        return {
+          enabled: false,
+          token: null,
+          url: null,
+          sharedAt: null,
+        };
+      }
+
+      const baseUrl = this.getBaseUrl();
+      return {
+        enabled: data.share_enabled || false,
+        token: data.share_token || null,
+        url: data.share_enabled && data.share_token 
+          ? `${baseUrl}/p/strategy/${data.share_token}` 
+          : null,
+        sharedAt: data.public_shared_at || null,
+      };
+    } catch (error) {
+      logger.error('Failed to get public sharing status:', error);
+      return {
+        enabled: false,
+        token: null,
+        url: null,
+        sharedAt: null,
+      };
+    }
+  }
+
+  /**
+   * Enable public sharing for a strategy
+   * Generates a share token if one doesn't exist
+   */
+  async enablePublicSharing(
+    raceEventId: string,
+    sailorId: string
+  ): Promise<PublicSharingStatus> {
+    logger.info('[enablePublicSharing] Starting with params:', { raceEventId, sailorId });
+    
+    // Validate inputs
+    if (!raceEventId) {
+      logger.error('[enablePublicSharing] raceEventId is missing!');
+      throw new Error('raceEventId is required');
+    }
+    if (!sailorId) {
+      logger.error('[enablePublicSharing] sailorId is missing!');
+      throw new Error('sailorId is required');
+    }
+    
+    try {
+      // Check auth session
+      const { data: { session } } = await supabase.auth.getSession();
+      logger.info('[enablePublicSharing] Auth session:', { 
+        hasSession: !!session, 
+        userId: session?.user?.id,
+        matchesSailorId: session?.user?.id === sailorId 
+      });
+      
+      // First check if there's already a record
+      logger.info('[enablePublicSharing] Checking for existing record...');
+      const { data: existing, error: selectError } = await supabase
+        .from('sailor_race_preparation')
+        .select('id, share_token')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      logger.info('[enablePublicSharing] Select result:', { 
+        hasExisting: !!existing, 
+        existingId: existing?.id,
+        hasShareToken: !!existing?.share_token,
+        selectError: selectError ? { message: selectError.message, code: selectError.code } : null 
+      });
+
+      if (selectError) {
+        logger.error('[enablePublicSharing] Error checking existing preparation:', {
+          message: selectError.message,
+          code: selectError.code,
+          details: selectError.details,
+          hint: selectError.hint,
+        });
+        throw new Error(`Select failed: ${selectError.message} (code: ${selectError.code})`);
+      }
+
+      // Generate new token only if one doesn't exist
+      const shareToken = existing?.share_token || this.generateShareToken();
+      const now = new Date().toISOString();
+      
+      logger.info('[enablePublicSharing] Generated token:', { shareToken, isNew: !existing?.share_token });
+
+      if (existing) {
+        // Update existing record
+        logger.info('[enablePublicSharing] Updating existing record:', { recordId: existing.id });
+        const updatePayload = {
+          share_token: shareToken,
+          share_enabled: true,
+          public_shared_at: existing.share_token ? undefined : now,
+        };
+        logger.info('[enablePublicSharing] Update payload:', updatePayload);
+        
+        const { error: updateError, data: updateData, status, statusText } = await supabase
+          .from('sailor_race_preparation')
+          .update(updatePayload)
+          .eq('id', existing.id)
+          .select();
+
+        logger.info('[enablePublicSharing] Update response:', { 
+          status, 
+          statusText, 
+          updateData,
+          updateError: updateError ? { message: updateError.message, code: updateError.code, details: updateError.details, hint: updateError.hint } : null 
+        });
+
+        if (updateError) {
+          logger.error('[enablePublicSharing] Error updating public sharing:', {
+            message: updateError.message,
+            code: updateError.code,
+            details: updateError.details,
+            hint: updateError.hint,
+          });
+          throw new Error(`Database error: ${updateError.message || 'Unknown error'} (code: ${updateError.code})`);
+        }
+      } else {
+        // Insert new record
+        logger.info('[enablePublicSharing] Inserting new record...');
+        const insertPayload = {
+          race_event_id: raceEventId,
+          sailor_id: sailorId,
+          share_token: shareToken,
+          share_enabled: true,
+          public_shared_at: now,
+        };
+        logger.info('[enablePublicSharing] Insert payload:', insertPayload);
+        
+        const { error: insertError, data: insertData, status, statusText } = await supabase
+          .from('sailor_race_preparation')
+          .insert(insertPayload)
+          .select();
+
+        logger.info('[enablePublicSharing] Insert response:', { 
+          status, 
+          statusText, 
+          insertData,
+          insertError: insertError ? { message: insertError.message, code: insertError.code, details: insertError.details, hint: insertError.hint } : null 
+        });
+
+        if (insertError) {
+          logger.error('[enablePublicSharing] Error inserting public sharing record:', {
+            message: insertError.message,
+            code: insertError.code,
+            details: insertError.details,
+            hint: insertError.hint,
+          });
+          throw new Error(`Database error: ${insertError.message || 'Unknown error'} (code: ${insertError.code})`);
+        }
+      }
+
+      const baseUrl = this.getBaseUrl();
+      logger.info('Public sharing enabled successfully', { shareToken, url: `${baseUrl}/p/strategy/${shareToken}` });
+      
+      return {
+        enabled: true,
+        token: shareToken,
+        url: `${baseUrl}/p/strategy/${shareToken}`,
+        sharedAt: now,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+      logger.error('[StrategicPlanningService] Failed to enable public sharing:', errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Disable public sharing for a strategy
+   * Keeps the token for potential re-enabling
+   */
+  async disablePublicSharing(
+    raceEventId: string,
+    sailorId: string
+  ): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('sailor_race_preparation')
+        .update({
+          share_enabled: false,
+        })
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId);
+
+      if (error) {
+        logger.error('Error disabling public sharing:', error);
+        throw error;
+      }
+
+      logger.info('Public sharing disabled successfully');
+      return true;
+    } catch (error) {
+      logger.error('Failed to disable public sharing:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle public sharing on/off
+   */
+  async togglePublicSharing(
+    raceEventId: string,
+    sailorId: string,
+    enabled: boolean
+  ): Promise<PublicSharingStatus> {
+    if (enabled) {
+      return this.enablePublicSharing(raceEventId, sailorId);
+    } else {
+      await this.disablePublicSharing(raceEventId, sailorId);
+      
+      // Return current status after disabling
+      const { data } = await supabase
+        .from('sailor_race_preparation')
+        .select('share_token, public_shared_at')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      return {
+        enabled: false,
+        token: data?.share_token || null,
+        url: null,
+        sharedAt: data?.public_shared_at || null,
+      };
+    }
+  }
+
+  /**
+   * Regenerate share token (invalidates old links)
+   */
+  async regenerateShareToken(
+    raceEventId: string,
+    sailorId: string
+  ): Promise<PublicSharingStatus> {
+    try {
+      const newToken = this.generateShareToken();
+      const now = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('sailor_race_preparation')
+        .update({
+          share_token: newToken,
+          share_enabled: true,
+          public_shared_at: now,
+        })
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId);
+
+      if (error) {
+        logger.error('Error regenerating share token:', error);
+        throw error;
+      }
+
+      const baseUrl = this.getBaseUrl();
+      logger.info('Share token regenerated successfully');
+      
+      return {
+        enabled: true,
+        token: newToken,
+        url: `${baseUrl}/p/strategy/${newToken}`,
+        sharedAt: now,
+      };
+    } catch (error) {
+      logger.error('Failed to regenerate share token:', error);
+      throw error;
+    }
   }
 }
 

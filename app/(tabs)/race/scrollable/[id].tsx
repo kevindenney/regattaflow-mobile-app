@@ -5,40 +5,41 @@
  */
 
 import {
-  ContingencyPlansCard,
-  CourseSelector,
-  CrewEquipmentCard,
-  CurrentTideCard,
-  DownwindStrategyCard,
-  FleetRacersCard,
-  MarkRoundingCard,
-  PostRaceAnalysisCard,
-  PreRaceStrategySection,
-  RaceDetailMapHero,
-  RaceInfoCards,
-  RacePhaseHeader,
-  RigTuningCard,
-  RouteMapCard,
-  StartStrategyCard,
-  UpwindStrategyCard,
-  WeatherAlongRouteCard,
-  WindWeatherCard
+    ContingencyPlansCard,
+    CourseSelector,
+    CrewEquipmentCard,
+    CurrentTideCard,
+    DistanceRacingStrategyCard,
+    DownwindStrategyCard,
+    FleetRacersCard,
+    MarkRoundingCard,
+    PostRaceAnalysisCard,
+    PreRaceStrategySection,
+    RaceDetailMapHero,
+    RaceInfoCards,
+    RacePhaseHeader,
+    RigTuningCard,
+    RouteMapCard,
+    StartStrategyCard,
+    UpwindStrategyCard,
+    WeatherAlongRouteCard,
+    WindWeatherCard
 } from '@/components/race-detail';
 import { PreRaceBriefingCard } from '@/components/races';
 import { TrackImportModal, TracksCard } from '@/components/tracking';
 import { Track } from '@/services/tracking/types';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  Platform,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle
+    Animated,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    ViewStyle
 } from 'react-native';
 // import { StrategyPlanningCard } from '@/components/race-detail/StrategyPlanningCard'; // No longer used - strategy planning is integrated into individual strategy cards
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
@@ -173,6 +174,15 @@ export default function RaceDetailScrollable() {
   useEffect(() => {
     loadRaceData();
   }, [id]);
+
+  // Reload race data when screen comes into focus (e.g., after editing)
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        loadRaceData();
+      }
+    }, [id])
+  );
 
   // Fetch sailor profile ID
   useEffect(() => {
@@ -907,6 +917,17 @@ export default function RaceDetailScrollable() {
           {/* Distance Racing Cards - Only shown for distance races */}
           {race.race_type === 'distance' && (
             <>
+              {/* Distance Racing Strategy with AI suggestions and user notes */}
+              <DistanceRacingStrategyCard
+                raceId={race.id}
+                raceName={race.race_name}
+                raceEventId={race.race_event_id}
+                routeWaypoints={race.route_waypoints || []}
+                totalDistanceNm={race.total_distance_nm}
+                raceDate={race.start_time?.split('T')[0]}
+                venueId={race.venue?.id}
+              />
+
               {/* Route Map with Waypoints */}
               <RouteMapCard
                 waypoints={race.route_waypoints || []}
@@ -914,11 +935,12 @@ export default function RaceDetailScrollable() {
                 raceName={race.race_name}
               />
 
-              {/* Weather Along Route */}
+              {/* Weather Along Route - uses initialConditionsSnapshot for consistency with other cards */}
               <WeatherAlongRouteCard
                 waypoints={race.route_waypoints || []}
                 raceDate={race.start_time?.split('T')[0] || new Date().toISOString().split('T')[0]}
                 startTime={race.start_time?.split('T')[1]?.slice(0, 5) || '10:00'}
+                sharedWeather={initialConditionsSnapshot}
               />
             </>
           )}

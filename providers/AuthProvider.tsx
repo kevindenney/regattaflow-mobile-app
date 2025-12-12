@@ -1,12 +1,12 @@
 import { signOutEverywhere } from '@/lib/auth-actions'
+import { createLogger } from '@/lib/utils/logger'
 import { supabase, UserType } from '@/services/supabase'
 import { bindAuthDiagnostics } from '@/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/utils/errToText'
+import { AuthApiError } from '@supabase/supabase-js'
 import { router } from 'expo-router'
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Platform } from 'react-native'
-import { createLogger } from '@/lib/utils/logger';
-import { AuthApiError } from '@supabase/supabase-js';
 
 // Re-export UserType for backward compatibility
 export type { UserType } from '@/services/supabase'
@@ -47,7 +47,9 @@ const getApiBase = () => {
     const isProductionApi = envApiBase.includes('vercel.app') || envApiBase.includes('regattaflow.io')
     
     if (isLocalhost && isProductionApi) {
-      console.log('[AuthProvider] 🔄 Auto-switching to local vercel dev server (localhost:3000)')
+      if (AUTH_DEBUG_ENABLED) {
+        logger.debug('🔄 Auto-switching to local vercel dev server (localhost:3000)')
+      }
       return 'http://localhost:3000'
     }
   }
@@ -58,16 +60,20 @@ const getApiBase = () => {
 const API_BASE = getApiBase()
 
 // 🔍 DEBUG: Log env vars at module load time
-console.log('[AuthProvider] 🔍 ENV DEBUG:', {
-  EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
-  EXPO_PUBLIC_BASE_URL: process.env.EXPO_PUBLIC_BASE_URL,
-  EXPO_PUBLIC_WEB_BASE_URL: process.env.EXPO_PUBLIC_WEB_BASE_URL,
-  RESOLVED_API_BASE: API_BASE,
-})
+if (AUTH_DEBUG_ENABLED) {
+  logger.debug('🔍 ENV DEBUG:', {
+    EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
+    EXPO_PUBLIC_BASE_URL: process.env.EXPO_PUBLIC_BASE_URL,
+    EXPO_PUBLIC_WEB_BASE_URL: process.env.EXPO_PUBLIC_WEB_BASE_URL,
+    RESOLVED_API_BASE: API_BASE,
+  })
+}
 
 const buildApiUrl = (path: string) => {
   const url = !API_BASE ? path : `${API_BASE.replace(/\/$/, '')}${path}`
-  console.log('[AuthProvider] 🔍 buildApiUrl:', { path, API_BASE, result: url })
+  if (AUTH_DEBUG_ENABLED) {
+    logger.debug('🔍 buildApiUrl:', { path, API_BASE, result: url })
+  }
   return url
 }
 
