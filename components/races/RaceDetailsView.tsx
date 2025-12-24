@@ -4,22 +4,23 @@
  * Organized into collapsible sections matching the race entry form
  */
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/services/supabase';
-import { CourseSelector } from './CourseSelector';
-import type { RaceCourse } from '@/types/courses';
 import { createLogger } from '@/lib/utils/logger';
+import { supabase } from '@/services/supabase';
+import type { RaceCourse } from '@/types/courses';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { CourseSelector } from './CourseSelector';
 
 interface RaceDetailsViewProps {
   raceData: any;
@@ -931,11 +932,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
   },
   courseSelectorButton: {
     flexDirection: 'row',

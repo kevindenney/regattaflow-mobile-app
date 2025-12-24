@@ -303,6 +303,15 @@ export class ComprehensiveRaceExtractionAgent {
         const requestDuration = Date.now() - requestStart;
         logger.debug('[ComprehensiveRaceExtractionAgent] Response received in', requestDuration, 'ms');
         logger.debug('[ComprehensiveRaceExtractionAgent] Response status:', response.status);
+        
+        // Log text preview to check if start/finish info is in input
+        const textLower = text.toLowerCase();
+        logger.debug('[ComprehensiveRaceExtractionAgent] Text contains start info:', {
+          hasStartingLine: textLower.includes('starting line'),
+          hasStartArea: textLower.includes('start') || textLower.includes('tai tam'),
+          hasFinish: textLower.includes('finish'),
+          preview: text.substring(0, 2000),
+        });
 
         // Parse response body first (even for 400 errors, as they may contain partial data)
         let result;
@@ -358,6 +367,30 @@ export class ComprehensiveRaceExtractionAgent {
         logger.debug('[ComprehensiveRaceExtractionAgent] Extraction successful:', {
           confidence: result.confidence || result.overallConfidence,
         });
+        
+        // Enhanced logging for start/finish extraction debugging
+        if (result.races && result.races.length > 0) {
+          const firstRace = result.races[0];
+          logger.debug('[ComprehensiveRaceExtractionAgent] First race start/finish extraction:', {
+            startAreaName: firstRace.startAreaName,
+            startAreaDescription: firstRace.startAreaDescription,
+            startLines: firstRace.startLines ? `${firstRace.startLines.length} line(s)` : 'missing',
+            startLinesDetails: firstRace.startLines?.map((sl: any) => ({
+              name: sl.name,
+              description: sl.description,
+              classes: sl.classes?.length || 0,
+            })),
+            finishAreaName: firstRace.finishAreaName,
+            finishAreaDescription: firstRace.finishAreaDescription,
+            raceType: firstRace.raceType,
+          });
+        } else if (result.data) {
+          logger.debug('[ComprehensiveRaceExtractionAgent] Single race start/finish extraction:', {
+            startAreaName: result.data.startAreaName,
+            startAreaDescription: result.data.startAreaDescription,
+            startLines: result.data.startLines ? `${result.data.startLines.length} line(s)` : 'missing',
+          });
+        }
 
         // Handle multi-race response (new edge function format)
         if (result.multipleRaces && result.races && result.races.length > 0) {

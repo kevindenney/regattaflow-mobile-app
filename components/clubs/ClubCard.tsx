@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from '@/components/ui/text';
+import React from 'react';
+import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface YachtClub {
   id: string;
@@ -72,11 +72,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

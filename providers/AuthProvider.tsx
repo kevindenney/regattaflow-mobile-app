@@ -660,17 +660,25 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setCoachProfile(null)
 
         authDebugLog('🚪 [AUTH] State cleanup complete. Starting navigation...')
+        
+        // Immediately redirect to landing page to prevent any route protection from redirecting to login
+        authDebugLog('🚪 [AUTH] Navigating to landing page...')
         try {
           if (typeof window !== 'undefined') {
             authDebugLog('🚪 [AUTH] Replacing browser history state...')
             window.history.replaceState(null, '', '/')
           }
+          // Use replace to ensure we go to landing page, not login
+          router.replace('/')
         } catch (historyError) {
           console.warn('🚪 [AUTH] History replace error:', historyError)
+          // Fallback: force navigation to landing page
+          try {
+            router.replace('/')
+          } catch (navError) {
+            console.warn('🚪 [AUTH] Navigation fallback failed:', navError)
+          }
         }
-
-        authDebugLog('🚪 [AUTH] Navigating to landing page...')
-        router.replace('/')
         authDebugLog('🚪 [AUTH] ===== SIGNED_OUT HANDLER COMPLETE =====')
       }
 
@@ -754,6 +762,18 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       ready
     })
 
+    // CRITICAL: Navigate to landing page IMMEDIATELY before clearing auth state
+    // This prevents route protection from redirecting to login
+    authDebugLog('🚪 [AUTH] Navigating to landing page immediately...')
+    try {
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/')
+      }
+      router.replace('/')
+    } catch (navError) {
+      console.warn('🚪 [AUTH] Initial navigation error:', navError)
+    }
+
     if (isDemoSession) {
       authDebugLog('🚪 [AUTH] Demo session detected, performing local sign out.')
       setSignedIn(false)
@@ -765,14 +785,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setClubProfile(null)
       setCoachProfile(null)
       setIsDemoSession(false)
-      if (typeof window !== 'undefined') {
-        try {
-          window.history.replaceState(null, '', '/')
-        } catch (historyError) {
-          console.warn('🚪 [AUTH] History replace error for demo sign out:', historyError)
-        }
-      }
-      router.replace('/')
       return
     }
 
@@ -904,7 +916,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           email: trimmedEmail,
           full_name: displayName,
           user_type: personaRole,
-          onboarding_completed: true,
+          onboarding_completed: false, // New users need to complete onboarding
         }
 
         authDebugLog('[AUTH] Upserting user profile:', profilePayload)

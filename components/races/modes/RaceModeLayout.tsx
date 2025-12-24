@@ -10,9 +10,9 @@
  * - Minimalist, distraction-free design
  */
 
+import { Navigation, Timer, Waves, Wind } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Dimensions } from 'react-native';
-import { Timer, Navigation, Wind, Waves } from 'lucide-react-native';
+import { Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLayoutContext } from '../ResponsiveRaceLayout';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -312,11 +312,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 20,
     paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px -2px 8px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
     zIndex: 900,
   },
   infoStripExpanded: {
@@ -388,11 +395,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 6,
+      },
+    }),
   },
   emergencyButton: {
     backgroundColor: '#DC2626', // Red for emergency

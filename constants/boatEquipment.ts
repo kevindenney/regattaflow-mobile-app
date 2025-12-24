@@ -204,7 +204,7 @@ export const ACTIVE_DRAGON_HULL_MAKER_NAMES = Array.from(
 // ============================================================================
 
 export const COMMON_RIG_MAKERS = [
-  'Selden',
+  'Seldén',
   'Z-Spars',
   'Sparcraft',
   'Hall Spars',

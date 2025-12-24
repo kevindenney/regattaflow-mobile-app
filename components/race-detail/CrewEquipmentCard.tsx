@@ -5,12 +5,12 @@
  * Shows crew assigned to a race with availability status
  */
 
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
-import { crewManagementService, CrewMemberWithAssignment } from '@/services/crewManagementService';
 import { useAuth } from '@/providers/AuthProvider';
+import { crewManagementService, CrewMemberWithAssignment } from '@/services/crewManagementService';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface CrewEquipmentCardProps {
   raceId: string;
@@ -36,16 +36,30 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
       return;
     }
 
+    if (!raceId) {
+      console.log('[CrewEquipmentCard] No raceId, skipping load');
+      setLoading(false);
+      setCrew([]);
+      return;
+    }
+
     try {
       setLoading(true);
       console.log('[CrewEquipmentCard] Loading crew for:', { userId: user.id, classId, raceId });
 
-      // Get crew with assignment status for this race
-      const crewMembers = await crewManagementService.getCrewWithAssignmentStatus(
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout loading crew after 10 seconds')), 10000);
+      });
+      
+      const crewPromise = crewManagementService.getCrewWithAssignmentStatus(
         user.id,
-        classId,
+        classId || null,
         raceId
       );
+      
+      // Get crew with assignment status for this race
+      const crewMembers = await Promise.race([crewPromise, timeoutPromise]);
 
       console.log('[CrewEquipmentCard] Loaded crew members:', crewMembers.length);
 
@@ -54,8 +68,19 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
       const relevantCrew = crewMembers.filter((c) => c.status === 'active' || c.status === 'pending');
       console.log('[CrewEquipmentCard] Relevant crew (active + pending):', relevantCrew.length);
       setCrew(relevantCrew);
-    } catch (error) {
+      
+      // Auto-expand "Available crew" section if there are unassigned crew members
+      const unassignedCount = relevantCrew.filter((c) => !c.isAssigned).length;
+      if (unassignedCount > 0) {
+        setShowAvailable(true);
+      }
+    } catch (error: any) {
       console.error('[CrewEquipmentCard] Error loading crew:', error);
+      console.error('[CrewEquipmentCard] Error details:', {
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack?.substring(0, 200),
+      });
       // Gracefully handle the error without showing an alert
       setCrew([]);
     } finally {
@@ -319,11 +344,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.md,
     marginBottom: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

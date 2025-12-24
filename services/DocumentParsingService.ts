@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import { nominatimService } from './location/NominatimService';
 
 interface CourseExtraction {
   course_name: string;
@@ -11,11 +12,13 @@ interface CourseExtraction {
     bearing: number;
     length_meters: number;
   };
+  start_location_name?: string | null;
   finish_line: {
     coordinates: [number, number][];
     bearing: number;
     length_meters: number;
   };
+  finish_location_name?: string | null;
   course_configurations: CourseConfiguration[];
   restrictions: CourseRestriction[];
   wind_conditions: {
@@ -190,10 +193,13 @@ Extract the following information in precise detail:
    - Rounding directions (port/starboard)
    - Mark descriptions and identification
 
-3. START/FINISH LINES:
-   - Start line coordinates and bearing
-   - Finish line coordinates and bearing
+3. START/FINISH LINES AND LOCATIONS:
+   - Start line coordinates and bearing (if provided)
+   - Finish line coordinates and bearing (if provided)
    - Line lengths in meters
+   - **CRITICAL: Extract start location names even if coordinates aren't provided** (e.g., "Tai Tam Bay", "Starting line will be laid in [location]")
+   - **CRITICAL: Extract finish location names even if coordinates aren't provided** (e.g., "ABC Main Club", "Race Safety Control Centre at [location]")
+   - Include start_location_name and finish_location_name fields in the response
 
 4. COURSE CONFIGURATIONS:
    - All possible course configurations
@@ -230,6 +236,11 @@ Look for coordinate data in formats like:
 
 Extract mark positions with maximum precision. If coordinates aren't explicit, look for distance/bearing references from known positions.
 
+**IMPORTANT FOR START/FINISH:**
+- If the document mentions a start area/location by name (e.g., "Tai Tam Bay", "starting line will be laid in [location]"), extract the location name even if no coordinates are provided
+- If the document mentions a finish location by name (e.g., "ABC Main Club", "Race Safety Control Centre at [location]"), extract the location name even if no coordinates are provided
+- These location names will be geocoded to coordinates after extraction
+
 Respond in this JSON format:
 {
   "course_name": "Course Alpha",
@@ -249,11 +260,13 @@ Respond in this JSON format:
     "bearing": 90,
     "length_meters": 100
   },
+  "start_location_name": "Tai Tam Bay" or null if not mentioned,
   "finish_line": {
     "coordinates": [[22.2854, 114.1577], [22.2860, 114.1580]],
     "bearing": 90,
     "length_meters": 100
   },
+  "finish_location_name": "ABC Main Club" or null if not mentioned,
   "course_configurations": [
     {
       "name": "Windward/Leeward",
@@ -322,7 +335,12 @@ Respond in this JSON format:
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const extraction = JSON.parse(jsonMatch[0]) as CourseExtraction;
+        
+        // Geocode start/finish location names if provided
+        const geocodedExtraction = await this.geocodeStartFinishLocations(extraction, venueId);
+        
+        return geocodedExtraction;
       }
 
       // Fallback course extraction
@@ -467,6 +485,97 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
   }
 
   // Helper methods
+
+  /**
+   * Geocode start/finish location names and add them as waypoints
+   */
+  private static async geocodeStartFinishLocations(
+    extraction: CourseExtraction,
+    venueId?: string
+  ): Promise<CourseExtraction> {
+    try {
+      const enhancedExtraction = { ...extraction };
+      const newMarks: CourseMark[] = [...extraction.marks];
+
+      // Geocode start location if name is provided but no coordinates
+      if (extraction.start_location_name && 
+          (!extraction.start_line.coordinates || extraction.start_line.coordinates.length === 0 || 
+           extraction.start_line.coordinates.every(coord => !coord || coord.length === 0))) {
+        try {
+          const startQuery = `${extraction.start_location_name}, Hong Kong`;
+          const startResults = await nominatimService.search(startQuery, { limit: 1, countrycodes: 'hk' });
+          
+          if (startResults && startResults.length > 0) {
+            const startCoord = [startResults[0].lat, startResults[0].lng] as [number, number];
+            
+            // Add start as first mark (point 0)
+            const startMark: CourseMark = {
+              id: 'START',
+              name: `Start - ${extraction.start_location_name}`,
+              type: 'start',
+              coordinates: startCoord,
+              rounding_direction: 'either',
+              description: `Start location at ${extraction.start_location_name} (geocoded)`,
+            };
+            
+            // Insert at the beginning
+            newMarks.unshift(startMark);
+            
+            // Update start_line coordinates if empty
+            if (!extraction.start_line.coordinates || extraction.start_line.coordinates.length === 0) {
+              enhancedExtraction.start_line.coordinates = [startCoord, startCoord];
+            }
+            
+            console.log(`[DocumentParsing] Geocoded start location: ${extraction.start_location_name} -> ${startCoord[0]}, ${startCoord[1]}`);
+          }
+        } catch (error) {
+          console.warn(`[DocumentParsing] Failed to geocode start location: ${extraction.start_location_name}`, error);
+        }
+      }
+
+      // Geocode finish location if name is provided but no coordinates
+      if (extraction.finish_location_name && 
+          (!extraction.finish_line.coordinates || extraction.finish_line.coordinates.length === 0 ||
+           extraction.finish_line.coordinates.every(coord => !coord || coord.length === 0))) {
+        try {
+          const finishQuery = `${extraction.finish_location_name}, Hong Kong`;
+          const finishResults = await nominatimService.search(finishQuery, { limit: 1, countrycodes: 'hk' });
+          
+          if (finishResults && finishResults.length > 0) {
+            const finishCoord = [finishResults[0].lat, finishResults[0].lng] as [number, number];
+            
+            // Add finish as last mark
+            const finishMark: CourseMark = {
+              id: 'FINISH',
+              name: `Finish - ${extraction.finish_location_name}`,
+              type: 'finish',
+              coordinates: finishCoord,
+              rounding_direction: 'either',
+              description: `Finish location at ${extraction.finish_location_name} (geocoded)`,
+            };
+            
+            // Add at the end
+            newMarks.push(finishMark);
+            
+            // Update finish_line coordinates if empty
+            if (!extraction.finish_line.coordinates || extraction.finish_line.coordinates.length === 0) {
+              enhancedExtraction.finish_line.coordinates = [finishCoord, finishCoord];
+            }
+            
+            console.log(`[DocumentParsing] Geocoded finish location: ${extraction.finish_location_name} -> ${finishCoord[0]}, ${finishCoord[1]}`);
+          }
+        } catch (error) {
+          console.warn(`[DocumentParsing] Failed to geocode finish location: ${extraction.finish_location_name}`, error);
+        }
+      }
+
+      enhancedExtraction.marks = newMarks;
+      return enhancedExtraction;
+    } catch (error) {
+      console.error('[DocumentParsing] Error in geocodeStartFinishLocations:', error);
+      return extraction; // Return original if geocoding fails
+    }
+  }
 
   private static async readDocumentContent(uri: string): Promise<string> {
     try {

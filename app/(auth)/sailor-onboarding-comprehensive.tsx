@@ -3,15 +3,36 @@
  * Single page with all structured fields for complete sailor profile
  */
 
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, TouchableOpacity, Alert, Platform } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { BoatAutocompleteInput } from '@/components/onboarding/BoatAutocompleteInput';
+import { VenueLocationPicker } from '@/components/races/VenueLocationPicker';
 import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
 import {
-  User, Anchor, MapPin, FileText, Calendar,
-  Plus, X, ChevronRight, Loader, ArrowLeft
+  getBoatClassesForClub,
+  getDocumentUrlsForRace,
+  getEquipmentForClass,
+  getHongKongClubs,
+  getHongKongRaces,
+  getSailNumbersForClass,
+  HONG_KONG_CLUBS,
+  isHongKongVenue,
+} from '@/services/HongKongVenueIntelligence';
+import { supabase } from '@/services/supabase';
+import * as Location from 'expo-location';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Anchor,
+  ArrowLeft,
+  Calendar,
+  ChevronRight,
+  FileText,
+  Loader,
+  MapPin,
+  Plus,
+  User,
+  X
 } from 'lucide-react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Alert, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface Boat {
   className: string;
@@ -70,8 +91,6 @@ export default function SailorOnboardingComprehensive() {
   // Section 1: Personal Info
   const [fullName, setFullName] = useState('');
   const [primaryRole, setPrimaryRole] = useState<'owner' | 'crew' | 'both'>('owner');
-  const [yearsSailing, setYearsSailing] = useState('');
-  const [experienceLevel, setExperienceLevel] = useState<'beginner' | 'intermediate' | 'advanced' | 'expert'>('intermediate');
 
   // Section 2: Boats - Pre-populate from chat
   const [boats, setBoats] = useState<Boat[]>(
@@ -143,6 +162,8 @@ export default function SailorOnboardingComprehensive() {
 
   // AI processing states
   const [isProcessingSiNor, setIsProcessingSiNor] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [extractionTimedOut, setExtractionTimedOut] = useState(false);
   const [extractedSiNorData, setExtractedSiNorData] = useState<{
     raceName?: string;
     date?: string;
@@ -152,6 +173,9 @@ export default function SailorOnboardingComprehensive() {
     courseDescription?: string;
     windLimits?: string;
   } | null>(null);
+  
+  // Debounce timer for SI/NOR extraction
+  const siNorExtractionTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Debug: Log race data on mount
   React.useEffect(() => {
@@ -160,32 +184,295 @@ export default function SailorOnboardingComprehensive() {
   }, []);
 
   const [submitting, setSubmitting] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
 
-  // Process SI/NOR text with AI when user pastes
-  const handleSiNorPaste = async (text: string) => {
+  // Track if we've already auto-filled for this venue (prevent re-triggering)
+  const [autoFilledForVenue, setAutoFilledForVenue] = useState<string>('');
+
+  // Smart auto-suggestions when Hong Kong venue is detected
+  useEffect(() => {
+    if (!homeVenue.trim()) {
+      setAutoFilledForVenue('');
+      return;
+    }
+
+    const venueName = homeVenue.trim();
+    if (!isHongKongVenue(venueName)) {
+      setAutoFilledForVenue('');
+      return;
+    }
+
+    // Only auto-fill once per venue
+    if (autoFilledForVenue === venueName) return;
+
+    // Auto-suggest clubs
+    const hkClubs = getHongKongClubs(venueName);
+    if (hkClubs.length > 0 && (!clubs[0]?.name || clubs[0].name === '')) {
+      const firstClub = hkClubs[0];
+      updateClub(0, 'name', firstClub.name);
+      if (firstClub.website) {
+        updateClub(0, 'url', firstClub.website);
+      }
+
+      // Auto-suggest boats for the club
+      const suggestedBoats = getBoatClassesForClub(firstClub.name);
+      if (suggestedBoats.length > 0 && (!boats[0]?.className || boats[0].className === '')) {
+        const firstBoat = suggestedBoats[0];
+        updateBoat(0, 'className', firstBoat);
+        
+        // Auto-suggest sail number
+        const sailNumbers = getSailNumbersForClass(firstBoat);
+        if (sailNumbers.length > 0 && (!boats[0]?.sailNumber || boats[0].sailNumber === '')) {
+          updateBoat(0, 'sailNumber', sailNumbers[0]);
+        }
+
+        // Auto-suggest equipment
+        const equipment = getEquipmentForClass(firstBoat);
+        if (equipment.hullMakers.length > 0 && !boats[0]?.hullMaker) {
+          updateBoat(0, 'hullMaker', equipment.hullMakers[0]);
+        }
+        if (equipment.rigMakers.length > 0 && !boats[0]?.rigMaker) {
+          updateBoat(0, 'rigMaker', equipment.rigMakers[0]);
+        }
+        if (equipment.sailMakers.length > 0 && !boats[0]?.sailMaker) {
+          updateBoat(0, 'sailMaker', equipment.sailMakers[0]);
+        }
+      }
+    }
+
+    // Auto-suggest races
+    const hkRaces = getHongKongRaces(venueName);
+    if (hkRaces.length > 0 && !nextRace.name) {
+      const firstRace = hkRaces[0];
+      setNextRace(prev => ({
+        ...prev,
+        name: firstRace.name,
+        location: venueName,
+      }));
+
+      // Auto-suggest documents for the race
+      const docUrls = getDocumentUrlsForRace(firstRace.name);
+      if (docUrls.classAssociation && documents.length === 0) {
+        setDocuments([{
+          type: 'class_association',
+          url: docUrls.classAssociation,
+        }]);
+      }
+      if (docUrls.tuningGuide) {
+        setDocuments(prev => {
+          const hasTuningGuide = prev.some(d => d.type === 'tuning_guide');
+          if (!hasTuningGuide) {
+            return [...prev, {
+              type: 'tuning_guide',
+              url: docUrls.tuningGuide!,
+            }];
+          }
+          return prev;
+        });
+      }
+      if (docUrls.calendar) {
+        setDocuments(prev => {
+          const hasCalendar = prev.some(d => d.type === 'race_calendar');
+          if (!hasCalendar) {
+            return [...prev, {
+              type: 'race_calendar',
+              url: docUrls.calendar!,
+            }];
+          }
+          return prev;
+        });
+      }
+    }
+
+    setAutoFilledForVenue(venueName);
+  }, [homeVenue]);
+
+  // Auto-detect location on mount (mobile only)
+  useEffect(() => {
+    const detectLocation = async () => {
+      if (homeVenue || Platform.OS === 'web') return;
+      
+      try {
+        setDetectingLocation(true);
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setDetectingLocation(false);
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = location.coords;
+
+        // Reverse geocode to get venue name
+        const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (geocode && geocode.length > 0) {
+          const address = geocode[0];
+          if (address.city === 'Hong Kong' || address.region === 'Hong Kong') {
+            setHomeVenue('Victoria Harbour, Hong Kong');
+          }
+        }
+      } catch (error) {
+        console.error('Location detection error:', error);
+      } finally {
+        setDetectingLocation(false);
+      }
+    };
+
+    detectLocation();
+  }, []);
+
+  // Handle text input change (just update state, don't extract yet)
+  const handleSiNorTextChange = useCallback((text: string) => {
     setSiNorPasteData(text);
+    
+    // Clear any previous extraction, errors, and timeout state when text changes
+    setExtractedSiNorData(null);
+    setExtractionError(null);
+    setExtractionTimedOut(false);
+    
+    // Clear existing timer
+    if (siNorExtractionTimerRef.current) {
+      clearTimeout(siNorExtractionTimerRef.current);
+    }
     
     // Only process if we have meaningful content (more than ~50 chars)
     if (text.length < 50) {
+      setIsProcessingSiNor(false);
+      return;
+    }
+    
+    // Set processing state immediately to show feedback
+    setIsProcessingSiNor(true);
+    
+    // Debounce: Wait 2 seconds after user stops typing before extracting
+    siNorExtractionTimerRef.current = setTimeout(() => {
+      extractSiNorData(text);
+    }, 2000);
+  }, []);
+
+  // Check if input is a URL
+  const isUrl = (input: string): boolean => {
+    try {
+      const url = new URL(input.trim());
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  // Check if URL is a PDF
+  const isPdfUrl = (url: string): boolean => {
+    return url.toLowerCase().endsWith('.pdf') || url.toLowerCase().includes('.pdf');
+  };
+
+  // Actual extraction function (called after debounce)
+  const extractSiNorData = async (text: string, isRetry: boolean = false) => {
+    // Clear previous errors and timeout state
+    setExtractionError(null);
+    setExtractionTimedOut(false);
+    
+    // Check if input is a URL
+    if (isUrl(text)) {
+      if (isPdfUrl(text)) {
+        // PDF URLs cannot be processed directly - need to fetch and extract text
+        setIsProcessingSiNor(true);
+        
+        // Create timeout for PDF download/extraction (60 seconds for PDFs)
+        const pdfTimeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('PDF_TIMEOUT'));
+          }, 60000); // 60 seconds for PDF processing
+        });
+
+        try {
+          // Try to fetch the PDF and extract text with timeout
+          const fetchPromise = (async () => {
+            const response = await fetch(text);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch PDF: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+
+            // Use PDF extraction service if available
+            try {
+              const { PDFExtractionService } = await import('@/services/PDFExtractionService');
+              const result = await PDFExtractionService.extractText(blobUrl, { maxPages: 50 });
+              URL.revokeObjectURL(blobUrl);
+
+              if (result.success && result.text) {
+                // Recursively call with extracted text
+                await extractSiNorData(result.text, isRetry);
+                return;
+              } else {
+                throw new Error(result.error || 'Failed to extract text from PDF');
+              }
+            } catch (pdfError: any) {
+              URL.revokeObjectURL(blobUrl);
+              throw pdfError;
+            }
+          })();
+
+          await Promise.race([fetchPromise, pdfTimeoutPromise]);
+        } catch (fetchError: any) {
+          if (fetchError?.message === 'PDF_TIMEOUT') {
+            setExtractionTimedOut(true);
+            setExtractionError('PDF download and extraction took too long (over 60 seconds).');
+            setIsProcessingSiNor(false);
+            return;
+          }
+          
+          setExtractionError(
+            fetchError?.message || 'Could not download or extract text from the PDF.'
+          );
+          setIsProcessingSiNor(false);
+          return;
+        }
+      } else {
+        // Non-PDF URL - suggest pasting text instead
+        setExtractionError('Please paste the text content from the document, not the URL. The AI extraction works best with the actual text content.');
+        setIsProcessingSiNor(false);
+        return;
+      }
+    }
+
+    // Only process if we have meaningful content (more than ~50 chars)
+    if (text.length < 50) {
       setExtractedSiNorData(null);
+      setIsProcessingSiNor(false);
       return;
     }
 
     setIsProcessingSiNor(true);
+    setExtractedSiNorData(null); // Clear previous extraction
+    
+    // Create a timeout promise (45 seconds max for text extraction)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('TIMEOUT'));
+      }, 45000); // 45 seconds for text extraction
+    });
+
     try {
-      // Call edge function to extract race info from SI/NOR
-      const { data, error } = await supabase.functions.invoke('extract-race-info', {
+      // Call edge function to extract race info from SI/NOR with timeout
+      const extractionPromise = supabase.functions.invoke('extract-race-info', {
         body: { text, type: 'si_nor' },
       });
 
+      const { data, error } = await Promise.race([extractionPromise, timeoutPromise]);
+
       if (error) {
         console.warn('[SailorOnboarding] SI/NOR extraction error:', error);
+        setExtractionError('Could not extract race information. Please try again or enter the details manually.');
+        setIsProcessingSiNor(false);
         return;
       }
 
       if (data?.success && data?.extracted) {
         console.log('[SailorOnboarding] Extracted SI/NOR data:', data.extracted);
         setExtractedSiNorData(data.extracted);
+        setExtractionError(null); // Clear any previous errors
         
         // Auto-fill next race fields if empty
         if (data.extracted.raceName && !nextRace.name) {
@@ -200,13 +487,41 @@ export default function SailorOnboardingComprehensive() {
         if (data.extracted.location && !nextRace.location) {
           setNextRace(prev => ({ ...prev, location: data.extracted.location }));
         }
+      } else if (data && !data.success) {
+        console.warn('[SailorOnboarding] Extraction returned unsuccessful:', data.error);
+        setExtractionError(data.error || 'Could not extract race information. Please enter the details manually.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[SailorOnboarding] SI/NOR extraction failed:', err);
+      
+      // Handle timeout specifically
+      if (err?.message === 'TIMEOUT' || err?.message?.includes('timed out')) {
+        setExtractionTimedOut(true);
+        setExtractionError('Extraction took too long (over 45 seconds). This can happen with very long documents.');
+      } else {
+        setExtractionError(err?.message || 'An error occurred during extraction. Please try again or enter the details manually.');
+      }
     } finally {
+      // Always stop the loading indicator
       setIsProcessingSiNor(false);
     }
   };
+
+  // Retry extraction
+  const retryExtraction = () => {
+    if (siNorPasteData) {
+      extractSiNorData(siNorPasteData, true);
+    }
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (siNorExtractionTimerRef.current) {
+        clearTimeout(siNorExtractionTimerRef.current);
+      }
+    };
+  }, []);
 
   // Select race as "next race" and populate form
   const selectAsNextRace = (race: any, index: number) => {
@@ -471,8 +786,26 @@ export default function SailorOnboardingComprehensive() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="flex-1 px-6 py-8 max-w-3xl mx-auto w-full">
+    <View className="flex-1 bg-white">
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ paddingBottom: 100 }}
+        style={Platform.select({
+          web: {
+            overflow: 'visible',
+          } as any,
+          default: {},
+        })}
+      >
+        <View 
+          className="flex-1 px-6 py-8 max-w-3xl mx-auto w-full"
+          style={Platform.select({
+            web: {
+              overflow: 'visible',
+            } as any,
+            default: {},
+          })}
+        >
         {/* Back to Chat Button */}
         {fromChat && (
           <Pressable
@@ -495,6 +828,49 @@ export default function SailorOnboardingComprehensive() {
               : 'Tell us about your sailing so we can provide personalized race strategy and weather forecasts'
             }
           </Text>
+        </View>
+
+        {/* Progress Indicator & Completion Status - At Top */}
+        <View className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="text-blue-900 font-bold text-base">Onboarding Progress</Text>
+            <Text className="text-blue-700 text-sm font-semibold">
+              {(() => {
+                const requiredFields = [
+                  boats.some(b => b.className.trim() && b.sailNumber.trim()),
+                  nextRace.name.trim(),
+                  nextRace.date.trim(),
+                  nextRace.startTime.trim(),
+                  nextRace.location.trim(),
+                ];
+                const completed = requiredFields.filter(Boolean).length;
+                return `${completed}/${requiredFields.length} Required Sections`;
+              })()}
+            </Text>
+          </View>
+          <Text className="text-blue-700 text-sm mb-3">
+            Complete all required fields below, then click "Complete Onboarding" at the bottom to finish setup.
+          </Text>
+          <View className="flex-row gap-2 flex-wrap">
+            {boats.some(b => b.className.trim() && b.sailNumber.trim()) ? (
+              <View className="bg-green-100 px-2 py-1 rounded">
+                <Text className="text-green-800 text-xs">✓ Boats</Text>
+              </View>
+            ) : (
+              <View className="bg-yellow-100 px-2 py-1 rounded">
+                <Text className="text-yellow-800 text-xs">○ Boats</Text>
+              </View>
+            )}
+            {nextRace.name.trim() && nextRace.date.trim() && nextRace.startTime.trim() && nextRace.location.trim() ? (
+              <View className="bg-green-100 px-2 py-1 rounded">
+                <Text className="text-green-800 text-xs">✓ Next Race</Text>
+              </View>
+            ) : (
+              <View className="bg-yellow-100 px-2 py-1 rounded">
+                <Text className="text-yellow-800 text-xs">○ Next Race</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* SECTION 1: Personal Info */}
@@ -551,129 +927,35 @@ export default function SailorOnboardingComprehensive() {
               </Pressable>
             </View>
           </View>
-
-          <View className="flex-row gap-3">
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Years Sailing</Text>
-              <TextInput
-                value={yearsSailing}
-                onChangeText={setYearsSailing}
-                placeholder="e.g., 10"
-                keyboardType="numeric"
-                className="bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-base"
-              />
-            </View>
-
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-700 mb-2">Experience</Text>
-              <View className="bg-gray-50 border border-gray-300 rounded-lg px-4 py-3">
-                <Text className="text-base text-gray-900">{experienceLevel}</Text>
-              </View>
-            </View>
-          </View>
         </View>
 
-        {/* SECTION 2: Boats (to be continued...) */}
-        <View className="mb-8">
-          <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center gap-2">
-              <Anchor size={24} color="#0284c7" />
-              <Text className="text-xl font-bold text-gray-900">Your Boats *</Text>
-            </View>
-            <Pressable
-              onPress={addBoat}
-              className="flex-row items-center gap-1 bg-sky-600 px-3 py-2 rounded-lg"
-            >
-              <Plus size={16} color="white" />
-              <Text className="text-white font-semibold text-sm">Add Boat</Text>
-            </Pressable>
-          </View>
-
-          {boats.map((boat, index) => (
-            <View key={index} className="bg-gray-50 rounded-lg p-4 mb-3 border border-gray-200">
-              <View className="flex-row justify-between items-center mb-3">
-                <Text className="font-semibold text-gray-900">Boat {index + 1}</Text>
-                {boats.length > 1 && (
-                  <Pressable onPress={() => removeBoat(index)}>
-                    <X size={20} color="#dc2626" />
-                  </Pressable>
-                )}
-              </View>
-
-              <View className="flex-row gap-3 mb-3">
-                <View className="flex-1">
-                  <Text className="text-sm font-medium text-gray-700 mb-1">Class *</Text>
-                  <TextInput
-                    value={boat.className}
-                    onChangeText={(val) => updateBoat(index, 'className', val)}
-                    placeholder="e.g., Dragon"
-                    className="bg-white border border-gray-300 rounded-lg px-3 py-2"
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <Text className="text-sm font-medium text-gray-700 mb-1">Sail # *</Text>
-                  <TextInput
-                    value={boat.sailNumber}
-                    onChangeText={(val) => updateBoat(index, 'sailNumber', val)}
-                    placeholder="e.g., D59"
-                    className="bg-white border border-gray-300 rounded-lg px-3 py-2"
-                  />
-                </View>
-              </View>
-
-              <View className="mb-3">
-                <Text className="text-sm font-medium text-gray-700 mb-1">Boat Name</Text>
-                <TextInput
-                  value={boat.boatName}
-                  onChangeText={(val) => updateBoat(index, 'boatName', val)}
-                  placeholder="e.g., Phoenix"
-                  className="bg-white border border-gray-300 rounded-lg px-3 py-2"
-                />
-              </View>
-
-              <View className="flex-row gap-3 mb-3">
-                <View className="flex-1">
-                  <Text className="text-sm font-medium text-gray-700 mb-1">Hull Maker</Text>
-                  <TextInput
-                    value={boat.hullMaker}
-                    onChangeText={(val) => updateBoat(index, 'hullMaker', val)}
-                    placeholder="e.g., Petticrows"
-                    className="bg-white border border-gray-300 rounded-lg px-3 py-2"
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <Text className="text-sm font-medium text-gray-700 mb-1">Rig Maker</Text>
-                  <TextInput
-                    value={boat.rigMaker}
-                    onChangeText={(val) => updateBoat(index, 'rigMaker', val)}
-                    placeholder="e.g., Selden"
-                    className="bg-white border border-gray-300 rounded-lg px-3 py-2"
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Text className="text-sm font-medium text-gray-700 mb-1">Sail Maker</Text>
-                <TextInput
-                  value={boat.sailMaker}
-                  onChangeText={(val) => updateBoat(index, 'sailMaker', val)}
-                  placeholder="e.g., North Sails, Quantum"
-                  className="bg-white border border-gray-300 rounded-lg px-3 py-2"
-                />
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* SECTION 3: Clubs & Venues */}
+        {/* SECTION 2: Clubs & Venues */}
         <View className="mb-8">
           <View className="flex-row items-center justify-between mb-4">
             <View className="flex-row items-center gap-2">
               <MapPin size={24} color="#0284c7" />
               <Text className="text-xl font-bold text-gray-900">Where You Sail</Text>
             </View>
+          </View>
+
+          {/* Home Venue - Now First */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-700 mb-2">Home Venue</Text>
+            <VenueLocationPicker
+              value={homeVenue}
+              onChangeText={setHomeVenue}
+              coordinates={null}
+              onCoordinatesChange={() => {}}
+              placeholder="e.g., Victoria Harbour, Hong Kong"
+            />
+            {detectingLocation && (
+              <Text className="text-xs text-gray-500 mt-1">Detecting your location...</Text>
+            )}
+          </View>
+
+          {/* Home Yacht Club - Now Second */}
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-lg font-semibold text-gray-900">Home Yacht Club</Text>
             <Pressable
               onPress={addClub}
               className="flex-row items-center gap-1 bg-sky-600 px-3 py-2 rounded-lg"
@@ -700,10 +982,55 @@ export default function SailorOnboardingComprehensive() {
                 <Text className="text-sm font-medium text-gray-700 mb-1">Club Name</Text>
                 <TextInput
                   value={club.name}
-                  onChangeText={(val) => updateClub(index, 'name', val)}
+                  onChangeText={(val) => {
+                    updateClub(index, 'name', val);
+                    // Auto-fill URL if Hong Kong club is detected
+                    if (isHongKongVenue(homeVenue)) {
+                      const hkClub = Object.values(HONG_KONG_CLUBS).find(c => 
+                        c.name.toLowerCase().includes(val.toLowerCase()) ||
+                        val.toLowerCase().includes(c.name.toLowerCase())
+                      );
+                      if (hkClub && !club.url) {
+                        updateClub(index, 'url', hkClub.website);
+                      }
+                    }
+                  }}
                   placeholder="e.g., Royal Hong Kong Yacht Club"
                   className="bg-white border border-gray-300 rounded-lg px-3 py-2"
                 />
+                {/* Show club suggestions for Hong Kong */}
+                {isHongKongVenue(homeVenue) && (
+                  <View className="mt-2">
+                    <Text className="text-xs text-gray-500 mb-1">
+                      {club.name.length < 3 ? 'Popular clubs:' : 'Other clubs:'}
+                    </Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {Object.values(HONG_KONG_CLUBS).map((hkClub) => (
+                        <Pressable
+                          key={hkClub.name}
+                          onPress={() => {
+                            // Populate club name and URL when clicked
+                            updateClub(index, 'name', hkClub.name);
+                            updateClub(index, 'url', hkClub.website);
+                          }}
+                          className={`border rounded px-3 py-2 ${
+                            club.name === hkClub.name
+                              ? 'bg-sky-100 border-sky-600'
+                              : 'bg-blue-50 border-blue-200'
+                          }`}
+                        >
+                          <Text className={`text-xs ${
+                            club.name === hkClub.name
+                              ? 'text-sky-700 font-semibold'
+                              : 'text-blue-700'
+                          }`}>
+                            {hkClub.name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                )}
               </View>
 
               <View>
@@ -718,16 +1045,191 @@ export default function SailorOnboardingComprehensive() {
               </View>
             </View>
           ))}
+        </View>
 
-          <View className="mt-4">
-            <Text className="text-sm font-semibold text-gray-700 mb-2">Home Venue</Text>
-            <TextInput
-              value={homeVenue}
-              onChangeText={setHomeVenue}
-              placeholder="e.g., Victoria Harbour, Hong Kong"
-              className="bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-base"
-            />
+        {/* SECTION 3: Boats */}
+        <View className="mb-8">
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-row items-center gap-2">
+              <Anchor size={24} color="#0284c7" />
+              <Text className="text-xl font-bold text-gray-900">Your Boats *</Text>
+            </View>
+            <Pressable
+              onPress={addBoat}
+              className="flex-row items-center gap-1 bg-sky-600 px-3 py-2 rounded-lg"
+            >
+              <Plus size={16} color="white" />
+              <Text className="text-white font-semibold text-sm">Add Boat</Text>
+            </Pressable>
           </View>
+
+          {boats.map((boat, index) => (
+            <View 
+              key={index} 
+              className="bg-gray-50 rounded-lg p-4 mb-3 border border-gray-200"
+              style={Platform.select({
+                web: {
+                  position: 'relative',
+                  overflow: 'visible',
+                  zIndex: 'auto',
+                  isolation: 'auto',
+                } as any,
+                default: {},
+              })}
+            >
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className="font-semibold text-gray-900">Boat {index + 1}</Text>
+                {boats.length > 1 && (
+                  <Pressable onPress={() => removeBoat(index)}>
+                    <X size={20} color="#dc2626" />
+                  </Pressable>
+                )}
+              </View>
+
+              <View 
+                className="flex-row gap-3 mb-3"
+                style={Platform.select({
+                  web: {
+                    position: 'relative',
+                    overflow: 'visible',
+                  } as any,
+                  default: {},
+                })}
+              >
+                <View 
+                  className="flex-1"
+                  style={Platform.select({
+                    web: {
+                      position: 'relative',
+                      overflow: 'visible',
+                    } as any,
+                    default: {},
+                  })}
+                >
+                  <BoatAutocompleteInput
+                    label="Class"
+                    value={boat.className}
+                    onChangeText={(val) => updateBoat(index, 'className', val)}
+                    placeholder="e.g., Dragon, J/70, Etchells"
+                    required
+                    type="boatClass"
+                    region="hong_kong"
+                  />
+                </View>
+
+                <View 
+                  className="flex-1"
+                  style={Platform.select({
+                    web: {
+                      position: 'relative',
+                      overflow: 'visible',
+                    } as any,
+                    default: {},
+                  })}
+                >
+                  <BoatAutocompleteInput
+                    label="Sail #"
+                    value={boat.sailNumber}
+                    onChangeText={(val) => updateBoat(index, 'sailNumber', val)}
+                    placeholder="e.g., D59"
+                    required
+                    type="sailNumber"
+                    boatClassName={boat.className}
+                  />
+                </View>
+              </View>
+
+              <View 
+                className="mb-3"
+                style={Platform.select({
+                  web: {
+                    position: 'relative',
+                    overflow: 'visible',
+                  } as any,
+                    default: {},
+                })}
+              >
+                <BoatAutocompleteInput
+                  label="Boat Name"
+                  value={boat.boatName || ''}
+                  onChangeText={(val) => updateBoat(index, 'boatName', val)}
+                  placeholder="e.g., Phoenix"
+                  type="boatName"
+                  boatClassName={boat.className}
+                />
+              </View>
+
+              <View 
+                className="flex-row gap-3 mb-3"
+                style={Platform.select({
+                  web: {
+                    position: 'relative',
+                    overflow: 'visible',
+                  } as any,
+                  default: {},
+                })}
+              >
+                <View 
+                  className="flex-1"
+                  style={Platform.select({
+                    web: {
+                      position: 'relative',
+                      overflow: 'visible',
+                    } as any,
+                    default: {},
+                  })}
+                >
+                  <BoatAutocompleteInput
+                    label="Hull Maker"
+                    value={boat.hullMaker || ''}
+                    onChangeText={(val) => updateBoat(index, 'hullMaker', val)}
+                    placeholder="e.g., Petticrows"
+                    type="hullMaker"
+                    boatClassName={boat.className}
+                  />
+                </View>
+
+                <View 
+                  className="flex-1"
+                  style={Platform.select({
+                    web: {
+                      position: 'relative',
+                      overflow: 'visible',
+                    } as any,
+                    default: {},
+                  })}
+                >
+                  <BoatAutocompleteInput
+                    label="Rig Maker"
+                    value={boat.rigMaker || ''}
+                    onChangeText={(val) => updateBoat(index, 'rigMaker', val)}
+                    placeholder="e.g., Selden"
+                    type="rigMaker"
+                    boatClassName={boat.className}
+                  />
+                </View>
+              </View>
+
+              <View
+                style={Platform.select({
+                  web: {
+                    position: 'relative',
+                    overflow: 'visible',
+                  } as any,
+                  default: {},
+                })}
+              >
+                <BoatAutocompleteInput
+                  label="Sail Maker"
+                  value={boat.sailMaker || ''}
+                  onChangeText={(val) => updateBoat(index, 'sailMaker', val)}
+                  placeholder="e.g., North Sails, Quantum"
+                  type="sailMaker"
+                  boatClassName={boat.className}
+                />
+              </View>
+            </View>
+          ))}
         </View>
 
         {/* SECTION 4: Documents & Organizations */}
@@ -1004,7 +1506,7 @@ export default function SailorOnboardingComprehensive() {
               </Text>
               <TextInput
                 value={siNorPasteData}
-                onChangeText={handleSiNorPaste}
+                onChangeText={handleSiNorTextChange}
                 placeholder="Paste sailing instructions or NOR text here...&#10;AI will extract course details, marks, timing, etc."
                 multiline
                 numberOfLines={6}
@@ -1019,8 +1521,47 @@ export default function SailorOnboardingComprehensive() {
                   </Text>
                 </View>
               )}
+              
+              {/* Error/Timeout Message with Retry */}
+              {extractionError && !isProcessingSiNor && (
+                <View className="mt-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <Text className="text-red-800 font-semibold text-sm mb-1">
+                    {extractionTimedOut ? '⏱️ Extraction Timed Out' : '❌ Extraction Failed'}
+                  </Text>
+                  <Text className="text-red-700 text-xs mb-3">
+                    {extractionError}
+                  </Text>
+                  {extractionTimedOut && (
+                    <Text className="text-red-600 text-xs mb-3">
+                      This can happen with very long documents. Try copying a shorter section or enter details manually.
+                    </Text>
+                  )}
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      onPress={retryExtraction}
+                      className="flex-1 bg-purple-600 px-4 py-2 rounded-lg"
+                    >
+                      <Text className="text-white text-xs font-semibold text-center">
+                        🔄 Retry Extraction
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        setExtractionError(null);
+                        setExtractionTimedOut(false);
+                      }}
+                      className="flex-1 bg-gray-200 px-4 py-2 rounded-lg"
+                    >
+                      <Text className="text-gray-700 text-xs font-semibold text-center">
+                        Dismiss
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+              
               {/* Extracted Data Preview */}
-              {extractedSiNorData && !isProcessingSiNor && (
+              {extractedSiNorData && !isProcessingSiNor && !extractionError && (
                 <View className="mt-2 bg-green-50 border border-green-200 rounded-lg p-3">
                   <Text className="text-green-800 font-semibold text-sm mb-1">
                     ✓ AI Extracted:
@@ -1155,16 +1696,49 @@ export default function SailorOnboardingComprehensive() {
           </View>
         )}
 
-        {/* Submit Button */}
-        <View className="mt-6 mb-8">
-          <TouchableOpacity
-            onPress={() => {
-              console.log('[SailorOnboarding] Button pressed!');
-              handleSubmit();
-            }}
-            disabled={submitting}
-            activeOpacity={0.8}
-            style={{
+        {/* Extra padding at bottom to account for sticky footer */}
+        <View className="mt-4 mb-24" />
+        </View>
+      </ScrollView>
+      
+      {/* Sticky Footer with Submit Button - Always Visible */}
+      <View 
+        style={{
+          ...Platform.select({
+            web: {
+              position: 'fixed' as any,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 100002, // Higher than dropdowns (100001) but reasonable
+            },
+            default: {
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+            },
+          }),
+          backgroundColor: 'white',
+          borderTopWidth: 1,
+          borderTopColor: '#E5E7EB',
+          padding: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 5,
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => {
+            console.log('[SailorOnboarding] Sticky button pressed!');
+            handleSubmit();
+          }}
+          disabled={submitting}
+          activeOpacity={0.8}
+          style={[
+            {
               backgroundColor: submitting ? '#9CA3AF' : '#0284C7',
               paddingVertical: 16,
               paddingHorizontal: 24,
@@ -1173,23 +1747,26 @@ export default function SailorOnboardingComprehensive() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              ...(Platform.OS === 'web' ? { cursor: submitting ? 'not-allowed' : 'pointer' } : {}),
-            }}
-          >
-            {submitting ? (
-              <>
-                <Loader size={20} color="white" />
-                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Processing...</Text>
-              </>
-            ) : (
-              <>
-                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Continue to Setup</Text>
-                <ChevronRight size={20} color="white" />
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+            },
+            Platform.OS === 'web' ? { cursor: submitting ? 'not-allowed' : 'pointer' } as any : {},
+          ]}
+        >
+          {submitting ? (
+            <>
+              <Loader size={20} color="white" />
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Processing...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Complete Onboarding</Text>
+              <ChevronRight size={20} color="white" />
+            </>
+          )}
+        </TouchableOpacity>
+        <Text className="text-center text-gray-500 text-xs mt-2">
+          Complete required fields above to finish setup
+        </Text>
       </View>
-    </ScrollView>
+    </View>
   );
 }

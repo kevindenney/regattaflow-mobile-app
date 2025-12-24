@@ -4,24 +4,24 @@
  * Matches SAILTI's Jury Web functionality
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { format, formatDistanceToNow, isPast } from 'date-fns';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
-import { protestService, Protest, Hearing, ProtestStatus } from '@/services/ProtestService';
+import { Hearing, Protest, protestService, ProtestStatus } from '@/services/ProtestService';
 import { timeLimitService } from '@/services/TimeLimitService';
+import { Ionicons } from '@expo/vector-icons';
+import { format, formatDistanceToNow } from 'date-fns';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface JuryStats {
   total: number;
@@ -723,11 +723,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#0EA5E9',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0EA5E9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(14, 165, 233, 0.3)',
+      },
+      default: {
+        shadowColor: '#0EA5E9',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
   },
   primaryButton: {
     backgroundColor: '#0EA5E9',

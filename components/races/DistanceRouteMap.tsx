@@ -90,18 +90,25 @@ export function DistanceRouteMap({
   const maplibreRef = useRef<any>(null); // Store maplibre module reference
   const markersRef = useRef<any[]>([]);
   const polylineRef = useRef<any>(null);
+  const hasFitBoundsRef = useRef(false); // Track if we've already fit bounds to prevent re-fitting on every update
+  const lastWaypointsKeyRef = useRef<string>(''); // Track waypoint changes to detect actual coordinate changes
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isAddingWaypoint, setIsAddingWaypoint] = useState(true); // Start in add mode
   const [nextWaypointType, setNextWaypointType] = useState<RouteWaypoint['type']>('start'); // Start with 'start' waypoint
   const [editingWaypoint, setEditingWaypoint] = useState<string | null>(null); // ID of waypoint being edited
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState<RouteWaypoint['type']>('waypoint');
+  const [editLat, setEditLat] = useState('');
+  const [editLng, setEditLng] = useState('');
+  const [isSelectingOnMap, setIsSelectingOnMap] = useState(false); // When true, clicking map sets coordinates
   
   // Refs to track current state for event handlers (closures capture stale values)
   const isAddingWaypointRef = useRef(true);
   const nextWaypointTypeRef = useRef<RouteWaypoint['type']>('start');
   const waypointsRef = useRef<RouteWaypoint[]>(waypoints);
   const onWaypointsChangeRef = useRef(onWaypointsChange);
+  const isSelectingOnMapRef = useRef(false);
+  const editingWaypointRef = useRef<string | null>(null);
 
   // Helper function to update map cursor
   const updateMapCursor = useCallback((map: any, isAdding: boolean) => {
@@ -117,15 +124,22 @@ export function DistanceRouteMap({
     isAddingWaypointRef.current = isAddingWaypoint;
     // Update cursor and drag behavior when adding mode changes
     if (mapRef.current) {
-      updateMapCursor(mapRef.current, isAddingWaypoint);
+      const canvas = mapRef.current.getCanvasContainer();
+      if (canvas) {
+        if (isSelectingOnMap) {
+          canvas.style.cursor = 'crosshair';
+        } else {
+          canvas.style.cursor = isAddingWaypoint ? 'crosshair' : 'grab';
+        }
+      }
       // Enable/disable map panning based on mode
-      if (isAddingWaypoint) {
+      if (isAddingWaypoint || isSelectingOnMap) {
         mapRef.current.dragPan.disable();
       } else {
         mapRef.current.dragPan.enable();
       }
     }
-  }, [isAddingWaypoint, updateMapCursor]);
+  }, [isAddingWaypoint, isSelectingOnMap, updateMapCursor]);
   
   useEffect(() => {
     nextWaypointTypeRef.current = nextWaypointType;
@@ -138,6 +152,14 @@ export function DistanceRouteMap({
   useEffect(() => {
     onWaypointsChangeRef.current = onWaypointsChange;
   }, [onWaypointsChange]);
+  
+  useEffect(() => {
+    isSelectingOnMapRef.current = isSelectingOnMap;
+  }, [isSelectingOnMap]);
+  
+  useEffect(() => {
+    editingWaypointRef.current = editingWaypoint;
+  }, [editingWaypoint]);
 
   // Calculate and report total distance when waypoints change
   useEffect(() => {
@@ -148,6 +170,9 @@ export function DistanceRouteMap({
   // Initialize map (web only with MapLibre)
   useEffect(() => {
     if (!isWeb || !mapContainerRef.current || mapRef.current) return;
+
+    let handleKeyDown: ((e: KeyboardEvent) => void) | null = null;
+    let handleKeyUp: ((e: KeyboardEvent) => void) | null = null;
 
     const initMap = async () => {
       try {
@@ -166,16 +191,95 @@ export function DistanceRouteMap({
 
         map.addControl(new maplibregl.default.NavigationControl(), 'top-left');
 
+        // Enable panning with right-click drag (common map pattern)
+        let isRightClickPanning = false;
+        map.on('contextmenu', (e: any) => {
+          e.preventDefault();
+          isRightClickPanning = true;
+          map.dragPan.enable();
+          // Temporarily disable click-to-add while right-click panning
+          const canvas = map.getCanvasContainer();
+          if (canvas) {
+            canvas.style.cursor = 'grab';
+          }
+        });
+
+        // Re-enable click-to-add when right mouse button is released
+        map.on('mouseup', (e: any) => {
+          if (e.originalEvent.button === 2) { // Right mouse button
+            isRightClickPanning = false;
+            // Restore proper drag pan state based on mode
+            if (isAddingWaypointRef.current || isSelectingOnMapRef.current) {
+              map.dragPan.disable();
+              const canvas = map.getCanvasContainer();
+              if (canvas) {
+                canvas.style.cursor = isAddingWaypointRef.current ? 'crosshair' : 'grab';
+              }
+            }
+          }
+        });
+
+        // Enable panning with spacebar (hold space + drag)
+        let isSpacePressed = false;
+        handleKeyDown = (e: KeyboardEvent) => {
+          if (e.code === 'Space' && !isSpacePressed) {
+            isSpacePressed = true;
+            map.dragPan.enable();
+            const canvas = map.getCanvasContainer();
+            if (canvas) {
+              canvas.style.cursor = 'grab';
+            }
+          }
+        };
+        handleKeyUp = (e: KeyboardEvent) => {
+          if (e.code === 'Space' && isSpacePressed) {
+            isSpacePressed = false;
+            // Restore proper drag pan state based on mode
+            if (isAddingWaypointRef.current || isSelectingOnMapRef.current) {
+              map.dragPan.disable();
+              const canvas = map.getCanvasContainer();
+              if (canvas) {
+                canvas.style.cursor = isAddingWaypointRef.current ? 'crosshair' : 'grab';
+              }
+            } else {
+              const canvas = map.getCanvasContainer();
+              if (canvas) {
+                canvas.style.cursor = 'grab';
+              }
+            }
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
         // Set up click handler BEFORE map loads to ensure it's registered
-        // Handle click to add waypoint - use refs for current state
+        // Handle click to add waypoint OR select location for editing - use refs for current state
         map.on('click', (e: any) => {
+          // Don't add waypoint if we're right-click panning or space panning
+          if (isRightClickPanning || isSpacePressed) {
+            return;
+          }
+          const { lng, lat } = e.lngLat;
+          
+          // Check if we're selecting location for editing a waypoint
+          if (isSelectingOnMapRef.current && editingWaypointRef.current) {
+            console.log('[DistanceRouteMap] Selecting location for waypoint:', lat, lng);
+            // Update coordinates via state - this will trigger a re-render
+            setEditLat(lat.toFixed(6));
+            setEditLng(lng.toFixed(6));
+            setIsSelectingOnMap(false);
+            // Center map on selected location
+            map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14), duration: 500 });
+            return;
+          }
+          
+          // Otherwise, handle adding new waypoint
           console.log('[DistanceRouteMap] Map clicked, isAddingWaypoint:', isAddingWaypointRef.current);
           if (!isAddingWaypointRef.current) return;
           
           // Prevent default map behavior (panning) when adding waypoints
           e.preventDefault?.();
           
-          const { lng, lat } = e.lngLat;
           console.log('[DistanceRouteMap] Adding waypoint at:', lat, lng, 'type:', nextWaypointTypeRef.current);
           
           // Create waypoint directly here to avoid stale closure issues
@@ -261,16 +365,28 @@ export function DistanceRouteMap({
             map.dragPan.disable();
           }
         });
-
-        return () => {
-          map.remove();
-        };
       } catch (error) {
         console.error('Failed to initialize map:', error);
       }
     };
 
     initMap();
+
+    // Cleanup function for useEffect
+    return () => {
+      // Clean up event listeners
+      if (handleKeyDown) {
+        window.removeEventListener('keydown', handleKeyDown);
+      }
+      if (handleKeyUp) {
+        window.removeEventListener('keyup', handleKeyUp);
+      }
+      // Remove map
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, [initialCenter, initialZoom]);
 
   // Start editing a waypoint
@@ -278,6 +394,9 @@ export function DistanceRouteMap({
     setEditingWaypoint(wp.id);
     setEditName(wp.name);
     setEditType(wp.type);
+    setEditLat(wp.latitude.toString());
+    setEditLng(wp.longitude.toString());
+    setIsSelectingOnMap(false);
   }, []);
 
   // Update map when waypoints change
@@ -307,10 +426,27 @@ export function DistanceRouteMap({
     markersRef.current = [];
 
     // Add markers for each waypoint
+    console.log('[DistanceRouteMap] Processing waypoints:', waypoints.map(wp => ({ 
+      name: wp.name, 
+      type: wp.type, 
+      lat: wp.latitude, 
+      lng: wp.longitude 
+    })));
+    
     waypoints.forEach((wp, index) => {
       try {
+        // Debug: Log each waypoint being processed
+        console.log(`[DistanceRouteMap] Processing waypoint ${index}:`, {
+          name: wp.name,
+          type: wp.type,
+          lat: wp.latitude,
+          lng: wp.longitude,
+          id: wp.id
+        });
+        
         const el = document.createElement('div');
         el.className = 'waypoint-marker';
+        // Note: Do NOT add transform, position, top, left, etc. - MapLibre handles positioning via offset
         el.style.cssText = `
           width: 32px;
           height: 32px;
@@ -323,9 +459,15 @@ export function DistanceRouteMap({
           color: white;
           font-weight: bold;
           font-size: 12px;
+          line-height: 1;
           box-shadow: 0 2px 6px rgba(0,0,0,0.3);
           cursor: pointer;
           z-index: 1000;
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          text-align: center;
+          vertical-align: middle;
         `;
         
         // Set marker label
@@ -335,11 +477,31 @@ export function DistanceRouteMap({
                      `${index + 1}`;
         el.textContent = label; // Use textContent instead of innerHTML for safety
 
+        // Ensure coordinates are valid numbers
+        const lat = typeof wp.latitude === 'number' ? wp.latitude : parseFloat(String(wp.latitude)) || 0;
+        const lng = typeof wp.longitude === 'number' ? wp.longitude : parseFloat(String(wp.longitude)) || 0;
+        
+        console.log(`[DistanceRouteMap] Waypoint ${wp.name} (${wp.type}): lat=${lat}, lng=${lng}`);
+        
+        if (lat === 0 && lng === 0) {
+          console.warn(`[DistanceRouteMap] ⚠️ SKIPPING waypoint "${wp.name}" (type: ${wp.type}) with invalid coordinates (0,0)`);
+          console.warn(`[DistanceRouteMap] This waypoint will NOT appear on the map and will NOT be saved to Supabase!`);
+          return;
+        }
+        
+        if (isNaN(lat) || isNaN(lng)) {
+          console.warn(`[DistanceRouteMap] ⚠️ SKIPPING waypoint "${wp.name}" (type: ${wp.type}) with NaN coordinates`);
+          return;
+        }
+
+        // Calculate explicit offset to center the marker perfectly
+        // Marker is 32px x 32px, so center offset is -16px, -16px
         const marker = new maplibreRef.current.Marker({ 
           element: el, 
-          draggable: true 
+          draggable: true,
+          offset: [-16, -16] // Explicit offset: half width and half height to center perfectly
         })
-          .setLngLat([wp.longitude, wp.latitude])
+          .setLngLat([lng, lat])
           .addTo(mapRef.current);
 
         // Click marker to edit waypoint
@@ -366,10 +528,19 @@ export function DistanceRouteMap({
       }
     });
 
+    // Filter out waypoints with invalid coordinates (0,0 or null)
+    const validWaypoints = waypoints.filter(
+      wp => wp.latitude && wp.longitude && 
+            wp.latitude !== 0 && wp.longitude !== 0 &&
+            !isNaN(wp.latitude) && !isNaN(wp.longitude)
+    );
+    
+    console.log(`[DistanceRouteMap] Valid waypoints: ${validWaypoints.length}/${waypoints.length}`);
+    
     // Update route line
     const routeSource = mapRef.current.getSource('route');
     if (routeSource) {
-      const coordinates = waypoints.map(wp => [wp.longitude, wp.latitude]);
+      const coordinates = validWaypoints.map(wp => [wp.longitude, wp.latitude]);
       routeSource.setData({
         type: 'Feature',
         properties: {},
@@ -380,21 +551,39 @@ export function DistanceRouteMap({
       });
     }
 
-    // Fit map to waypoints if we have any
-    if (waypoints.length > 0) {
-      const bounds = waypoints.reduce(
-        (bounds, wp) => {
-          return [
-            [Math.min(bounds[0][0], wp.longitude), Math.min(bounds[0][1], wp.latitude)],
-            [Math.max(bounds[1][0], wp.longitude), Math.max(bounds[1][1], wp.latitude)],
-          ];
-        },
-        [[Infinity, Infinity], [-Infinity, -Infinity]] as [[number, number], [number, number]]
-      );
-      
-      if (bounds[0][0] !== Infinity) {
-        mapRef.current.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+    // Fit map to waypoints if we have any valid ones (only on initial load, not on every waypoint change)
+    // This prevents the map from jumping around when markers are updated
+    // Create a stable key from waypoint coordinates to detect actual changes
+    const waypointsKey = validWaypoints.map(wp => `${wp.latitude},${wp.longitude}`).join('|');
+    const waypointsChanged = waypointsKey !== lastWaypointsKeyRef.current;
+    
+    if (validWaypoints.length > 0) {
+      if (!hasFitBoundsRef.current || waypointsChanged) {
+        const bounds = validWaypoints.reduce(
+          (bounds, wp) => {
+            return [
+              [Math.min(bounds[0][0], wp.longitude), Math.min(bounds[0][1], wp.latitude)],
+              [Math.max(bounds[1][0], wp.longitude), Math.max(bounds[1][1], wp.latitude)],
+            ];
+          },
+          [[Infinity, Infinity], [-Infinity, -Infinity]] as [[number, number], [number, number]]
+        );
+        
+        if (bounds[0][0] !== Infinity) {
+          // Only fit bounds on initial load or when waypoints actually change
+          if (!hasFitBoundsRef.current) {
+            mapRef.current.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+            hasFitBoundsRef.current = true;
+          }
+          lastWaypointsKeyRef.current = waypointsKey;
+        }
       }
+    } else if (waypoints.length > 0 && validWaypoints.length === 0 && !hasFitBoundsRef.current) {
+      // If we have waypoints but no valid coordinates, center on initial center
+      console.log('[DistanceRouteMap] No valid waypoint coordinates, centering on initial location');
+      mapRef.current.setCenter([initialCenter.lng, initialCenter.lat]);
+      mapRef.current.setZoom(initialZoom);
+      hasFitBoundsRef.current = true;
     }
   }, [waypoints, mapLoaded, onWaypointsChange]);
 
@@ -445,20 +634,34 @@ export function DistanceRouteMap({
   const saveEditWaypoint = useCallback(() => {
     if (!editingWaypoint || !editName.trim()) return;
     
+    const lat = parseFloat(editLat) || 0;
+    const lng = parseFloat(editLng) || 0;
+    
+    if (lat === 0 || lng === 0) {
+      alert('Please enter valid coordinates or select a location on the map');
+      return;
+    }
+    
     const updated = waypoints.map(wp => 
       wp.id === editingWaypoint 
-        ? { ...wp, name: editName.trim(), type: editType }
+        ? { ...wp, name: editName.trim(), type: editType, latitude: lat, longitude: lng }
         : wp
     );
     onWaypointsChange(updated);
     setEditingWaypoint(null);
     setEditName('');
-  }, [editingWaypoint, editName, editType, waypoints, onWaypointsChange]);
+    setEditLat('');
+    setEditLng('');
+    setIsSelectingOnMap(false);
+  }, [editingWaypoint, editName, editType, editLat, editLng, waypoints, onWaypointsChange]);
 
   // Cancel editing
   const cancelEditWaypoint = useCallback(() => {
     setEditingWaypoint(null);
     setEditName('');
+    setEditLat('');
+    setEditLng('');
+    setIsSelectingOnMap(false);
   }, []);
 
   // Clear all waypoints
@@ -502,6 +705,13 @@ export function DistanceRouteMap({
                 {isAddingWaypoint ? 'Click Map to Add' : 'Add Waypoint'}
               </Text>
             </Pressable>
+            
+            {/* Panning hint */}
+            {isAddingWaypoint && (
+              <Text className="text-xs text-purple-600 ml-2 self-center">
+                💡 Hold Space or Right-click to pan
+              </Text>
+            )}
             
             <Pressable
               onPress={undoLastWaypoint}
@@ -723,6 +933,95 @@ export function DistanceRouteMap({
               }}
               autoFocus
             />
+
+            {/* Coordinates */}
+            <Text style={{
+              fontSize: 12,
+              fontWeight: '600',
+              color: '#64748B',
+              marginBottom: 6,
+            }}>
+              Coordinates
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>Latitude</Text>
+                <TextInput
+                  value={editLat}
+                  onChangeText={setEditLat}
+                  placeholder="22.19175"
+                  keyboardType="numeric"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    borderRadius: 8,
+                    padding: 12,
+                    fontSize: 14,
+                    color: '#1E293B',
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>Longitude</Text>
+                <TextInput
+                  value={editLng}
+                  onChangeText={setEditLng}
+                  placeholder="114.12769"
+                  keyboardType="numeric"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    borderRadius: 8,
+                    padding: 12,
+                    fontSize: 14,
+                    color: '#1E293B',
+                  }}
+                />
+              </View>
+            </View>
+            
+            {/* Select on Map Button */}
+            <Pressable
+              onPress={() => {
+                setIsSelectingOnMap(true);
+                // Change cursor to crosshair
+                if (mapRef.current) {
+                  const canvas = mapRef.current.getCanvasContainer();
+                  if (canvas) {
+                    canvas.style.cursor = 'crosshair';
+                  }
+                }
+              }}
+              style={{
+                backgroundColor: isSelectingOnMap ? '#9333ea' : '#F3F4F6',
+                padding: 12,
+                borderRadius: 8,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: isSelectingOnMap ? '#9333ea' : '#E2E8F0',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <MapPin size={16} color={isSelectingOnMap ? '#fff' : '#64748B'} />
+                <Text style={{
+                  color: isSelectingOnMap ? '#fff' : '#64748B',
+                  fontWeight: '600',
+                  fontSize: 14,
+                }}>
+                  {isSelectingOnMap ? 'Click on map to set location...' : 'Select Location on Map'}
+                </Text>
+              </View>
+            </Pressable>
+            {isSelectingOnMap && (
+              <Text style={{
+                fontSize: 11,
+                color: '#9333ea',
+                marginBottom: 16,
+                textAlign: 'center',
+              }}>
+                Click anywhere on the map to set the waypoint location
+              </Text>
+            )}
 
             {/* Waypoint Type */}
             <Text style={{

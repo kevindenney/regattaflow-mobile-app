@@ -5,14 +5,14 @@
  * Now shows ALL matching fleets and includes race registration
  */
 
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking, TextInput, Modal } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, Spacing } from '@/constants/designSystem';
-import { FleetDiscoveryService, Fleet } from '@/services/FleetDiscoveryService';
-import { raceParticipantService, ParticipantWithProfile } from '@/services/RaceParticipantService';
 import { useAuth } from '@/providers/AuthProvider';
+import { Fleet, FleetDiscoveryService } from '@/services/FleetDiscoveryService';
+import { raceParticipantService } from '@/services/RaceParticipantService';
 import { supabase } from '@/services/supabase';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface RaceParticipant {
   id: string;
@@ -65,16 +65,29 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
   }, [raceId, user?.id]);
 
   const loadParticipants = async () => {
-    if (!user?.id || !raceId) return;
+    if (!user?.id || !raceId) {
+      console.log('[FleetRacersCard] Missing user or raceId, skipping load', { userId: user?.id, raceId });
+      setLoading(false);
+      setParticipants([]);
+      return;
+    }
 
     try {
       setLoading(true);
-      console.debug('[FleetRacersCard] loading competitors', { raceId });
-      const competitors = await raceParticipantService.getRaceCompetitors(
+      console.debug('[FleetRacersCard] loading competitors', { raceId, userId: user.id });
+      
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise<[]>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout loading competitors after 10 seconds')), 10000);
+      });
+      
+      const competitorsPromise = raceParticipantService.getRaceCompetitors(
         raceId,
         user.id,
         userFleetMemberships.size > 0
       );
+      
+      const competitors = await Promise.race([competitorsPromise, timeoutPromise]);
 
       const mapped: RaceParticipant[] = competitors.map(c => ({
         id: c.id,
@@ -88,8 +101,14 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
 
       console.debug('[FleetRacersCard] competitors result', { raceId, count: mapped.length });
       setParticipants(mapped);
-    } catch (error) {
-      console.error('Error loading participants:', error);
+    } catch (error: any) {
+      console.error('[FleetRacersCard] Error loading participants:', error);
+      console.error('[FleetRacersCard] Error details:', {
+        message: error?.message,
+        name: error?.name,
+        raceId,
+        userId: user?.id,
+      });
       setParticipants([]);
     } finally {
       setLoading(false);
@@ -276,13 +295,36 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
 
       {/* Race Registration Button */}
       {!isRegistered ? (
-        <TouchableOpacity 
-          style={styles.registerButton}
-          onPress={() => setShowRegisterModal(true)}
-        >
-          <Ionicons name="add-circle" size={20} color={colors.background.primary} />
-          <Text style={styles.registerButtonText}>Register for This Race</Text>
-        </TouchableOpacity>
+        <View style={styles.registrationSection}>
+          <View style={styles.registrationBenefits}>
+            <Text style={styles.registrationTitle}>Register to Unlock:</Text>
+            <View style={styles.benefitsGrid}>
+              <View style={styles.benefitChip}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
+                <Text style={styles.benefitChipText}>Competitor insights</Text>
+              </View>
+              <View style={styles.benefitChip}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
+                <Text style={styles.benefitChipText}>Race check-in</Text>
+              </View>
+              <View style={styles.benefitChip}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
+                <Text style={styles.benefitChipText}>Fleet networking</Text>
+              </View>
+              <View style={styles.benefitChip}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
+                <Text style={styles.benefitChipText}>Tactical analysis</Text>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity 
+            style={styles.registerButton}
+            onPress={() => setShowRegisterModal(true)}
+          >
+            <Ionicons name="add-circle" size={20} color={colors.background.primary} />
+            <Text style={styles.registerButtonText}>Register for This Race</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <View style={styles.registeredBadge}>
           <Ionicons name="checkmark-circle" size={16} color={colors.success[600]} />
@@ -597,11 +639,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.md,
     marginBottom: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',
@@ -828,6 +877,39 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border.light,
   },
   // Registration button styles
+  registrationSection: {
+    marginTop: 12,
+    gap: 12,
+  },
+  registrationBenefits: {
+    backgroundColor: colors.primary[50],
+    borderRadius: 8,
+    padding: 12,
+  },
+  registrationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  benefitsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  benefitChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.background.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  benefitChipText: {
+    fontSize: 12,
+    color: colors.text.primary,
+  },
   registerButton: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,21 +1,21 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import { coachingService, SailorSummary } from '@/services/CoachingService';
+import { Ionicons } from '@expo/vector-icons';
+import { NavigationProp, ParamListBase, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 type CoachingClientSkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 type CoachingClientStatus = 'active' | 'inactive' | 'completed';
@@ -369,11 +369,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)',
+      },
+      default: {
+        shadowColor: '#0F172A',
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
+      },
+    }),
   },
   sectionTitle: {
     fontSize: 16,
@@ -512,11 +519,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#0EA5E9',
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 8px 16px rgba(14, 165, 233, 0.3)',
+      },
+      default: {
+        shadowColor: '#0EA5E9',
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 4,
+      },
+    }),
   },
   primaryButtonDisabled: {
     opacity: 0.5,

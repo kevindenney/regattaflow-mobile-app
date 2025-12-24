@@ -184,9 +184,21 @@ export function RaceConditionsCard({
     return now > raceEndEstimate;
   }, [raceTime, raceStatus, expectedDurationMinutes]);
 
+  // Determine if race is too far in the future for reliable forecasts (>10 days / 240 hours)
+  // This matches the limit in useRaceWeather, useEnrichedRaces, and RaceWeatherService
+  const isTooFarInFuture = useMemo(() => {
+    if (isPastRace) return false;
+    if (!raceTime) return false;
+    const raceDate = new Date(raceTime);
+    const now = new Date();
+    const hoursUntil = (raceDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    return hoursUntil > 240; // 10 days
+  }, [raceTime, isPastRace]);
+
   // For past races, skip live fetching and use saved data only
-  // For upcoming races, fetch live weather data
-  const shouldFetchLive = !isPastRace;
+  // For upcoming races within forecast window, fetch live weather data
+  // For races too far in future, don't fetch (forecasts not reliable)
+  const shouldFetchLive = !isPastRace && !isTooFarInFuture;
 
   // Fetch weather data (only for non-past races)
   const { weather: realWeather, loading: weatherLoading, refetch: loadWeather } = useRaceWeather(
@@ -218,7 +230,13 @@ export function RaceConditionsCard({
   });
 
   const loading = shouldFetchLive && (weatherLoading || tidalLoading);
-  const hasData = isPastRace ? (savedWind || savedTide) : (realWeather || tidalIntel);
+  // For far-future races, don't consider saved data as valid (forecasts aren't reliable yet)
+  // For past races, use saved data. For upcoming races within window, use live or saved data.
+  const hasData = isPastRace 
+    ? (savedWind || savedTide) 
+    : isTooFarInFuture 
+      ? false // Don't show saved data for far-future races
+      : (realWeather || tidalIntel || savedWind || savedTide);
 
   useEffect(() => {
     if (hasData) setHasAutoLoaded(true);
@@ -558,6 +576,18 @@ export function RaceConditionsCard({
     }
 
     if (!hasData && !hasAutoLoaded) {
+      // Show appropriate message based on why data isn't available
+      if (isTooFarInFuture) {
+        return (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Forecast not yet available</Text>
+            <Text style={[styles.emptyText, { fontSize: 12, marginTop: 8, opacity: 0.7 }]}>
+              Weather forecasts are only available for races within 10 days
+            </Text>
+          </View>
+        );
+      }
+      
       return (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>No venue coordinates set</Text>

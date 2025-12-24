@@ -4,15 +4,16 @@
  * maintenance info, and quick actions
  */
 
+import type { BoatEquipment } from '@/services/EquipmentService';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import type { BoatEquipment } from '@/services/EquipmentService';
 
 interface EquipmentCardProps {
   equipment: BoatEquipment;
@@ -260,11 +261,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+    }),
   },
   compactCard: {
     flexDirection: 'row',
@@ -273,11 +281,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 1,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.03)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.03,
+        shadowRadius: 1,
+        elevation: 1,
+      },
+    }),
   },
   compactMain: {
     flex: 1,

@@ -10,12 +10,11 @@
  * 6. No chartjunk (emojis, gradients, heavy shadows)
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { useRouter } from 'expo-router';
-import { Sparkline } from '../viz/Sparkline';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CompactDataGrid } from '../viz/DataTable';
 
 interface Regatta {
@@ -247,11 +246,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 8,
     // Minimal shadow (was shadowOpacity: 0.1, shadowRadius: 8)
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

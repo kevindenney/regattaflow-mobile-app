@@ -5,32 +5,32 @@
  * Shows tips from local sailors that feed into AI strategy generation.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Pressable,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 import {
-  venueCommunityTipsService,
-  VenueCommunityTip,
-  TipCategory,
-  TIP_CATEGORIES,
-  CreateTipInput,
-  TidePhase,
-  Season,
+    CreateTipInput,
+    Season,
+    TidePhase,
+    TIP_CATEGORIES,
+    TipCategory,
+    VenueCommunityTip,
+    venueCommunityTipsService,
 } from '@/services/venue/VenueCommunityTipsService';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface CommunityTipsCardProps {
   venueId: string;
@@ -622,11 +622,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

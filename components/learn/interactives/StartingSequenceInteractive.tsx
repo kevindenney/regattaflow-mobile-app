@@ -8,23 +8,23 @@
  * - Web Audio API → expo-av
  */
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Dimensions, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-  withRepeat,
-} from 'react-native-reanimated';
 import { Audio } from 'expo-av';
-import Svg, { G, Line, Circle, Rect, Text as SvgText, Defs, Pattern, Marker, Polygon, Path, Image as SvgImage } from 'react-native-svg';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, {
+    useAnimatedProps,
+    useSharedValue,
+    withRepeat,
+    withTiming,
+} from 'react-native-reanimated';
+import Svg, { Circle, Defs, G, Line, Marker, Path, Pattern, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import type { FlagState, SequenceStep } from './data/startSequenceData';
+import { PREPARATORY_FLAG_OPTIONS as PREP_FLAGS, RACING_SEQUENCE_STEPS, STARTING_SEQUENCE_QUIZ } from './data/startSequenceData';
+import { CustomTimelineSlider, PowerboatSVG, StartProcedurePanel, TopDownSailboatSVG } from './shared';
 
 // Create animated SVG components
 const AnimatedG = Animated.createAnimatedComponent(G);
-import type { SequenceStep, FlagState } from './data/startSequenceData';
-import { RACING_SEQUENCE_STEPS, PREPARATORY_FLAG_OPTIONS as PREP_FLAGS, STARTING_SEQUENCE_QUIZ } from './data/startSequenceData';
-import { PowerboatSVG, TopDownSailboatSVG, CustomTimelineSlider, StartProcedurePanel } from './shared';
 
 // Quiz state interface
 interface QuizAnswer {
@@ -803,15 +803,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     margin: 8,
     overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)' }
-      : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          elevation: 3,
-        }),
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+      },
+    }),
   },
   seaContainer: {
     position: 'relative',
@@ -845,15 +848,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 4px 16px rgba(59, 130, 246, 0.4)' }
-      : {
-          shadowColor: '#3B82F6',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.4,
-          shadowRadius: 8,
-          elevation: 6,
-        }),
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 16px rgba(59, 130, 246, 0.4)',
+      },
+      default: {
+        shadowColor: '#3B82F6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        elevation: 6,
+      },
+    }),
   },
   startButtonText: {
     color: '#FFFFFF',
@@ -878,15 +884,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: 8,
     overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)' }
-      : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.15,
-          shadowRadius: 4,
-          elevation: 4,
-        }),
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 4,
+      },
+    }),
   },
   controls: {
     flexDirection: 'row',
@@ -899,15 +908,18 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 8,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.15)' }
-      : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.15,
-          shadowRadius: 3,
-          elevation: 3,
-        }),
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 3,
+        elevation: 3,
+      },
+    }),
   },
   timeDisplay: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
@@ -934,18 +946,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.35)',
     overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? { 
-          boxShadow: 'inset 0px 1px 3px rgba(255, 255, 255, 0.3), 0px 2px 8px rgba(0, 50, 100, 0.12)',
-          backdropFilter: 'blur(16px)',
-        }
-      : {
-          shadowColor: '#1E3A5F',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.12,
-          shadowRadius: 6,
-          elevation: 4,
-        }),
+    ...Platform.select({
+      web: {
+        boxShadow: 'inset 0px 1px 3px rgba(255, 255, 255, 0.3), 0px 2px 8px rgba(0, 50, 100, 0.12)',
+        backdropFilter: 'blur(16px)',
+      },
+      default: {
+        shadowColor: '#1E3A5F',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 4,
+      },
+    }),
   },
   // Deep Dive Section Styles
   deepDiveSection: {

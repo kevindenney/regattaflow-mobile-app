@@ -3,19 +3,20 @@
  * Displays AI-powered race analysis from RaceAnalysisAgent
  */
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  ScrollView,
-} from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
-import { RaceTimerService } from '@/services/RaceTimerService';
 import { RaceAnalysisService } from '@/services/RaceAnalysisService';
+import { RaceTimerService } from '@/services/RaceTimerService';
 import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface RaceAnalysis {
   overall_summary: string;
@@ -222,11 +223,18 @@ const styles = StyleSheet.create({
     padding: 16,
     marginHorizontal: 16,
     marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
     maxHeight: 500,
   },
   loadingContainer: {

@@ -5,6 +5,8 @@
  * Ensures consistent visual language across all racing modules
  */
 
+import { Platform } from 'react-native';
+
 // ============================================================================
 // COLOR PALETTE
 // ============================================================================
@@ -223,29 +225,44 @@ export const BorderRadius = {
 // ============================================================================
 
 export const Shadows = {
-  card: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2, // Android
-  },
+  card: Platform.select({
+    web: {
+      boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
+    },
+    default: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 2, // Android
+    },
+  }) ?? {},
 
-  elevated: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 4, // Android
-  },
+  elevated: Platform.select({
+    web: {
+      boxShadow: '0px 4px 16px rgba(0, 0, 0, 0.15)',
+    },
+    default: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 16,
+      elevation: 4, // Android
+    },
+  }) ?? {},
 
-  alert: {
-    shadowColor: Colors.primary.red,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 8, // Android
-  },
+  alert: Platform.select({
+    web: {
+      boxShadow: '0px 4px 24px rgba(239, 68, 68, 0.3)',
+    },
+    default: {
+      shadowColor: Colors.primary.red,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 24,
+      elevation: 8, // Android
+    },
+  }) ?? {},
 
   none: {
     shadowColor: 'transparent',

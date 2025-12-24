@@ -41,6 +41,7 @@ export default function CrewScreen() {
   const { state, updateCrew, loading } = useSailorOnboardingState();
   const [crewMembers, setCrewMembers] = useState<SailorCrewMember[]>(() => state.crew?.crewMembers ?? []);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAddingMember, setIsAddingMember] = useState(false);
   
   const [newMember, setNewMember] = useState({
     name: '',
@@ -88,36 +89,56 @@ export default function CrewScreen() {
 
   const generateMemberId = () => `crew-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  const handleAddMember = () => {
-    if (!newMember.name.trim() || !newMember.role.trim()) {
-      Alert.alert('Validation Error', 'Please enter both name and role');
-      return;
+  const handleAddMember = async () => {
+    if (isAddingMember) return; // Prevent double-clicks
+    
+    try {
+      setIsAddingMember(true);
+      console.log('handleAddMember called', { newMember, crewMembers });
+      
+      if (!newMember.name.trim() || !newMember.role.trim()) {
+        Alert.alert('Validation Error', 'Please enter both name and role');
+        return;
+      }
+      
+      const member: SailorCrewMember = {
+        id: generateMemberId(),
+        name: newMember.name.trim(),
+        role: newMember.role.trim(),
+        email: newMember.email.trim() || undefined,
+        phone: newMember.phone.trim() || undefined,
+        communicationMethods: newMember.communicationMethods,
+        hasAccess: newMember.hasAccess,
+      };
+      
+      console.log('Adding member:', member);
+      const updatedMembers = [...crewMembers, member];
+      
+      // Update local state first for immediate feedback
+      setCrewMembers(updatedMembers);
+      
+      // Then persist to storage
+      persistCrewMembers(updatedMembers);
+      
+      Alert.alert('Crew member added', `${member.name} was added to your roster.`);
+      
+      // Reset form
+      setNewMember({
+        name: '',
+        role: '',
+        email: '',
+        phone: '',
+        communicationMethods: [],
+        hasAccess: false
+      });
+      setSelectedAvatar(0);
+      setShowRoleSuggestions(false);
+    } catch (error) {
+      console.error('Error adding crew member:', error);
+      Alert.alert('Error', 'Failed to add crew member. Please try again.');
+    } finally {
+      setIsAddingMember(false);
     }
-    
-    const member: SailorCrewMember = {
-      id: generateMemberId(),
-      name: newMember.name.trim(),
-      role: newMember.role.trim(),
-      email: newMember.email.trim() || undefined,
-      phone: newMember.phone.trim() || undefined,
-      communicationMethods: newMember.communicationMethods,
-      hasAccess: newMember.hasAccess,
-    };
-    
-    persistCrewMembers([...crewMembers, member]);
-    Alert.alert('Crew member added', `${member.name} was added to your roster.`);
-    
-    // Reset form
-    setNewMember({
-      name: '',
-      role: '',
-      email: '',
-      phone: '',
-      communicationMethods: [],
-      hasAccess: false
-    });
-    setSelectedAvatar(0);
-    setShowRoleSuggestions(false);
   };
 
   const toggleCommunicationMethod = (methodId: string) => {
@@ -347,12 +368,31 @@ export default function CrewScreen() {
             {/* Add Button */}
             <TouchableOpacity 
               onPress={handleAddMember}
-              className="bg-blue-600 rounded-xl py-3 flex-row items-center justify-center mt-2"
+              activeOpacity={0.8}
+              disabled={isAddingMember}
+              style={{
+                backgroundColor: isAddingMember ? '#94A3B8' : '#2563EB',
+                borderRadius: 12,
+                paddingVertical: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: 8,
+                opacity: isAddingMember ? 0.6 : 1,
+              }}
             >
-              <Plus size={20} color="white" className="mr-2" />
-              <Text className="text-white font-semibold">
-                Add Crew Member
-              </Text>
+              {isAddingMember ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Plus size={20} color="white" style={{ marginRight: 8 }} />
+                  <Text 
+                    style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 16 }}
+                  >
+                    Add Crew Member
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 

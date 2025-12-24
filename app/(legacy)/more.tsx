@@ -1,18 +1,18 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { useRouter, Href } from 'expo-router';
-import {
-  Sailboat,
-  Users,
-  MapPin,
-  Book,
-  User,
-  Settings as SettingsIcon,
-  Building2,
-  ChevronRight,
-  Sparkles
-} from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
+import { Href, useRouter } from 'expo-router';
+import {
+    Book,
+    Building2,
+    ChevronRight,
+    MapPin,
+    Sailboat,
+    Settings as SettingsIcon,
+    Sparkles,
+    User,
+    Users
+} from 'lucide-react-native';
+import React from 'react';
+import { Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 interface MenuItemProps {
   icon: React.ComponentType<{ size: number; color: string }>;
@@ -35,11 +35,18 @@ const MenuItem: React.FC<MenuItemProps> = ({
     onPress={onPress}
     className="flex-row items-center bg-white p-4 mb-2 rounded-xl active:bg-gray-50"
     style={{
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 2,
-      elevation: 1,
+      ...Platform.select({
+        web: {
+          boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+        },
+        default: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        },
+      }),
     }}
     accessibilityRole="button"
     accessibilityLabel={`${title}. ${subtitle}`}

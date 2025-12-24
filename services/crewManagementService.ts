@@ -1649,6 +1649,13 @@ export function initializeCrewMutationHandlers() {
             payload.invite
           );
           break;
+        case 'add':
+          await crewManagementService.addCrewMemberDirect(
+            payload.sailorId,
+            payload.classId,
+            payload.member
+          );
+          break;
         case 'update':
           await crewManagementService.updateCrewMemberDirect(
             payload.crewMemberId,

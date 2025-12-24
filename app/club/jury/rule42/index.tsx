@@ -3,30 +3,30 @@
  * Track propulsion infractions - SAILTI-competitive feature
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Platform,
-  ActivityIndicator,
-  Alert,
-  TextInput,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { format } from 'date-fns';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
-import { 
-  rule42Service, 
-  Rule42Infraction, 
-  Rule42Summary,
-  Rule42InfractionType,
+import {
+    Rule42Infraction,
+    Rule42InfractionType,
+    rule42Service,
+    Rule42Summary,
 } from '@/services/Rule42Service';
+import { Ionicons } from '@expo/vector-icons';
+import { format } from 'date-fns';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 const INFRACTION_TYPES: { value: Rule42InfractionType; label: string; icon: string }[] = [
   { value: 'pumping', label: 'Pumping', icon: 'arrow-up' },
@@ -760,11 +760,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(239, 68, 68, 0.3)',
+      },
+      default: {
+        shadowColor: '#EF4444',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
   },
 });
 

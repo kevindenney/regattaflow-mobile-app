@@ -133,6 +133,7 @@ export default function Callback(){
         // Determine the user type - use pending persona if profile doesn't have one yet
         let effectiveUserType = profile?.user_type
         const isNewUser = !profile || !profile.user_type
+        const needsOnboarding = !profile?.onboarding_completed && (profile?.user_type || pendingPersona)
 
         if (pendingPersona && isNewUser) {
           logger.info('Applying pending persona to new OAuth user:', pendingPersona)
@@ -169,20 +170,21 @@ export default function Callback(){
         }
 
         // Route based on the effective user type
-        // If new user with persona, route to appropriate onboarding
-        if (pendingPersona && isNewUser) {
-          logger.info('Routing new OAuth user to onboarding for persona:', pendingPersona)
+        // Route to onboarding if: (1) new OAuth user with pending persona, OR (2) existing user who hasn't completed onboarding
+        const personaForOnboarding = pendingPersona || effectiveUserType
+        if (needsOnboarding && personaForOnboarding) {
+          logger.info('Routing user to onboarding for persona:', personaForOnboarding)
           setStatus('Redirecting to setup...')
           
           let onboardingRoute: string
-          if (pendingPersona === 'sailor') {
+          if (personaForOnboarding === 'sailor') {
             onboardingRoute = '/(auth)/sailor-onboarding-comprehensive'
-          } else if (pendingPersona === 'coach') {
+          } else if (personaForOnboarding === 'coach') {
             onboardingRoute = '/(auth)/coach-onboarding-welcome'
-          } else if (pendingPersona === 'club') {
+          } else if (personaForOnboarding === 'club') {
             onboardingRoute = '/(auth)/club-onboarding-chat'
           } else {
-            onboardingRoute = getDashboardRoute(pendingPersona)
+            onboardingRoute = getDashboardRoute(personaForOnboarding)
           }
           
           setTimeout(() => {

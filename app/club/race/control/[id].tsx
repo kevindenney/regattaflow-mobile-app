@@ -3,28 +3,27 @@
  * Comprehensive race day management: start sequences, finish recording, protests, and results
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  TextInput,
-  Modal,
-  FlatList,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
-import { Audio } from 'expo-av';
+import CrewManifestTab from '@/components/race-control/CrewManifestTab';
 import ProtestModal from '@/components/race-control/ProtestModal';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
-import CrewManifestTab from '@/components/race-control/CrewManifestTab';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
 // Types
 interface Regatta {
@@ -937,11 +936,18 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   timerText: {
     fontSize: 72,

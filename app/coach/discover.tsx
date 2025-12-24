@@ -1,21 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  TextInput,
-  Image,
-  Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
+import { useAuth } from '@/providers/AuthProvider';
 import { coachingService, CoachProfile } from '@/services/CoachingService';
 import { CoachMatchingAgent } from '@/services/agents/CoachMatchingAgent';
 import { supabase } from '@/services/supabase';
-import { useAuth } from '@/providers/AuthProvider';
-import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface CoachWithScore extends CoachProfile {
   display_name?: string | null;
@@ -950,11 +951,18 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
   },
   coachCardAI: {
     borderWidth: 2,

@@ -7,10 +7,10 @@
 
 // @ts-nocheck
 
-import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { BorderRadius, colors, Spacing } from '@/constants/designSystem';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, BorderRadius, Spacing } from '@/constants/designSystem';
+import React from 'react';
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 interface WeatherMetricCardProps {
   title: string;
@@ -62,11 +62,18 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     minHeight: 160,
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

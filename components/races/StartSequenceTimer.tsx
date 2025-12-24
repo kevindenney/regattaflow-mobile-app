@@ -5,9 +5,9 @@
  * Shows button on upcoming races to help sailors time their approach to the line.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Vibration } from 'react-native';
-import { Timer, Play, RotateCcw } from 'lucide-react-native';
+import { Play, RotateCcw, Timer } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 
 interface StartSequenceTimerProps {
   compact?: boolean; // Use compact UI for smaller cards
@@ -228,11 +228,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+    }),
   },
   startButtonText: {
     fontSize: 13,

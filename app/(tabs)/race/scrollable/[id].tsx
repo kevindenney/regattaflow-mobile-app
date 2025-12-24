@@ -25,6 +25,7 @@ import {
     WeatherAlongRouteCard,
     WindWeatherCard
 } from '@/components/race-detail';
+import { CompetitorInsightsCard } from '@/components/race-detail/CompetitorInsightsCard';
 import { PreRaceBriefingCard } from '@/components/races';
 import { TrackImportModal, TracksCard } from '@/components/tracking';
 import { Track } from '@/services/tracking/types';
@@ -120,6 +121,7 @@ export default function RaceDetailScrollable() {
   const [sailorId, setSailorId] = useState<string | null>(null);
   const [showTrackImport, setShowTrackImport] = useState(false);
   const [importedTracks, setImportedTracks] = useState<Track[]>([]);
+  const [isRegistered, setIsRegistered] = useState(false);
   const lastCourseParam = useRef<string | null>(null);
 
   // Get real weather for course filtering
@@ -211,6 +213,30 @@ export default function RaceDetailScrollable() {
 
     fetchSailorId();
   }, [user]);
+
+  // Check if user is registered for this race
+  useEffect(() => {
+    const checkRegistration = async () => {
+      if (!user?.id || !id) return;
+
+      try {
+        const { data } = await supabase
+          .from('race_participants')
+          .select('id')
+          .eq('regatta_id', id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        setIsRegistered(!!data);
+      } catch (error) {
+        logger.error('[RaceDetailScrollable] Error checking registration:', error);
+      }
+    };
+
+    if (id && user?.id) {
+      checkRegistration();
+    }
+  }, [id, user?.id]);
 
   // Track scroll position for map resize
   useEffect(() => {
@@ -1039,10 +1065,27 @@ export default function RaceDetailScrollable() {
 
           <FleetRacersCard
             raceId={race.id}
-            classId={race.boat_class?.name}
+            classId={race.boat_class?.id || race.class_id}
             venueId={race.venue?.id}
+            clubId={undefined}
             onJoinFleet={(fleetId) => {
               logger.debug('[RaceDetail] Joined fleet:', fleetId);
+            }}
+            onRegister={() => {
+              // Refresh registration status after registration
+              setIsRegistered(true);
+              // Reload race data to refresh all components
+              loadRaceData();
+            }}
+          />
+
+          <CompetitorInsightsCard
+            raceId={race.id}
+            classId={race.boat_class?.id || race.class_id}
+            isRegistered={isRegistered}
+            onRegister={() => {
+              // Registration will be handled by FleetRacersCard's modal
+              // After registration, isRegistered state will update via onRegister callback
             }}
           />
 
@@ -1147,10 +1190,14 @@ export default function RaceDetailScrollable() {
 const logger = createLogger('[id]');
 type ShadowProps = Pick<ViewStyle, 'shadowColor' | 'shadowOffset' | 'shadowOpacity' | 'shadowRadius' | 'elevation'>;
 
-const getShadowStyle = (webShadow: string, nativeShadow: ShadowProps): ViewStyle =>
-  Platform.OS === 'web'
-    ? ({ boxShadow: webShadow } as ViewStyle)
-    : nativeShadow;
+const getShadowStyle = (webShadow: string, nativeShadow: ShadowProps): ViewStyle => {
+  if (Platform.OS === 'web') {
+    // On web, use boxShadow only - completely omit shadow* props to avoid deprecation warnings
+    return { boxShadow: webShadow } as ViewStyle;
+  }
+  // On native platforms, use shadow props
+  return nativeShadow;
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -1254,12 +1301,17 @@ const styles = StyleSheet.create({
     right: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
-    ...getShadowStyle('0px 18px 35px rgba(15, 23, 42, 0.18)', {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 12,
-      elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 18px 35px rgba(15, 23, 42, 0.18)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+      },
     }),
     minWidth: 200,
   },
@@ -1371,12 +1423,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     backgroundColor: '#10B981',
-    ...getShadowStyle('0px 6px 18px rgba(16, 185, 129, 0.35)', {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 6px 18px rgba(16, 185, 129, 0.35)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
     }),
   },
   saveRacingAreaButtonText: {

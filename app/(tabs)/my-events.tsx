@@ -4,25 +4,25 @@
  * Shows registrations, results, favorites, and live signals
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Platform,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { format, isPast, isFuture, isToday, formatDistanceToNow } from 'date-fns';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/providers/AuthProvider';
+import { RaceSignal, raceSignalService } from '@/services/RaceSignalService';
 import { supabase } from '@/services/supabase';
-import { raceSignalService, RaceSignal } from '@/services/RaceSignalService';
+import { Ionicons } from '@expo/vector-icons';
+import { format, formatDistanceToNow, isFuture, isPast, isToday } from 'date-fns';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Image,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface MyRegistration {
   id: string;
@@ -779,11 +779,18 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+    }),
   },
   tabText: {
     fontSize: 14,

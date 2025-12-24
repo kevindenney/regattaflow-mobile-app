@@ -60,6 +60,10 @@ export interface MockRace {
   // Phase 6: Race-Course-Boat Linking
   courseId?: string; // Links to MockCourse
   boatId?: string; // Links to MockBoat
+  // Race type: fleet or distance
+  race_type?: 'fleet' | 'distance';
+  // Distance race specific fields
+  total_distance_nm?: number;
 }
 
 export interface MockBoat {
@@ -122,7 +126,12 @@ export const MOCK_RACES: MockRace[] = [
     name: 'Hong Kong Dragon Championship',
     venue: 'Royal Hong Kong Yacht Club',
     venueId: 'rhkyc',
-    date: '2025-10-15T10:00:00Z',
+    date: (() => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7); // 7 days from now
+      futureDate.setHours(10, 0, 0, 0);
+      return futureDate.toISOString();
+    })(),
     startTime: '10:00',
     countdown: {
       days: 7,
@@ -154,7 +163,12 @@ export const MOCK_RACES: MockRace[] = [
     name: 'Autumn Series Race 3',
     venue: 'Aberdeen Boat Club',
     venueId: 'abc',
-    date: '2025-10-20T14:00:00Z',
+    date: (() => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 12); // 12 days from now
+      futureDate.setHours(14, 0, 0, 0);
+      return futureDate.toISOString();
+    })(),
     startTime: '14:00',
     countdown: {
       days: 12,
@@ -182,10 +196,15 @@ export const MOCK_RACES: MockRace[] = [
   },
   {
     id: 'mock-race-3',
-    name: 'Mid-Winter Championship',
+    name: 'Around Lantau Island Race',
     venue: 'Victoria Harbour',
     venueId: 'vharbour',
-    date: '2025-11-11T08:00:00Z',
+    date: (() => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 34); // 34 days from now
+      futureDate.setHours(8, 0, 0, 0);
+      return futureDate.toISOString();
+    })(),
     startTime: '08:00',
     countdown: {
       days: 34,
@@ -201,7 +220,7 @@ export const MOCK_RACES: MockRace[] = [
       state: 'slack',
       height: 1.0,
     },
-    strategy: 'Variable conditions expected. Stay flexible with strategy, favor center of course.',
+    strategy: 'Long distance race around Lantau Island. Monitor weather patterns, plan for changing conditions, and manage energy levels across the full distance.',
     critical_details: {
       vhf_channel: '68',
       warning_signal: '07:55',
@@ -209,6 +228,8 @@ export const MOCK_RACES: MockRace[] = [
     },
     courseId: 'mock-course-1',
     boatId: 'mock-boat-1',
+    race_type: 'distance',
+    total_distance_nm: 26,
   },
 ];
 
@@ -233,7 +254,7 @@ export const MOCK_BOATS: MockBoat[] = [
     },
     equipment: {
       hull_maker: 'Petticrows',
-      rig_maker: 'Selden',
+      rig_maker: 'Seldén',
       sail_maker: 'North Sails',
     },
   },
@@ -253,7 +274,7 @@ export const MOCK_BOATS: MockBoat[] = [
     },
     equipment: {
       hull_maker: 'Borresens',
-      rig_maker: 'Selden',
+      rig_maker: 'Seldén',
       sail_maker: 'Quantum',
     },
   },

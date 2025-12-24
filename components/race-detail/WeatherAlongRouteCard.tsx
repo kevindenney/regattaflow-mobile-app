@@ -21,8 +21,8 @@ import {
     TrendingUp,
     Wind
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface RouteWaypoint {
   name: string;
@@ -444,35 +444,56 @@ export function WeatherAlongRouteCard({
     });
   }, [sharedWeather, allPoints, calculateDistance, totalRouteDistance, startTime]);
 
+  // Track if we've already fetched to prevent infinite loops
+  const hasFetchedRef = useRef(false);
+  const lastWaypointsKeyRef = useRef<string>('');
+
   // Clear fetched weather when shared weather becomes available (to use shared instead)
   useEffect(() => {
     if (sharedWeather?.wind && fetchedWeather.length > 0) {
       setFetchedWeather([]);
+      hasFetchedRef.current = false; // Reset fetch flag when shared weather arrives
     }
   }, [sharedWeather, fetchedWeather.length]);
 
   // Auto-fetch weather when waypoints change (only if no shared weather with wind data)
   useEffect(() => {
+    // Create a stable key for waypoints to detect actual changes
+    const waypointsKey = allPoints.map(p => `${p.latitude},${p.longitude}`).join('|');
+    
     // Only fetch individually if:
     // 1. We have waypoints
     // 2. No external data provided
     // 3. No shared weather with wind data (the key field we need)
+    // 4. Waypoints actually changed (not just a re-render)
+    // 5. We haven't already fetched for these waypoints
     const hasSharedWind = sharedWeather?.wind && (
       (sharedWeather.wind as any).speedMin !== undefined || 
       (sharedWeather.wind as any).speed !== undefined
     );
     
-    if (allPoints.length > 0 && !externalWeatherData && !hasSharedWind) {
+    const waypointsChanged = waypointsKey !== lastWaypointsKeyRef.current;
+    const shouldFetch = allPoints.length > 0 && 
+                       !externalWeatherData && 
+                       !hasSharedWind && 
+                       waypointsChanged && 
+                       !hasFetchedRef.current;
+    
+    if (shouldFetch) {
+      lastWaypointsKeyRef.current = waypointsKey;
+      hasFetchedRef.current = true;
       fetchWeatherForWaypoints();
     }
-  }, [allPoints, externalWeatherData, sharedWeather, fetchWeatherForWaypoints]);
+  }, [allPoints.length, externalWeatherData, sharedWeather?.wind, fetchWeatherForWaypoints]);
 
-  // Generate advice when we have weather from shared data
+  // Generate advice when we have weather from shared data (only once)
+  const hasGeneratedAdviceRef = useRef(false);
   useEffect(() => {
-    if (weatherFromShared.length > 0 && adviceMap.size === 0) {
+    if (weatherFromShared.length > 0 && adviceMap.size === 0 && !hasGeneratedAdviceRef.current) {
+      hasGeneratedAdviceRef.current = true;
       generateAdviceForWaypoints(weatherFromShared);
     }
-  }, [weatherFromShared, adviceMap.size, generateAdviceForWaypoints]);
+  }, [weatherFromShared.length, adviceMap.size, generateAdviceForWaypoints]);
 
   // Determine which weather data to display
   const displayWeather = useMemo<WeatherAtPoint[]>(() => {
@@ -813,11 +834,18 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

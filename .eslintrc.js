@@ -11,5 +11,9 @@ module.exports = {
       argsIgnorePattern: '^_',
       varsIgnorePattern: '^_'
     }],
+    // Disable rules that may not be available in this ESLint version
+    '@typescript-eslint/no-empty-object-type': 'off',
+    '@typescript-eslint/no-wrapper-object-types': 'off',
+    'import/no-unresolved': 'off', // TypeScript handles this
   },
 };

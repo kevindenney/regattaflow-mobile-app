@@ -1,25 +1,25 @@
+import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  useWindowDimensions,
-  Platform,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
-import { Link, router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/providers/AuthProvider';
-import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
-import { MiniSailorDashboard } from './MiniSailorDashboard';
-import { MiniCoachDashboard } from './MiniCoachDashboard';
-import { MiniClubDashboard } from './MiniClubDashboard';
-import { PricingSection } from './PricingSection';
-import { MissionSection } from './MissionSection';
-import { FounderSection } from './FounderSection';
 import { Footer } from './Footer';
-import { supabase } from '@/services/supabase';
+import { FounderSection } from './FounderSection';
+import { MiniClubDashboard } from './MiniClubDashboard';
+import { MiniCoachDashboard } from './MiniCoachDashboard';
+import { MiniSailorDashboard } from './MiniSailorDashboard';
+import { MissionSection } from './MissionSection';
+import { PricingSection } from './PricingSection';
 
 export function HeroPhones() {
   const { user, userProfile } = useAuth();

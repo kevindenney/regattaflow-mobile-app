@@ -90,6 +90,8 @@ export const Spacing = {
 // SHADOW SYSTEM
 // =============================================================================
 
+import { Platform } from 'react-native';
+
 /**
  * Shadow elevations for depth and hierarchy
  * Lighter shadows for cleaner, more subtle appearance
@@ -102,27 +104,42 @@ export const Shadows = {
     shadowRadius: 0,
     elevation: 0,
   },
-  small: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  medium: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  large: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
-  },
+  small: Platform.select({
+    web: {
+      boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.04)',
+    },
+    default: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.04,
+      shadowRadius: 3,
+      elevation: 1,
+    },
+  }) ?? {},
+  medium: Platform.select({
+    web: {
+      boxShadow: '0px 1px 6px rgba(0, 0, 0, 0.08)',
+    },
+    default: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+  }) ?? {},
+  large: Platform.select({
+    web: {
+      boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.12)',
+    },
+    default: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+  }) ?? {},
 };
 
 // =============================================================================

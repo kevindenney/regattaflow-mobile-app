@@ -55,6 +55,7 @@ interface ExtractionPreferencesDialogProps {
   onConfirm: (preferences: ExtractionPreferences) => void;
   userBoatClasses?: string[];  // Classes the user has registered
   documentPreview?: string;    // First few lines of document for context
+  raceType?: 'fleet' | 'distance'; // Race type to customize UI
 }
 
 // Common boat classes for quick selection
@@ -68,7 +69,11 @@ const COMMON_BOAT_CLASSES = [
   'Flying Fifteen',
   'Sportsboat',
   'IRC Cruiser',
+  'IRC Division 1',
+  'IRC Division 2',
   'PHS Cruiser',
+  'PHS Division A',
+  'PHS Division B',
   'Laser/ILCA',
   '29er',
   '420',
@@ -81,6 +86,7 @@ export function ExtractionPreferencesDialog({
   onConfirm,
   userBoatClasses = [],
   documentPreview,
+  raceType,
 }: ExtractionPreferencesDialogProps) {
   const [preferences, setPreferences] = useState<ExtractionPreferences>(DEFAULT_PREFERENCES);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -217,12 +223,39 @@ export function ExtractionPreferencesDialog({
 
             {/* Boat Class Selection */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                <Sailboat size={16} color="#3b82f6" /> Your Boat Class
-              </Text>
-              <Text style={styles.sectionDescription}>
-                We'll highlight information relevant to your class
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Sailboat size={16} color="#3b82f6" style={{ marginRight: 6 }} />
+                    <Text style={styles.sectionTitle}>Your Boat Class / Division</Text>
+                  </View>
+                  <Text style={styles.sectionDescription}>
+                    {raceType === 'distance' 
+                      ? 'Optional: Select your division to highlight relevant start times and communications'
+                      : 'We\'ll highlight information relevant to your class'}
+                  </Text>
+                </View>
+                {raceType === 'distance' && (
+                  <TouchableOpacity
+                    onPress={() => setSelectedBoatClass(undefined)}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 6,
+                      backgroundColor: selectedBoatClass === undefined ? '#e0e7ff' : '#f3f4f6',
+                      marginLeft: 8,
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '600',
+                      color: selectedBoatClass === undefined ? '#4338ca' : '#6b7280',
+                    }}>
+                      Skip
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               
               <ScrollView 
                 horizontal 
@@ -248,6 +281,25 @@ export function ExtractionPreferencesDialog({
                 ))}
               </ScrollView>
 
+              {raceType === 'distance' && (
+                <View style={{
+                  marginTop: 12,
+                  padding: 12,
+                  backgroundColor: '#f0f9ff',
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#bae6fd',
+                }}>
+                  <Text style={{
+                    fontSize: 12,
+                    color: '#0369a1',
+                    lineHeight: 18,
+                  }}>
+                    💡 <Text style={{ fontWeight: '600' }}>For distance races:</Text> Boat selection happens later when you register. This class selection is optional and only helps filter information during extraction. Your division (IRC Div 1/2, PHS A/B) will be determined by your boat's handicap rating.
+                  </Text>
+                </View>
+              )}
+
               {selectedBoatClass && (
                 <PreferenceToggle
                   label="Filter to my class only"
@@ -261,9 +313,10 @@ export function ExtractionPreferencesDialog({
 
             {/* What to Extract */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                <Settings size={16} color="#3b82f6" /> Information to Extract
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Settings size={16} color="#3b82f6" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTitle}>Information to Extract</Text>
+              </View>
               
               <PreferenceToggle
                 label="Starting Lines & Times"

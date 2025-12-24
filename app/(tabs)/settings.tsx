@@ -1,24 +1,24 @@
-import React, { useMemo, useState } from 'react';
-import {
-  View,
-  ScrollView,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
-  Alert,
-  Modal,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
 import { ClubAiAssistant } from '@/components/ai/ClubAiAssistant';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
+import { getCurrentLocale, localeConfig } from '@/lib/i18n';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { localeConfig, getCurrentLocale } from '@/lib/i18n';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function SettingsScreen() {
   const { user, userProfile, clubProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
@@ -185,6 +185,14 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.settingsGroup}>
+            {!userProfile?.onboarding_completed && userProfile?.user_type === 'sailor' && (
+              <SettingItem
+                icon="checkmark-circle-outline"
+                title="Complete Onboarding"
+                subtitle="Finish setting up your sailing profile"
+                onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
+              />
+            )}
             {isDemoProfile && (
               <SettingItem
                 icon="flag-outline"

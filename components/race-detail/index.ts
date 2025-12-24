@@ -34,6 +34,7 @@ export { WeatherMetricCard } from './WeatherMetricCard';
 
 // Enhanced race detail components (new)
 export { ContingencyPlansCard, type ContingencyScenario } from './ContingencyPlansCard';
+export { CompetitorInsightsCard } from './CompetitorInsightsCard';
 export { CrewEquipmentCard } from './CrewEquipmentCard';
 export { FleetRacersCard } from './FleetRacersCard';
 export { RaceConditionsCard } from './RaceConditionsCard';

@@ -4,32 +4,31 @@
  * Includes generate button, preview, and share options
  */
 
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  Share,
-  Platform,
-} from 'react-native';
-import {
-  FileText,
-  Sparkles,
-  Share2,
-  Copy,
-  ChevronDown,
-  ChevronUp,
-  AlertTriangle,
-  Clock,
-  Wind,
-  Target,
-  Radio,
-} from 'lucide-react-native';
 import { RaceBriefingService, type RaceBriefing } from '@/services/RaceBriefingService';
 import * as Clipboard from 'expo-clipboard';
+import {
+    AlertTriangle,
+    ChevronDown,
+    ChevronUp,
+    Clock,
+    Copy,
+    FileText,
+    Radio,
+    Share2,
+    Sparkles,
+    Target,
+    Wind,
+} from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import {
+    ActivityIndicator,
+    Platform,
+    Pressable,
+    Share,
+    StyleSheet,
+    Text,
+    View
+} from 'react-native';
 
 interface PreRaceBriefingCardProps {
   raceId: string;
@@ -324,11 +323,18 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

@@ -3,7 +3,7 @@
  * Allows users to review and correct AI-extracted race data before creation
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -59,6 +59,8 @@ export interface ExtractedData {
   // === COURSE & VENUE ===
   courseArea?: string;
   courseSelectionCriteria?: string;
+  courseDescription?: string;  // Full course description
+  potentialCourses?: Array<string>;  // List of possible courses
 
   // === SAFETY ===
   safetyRequirements?: string;
@@ -92,6 +94,7 @@ export interface ExtractedData {
   
   // === START AREA ===
   startAreaName?: string;
+  startAreaDescription?: string;
   
   // === MULTIPLE START LINES ===
   startLines?: Array<{
@@ -186,7 +189,7 @@ export interface FieldConfidenceMap {
 interface AIValidationScreenProps {
   extractedData: ExtractedData;
   confidenceScores?: FieldConfidenceMap;
-  onConfirm: (validatedData: ExtractedData) => void;
+  onConfirm: (validatedData: ExtractedData) => void | Promise<void>;
   onCancel: () => void;
   userBoatClass?: string;  // For smart filtering
   filterToUserClass?: boolean;  // Whether to filter by default
@@ -229,6 +232,17 @@ export function AIValidationScreen({
   filterToUserClass = false,
 }: AIValidationScreenProps) {
   const [data, setData] = useState<ExtractedData>(extractedData);
+  
+  // Debug logging for start/finish fields
+  useEffect(() => {
+    console.log('[AIValidationScreen] Received extracted data:', {
+      startAreaName: extractedData?.startAreaName,
+      startAreaDescription: extractedData?.startAreaDescription,
+      finishAreaName: extractedData?.finishAreaName,
+      finishAreaDescription: extractedData?.finishAreaDescription,
+      startLines: extractedData?.startLines,
+    });
+  }, [extractedData]);
   const [showMyClassOnly, setShowMyClassOnly] = useState(filterToUserClass);
 
   // Calculate validation statistics
@@ -330,6 +344,22 @@ export function AIValidationScreen({
       fields: [
         { key: 'scoringSystem', label: 'Scoring System', placeholder: 'e.g., Low Point' },
         { key: 'penaltySystem', label: 'Penalty System', placeholder: 'e.g., One-Turn Penalty' },
+      ],
+    },
+    {
+      title: 'Course Information',
+      fields: [
+        { key: 'courseArea', label: 'Course Area', placeholder: 'e.g., Harbour, Port Shelter' },
+        { key: 'courseDescription', label: 'Course Description', placeholder: 'Full course description', multiline: true },
+        { key: 'courseSelectionCriteria', label: 'Course Selection Criteria', placeholder: 'How course is selected', multiline: true },
+      ],
+    },
+    {
+      title: 'Start & Finish',
+      fields: [
+        { key: 'startAreaName', label: 'Start Area Name', placeholder: 'e.g., Inner Starting Line' },
+        { key: 'finishAreaName', label: 'Finish Area Name', placeholder: 'e.g., Club Finishing Line' },
+        { key: 'finishAreaDescription', label: 'Finish Area Description', placeholder: 'How boats finish', multiline: true },
       ],
     },
   ];
@@ -590,6 +620,18 @@ export function AIValidationScreen({
                     📍 {area.coordinates.length} coordinate points
                   </Text>
                 )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Potential Courses */}
+        {data.potentialCourses && data.potentialCourses.length > 0 && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.groupTitle}>📋 Potential Courses ({data.potentialCourses.length})</Text>
+            {data.potentialCourses.map((course, index) => (
+              <View key={index} style={styles.courseCard}>
+                <Text style={styles.courseName}>{course}</Text>
               </View>
             ))}
           </View>
@@ -1200,5 +1242,19 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     marginTop: 4,
     fontFamily: 'monospace',
+  },
+  // Course styles
+  courseCard: {
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  courseName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0369a1',
   },
 });

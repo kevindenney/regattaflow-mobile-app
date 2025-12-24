@@ -1,28 +1,29 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import { CoachDashboard } from '@/components/coaching/CoachDashboard';
 import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-  Image,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+    useCoachMetrics,
+    useCoachResources,
+    useCoachSpotlights,
+    useRecentCoachSessions,
+    useUpcomingCoachSessions,
+} from '@/hooks/useCoachData';
+import { useAuth } from '@/providers/AuthProvider';
+import { CoachProfile, CoachingSession } from '@/services/CoachingService';
+import { coachStrategyService } from '@/services/CoachStrategyService';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CoachProfile, CoachingSession } from '@/services/CoachingService';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  useUpcomingCoachSessions,
-  useRecentCoachSessions,
-  useCoachSpotlights,
-  useCoachMetrics,
-  useCoachResources,
-} from '@/hooks/useCoachData';
-import { useAuth } from '@/providers/AuthProvider';
-import { CoachDashboard } from '@/components/coaching/CoachDashboard';
-import { coachStrategyService } from '@/services/CoachStrategyService';
+    ActivityIndicator,
+    Image,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 type DiscoverCoach = CoachProfile & {
   hourly_rate_usd?: number | null;
@@ -574,10 +575,17 @@ export default function CoachingHubScreen() {
             borderRadius: 24,
             padding: 24,
             marginBottom: 20,
-            shadowColor: '#1E3A8A',
-            shadowOpacity: 0.18,
-            shadowOffset: { width: 0, height: 10 },
-            shadowRadius: 20,
+            ...Platform.select({
+              web: {
+                boxShadow: '0px 10px 20px rgba(30, 58, 138, 0.18)',
+              },
+              default: {
+                shadowColor: '#1E3A8A',
+                shadowOpacity: 0.18,
+                shadowOffset: { width: 0, height: 10 },
+                shadowRadius: 20,
+              },
+            }),
           }}
         >
           <Text className="text-white/70 text-sm uppercase tracking-widest mb-2">

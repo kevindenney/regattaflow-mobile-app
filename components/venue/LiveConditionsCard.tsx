@@ -3,16 +3,17 @@
  * Displays real-time sailing conditions for racing sailors
  */
 
+import { ThemedText } from '@/components/themed-text';
+import { LiveWeatherData, useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
+    ActivityIndicator,
+    Platform,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { Ionicons } from '@expo/vector-icons';
-import { useVenueLiveWeather, LiveWeatherData } from '@/hooks/useVenueLiveWeather';
 
 interface LiveConditionsCardProps {
   latitude?: number;
@@ -294,11 +295,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
     maxWidth: 420,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+      },
+    }),
   },
   
   // Loading & Error states
@@ -513,11 +521,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 4,
+      },
+    }),
   },
   compactRow: {
     flexDirection: 'row',

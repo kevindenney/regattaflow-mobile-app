@@ -26,7 +26,104 @@ interface ExtractionResult {
   courseName?: string;
   totalDistanceNm?: number;
   courseDescription?: string;
+  startLocationName?: string | null;
+  finishLocationName?: string | null;
   rawExtraction?: any;
+}
+
+/**
+ * Geocode start/finish location names and add them as waypoints
+ */
+async function geocodeStartFinishLocations(
+  existingWaypoints: RouteWaypoint[],
+  startLocationName?: string | null,
+  finishLocationName?: string | null
+): Promise<RouteWaypoint[]> {
+  const waypoints = [...existingWaypoints];
+  
+  // Check if start waypoint already exists
+  const hasStart = waypoints.some(wp => wp.type === 'start');
+  
+  // Geocode start location if name is provided and no start waypoint exists
+  if (startLocationName && !hasStart) {
+    try {
+      const startQuery = `${startLocationName}, Hong Kong`;
+      const geocodeUrl = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
+        q: startQuery,
+        format: 'json',
+        limit: '1',
+        countrycodes: 'hk',
+      })}`;
+      
+      const response = await fetch(geocodeUrl, {
+        headers: {
+          'User-Agent': 'RegattaFlow/1.0 (Sailing Race Management App)',
+        },
+      });
+      
+      if (response.ok) {
+        const results = await response.json();
+        if (results && results.length > 0) {
+          const startWaypoint: RouteWaypoint = {
+            name: `Start - ${startLocationName}`,
+            latitude: parseFloat(results[0].lat),
+            longitude: parseFloat(results[0].lon),
+            type: 'start',
+            notes: `Start location at ${startLocationName} (geocoded)`,
+          };
+          
+          // Insert at the beginning (point 0)
+          waypoints.unshift(startWaypoint);
+          console.log(`[extract-course] Geocoded start: ${startLocationName} -> ${startWaypoint.latitude}, ${startWaypoint.longitude}`);
+        }
+      }
+    } catch (error) {
+      console.warn(`[extract-course] Failed to geocode start location: ${startLocationName}`, error);
+    }
+  }
+  
+  // Check if finish waypoint already exists
+  const hasFinish = waypoints.some(wp => wp.type === 'finish');
+  
+  // Geocode finish location if name is provided and no finish waypoint exists
+  if (finishLocationName && !hasFinish) {
+    try {
+      const finishQuery = `${finishLocationName}, Hong Kong`;
+      const geocodeUrl = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
+        q: finishQuery,
+        format: 'json',
+        limit: '1',
+        countrycodes: 'hk',
+      })}`;
+      
+      const response = await fetch(geocodeUrl, {
+        headers: {
+          'User-Agent': 'RegattaFlow/1.0 (Sailing Race Management App)',
+        },
+      });
+      
+      if (response.ok) {
+        const results = await response.json();
+        if (results && results.length > 0) {
+          const finishWaypoint: RouteWaypoint = {
+            name: `Finish - ${finishLocationName}`,
+            latitude: parseFloat(results[0].lat),
+            longitude: parseFloat(results[0].lon),
+            type: 'finish',
+            notes: `Finish location at ${finishLocationName} (geocoded)`,
+          };
+          
+          // Add at the end (last point)
+          waypoints.push(finishWaypoint);
+          console.log(`[extract-course] Geocoded finish: ${finishLocationName} -> ${finishWaypoint.latitude}, ${finishWaypoint.longitude}`);
+        }
+      }
+    } catch (error) {
+      console.warn(`[extract-course] Failed to geocode finish location: ${finishLocationName}`, error);
+    }
+  }
+  
+  return waypoints;
 }
 
 const EXTRACTION_PROMPT = `You are an expert sailing race course analyst. Extract all course waypoints and marks from this document.
@@ -40,6 +137,8 @@ For each waypoint/mark found, extract:
 
 Look for:
 - Start/finish line coordinates
+- **CRITICAL: Start location names even if coordinates aren't provided** (e.g., "Tai Tam Bay", "starting line will be laid in [location]")
+- **CRITICAL: Finish location names even if coordinates aren't provided** (e.g., "ABC Main Club", "Race Safety Control Centre at [location]")
 - Course marks and buoys
 - Gate marks
 - Turning points
@@ -51,6 +150,8 @@ Return a JSON object with this exact structure:
   "courseName": "Name of the course if found",
   "totalDistanceNm": number or null,
   "courseDescription": "Brief description if available",
+  "startLocationName": "Location name if mentioned (e.g., 'Tai Tam Bay')" or null,
+  "finishLocationName": "Location name if mentioned (e.g., 'ABC Main Club')" or null,
   "waypoints": [
     {
       "name": "Start",
@@ -215,9 +316,16 @@ serve(async (req: Request) => {
 
     console.log('[extract-course] Extracted waypoints:', validWaypoints.length);
 
+    // Geocode start/finish location names if provided
+    const finalWaypoints = await geocodeStartFinishLocations(
+      validWaypoints,
+      result.startLocationName,
+      result.finishLocationName
+    );
+
     return new Response(
       JSON.stringify({
-        waypoints: validWaypoints,
+        waypoints: finalWaypoints,
         courseName: result.courseName,
         totalDistanceNm: result.totalDistanceNm,
         courseDescription: result.courseDescription,

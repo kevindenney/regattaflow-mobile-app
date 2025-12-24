@@ -56,8 +56,9 @@ export default function AddRaceScreen() {
 
   const handleSubmit = (raceId: string) => {
     logger.debug('[AddRaceScreen] Race created:', raceId);
-    // Navigate to race detail
-    router.push(`/(tabs)/race/scrollable/${raceId}` as any);
+    // Navigate back to races list with the newly created race selected
+    // This allows users to see the race in context with other races
+    router.replace(`/(tabs)/races?selected=${raceId}`);
   };
 
   const handleCancel = () => {

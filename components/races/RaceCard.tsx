@@ -17,7 +17,7 @@ import { supabase } from '@/services/supabase';
 import { useRouter } from 'expo-router';
 import { Award, CheckCircle2, MapPin, Medal, Pin, Radio, RefreshCw, Route, Sailboat, Trophy, Waves, Wind } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RaceTimer } from './RaceTimer';
 import { StartSequenceTimer } from './StartSequenceTimer';
 
@@ -785,11 +785,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     flexShrink: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
     borderWidth: 1,
     borderColor: '#E2E8F0',
     // @ts-ignore - cursor is web-only
@@ -799,9 +806,16 @@ const styles = StyleSheet.create({
     // @ts-ignore - pointerEvents handled by prop
   },
   primaryCard: {
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 0px 12px rgba(0, 0, 0, 0.15)',
+      },
+      default: {
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 6,
+      },
+    }),
     borderWidth: 2,
     borderColor: '#3B82F6',
     backgroundColor: '#FAFBFF',
@@ -820,10 +834,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#1D4ED8',
     backgroundColor: '#E0ECFF',
-    shadowColor: '#2563EB',
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 0px 16px rgba(37, 99, 235, 0.25)',
+      },
+      default: {
+        shadowColor: '#2563EB',
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
+        elevation: 6,
+      },
+    }),
     transform: [{ translateY: -4 }, { scale: 1.02 }],
   },
   menuContainer: {
@@ -902,11 +923,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+    }),
   },
   nextBadgeText: {
     color: '#FFFFFF',
@@ -987,11 +1015,18 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
   },
   primaryCountdownSection: {
     backgroundColor: '#1E293B',
@@ -1204,11 +1239,18 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+    }),
   },
   detailRowEnhanced: {
     flexDirection: 'row',
@@ -1266,11 +1308,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',  // Match "NEXT RACE" badge green
     borderRadius: 999,
     alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
     zIndex: 5,
   },
   timelineIndicatorLeft: {

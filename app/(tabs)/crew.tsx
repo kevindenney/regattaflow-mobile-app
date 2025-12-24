@@ -1,7 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +15,7 @@ import { useSailorDashboardData } from '@/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { CrewMember } from '@/services/crewManagementService';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 export default function CrewScreen() {
   const { user } = useAuth();
@@ -51,12 +53,36 @@ export default function CrewScreen() {
 
   const handleBackToRace = useCallback(() => {
     if (fromRaceId) {
+      // Navigate back to races list with the race selected (inline detail view)
+      // This is the proper user-facing view, not the separate race detail page
       router.push({
-        pathname: '/(tabs)/race/scrollable/[id]',
-        params: { id: fromRaceId },
+        pathname: '/(tabs)/races',
+        params: { selected: fromRaceId },
       });
+    } else {
+      // If no race context, just go back to races list
+      router.push('/(tabs)/races');
     }
   }, [fromRaceId, router]);
+
+  // Intercept back button to ensure we go to races list, not the old race detail page
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (fromRaceId) {
+          // Navigate to races list with race selected instead of using default back behavior
+          handleBackToRace();
+          return true; // Prevent default back behavior
+        }
+        return false; // Allow default back behavior if no race context
+      };
+
+      if (Platform.OS === 'android') {
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => subscription.remove();
+      }
+    }, [fromRaceId, handleBackToRace])
+  );
 
   const fallbackClasses = useMemo(() => {
     if (!routeContext.classId) return [];
@@ -159,13 +185,6 @@ export default function CrewScreen() {
                 )}
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.backToRaceLinkButton}
-              onPress={handleBackToRace}
-            >
-              <Text style={styles.backToRaceLinkText}>Back to Race</Text>
-              <Ionicons name="chevron-forward" size={16} color="#1D4ED8" />
-            </TouchableOpacity>
           </View>
         )}
 
@@ -213,6 +232,10 @@ export default function CrewScreen() {
               classId={cls.id}
               className={cls.name}
               sailNumber={cls.sailNumber}
+              onSelectMemberForAvailability={(member) => {
+                setSelectedMember(member);
+                setShowAvailabilityModal(true);
+              }}
             />
           </View>
         ))}
@@ -325,21 +348,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#BFDBFE',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backToRaceLinkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: '#BFDBFE',
-    borderRadius: 6,
-  },
-  backToRaceLinkText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1D4ED8',
   },
   contextTitle: {
     fontSize: 16,

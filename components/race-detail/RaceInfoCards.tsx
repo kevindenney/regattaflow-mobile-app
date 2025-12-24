@@ -7,13 +7,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import {
-  Linking,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
+    Linking,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 interface VHFChannel {
@@ -61,12 +60,7 @@ interface RaceInfoCardsProps {
   handicapSystem?: string;
 }
 
-type ShadowProps = Pick<ViewStyle, 'shadowColor' | 'shadowOffset' | 'shadowOpacity' | 'shadowRadius' | 'elevation'>;
-
-const getShadowStyle = (webShadow: string, nativeShadow: ShadowProps): ViewStyle =>
-  Platform.OS === 'web'
-    ? ({ boxShadow: webShadow } as ViewStyle)
-    : nativeShadow;
+// Removed getShadowStyle - using Platform.select directly in styles
 
 export function RaceInfoCards({
   absoluteTimeLimit,
@@ -387,12 +381,17 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    ...getShadowStyle('0px 4px 12px rgba(15, 23, 42, 0.08)', {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 6,
-      elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 3,
+      },
     }),
   },
   

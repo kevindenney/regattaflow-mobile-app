@@ -230,12 +230,58 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
         throw new Error('AI rig tuning returned no content');
       }
 
-      const jsonMatch = combinedText.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        throw new Error('Unable to parse JSON from AI rig tuning response');
+      // Try to extract JSON array from response
+      // First, try to find JSON in markdown code blocks
+      let jsonText = combinedText;
+      
+      // Remove markdown code blocks if present
+      const codeBlockMatch = combinedText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
+      } else {
+        // Try to find JSON array in the text
+        const jsonMatch = combinedText.match(/\[[\s\S]*?\]/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[0];
+        } else {
+          throw new Error('Unable to find JSON array in AI rig tuning response');
+        }
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      // Clean up the JSON text - remove any trailing non-JSON content
+      // Find the last valid closing bracket
+      let bracketCount = 0;
+      let lastValidIndex = -1;
+      for (let i = 0; i < jsonText.length; i++) {
+        if (jsonText[i] === '[') bracketCount++;
+        if (jsonText[i] === ']') {
+          bracketCount--;
+          if (bracketCount === 0) {
+            lastValidIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (lastValidIndex === -1) {
+        throw new Error('Unable to find valid JSON array structure in AI response');
+      }
+
+      const cleanedJson = jsonText.substring(0, lastValidIndex + 1);
+
+      let parsed;
+      try {
+        parsed = JSON.parse(cleanedJson);
+      } catch (parseError: any) {
+        logger.error('JSON parse error', {
+          error: parseError.message,
+          jsonLength: cleanedJson.length,
+          jsonPreview: cleanedJson.substring(0, 200),
+          fullResponse: combinedText.substring(0, 500),
+        });
+        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+      }
+
       if (!Array.isArray(parsed)) {
         throw new Error('AI rig tuning response was not an array');
       }
@@ -352,12 +398,58 @@ ${JSON.stringify(payload, null, 2)}`;
         throw new Error('Boat tuning skill returned no text content');
       }
 
-      const jsonMatch = combinedText.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        throw new Error('Unable to parse JSON array from boat tuning skill response');
+      // Try to extract JSON array from response
+      // First, try to find JSON in markdown code blocks
+      let jsonText = combinedText;
+      
+      // Remove markdown code blocks if present
+      const codeBlockMatch = combinedText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
+      } else {
+        // Try to find JSON array in the text
+        const jsonMatch = combinedText.match(/\[[\s\S]*?\]/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[0];
+        } else {
+          throw new Error('Unable to find JSON array in boat tuning skill response');
+        }
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      // Clean up the JSON text - remove any trailing non-JSON content
+      // Find the last valid closing bracket
+      let bracketCount = 0;
+      let lastValidIndex = -1;
+      for (let i = 0; i < jsonText.length; i++) {
+        if (jsonText[i] === '[') bracketCount++;
+        if (jsonText[i] === ']') {
+          bracketCount--;
+          if (bracketCount === 0) {
+            lastValidIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (lastValidIndex === -1) {
+        throw new Error('Unable to find valid JSON array structure in boat tuning skill response');
+      }
+
+      const cleanedJson = jsonText.substring(0, lastValidIndex + 1);
+
+      let parsed;
+      try {
+        parsed = JSON.parse(cleanedJson);
+      } catch (parseError: any) {
+        logger.error('JSON parse error in boat tuning skill', {
+          error: parseError.message,
+          jsonLength: cleanedJson.length,
+          jsonPreview: cleanedJson.substring(0, 200),
+          fullResponse: combinedText.substring(0, 500),
+        });
+        throw new Error(`Failed to parse JSON from boat tuning skill: ${parseError.message}`);
+      }
+
       if (!Array.isArray(parsed)) {
         throw new Error('Boat tuning skill response was not an array');
       }

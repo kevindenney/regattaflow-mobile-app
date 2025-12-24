@@ -1,14 +1,15 @@
+import type { BoatPerformanceStats } from '@/hooks/useBoatPerformanceStats';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import type { BoatPerformanceStats } from '@/hooks/useBoatPerformanceStats';
 
 type BoatDetailTab =
   | 'overview'
@@ -398,11 +399,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 8px 16px rgba(15, 23, 42, 0.05)',
+      },
+      default: {
+        shadowColor: '#0F172A',
+        shadowOpacity: 0.05,
+        shadowOffset: { width: 0, height: 8 },
+        shadowRadius: 16,
+        elevation: 3,
+      },
+    }),
   },
   cardHeader: {
     flexDirection: 'row',

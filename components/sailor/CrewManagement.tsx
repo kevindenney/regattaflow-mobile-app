@@ -35,6 +35,7 @@ interface CrewManagementProps {
   sailNumber?: string;
   compact?: boolean;
   onManagePress?: () => void;
+  onSelectMemberForAvailability?: (member: CrewMember) => void;
 }
 
 const logger = createLogger('CrewManagement');
@@ -65,6 +66,7 @@ export function CrewManagement({
   sailNumber,
   compact = false,
   onManagePress,
+  onSelectMemberForAvailability,
 }: CrewManagementProps) {
   const [crew, setCrew] = useState<CrewMemberWithAvailability[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,26 +107,40 @@ export function CrewManagement({
   };
 
   const handleInviteCrew = async () => {
-    if (!inviteForm.email || !inviteForm.name) {
-      Alert.alert('Error', 'Please enter both name and email');
+    if (!inviteForm.name) {
+      Alert.alert('Error', 'Please enter a name');
       return;
     }
 
     try {
-      await crewManagementService.inviteCrewMember(sailorId, classId, inviteForm);
-      Alert.alert('Success', `Invite sent to ${inviteForm.name}`);
+      // If email is provided, send an invite (creates pending member)
+      // If no email, add directly (creates active member)
+      if (inviteForm.email && inviteForm.email.trim()) {
+        await crewManagementService.inviteCrewMember(sailorId, classId, inviteForm);
+        Alert.alert('Success', `Invite sent to ${inviteForm.name}`);
+      } else {
+        await crewManagementService.addCrewMember(sailorId, classId, {
+          name: inviteForm.name,
+          email: undefined,
+          role: inviteForm.role,
+          accessLevel: inviteForm.accessLevel,
+          notes: inviteForm.notes,
+        });
+        Alert.alert('Success', `${inviteForm.name} added to crew`);
+      }
       setShowInviteModal(false);
       setInviteForm({ email: '', name: '', role: 'trimmer' });
       loadCrew();
     } catch (err: any) {
       if (err?.queuedForSync && err?.entity) {
         setCrew(prev => [...prev, err.entity as CrewMember]);
-        Alert.alert('Offline', `${inviteForm.name} will be invited once you're back online.`);
+        const action = inviteForm.email ? 'invited' : 'added';
+        Alert.alert('Offline', `${inviteForm.name} will be ${action} once you're back online.`);
         setShowInviteModal(false);
         setInviteForm({ email: '', name: '', role: 'trimmer' });
       } else {
-        console.error('Error inviting crew:', err);
-        Alert.alert('Error', 'Failed to send invite');
+        console.error('Error adding/inviting crew:', err);
+        Alert.alert('Error', inviteForm.email ? 'Failed to send invite' : 'Failed to add crew member');
       }
     }
   };
@@ -358,7 +374,7 @@ export function CrewManagement({
           activeOpacity={0.8}
         >
           <Ionicons name="person-add-outline" size={18} color="#047857" />
-          <Text style={styles.inviteButtonText}>Invite Crew</Text>
+          <Text style={styles.inviteButtonText}>Add Crew</Text>
         </TouchableOpacity>
       </View>
 
@@ -374,7 +390,7 @@ export function CrewManagement({
             onPress={() => setShowInviteModal(true)}
           >
             <Ionicons name="add-circle" size={20} color="#FFFFFF" />
-            <Text style={styles.emptyButtonText}>Invite First Member</Text>
+            <Text style={styles.emptyButtonText}>Add First Member</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -394,6 +410,15 @@ export function CrewManagement({
                 label: 'Edit Details',
                 icon: 'create-outline',
                 onPress: () => handleEditCrew(member),
+              },
+              {
+                label: 'Set Availability',
+                icon: 'calendar-outline',
+                onPress: () => {
+                  if (onSelectMemberForAvailability) {
+                    onSelectMemberForAvailability(member);
+                  }
+                },
               },
               {
                 label: member.isPrimary ? 'Remove from Primary' : 'Set as Primary',
@@ -514,7 +539,7 @@ export function CrewManagement({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Invite Crew Member</Text>
+              <Text style={styles.modalTitle}>Add Crew Member</Text>
               <TouchableOpacity onPress={() => setShowInviteModal(false)}>
                 <Ionicons name="close" size={24} color="#64748B" />
               </TouchableOpacity>
@@ -533,18 +558,23 @@ export function CrewManagement({
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>Email (Optional)</Text>
                 <TextInput
                   style={styles.input}
                   value={inviteForm.email}
                   onChangeText={(email) =>
                     setInviteForm({ ...inviteForm, email: email.toLowerCase() })
                   }
-                  placeholder="Enter email"
+                  placeholder="Enter email to send invite"
                   placeholderTextColor="#94A3B8"
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
+                <Text style={styles.helperText}>
+                  {inviteForm.email 
+                    ? 'An invite will be sent to this email address'
+                    : 'Leave blank to add crew member without sending invite'}
+                </Text>
               </View>
 
               <View style={styles.formGroup}>
@@ -590,8 +620,14 @@ export function CrewManagement({
             </View>
 
             <TouchableOpacity style={styles.submitButton} onPress={handleInviteCrew}>
-              <Ionicons name="send" size={18} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Send Invite</Text>
+              <Ionicons 
+                name={inviteForm.email ? "send" : "add-circle"} 
+                size={18} 
+                color="#FFFFFF" 
+              />
+              <Text style={styles.submitButtonText}>
+                {inviteForm.email ? 'Send Invite' : 'Add Crew Member'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1047,6 +1083,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1E293B',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
   },
   input: {
     borderWidth: 1,

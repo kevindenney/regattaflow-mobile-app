@@ -190,6 +190,7 @@ class CheckInService {
 
   /**
    * Self check-in via QR code token
+   * Now supports both race_entries and race_participants
    */
   async selfCheckIn(
     qrToken: string,
@@ -215,22 +216,40 @@ class CheckInService {
     const isLate = race.check_in_closes_at && 
       new Date() > new Date(race.check_in_closes_at);
 
-    // Verify entry belongs to this regatta
-    const { data: entry, error: entryError } = await supabase
-      .from('race_entries')
-      .select('id, sailor_id')
-      .eq('id', entryId)
-      .eq('regatta_id', race.regatta_id)
-      .single();
-
-    if (entryError || !entry) {
-      throw new Error('Entry not found for this regatta');
+    // Verify current user is registered for this race
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
+      throw new Error('You must be logged in to check in');
     }
 
-    // Verify current user is the sailor
-    const { data: { user } } = await supabase.auth.getUser();
-    if (entry.sailor_id !== user?.id) {
-      throw new Error('You can only check in your own entry');
+    // Check if user is registered as a participant (new simpler registration)
+    const { data: participant, error: participantError } = await supabase
+      .from('race_participants')
+      .select('id, user_id, regatta_id')
+      .eq('regatta_id', race.regatta_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!participant && !entryId) {
+      throw new Error('You must register for this race before checking in. Please register first.');
+    }
+
+    // If entryId provided, verify it belongs to this regatta and user
+    if (entryId) {
+      const { data: entry, error: entryError } = await supabase
+        .from('race_entries')
+        .select('id, sailor_id')
+        .eq('id', entryId)
+        .eq('regatta_id', race.regatta_id)
+        .single();
+
+      if (entryError || !entry) {
+        throw new Error('Entry not found for this regatta');
+      }
+
+      if (entry.sailor_id !== user.id) {
+        throw new Error('You can only check in your own entry');
+      }
     }
 
     // Perform check-in

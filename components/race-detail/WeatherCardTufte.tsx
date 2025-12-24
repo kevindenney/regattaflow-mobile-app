@@ -11,9 +11,9 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Sparkline } from '../viz/Sparkline';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { DataTable } from '../viz/DataTable';
+import { Sparkline } from '../viz/Sparkline';
 
 interface WindConditions {
   speed: number; // knots
@@ -174,11 +174,18 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     // Minimal shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

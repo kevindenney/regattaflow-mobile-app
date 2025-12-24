@@ -638,19 +638,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     ...Platform.select({
-      ios: {
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
-      },
-      android: {
         elevation: 2,
       },
-      web: {
-        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
-      },
-      default: {},
     }),
   },
   header: {

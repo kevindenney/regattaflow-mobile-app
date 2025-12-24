@@ -3,15 +3,17 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } fr
 import { Image } from '@/components/ui';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { useSailorOnboardingState } from '@/hooks/useSailorOnboardingState';
 import { 
 MapPin, Anchor, Users, Calendar, CheckCircle, Circle, ChevronRight, 
 Download, FileText, Clock, CheckCircle2, XCircle, Edit3, CalendarDays,
-Wifi, WifiOff, RefreshCw, Trophy
+Wifi, WifiOff, RefreshCw, Trophy, User, Mail, Phone, MessageCircle, Shield
 } from 'lucide-react-native';
 
 export default function ReviewScreen() {
 const router = useRouter();
 const { updateUserProfile } = useAuth();
+const { state, saveToSupabase } = useSailorOnboardingState();
 const [isCompleting, setIsCompleting] = useState(false);
 
 // Mock data from previous screens
@@ -89,6 +91,10 @@ const handleEditRaces = () => {
 Alert.alert('Edit Races', 'Navigate to race selection screen');
 };
 
+const handleEditCrew = () => {
+router.push('/crew');
+};
+
 const handleImportCalendar = () => {
 setRaceCalendarStatus('pending');
 setIsSyncing(true);
@@ -114,17 +120,59 @@ setIsSyncing(false);
 const handleCompleteSetup = async () => {
 setIsCompleting(true);
 try {
-// Mark onboarding as complete
-await updateUserProfile({
-onboarding_completed: true,
+console.log('Starting setup completion...');
+console.log('Onboarding state:', { 
+  hasVenue: !!state.venue, 
+  hasBoat: !!state.boat, 
+  hasCrew: !!state.crew,
+  crewCount: state.crew?.crewMembers?.length || 0
 });
 
+// Try to save onboarding data if we have a venue
+if (state.venue) {
+  console.log('Saving onboarding data to Supabase...');
+  try {
+    const saveResult = await saveToSupabase();
+    
+    if (!saveResult.success) {
+      console.warn('Failed to save onboarding data:', saveResult.error);
+      // Don't block completion if save fails - user can add data later
+    } else {
+      console.log('Onboarding data saved successfully');
+    }
+  } catch (saveError) {
+    console.error('Error saving onboarding data:', saveError);
+    // Continue anyway - don't block completion
+  }
+} else {
+  console.log('No venue selected - skipping data save. User can add data later.');
+}
+
+// Always mark onboarding as complete and navigate
+console.log('Marking onboarding as complete...');
+try {
+  await updateUserProfile({
+    onboarding_completed: true,
+  });
+  console.log('Onboarding marked as complete');
+} catch (profileError) {
+  console.error('Error updating user profile:', profileError);
+  // Still try to navigate - the update might have succeeded
+}
+
 // Navigate to the main dashboard
+console.log('Navigating to dashboard...');
 router.replace('/(tabs)/dashboard');
 } catch (error) {
 console.error('Error completing setup:', error);
-Alert.alert('Error', 'Failed to complete setup. Please try again.');
-setIsCompleting(false);
+// Even on error, try to navigate to dashboard
+try {
+  await updateUserProfile({ onboarding_completed: true });
+  router.replace('/(tabs)/dashboard');
+} catch (finalError) {
+  Alert.alert('Error', `Failed to complete setup: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+  setIsCompleting(false);
+}
 }
 };
 
@@ -369,6 +417,86 @@ onPress={handleEditRaces}
 </View>
 )}
 </View>
+
+{/* Crew Section */}
+{state.crew && (
+<View className="bg-white rounded-xl p-5 mb-5 shadow-sm border border-gray-100">
+<View className="flex-row items-center justify-between mb-4">
+<Text className="text-lg font-bold text-gray-800">Crew</Text>
+<TouchableOpacity 
+className="flex-row items-center"
+onPress={handleEditCrew}
+>
+<Edit3 size={18} color="#2563EB" />
+<Text className="text-blue-600 font-medium ml-1">Edit</Text>
+</TouchableOpacity>
+</View>
+
+{state.crew.crewMembers && state.crew.crewMembers.length > 0 ? (
+state.crew.crewMembers.map((member) => (
+<View key={member.id} className="flex-row items-center py-3 border-b border-gray-100 last:border-0">
+<CheckCircle2 size={20} color="#10B981" className="mr-3" />
+<View className="flex-1">
+<View className="flex-row items-center mb-1">
+<User size={18} color="#6B7280" className="mr-2" />
+<Text className="text-gray-800 font-medium">{member.name}</Text>
+</View>
+<Text className="text-blue-600 text-sm mb-2">{member.role}</Text>
+<View className="flex-row flex-wrap gap-2">
+{member.email && (
+<View className="flex-row items-center bg-blue-50 rounded-full px-2 py-1">
+<Mail size={12} color="#2563EB" />
+<Text className="text-blue-600 text-xs ml-1">{member.email}</Text>
+</View>
+)}
+{member.phone && (
+<View className="flex-row items-center bg-blue-50 rounded-full px-2 py-1">
+<Phone size={12} color="#2563EB" />
+<Text className="text-blue-600 text-xs ml-1">{member.phone}</Text>
+</View>
+)}
+{member.communicationMethods && member.communicationMethods.map((methodId) => {
+const methodIcons: Record<string, any> = {
+phone: Phone,
+email: Mail,
+whatsapp: MessageCircle,
+signal: Shield,
+};
+const Icon = methodIcons[methodId] || User;
+return (
+<View key={methodId} className="flex-row items-center bg-green-50 rounded-full px-2 py-1">
+<Icon size={12} color="#10B981" />
+<Text className="text-green-600 text-xs ml-1 capitalize">{methodId}</Text>
+</View>
+);
+})}
+{member.hasAccess && (
+<View className="flex-row items-center bg-purple-50 rounded-full px-2 py-1">
+<Shield size={12} color="#8B5CF6" />
+<Text className="text-purple-600 text-xs ml-1">Has Access</Text>
+</View>
+)}
+</View>
+</View>
+</View>
+))
+) : (
+<View className="flex-row items-center py-3">
+<XCircle size={24} color="#EF4444" className="mr-3" />
+<View className="flex-1">
+<Text className="text-gray-800 font-medium">No Crew Members Added</Text>
+<Text className="text-gray-500 text-sm mt-1">Add crew members to track your team</Text>
+</View>
+<TouchableOpacity 
+className="bg-blue-600 rounded-full px-3 py-1"
+onPress={handleEditCrew}
+>
+<Text className="text-white text-sm font-medium">Add</Text>
+</TouchableOpacity>
+</View>
+)}
+</View>
+)}
 
 {/* Race Calendar Section */}
 <View className="bg-white rounded-xl p-5 mb-5 shadow-sm border border-gray-100">

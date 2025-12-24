@@ -6,23 +6,24 @@
  * - PDF/Image upload with AI extraction
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  Platform,
-  Modal,
-  Alert,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '@/services/supabase';
 import type { Mark } from '@/types/courses';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import { createLogger } from '@/lib/utils/logger';
+import React, { useCallback, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface RouteWaypoint {
   name: string;
@@ -43,6 +44,8 @@ interface CourseEntryPanelProps {
 }
 
 type TabType = 'manual' | 'url' | 'upload';
+
+const logger = createLogger('CourseEntryPanel');
 
 export function CourseEntryPanel({
   onWaypointsExtracted,
@@ -213,10 +216,10 @@ export function CourseEntryPanel({
       return;
     }
 
-    console.log('[CourseEntryPanel] Starting AI extraction from pasted text, attempt:', retryCount + 1);
-    console.log('[CourseEntryPanel] Text length:', manualText.length);
-    console.log('[CourseEntryPanel] supabase object:', typeof supabase);
-    console.log('[CourseEntryPanel] supabase.functions:', typeof supabase?.functions);
+    logger.debug('Starting AI extraction from pasted text, attempt:', retryCount + 1);
+    logger.debug('Text length:', manualText.length);
+    logger.debug('supabase object:', typeof supabase);
+    logger.debug('supabase.functions:', typeof supabase?.functions);
     setIsProcessing(true);
     setError(null);
 
@@ -224,15 +227,15 @@ export function CourseEntryPanel({
       // Limit text size to avoid timeouts
       const textToProcess = manualText.slice(0, 30000);
       
-      console.log('[CourseEntryPanel] About to invoke extract-course-from-text...');
+      logger.debug('About to invoke extract-course-from-text...');
       const startTime = Date.now();
       
       // Try direct fetch first as supabase.functions.invoke seems to hang
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
       
-      console.log('[CourseEntryPanel] Supabase URL:', supabaseUrl);
-      console.log('[CourseEntryPanel] Making direct fetch to edge function...');
+      logger.debug('Supabase URL:', supabaseUrl);
+      logger.debug('Making direct fetch to edge function...');
       
       const fetchPromise = fetch(`${supabaseUrl}/functions/v1/extract-course-from-text`, {
         method: 'POST',
@@ -246,9 +249,9 @@ export function CourseEntryPanel({
           raceType,
         }),
       }).then(async (response) => {
-        console.log('[CourseEntryPanel] Fetch response received, status:', response.status);
+        logger.debug('Fetch response received, status:', response.status);
         const responseText = await response.text();
-        console.log('[CourseEntryPanel] Response text length:', responseText.length);
+        logger.debug('Response text length:', responseText.length);
         try {
           const data = JSON.parse(responseText);
           return { data, error: response.ok ? null : new Error(`HTTP ${response.status}`) };
@@ -256,29 +259,29 @@ export function CourseEntryPanel({
           return { data: null, error: new Error(`Invalid JSON: ${responseText.slice(0, 100)}`) };
         }
       }).catch((err) => {
-        console.error('[CourseEntryPanel] Fetch error:', err);
+        logger.error('Fetch error:', err);
         return { data: null, error: err };
       });
       
-      console.log('[CourseEntryPanel] fetchPromise created');
+      logger.debug('fetchPromise created');
 
       const timeoutPromise = new Promise<{ data: null, error: Error }>((resolve) => {
         setTimeout(() => {
           const elapsed = Date.now() - startTime;
-          console.log('[CourseEntryPanel] Timeout triggered after', elapsed, 'ms');
+          logger.debug('Timeout triggered after', elapsed, 'ms');
           resolve({ data: null, error: new Error('TIMEOUT') });
         }, 90000); // 90 seconds for large documents
       });
 
-      console.log('[CourseEntryPanel] Starting Promise.race...');
+      logger.debug('Starting Promise.race...');
       const { data, error: fnError } = await Promise.race([fetchPromise, timeoutPromise]);
       const elapsed = Date.now() - startTime;
-      console.log('[CourseEntryPanel] Promise.race completed after', elapsed, 'ms');
+      logger.debug('Promise.race completed after', elapsed, 'ms');
 
-      console.log('[CourseEntryPanel] AI extraction response:', { data, error: fnError });
+      logger.debug('AI extraction response:', { data, error: fnError });
 
       if (fnError) {
-        console.error('[CourseEntryPanel] AI extraction error:', fnError);
+        logger.error('AI extraction error:', fnError);
         throw fnError;
       }
 
@@ -288,14 +291,14 @@ export function CourseEntryPanel({
       }
 
       if (data?.waypoints && data.waypoints.length > 0) {
-        console.log('[CourseEntryPanel] AI found waypoints:', data.waypoints.length);
+        logger.debug('AI found waypoints:', data.waypoints.length);
         setParsedWaypoints(data.waypoints);
         setShowPreview(true);
       } else {
         setError('No course waypoints found in the text. Make sure the text contains coordinate information.');
       }
     } catch (err: any) {
-      console.error('[CourseEntryPanel] AI extraction error:', err);
+      logger.error('AI extraction error:', err);
       
       // Check if it's a network error or timeout that might be fixed by retry
       const isNetworkError = err.message?.includes('network') || 
@@ -305,7 +308,7 @@ export function CourseEntryPanel({
                              err.name === 'TypeError';
       
       if (isNetworkError && retryCount < 2) {
-        console.log('[CourseEntryPanel] Network error, retrying...', retryCount + 1);
+        logger.debug('Network error, retrying...', retryCount + 1);
         setError('Connection issue, retrying...');
         // Don't call finally, continue with retry
         setTimeout(() => {
@@ -332,7 +335,7 @@ export function CourseEntryPanel({
       return;
     }
 
-    console.log('[CourseEntryPanel] Starting URL fetch:', urlInput);
+    logger.debug('Starting URL fetch:', urlInput);
     setIsProcessing(true);
     setError(null);
 
@@ -342,7 +345,7 @@ export function CourseEntryPanel({
       const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
 
       // Call edge function to extract course from URL
-      console.log('[CourseEntryPanel] Calling extract-course-from-url edge function...');
+      logger.debug('Calling extract-course-from-url edge function...');
       const { data, error: fnError } = await supabase.functions.invoke('extract-course-from-url', {
         body: {
           url: urlInput,
@@ -352,30 +355,30 @@ export function CourseEntryPanel({
 
       clearTimeout(timeoutId);
 
-      console.log('[CourseEntryPanel] Response:', { data, error: fnError });
+      logger.debug('Response:', { data, error: fnError });
 
       if (fnError) {
-        console.error('[CourseEntryPanel] Edge function error:', fnError);
+        logger.error('Edge function error:', fnError);
         throw fnError;
       }
 
       // Check if the response contains an error (like PDF not supported)
       if (data?.error) {
-        console.log('[CourseEntryPanel] Server returned error:', data.error);
+        logger.debug('Server returned error:', data.error);
         setError(data.error);
         return;
       }
       
       if (data?.waypoints && data.waypoints.length > 0) {
-        console.log('[CourseEntryPanel] Found waypoints:', data.waypoints.length);
+        logger.debug('Found waypoints:', data.waypoints.length);
         setParsedWaypoints(data.waypoints);
         setShowPreview(true);
       } else {
-        console.log('[CourseEntryPanel] No waypoints found in response');
+        logger.debug('No waypoints found in response');
         setError('No course waypoints found at this URL. Try uploading the document directly or using Manual Entry.');
       }
     } catch (err: any) {
-      console.error('[CourseEntryPanel] URL fetch error:', err);
+      logger.error('URL fetch error:', err);
       if (err.name === 'AbortError') {
         setError('Request timed out. The page may be too large. Try uploading the PDF directly.');
       } else {
@@ -441,7 +444,7 @@ export function CourseEntryPanel({
         setError('No course waypoints found in document. Try entering coordinates manually.');
       }
     } catch (err: any) {
-      console.error('[CourseEntryPanel] Upload error:', err);
+      logger.error('Upload error:', err);
       setError(err.message || 'Failed to extract course from document');
     } finally {
       setIsProcessing(false);
@@ -474,14 +477,14 @@ export function CourseEntryPanel({
       return;
     }
 
-    console.log('[CourseEntryPanel] Starting save course...');
+    logger.debug('Starting save course...');
     setIsSaving(true);
     try {
       // Get user with timeout to prevent hanging
-      console.log('[CourseEntryPanel] Getting user session...');
+      logger.debug('Getting user session...');
       const sessionTimeout = new Promise<{ data: { session: null } }>((resolve) =>
         setTimeout(() => {
-          console.error('[CourseEntryPanel] Session lookup timed out');
+          logger.error('Session lookup timed out');
           resolve({ data: { session: null } });
         }, 5000)
       );
@@ -491,7 +494,7 @@ export function CourseEntryPanel({
         sessionTimeout
       ]);
       
-      console.log('[CourseEntryPanel] Session result:', sessionData?.session ? 'found' : 'not found');
+      logger.debug('Session result:', sessionData?.session ? 'found' : 'not found');
       
       if (!sessionData?.session?.user) {
         Alert.alert('Sign In Required', 'Please sign in to save courses.');
@@ -516,12 +519,12 @@ export function CourseEntryPanel({
 
       const totalDistance = extractedTotalDistance || calculateTotalDistance(parsedWaypoints);
 
-      console.log('[CourseEntryPanel] Inserting course into database...');
+      logger.debug('Inserting course into database...');
       
       // Add timeout to database insert
       const insertTimeout = new Promise<{ data: null, error: Error }>((resolve) =>
         setTimeout(() => {
-          console.error('[CourseEntryPanel] Database insert timed out');
+          logger.error('Database insert timed out');
           resolve({ data: null, error: new Error('Save timed out. Please try again.') });
         }, 15000)
       );
@@ -553,13 +556,13 @@ export function CourseEntryPanel({
       const { data, error: saveError } = await Promise.race([insertPromise, insertTimeout]);
 
       if (saveError) {
-        console.error('[CourseEntryPanel] Save error:', saveError);
+        logger.error('Save error:', saveError);
         Alert.alert('Save Failed', saveError.message);
         setIsSaving(false);
         return;
       }
 
-      console.log('[CourseEntryPanel] Course saved:', data?.id);
+      logger.debug('Course saved:', data?.id);
       
       // Success!
       Alert.alert(
@@ -578,7 +581,7 @@ export function CourseEntryPanel({
       // Also use the waypoints
       handleConfirmWaypoints();
     } catch (err) {
-      console.error('[CourseEntryPanel] Save exception:', err);
+      logger.error('Save exception:', err);
       Alert.alert('Error', 'Failed to save course. Please try again.');
     } finally {
       setIsSaving(false);
@@ -1170,11 +1173,18 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+    }),
   },
   tabText: {
     fontSize: 13,
@@ -1291,11 +1301,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     gap: 8,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(139, 92, 246, 0.3)',
+      },
+      default: {
+        shadowColor: '#8B5CF6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
   },
   aiButtonText: {
     color: 'white',
@@ -1486,11 +1503,18 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
     maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.2)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
+      },
+    }),
   },
   modalHeader: {
     flexDirection: 'row',

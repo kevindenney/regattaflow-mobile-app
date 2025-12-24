@@ -3,20 +3,19 @@
  * Professional B2B marketing page for yacht clubs and regatta organizers
  */
 
-import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  useWindowDimensions,
-  Platform,
-  Linking,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import React from 'react';
+import {
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
 
 export default function ForOrganizationsPage() {
   const { width } = useWindowDimensions();
@@ -719,11 +718,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 10,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(65, 105, 225, 0.3)',
+      },
+      default: {
+        shadowColor: '#4169E1',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
   },
   primaryCTAText: {
     color: '#FFFFFF',
@@ -772,11 +778,18 @@ const styles = StyleSheet.create({
     borderWidth: 8,
     borderColor: '#1F2937',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.25,
-    shadowRadius: 30,
-    elevation: 10,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 20px 30px rgba(0, 0, 0, 0.25)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.25,
+        shadowRadius: 30,
+        elevation: 10,
+      },
+    }),
   },
   phoneLeft: {
     transform: [{ rotate: '-3deg' }, { translateY: 20 }],
@@ -891,11 +904,18 @@ const styles = StyleSheet.create({
     padding: 32,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
   featureIconLarge: {
     width: 64,

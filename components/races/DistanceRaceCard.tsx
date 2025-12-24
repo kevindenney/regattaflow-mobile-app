@@ -10,25 +10,23 @@
  * - Different countdown layout emphasizing duration
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  MapPin, 
-  Navigation, 
-  Clock, 
-  Wind, 
-  Flag, 
-  Anchor,
-  Route,
-  Timer,
-  PlayCircle,
-  ChevronRight,
-  Radio,
-} from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { calculateCountdown } from '@/constants/mockData';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import {
+    Anchor,
+    Flag,
+    MapPin,
+    Navigation,
+    PlayCircle,
+    Radio,
+    Route,
+    Timer,
+    Wind
+} from 'lucide-react-native';
+import React, { useMemo } from 'react';
+import { Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RouteWaypoint } from './DistanceRouteMap';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -394,11 +392,18 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 16, // Match fleet RaceCard
     overflow: 'hidden',
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(124, 58, 237, 0.15)',
+      },
+      default: {
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 6,
+      },
+    }),
     borderWidth: 1.5,
     borderColor: '#DDD6FE',
     position: 'relative',
@@ -416,8 +421,15 @@ const styles = StyleSheet.create({
   cardPrimary: {
     borderWidth: 2,
     borderColor: '#7C3AED',
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 0px 16px rgba(124, 58, 237, 0.25)',
+      },
+      default: {
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
+      },
+    }),
   },
   cardSelected: {
     borderWidth: 2.5,
@@ -555,11 +567,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(16, 185, 129, 0.2)',
+      },
+      default: {
+        shadowColor: '#10B981',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+    }),
   },
   routePointDotFinish: {
     width: 20,
@@ -568,11 +587,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(239, 68, 68, 0.2)',
+      },
+      default: {
+        shadowColor: '#EF4444',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+    }),
   },
   routePointInfo: {
     flex: 1,
@@ -657,11 +683,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#5B21B6', // Purple variant matching fleet's bg-gray-700 / bg-sky-600
     borderRadius: 8,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
     marginBottom: 6,
   },
   countdownRow: {

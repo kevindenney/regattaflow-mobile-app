@@ -364,6 +364,14 @@ export function ComprehensiveRaceEntry({
   const [startFinishSameLocation, setStartFinishSameLocation] = useState(true);
   const [finishVenue, setFinishVenue] = useState(''); // For point-to-point races
 
+  // === Prohibited Areas (TSS, military zones, etc.) ===
+  const [prohibitedAreas, setProhibitedAreas] = useState<Array<{
+    name: string;
+    description?: string;
+    coordinates?: Array<{ lat: number; lng: number }>;
+    consequence?: string;
+  }>>([]);
+
   // === NEW: Race Office & Contacts ===
   const [raceOfficeLocation, setRaceOfficeLocation] = useState('');
   const [raceOfficePhone, setRaceOfficePhone] = useState<string[]>([]);
@@ -373,6 +381,25 @@ export function ComprehensiveRaceEntry({
   const [entryFees, setEntryFees] = useState<Array<{type: string; amount: string; deadline?: string}>>([]);
   const [eligibleClasses, setEligibleClasses] = useState<string[]>([]);
   const [safetyBriefingDetails, setSafetyBriefingDetails] = useState('');
+  const [signOnRequirement, setSignOnRequirement] = useState(''); // SailSys sign-on requirements
+
+  // === Start Lines (multiple start lines for different classes) ===
+  const [startLines, setStartLines] = useState<Array<{
+    name: string;
+    description?: string;
+    classes: string[];
+    vhfChannel?: string;
+    marks?: {
+      starboardEnd?: string;
+      portEnd?: string;
+    };
+    direction?: string;
+    startTimes?: Array<{
+      class: string;
+      flag: string;
+      time: string;
+    }>;
+  }>>([]);
 
   // === NEW: Prizegiving ===
   const [prizegivingDate, setPrizegivingDate] = useState('');
@@ -601,7 +628,17 @@ export function ComprehensiveRaceEntry({
 
         // Load route waypoints for distance races
         if (race.route_waypoints && Array.isArray(race.route_waypoints)) {
-          setRouteWaypoints(race.route_waypoints);
+          // Transform waypoints to ensure they have required fields (id, required)
+          const transformedWaypoints: RouteWaypoint[] = race.route_waypoints.map((wp: any, index: number) => ({
+            id: wp.id || `wp-${existingRaceId}-${index}-${Date.now()}`,
+            name: wp.name || `Waypoint ${index + 1}`,
+            latitude: typeof wp.latitude === 'number' ? wp.latitude : parseFloat(wp.latitude) || 0,
+            longitude: typeof wp.longitude === 'number' ? wp.longitude : parseFloat(wp.longitude) || 0,
+            type: wp.type || 'waypoint',
+            required: wp.required !== undefined ? wp.required : (wp.type === 'start' || wp.type === 'finish'),
+          }));
+          logger.debug('[ComprehensiveRaceEntry] Loaded waypoints:', transformedWaypoints.length, transformedWaypoints);
+          setRouteWaypoints(transformedWaypoints);
         }
 
         // Load other distance racing fields
@@ -1165,6 +1202,25 @@ export function ComprehensiveRaceEntry({
 
       const result = await agent.extractRaceDetails(documentText);
       logger.debug('[extractFromText] Result:', result);
+      
+      // Enhanced logging for start/finish extraction debugging
+      if (result.success && result.data) {
+        const data = result.data as any;
+        const raceData = data.races?.[0] || data;
+        logger.debug('[extractFromText] Start/Finish extraction check:', {
+          startAreaName: raceData.startAreaName,
+          startAreaDescription: raceData.startAreaDescription,
+          startLines: raceData.startLines ? `${raceData.startLines.length} line(s)` : 'missing',
+          startLinesDetails: raceData.startLines?.map((sl: any) => ({
+            name: sl.name,
+            description: sl.description,
+            location: sl.location,
+          })),
+          finishAreaName: raceData.finishAreaName,
+          finishAreaDescription: raceData.finishAreaDescription,
+          raceType: raceData.raceType,
+        });
+      }
 
       if (!result.success || !result.data) {
         console.error('[extractFromText] Extraction failed:', result.error);
@@ -1225,6 +1281,16 @@ export function ComprehensiveRaceEntry({
       });
 
       logger.debug('[extractFromText] Showing validation screen with', Object.keys(singleRaceData).length, 'fields');
+      
+      // Detailed logging for start/finish fields before passing to validation
+      logger.debug('[extractFromText] Single race data start/finish fields:', {
+        startAreaName: singleRaceData.startAreaName,
+        startAreaDescription: singleRaceData.startAreaDescription,
+        finishAreaName: singleRaceData.finishAreaName,
+        finishAreaDescription: singleRaceData.finishAreaDescription,
+        startLines: singleRaceData.startLines,
+        allKeys: Object.keys(singleRaceData),
+      });
 
       // Store extracted data and confidence scores
       setExtractedDataForValidation(singleRaceData);
@@ -1303,19 +1369,71 @@ export function ComprehensiveRaceEntry({
       const result = await response.json();
       
       if (result.waypoints && Array.isArray(result.waypoints) && result.waypoints.length > 0) {
-        // Convert extracted waypoints to RouteWaypoint format
-        const convertedWaypoints: RouteWaypoint[] = result.waypoints.map((wp: any, index: number) => ({
-          id: `wp-${Date.now()}-${index}`,
-          name: wp.name || `Waypoint ${index + 1}`,
-          latitude: wp.latitude,
-          longitude: wp.longitude,
-          type: wp.type === 'start' ? 'start' : 
-                wp.type === 'finish' ? 'finish' : 
-                wp.type === 'gate' ? 'gate' : 'waypoint',
-          required: wp.type === 'start' || wp.type === 'finish',
-        }));
+        // Known Hong Kong peak coordinates (for Four Peaks Race and similar)
+        const hongKongPeaks: Record<string, { lat: number; lng: number }> = {
+          'Lantau Peak': { lat: 22.2514, lng: 113.9014 },
+          'Mount Stenhouse': { lat: 22.19175, lng: 114.12769 }, // Lamma Island - highest peak at 353m
+          'Violet Hill': { lat: 22.2500, lng: 114.1833 }, // Tai Tam area
+          'Ma On Shan': { lat: 22.4000, lng: 114.2500 }, // Sha Tin area
+        };
+        
+        // Convert extracted waypoints to RouteWaypoint format with geocoding for missing coordinates
+        const convertedWaypoints: RouteWaypoint[] = await Promise.all(
+          result.waypoints.map(async (wp: any, index: number) => {
+            let lat = wp.latitude;
+            let lng = wp.longitude;
+            
+            // If coordinates are missing, try to geocode the name
+            if ((!lat || lat === 0) && (!lng || lng === 0)) {
+              // Check known peaks first
+              const peakCoords = hongKongPeaks[wp.name];
+              if (peakCoords) {
+                lat = peakCoords.lat;
+                lng = peakCoords.lng;
+                logger.debug(`[extractFromText] Using known coordinates for ${wp.name}:`, lat, lng);
+              } else if (wp.name && wp.name.trim() && venue.toLowerCase().includes('hong kong')) {
+                // Try geocoding if it's a named location in Hong Kong
+                try {
+                  const { NominatimService } = await import('@/services/location/NominatimService');
+                  const geocoder = new NominatimService();
+                  const result = await geocoder.search(`${wp.name}, Hong Kong`, { limit: 1 });
+                  if (result) {
+                    lat = result.lat;
+                    lng = result.lng;
+                    logger.debug(`[extractFromText] Geocoded ${wp.name} to:`, lat, lng);
+                  } else {
+                    // Fallback to venue center if geocoding fails
+                    lat = venueCoordinates?.lat || 22.28;
+                    lng = venueCoordinates?.lng || 114.16;
+                  }
+                } catch (error) {
+                  logger.warn(`[extractFromText] Geocoding error for ${wp.name}:`, error);
+                  // Fallback to venue center
+                  lat = venueCoordinates?.lat || 22.28;
+                  lng = venueCoordinates?.lng || 114.16;
+                }
+              } else {
+                // No name or not Hong Kong - use venue center
+                lat = venueCoordinates?.lat || 22.28;
+                lng = venueCoordinates?.lng || 114.16;
+              }
+            }
+            
+            return {
+              id: `wp-${Date.now()}-${index}`,
+              name: wp.name || `Waypoint ${index + 1}`,
+              latitude: lat || venueCoordinates?.lat || 22.28,
+              longitude: lng || venueCoordinates?.lng || 114.16,
+              type: wp.type === 'start' ? 'start' : 
+                    wp.type === 'finish' ? 'finish' : 
+                    wp.type === 'gate' ? 'gate' : 'waypoint',
+              required: wp.type === 'start' || wp.type === 'finish',
+            };
+          })
+        );
 
         setRouteWaypoints(convertedWaypoints);
+        logger.debug(`[extractFromText] Converted ${convertedWaypoints.length} waypoints with coordinates`);
         
         // Update distance if provided
         if (result.totalDistanceNm) {
@@ -1443,7 +1561,7 @@ export function ComprehensiveRaceEntry({
    * Phase 3: Handle AI Validation Screen Confirmation
    * Populate all form fields with validated data
    */
-  const handleValidationConfirm = (validatedData: ExtractedData) => {
+  const handleValidationConfirm = async (validatedData: ExtractedData) => {
     logger.debug('=== VALIDATION CONFIRM CALLED ===');
     logger.debug('[handleValidationConfirm] Validated data keys:', Object.keys(validatedData));
     logger.debug('[handleValidationConfirm] Marks count:', validatedData.marks?.length || 0);
@@ -1520,6 +1638,10 @@ export function ComprehensiveRaceEntry({
     if (validatedData.potentialCourses) setPotentialCourses(validatedData.potentialCourses || []);
     if (validatedData.courseSelectionCriteria) setCourseSelectionCriteria(validatedData.courseSelectionCriteria || '');
     if (validatedData.courseDiagramUrl) setCourseDiagramUrl(validatedData.courseDiagramUrl || '');
+    if (validatedData.courseDescription) {
+      // Store course description in metadata or add to description field
+      setDescription(prev => prev ? `${prev}\n\nCourse: ${validatedData.courseDescription}` : validatedData.courseDescription);
+    }
     
     // Finish area
     if (validatedData.finishAreaName) setFinishAreaName(validatedData.finishAreaName);
@@ -1594,6 +1716,24 @@ export function ComprehensiveRaceEntry({
     // Safety & Insurance
     if (validatedData.safetyRequirements) setSafetyRequirements(validatedData.safetyRequirements || '');
     if (validatedData.retirementNotificationRequirements) setRetirementNotificationRequirements(validatedData.retirementNotificationRequirements || '');
+    if (validatedData.safetyConsequences) {
+      // Store safety consequences in safety requirements if not already there
+      const currentSafety = validatedData.safetyRequirements || '';
+      if (!currentSafety.includes(validatedData.safetyConsequences)) {
+        setSafetyRequirements(currentSafety ? `${currentSafety}\n\nConsequences: ${validatedData.safetyConsequences}` : validatedData.safetyConsequences);
+      }
+    }
+
+    // Safety & Insurance
+    if (validatedData.safetyRequirements) setSafetyRequirements(validatedData.safetyRequirements || '');
+    if (validatedData.retirementNotificationRequirements) setRetirementNotificationRequirements(validatedData.retirementNotificationRequirements || '');
+    if (validatedData.safetyConsequences) {
+      // Store safety consequences in safety requirements if not already there
+      const currentSafety = safetyRequirements || '';
+      if (!currentSafety.includes(validatedData.safetyConsequences)) {
+        setSafetyRequirements(currentSafety ? `${currentSafety}\n\nConsequences: ${validatedData.safetyConsequences}` : validatedData.safetyConsequences);
+      }
+    }
     if (validatedData.minimumInsuranceCoverage != null) setMinimumInsuranceCoverage(validatedData.minimumInsuranceCoverage.toString());
     if (validatedData.insurancePolicyReference) setInsurancePolicyReference(validatedData.insurancePolicyReference || '');
 
@@ -1623,11 +1763,105 @@ export function ComprehensiveRaceEntry({
       setEligibleClasses(validatedData.eligibleClasses);
     }
     if (validatedData.safetyBriefingDetails) setSafetyBriefingDetails(validatedData.safetyBriefingDetails);
+    if (validatedData.signOnRequirement) setSignOnRequirement(validatedData.signOnRequirement);
+
+    // Start Lines (multiple start lines for different classes)
+    if (validatedData.startLines && Array.isArray(validatedData.startLines)) {
+      setStartLines(validatedData.startLines);
+    }
     
     // Prizegiving
     if (validatedData.prizegivingDate) setPrizegivingDate(validatedData.prizegivingDate);
     if (validatedData.prizegivingTime) setPrizegivingTime(validatedData.prizegivingTime);
     if (validatedData.prizegivingLocation) setPrizegivingLocation(validatedData.prizegivingLocation);
+
+    // === STRATEGY-CRITICAL FIELDS ===
+    // Prohibited Areas (TSS, military zones, etc.)
+    if (validatedData.prohibitedAreas && Array.isArray(validatedData.prohibitedAreas)) {
+      setProhibitedAreas(validatedData.prohibitedAreas);
+    }
+
+    // Route Waypoints (for distance races)
+    if (validatedData.routeWaypoints && Array.isArray(validatedData.routeWaypoints) && raceType === 'distance') {
+      // Known Hong Kong peak coordinates (for Four Peaks Race and similar)
+      const hongKongPeaks: Record<string, { lat: number; lng: number }> = {
+        'Lantau Peak': { lat: 22.2514, lng: 113.9014 },
+        'Mount Stenhouse': { lat: 22.2833, lng: 114.2167 }, // Approximate - Sai Kung area
+        'Violet Hill': { lat: 22.2500, lng: 114.1833 }, // Approximate - Tai Tam area
+        'Ma On Shan': { lat: 22.4000, lng: 114.2500 }, // Approximate - Sha Tin area
+      };
+      
+      const convertedWaypoints: RouteWaypoint[] = await Promise.all(
+        validatedData.routeWaypoints.map(async (wp: any) => {
+          let lat = wp.latitude;
+          let lng = wp.longitude;
+          
+          // If coordinates are missing, try to geocode the name
+          if ((!lat || lat === 0) && (!lng || lng === 0)) {
+            // Check known peaks first
+            const peakCoords = hongKongPeaks[wp.name];
+            if (peakCoords) {
+              lat = peakCoords.lat;
+              lng = peakCoords.lng;
+              logger.debug(`[handleValidationConfirm] Using known coordinates for ${wp.name}:`, lat, lng);
+            } else {
+              // Try geocoding if it's a named location
+              if (wp.name && wp.name.trim() && venue.toLowerCase().includes('hong kong')) {
+                try {
+                  const { NominatimService } = await import('@/services/location/NominatimService');
+                  const geocoder = new NominatimService();
+                  const result = await geocoder.search(`${wp.name}, Hong Kong`, { limit: 1 });
+                  if (result) {
+                    lat = result.lat;
+                    lng = result.lng;
+                    logger.debug(`[handleValidationConfirm] Geocoded ${wp.name} to:`, lat, lng);
+                  } else {
+                    // Fallback to venue center if geocoding fails
+                    lat = venueCoordinates?.lat || 22.28;
+                    lng = venueCoordinates?.lng || 114.16;
+                    logger.debug(`[handleValidationConfirm] Geocoding failed for ${wp.name}, using venue center`);
+                  }
+                } catch (error) {
+                  logger.warn(`[handleValidationConfirm] Geocoding error for ${wp.name}:`, error);
+                  // Fallback to venue center
+                  lat = venueCoordinates?.lat || 22.28;
+                  lng = venueCoordinates?.lng || 114.16;
+                }
+              } else {
+                // No name or not Hong Kong - use venue center
+                lat = venueCoordinates?.lat || 22.28;
+                lng = venueCoordinates?.lng || 114.16;
+              }
+            }
+          }
+          
+          return {
+            name: wp.name || '',
+            latitude: lat || venueCoordinates?.lat || 22.28,
+            longitude: lng || venueCoordinates?.lng || 114.16,
+            type: wp.type === 'start' ? 'start' : 
+                  wp.type === 'finish' ? 'finish' : 
+                  wp.type === 'gate' ? 'gate' : 'waypoint',
+            passingSide: wp.passingSide || undefined,
+            notes: wp.notes || undefined,
+          };
+        })
+      );
+      
+      setRouteWaypoints(convertedWaypoints);
+      logger.debug(`[handleValidationConfirm] Converted ${convertedWaypoints.length} waypoints with coordinates`);
+    }
+
+    // Time limits for distance races
+    if (validatedData.timeLimitHours != null && raceType === 'distance') {
+      setTimeLimitHours(validatedData.timeLimitHours.toString());
+    }
+    if (validatedData.totalDistanceNm != null && raceType === 'distance') {
+      setTotalDistanceNm(validatedData.totalDistanceNm.toString());
+    }
+    if (validatedData.startFinishSameLocation != null && raceType === 'distance') {
+      setStartFinishSameLocation(validatedData.startFinishSameLocation);
+    }
 
     // Expand all sections so user can see extracted data
     setExpandedSections(new Set(['basic', 'timing', 'comms', 'course', 'rules', 'fleet']));
@@ -2037,12 +2271,13 @@ export function ComprehensiveRaceEntry({
         ),
       });
 
-      // Navigate to the race detail page
-      logger.debug('[handleDirectRaceCreation] Navigating to race detail page');
+      // Navigate back to races list with the newly created race selected
+      // This allows users to see the race in context with other races
+      logger.debug('[handleDirectRaceCreation] Navigating to races list with race selected');
       if (onSubmit) {
         onSubmit(data.id);
       } else {
-        router.push(`/(tabs)/race/scrollable/${data.id}` as any);
+        router.replace(`/(tabs)/races?selected=${data.id}`);
       }
     } catch (error: any) {
       console.error('[handleDirectRaceCreation] Error:', error);
@@ -2509,12 +2744,36 @@ export function ComprehensiveRaceEntry({
         time_limit_hours: raceType === 'distance' && timeLimitHours ? parseFloat(timeLimitHours) : null,
         start_finish_same_location: raceType === 'distance' ? startFinishSameLocation : null,
 
+        // Metadata for strategy-critical information (merge with existing metadata if updating)
+        metadata: {
+          venue_name: venue.trim(),
+          // Store prohibited areas in metadata for race strategy
+          ...(prohibitedAreas.length > 0 ? { prohibited_areas: prohibitedAreas } : {}),
+          // Store start lines (if multiple start lines exist)
+          ...(startLines.length > 0 ? { start_lines: startLines } : {}),
+          // Store sign-on requirements (SailSys requirements)
+          ...(signOnRequirement ? { sign_on_requirement: signOnRequirement } : {}),
+        },
+
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
       if (existingRaceId) {
-        // Update existing race
+        // Update existing race - merge metadata to preserve existing data
+        const { data: existingRace } = await supabase
+          .from('regattas')
+          .select('metadata')
+          .eq('id', existingRaceId)
+          .single();
+
+        if (existingRace?.metadata && typeof existingRace.metadata === 'object') {
+          raceData.metadata = {
+            ...existingRace.metadata,
+            ...raceData.metadata,
+          };
+        }
+
         const { error } = await supabase
           .from('regattas')
           .update(raceData)
@@ -2908,6 +3167,7 @@ export function ComprehensiveRaceEntry({
       onConfirm={handleExtractionPreferencesConfirm}
       userBoatClasses={userBoatClasses}
       documentPreview={pendingExtractionText.slice(0, 200)}
+      raceType={raceType}
     />
   );
 

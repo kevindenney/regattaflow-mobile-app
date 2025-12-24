@@ -4,17 +4,17 @@
  * Uses AI-generated tactical insights and historical data
  */
 
+import { ThemedText } from '@/components/themed-text';
+import { useVenueTactics } from '@/hooks/useVenueIntelligence';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
+    ActivityIndicator,
+    Platform,
+    StyleSheet,
+    View
 } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, Line, Path, Text as SvgText, G } from 'react-native-svg';
-import { useVenueTactics } from '@/hooks/useVenueIntelligence';
+import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 
 interface WindPatternCardProps {
   venueId?: string;
@@ -356,11 +356,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
     maxWidth: 420,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+      },
+    }),
   },
 
   // Header
@@ -498,11 +505,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 4,
+      },
+    }),
   },
   compactRow: {
     flexDirection: 'row',

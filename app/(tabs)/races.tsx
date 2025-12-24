@@ -35,6 +35,7 @@ import { PostRaceInterview } from '@/components/races/PostRaceInterview';
 import { PreRaceBriefingCard } from '@/components/races/PreRaceBriefingCard';
 import { RaceCard } from '@/components/races/RaceCard';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
+import { BoatClassSelectorModal } from '@/components/races/BoatClassSelectorModal';
 import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -70,6 +71,7 @@ import {
     AlertTriangle,
     Bell,
     Calendar,
+    ChevronLeft,
     ChevronRight,
     MapPin,
     Navigation,
@@ -645,6 +647,10 @@ export default function RacesScreen() {
   const RACE_CARD_WIDTH = 170;
   const RACE_CARD_TOTAL_WIDTH = RACE_CARD_WIDTH + 8; // width + combined horizontal margin (4px each side)
 
+  // State for horizontal scroll arrows
+  const [scrollX, setScrollX] = useState(0);
+  const [scrollContentWidth, setScrollContentWidth] = useState(0);
+
   const [regulatorySectionY, setRegulatorySectionY] = useState(0);
   const [logisticsSectionY, setLogisticsSectionY] = useState(0);
 
@@ -693,6 +699,7 @@ export default function RacesScreen() {
   const [showCoachSelectionModal, setShowCoachSelectionModal] = useState(false);
   const [sharingStrategy, setSharingStrategy] = useState(false);
   const [sharingRaceEventId, setSharingRaceEventId] = useState<string | null>(null);
+  const [showBoatClassSelector, setShowBoatClassSelector] = useState(false);
   const updateRacePosition = useRaceConditions(state => state.updatePosition);
   const updateEnvironment = useRaceConditions(state => state.updateEnvironment);
   const updateCourse = useRaceConditions(state => state.updateCourse);
@@ -980,9 +987,17 @@ export default function RacesScreen() {
       }
 
       // Redirect to login if not authenticated
-      if (!signedIn) {
+      // BUT: Skip redirect if auth is not ready yet (prevents race condition during sign-out)
+      if (!signedIn && ready) {
         logger.debug('User not authenticated, redirecting to login');
         router.replace('/(auth)/login');
+        return;
+      }
+      
+      // If not ready or signed out but not ready, don't redirect yet
+      // This prevents redirecting to login during sign-out process
+      if (!signedIn && !ready) {
+        logger.debug('Auth not ready yet, skipping redirect');
         return;
       }
 
@@ -1053,9 +1068,16 @@ const addRaceTimelineStyles = StyleSheet.create({
     flex: 1,
     borderRadius: 999,
     backgroundColor: '#10B981',
-    shadowColor: '#059669',
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 0px 8px rgba(5, 150, 105, 0.35)',
+      },
+      default: {
+        shadowColor: '#059669',
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+      },
+    }),
   },
   card: {
     width: 240,
@@ -1066,11 +1088,18 @@ const addRaceTimelineStyles = StyleSheet.create({
     borderRadius: 28,
     padding: 20,
     marginLeft: 12,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 12,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 8px 12px rgba(15, 23, 42, 0.08)',
+      },
+      default: {
+        shadowColor: '#0F172A',
+        shadowOpacity: 0.08,
+        shadowOffset: { width: 0, height: 8 },
+        shadowRadius: 12,
+        elevation: 4,
+      },
+    }),
     justifyContent: 'space-between',
   },
   eyebrow: {
@@ -1272,9 +1301,22 @@ interface RigPlannerCardProps {
   notes: string;
   onChangeNotes: (value: string) => void;
   onOpenChat: () => void;
+  isGenericDefaults?: boolean;
+  boatClassName?: string | null;
+  onAddTuningGuide?: () => void;
 }
 
-function RigPlannerCard({ presets, selectedBand, onSelectBand, notes, onChangeNotes, onOpenChat }: RigPlannerCardProps) {
+function RigPlannerCard({ 
+  presets, 
+  selectedBand, 
+  onSelectBand, 
+  notes, 
+  onChangeNotes, 
+  onOpenChat,
+  isGenericDefaults = false,
+  boatClassName,
+  onAddTuningGuide,
+}: RigPlannerCardProps) {
   if (!presets || presets.length === 0) {
     return null;
   }
@@ -1294,6 +1336,26 @@ function RigPlannerCard({ presets, selectedBand, onSelectBand, notes, onChangeNo
           <Text className="text-xs font-semibold text-blue-600 ml-1">Review chat</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Warning when using generic defaults */}
+      {isGenericDefaults && (
+        <View className="flex-row items-start gap-2 mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
+          <View className="flex-1">
+            <Text className="text-xs font-semibold text-amber-700">Generic Settings Shown</Text>
+            <Text className="text-xs text-amber-600 mt-1">
+              These are generic rig settings, not specific to {boatClassName || 'your boat class'}. 
+              Add a tuning guide for accurate {boatClassName || 'class'}-specific recommendations.
+            </Text>
+            {onAddTuningGuide && (
+              <Pressable onPress={onAddTuningGuide} className="flex-row items-center gap-1 mt-2">
+                <MaterialCommunityIcons name="book-plus-outline" size={14} color="#b45309" />
+                <Text className="text-xs font-semibold text-amber-700">Add tuning guide</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
 
       <View className="flex-row flex-wrap gap-2 mb-3">
         {presets.map((preset) => {
@@ -1860,6 +1922,7 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
       return metadataPresets;
     }
 
+    // Return generic defaults - these are NOT class-specific
     return [
       {
         id: 'light',
@@ -2120,6 +2183,36 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
     if (!selectedRaceId) return;
     handleEditRace(selectedRaceId);
   }, [handleEditRace, selectedRaceId]);
+
+  // Open boat class selector modal
+  const handleSetBoatClass = useCallback(() => {
+    if (!selectedRaceId) return;
+    setShowBoatClassSelector(true);
+  }, [selectedRaceId]);
+
+  // Handle boat class selection
+  const handleBoatClassSelected = useCallback(async (classId: string, className: string) => {
+    logger.info('Boat class selected:', { classId, className, raceId: selectedRaceId });
+    
+    // Refresh race data to show updated class
+    if (selectedRaceId) {
+      triggerRaceDetailReload();
+      
+      // Also update local state immediately for better UX
+      setSelectedRaceData((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          class_id: classId,
+          metadata: {
+            ...prev.metadata,
+            class_id: classId,
+            class_name: className,
+          },
+        };
+      });
+    }
+  }, [selectedRaceId, triggerRaceDetailReload, logger]);
 
   const handleHideRace = useCallback(async (raceId: string, raceName?: string) => {
     if (!raceId || !user?.id) {
@@ -4656,15 +4749,21 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 </Text>
               </View>
             </View>
-            <ScrollView
-              ref={raceCardsScrollViewRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="mb-4"
-              contentContainerStyle={{ paddingRight: 16 }}
-              nestedScrollEnabled={true}
-              scrollEventThrottle={16}
-            >
+            <View className="relative mb-4">
+              <ScrollView
+                ref={raceCardsScrollViewRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 16 }}
+                nestedScrollEnabled={true}
+                scrollEventThrottle={16}
+                onScroll={(event) => {
+                  setScrollX(event.nativeEvent.contentOffset.x);
+                }}
+                onContentSizeChange={(contentWidth) => {
+                  setScrollContentWidth(contentWidth);
+                }}
+              >
               {(() => {
                 let addRaceCardInserted = false;
                 const cardElements: React.ReactNode[] = [];
@@ -4792,7 +4891,52 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
 
                 return cardElements;
               })()}
-            </ScrollView>
+              </ScrollView>
+              {/* Left Arrow Button */}
+              {scrollX > 10 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    raceCardsScrollViewRef.current?.scrollTo({
+                      x: Math.max(0, scrollX - SCREEN_WIDTH * 0.8),
+                      animated: true,
+                    });
+                  }}
+                  className="absolute left-0 top-0 bottom-0 justify-center items-center w-10 z-10"
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 2, height: 0 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }}
+                >
+                  <ChevronLeft size={32} color="#2563EB" />
+                </TouchableOpacity>
+              )}
+              {/* Right Arrow Button */}
+              {scrollContentWidth > SCREEN_WIDTH && scrollX < scrollContentWidth - SCREEN_WIDTH - 10 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    raceCardsScrollViewRef.current?.scrollTo({
+                      x: Math.min(scrollContentWidth - SCREEN_WIDTH, scrollX + SCREEN_WIDTH * 0.8),
+                      animated: true,
+                    });
+                  }}
+                  className="absolute right-0 top-0 bottom-0 justify-center items-center w-10 z-10"
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    shadowColor: '#000',
+                    shadowOffset: { width: -2, height: 0 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }}
+                >
+                  <ChevronRight size={32} color="#2563EB" />
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Inline Comprehensive Race Detail Section */}
             {loadingRaceDetail && !selectedRaceData && (
@@ -5294,12 +5438,32 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                             <Text className="text-xs text-amber-600 mt-1">
                               Select a boat class to unlock rig tuning checklists and class-based start sequences.
                             </Text>
-                            <Pressable onPress={handleEditSelectedRace} className="flex-row items-center gap-1 mt-2">
+                            <Pressable onPress={handleSetBoatClass} className="flex-row items-center gap-1 mt-2">
                               <MaterialCommunityIcons name="pencil" size={14} color="#b45309" />
                               <Text className="text-xs font-semibold text-amber-700">Set class</Text>
                             </Pressable>
                           </View>
                         </View>
+                      )}
+
+                      {/* Class set display - show when class is set, allows changing */}
+                      {isRaceFuture && selectedRaceClassId && selectedRaceClassName && (
+                        <Pressable 
+                          onPress={handleSetBoatClass}
+                          className="flex-row items-center gap-2 mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
+                        >
+                          <MaterialCommunityIcons name="sail-boat" size={18} color="#1e40af" />
+                          <View className="flex-1">
+                            <Text className="text-xs font-semibold text-blue-700">Boat Class</Text>
+                            <Text className="text-sm font-semibold text-blue-900 mt-0.5">
+                              {selectedRaceClassName}
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center gap-1">
+                            <MaterialCommunityIcons name="pencil" size={14} color="#1e40af" />
+                            <Text className="text-xs font-semibold text-blue-700">Change</Text>
+                          </View>
+                        </Pressable>
                       )}
 
                       {/* AI Rig Tuning Guidance - only show for future races */}
@@ -5321,6 +5485,14 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         notes={rigNotes}
                         onChangeNotes={setRigNotes}
                         onOpenChat={isRaceFuture ? handleOpenChatFromRigPlanner : undefined}
+                        isGenericDefaults={
+                          !selectedRaceData?.metadata?.rig_presets && 
+                          !selectedRaceTuningRecommendation
+                        }
+                        boatClassName={selectedRaceClassName}
+                        onAddTuningGuide={() => {
+                          router.push('/(tabs)/tuning-guides');
+                        }}
                       />
                     </>
                   ),
@@ -5507,25 +5679,47 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 onImportCalendar={handleOpenCalendarImport}
                 hasRealRaces={hasRealRaces}
               />
-              {MOCK_RACES.map((race, index) => (
-                <RaceCard
-                  key={race.id}
-                  id={race.id}
-                  name={race.name}
-                  venue={race.venue}
-                  date={race.date}
-                  startTime={race.startTime}
-                  wind={race.wind}
-                  tide={race.tide}
-                  strategy={race.strategy}
-                  critical_details={race.critical_details}
-                  isPrimary={index === 0}
-                  isMock={true}
-                  isSelected={selectedDemoRaceId === race.id}
-                  isDimmed={selectedDemoRaceId !== race.id}
-                  onSelect={() => setSelectedDemoRaceId(race.id)}
-                />
-              ))}
+              {MOCK_RACES.map((race, index) => {
+                const isDistanceRace = race.race_type === 'distance';
+                if (isDistanceRace) {
+                  return (
+                    <DistanceRaceCard
+                      key={race.id}
+                      id={race.id}
+                      name={race.name}
+                      startVenue={race.venue}
+                      date={race.date}
+                      startTime={race.startTime}
+                      wind={race.wind}
+                      totalDistanceNm={race.total_distance_nm}
+                      vhf_channel={race.critical_details?.vhf_channel}
+                      isPrimary={index === 0}
+                      isSelected={selectedDemoRaceId === race.id}
+                      isDimmed={selectedDemoRaceId !== race.id}
+                      onSelect={() => setSelectedDemoRaceId(race.id)}
+                    />
+                  );
+                }
+                return (
+                  <RaceCard
+                    key={race.id}
+                    id={race.id}
+                    name={race.name}
+                    venue={race.venue}
+                    date={race.date}
+                    startTime={race.startTime}
+                    wind={race.wind}
+                    tide={race.tide}
+                    strategy={race.strategy}
+                    critical_details={race.critical_details}
+                    isPrimary={index === 0}
+                    isMock={true}
+                    isSelected={selectedDemoRaceId === race.id}
+                    isDimmed={selectedDemoRaceId !== race.id}
+                    onSelect={() => setSelectedDemoRaceId(race.id)}
+                  />
+                );
+              })}
             </ScrollView>
             {selectedDemoRace && (
               <DemoRaceDetail
@@ -5759,6 +5953,21 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
               notes: selectedRaceData.metadata.rigTuning.notes,
             } : undefined,
           }}
+        />
+      )}
+
+      {/* Boat Class Selector Modal */}
+      {selectedRaceId && (
+        <BoatClassSelectorModal
+          visible={showBoatClassSelector}
+          onClose={() => setShowBoatClassSelector(false)}
+          raceId={selectedRaceId}
+          currentClassId={
+            selectedRaceData?.class_id ||
+            selectedRaceData?.metadata?.class_id ||
+            null
+          }
+          onClassSelected={handleBoatClassSelected}
         />
       )}
 

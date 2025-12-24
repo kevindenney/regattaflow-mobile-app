@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Calendar, Clock, MapPin, ChevronLeft, CheckCircle, FileText, Plus, X } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { RaceTypeSelector, type RaceType } from '@/components/races/RaceTypeSelector';
 
 export default function AddNextRace() {
   const router = useRouter();
@@ -17,12 +18,14 @@ export default function AddNextRace() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [existingRaceId, setExistingRaceId] = useState<string | null>(null);
+  const [suggestedFromClub, setSuggestedFromClub] = useState<string | null>(null);
 
   // Form fields
   const [raceName, setRaceName] = useState('');
   const [raceDate, setRaceDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [location, setLocation] = useState('');
+  const [raceType, setRaceType] = useState<RaceType>('fleet');
 
   // Race documents
   const [documents, setDocuments] = useState<Array<{
@@ -33,10 +36,63 @@ export default function AddNextRace() {
   const [newDocUrl, setNewDocUrl] = useState('');
   const [newDocType, setNewDocType] = useState<'notice_of_race' | 'sailing_instructions' | 'course_map' | 'other'>('notice_of_race');
 
-  // Load existing next race if any
+  /**
+   * Auto-detect race type from race name
+   */
+  const detectRaceTypeFromName = (name: string): RaceType => {
+    if (!name) return 'fleet';
+    
+    const lowerName = name.toLowerCase();
+    const distanceKeywords = [
+      'around',
+      'island race',
+      'offshore',
+      'ocean race',
+      'ocean racing',
+      'coastal',
+      'passage',
+      'distance race',
+      'long distance',
+      'overnight',
+      'multi-day',
+      'transat',
+      'transpac',
+      'fastnet',
+      'rolex',
+      'sydney hobart',
+      'bermuda',
+      'nm race',
+      'mile race',
+    ];
+
+    // Check for distance keywords
+    for (const keyword of distanceKeywords) {
+      if (lowerName.includes(keyword)) {
+        return 'distance';
+      }
+    }
+
+    // Check for distance patterns like "25nm", "50 mile", "100 nautical"
+    if (/\d+\s*(nm|nautical|mile)/i.test(name)) {
+      return 'distance';
+    }
+
+    return 'fleet';
+  };
+
+  // Load existing next race if any, or suggest from club
   useEffect(() => {
     loadExistingRace();
   }, []);
+
+  // Auto-detect race type when race name changes (if not manually set)
+  useEffect(() => {
+    if (raceName && !existingRaceId) {
+      // Only auto-detect if we haven't loaded an existing race
+      const detectedType = detectRaceTypeFromName(raceName);
+      setRaceType(detectedType);
+    }
+  }, [raceName, existingRaceId]);
 
   const loadExistingRace = async () => {
     if (!user?.id) return;
@@ -70,16 +126,119 @@ export default function AddNextRace() {
         setRaceDate(race.race_date || '');
         setStartTime(race.start_time || '');
         setLocation(race.location || '');
+        
+        // Load race type if available, otherwise auto-detect from name
+        if (race.race_type) {
+          setRaceType(race.race_type as RaceType);
+        } else if (race.name) {
+          setRaceType(detectRaceTypeFromName(race.name));
+        }
 
         // Load associated documents if any
         if (race.documents) {
           setDocuments(race.documents);
         }
+        setLoading(false);
+      } else {
+        // No existing race found - try to suggest from club events
+        await suggestRaceFromClub();
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error loading race:', error);
-    } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Suggest next race from user's yacht club events
+   */
+  const suggestRaceFromClub = async () => {
+    if (!user?.id) return;
+
+    try {
+      // Get user's club memberships
+      const { data: memberships, error: memberError } = await supabase
+        .from('club_members')
+        .select('club_id, clubs(id, name)')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+
+      if (memberError || !memberships || memberships.length === 0) {
+        // No club memberships - can't suggest
+        return;
+      }
+
+      const clubIds = memberships.map((m: any) => m.club_id);
+
+      // Get upcoming events from these clubs
+      const { data: events, error: eventsError } = await supabase
+        .from('club_events')
+        .select('*')
+        .in('club_id', clubIds)
+        .gte('start_date', new Date().toISOString())
+        .in('status', ['published', 'registration_open'])
+        .order('start_date', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (eventsError || !events) {
+        // No upcoming events found
+        return;
+      }
+
+      // Auto-fill form with the next club event
+      const event = events;
+      const club = memberships.find((m: any) => m.club_id === event.club_id)?.clubs as any;
+      const clubName = club?.name || 'your club';
+      
+      if (event.title) {
+        setRaceName(event.title);
+        // Auto-detect race type from name
+        setRaceType(detectRaceTypeFromName(event.title));
+      }
+      if (event.start_date) {
+        // Extract date part (YYYY-MM-DD)
+        const dateStr = event.start_date.split('T')[0];
+        setRaceDate(dateStr);
+        
+        // Extract time part if available (HH:MM)
+        if (event.start_date.includes('T')) {
+          const timeStr = event.start_date.split('T')[1]?.substring(0, 5);
+          if (timeStr) {
+            setStartTime(timeStr);
+          }
+        }
+      }
+      if (event.location_name) {
+        setLocation(event.location_name);
+      }
+
+      // Remember that this was suggested from club
+      setSuggestedFromClub(clubName);
+
+      // Add document URLs if available
+      if (event.website_url) {
+        // Try to determine document type from URL
+        const url = event.website_url.toLowerCase();
+        let docType: 'notice_of_race' | 'sailing_instructions' | 'course_map' | 'other' = 'other';
+        if (url.includes('nor') || url.includes('notice')) {
+          docType = 'notice_of_race';
+        } else if (url.includes('si') || url.includes('sailing-instruction') || url.includes('instruction')) {
+          docType = 'sailing_instructions';
+        } else if (url.includes('course') || url.includes('map')) {
+          docType = 'course_map';
+        }
+
+        setDocuments([{
+          type: docType,
+          url: event.website_url,
+          name: event.title || 'Race Document',
+        }]);
+      }
+    } catch (error) {
+      console.error('Error suggesting race from club:', error);
+      // Don't show error to user - this is just a suggestion feature
     }
   };
 
@@ -155,6 +314,7 @@ export default function AddNextRace() {
         race_date: raceDate,
         start_time: startTime,
         location: location,
+        race_type: raceType, // Store race type for strategy recommendations
         documents: documents.length > 0 ? documents : null,
         updated_at: new Date().toISOString(),
       };
@@ -227,6 +387,18 @@ export default function AddNextRace() {
       </View>
 
       <ScrollView className="flex-1 px-6 py-6">
+        {/* Auto-suggestion Banner */}
+        {suggestedFromClub && (
+          <View className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <Text className="text-sm font-semibold text-green-900 mb-1">
+              ✨ Auto-filled from {suggestedFromClub}
+            </Text>
+            <Text className="text-sm text-green-800">
+              We found an upcoming race from your yacht club. Feel free to edit any details below.
+            </Text>
+          </View>
+        )}
+
         {/* Info Banner */}
         <View className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-6">
           <Text className="text-sm font-semibold text-sky-900 mb-1">
@@ -240,6 +412,18 @@ export default function AddNextRace() {
             • Hull and rig setup recommendations{'\n'}
             • Tactical strategy for conditions{'\n'}
             • Performance tracking over time
+          </Text>
+        </View>
+
+        {/* Race Type Selector */}
+        <View className="mb-4">
+          <RaceTypeSelector
+            value={raceType}
+            onChange={setRaceType}
+            size="compact"
+          />
+          <Text className="text-xs text-gray-500 mt-2">
+            Fleet racing = buoy/mark courses • Distance racing = offshore/passage races
           </Text>
         </View>
 

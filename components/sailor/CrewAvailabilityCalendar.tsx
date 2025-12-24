@@ -44,7 +44,10 @@ export function CrewAvailabilityCalendar({
   const [currentDate, setCurrentDate] = useState(new Date());
   const [availability, setAvailability] = useState<CrewAvailability[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showExistingModal, setShowExistingModal] = useState(false);
+  const [selectedAvailability, setSelectedAvailability] = useState<CrewAvailability | null>(null);
   const [selectedRange, setSelectedRange] = useState<{
     startDate: string;
     endDate: string;
@@ -66,10 +69,11 @@ export function CrewAvailabilityCalendar({
   const loadAvailability = async () => {
     try {
       setLoading(true);
-      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      // Load a wider date range (3 months) to ensure availability persists across navigation
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
         .toISOString()
         .split('T')[0];
-      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0)
         .toISOString()
         .split('T')[0];
 
@@ -81,6 +85,7 @@ export function CrewAvailabilityCalendar({
       setAvailability(data);
     } catch (err) {
       console.error('Error loading availability:', err);
+      Alert.alert('Error', 'Failed to load availability. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -170,8 +175,103 @@ export function CrewAvailabilityCalendar({
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
+  const handleSetAvailability = () => {
+    if (!selectedRange) {
+      Alert.alert('Error', 'Please select a date range');
+      return;
+    }
+
+    setShowAddModal(true);
+  };
+
+  const handleSaveAvailability = async () => {
+    if (!selectedRange) return;
+
+    try {
+      setSaving(true);
+      const saved = await crewManagementService.setCrewAvailability(crewMember.id, {
+        startDate: selectedRange.startDate,
+        endDate: selectedRange.endDate,
+        status: newAvailability.status,
+        reason: newAvailability.reason || undefined,
+        notes: newAvailability.notes || undefined,
+      });
+
+      // Add to local state immediately for instant feedback
+      setAvailability(prev => [...prev, saved]);
+      
+      Alert.alert('Success', 'Availability saved successfully');
+      setShowAddModal(false);
+      setSelectedRange(null);
+      setNewAvailability({ status: 'available', reason: '', notes: '' });
+      
+      // Reload to ensure we have the latest data
+      await loadAvailability();
+      onUpdate?.();
+    } catch (err: any) {
+      if (err?.queuedForSync && err?.entity) {
+        setAvailability(prev => [...prev, err.entity as CrewAvailability]);
+        Alert.alert('Offline', 'Availability will sync once you are back online.');
+        setShowAddModal(false);
+        setSelectedRange(null);
+        setNewAvailability({ status: 'available', reason: '', notes: '' });
+        onUpdate?.();
+      } else {
+        console.error('Error saving availability:', err);
+        Alert.alert(
+          'Error', 
+          err?.message || 'Failed to save availability. Please try again.'
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAvailability = async (availabilityId: string) => {
+    Alert.alert(
+      'Delete Availability',
+      'Are you sure you want to delete this availability entry?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSaving(true);
+              await crewManagementService.deleteCrewAvailability(availabilityId);
+              setAvailability(prev => prev.filter(a => a.id !== availabilityId));
+              setShowExistingModal(false);
+              setSelectedAvailability(null);
+              await loadAvailability();
+              onUpdate?.();
+              Alert.alert('Success', 'Availability deleted');
+            } catch (err: any) {
+              console.error('Error deleting availability:', err);
+              Alert.alert('Error', 'Failed to delete availability. Please try again.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleDayPress = (day: CalendarDay) => {
     if (!day.isCurrentMonth) return;
+
+    // Check if this day has existing availability
+    const existingAvail = availability.find(
+      (a) => day.date >= a.startDate && day.date <= a.endDate
+    );
+
+    if (existingAvail) {
+      setSelectedAvailability(existingAvail);
+      setShowExistingModal(true);
+      return;
+    }
 
     // If selecting a range, set start or end
     if (!selectedRange) {
@@ -186,48 +286,6 @@ export function CrewAvailabilityCalendar({
     } else {
       // Reset to new start
       setSelectedRange({ startDate: day.date, endDate: day.date });
-    }
-  };
-
-  const handleSetAvailability = () => {
-    if (!selectedRange) {
-      Alert.alert('Error', 'Please select a date range');
-      return;
-    }
-
-    setShowAddModal(true);
-  };
-
-  const handleSaveAvailability = async () => {
-    if (!selectedRange) return;
-
-    try {
-      await crewManagementService.setCrewAvailability(crewMember.id, {
-        startDate: selectedRange.startDate,
-        endDate: selectedRange.endDate,
-        status: newAvailability.status,
-        reason: newAvailability.reason || undefined,
-        notes: newAvailability.notes || undefined,
-      });
-
-      Alert.alert('Success', 'Availability updated');
-      setShowAddModal(false);
-      setSelectedRange(null);
-      setNewAvailability({ status: 'available', reason: '', notes: '' });
-      loadAvailability();
-      onUpdate?.();
-    } catch (err: any) {
-      if (err?.queuedForSync && err?.entity) {
-        setAvailability(prev => [...prev, err.entity as CrewAvailability]);
-        Alert.alert('Offline', 'Availability will sync once you are back online.');
-        setShowAddModal(false);
-        setSelectedRange(null);
-        setNewAvailability({ status: 'available', reason: '', notes: '' });
-        onUpdate?.();
-      } else {
-        console.error('Error saving availability:', err);
-        Alert.alert('Error', 'Failed to save availability');
-      }
     }
   };
 
@@ -321,6 +379,24 @@ export function CrewAvailabilityCalendar({
         })}
       </View>
 
+      {/* Selected range info */}
+      {selectedRange && (
+        <View style={styles.selectedRangeInfo}>
+          <View style={styles.selectedRangeContent}>
+            <Ionicons name="calendar-outline" size={16} color="#3B82F6" />
+            <Text style={styles.selectedRangeText}>
+              {new Date(selectedRange.startDate).toLocaleDateString()} - {new Date(selectedRange.endDate).toLocaleDateString()}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.clearButtonSmall}
+            onPress={() => setSelectedRange(null)}
+          >
+            <Ionicons name="close" size={16} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Action buttons */}
       {selectedRange && (
         <View style={styles.actions}>
@@ -328,13 +404,54 @@ export function CrewAvailabilityCalendar({
             style={styles.clearButton}
             onPress={() => setSelectedRange(null)}
           >
-            <Text style={styles.clearButtonText}>Clear Selection</Text>
+            <Text style={styles.clearButtonText}>Clear</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.setButton} onPress={handleSetAvailability}>
-            <Ionicons name="calendar" size={18} color="#FFFFFF" />
-            <Text style={styles.setButtonText}>Set Availability</Text>
+          <TouchableOpacity 
+            style={[styles.setButton, saving && styles.setButtonDisabled]} 
+            onPress={handleSetAvailability}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="calendar" size={18} color="#FFFFFF" />
+                <Text style={styles.setButtonText}>Set Availability</Text>
+              </>
+            )}
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Existing availability list */}
+      {availability.length > 0 && (
+        <View style={styles.existingSection}>
+          <Text style={styles.existingTitle}>Existing Availability</Text>
+          <ScrollView style={styles.existingList} nestedScrollEnabled>
+            {availability.map((avail) => (
+              <TouchableOpacity
+                key={avail.id}
+                style={styles.existingItem}
+                onPress={() => {
+                  setSelectedAvailability(avail);
+                  setShowExistingModal(true);
+                }}
+              >
+                <View style={[styles.existingDot, { backgroundColor: getAvailabilityColor(avail.status) }]} />
+                <View style={styles.existingContent}>
+                  <Text style={styles.existingDate}>
+                    {new Date(avail.startDate).toLocaleDateString()} - {new Date(avail.endDate).toLocaleDateString()}
+                  </Text>
+                  <Text style={styles.existingStatus}>
+                    {avail.status.charAt(0).toUpperCase() + avail.status.slice(1)}
+                    {avail.reason && ` • ${avail.reason}`}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -443,10 +560,89 @@ export function CrewAvailabilityCalendar({
               </View>
             </View>
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleSaveAvailability}>
-              <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Save Availability</Text>
+            <TouchableOpacity 
+              style={[styles.submitButton, saving && styles.submitButtonDisabled]} 
+              onPress={handleSaveAvailability}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+                  <Text style={styles.submitButtonText}>Save Availability</Text>
+                </>
+              )}
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* View/Edit existing availability modal */}
+      <Modal
+        visible={showExistingModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setShowExistingModal(false);
+          setSelectedAvailability(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Availability Details</Text>
+              <TouchableOpacity onPress={() => {
+                setShowExistingModal(false);
+                setSelectedAvailability(null);
+              }}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedAvailability && (
+              <ScrollView style={styles.existingDetails}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Date Range</Text>
+                  <Text style={styles.detailValue}>
+                    {new Date(selectedAvailability.startDate).toLocaleDateString()} - {new Date(selectedAvailability.endDate).toLocaleDateString()}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Status</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getAvailabilityColor(selectedAvailability.status) + '15' }]}>
+                    <View style={[styles.statusBadgeDot, { backgroundColor: getAvailabilityColor(selectedAvailability.status) }]} />
+                    <Text style={[styles.statusBadgeText, { color: getAvailabilityColor(selectedAvailability.status) }]}>
+                      {selectedAvailability.status.charAt(0).toUpperCase() + selectedAvailability.status.slice(1)}
+                    </Text>
+                  </View>
+                </View>
+
+                {selectedAvailability.reason && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Reason</Text>
+                    <Text style={styles.detailValue}>{selectedAvailability.reason}</Text>
+                  </View>
+                )}
+
+                {selectedAvailability.notes && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Notes</Text>
+                    <Text style={styles.detailValue}>{selectedAvailability.notes}</Text>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteAvailability(selectedAvailability.id)}
+                  disabled={saving}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                  <Text style={styles.deleteButtonText}>Delete Availability</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -527,10 +723,35 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 4,
   },
+  selectedRangeInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  selectedRangeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  selectedRangeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  clearButtonSmall: {
+    padding: 4,
+  },
   actions: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 16,
+    marginTop: 12,
   },
   clearButton: {
     flex: 1,
@@ -546,7 +767,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   setButton: {
-    flex: 1,
+    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -555,10 +776,113 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#3B82F6',
   },
+  setButtonDisabled: {
+    opacity: 0.6,
+  },
   setButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  existingSection: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  existingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  existingList: {
+    maxHeight: 200,
+  },
+  existingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  existingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  existingContent: {
+    flex: 1,
+  },
+  existingDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  existingStatus: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  existingDetails: {
+    maxHeight: 400,
+  },
+  detailRow: {
+    marginBottom: 16,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#1E293B',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  statusBadgeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    backgroundColor: '#FEF2F2',
+    marginTop: 16,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   legend: {
     flexDirection: 'row',

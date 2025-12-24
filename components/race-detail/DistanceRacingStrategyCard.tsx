@@ -167,11 +167,11 @@ export function DistanceRacingStrategyCard({
       if (strategyRef.current === null && !loadingRef.current && pollCountRef.current < MAX_POLLS) {
         pollCountRef.current += 1;
         const nextDelay = Math.min(2000 + pollCountRef.current * 1000, 10000); // 2s to 10s max
-        console.log(`[DistanceRacingStrategyCard] Polling for strategy updates... (${pollCountRef.current}/${MAX_POLLS}, next in ${nextDelay/1000}s)`);
+        logger.debug(`Polling for strategy updates... (${pollCountRef.current}/${MAX_POLLS}, next in ${nextDelay/1000}s)`);
         loadDistanceStrategy();
         pollInterval = setTimeout(pollWithBackoff, nextDelay);
       } else if (pollCountRef.current >= MAX_POLLS) {
-        console.log('[DistanceRacingStrategyCard] Max poll attempts reached, stopping polling');
+        logger.debug('Max poll attempts reached, stopping polling');
       }
     };
     // Start polling after initial delay (give TacticalPlanCard time to begin generating)
@@ -1095,3 +1095,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+
+
+
+

@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform, Linking } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Linking, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface VenueHeroCardProps {
   venueName: string;
@@ -122,11 +122,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
     maxWidth: 420,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.12)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 8,
+      },
+    }),
     gap: 10,
   },
   titleRow: {

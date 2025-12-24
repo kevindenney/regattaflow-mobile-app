@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  TextInput,
-  Image,
-  Animated,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
+import { useAuth } from '@/providers/AuthProvider';
 import { coachingService, CoachProfile } from '@/services/CoachingService';
 import { CoachMatchingAgent } from '@/services/agents/CoachMatchingAgent';
-import { useAuth } from '@/providers/AuthProvider';
-import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
 import { supabase } from '@/services/supabase';
 import type { SailorProfile as MatchingSailorProfile } from '@/types/coach';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
 interface CoachWithMatch extends CoachProfile {
   display_name?: string | null;
@@ -772,11 +772,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+      },
+    }),
     overflow: 'hidden',
   },
   matchBadge: {

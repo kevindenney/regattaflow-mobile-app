@@ -2,32 +2,32 @@
  * Edit Boat Screen - Update existing boat
  */
 
+import { DRAGON_HULL_MAKER_NAMES } from '@/constants/boatEquipment';
 import { useAuth } from '@/providers/AuthProvider';
 import {
-  sailorBoatService,
-  type SailorBoat,
-  type UpdateBoatInput,
+    sailorBoatService,
+    type SailorBoat,
+    type UpdateBoatInput,
 } from '@/services/SailorBoatService';
 import { supabase } from '@/services/supabase';
-import { DRAGON_HULL_MAKER_NAMES } from '@/constants/boatEquipment';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 interface BoatClass {
@@ -855,11 +855,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 5,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px -2px 8px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 5,
+      },
+    }),
   },
   cancelFooterButton: {
     paddingVertical: 12,

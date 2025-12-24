@@ -16,106 +16,106 @@
  * ```
  */
 
+import * as Localization from 'expo-localization';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import * as Localization from 'expo-localization';
 
 // Import translation files
+import enAi from './locales/en/ai.json';
 import enCommon from './locales/en/common.json';
+import enErrors from './locales/en/errors.json';
 import enNavigation from './locales/en/navigation.json';
 import enRaces from './locales/en/races.json';
 import enScoring from './locales/en/scoring.json';
-import enAi from './locales/en/ai.json';
 import enSettings from './locales/en/settings.json';
-import enErrors from './locales/en/errors.json';
 
+import deAi from './locales/de/ai.json';
 import deCommon from './locales/de/common.json';
+import deErrors from './locales/de/errors.json';
 import deNavigation from './locales/de/navigation.json';
 import deRaces from './locales/de/races.json';
 import deScoring from './locales/de/scoring.json';
-import deAi from './locales/de/ai.json';
 import deSettings from './locales/de/settings.json';
-import deErrors from './locales/de/errors.json';
 
+import frAi from './locales/fr/ai.json';
 import frCommon from './locales/fr/common.json';
+import frErrors from './locales/fr/errors.json';
 import frNavigation from './locales/fr/navigation.json';
 import frRaces from './locales/fr/races.json';
 import frScoring from './locales/fr/scoring.json';
-import frAi from './locales/fr/ai.json';
 import frSettings from './locales/fr/settings.json';
-import frErrors from './locales/fr/errors.json';
 
+import itAi from './locales/it/ai.json';
 import itCommon from './locales/it/common.json';
+import itErrors from './locales/it/errors.json';
 import itNavigation from './locales/it/navigation.json';
 import itRaces from './locales/it/races.json';
 import itScoring from './locales/it/scoring.json';
-import itAi from './locales/it/ai.json';
 import itSettings from './locales/it/settings.json';
-import itErrors from './locales/it/errors.json';
 
+import esAi from './locales/es/ai.json';
 import esCommon from './locales/es/common.json';
+import esErrors from './locales/es/errors.json';
 import esNavigation from './locales/es/navigation.json';
 import esRaces from './locales/es/races.json';
 import esScoring from './locales/es/scoring.json';
-import esAi from './locales/es/ai.json';
 import esSettings from './locales/es/settings.json';
-import esErrors from './locales/es/errors.json';
 
+import nlAi from './locales/nl/ai.json';
 import nlCommon from './locales/nl/common.json';
+import nlErrors from './locales/nl/errors.json';
 import nlNavigation from './locales/nl/navigation.json';
 import nlRaces from './locales/nl/races.json';
 import nlScoring from './locales/nl/scoring.json';
-import nlAi from './locales/nl/ai.json';
 import nlSettings from './locales/nl/settings.json';
-import nlErrors from './locales/nl/errors.json';
 
+import ptAi from './locales/pt/ai.json';
 import ptCommon from './locales/pt/common.json';
+import ptErrors from './locales/pt/errors.json';
 import ptNavigation from './locales/pt/navigation.json';
 import ptRaces from './locales/pt/races.json';
 import ptScoring from './locales/pt/scoring.json';
-import ptAi from './locales/pt/ai.json';
 import ptSettings from './locales/pt/settings.json';
-import ptErrors from './locales/pt/errors.json';
 
+import svAi from './locales/sv/ai.json';
 import svCommon from './locales/sv/common.json';
+import svErrors from './locales/sv/errors.json';
 import svNavigation from './locales/sv/navigation.json';
 import svRaces from './locales/sv/races.json';
 import svScoring from './locales/sv/scoring.json';
-import svAi from './locales/sv/ai.json';
 import svSettings from './locales/sv/settings.json';
-import svErrors from './locales/sv/errors.json';
 
+import daAi from './locales/da/ai.json';
 import daCommon from './locales/da/common.json';
+import daErrors from './locales/da/errors.json';
 import daNavigation from './locales/da/navigation.json';
 import daRaces from './locales/da/races.json';
 import daScoring from './locales/da/scoring.json';
-import daAi from './locales/da/ai.json';
 import daSettings from './locales/da/settings.json';
-import daErrors from './locales/da/errors.json';
 
+import plAi from './locales/pl/ai.json';
 import plCommon from './locales/pl/common.json';
+import plErrors from './locales/pl/errors.json';
 import plNavigation from './locales/pl/navigation.json';
 import plRaces from './locales/pl/races.json';
 import plScoring from './locales/pl/scoring.json';
-import plAi from './locales/pl/ai.json';
 import plSettings from './locales/pl/settings.json';
-import plErrors from './locales/pl/errors.json';
 
+import elAi from './locales/el/ai.json';
 import elCommon from './locales/el/common.json';
+import elErrors from './locales/el/errors.json';
 import elNavigation from './locales/el/navigation.json';
 import elRaces from './locales/el/races.json';
 import elScoring from './locales/el/scoring.json';
-import elAi from './locales/el/ai.json';
 import elSettings from './locales/el/settings.json';
-import elErrors from './locales/el/errors.json';
 
+import fiAi from './locales/fi/ai.json';
 import fiCommon from './locales/fi/common.json';
+import fiErrors from './locales/fi/errors.json';
 import fiNavigation from './locales/fi/navigation.json';
 import fiRaces from './locales/fi/races.json';
 import fiScoring from './locales/fi/scoring.json';
-import fiAi from './locales/fi/ai.json';
 import fiSettings from './locales/fi/settings.json';
-import fiErrors from './locales/fi/errors.json';
 
 // ============================================================================
 // Configuration
@@ -426,8 +426,8 @@ i18n.use(initReactI18next).init({
     useSuspense: false, // Disable suspense for React Native
   },
 
-  // Debug in development
-  debug: __DEV__,
+  // Debug in development (disabled to reduce console noise)
+  debug: false,
 
   // Missing key handling
   saveMissing: __DEV__,

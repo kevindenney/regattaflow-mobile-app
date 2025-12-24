@@ -9,7 +9,7 @@
  * - Used for accurate weather forecasting
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -44,6 +44,140 @@ const logger = createLogger('VenueLocationPicker');
 const VENUE_CACHE_KEY = 'regattaflow_venue_cache_v1';
 const VENUE_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 
+// Web-only map component using Leaflet
+function VenueMapWeb({
+  coordinates,
+  value,
+  onMapClick,
+  showMap,
+}: {
+  coordinates: { lat: number; lng: number } | null;
+  value: string;
+  onMapClick: (lat: number, lng: number) => void;
+  showMap: boolean;
+}) {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!showMap || Platform.OS !== 'web') return;
+    
+    // Wait for ref to be set
+    if (typeof window === 'undefined' || !mapContainerRef.current) {
+      // Try again after a short delay
+      const timeout = setTimeout(() => {
+        if (mapContainerRef.current) {
+          // Trigger re-run by updating a state or force re-render
+        }
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+
+    let isMounted = true;
+
+    const loadLeaflet = async () => {
+      try {
+        // Load Leaflet CSS
+        if (!document.querySelector('link[href*="leaflet.css"]')) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+          document.head.appendChild(link);
+        }
+
+        // Load Leaflet JS
+        if (!(window as any).L) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            script.onload = resolve;
+            script.onerror = () => {
+              logger.error('Failed to load Leaflet script');
+              reject(new Error('Leaflet script failed to load'));
+            };
+            document.head.appendChild(script);
+          });
+        }
+
+        if (!isMounted || !mapContainerRef.current) return;
+
+        const L = (window as any).L;
+        if (!L) {
+          logger.error('Leaflet failed to load');
+          return;
+        }
+
+        // Initialize map
+        const initialLat = coordinates?.lat || 22.3193;
+        const initialLng = coordinates?.lng || 114.1694;
+
+        if (!mapRef.current) {
+          mapRef.current = L.map(mapContainerRef.current).setView([initialLat, initialLng], 13);
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+          }).addTo(mapRef.current);
+
+          // Add initial marker if coordinates exist
+          if (coordinates) {
+            markerRef.current = L.marker([initialLat, initialLng]).addTo(mapRef.current);
+          }
+
+          // Handle map clicks
+          mapRef.current.on('click', (e: any) => {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+
+            if (markerRef.current) {
+              markerRef.current.setLatLng([lat, lng]);
+            } else {
+              markerRef.current = L.marker([lat, lng]).addTo(mapRef.current);
+            }
+
+            onMapClick(lat, lng);
+          });
+        } else {
+          // Update map view if coordinates changed
+          mapRef.current.setView([initialLat, initialLng], 13);
+          if (markerRef.current) {
+            markerRef.current.setLatLng([initialLat, initialLng]);
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to load Leaflet map:', error);
+      }
+    };
+
+    loadLeaflet();
+
+    return () => {
+      isMounted = false;
+      if (mapRef.current) {
+        try {
+          mapRef.current.remove();
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        mapRef.current = null;
+        markerRef.current = null;
+      }
+    };
+  }, [showMap, coordinates?.lat, coordinates?.lng]);
+
+  if (Platform.OS !== 'web') return null;
+
+  // For React Native Web, we need to use a View that will render as a div
+  // The ref will work correctly on web
+  return (
+    <View
+      ref={mapContainerRef}
+      style={{ width: '100%', height: '100%', minHeight: 400 }}
+    />
+  );
+}
+
 export function VenueLocationPicker({
   value,
   onChangeText,
@@ -58,6 +192,38 @@ export function VenueLocationPicker({
   const [cachedVenues, setCachedVenues] = useState<VenueLocation[]>([]);
   const [cacheLoaded, setCacheLoaded] = useState(false);
   const cachedVenuesRef = useRef<VenueLocation[]>([]);
+  
+  // Handle map clicks
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    onCoordinatesChange({ lat, lng });
+    // Try to find a venue name for these coordinates
+    const matchingVenue = venueSuggestions.find(
+      v => Math.abs(v.lat - lat) < 0.01 && Math.abs(v.lng - lng) < 0.01
+    );
+    if (matchingVenue) {
+      onChangeText(matchingVenue.name);
+    } else if (!value) {
+      // If no venue name set, use coordinates as placeholder
+      onChangeText(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    }
+    // Don't close the map - let user continue selecting or click Done
+  }, [onCoordinatesChange, onChangeText, venueSuggestions, value]);
+  
+  // Listen for map clicks on web
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !showMap) return;
+
+    const handleMapClickEvent = (event: CustomEvent) => {
+      const { lat, lng } = event.detail;
+      handleMapClick(lat, lng);
+    };
+
+    window.addEventListener('venueMapClick', handleMapClickEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('venueMapClick', handleMapClickEvent as EventListener);
+    };
+  }, [showMap, handleMapClick]);
 
   // Keep ref in sync with state without triggering effects
   useEffect(() => {
@@ -205,8 +371,31 @@ export function VenueLocationPicker({
       if (cachedMatches.length > 0) {
         setVenueSuggestions(cachedMatches);
         setShowSuggestions(true);
-      } else if (!loadingVenues) {
-        setShowSuggestions(false);
+      }
+    }
+    
+    // Show fallback suggestions immediately for common venues (don't wait for database)
+    if (trimmed.length >= 2) {
+      const commonVenues: VenueLocation[] = [];
+      const lowerTrimmed = trimmed.toLowerCase();
+      
+      // Hong Kong venues
+      if (lowerTrimmed.includes('victoria') || lowerTrimmed.includes('hong kong') || lowerTrimmed.includes('hk') || lowerTrimmed === 'vic') {
+        commonVenues.push({
+          name: 'Victoria Harbour, Hong Kong',
+          lat: 22.3193,
+          lng: 114.1694,
+        });
+      }
+      
+      if (commonVenues.length > 0) {
+        setVenueSuggestions(prev => {
+          // Merge with existing suggestions, avoiding duplicates
+          const existing = prev.map(v => v.name.toLowerCase());
+          const newOnes = commonVenues.filter(v => !existing.includes(v.name.toLowerCase()));
+          return [...prev, ...newOnes];
+        });
+        setShowSuggestions(true);
       }
     }
 
@@ -214,63 +403,141 @@ export function VenueLocationPicker({
 
     const fetchVenues = async () => {
       setLoadingVenues(true);
+      let suggestions: VenueLocation[] = [];
+      
       try {
-        const { data, error } = await supabase
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Query timeout')), 5000);
+        });
+
+        // Try to query with coordinates_lat/lng first (simpler schema)
+        const queryPromise = supabase
           .from('sailing_venues')
           .select('id, name, coordinates_lat, coordinates_lng')
           .ilike('name', `%${trimmed}%`)
-          .limit(5);
+          .limit(10);
+
+        let { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+        // If that fails or returns no data, try PostGIS schema with computed columns
+        if (error || !data || data.length === 0) {
+          const pgQueryPromise = supabase
+            .from('sailing_venues')
+            .select('id, name')
+            .ilike('name', `%${trimmed}%`)
+            .limit(10);
+          
+          const pgResult = await Promise.race([pgQueryPromise, timeoutPromise]) as any;
+          const { data: pgData, error: pgError } = pgResult;
+          
+          if (!pgError && pgData && pgData.length > 0) {
+            // If we have PostGIS schema, we need to extract coordinates differently
+            // For now, use a fallback: try to get coordinates from a view or function
+            data = pgData.map((v: any) => ({
+              ...v,
+              coordinates_lat: null,
+              coordinates_lng: null,
+            }));
+            error = null;
+          }
+        }
 
         if (error) {
           if (!cancelled) {
-            console.error('[VenueLocationPicker] Database error:', error);
+            logger.warn('[VenueLocationPicker] Database error:', error);
           }
-          return;
         }
 
-        const suggestions: VenueLocation[] = (data || []).map((v) => ({
-          name: v.name,
-          lat: v.coordinates_lat,
-          lng: v.coordinates_lng,
-        }));
+        suggestions = (data || [])
+          .map((v: any) => {
+            // Handle both schema types
+            const lat = v.coordinates_lat ?? v.latitude ?? (v.coordinates ? v.coordinates.lat : null);
+            const lng = v.coordinates_lng ?? v.longitude ?? (v.coordinates ? v.coordinates.lng : null);
+            
+            return {
+              name: v.name,
+              lat: lat || 0,
+              lng: lng || 0,
+            };
+          })
+          .filter(v => v.name); // Filter out any invalid entries
 
         logger.debug(`[VenueLocationPicker] Found ${suggestions.length} venues matching "${trimmed}"`);
 
-        if (!cancelled && trimmed === value.trim()) {
-          if (suggestions.length > 0) {
-            setVenueSuggestions(suggestions);
-            setShowSuggestions(true);
-          }
-
-          let mergedForCache: VenueLocation[] | null = null;
-          setCachedVenues((prev) => {
-            const merged = mergeVenues(prev, suggestions);
-            if (merged === prev) {
-              return prev;
-            }
-            mergedForCache = merged;
-            return merged;
-          });
-
-          if (mergedForCache) {
-            persistCache(mergedForCache);
-          }
-        }
       } catch (error: any) {
         if (!cancelled) {
-          console.error('[VenueLocationPicker] Error fetching venues:', error);
-          if (!showSuggestions) {
-            const cachedMatches = filterCachedVenues(trimmed);
-            if (cachedMatches.length > 0) {
-              setVenueSuggestions(cachedMatches);
-              setShowSuggestions(true);
-            }
+          logger.warn('[VenueLocationPicker] Query failed or timed out:', error.message);
+        }
+      }
+
+      // Add common venue fallbacks if no database results (even on error/timeout)
+      // But only if we don't already have suggestions from the immediate fallback
+      if (suggestions.length === 0 && trimmed.length >= 2) {
+        const commonVenues: VenueLocation[] = [];
+        const lowerTrimmed = trimmed.toLowerCase();
+        
+        // Hong Kong venues
+        if (lowerTrimmed.includes('victoria') || lowerTrimmed.includes('hong kong') || lowerTrimmed.includes('hk') || lowerTrimmed === 'vic') {
+          commonVenues.push({
+            name: 'Victoria Harbour, Hong Kong',
+            lat: 22.3193,
+            lng: 114.1694,
+          });
+        }
+        
+        // Add more common venues
+        if (lowerTrimmed.includes('sydney')) {
+          commonVenues.push({
+            name: 'Sydney Harbour, Australia',
+            lat: -33.8688,
+            lng: 151.2093,
+          });
+        }
+        
+        if (lowerTrimmed.includes('san francisco') || lowerTrimmed.includes('sf')) {
+          commonVenues.push({
+            name: 'San Francisco Bay, USA',
+            lat: 37.7749,
+            lng: -122.4194,
+          });
+        }
+        
+        if (commonVenues.length > 0) {
+          suggestions.push(...commonVenues);
+        }
+      }
+
+      if (!cancelled && trimmed === value.trim()) {
+        if (suggestions.length > 0) {
+          // Merge with any existing suggestions (from immediate fallback)
+          setVenueSuggestions(prev => {
+            const existingNames = new Set(prev.map(v => v.name.toLowerCase()));
+            const newSuggestions = suggestions.filter(v => !existingNames.has(v.name.toLowerCase()));
+            return newSuggestions.length > 0 ? [...prev, ...newSuggestions] : prev;
+          });
+          setShowSuggestions(true);
+        }
+        // Don't hide suggestions here - they might have been set by immediate fallback
+
+        let mergedForCache: VenueLocation[] | null = null;
+        setCachedVenues((prev) => {
+          const merged = mergeVenues(prev, suggestions);
+          if (merged === prev) {
+            return prev;
           }
+          mergedForCache = merged;
+          return merged;
+        });
+
+        if (mergedForCache) {
+          persistCache(mergedForCache);
         }
-      } finally {
-        if (!cancelled) {
-          setLoadingVenues(false);
-        }
+      }
+      
+      // Always clear loading state, even on error
+      if (!cancelled) {
+        setLoadingVenues(false);
       }
     };
 
@@ -290,14 +557,13 @@ export function VenueLocationPicker({
   };
 
   const handleOpenMap = () => {
-    // For now, show a coming soon alert
-    // TODO: Implement actual map modal with MapLibre
-    Alert.alert(
-      'Map Selection',
-      'Map-based location selection is coming soon!\n\nFor now, select a venue from the dropdown or type a custom location.',
-      [{ text: 'OK' }]
-    );
+    setShowMap(true);
   };
+
+  const handleMapClose = () => {
+    setShowMap(false);
+  };
+
 
   const coordinatesDisplay = coordinates
     ? `${coordinates.lat.toFixed(4)}°N, ${coordinates.lng.toFixed(4)}°E`
@@ -327,6 +593,12 @@ export function VenueLocationPicker({
               setShowSuggestions(true);
             }
           }}
+          onBlur={() => {
+            // Delay hiding suggestions to allow for selection
+            setTimeout(() => {
+              setShowSuggestions(false);
+            }, 200);
+          }}
         />
         {loadingVenues && (
           <ActivityIndicator size="small" color="#3B82F6" style={styles.loader} />
@@ -338,8 +610,11 @@ export function VenueLocationPicker({
         <View style={styles.suggestionsContainer}>
           {venueSuggestions.map((suggestion, index) => (
             <Pressable
-              key={index}
-              style={styles.suggestionItem}
+              key={`${suggestion.name}-${index}`}
+              style={({ pressed }) => [
+                styles.suggestionItem,
+                pressed && styles.suggestionItemPressed,
+              ]}
               onPress={() => handleSelectSuggestion(suggestion)}
             >
               <MapPin size={16} color="#3B82F6" />
@@ -349,6 +624,15 @@ export function VenueLocationPicker({
               </Text>
             </Pressable>
           ))}
+        </View>
+      )}
+      
+      {/* Show message if no suggestions found but user has typed enough */}
+      {!loadingVenues && value.trim().length >= 3 && !showSuggestions && venueSuggestions.length === 0 && (
+        <View style={styles.noSuggestionsContainer}>
+          <Text style={styles.noSuggestionsText}>
+            No venues found. You can type a custom location.
+          </Text>
         </View>
       )}
 
@@ -375,6 +659,55 @@ export function VenueLocationPicker({
           </Text>
         </View>
       )}
+
+      {/* Map Modal */}
+      <Modal
+        visible={showMap}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={handleMapClose}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Location on Map</Text>
+            <Pressable onPress={handleMapClose} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>✕</Text>
+            </Pressable>
+          </View>
+          
+          <View style={styles.mapContainer}>
+            {Platform.OS === 'web' ? (
+              <VenueMapWeb
+                coordinates={coordinates}
+                value={value}
+                onMapClick={handleMapClick}
+                showMap={showMap}
+              />
+            ) : (
+              <View style={styles.mapPlaceholder}>
+                <MapPin size={48} color="#3B82F6" />
+                <Text style={styles.mapPlaceholderText}>
+                  Map view coming soon
+                </Text>
+                <Text style={styles.mapPlaceholderSubtext}>
+                  For now, select a venue from the suggestions
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.modalFooter}>
+            <Text style={styles.modalFooterText}>
+              {coordinates 
+                ? `Selected: ${coordinates.lat.toFixed(4)}°N, ${coordinates.lng.toFixed(4)}°E - Click on the map to change location`
+                : 'Click on the map to select a location'}
+            </Text>
+            <Pressable onPress={handleMapClose} style={styles.doneButton}>
+              <Text style={styles.doneButtonText}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -423,6 +756,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
     maxHeight: 200,
+    zIndex: 1000,
+    position: 'relative',
   },
   suggestionItem: {
     flexDirection: 'row',
@@ -430,6 +765,22 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+  },
+  suggestionItemPressed: {
+    backgroundColor: '#F1F5F9',
+  },
+  noSuggestionsContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  noSuggestionsText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontStyle: 'italic',
   },
   suggestionText: {
     flex: 1,
@@ -488,5 +839,81 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#166534',
     fontWeight: '500',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  closeButtonText: {
+    fontSize: 20,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  mapContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  mapPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  mapPlaceholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginTop: 16,
+  },
+  mapPlaceholderSubtext: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 8,
+  },
+  modalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  modalFooterText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  doneButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

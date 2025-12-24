@@ -183,9 +183,18 @@ export function useRaceWeather(
 
     const raceDateObj = new Date(raceDate);
     const now = new Date();
+    const hoursUntil = (raceDateObj.getTime() - now.getTime()) / (1000 * 60 * 60);
 
     // Don't fetch weather for past races
     if (raceDateObj < now) {
+      setWeather(null);
+      return;
+    }
+
+    // Don't fetch weather for races more than 10 days (240 hours) away
+    // This matches the limit in RaceWeatherService and useEnrichedRaces
+    if (hoursUntil > 240) {
+      logger.debug(`[useRaceWeather] Race is too far in future (${Math.round(hoursUntil / 24)} days away) - skipping fetch`);
       setWeather(null);
       return;
     }
