@@ -1,0 +1,7 @@
+<svg width="200" height="200" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="46" stroke="white" stroke-width="2" fill="none"/>
+  <!-- Bold R -->
+  <text x="50" y="58" text-anchor="middle" font-family="Manrope, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="700" fill="white">R</text>
+  <!-- Flow wave underneath -->
+  <path d="M25 72 Q35 68 45 72 Q55 76 65 72 Q72 69 78 72" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>

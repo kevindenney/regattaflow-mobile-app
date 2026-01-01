@@ -21,6 +21,10 @@ import { FavoredEndInteractive } from './interactives/FavoredEndInteractive';
 import { TimedRunInteractive } from './interactives/TimedRunInteractive';
 import { PositioningInteractive } from './interactives/PositioningInteractive';
 import { StartingStrategiesInteractive } from './interactives/StartingStrategiesInteractive';
+import { RightOfWayInteractive } from './interactives/RightOfWayInteractive';
+import { WhatIsSailboatRacingInteractive } from './interactives/WhatIsSailboatRacingInteractive';
+import { TypesOfRacesInteractive } from './interactives/TypesOfRacesInteractive';
+import { MarkRoomInteractive } from './interactives/MarkRoomInteractive';
 
 // Component registry
 const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -31,6 +35,10 @@ const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
   'TimedRunInteractive': TimedRunInteractive,
   'PositioningInteractive': PositioningInteractive,
   'StartingStrategiesInteractive': StartingStrategiesInteractive,
+  'RightOfWayInteractive': RightOfWayInteractive,
+  'WhatIsSailboatRacingInteractive': WhatIsSailboatRacingInteractive,
+  'TypesOfRacesInteractive': TypesOfRacesInteractive,
+  'MarkRoomInteractive': MarkRoomInteractive,
 };
 
 export function InteractivePlayer({ componentName, onComplete }: InteractivePlayerProps) {

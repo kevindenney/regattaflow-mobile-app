@@ -20,6 +20,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
 import { signOutEverywhere } from '@/lib/auth-actions';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 
@@ -114,7 +115,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       >
         {showLogo ? (
           <>
-            <Text style={styles.logoIcon}>⚓</Text>
+            <RegattaFlowLogo size={28} variant="filled" />
             <Text style={styles.logoText}>RegattaFlow</Text>
           </>
         ) : (
@@ -248,7 +249,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       >
         {showLogo ? (
           <>
-            <Text style={styles.mobileLogoIcon}>⚓</Text>
+            <RegattaFlowLogo size={24} variant="filled" />
             <Text style={styles.mobileLogoText}>RegattaFlow</Text>
           </>
         ) : (

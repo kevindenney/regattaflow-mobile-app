@@ -3,6 +3,7 @@
 import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
+import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
 import React, { useRef, useState } from 'react';
 import {
   Modal,
@@ -149,8 +150,17 @@ export function NavigationHeader({
           {showLogo && (
             <TouchableOpacity
               style={styles.logoContainer}
-              onPress={() => router.push('/')}
+              onPress={() => {
+                // For authenticated users, link to landing page with bypass flag
+                // For unauthenticated users, link to landing page normally
+                if (user) {
+                  router.push('/?view=landing' as any);
+                } else {
+                  router.push('/');
+                }
+              }}
             >
+              <RegattaFlowLogo size={32} variant="filled" />
               <Text style={styles.logoText}>RegattaFlow</Text>
             </TouchableOpacity>
           )}
@@ -257,6 +267,17 @@ export function NavigationHeader({
               <View style={styles.dropdownDivider} />
 
               {/* Menu Items */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.dropdownItem,
+                  pressed && styles.dropdownItemPressed
+                ]}
+                onPress={() => handleNavigation('/?view=landing')}
+              >
+                <Ionicons name="home-outline" size={20} color="#374151" />
+                <Text style={styles.dropdownItemText}>Home / Landing</Text>
+              </Pressable>
+
               <Pressable
                 style={({ pressed }) => [
                   styles.dropdownItem,

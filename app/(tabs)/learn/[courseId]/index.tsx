@@ -22,6 +22,7 @@ import { Linking } from 'react-native';
 import { LearningService, type LearningCourse, type LearningModule, type LearningLesson } from '@/services/LearningService';
 import { LessonProgressService, type LessonProgress } from '@/services/LessonProgressService';
 import { coursePaymentService } from '@/services/CoursePaymentService';
+import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function CourseDetailScreen() {
@@ -42,13 +43,13 @@ export default function CourseDetailScreen() {
     }
   }, [courseId]);
 
-  // Check enrollment when user or courseId changes
+  // Check enrollment when user, courseId, or course data changes
   useEffect(() => {
-    if (courseId && user?.id) {
-      console.log('[CourseDetail] Checking enrollment for user:', user.id, 'course:', courseId);
+    if (courseId && user?.id && course?.id) {
+      console.log('[CourseDetail] Checking enrollment for user:', user.id, 'course:', course.id);
       checkEnrollment();
     }
-  }, [courseId, user?.id]);
+  }, [courseId, user?.id, course?.id]);
 
   const loadCourse = async () => {
     if (!courseId) return;
@@ -57,15 +58,132 @@ export default function CourseDetailScreen() {
       setLoading(true);
       setError(null);
       
-      // Add timeout to prevent hanging (45s to allow for multiple Supabase queries)
+      // First, try to load from JSON catalog (single source of truth)
+      let catalogCourse: CatalogCourse | undefined;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+      
+      if (isUUID) {
+        catalogCourse = CourseCatalogService.getCourseById(courseId);
+      } else {
+        // Try by slug first (most common case from navigation)
+        catalogCourse = CourseCatalogService.getCourseBySlug(courseId);
+      }
+      
+      // If found in catalog, convert to LearningCourse format for compatibility
+      if (catalogCourse) {
+        // Try to get the database UUID by looking up the course by slug
+        // This ensures we have the real UUID for enrollment operations
+        let dbCourseId: string | null = null;
+        let courseExistsInDb = false;
+        try {
+          const dbCourse = await Promise.race([
+            LearningService.getCourseBySlugForEnrollment(catalogCourse.slug),
+            new Promise<LearningCourse | null>((resolve) => 
+              setTimeout(() => resolve(null), 10000)
+            )
+          ]) as LearningCourse | null;
+          
+          if (dbCourse && dbCourse.id) {
+            dbCourseId = dbCourse.id; // Use the database UUID
+            courseExistsInDb = true;
+            console.log('[CourseDetail] Found course in database with UUID:', dbCourseId);
+          } else {
+            console.warn('[CourseDetail] Course not found in database. Course needs to be seeded.');
+            // Course doesn't exist in database yet - we'll use null to indicate this
+            // and skip enrollment operations
+            dbCourseId = null;
+            courseExistsInDb = false;
+          }
+        } catch (err: any) {
+          // Check if it's a 406 or other error indicating course doesn't exist
+          const isNotFoundError = err?.code === 'PGRST116' || err?.status === 406 || err?.message?.includes('406');
+          if (isNotFoundError) {
+            console.warn('[CourseDetail] Course not found in database (404/406). Course needs to be seeded.');
+            dbCourseId = null;
+            courseExistsInDb = false;
+          } else {
+            console.warn('[CourseDetail] Error looking up course in database:', err);
+            // For other errors, we'll still try to proceed but mark as not in DB
+            dbCourseId = null;
+            courseExistsInDb = false;
+          }
+        }
+        
+        const convertedCourse: LearningCourse = {
+          id: dbCourseId || catalogCourse.id, // Use database UUID if available, otherwise catalog ID (for display only)
+          // Store metadata about whether course exists in DB
+          ...(courseExistsInDb ? {} : { _catalogOnly: true } as any),
+          slug: catalogCourse.slug,
+          title: catalogCourse.title,
+          description: catalogCourse.description,
+          long_description: catalogCourse.longDescription || null,
+          thumbnail_url: catalogCourse.thumbnailUrl || null,
+          level: catalogCourse.level === 'level-1' ? 'beginner' : catalogCourse.level === 'level-2' ? 'intermediate' : 'advanced',
+          duration_minutes: catalogCourse.duration.totalMinutes,
+          price_cents: catalogCourse.price.cents,
+          stripe_price_id: null,
+          stripe_product_id: null,
+          is_published: catalogCourse.status === 'available',
+          is_featured: catalogCourse.slug === 'winning-starts-first-beats',
+          order_index: 0,
+          requires_subscription: false,
+          min_subscription_tier: 'free',
+          instructor_name: catalogCourse.instructor?.name || null,
+          instructor_bio: catalogCourse.instructor?.bio || null,
+          learning_objectives: catalogCourse.whatYouLearn || [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          learning_modules: catalogCourse.modules?.map((mod) => ({
+            id: mod.id,
+            course_id: dbCourseId || catalogCourse.id, // Use database UUID for course_id reference
+            title: mod.title,
+            description: null,
+            order_index: mod.orderIndex,
+            duration_minutes: mod.durationMinutes,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            learning_lessons: mod.lessons?.map((lesson) => ({
+              id: lesson.id,
+              module_id: mod.id,
+              title: lesson.title,
+              description: lesson.description || null,
+              lesson_type: lesson.lessonType as 'video' | 'text' | 'interactive' | 'quiz',
+              interactive_component: lesson.interactiveComponent || null,
+              video_url: null,
+              order_index: lesson.orderIndex,
+              duration_seconds: lesson.durationSeconds,
+              is_free_preview: lesson.isFreePreview || false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })) || [],
+          })) || [],
+        };
+        
+        setCourse(convertedCourse);
+        setLoading(false);
+        return;
+      }
+      
+      // Fallback to Supabase (for backward compatibility)
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), 45000)
       );
       
-      const courseData = await Promise.race([
-        LearningService.getCourse(courseId),
-        timeoutPromise,
-      ]) as LearningCourse | null;
+      let courseData: LearningCourse | null = null;
+      
+      if (isUUID) {
+        // It's a UUID - use getCourse
+        courseData = await Promise.race([
+          LearningService.getCourse(courseId),
+          timeoutPromise,
+        ]) as LearningCourse | null;
+      } else {
+        // It's a slug - use getCourseBySlug
+        courseData = await Promise.race([
+          LearningService.getCourseBySlug(courseId),
+          timeoutPromise,
+        ]) as LearningCourse | null;
+      }
       
       setCourse(courseData);
     } catch (err: any) {
@@ -85,8 +203,101 @@ export default function CourseDetailScreen() {
       return;
     }
     
+    // Wait for course to load so we have the actual UUID
+    if (!course?.id) {
+      console.log('[CourseDetail] Course not loaded yet, waiting...');
+      return;
+    }
+    
+    // Use course.id (UUID) instead of courseId (might be slug)
+    let actualCourseId = course.id;
+    
+    // Check if course is catalog-only (not in database)
+    // Even if marked as catalog-only, the course might exist in DB (previous lookup may have timed out)
+    // So we should try to find it by slug and check enrollment
+    if ((course as any)._catalogOnly) {
+      console.log('[CourseDetail] Course marked as catalog-only, but checking database by slug for enrollment...');
+      
+        // Try to find the course in database by slug (maybe previous lookup timed out)
+        const courseSlug = course.slug || courseId;
+        try {
+          const dbCourse = await Promise.race([
+            LearningService.getCourseBySlugForEnrollment(courseSlug),
+            new Promise<LearningCourse | null>((resolve) => 
+              setTimeout(() => resolve(null), 10000)
+            )
+          ]) as LearningCourse | null;
+        
+        if (dbCourse?.id) {
+          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
+          actualCourseId = dbCourse.id;
+          // Update course state to remove catalog-only flag
+          setCourse({ ...course, id: dbCourse.id, _catalogOnly: false } as any);
+        } else {
+          // Course not found, but check if user is enrolled by slug (enrollment might exist even if course lookup fails)
+          console.log('[CourseDetail] Course not found in database, checking enrollment by slug...');
+          const isEnrolledBySlug = await Promise.race([
+            LearningService.isEnrolledBySlug(user.id, courseSlug),
+            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
+          ]);
+          
+          if (isEnrolledBySlug) {
+            console.log('[CourseDetail] User is enrolled (found by slug), but course not in database');
+            setEnrolled(true);
+            // Still try to load subscription status
+            try {
+              const { hasProAccess, tier } = await LearningService.checkSubscriptionAccess(user.id);
+              setHasProSubscription(hasProAccess);
+              setUserSubscriptionTier(tier);
+            } catch (err) {
+              console.warn('[CourseDetail] Failed to check subscription:', err);
+            }
+            return;
+          } else {
+            console.log('[CourseDetail] Course truly not in database and user not enrolled');
+            setEnrolled(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[CourseDetail] Error looking up course in database:', err);
+        setEnrolled(false);
+        return;
+      }
+    }
+    
+    // Validate that we have a UUID (not a catalog string ID)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actualCourseId);
+    if (!isUUID) {
+      console.warn('[CourseDetail] Course ID is not a valid UUID, trying to find by slug...');
+      
+      // Last resort: try to find course by slug
+      const courseSlug = course.slug || courseId;
+      try {
+        const dbCourse = await Promise.race([
+          LearningService.getCourseBySlug(courseSlug),
+          new Promise<LearningCourse | null>((resolve) => 
+            setTimeout(() => resolve(null), 5000)
+          )
+        ]) as LearningCourse | null;
+        
+        if (dbCourse?.id) {
+          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
+          actualCourseId = dbCourse.id;
+        } else {
+          console.warn('[CourseDetail] Course ID is not a valid UUID and course not found in database');
+          setEnrolled(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('[CourseDetail] Error looking up course:', err);
+        setEnrolled(false);
+        return;
+      }
+    }
+    
     try {
-      console.log('[CourseDetail] Checking enrollment...');
+      console.log('[CourseDetail] Checking enrollment with course ID:', actualCourseId);
       
       // Run both queries in PARALLEL with 30-second timeout (was 10s, too short for slow connections)
       const QUERY_TIMEOUT = 30000;
@@ -102,7 +313,7 @@ export default function CourseDetailScreen() {
       ]);
       
       const enrollmentPromise = Promise.race([
-        LearningService.isEnrolled(user.id, courseId).then(result => ({ isEnrolled: result, timedOut: false })),
+        LearningService.isEnrolled(user.id, actualCourseId).then(result => ({ isEnrolled: result, timedOut: false })),
         new Promise<{ isEnrolled: boolean; timedOut: boolean }>((resolve) => 
           setTimeout(() => {
             console.warn('[CourseDetail] Enrollment check timed out after 30s');
@@ -139,17 +350,27 @@ export default function CourseDetailScreen() {
   };
 
   const loadLessonProgress = async () => {
-    if (!courseId || !user?.id) return;
+    if (!courseId || !user?.id || !course?.id) return;
+    
+    // Use course.id (UUID) instead of courseId (might be slug)
+    const actualCourseId = course.id;
+    
+    // Validate that we have a UUID (not a catalog string ID)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actualCourseId);
+    if (!isUUID) {
+      console.warn('[CourseDetail] Course ID is not a valid UUID, skipping progress load');
+      return;
+    }
     
     try {
       // Get course progress summary
-      const summary = await LessonProgressService.getCourseProgressSummary(user.id, courseId);
+      const summary = await LessonProgressService.getCourseProgressSummary(user.id, actualCourseId);
       if (summary) {
         setCourseProgress(summary.progress_percent);
       }
       
       // Get individual lesson progress
-      const progress = await LessonProgressService.getCourseProgress(user.id, courseId);
+      const progress = await LessonProgressService.getCourseProgress(user.id, actualCourseId);
       const progressMap = new Map<string, LessonProgress>();
       progress.forEach(p => {
         progressMap.set(p.lesson_id, p);
@@ -173,10 +394,124 @@ export default function CourseDetailScreen() {
   const [purchasing, setPurchasing] = useState(false);
 
   const handleEnroll = async () => {
-    console.log('[CourseDetail] handleEnroll called', { courseId, userId: user?.id, hasProSubscription });
-    if (!courseId || !user?.id) {
-      console.log('[CourseDetail] Missing courseId or userId');
+    console.log('[CourseDetail] handleEnroll called', { courseId, course: course?.id, userId: user?.id, hasProSubscription });
+
+    // Check if user is authenticated - redirect to sign-in if not
+    if (!user?.id) {
+      console.log('[CourseDetail] User not authenticated - redirecting to sign-in');
+      if (Platform.OS === 'web') {
+        // On web, navigate to login page
+        router.push('/login');
+      } else {
+        // On native, show alert then navigate
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to enroll in this course.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => router.push('/login') }
+          ]
+        );
+      }
       return;
+    }
+
+    if (!courseId || !course?.id) {
+      console.log('[CourseDetail] Missing courseId or course.id');
+      Alert.alert('Error', 'Course information is missing. Please try refreshing the page.');
+      return;
+    }
+    
+    // Use course.id (UUID) instead of courseId (might be slug)
+    let actualCourseId = course.id;
+    
+    // Check if course is catalog-only (not in database)
+    // Even if marked as catalog-only, try to find it in database (maybe previous lookup timed out)
+    if ((course as any)._catalogOnly) {
+      console.log('[CourseDetail] Course marked as catalog-only, but trying to find in database for enrollment...');
+      
+          // Try to find the course in database by slug (maybe previous lookup timed out)
+          const courseSlug = course.slug || courseId;
+          try {
+            const dbCourse = await Promise.race([
+              LearningService.getCourseBySlugForEnrollment(courseSlug),
+              new Promise<LearningCourse | null>((resolve) => 
+                setTimeout(() => resolve(null), 10000)
+              )
+            ]) as LearningCourse | null;
+        
+        if (dbCourse?.id) {
+          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
+          actualCourseId = dbCourse.id;
+          // Update course state to remove catalog-only flag
+          setCourse({ ...course, id: dbCourse.id, _catalogOnly: false } as any);
+        } else {
+          // Course not found, but check if user is already enrolled (enrollment might exist even if course lookup fails)
+          console.log('[CourseDetail] Course not found in database, checking if user is already enrolled by slug...');
+          const isAlreadyEnrolled = await Promise.race([
+            LearningService.isEnrolledBySlug(user.id, courseSlug),
+            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
+          ]);
+          
+          if (isAlreadyEnrolled) {
+            console.log('[CourseDetail] User is already enrolled (found by slug), updating enrollment status');
+            setEnrolled(true);
+            await loadLessonProgress();
+            Alert.alert('Success', 'You are already enrolled in this course!');
+            return;
+          } else {
+            console.error('[CourseDetail] Course truly not in database and user not enrolled, cannot enroll');
+            Alert.alert(
+              'Course Not Available', 
+              'This course has not been set up in the database yet. Please contact support or try again later.'
+            );
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('[CourseDetail] Error looking up course in database:', err);
+        Alert.alert(
+          'Error', 
+          'Unable to verify course. Please try again later.'
+        );
+        return;
+      }
+    }
+    
+    // Validate that we have a UUID (not a catalog string ID)
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actualCourseId);
+    if (!isValidUUID) {
+      console.error('[CourseDetail] Course ID is not a valid UUID, trying to find by slug...');
+      
+      // Last resort: try to find course by slug
+      const courseSlug = course.slug || courseId;
+      try {
+        const dbCourse = await Promise.race([
+          LearningService.getCourseBySlug(courseSlug),
+          new Promise<LearningCourse | null>((resolve) => 
+            setTimeout(() => resolve(null), 10000)
+          )
+        ]) as LearningCourse | null;
+        
+        if (dbCourse?.id) {
+          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
+          actualCourseId = dbCourse.id;
+        } else {
+          console.error('[CourseDetail] Course ID is not a valid UUID and course not found in database');
+          Alert.alert(
+            'Course Not Available', 
+            'This course has not been set up in the database yet. Please contact support or try again later.'
+          );
+          return;
+        }
+      } catch (err) {
+        console.error('[CourseDetail] Error looking up course:', err);
+        Alert.alert(
+          'Error', 
+          'Unable to verify course. Please try again later.'
+        );
+        return;
+      }
     }
     
     try {
@@ -185,7 +520,7 @@ export default function CourseDetailScreen() {
       // Pro subscribers get free access
       if (hasProSubscription) {
         console.log('[CourseDetail] Pro subscriber - enrolling for free');
-        const success = await LearningService.enrollProSubscriber(user.id, courseId);
+        const success = await LearningService.enrollProSubscriber(user.id, actualCourseId);
         if (success) {
           setEnrolled(true);
           await loadLessonProgress();
@@ -204,7 +539,7 @@ export default function CourseDetailScreen() {
         // Initiate Stripe checkout
         const result = await coursePaymentService.purchaseCourse(
           user.id,
-          courseId
+          actualCourseId
         );
         console.log('[CourseDetail] Purchase result:', result);
 
@@ -235,14 +570,16 @@ export default function CourseDetailScreen() {
           }
         }
       } else {
-        // Free course - enroll directly
-        await LearningService.enrollInCourse(user.id, courseId);
+        // Free course - enroll directly using the actual UUID
+        console.log('[CourseDetail] Enrolling in free course with ID:', actualCourseId);
+        await LearningService.enrollInCourse(user.id, actualCourseId);
         setEnrolled(true);
+        await loadLessonProgress();
         Alert.alert('Success', 'You are now enrolled in this free course!');
       }
     } catch (err) {
       console.error('[CourseDetail] Failed to enroll:', err);
-      Alert.alert('Error', 'Failed to process enrollment. Please try again.');
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to process enrollment. Please try again.');
     } finally {
       setPurchasing(false);
     }

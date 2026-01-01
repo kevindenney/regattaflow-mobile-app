@@ -5,22 +5,28 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, SafeAreaView, Platform, type ViewStyle } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { HeroPhones } from '@/components/landing/HeroPhones';
+import { LandingNav } from '@/components/landing/LandingNav';
 import { ScrollFix } from '@/components/landing/ScrollFix';
 
 export default function LandingPage() {
   const { signedIn, ready, userProfile, loading } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const searchParams = useLocalSearchParams<{ view?: string }>();
+  
+  // Allow authenticated users to view landing page if they explicitly request it
+  const bypassRedirect = searchParams.view === 'landing';
 
   useEffect(() => {
     // Wait for auth to be ready AND not loading profile
     if (!ready || loading || isRedirecting) return;
 
     // Only redirect if signed in AND profile is loaded (or explicitly null after loading)
-    if (signedIn) {
+    // BUT allow bypass if user explicitly wants to see landing page
+    if (signedIn && !bypassRedirect) {
       // If profile is still being fetched, wait for it
       // userProfile will be populated after signIn completes
       if (userProfile || (!loading && ready)) {
@@ -32,7 +38,7 @@ export default function LandingPage() {
         router.replace(destination);
       }
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting]);
+  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect]);
 
   // Show landing page immediately - don't wait for auth
   // (Auth redirect will happen in useEffect once ready)
@@ -44,6 +50,7 @@ export default function LandingPage() {
   return (
     <Container style={containerStyle}>
       <ScrollFix />
+      <LandingNav transparent={true} sticky={true} />
       <HeroPhones />
     </Container>
   );

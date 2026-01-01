@@ -427,8 +427,8 @@ export function RaceCard({
       <Pressable
         style={({ pressed }) => {
           const baseOpacity = raceStatus === 'past' ? 0.7 : 1;
-          const selectionOpacity = isDimmed ? 0.45 : baseOpacity;
-          const computedOpacity = pressed ? Math.max(selectionOpacity - 0.1, 0.35) : selectionOpacity;
+          const selectionOpacity = isDimmed ? 0.65 : baseOpacity;
+          const computedOpacity = pressed ? Math.max(selectionOpacity - 0.1, 0.5) : selectionOpacity;
           return [
             styles.card,
             {

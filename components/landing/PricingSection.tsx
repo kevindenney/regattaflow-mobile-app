@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,70 +6,43 @@ import {
   StyleSheet,
   useWindowDimensions,
   Platform,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-type Audience = 'sailors' | 'coaches' | 'clubs';
-
 export function PricingSection() {
-  const [activeTab, setActiveTab] = useState<Audience>('sailors');
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
 
   return (
-    <View style={styles.container}>
+    <View id="pricing-section" style={styles.container}>
       <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-        {/* Tabs */}
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'sailors' && styles.tabActive]}
-            onPress={() => setActiveTab('sailors')}
-          >
-            <Ionicons
-              name="water-outline"
-              size={20}
-              color={activeTab === 'sailors' ? '#3E92CC' : '#6B7280'}
-            />
-            <Text style={[styles.tabText, activeTab === 'sailors' && styles.tabTextActive]}>
-              Sailors
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'clubs' && styles.tabActive]}
-            onPress={() => setActiveTab('clubs')}
-          >
-            <Ionicons
-              name="trophy-outline"
-              size={20}
-              color={activeTab === 'clubs' ? '#10B981' : '#6B7280'}
-            />
-            <Text style={[styles.tabText, activeTab === 'clubs' && styles.tabTextActive]}>
-              Clubs
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'coaches' && styles.tabActive]}
-            onPress={() => setActiveTab('coaches')}
-          >
-            <Ionicons
-              name="people-outline"
-              size={20}
-              color={activeTab === 'coaches' ? '#8B5CF6' : '#6B7280'}
-            />
-            <Text style={[styles.tabText, activeTab === 'coaches' && styles.tabTextActive]}>
-              Coaches
-            </Text>
-          </TouchableOpacity>
+        {/* Section Header */}
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
+            Simple, Transparent Pricing
+          </Text>
+          <Text style={[styles.headerSubtitle, isDesktop && styles.headerSubtitleDesktop]}>
+            Choose the plan that fits your racing goals
+          </Text>
         </View>
 
-        {/* Content */}
-        {activeTab === 'sailors' && <SailorsPricing isDesktop={isDesktop} />}
-        {activeTab === 'clubs' && <ClubsPricing isDesktop={isDesktop} />}
-        {activeTab === 'coaches' && <CoachesPricing isDesktop={isDesktop} />}
+        {/* Sailor Pricing Tiers */}
+        <SailorsPricing isDesktop={isDesktop} />
+        
+        {/* Racing Academy Pricing Note */}
+        <View style={styles.academyPricingNote}>
+          <Ionicons name="school-outline" size={20} color="#3E92CC" />
+          <View style={styles.academyPricingText}>
+            <Text style={styles.academyPricingTitle}>Racing Academy Modules</Text>
+            <Text style={styles.academyPricingSubtitle}>
+              $30/year per module • Bundle all 3 for $75/year (save $15)
+            </Text>
+            <Text style={styles.academyPricingDetails}>
+              Starting Line Strategy • Wind Shift Tactics • Mark Rounding Mastery
+            </Text>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -93,11 +66,15 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>5 documents/mo</Text>
+            <Text style={styles.featureText}>View venue intelligence</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Basic maps</Text>
+            <Text style={styles.featureText}>10 AI queries per month</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>Basic race planning</Text>
           </View>
         </View>
 
@@ -105,7 +82,7 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           style={[styles.ctaButton, styles.ctaButtonOutline]}
           onPress={() => router.push('/(auth)/signup')}
         >
-          <Text style={styles.ctaButtonOutlineText}>Get Started</Text>
+          <Text style={styles.ctaButtonOutlineText}>Start Free Trial</Text>
         </TouchableOpacity>
       </View>
 
@@ -124,19 +101,23 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
         <View style={styles.features}>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Unlimited docs</Text>
+            <Text style={styles.featureText}>Unlimited AI queries</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>AI course viz</Text>
+            <Text style={styles.featureText}>Full venue intelligence access</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Full strategy</Text>
+            <Text style={styles.featureText}>Advanced race strategy</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
             <Text style={styles.featureText}>Performance analytics</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>1 Racing Academy module included</Text>
           </View>
         </View>
 
@@ -160,15 +141,19 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
         <View style={styles.features}>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>AI strategy</Text>
+            <Text style={styles.featureText}>Everything in Sailor Pro</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Venue intel</Text>
+            <Text style={styles.featureText}>Up to 5 users (team/coach access)</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Multi-model forecast</Text>
+            <Text style={styles.featureText}>Advanced team analytics</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>All Racing Academy modules included</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
@@ -180,7 +165,7 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           style={[styles.ctaButton, styles.ctaButtonOutline]}
           onPress={() => router.push('/(auth)/signup')}
         >
-          <Text style={styles.ctaButtonOutlineText}>Start Trial</Text>
+          <Text style={styles.ctaButtonOutlineText}>Start Free Trial</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -333,49 +318,28 @@ const styles = StyleSheet.create({
     // Additional desktop styles if needed
   },
 
-  // Tabs
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 48,
-    alignSelf: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        elevation: 2,
-      },
-    }),
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
+  // Header
+  header: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    gap: 8,
-    ...Platform.select({
-      web: {
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-      },
-    }),
+    marginBottom: 48,
   },
-  tabActive: {
-    backgroundColor: '#F3F4F6',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  tabTextActive: {
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
     color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  headerTitleDesktop: {
+    fontSize: 40,
+  },
+  headerSubtitle: {
+    fontSize: 18,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  headerSubtitleDesktop: {
+    fontSize: 20,
   },
 
   // Pricing Content
@@ -383,6 +347,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 24,
     flexWrap: 'wrap',
+    ...Platform.select({
+      web: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: 24,
+        maxWidth: 1200,
+        alignSelf: 'center',
+        '@media (max-width: 768px)': {
+          gridTemplateColumns: '1fr',
+          gap: 16,
+        },
+      } as any,
+    }),
   },
   pricingContentDesktop: {
     flexWrap: 'nowrap',
@@ -398,7 +375,11 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-      },
+        '@media (max-width: 768px)': {
+          minWidth: 0,
+          width: '100%',
+        },
+      } as any,
       default: {
         elevation: 2,
       },
@@ -546,6 +527,39 @@ const styles = StyleSheet.create({
   clubTierDesc: {
     fontSize: 12,
     color: '#9CA3AF',
+    marginTop: 4,
+  },
+  
+  // Racing Academy Pricing Note
+  academyPricingNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0F9FF',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 32,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    gap: 16,
+  },
+  academyPricingText: {
+    flex: 1,
+  },
+  academyPricingTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  academyPricingSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3E92CC',
+    marginBottom: 4,
+  },
+  academyPricingDetails: {
+    fontSize: 13,
+    color: '#6B7280',
     marginTop: 4,
   },
 });

@@ -1,23 +1,8 @@
 import { Link } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
-
-type DemoPersona = 'sailor' | 'club' | 'coach' | 'sarah' | 'marcus' | 'emma' | 'james' | 'coachSarah' | 'coachJimmy';
-
-const DEFAULT_DEMO_IDENTIFIERS: Record<DemoPersona, string> = {
-  sailor: 'demo-sailor@regattaflow.app',
-  club: 'demo-club@regattaflow.app',
-  coach: 'demo-coach@regattaflow.app',
-  // New mock users with clubs/fleets
-  sarah: 'sarah.chen@sailing.com',
-  marcus: 'mike.thompson@racing.com',
-  emma: 'emma.wilson@yacht.club',
-  james: 'james.rodriguez@fleet.com',
-  coachSarah: 'coach.anderson@sailing.com',
-  coachJimmy: 'coachkdenney@icloud.com',
-};
 
 const cardShadowStyle: ViewStyle =
   Platform.OS === 'web'
@@ -35,7 +20,7 @@ const cardShadowStyle: ViewStyle =
 const getAuthErrorMessage = (error: any): string => {
   const message = error?.message?.toLowerCase() || '';
   const code = error?.code || '';
-  
+
   if (message.includes('invalid login credentials') || code === 'invalid_credentials') {
     return 'Invalid email or password. Please check your credentials and try again.';
   }
@@ -60,63 +45,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const demoAccounts = useMemo(
-    () => ({
-      sailor: {
-        label: 'Demo Sailor',
-        identifier:
-          process.env.EXPO_PUBLIC_DEMO_SAILOR_IDENTIFIER ?? DEFAULT_DEMO_IDENTIFIERS.sailor,
-        password: process.env.EXPO_PUBLIC_DEMO_SAILOR_PASSWORD ?? 'Demo123!',
-      },
-      club: {
-        label: 'Demo Club Manager',
-        identifier:
-          process.env.EXPO_PUBLIC_DEMO_CLUB_IDENTIFIER ?? DEFAULT_DEMO_IDENTIFIERS.club,
-        password: process.env.EXPO_PUBLIC_DEMO_CLUB_PASSWORD ?? 'Demo123!',
-      },
-      coach: {
-        label: 'Demo Coach',
-        identifier:
-          process.env.EXPO_PUBLIC_DEMO_COACH_IDENTIFIER ?? DEFAULT_DEMO_IDENTIFIERS.coach,
-        password: process.env.EXPO_PUBLIC_DEMO_COACH_PASSWORD ?? 'Demo123!',
-      },
-      sarah: {
-        label: 'Sarah Chen (RHKYC, Dragon/J70)',
-        identifier: DEFAULT_DEMO_IDENTIFIERS.sarah,
-        password: 'sailing123',
-      },
-      marcus: {
-        label: 'Mike Thompson (SFYC, Dragon/420)',
-        identifier: DEFAULT_DEMO_IDENTIFIERS.marcus,
-        password: 'sailing123',
-      },
-      emma: {
-        label: 'Emma Wilson (RSYS, Laser/Opti)',
-        identifier: DEFAULT_DEMO_IDENTIFIERS.emma,
-        password: 'sailing123',
-      },
-      james: {
-        label: 'James Rodriguez (MYC, J70)',
-        identifier: DEFAULT_DEMO_IDENTIFIERS.james,
-        password: 'sailing123',
-      },
-      coachSarah: {
-        label: 'Coach Anderson (Multi-club)',
-        identifier: DEFAULT_DEMO_IDENTIFIERS.coachSarah,
-        password: 'sailing123',
-      },
-      coachJimmy: {
-        label: 'Coach: Jimmy Wilson',
-        identifier: DEFAULT_DEMO_IDENTIFIERS.coachJimmy,
-        password: 'password123',
-      },
-    }),
-    []
-  );
-
   const onEmailLogin = async () => {
     setErrorMessage(null); // Clear previous errors
-    
+
     if (!identifier || !password) {
       setErrorMessage('Please enter your email and password');
       return;
@@ -124,7 +55,7 @@ export default function Login() {
     try {
       await signIn(identifier, password);
     } catch (e: any) {
-      console.error('🔍 [LOGIN] Sign in failed:', e);
+      console.error('[LOGIN] Sign in failed:', e);
       const friendlyMessage = getAuthErrorMessage(e);
       setErrorMessage(friendlyMessage);
       // Also show alert on mobile for better visibility
@@ -139,7 +70,7 @@ export default function Login() {
     try {
       await signInWithGoogle();
     } catch (e: any) {
-      console.error('🔍 [LOGIN] Google sign in failed:', e);
+      console.error('[LOGIN] Google sign in failed:', e);
       const friendlyMessage = getAuthErrorMessage(e);
       setErrorMessage(friendlyMessage);
       if (Platform.OS !== 'web') {
@@ -153,7 +84,7 @@ export default function Login() {
     try {
       await signInWithApple();
     } catch (e: any) {
-      console.error('🔍 [LOGIN] Apple sign in failed:', e);
+      console.error('[LOGIN] Apple sign in failed:', e);
       const friendlyMessage = getAuthErrorMessage(e);
       setErrorMessage(friendlyMessage);
       if (Platform.OS !== 'web') {
@@ -162,31 +93,12 @@ export default function Login() {
     }
   };
 
-  const onDemoLogin = async (persona: DemoPersona) => {
-    setErrorMessage(null);
-    const demo = demoAccounts[persona];
-    if (!demo.password) {
-      setErrorMessage(`Demo credentials for ${demo.label} are not configured.`);
-      return;
-    }
-
-    try {
-      setIdentifier(demo.identifier);
-      setPassword(demo.password);
-      await signIn(demo.identifier, demo.password);
-    } catch (e: any) {
-      console.error(`[LOGIN] Demo ${persona} sign in failed:`, e);
-      const friendlyMessage = getAuthErrorMessage(e);
-      setErrorMessage(friendlyMessage);
-    }
-  };
-
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -236,94 +148,6 @@ export default function Login() {
             <View style={styles.divider} />
             <Text style={styles.dividerText}>or</Text>
             <View style={styles.divider} />
-          </View>
-
-          <View style={styles.demoSection}>
-            <Text style={styles.demoLabel}>Quick demo access</Text>
-            <View style={styles.demoButtonRow}>
-              {(['sailor', 'club', 'coach'] as DemoPersona[]).map((persona) => {
-                const demo = demoAccounts[persona];
-                const isConfigured = Boolean(demo.password);
-                return (
-                  <TouchableOpacity
-                    key={persona}
-                    accessibilityRole="button"
-                    accessibilityLabel={`demo-login-${persona}`}
-                    onPress={() => onDemoLogin(persona)}
-                    disabled={loading || !isConfigured}
-                    style={[
-                      styles.demoButton,
-                      (!isConfigured || loading) && styles.demoButtonDisabled,
-                    ]}
-                  >
-                    <Text style={styles.demoButtonTitle}>{demo.label}</Text>
-                    <Text style={styles.demoButtonSubtitle}>
-                      {demo.identifier}
-                    </Text>
-                    {!isConfigured && (
-                      <Text style={styles.demoMissingPassword}>Set password env to enable</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.demoSection}>
-            <Text style={styles.demoLabel}>Fleet Members</Text>
-            <View style={styles.demoButtonRow}>
-              {(['sarah', 'marcus', 'emma', 'james'] as DemoPersona[]).map((persona) => {
-                const demo = demoAccounts[persona];
-                const isConfigured = Boolean(demo.password);
-                return (
-                  <TouchableOpacity
-                    key={persona}
-                    accessibilityRole="button"
-                    accessibilityLabel={`demo-login-${persona}`}
-                    onPress={() => onDemoLogin(persona)}
-                    disabled={loading || !isConfigured}
-                    style={[
-                      styles.demoButton,
-                      (!isConfigured || loading) && styles.demoButtonDisabled,
-                    ]}
-                  >
-                    <Text style={styles.demoButtonTitle}>{demo.label}</Text>
-                    <Text style={styles.demoButtonSubtitle}>
-                      {demo.identifier}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.demoSection}>
-            <Text style={styles.demoLabel}>Coaches (for testing)</Text>
-            <View style={styles.demoButtonRow}>
-              {(['coachSarah', 'coachJimmy'] as DemoPersona[]).map((persona) => {
-                const demo = demoAccounts[persona];
-                const isConfigured = Boolean(demo.password);
-                return (
-                  <TouchableOpacity
-                    key={persona}
-                    accessibilityRole="button"
-                    accessibilityLabel={`demo-login-${persona}`}
-                    onPress={() => onDemoLogin(persona)}
-                    disabled={loading || !isConfigured}
-                    style={[
-                      styles.demoButton,
-                      styles.coachDemoButton,
-                      (!isConfigured || loading) && styles.demoButtonDisabled,
-                    ]}
-                  >
-                    <Text style={styles.demoButtonTitle}>{demo.label}</Text>
-                    <Text style={styles.demoButtonSubtitle}>
-                      {demo.identifier}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
           </View>
 
           {/* Login Form */}
@@ -475,55 +299,6 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: 8,
     color: '#94A3B8'
-  },
-  demoSection: {
-    marginBottom: 20,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  demoLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 12,
-    textTransform: 'uppercase'
-  },
-  demoButtonRow: {
-    flexDirection: 'column',
-  },
-  demoButton: {
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    marginBottom: 10,
-  },
-  demoButtonDisabled: {
-    opacity: 0.6,
-  },
-  coachDemoButton: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FCD34D',
-  },
-  demoButtonTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1D4ED8',
-  },
-  demoButtonSubtitle: {
-    fontSize: 12,
-    color: '#475569',
-    marginTop: 2,
-  },
-  demoMissingPassword: {
-    marginTop: 4,
-    fontSize: 11,
-    color: '#DC2626',
   },
   input: {
     width: '100%',

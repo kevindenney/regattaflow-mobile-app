@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Check } from 'lucide-react-native';
+import { LandingNav } from '@/components/landing/LandingNav';
 
 const PricingScreen = () => {
   const plans = [
@@ -57,8 +58,10 @@ const PricingScreen = () => {
   ];
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="p-6">
+    <View className="flex-1 bg-white">
+      <LandingNav transparent={false} sticky={true} />
+      <ScrollView className="flex-1">
+        <View className="p-6">
         {/* Header */}
         <View className="mb-8">
           <Text className="text-3xl font-bold text-gray-900 text-center mb-2">
@@ -134,8 +137,9 @@ const PricingScreen = () => {
             </View>
           ))}
         </View>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 

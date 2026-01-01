@@ -20,6 +20,7 @@ import { LearningService, type LearningCourse, type LearningLesson } from '@/ser
 import { LessonProgressService } from '@/services/LessonProgressService';
 import { useAuth } from '@/providers/AuthProvider';
 import { LessonPlayer } from '@/components/learn';
+import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
 
 export default function LessonPlayerScreen() {
   const { courseId, lessonId } = useLocalSearchParams<{ courseId: string; lessonId: string }>();
@@ -32,6 +33,8 @@ export default function LessonPlayerScreen() {
   const [canAccess, setCanAccess] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [marking, setMarking] = useState(false);
+  const [currentModule, setCurrentModule] = useState<{ id: string; title: string; orderIndex: number } | null>(null);
+  const [lessonPosition, setLessonPosition] = useState<{ current: number; total: number } | null>(null);
 
   useEffect(() => {
     if (courseId && lessonId && user?.id) {
@@ -54,7 +57,121 @@ export default function LessonPlayerScreen() {
       const loadAllData = async () => {
         // Load course with modules and lessons
         console.log('[LessonPlayer] Loading course...');
-        const courseData = await LearningService.getCourse(courseId);
+        
+        // First, try to load from JSON catalog (single source of truth)
+        let catalogCourse: CatalogCourse | undefined;
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+        
+        if (isUUID) {
+          catalogCourse = CourseCatalogService.getCourseById(courseId);
+        } else {
+          // Try by slug first (most common case from navigation)
+          catalogCourse = CourseCatalogService.getCourseBySlug(courseId);
+        }
+        
+        let courseData: LearningCourse | null = null;
+        
+        // If found in catalog, convert to LearningCourse format for compatibility
+        if (catalogCourse) {
+          // Try to get the database UUID by looking up the course by slug
+          // This ensures we have the real UUID for enrollment operations
+          let dbCourseId: string | null = null;
+          let courseExistsInDb = false;
+          try {
+            const dbCourse = await Promise.race([
+              LearningService.getCourseBySlug(catalogCourse.slug),
+              new Promise<LearningCourse | null>((resolve) => 
+                setTimeout(() => resolve(null), 5000)
+              )
+            ]) as LearningCourse | null;
+            
+            if (dbCourse && dbCourse.id) {
+              dbCourseId = dbCourse.id; // Use the database UUID
+              courseExistsInDb = true;
+              console.log('[LessonPlayer] Found course in database with UUID:', dbCourseId);
+            } else {
+              console.warn('[LessonPlayer] Course not found in database. Course needs to be seeded.');
+              dbCourseId = null;
+              courseExistsInDb = false;
+            }
+          } catch (err: any) {
+            // Check if it's a 406 or other error indicating course doesn't exist
+            const isNotFoundError = err?.code === 'PGRST116' || err?.status === 406 || err?.message?.includes('406');
+            if (isNotFoundError) {
+              console.warn('[LessonPlayer] Course not found in database (404/406). Course needs to be seeded.');
+              dbCourseId = null;
+              courseExistsInDb = false;
+            } else {
+              console.warn('[LessonPlayer] Error looking up course in database:', err);
+              dbCourseId = null;
+              courseExistsInDb = false;
+            }
+          }
+          
+          courseData = {
+            id: dbCourseId || catalogCourse.id, // Use database UUID if available, otherwise catalog ID (for display only)
+            slug: catalogCourse.slug,
+            title: catalogCourse.title,
+            description: catalogCourse.description,
+            long_description: catalogCourse.longDescription || null,
+            thumbnail_url: catalogCourse.thumbnailUrl || null,
+            level: catalogCourse.level === 'level-1' ? 'beginner' : catalogCourse.level === 'level-2' ? 'intermediate' : 'advanced',
+            duration_minutes: catalogCourse.duration.totalMinutes,
+            price_cents: catalogCourse.price.cents,
+            stripe_price_id: null,
+            stripe_product_id: null,
+            is_published: catalogCourse.status === 'available',
+            is_featured: catalogCourse.slug === 'winning-starts-first-beats',
+            order_index: 0,
+            requires_subscription: false,
+            min_subscription_tier: 'free',
+            instructor_name: catalogCourse.instructor?.name || null,
+            instructor_bio: catalogCourse.instructor?.bio || null,
+            learning_objectives: catalogCourse.whatYouLearn || [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            learning_modules: catalogCourse.modules?.map((mod) => ({
+              id: mod.id,
+              course_id: dbCourseId || catalogCourse.id, // Use database UUID for course_id reference
+              title: mod.title,
+              description: null,
+              order_index: mod.orderIndex,
+              duration_minutes: mod.durationMinutes,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              learning_lessons: mod.lessons?.map((lesson) => ({
+                id: lesson.id,
+                module_id: mod.id,
+                title: lesson.title,
+                description: lesson.description || null,
+                lesson_type: lesson.lessonType as 'video' | 'text' | 'interactive' | 'quiz',
+                interactive_component: lesson.interactiveComponent || null,
+                video_url: null,
+                order_index: lesson.orderIndex,
+                duration_seconds: lesson.durationSeconds,
+                is_free_preview: lesson.isFreePreview || false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })) || [],
+            })) || [],
+          };
+        } else {
+          // Fallback to Supabase (for backward compatibility)
+          if (isUUID) {
+            // It's a UUID - use getCourse
+            courseData = await Promise.race([
+              LearningService.getCourse(courseId),
+              new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 30000))
+            ]) as LearningCourse | null;
+          } else {
+            // It's a slug - use getCourseBySlug
+            courseData = await Promise.race([
+              LearningService.getCourseBySlug(courseId),
+              new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 30000))
+            ]) as LearningCourse | null;
+          }
+        }
+        
         if (!courseData) {
           throw new Error('Course not found');
         }
@@ -72,10 +189,62 @@ export default function LessonPlayerScreen() {
         }
         setLesson(foundLesson);
 
+        // Find current module and lesson position
+        const module = courseData.learning_modules?.find(m => 
+          m.learning_lessons?.some(l => l.id === lessonId)
+        );
+        if (module) {
+          setCurrentModule({
+            id: module.id,
+            title: module.title,
+            orderIndex: module.order_index || 0,
+          });
+          
+          const moduleLessons = module.learning_lessons || [];
+          const sortedLessons = [...moduleLessons].sort((a, b) => 
+            (a.order_index || 0) - (b.order_index || 0)
+          );
+          const currentIndex = sortedLessons.findIndex(l => l.id === lessonId);
+          if (currentIndex >= 0) {
+            setLessonPosition({
+              current: currentIndex + 1,
+              total: sortedLessons.length,
+            });
+          }
+        }
+
         // Check enrollment and access with individual timeouts
-        console.log('[LessonPlayer] Checking enrollment...');
+        // Use courseData.id (actual UUID) instead of courseId (might be slug)
+        // But first validate it's a UUID, and if not, try to find the course in database
+        let enrollmentCourseId = courseData.id;
+        const isValidCourseIdUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(enrollmentCourseId);
+        
+        if (!isValidCourseIdUUID) {
+          console.warn('[LessonPlayer] Course ID is not a valid UUID, trying to find by slug...');
+          // Try to find the course in database by slug
+          const courseSlug = courseData.slug || courseId;
+          try {
+            const dbCourse = await Promise.race([
+              LearningService.getCourseBySlug(courseSlug),
+              new Promise<LearningCourse | null>((resolve) => 
+                setTimeout(() => resolve(null), 5000)
+              )
+            ]) as LearningCourse | null;
+            
+            if (dbCourse?.id) {
+              console.log('[LessonPlayer] Found course in database with UUID:', dbCourse.id);
+              enrollmentCourseId = dbCourse.id;
+            } else {
+              console.warn('[LessonPlayer] Course not found in database, cannot check enrollment');
+            }
+          } catch (err) {
+            console.warn('[LessonPlayer] Error looking up course:', err);
+          }
+        }
+        
+        console.log('[LessonPlayer] Checking enrollment with course ID:', enrollmentCourseId);
         const enrollmentPromise = Promise.race([
-          LearningService.isEnrolled(user.id, courseId),
+          LearningService.isEnrolled(user.id, enrollmentCourseId),
           new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
         ]);
         const isEnrolled = await enrollmentPromise;
@@ -130,7 +299,10 @@ export default function LessonPlayerScreen() {
 
   // Find the next lesson in the course
   const getNextLesson = useCallback(() => {
-    if (!course || !lessonId) return null;
+    if (!course || !lessonId) {
+      console.log('[LessonPlayer] getNextLesson - missing course or lessonId', { course: !!course, lessonId });
+      return null;
+    }
     
     const allLessons = course.learning_modules
       ?.flatMap((module) => module.learning_lessons || [])
@@ -144,10 +316,18 @@ export default function LessonPlayerScreen() {
         return (a.order_index || 0) - (b.order_index || 0);
       }) || [];
     
+    console.log('[LessonPlayer] getNextLesson - all lessons:', allLessons.map(l => ({ id: l.id, title: l.title, order: l.order_index })));
+    
     const currentIndex = allLessons.findIndex(l => l.id === lessonId);
+    console.log('[LessonPlayer] getNextLesson - current lesson index:', currentIndex, 'total lessons:', allLessons.length);
+    
     if (currentIndex >= 0 && currentIndex < allLessons.length - 1) {
-      return allLessons[currentIndex + 1];
+      const nextLesson = allLessons[currentIndex + 1];
+      console.log('[LessonPlayer] getNextLesson - found next lesson:', nextLesson.id, nextLesson.title);
+      return nextLesson;
     }
+    
+    console.log('[LessonPlayer] getNextLesson - no next lesson found');
     return null;
   }, [course, lessonId]);
 
@@ -224,6 +404,27 @@ export default function LessonPlayerScreen() {
     }
   }, [lesson?.lesson_type, user?.id, lessonId]);
 
+  // Handle navigation to next lesson when interactive component completes
+  const handleLessonComplete = useCallback(() => {
+    const nextLesson = getNextLesson();
+    console.log('[LessonPlayer] handleLessonComplete - nextLesson:', nextLesson);
+    console.log('[LessonPlayer] handleLessonComplete - current lessonId:', lessonId);
+    console.log('[LessonPlayer] handleLessonComplete - course modules:', course?.learning_modules?.map(m => ({
+      id: m.id,
+      title: m.title,
+      lessons: m.learning_lessons?.map(l => ({ id: l.id, title: l.title }))
+    })));
+    
+    if (nextLesson && nextLesson.id) {
+      console.log('[LessonPlayer] Navigating to next lesson:', nextLesson.id, nextLesson.title);
+      router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
+    } else {
+      console.log('[LessonPlayer] No next lesson found, navigating back to course');
+      // No more lessons, go back to course
+      router.push(`/(tabs)/learn/${courseId}`);
+    }
+  }, [courseId, getNextLesson, lessonId, course]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -299,12 +500,30 @@ export default function LessonPlayerScreen() {
         </View>
       </View>
 
+      {/* Breadcrumb Navigation */}
+      {course && currentModule && lessonPosition && (
+        <View style={styles.breadcrumb}>
+          <TouchableOpacity
+            style={styles.breadcrumbItem}
+            onPress={() => router.push(`/(tabs)/learn/${courseId}`)}
+          >
+            <Text style={styles.breadcrumbText}>{course.title}</Text>
+          </TouchableOpacity>
+          <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+          <Text style={styles.breadcrumbItemText}>{currentModule.title}</Text>
+          <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+          <Text style={styles.breadcrumbItemText}>
+            Lesson {lessonPosition.current} of {lessonPosition.total}
+          </Text>
+        </View>
+      )}
+
       {/* Lesson Content */}
       {canAccess && lesson ? (
         <View style={styles.content}>
           <LessonPlayer
             lesson={lesson}
-            onComplete={handleComplete}
+            onComplete={handleLessonComplete}
             onProgress={handleProgress}
           />
         </View>
@@ -396,6 +615,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
     marginTop: 2,
+  },
+  breadcrumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    gap: 6,
+  },
+  breadcrumbItem: {
+    paddingVertical: 2,
+  },
+  breadcrumbText: {
+    fontSize: 12,
+    color: '#3B82F6',
+    fontWeight: '500',
+  },
+  breadcrumbItemText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
   content: {
     flex: 1,

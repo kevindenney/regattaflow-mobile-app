@@ -73,17 +73,8 @@ config.transformer = {
 config.watcher = {
   ...config.watcher,
   additionalExts: ['mjs'],
-  watchman: {
-    ignore_dirs: [
-      '.git',
-      '.expo',
-      '.next',
-      'node_modules/.cache',
-      'coverage',
-      'dist',
-      '__tests__',
-    ],
-  },
+  // Note: watchman.ignore_dirs is not a valid Metro config option
+  // Use blockList in resolver instead (already configured below)
 };
 
 // Blacklist patterns to prevent watching unnecessary files

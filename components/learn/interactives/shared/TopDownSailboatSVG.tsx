@@ -35,6 +35,12 @@ interface TopDownSailboatSVGProps {
   label?: string;
   /** Wind direction (where wind comes FROM), default 0 = from North */
   windDirection?: number;
+  /** If true, render boat as outlined (stroke only, no fill) */
+  outlined?: boolean;
+  /** Show tack indicator labels (PORT/STARBOARD) */
+  showTackIndicator?: boolean;
+  /** Show boom position with highlight */
+  highlightBoom?: boolean;
 }
 
 /**
@@ -110,6 +116,9 @@ export function TopDownSailboatSVG({
   showWake = true,
   label,
   windDirection = 0,
+  outlined = false,
+  showTackIndicator = false,
+  highlightBoom = false,
   /** If true, rotation is handled externally (by AnimatedG), so don't apply rotation transform */
   externalRotation = false,
 }: TopDownSailboatSVGProps & { externalRotation?: boolean }) {
@@ -203,30 +212,34 @@ export function TopDownSailboatSVG({
       {/* Main hull */}
       <Path
         d={hullPath}
-        fill={hullColor}
-        stroke="#0F172A"
-        strokeWidth="1.5"
+        fill={outlined ? 'none' : hullColor}
+        stroke={hullColor}
+        strokeWidth={outlined ? '2.5' : '1.5'}
       />
 
       {/* Deck (lighter area) */}
-      <Ellipse
-        cx="25"
-        cy="42"
-        rx="12"
-        ry="25"
-        fill={hullColor}
-        opacity={0.7}
-      />
+      {!outlined && (
+        <Ellipse
+          cx="25"
+          cy="42"
+          rx="12"
+          ry="25"
+          fill={hullColor}
+          opacity={0.7}
+        />
+      )}
 
       {/* Cockpit */}
-      <Ellipse
-        cx="25"
-        cy="55"
-        rx="8"
-        ry="12"
-        fill="#1E293B"
-        opacity={0.4}
-      />
+      {!outlined && (
+        <Ellipse
+          cx="25"
+          cy="55"
+          rx="8"
+          ry="12"
+          fill="#1E293B"
+          opacity={0.4}
+        />
+      )}
 
       {/* Mast (circle at center) */}
       <Circle
@@ -249,13 +262,21 @@ export function TopDownSailboatSVG({
         strokeLinecap="round"
       />
 
-      {/* Mainsail - single white sail on leeward side */}
+      {/* Mainsail - single white sail on leeward side - made more prominent */}
       <Path
         d={mainsailPath}
         fill={sailColor}
-        stroke="#0F172A"
+        stroke="#1E293B"
+        strokeWidth="2"
+        opacity={isInNoGoZone ? 0.5 : 1.0} // Full opacity for visibility
+      />
+      {/* Sail highlight/shadow for depth */}
+      <Path
+        d={mainsailPath}
+        fill="none"
+        stroke="#FFFFFF"
         strokeWidth="1"
-        opacity={isInNoGoZone ? 0.5 : 0.95} // Dim sail if in no-go zone
+        opacity={0.3}
       />
 
       {/* Sail draft line (shows belly of sail) */}
@@ -308,6 +329,68 @@ export function TopDownSailboatSVG({
             fill="none"
             opacity={0.6}
             strokeDasharray="2,2"
+          />
+        </G>
+      )}
+
+      {/* Boom highlight - glowing effect to draw attention */}
+      {highlightBoom && (
+        <G>
+          {/* Glow effect */}
+          <Line
+            x1="25"
+            y1="32"
+            x2={boomEndX}
+            y2={boomEndY}
+            stroke="#FCD34D"
+            strokeWidth="6"
+            strokeLinecap="round"
+            opacity={0.4}
+          />
+          {/* Boom marker at end */}
+          <Circle
+            cx={boomEndX}
+            cy={boomEndY}
+            r="4"
+            fill="#F59E0B"
+            stroke="#FFFFFF"
+            strokeWidth="1.5"
+          />
+        </G>
+      )}
+
+      {/* Tack indicator - shows PORT or STARBOARD */}
+      {showTackIndicator && (
+        <G>
+          {/* Badge background */}
+          <Rect
+            x="-15"
+            y="20"
+            width="40"
+            height="16"
+            rx="8"
+            fill={isStarboardTack ? '#10B981' : '#EF4444'}
+            opacity={0.9}
+          />
+          {/* Badge text would go here but SVG Text has font issues in RN */}
+          {/* Instead we'll show a visual indicator */}
+          {/* Port side marker (left) */}
+          <Circle
+            cx="-5"
+            cy="28"
+            r="4"
+            fill={isStarboardTack ? '#FFFFFF40' : '#FFFFFF'}
+            stroke="#FFFFFF"
+            strokeWidth="1"
+          />
+          {/* Starboard side marker (right) */}
+          <Circle
+            cx="15"
+            cy="28"
+            r="4"
+            fill={isStarboardTack ? '#FFFFFF' : '#FFFFFF40'}
+            stroke="#FFFFFF"
+            strokeWidth="1"
           />
         </G>
       )}

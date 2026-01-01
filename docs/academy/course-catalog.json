@@ -1,0 +1,1079 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-01-11",
+  "levels": [
+    {
+      "id": "level-1",
+      "name": "Fundamentals",
+      "description": "Essential racing knowledge for beginners and those new to competitive sailing",
+      "targetAudience": "New racers, junior sailors, recreational sailors transitioning to racing",
+      "prerequisites": "Basic sailing ability",
+      "estimatedTotalDuration": "8-10 hours",
+      "courses": [
+        {
+          "id": "course-1",
+          "title": "Racing Basics",
+          "slug": "racing-basics",
+          "level": "level-1",
+          "status": "available",
+          "releaseDate": "2025-01-15",
+          "duration": {
+            "totalMinutes": 120,
+            "lessons": 8,
+            "estimatedHours": 2
+          },
+          "price": {
+            "cents": 0,
+            "currency": "USD",
+            "tier": "free"
+          },
+          "description": "Master the fundamentals of sailboat racing, from rules to race structure. Perfect for sailors new to competitive racing or those wanting a solid foundation.",
+          "longDescription": "This comprehensive course covers everything you need to know to start racing confidently. Learn the racing rules, understand race structure, master basic tactics, and develop the skills needed to compete at the club level.",
+          "whatYouLearn": [
+            "Understanding the Racing Rules of Sailing (RRS)",
+            "Race structure and course types",
+            "Basic right-of-way rules",
+            "Starting procedures and signals",
+            "Mark rounding basics",
+            "Protest procedures",
+            "Race preparation essentials",
+            "Safety in racing"
+          ],
+          "modules": [
+            {
+              "id": "module-1-1",
+              "title": "Introduction to Racing",
+              "orderIndex": 1,
+              "durationMinutes": 15,
+              "lessons": [
+                {
+                  "id": "lesson-1-1-1",
+                  "title": "What is Sailboat Racing?",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "WhatIsSailboatRacingInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": true,
+                  "description": "Overview of competitive sailing and what makes it exciting"
+                },
+                {
+                  "id": "lesson-1-1-2",
+                  "title": "Types of Races",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TypesOfRacesInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 600,
+                  "isFreePreview": true,
+                  "description": "Fleet racing, match racing, team racing, and distance racing explained"
+                }
+              ]
+            },
+            {
+              "id": "module-1-2",
+              "title": "Racing Rules Basics",
+              "orderIndex": 2,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-1-2-1",
+                  "title": "Right-of-Way Rules",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "RightOfWayInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Learn port/starboard, windward/leeward, and overtaking rules"
+                },
+                {
+                  "id": "lesson-1-2-2",
+                  "title": "Mark Room Rules",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "MarkRoomInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Understanding overlap, mark room, and proper rounding"
+                }
+              ]
+            },
+            {
+              "id": "module-1-3",
+              "title": "Race Structure",
+              "orderIndex": 3,
+              "durationMinutes": 25,
+              "lessons": [
+                {
+                  "id": "lesson-1-3-1",
+                  "title": "The Starting Sequence",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "StartingSequenceInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Master the 5-4-1-0 minute sequence"
+                },
+                {
+                  "id": "lesson-1-3-2",
+                  "title": "Course Types",
+                  "lessonType": "text",
+                  "orderIndex": 2,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Windward-leeward, triangle, and distance courses"
+                }
+              ]
+            },
+            {
+              "id": "module-1-4",
+              "title": "Basic Tactics",
+              "orderIndex": 4,
+              "durationMinutes": 50,
+              "lessons": [
+                {
+                  "id": "lesson-1-4-1",
+                  "title": "Starting Basics",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "StartingBasicsInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 1200,
+                  "isFreePreview": false,
+                  "description": "Fundamental starting techniques"
+                },
+                {
+                  "id": "lesson-1-4-2",
+                  "title": "Upwind Tactics",
+                  "lessonType": "text",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Basic upwind sailing strategies"
+                },
+                {
+                  "id": "lesson-1-4-3",
+                  "title": "Downwind Basics",
+                  "lessonType": "text",
+                  "orderIndex": 3,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Introduction to downwind sailing"
+                }
+              ]
+            }
+          ],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor with 20+ years of racing experience across multiple classes",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/racing-basics.jpg",
+          "skillsUsed": [
+            "rules-advisor"
+          ],
+          "targetMarkets": [
+            "individual",
+            "junior-program",
+            "club-racing"
+          ],
+          "tags": [
+            "beginner",
+            "rules",
+            "fundamentals",
+            "free"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Racing Basics Certificate"
+          }
+        },
+        {
+          "id": "course-2",
+          "title": "Boat Handling Fundamentals",
+          "slug": "boat-handling-fundamentals",
+          "level": "level-1",
+          "status": "coming-soon",
+          "releaseDate": "2025-04-01",
+          "duration": {
+            "totalMinutes": 180,
+            "lessons": 12,
+            "estimatedHours": 3
+          },
+          "price": {
+            "cents": 3000,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Master essential boat handling skills for racing: tacks, jibes, mark roundings, and speed optimization.",
+          "whatYouLearn": [
+            "Efficient tacking technique",
+            "Jibing under control",
+            "Mark rounding fundamentals",
+            "Speed optimization basics",
+            "Sail trim for different conditions",
+            "Boat balance and heel control"
+          ],
+          "modules": [
+            {
+              "id": "module-2-1",
+              "title": "Tacking & Jibing",
+              "orderIndex": 1,
+              "durationMinutes": 45,
+              "lessons": []
+            },
+            {
+              "id": "module-2-2",
+              "title": "Mark Roundings",
+              "orderIndex": 2,
+              "durationMinutes": 40,
+              "lessons": []
+            },
+            {
+              "id": "module-2-3",
+              "title": "Speed Optimization",
+              "orderIndex": 3,
+              "durationMinutes": 55,
+              "lessons": []
+            }
+          ],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor with 20+ years of racing experience",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/boat-handling.jpg",
+          "skillsUsed": [
+            "mark-rounding-coach",
+            "execution-coach"
+          ],
+          "targetMarkets": [
+            "individual",
+            "junior-program",
+            "club-racing"
+          ],
+          "tags": [
+            "beginner",
+            "boat-handling",
+            "technique"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Boat Handling Fundamentals Certificate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "level-2",
+      "name": "Intermediate",
+      "description": "Advanced tactics and strategies for competitive club racing",
+      "targetAudience": "Club racers, experienced sailors, competitive juniors",
+      "prerequisites": "Completion of Level 1 or equivalent experience",
+      "estimatedTotalDuration": "15-20 hours",
+      "courses": [
+        {
+          "id": "course-3",
+          "title": "Winning Starts & First Beats",
+          "slug": "winning-starts-first-beats",
+          "level": "level-2",
+          "status": "available",
+          "releaseDate": "2025-01-15",
+          "duration": {
+            "totalMinutes": 150,
+            "lessons": 7,
+            "estimatedHours": 2.5
+          },
+          "price": {
+            "cents": 7500,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Master the critical first moments of every race with proven techniques for reading the line, timing your approach, and executing a winning start.",
+          "longDescription": "This comprehensive course covers everything you need to know about race starts in sailboat racing. From understanding the starting sequence to advanced positioning strategies, you'll learn the techniques used by top sailors worldwide.",
+          "whatYouLearn": [
+            "Understanding the 5-4-1-0 starting sequence",
+            "Reading line bias and identifying the favored end",
+            "Executing precise timed runs to the line",
+            "Positioning and defending your spot on the line",
+            "Advanced strategies for different conditions"
+          ],
+          "modules": [
+            {
+              "id": "module-3-1",
+              "title": "Understanding the Start",
+              "orderIndex": 1,
+              "durationMinutes": 25,
+              "lessons": [
+                {
+                  "id": "lesson-3-1-1",
+                  "title": "Setting the Course",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "SetCourseInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": true,
+                  "description": "Learn how race committees set the course and what it means for your start strategy"
+                },
+                {
+                  "id": "lesson-3-1-2",
+                  "title": "The Starting Sequence",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "StartingSequenceInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Master the 5-4-1-0 minute sequence with flags and horns"
+                }
+              ]
+            },
+            {
+              "id": "module-3-2",
+              "title": "Reading the Line",
+              "orderIndex": 2,
+              "durationMinutes": 22,
+              "lessons": [
+                {
+                  "id": "lesson-3-2-1",
+                  "title": "Line Bias Fundamentals",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "LineBiasInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Learn to read the start line and identify which end gives you an advantage"
+                },
+                {
+                  "id": "lesson-3-2-2",
+                  "title": "Finding the Favored End",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "FavoredEndInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Techniques for determining which end of the line to start from"
+                }
+              ]
+            },
+            {
+              "id": "module-3-3",
+              "title": "Execution",
+              "orderIndex": 3,
+              "durationMinutes": 41,
+              "lessons": [
+                {
+                  "id": "lesson-3-3-1",
+                  "title": "The Timed Run",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TimedRunInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Perfect your approach with the timed run technique"
+                },
+                {
+                  "id": "lesson-3-3-2",
+                  "title": "Positioning & Defense",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "PositioningInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 840,
+                  "isFreePreview": false,
+                  "description": "Secure and defend your position on the start line"
+                },
+                {
+                  "id": "lesson-3-3-3",
+                  "title": "Advanced Starting Strategies",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "StartingStrategiesInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Advanced techniques for different conditions and fleet sizes"
+                }
+              ]
+            }
+          ],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor with 20+ years of racing experience across multiple classes",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/winning-starts.jpg",
+          "skillsUsed": [
+            "start-line-tactician",
+            "race-strategy-analyst"
+          ],
+          "targetMarkets": [
+            "individual",
+            "junior-program",
+            "club-racing",
+            "university-team"
+          ],
+          "tags": [
+            "intermediate",
+            "starting",
+            "tactics",
+            "flagship"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Winning Starts & First Beats Certificate"
+          }
+        },
+        {
+          "id": "course-4",
+          "title": "Wind Shift Tactics",
+          "slug": "wind-shift-tactics",
+          "level": "level-2",
+          "status": "coming-soon",
+          "releaseDate": "2025-05-01",
+          "duration": {
+            "totalMinutes": 180,
+            "lessons": 10,
+            "estimatedHours": 3
+          },
+          "price": {
+            "cents": 7500,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Read and react to changing wind conditions. Learn to identify shifts, understand persistent vs. oscillating patterns, and make tactical decisions that win races.",
+          "whatYouLearn": [
+            "Identifying wind shifts",
+            "Persistent vs. oscillating shifts",
+            "Lift and header concepts",
+            "Tacking on shifts",
+            "Using shifts to gain advantage",
+            "Reading wind patterns"
+          ],
+          "modules": [
+            {
+              "id": "module-4-1",
+              "title": "Understanding Wind Shifts",
+              "orderIndex": 1,
+              "durationMinutes": 40,
+              "lessons": []
+            },
+            {
+              "id": "module-4-2",
+              "title": "Reading Shift Patterns",
+              "orderIndex": 2,
+              "durationMinutes": 50,
+              "lessons": []
+            },
+            {
+              "id": "module-4-3",
+              "title": "Tactical Applications",
+              "orderIndex": 3,
+              "durationMinutes": 50,
+              "lessons": []
+            }
+          ],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/wind-shifts.jpg",
+          "skillsUsed": [
+            "wind-shift-predictor",
+            "race-strategy-analyst"
+          ],
+          "targetMarkets": [
+            "individual",
+            "club-racing",
+            "university-team"
+          ],
+          "tags": [
+            "intermediate",
+            "wind",
+            "tactics"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Wind Shift Tactics Certificate"
+          }
+        },
+        {
+          "id": "course-5",
+          "title": "Downwind Speed",
+          "slug": "downwind-speed",
+          "level": "level-2",
+          "status": "coming-soon",
+          "releaseDate": "2025-06-01",
+          "duration": {
+            "totalMinutes": 150,
+            "lessons": 8,
+            "estimatedHours": 2.5
+          },
+          "price": {
+            "cents": 7500,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Master downwind sailing techniques to maximize speed and gain positions on every run.",
+          "whatYouLearn": [
+            "Spinnaker handling",
+            "Jibing techniques",
+            "VMG optimization",
+            "Downwind tactics",
+            "Gybe set strategies"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/downwind-speed.jpg",
+          "skillsUsed": [
+            "execution-coach"
+          ],
+          "targetMarkets": [
+            "individual",
+            "club-racing"
+          ],
+          "tags": [
+            "intermediate",
+            "downwind",
+            "speed"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Downwind Speed Certificate"
+          }
+        },
+        {
+          "id": "course-6",
+          "title": "Race Management",
+          "slug": "race-management",
+          "level": "level-2",
+          "status": "coming-soon",
+          "releaseDate": "2025-07-01",
+          "duration": {
+            "totalMinutes": 120,
+            "lessons": 6,
+            "estimatedHours": 2
+          },
+          "price": {
+            "cents": 7500,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Learn to manage your race from start to finish: positioning, fleet management, and strategic decision-making.",
+          "whatYouLearn": [
+            "Fleet positioning",
+            "Covering strategies",
+            "When to split from the fleet",
+            "Risk management",
+            "Race-long strategy"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/race-management.jpg",
+          "skillsUsed": [
+            "fleet-positioning-guide",
+            "race-strategy-analyst"
+          ],
+          "targetMarkets": [
+            "individual",
+            "club-racing"
+          ],
+          "tags": [
+            "intermediate",
+            "strategy",
+            "fleet-management"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Race Management Certificate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "level-3",
+      "name": "Advanced",
+      "description": "Championship-level tactics and techniques for serious competitors",
+      "targetAudience": "Championship sailors, Olympic hopefuls, professional racers",
+      "prerequisites": "Completion of Level 2 or extensive racing experience",
+      "estimatedTotalDuration": "20-25 hours",
+      "courses": [
+        {
+          "id": "course-7",
+          "title": "Advanced Starting Techniques",
+          "slug": "advanced-starting-techniques",
+          "level": "level-3",
+          "status": "coming-soon",
+          "releaseDate": "2025-09-01",
+          "duration": {
+            "totalMinutes": 180,
+            "lessons": 10,
+            "estimatedHours": 3
+          },
+          "price": {
+            "cents": 15000,
+            "currency": "USD",
+            "tier": "academy"
+          },
+          "description": "Elite starting techniques used by world champions and Olympic sailors.",
+          "whatYouLearn": [
+            "Port tack starts",
+            "Barging defense",
+            "Line sag tactics",
+            "Fleet management at starts",
+            "Advanced timing techniques"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/advanced-starting.jpg",
+          "skillsUsed": [
+            "start-line-tactician"
+          ],
+          "targetMarkets": [
+            "individual",
+            "championship-club"
+          ],
+          "tags": [
+            "advanced",
+            "starting",
+            "championship"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Advanced Starting Techniques Certificate"
+          }
+        },
+        {
+          "id": "course-8",
+          "title": "Tidal Strategy",
+          "slug": "tidal-strategy",
+          "level": "level-3",
+          "status": "coming-soon",
+          "releaseDate": "2025-10-01",
+          "duration": {
+            "totalMinutes": 200,
+            "lessons": 12,
+            "estimatedHours": 3.5
+          },
+          "price": {
+            "cents": 15000,
+            "currency": "USD",
+            "tier": "academy"
+          },
+          "description": "Master tidal currents and use them to your advantage. Essential for racing in tidal venues.",
+          "whatYouLearn": [
+            "Understanding tidal patterns",
+            "Current effects on course",
+            "Tidal gate strategies",
+            "Slack window optimization",
+            "Combining wind and current"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/tidal-strategy.jpg",
+          "skillsUsed": [
+            "tidal-opportunism-analyst",
+            "slack-window-planner",
+            "current-counterplay-advisor"
+          ],
+          "targetMarkets": [
+            "individual",
+            "championship-club"
+          ],
+          "tags": [
+            "advanced",
+            "tidal",
+            "currents"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Tidal Strategy Certificate"
+          }
+        },
+        {
+          "id": "course-9",
+          "title": "Boat Tuning for Performance",
+          "slug": "boat-tuning-performance",
+          "level": "level-3",
+          "status": "coming-soon",
+          "releaseDate": "2025-11-01",
+          "duration": {
+            "totalMinutes": 240,
+            "lessons": 15,
+            "estimatedHours": 4
+          },
+          "price": {
+            "cents": 15000,
+            "currency": "USD",
+            "tier": "academy"
+          },
+          "description": "Optimize your boat's rig tuning for maximum speed in all conditions.",
+          "whatYouLearn": [
+            "Rig tuning fundamentals",
+            "Sail trim optimization",
+            "Condition-specific tuning",
+            "Speed testing techniques",
+            "Tuning for different boat classes"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/boat-tuning.jpg",
+          "skillsUsed": [
+            "boat-tuning-analyst"
+          ],
+          "targetMarkets": [
+            "individual",
+            "championship-club"
+          ],
+          "tags": [
+            "advanced",
+            "tuning",
+            "performance"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Boat Tuning for Performance Certificate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "specializations",
+      "name": "Specializations",
+      "description": "Specialized racing formats and advanced techniques",
+      "targetAudience": "Specialized racers, team racing enthusiasts, match racing sailors",
+      "prerequisites": "Level 2 completion recommended",
+      "estimatedTotalDuration": "Varies by course",
+      "courses": [
+        {
+          "id": "course-10",
+          "title": "Team Racing Tactics",
+          "slug": "team-racing-tactics",
+          "level": "specializations",
+          "status": "coming-soon",
+          "releaseDate": "2026-01-01",
+          "duration": {
+            "totalMinutes": 180,
+            "lessons": 10,
+            "estimatedHours": 3
+          },
+          "price": {
+            "cents": 15000,
+            "currency": "USD",
+            "tier": "academy"
+          },
+          "description": "Master the unique tactics of team racing: covering, slowing opponents, and team coordination.",
+          "whatYouLearn": [
+            "Team racing rules",
+            "Covering strategies",
+            "Slowing opponents",
+            "Team coordination",
+            "Match play tactics"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/team-racing.jpg",
+          "skillsUsed": [],
+          "targetMarkets": [
+            "university-team",
+            "championship-club"
+          ],
+          "tags": [
+            "specialization",
+            "team-racing",
+            "collegiate"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Team Racing Tactics Certificate"
+          }
+        },
+        {
+          "id": "course-11",
+          "title": "Match Racing Mastery",
+          "slug": "match-racing-mastery",
+          "level": "specializations",
+          "status": "coming-soon",
+          "releaseDate": "2026-02-01",
+          "duration": {
+            "totalMinutes": 200,
+            "lessons": 12,
+            "estimatedHours": 3.5
+          },
+          "price": {
+            "cents": 15000,
+            "currency": "USD",
+            "tier": "academy"
+          },
+          "description": "One-on-one racing tactics: pre-starts, covering, and psychological warfare.",
+          "whatYouLearn": [
+            "Pre-start tactics",
+            "Covering techniques",
+            "Match racing rules",
+            "Psychological tactics",
+            "Advanced maneuvers"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/match-racing.jpg",
+          "skillsUsed": [],
+          "targetMarkets": [
+            "individual",
+            "championship-club"
+          ],
+          "tags": [
+            "specialization",
+            "match-racing"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Match Racing Mastery Certificate"
+          }
+        },
+        {
+          "id": "course-12",
+          "title": "Distance Racing Strategy",
+          "slug": "distance-racing-strategy",
+          "level": "specializations",
+          "status": "coming-soon",
+          "releaseDate": "2026-03-01",
+          "duration": {
+            "totalMinutes": 240,
+            "lessons": 15,
+            "estimatedHours": 4
+          },
+          "price": {
+            "cents": 15000,
+            "currency": "USD",
+            "tier": "academy"
+          },
+          "description": "Long-distance racing tactics: navigation, weather routing, and endurance strategy.",
+          "whatYouLearn": [
+            "Weather routing",
+            "Navigation tactics",
+            "Endurance strategy",
+            "Night racing",
+            "Offshore preparation"
+          ],
+          "modules": [],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/distance-racing.jpg",
+          "skillsUsed": [
+            "weather-routing-optimizer"
+          ],
+          "targetMarkets": [
+            "individual",
+            "championship-club"
+          ],
+          "tags": [
+            "specialization",
+            "distance",
+            "offshore"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Distance Racing Strategy Certificate"
+          }
+        }
+      ]
+    }
+  ],
+  "pricingTiers": [
+    {
+      "id": "free",
+      "name": "Free",
+      "price": {
+        "cents": 0,
+        "currency": "USD",
+        "period": "forever"
+      },
+      "includes": [
+        "1 course (Racing Basics)",
+        "Basic progress tracking",
+        "Community access"
+      ],
+      "excludes": [
+        "Certificates",
+        "Advanced courses",
+        "AI coaching integration"
+      ]
+    },
+    {
+      "id": "sailor",
+      "name": "Sailor",
+      "price": {
+        "cents": 3000,
+        "currency": "USD",
+        "period": "year"
+      },
+      "includes": [
+        "All Level 1 & 2 courses",
+        "Course completion certificates",
+        "Progress tracking",
+        "Community access"
+      ],
+      "excludes": [
+        "Level 3 courses",
+        "Specializations",
+        "AI coaching integration"
+      ]
+    },
+    {
+      "id": "academy",
+      "name": "Academy",
+      "price": {
+        "cents": 7500,
+        "currency": "USD",
+        "period": "year"
+      },
+      "includes": [
+        "All courses (Levels 1-3 + Specializations)",
+        "All certificates",
+        "Advanced progress tracking",
+        "Priority support",
+        "Early access to new courses"
+      ],
+      "excludes": [
+        "AI coaching integration (requires Championship tier)"
+      ]
+    },
+    {
+      "id": "championship",
+      "name": "Championship",
+      "price": {
+        "monthly": {
+          "cents": 4900,
+          "currency": "USD",
+          "period": "month"
+        },
+        "yearly": {
+          "cents": 45000,
+          "currency": "USD",
+          "period": "year"
+        }
+      },
+      "includes": [
+        "Everything in Academy tier",
+        "AI coaching integration",
+        "Personalized learning paths",
+        "Advanced analytics",
+        "Direct instructor access"
+      ]
+    }
+  ],
+  "institutionalPackages": [
+    {
+      "id": "junior-program",
+      "name": "Junior Program",
+      "price": {
+        "cents": 14900,
+        "currency": "USD",
+        "period": "month"
+      },
+      "userLimit": 50,
+      "includes": [
+        "Level 1 & 2 courses",
+        "Progress tracking dashboard",
+        "Custom branding",
+        "Bulk user management",
+        "Email support"
+      ],
+      "targetMarkets": [
+        "junior-program",
+        "youth-sailing"
+      ]
+    },
+    {
+      "id": "club-racing",
+      "name": "Club Racing",
+      "price": {
+        "cents": 34900,
+        "currency": "USD",
+        "period": "month"
+      },
+      "userLimit": "unlimited",
+      "includes": [
+        "All courses",
+        "Progress tracking dashboard",
+        "Custom branding",
+        "Bulk user management",
+        "Priority support",
+        "Analytics dashboard"
+      ],
+      "targetMarkets": [
+        "club-racing"
+      ]
+    },
+    {
+      "id": "university-team",
+      "name": "University Team",
+      "price": {
+        "cents": 22900,
+        "currency": "USD",
+        "period": "month"
+      },
+      "userLimit": 20,
+      "includes": [
+        "All courses",
+        "Team progress dashboard",
+        "Coach access",
+        "Integration with race planning",
+        "Priority support"
+      ],
+      "targetMarkets": [
+        "university-team",
+        "collegiate-sailing"
+      ]
+    },
+    {
+      "id": "championship-club",
+      "name": "Championship Club",
+      "price": {
+        "cents": 69900,
+        "currency": "USD",
+        "period": "month"
+      },
+      "userLimit": "unlimited",
+      "includes": [
+        "Everything in Club Racing",
+        "Custom content creation",
+        "Dedicated account manager",
+        "Advanced analytics",
+        "White-label options",
+        "API access"
+      ],
+      "targetMarkets": [
+        "championship-club",
+        "elite-programs"
+      ]
+    }
+  ]
+}
+

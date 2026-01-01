@@ -516,7 +516,7 @@ export class LearningService {
   }
 
   /**
-   * Get a course by slug
+   * Get a course by slug (published courses only)
    */
   static async getCourseBySlug(slug: string): Promise<LearningCourse | null> {
     try {
@@ -555,6 +555,49 @@ export class LearningService {
     } catch (error) {
       logger.error('getCourseBySlug error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get a course by slug for enrollment purposes (checks both published and unpublished)
+   * This is useful when checking enrollments - we need to find the course even if it's not published
+   */
+  static async getCourseBySlugForEnrollment(slug: string): Promise<LearningCourse | null> {
+    try {
+      // First try published courses (normal flow)
+      const published = await this.getCourseBySlug(slug);
+      if (published) {
+        return published;
+      }
+
+      // If not found, try without published filter (for enrollment checks)
+      const { data, error } = await supabase
+        .from('learning_courses')
+        .select('id, slug, title, is_published')
+        .eq('slug', slug)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        logger.error('Error fetching course by slug for enrollment:', error);
+        return null;
+      }
+
+      if (data) {
+        logger.warn(`Course "${slug}" found but is_published=${data.is_published}`);
+        // Return minimal course data for enrollment purposes
+        return {
+          id: data.id,
+          slug: data.slug,
+          title: data.title,
+          is_published: data.is_published,
+        } as LearningCourse;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('getCourseBySlugForEnrollment error:', error);
+      return null;
     }
   }
 
@@ -690,6 +733,54 @@ export class LearningService {
       return !!data;
     } catch (error) {
       logger.error('isEnrolled error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if a user is enrolled in a course by slug
+   * Useful when course might not be found in database lookup but enrollment exists
+   * This method joins enrollments with courses table to find enrollments by slug
+   */
+  static async isEnrolledBySlug(userId: string, courseSlug: string): Promise<boolean> {
+    try {
+      // First, try to get the course by slug to get its UUID
+      const course = await this.getCourseBySlug(courseSlug);
+      if (course?.id) {
+        // Course found, use standard enrollment check
+        return this.isEnrolled(userId, course.id);
+      }
+
+      // Course not found by direct lookup, but enrollment might still exist
+      // Try to find enrollment by joining with courses table on slug
+      const { data, error } = await supabase
+        .from('learning_enrollments')
+        .select('id, learning_courses!inner(slug)')
+        .eq('user_id', userId)
+        .eq('learning_courses.slug', courseSlug)
+        .maybeSingle();
+
+      if (error) {
+        // If join fails, try alternative: get all user enrollments and check course slugs
+        logger.warn('Join query failed, trying alternative method:', error);
+        const enrollments = await this.getEnrollments(userId);
+        for (const enrollment of enrollments) {
+          try {
+            const enrolledCourse = await this.getCourse(enrollment.course_id);
+            if (enrolledCourse?.slug === courseSlug) {
+              return true;
+            }
+          } catch (err) {
+            // Skip if course lookup fails
+            continue;
+          }
+        }
+        return false;
+      }
+
+      return !!data;
+    } catch (error) {
+      logger.error('isEnrolledBySlug error:', error);
       return false;
     }
   }

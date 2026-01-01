@@ -11,7 +11,8 @@ import { initializeBoatMutationHandlers } from '@/services/SailorBoatService';
 import { initializeMutationQueueHandlers } from '@/services/userManualClubsService';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import React, { useEffect } from 'react';
+import * as Font from 'expo-font';
+import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 // Initialize i18n (must be imported before any components that use translations)
@@ -159,6 +160,25 @@ function StackWithSplash() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, setFontsLoaded] = useState(false);
+
+  // Load custom fonts
+  useEffect(() => {
+    async function loadFonts() {
+      try {
+        await Font.loadAsync({
+          'Manrope-Bold': require('@/assets/fonts/Manrope-Bold.ttf'),
+        });
+        setFontsLoaded(true);
+      } catch (error) {
+        // Font loading failed, continue with system fonts
+        console.warn('Failed to load Manrope font:', error);
+        setFontsLoaded(true);
+      }
+    }
+    loadFonts();
+  }, []);
+
   // Initialize image cache and inject global CSS for web
   useEffect(() => {
     // Initialize expo-image cache for optimal performance
@@ -251,11 +271,45 @@ export default function RootLayout() {
         });
       };
 
+      // Also check for elements that are already focused when they become aria-hidden
+      const handleAriaHiddenChange = () => {
+        const activeElement = document.activeElement as HTMLElement | null;
+        if (!activeElement) return;
+        
+        const hiddenAncestor = activeElement.closest('[aria-hidden="true"]');
+        if (hiddenAncestor) {
+          requestAnimationFrame(() => {
+            activeElement.blur();
+            if (!document.body.hasAttribute('tabindex')) {
+              document.body.setAttribute('tabindex', '-1');
+            }
+            document.body.focus();
+          });
+        }
+      };
+
+      // Use MutationObserver to watch for aria-hidden changes
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'aria-hidden') {
+            handleAriaHiddenChange();
+          }
+        }
+      });
+
+      // Observe the entire document for aria-hidden attribute changes
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['aria-hidden'],
+        subtree: true,
+      });
+
       document.addEventListener('focusin', handleFocusIn, true);
 
       return () => {
         document.head.removeChild(style);
         document.removeEventListener('focusin', handleFocusIn, true);
+        observer.disconnect();
         const addedFavicon = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
         if (addedFavicon) {
           addedFavicon.remove();

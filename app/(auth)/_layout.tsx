@@ -34,7 +34,7 @@ const ONBOARDING_ROUTES = new Set([
 ]);
 
 // Routes that should be accessible while signed out (OAuth callback needs to run)
-const AUTH_ENTRY_ROUTES = new Set(['login', 'signup', 'callback']);
+const AUTH_ENTRY_ROUTES = new Set(['login', 'signup', 'callback', 'dev-login']);
 
 export default function AuthLayout() {
   const { state, userType } = useAuth();
@@ -155,6 +155,7 @@ export default function AuthLayout() {
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
       <Stack.Screen name="callback" />
+      <Stack.Screen name="dev-login" />
       <Stack.Screen name="club-onboarding-chat" />
       <Stack.Screen name="club-onboarding-enhanced" />
       <Stack.Screen name="club-onboarding-simple" />

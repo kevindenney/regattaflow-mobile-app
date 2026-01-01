@@ -63,9 +63,13 @@ export function StartingSequenceInteractive({
   // Quiz state
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
   const [showQuizResults, setShowQuizResults] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(false);
   
   // Deep Dive state
   const [showDeepDive, setShowDeepDive] = useState(false);
+  
+  // Completion state - track when animation finishes but don't auto-navigate
+  const [isCompleted, setIsCompleted] = useState(false);
   
   // Audio sounds
   const [sounds, setSounds] = useState<{ [key: string]: Audio.Sound | null }>({});
@@ -228,7 +232,7 @@ export function StartingSequenceInteractive({
           
           if (newTime >= 5) {
             setIsPlaying(false);
-            onComplete?.();
+            setIsCompleted(true); // Mark as completed but don't auto-navigate
             return 5;
           }
           return newTime;
@@ -666,22 +670,167 @@ export function StartingSequenceInteractive({
             
             {showDeepDive && (
               <View style={styles.deepDiveContent}>
-                <Text style={styles.deepDiveTitle}>
-                  {currentStepInfo.label || 'Additional Details'}
-                </Text>
-                {currentStepInfo.details.map((detail, index) => (
-                  <View key={index} style={styles.deepDiveItem}>
-                    <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
-                    <Text style={styles.deepDiveItemText}>{detail}</Text>
+                <View style={styles.deepDiveHeader}>
+                  <Ionicons name="book" size={20} color="#1E293B" />
+                  <Text style={styles.deepDiveTitle}>
+                    {currentStepInfo.label || 'Additional Details'}
+                  </Text>
+                </View>
+                
+                <View style={styles.deepDiveDivider} />
+                
+                {/* Quick Reference - Basic Details */}
+                {currentStepInfo.details && currentStepInfo.details.length > 0 && (
+                  <View style={styles.deepDiveSection}>
+                    <View style={styles.sectionHeader}>
+                      <Ionicons name="information-circle" size={18} color="#3B82F6" />
+                      <Text style={styles.sectionTitle}>Quick Reference</Text>
+                    </View>
+                    {currentStepInfo.details.map((detail, index) => (
+                      <View key={index} style={styles.deepDiveItem}>
+                        <View style={styles.deepDiveIconContainer}>
+                          <Ionicons name="checkmark-circle" size={16} color="#3B82F6" />
+                        </View>
+                        <Text style={styles.deepDiveItemText}>{detail}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
+                )}
+
+                {/* Comprehensive Deep Dive Sections */}
+                {currentStepInfo.deepDive && (
+                  <>
+                    {/* Why It Matters */}
+                    {currentStepInfo.deepDive.whyItMatters && currentStepInfo.deepDive.whyItMatters.length > 0 && (
+                      <View style={styles.deepDiveSection}>
+                        <View style={styles.sectionHeader}>
+                          <Ionicons name="star" size={18} color="#8B5CF6" />
+                          <Text style={styles.sectionTitle}>Why It Matters</Text>
+                        </View>
+                        {currentStepInfo.deepDive.whyItMatters.map((item, index) => (
+                          <View key={index} style={styles.deepDiveItem}>
+                            <View style={[styles.deepDiveIconContainer, { backgroundColor: '#F3E8FF' }]}>
+                              <Ionicons name="bulb" size={16} color="#8B5CF6" />
+                            </View>
+                            <Text style={styles.deepDiveItemText}>{item}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Common Mistakes */}
+                    {currentStepInfo.deepDive.commonMistakes && currentStepInfo.deepDive.commonMistakes.length > 0 && (
+                      <View style={styles.deepDiveSection}>
+                        <View style={styles.sectionHeader}>
+                          <Ionicons name="warning" size={18} color="#EF4444" />
+                          <Text style={styles.sectionTitle}>Common Mistakes</Text>
+                        </View>
+                        {currentStepInfo.deepDive.commonMistakes.map((item, index) => (
+                          <View key={index} style={[styles.deepDiveItem, styles.mistakeItem]}>
+                            <View style={[styles.deepDiveIconContainer, { backgroundColor: '#FEE2E2' }]}>
+                              <Ionicons name="close-circle" size={16} color="#EF4444" />
+                            </View>
+                            <Text style={styles.deepDiveItemText}>{item}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Advanced Tactics */}
+                    {currentStepInfo.deepDive.advancedTactics && currentStepInfo.deepDive.advancedTactics.length > 0 && (
+                      <View style={styles.deepDiveSection}>
+                        <View style={styles.sectionHeader}>
+                          <Ionicons name="rocket" size={18} color="#F59E0B" />
+                          <Text style={styles.sectionTitle}>Advanced Tactics</Text>
+                        </View>
+                        {currentStepInfo.deepDive.advancedTactics.map((item, index) => (
+                          <View key={index} style={[styles.deepDiveItem, styles.tacticsItem]}>
+                            <View style={[styles.deepDiveIconContainer, { backgroundColor: '#FEF3C7' }]}>
+                              <Ionicons name="flash" size={16} color="#F59E0B" />
+                            </View>
+                            <Text style={styles.deepDiveItemText}>{item}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Rules and Regulations */}
+                    {currentStepInfo.deepDive.rulesAndRegulations && currentStepInfo.deepDive.rulesAndRegulations.length > 0 && (
+                      <View style={styles.deepDiveSection}>
+                        <View style={styles.sectionHeader}>
+                          <Ionicons name="document-text" size={18} color="#10B981" />
+                          <Text style={styles.sectionTitle}>Rules & Regulations</Text>
+                        </View>
+                        {currentStepInfo.deepDive.rulesAndRegulations.map((item, index) => (
+                          <View key={index} style={[styles.deepDiveItem, styles.rulesItem]}>
+                            <View style={[styles.deepDiveIconContainer, { backgroundColor: '#D1FAE5' }]}>
+                              <Ionicons name="checkmark-done-circle" size={16} color="#10B981" />
+                            </View>
+                            <Text style={styles.deepDiveItemText}>{item}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Pro Tips */}
+                    {currentStepInfo.deepDive.proTips && currentStepInfo.deepDive.proTips.length > 0 && (
+                      <View style={styles.proTipSection}>
+                        <View style={styles.proTipHeader}>
+                          <Ionicons name="star" size={20} color="#F59E0B" />
+                          <Text style={styles.proTipTitle}>Pro Tips</Text>
+                        </View>
+                        {currentStepInfo.deepDive.proTips.map((tip, index) => (
+                          <View key={index} style={styles.proTipItem}>
+                            <View style={styles.proTipBullet}>
+                              <Ionicons name="flash" size={12} color="#F59E0B" />
+                            </View>
+                            <Text style={styles.proTipText}>{tip}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
               </View>
             )}
           </View>
         )}
 
-        {/* Quiz Section */}
-        <View style={styles.quizSection}>
+        {/* Quiz Prompt - Show after completing animation */}
+        {isCompleted && !showQuiz && (
+          <View style={styles.quizPrompt}>
+            <View style={styles.quizPromptContent}>
+              <Ionicons name="school" size={32} color="#3B82F6" />
+              <Text style={styles.quizPromptTitle}>Test Your Knowledge?</Text>
+              <Text style={styles.quizPromptText}>
+                Take a quick quiz to check your understanding of the starting sequence before moving on.
+              </Text>
+              <View style={styles.quizPromptButtons}>
+                <TouchableOpacity 
+                  style={styles.quizPromptButtonSecondary}
+                  onPress={() => {
+                    if (onComplete) {
+                      onComplete();
+                    }
+                  }}
+                >
+                  <Text style={styles.quizPromptButtonSecondaryText}>Skip Quiz</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.quizPromptButtonPrimary}
+                  onPress={() => setShowQuiz(true)}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+                  <Text style={styles.quizPromptButtonPrimaryText}>Take Quiz</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Quiz Section - Show when user chooses to take quiz */}
+        {showQuiz && (
+          <View style={styles.quizSection}>
           <Text style={styles.quizTitle}>Test Your Knowledge</Text>
           <Text style={styles.quizSubtitle}>Answer these questions to check your understanding of the starting sequence.</Text>
           
@@ -784,6 +933,27 @@ export function StartingSequenceInteractive({
             </View>
           )}
         </View>
+        )}
+
+        {/* Navigation Controls - Show when lesson is completed (after quiz or if quiz skipped) */}
+        {isCompleted && !showQuiz && (
+          <View style={styles.navControls}>
+            <View style={styles.stepIndicator}>
+              <Text style={styles.stepIndicatorText}>Lesson Complete</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.navButton, styles.navButtonPrimary]}
+              onPress={() => {
+                if (onComplete) {
+                  onComplete();
+                }
+              }}
+            >
+              <Text style={[styles.navButtonText, styles.navButtonTextPrimary]}>Next Lesson</Text>
+              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -983,29 +1153,196 @@ const styles = StyleSheet.create({
   },
   deepDiveContent: {
     marginTop: 12,
-    backgroundColor: '#FEFCE8',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#FDE047',
+    borderColor: '#E2E8F0',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+      },
+    }),
+  },
+  deepDiveHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
   deepDiveTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+  },
+  deepDiveDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  deepDiveSection: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#854D0E',
-    marginBottom: 12,
+    color: '#1E293B',
   },
   deepDiveItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 10,
-    gap: 10,
+    gap: 12,
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+  },
+  mistakeItem: {
+    backgroundColor: '#FEF2F2',
+    borderLeftWidth: 3,
+    borderLeftColor: '#EF4444',
+  },
+  tacticsItem: {
+    backgroundColor: '#FFFBEB',
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+  },
+  rulesItem: {
+    backgroundColor: '#F0FDF4',
+    borderLeftWidth: 3,
+    borderLeftColor: '#10B981',
+  },
+  deepDiveIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    flexShrink: 0,
   },
   deepDiveItemText: {
     flex: 1,
     fontSize: 14,
-    color: '#713F12',
+    color: '#334155',
     lineHeight: 20,
+  },
+  proTipSection: {
+    marginTop: 8,
+    padding: 16,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  proTipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  proTipTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  proTipItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    gap: 10,
+  },
+  proTipBullet: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  proTipText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#78350F',
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  // Quiz Prompt Styles
+  quizPrompt: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 2,
+    borderTopColor: '#E2E8F0',
+  },
+  quizPromptContent: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  quizPromptTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E40AF',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  quizPromptText: {
+    fontSize: 14,
+    color: '#3B82F6',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  quizPromptButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quizPromptButtonSecondary: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  quizPromptButtonSecondaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  quizPromptButtonPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#3B82F6',
+  },
+  quizPromptButtonPrimaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   // Quiz Section Styles
   quizSection: {
@@ -1156,6 +1493,50 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontWeight: '600',
     fontSize: 14,
+  },
+  // Navigation Controls Styles (similar to SetCourseInteractive)
+  navControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  navButtonPrimary: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  navButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  navButtonTextPrimary: {
+    color: '#FFFFFF',
+  },
+  stepIndicator: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stepIndicatorText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });
 

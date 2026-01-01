@@ -1,4 +1,3 @@
-import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,35 +5,262 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React from 'react';
 import {
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
+import { EmbeddedRacesDemo } from './EmbeddedRacesDemo';
 import { Footer } from './Footer';
-import { FounderSection } from './FounderSection';
-import { MiniClubDashboard } from './MiniClubDashboard';
-import { MiniCoachDashboard } from './MiniCoachDashboard';
-import { MiniSailorDashboard } from './MiniSailorDashboard';
+// Removed: MiniClubDashboard, MiniCoachDashboard, MiniSailorDashboard - no longer used
+import { FeatureDescriptions, type FeatureId } from './FeatureDescriptions';
 import { MissionSection } from './MissionSection';
 import { PricingSection } from './PricingSection';
+import { RacingAcademySection } from './RacingAcademySection';
+
+// Web-only component to render title without React Native Web duplication
+const WebHeroTitle = ({ text, style }: { text: string; style: any }) => {
+  if (Platform.OS !== 'web') return null;
+  
+  React.useEffect(() => {
+    // Ensure only one element exists - remove duplicates
+    const elements = document.querySelectorAll('[data-hero-title-native]');
+    if (elements.length > 1) {
+      // Remove duplicates, keep only first
+      for (let i = 1; i < elements.length; i++) {
+        elements[i].remove();
+      }
+    }
+  }, []);
+  
+  // Convert \n to actual line breaks - handle both literal \n and actual newlines
+  const htmlText = text
+    .replace(/\\n/g, '<br/>')  // Replace literal \n string
+    .replace(/\n/g, '<br/>');  // Replace actual newline characters
+  
+  // @ts-ignore - web only, using native HTML div
+  return (
+    <div
+      data-hero-title-native="true"
+      style={{
+        fontSize: '56px',
+        fontWeight: '800',
+        color: '#FFFFFF',
+        textAlign: 'center',
+        lineHeight: 1.2,
+        marginBottom: '20px',
+        maxWidth: '900px',
+        width: '100%',
+        display: 'block',
+        whiteSpace: 'pre-line',
+        position: 'relative',
+        ...style,
+      }}
+      dangerouslySetInnerHTML={{ __html: htmlText }}
+    />
+  );
+};
 
 export function HeroPhones() {
   const { user, userProfile } = useAuth();
   const { width } = useWindowDimensions();
   const [mounted, setMounted] = React.useState(false);
+  const [highlightedFeature, setHighlightedFeature] = React.useState<FeatureId | null>(null);
+  const [zoomedFeature, setZoomedFeature] = React.useState<FeatureId | null>(null);
+  const [highlightedRaceId, setHighlightedRaceId] = React.useState<string | null>(null);
 
   // Ensure we only check dimensions after mount to avoid hydration mismatch
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  const isDesktop = mounted && width > 768;
+  const isDesktop = mounted && width > 1024; // MacBook on desktop (>1024px)
+  const isTablet = mounted && width > 768 && width <= 1024;
+  const isMobile = mounted && width <= 768;
+  const isSmallDesktop = mounted && width > 1200; // For three-column layout
+  const shouldStackColumns = mounted && width <= 1200; // Stack below 1200px
   const showDevControls =
     (typeof __DEV__ !== 'undefined' && __DEV__) ||
     process.env.EXPO_PUBLIC_SHOW_DEV_CONTROLS === 'true';
+
+  // Inject responsive CSS for three-column layout and hero section (web only)
+  React.useEffect(() => {
+    if (Platform.OS === 'web') {
+      const styleId = 'hero-phones-responsive-layout';
+      let styleElement = document.getElementById(styleId) as HTMLStyleElement;
+      
+      if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = styleId;
+        document.head.appendChild(styleElement);
+      }
+      
+      styleElement.textContent = `
+        /* Global responsive utilities */
+        * {
+          box-sizing: border-box;
+        }
+        
+        body, html {
+          width: 100%;
+          overflow-x: hidden;
+          margin: 0;
+          padding: 0;
+        }
+        
+        /* Three-column layout responsive styles */
+        @media (max-width: 1200px) {
+          [data-demo-with-features] {
+            flex-direction: column !important;
+            padding: 30px 20px !important;
+            gap: 20px !important;
+          }
+          [data-features-left] {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            position: static !important;
+            order: 2 !important;
+            margin-top: 24px !important;
+          }
+          [data-demo-center] {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            order: 1 !important;
+            margin-bottom: 24px !important;
+          }
+          [data-features-right] {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            position: static !important;
+            order: 3 !important;
+            margin-top: 24px !important;
+          }
+        }
+        
+        /* Mobile: Stack everything vertically, horizontal scroll for features */
+        @media (max-width: 768px) {
+          [data-demo-with-features] {
+            flex-direction: column !important;
+            padding: 20px 16px !important;
+            gap: 16px !important;
+          }
+          [data-features-left],
+          [data-features-right] {
+            order: 2 !important;
+            margin-top: 16px !important;
+            margin-bottom: 0 !important;
+          }
+          [data-demo-center] {
+            order: 1 !important;
+            margin-bottom: 16px !important;
+          }
+        }
+        
+        /* Hero section responsive styles */
+        @media (max-width: 768px) {
+          [data-hero-section] {
+            min-height: 400px !important;
+            padding: 60px 20px !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          [data-hero-section] {
+            min-height: 350px !important;
+            padding: 40px 16px !important;
+          }
+          [data-hero-title] {
+            font-size: 36px !important;
+            line-height: 1.4 !important;
+          }
+          [data-hero-subtitle] {
+            font-size: 16px !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          [data-hero-title] {
+            font-size: 28px !important;
+            line-height: 1.5 !important;
+          }
+        }
+        
+        /* CRITICAL: Prevent text duplication - clean, simple styles only */
+        [data-hero-title-wrapper] {
+          position: relative !important;
+          display: block !important;
+          width: 100% !important;
+          /* Prevent any duplication at wrapper level */
+        }
+        
+        [data-hero-title] {
+          position: relative !important;
+          display: block !important;
+          white-space: pre-line !important;
+          /* Force single rendering - hide any duplicates */
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+        
+        /* Remove any pseudo-elements that might duplicate content */
+        [data-hero-title]::before,
+        [data-hero-title]::after {
+          content: none !important;
+          display: none !important;
+          visibility: hidden !important;
+        }
+        
+        /* Nuclear option: Hide any duplicate elements */
+        [data-hero-title] + [data-hero-title] {
+          display: none !important;
+        }
+        
+        /* Ensure only first instance is visible */
+        [data-hero-title-wrapper] > [data-hero-title]:not(:first-child) {
+          display: none !important;
+        }
+        
+        /* Races Demo Scrollbar Styling */
+        [data-races-demo-container] {
+          scrollbar-width: thin;
+          scrollbar-color: #2563eb #f1f1f1;
+        }
+        
+        [data-races-demo-container]::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        [data-races-demo-container]::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        
+        [data-races-demo-container]::-webkit-scrollbar-thumb {
+          background: #2563eb;
+          border-radius: 4px;
+        }
+        
+        [data-races-demo-container]::-webkit-scrollbar-thumb:hover {
+          background: #1d4ed8;
+        }
+      `;
+      
+      return () => {
+        const existing = document.getElementById(styleId);
+        if (existing && existing.parentNode) {
+          existing.remove();
+        }
+      };
+    }
+  }, []);
 
   // DEV: Logout function for testing
   const handleLogout = async () => {
@@ -48,400 +274,326 @@ export function HeroPhones() {
   };
 
   const handleGetStarted = () => {
-
-    if (user && userProfile) {
-      router.push(getDashboardRoute(userProfile.user_type));
-    } else {
-      // For new users, default to sailor persona (can be changed later if we add tabs)
-      router.push({
-        pathname: '/(auth)/signup',
-        params: { persona: 'sailor' }
-      });
-    }
+    // Always route to signup - signed-in users are auto-redirected from landing page
+    router.push({
+      pathname: '/(auth)/signup',
+      params: { persona: 'sailor' }
+    });
   };
 
   const handleSignIn = () => {
     router.push('/(auth)/login');
   };
 
+  const handleExploreVenues = () => {
+    if (user && userProfile) {
+      router.push('/(tabs)/venue');
+    } else {
+      router.push('/(tabs)/venue');
+    }
+  };
+
+  const handleScrollToPricing = () => {
+    if (Platform.OS === 'web') {
+      // Scroll to pricing section
+      const pricingSection = document.getElementById('pricing-section');
+      if (pricingSection) {
+        pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        // Fallback: navigate to pricing page
+        router.push('/pricing');
+      }
+    } else {
+      // Native: navigate to pricing page
+      router.push('/pricing');
+    }
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={styles.rootContainer}>
+      <View style={styles.pageWrapper}>
       {/* Hero Section with 3 Overlapping Phones */}
       <LinearGradient
         colors={['#0A2463', '#3E92CC', '#0A2463']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.heroSection}
+        {...(Platform.OS === 'web' ? { 'data-hero-section': true } : {})}
       >
-        {/* DEV: Logout button (only show if logged in) */}
-        {showDevControls && user && (
-          <TouchableOpacity
-            onPress={handleLogout}
-            style={styles.logoutButton}
-          >
-            <Text style={styles.logoutText}>Logout (Dev)</Text>
-          </TouchableOpacity>
-        )}
+        {/* DEV: Logout button removed - not for public landing page */}
 
-        <View style={[styles.heroContent, isDesktop && styles.heroContentDesktop]}>
-          {/* Left Side - Text Content */}
-          <View style={[styles.heroText, isDesktop && styles.heroTextDesktop]}>
-            <View style={styles.badgeContainer}>
-              <View style={styles.logoRow}>
-                <Ionicons name="water-outline" size={24} color="#3E92CC" />
-                <Text style={styles.logoText}>RegattaFlow</Text>
-              </View>
-              <Text style={styles.tagline}>The Complete Sailing Ecosystem</Text>
-            </View>
-
-            <Text style={[styles.heroTitle, isDesktop && styles.heroTitleDesktop]}>
-              Race Smarter.{'\n'}Coach Better.{'\n'}Manage Easier.
-            </Text>
-
-            <Text style={[styles.heroSubtitle, isDesktop && styles.heroSubtitleDesktop]}>
-              One platform that brings sailors, coaches, and yacht clubs together with AI-powered race strategy, performance analytics, and complete regatta management.
-            </Text>
-
-            <View style={[styles.ctaButtons, isDesktop && styles.ctaButtonsDesktop]}>
-              <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
-                <Text style={styles.primaryButtonText}>Get Started Free</Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleSignIn}>
-                <Text style={styles.secondaryButtonText}>Sign In</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* App Download Buttons */}
-            <View style={[styles.downloadButtons, isDesktop && styles.downloadButtonsDesktop]}>
-              <TouchableOpacity
-                style={styles.downloadButton}
-                onPress={() => {
-                  // TODO: Replace with actual App Store URL
-                  if (Platform.OS === 'web') {
-                    window.open('https://apps.apple.com/app/regattaflow', '_blank');
-                  }
-                }}
-              >
-                <Ionicons name="logo-apple" size={18} color="#FFFFFF" />
-                <View style={styles.downloadButtonText}>
-                  <Text style={styles.downloadButtonLabel}>Download on the</Text>
-                  <Text style={styles.downloadButtonStore}>App Store</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.downloadButton}
-                onPress={() => {
-                  // TODO: Replace with actual Google Play URL
-                  if (Platform.OS === 'web') {
-                    window.open('https://play.google.com/store/apps/details?id=com.regattaflow', '_blank');
-                  }
-                }}
-              >
-                <Ionicons name="logo-google-playstore" size={18} color="#FFFFFF" />
-                <View style={styles.downloadButtonText}>
-                  <Text style={styles.downloadButtonLabel}>GET IT ON</Text>
-                  <Text style={styles.downloadButtonStore}>Google Play</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.downloadButton}
-                onPress={() => {
-                  // Already on web - could scroll to features or show modal
-                  if (Platform.OS === 'web') {
-                    // User is already on the web app
-                    alert('You\'re already using the web version!');
-                  }
-                }}
-              >
-                <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />
-                <View style={styles.downloadButtonText}>
-                  <Text style={styles.downloadButtonLabel}>Use On</Text>
-                  <Text style={styles.downloadButtonStore}>Web Browser</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
+        {/* Hero Content - Centered */}
+        <View style={styles.heroContent}>
+          {/* Trust Badge */}
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>🏆 Trusted by 500+ sailors worldwide</Text>
           </View>
 
-          {/* Right Side - 3 Overlapping Phones */}
-          <View style={[styles.phonesContainer, isDesktop && styles.phonesContainerDesktop]}>
-            {/* Left Phone - Sailor */}
-            <View style={[styles.phone, styles.phoneLeft]}>
-              <View style={styles.phoneFrame}>
-                <View style={styles.phoneScreen}>
-                  {/* Status Bar */}
-                  <View style={[styles.statusBar, { backgroundColor: '#3E92CC' }]}>
-                    <Text style={styles.statusText}>3:58</Text>
-                    <View style={styles.statusIcons}>
-                      <Ionicons name="cellular" size={12} color="#FFF" />
-                      <Ionicons name="wifi" size={12} color="#FFF" style={{ marginLeft: 4 }} />
-                      <Ionicons name="battery-full" size={12} color="#FFF" style={{ marginLeft: 4 }} />
-                    </View>
-                  </View>
+          {/* Simplified Logo - Text Only */}
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>RegattaFlow</Text>
+          </View>
 
-                  {/* App Header */}
-                  <View style={[styles.appHeader, { backgroundColor: '#3E92CC' }]}>
-                    <Ionicons name="menu" size={24} color="#FFF" />
-                    <Text style={styles.appTitle}>SAILOR</Text>
-                    <Ionicons name="notifications-outline" size={24} color="#FFF" />
-                  </View>
+          {/* MAIN TITLE - USE WEB COMPONENT TO PREVENT DUPLICATION */}
+          <View 
+            style={styles.heroTitleWrapper}
+            {...(Platform.OS === 'web' ? { 'data-hero-title-wrapper': true } : {})}
+          >
+            {Platform.OS === 'web' ? (
+              <WebHeroTitle 
+                text="Race Smarter with\nAI-Powered Strategy"
+                style={{}}
+              />
+            ) : (
+              <Text 
+                key="hero-title-single" 
+                style={styles.heroTitle}
+              >
+                Race Smarter with{'\n'}AI-Powered Strategy
+              </Text>
+            )}
+          </View>
 
-                  {/* Content - Mini Sailor Dashboard */}
-                  <View style={styles.appContent}>
-                    <MiniSailorDashboard />
-                  </View>
-                </View>
-                <View style={styles.homeIndicator} />
-              </View>
+          <Text 
+            style={styles.heroSubtitle}
+            {...(Platform.OS === 'web' ? { 'data-hero-subtitle': true } : {})}
+          >
+            147+ global sailing venues • Unlimited race planning • Community-powered intelligence
+          </Text>
+
+          <View style={styles.ctaButtons}>
+            <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
+              <Text style={styles.primaryButtonText}>Start Free Trial</Text>
+              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleExploreVenues}>
+              <Text style={styles.secondaryButtonText}>Explore Venues</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Sign In link for existing users */}
+          {!user && (
+            <View style={styles.signInLink}>
+              <Text style={styles.signInLinkText}>
+                Already have an account?{' '}
+                <Text style={styles.signInLinkButton} onPress={handleSignIn}>
+                  Sign In
+                </Text>
+              </Text>
             </View>
+          )}
 
-            {/* Center Phone - Coach */}
-            <View style={[styles.phone, styles.phoneCenter]}>
-              <View style={styles.phoneFrame}>
-                <View style={styles.phoneScreen}>
-                  {/* Status Bar */}
-                  <View style={[styles.statusBar, { backgroundColor: '#8B5CF6' }]}>
-                    <Text style={styles.statusText}>3:58</Text>
-                    <View style={styles.statusIcons}>
-                      <Ionicons name="cellular" size={12} color="#FFF" />
-                      <Ionicons name="wifi" size={12} color="#FFF" style={{ marginLeft: 4 }} />
-                      <Ionicons name="battery-full" size={12} color="#FFF" style={{ marginLeft: 4 }} />
-                    </View>
-                  </View>
+          {/* Also available for coaches and clubs */}
+          <View style={styles.otherUserTypes}>
+            <Text style={styles.otherUserTypesText}>
+              Also available for{' '}
+              <Text
+                style={styles.otherUserTypesLink}
+                onPress={() => router.push('/coaches')}
+              >
+                coaches
+              </Text>
+              {' '}and{' '}
+              <Text
+                style={styles.otherUserTypesLink}
+                onPress={() => router.push('/clubs')}
+              >
+                clubs
+              </Text>
+            </Text>
+          </View>
 
-                  {/* App Header */}
-                  <View style={[styles.appHeader, { backgroundColor: '#8B5CF6' }]}>
-                    <Ionicons name="menu" size={24} color="#FFF" />
-                    <Text style={styles.appTitle}>COACH</Text>
-                    <Ionicons name="people-outline" size={24} color="#FFF" />
-                  </View>
-
-                  {/* Content - Mini Coach Dashboard */}
-                  <View style={styles.appContent}>
-                    <MiniCoachDashboard />
-                  </View>
-                </View>
-                <View style={styles.homeIndicator} />
+          {/* App Download Buttons */}
+          <View style={styles.downloadButtons}>
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  window.open('https://apps.apple.com/app/regattaflow', '_blank');
+                }
+              }}
+            >
+              <Ionicons name="logo-apple" size={18} color="#FFFFFF" />
+              <View style={styles.downloadButtonText}>
+                <Text style={styles.downloadButtonLabel}>Download on the</Text>
+                <Text style={styles.downloadButtonStore}>App Store</Text>
               </View>
-            </View>
+            </TouchableOpacity>
 
-            {/* Right Phone - Club */}
-            <View style={[styles.phone, styles.phoneRight]}>
-              <View style={styles.phoneFrame}>
-                <View style={styles.phoneScreen}>
-                  {/* Status Bar */}
-                  <View style={[styles.statusBar, { backgroundColor: '#10B981' }]}>
-                    <Text style={styles.statusText}>3:58</Text>
-                    <View style={styles.statusIcons}>
-                      <Ionicons name="cellular" size={12} color="#FFF" />
-                      <Ionicons name="wifi" size={12} color="#FFF" style={{ marginLeft: 4 }} />
-                      <Ionicons name="battery-full" size={12} color="#FFF" style={{ marginLeft: 4 }} />
-                    </View>
-                  </View>
-
-                  {/* App Header */}
-                  <View style={[styles.appHeader, { backgroundColor: '#10B981' }]}>
-                    <Ionicons name="menu" size={24} color="#FFF" />
-                    <Text style={styles.appTitle}>CLUB</Text>
-                    <Ionicons name="settings-outline" size={24} color="#FFF" />
-                  </View>
-
-                  {/* Content - Mini Club Dashboard */}
-                  <View style={styles.appContent}>
-                    <MiniClubDashboard />
-                  </View>
-                </View>
-                <View style={styles.homeIndicator} />
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  window.open('https://play.google.com/store/apps/details?id=com.regattaflow', '_blank');
+                }
+              }}
+            >
+              <Ionicons name="logo-google-playstore" size={18} color="#FFFFFF" />
+              <View style={styles.downloadButtonText}>
+                <Text style={styles.downloadButtonLabel}>GET IT ON</Text>
+                <Text style={styles.downloadButtonStore}>Google Play</Text>
               </View>
-            </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  alert('You\'re already using the web version!');
+                }
+              }}
+            >
+              <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />
+              <View style={styles.downloadButtonText}>
+                <Text style={styles.downloadButtonLabel}>Use On</Text>
+                <Text style={styles.downloadButtonStore}>Web Browser</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Pricing Section */}
-      <PricingSection />
+      {/* /races Demo with Features - Three Column Layout (Left | Center | Right) */}
+      <View style={styles.demoSection} id="features-demo" {...(Platform.OS === 'web' ? { 'data-section': 'features-demo' } : {})}>
+        <View 
+          style={[
+            styles.demoWithFeatures,
+            shouldStackColumns && styles.demoWithFeaturesStacked,
+          ]}
+          {...(Platform.OS === 'web' ? { 'data-demo-with-features': true } : {})}
+        >
+          {/* LEFT COLUMN - Feature Cards */}
+          <View 
+            style={[
+              styles.featuresLeft,
+              shouldStackColumns && styles.featuresLeftStacked,
+            ]}
+            {...(Platform.OS === 'web' ? { 'data-features-left': true } : {})}
+          >
+            <FeatureDescriptions
+              column="left"
+              highlightedFeature={highlightedFeature}
+              onFeatureClick={(featureId, raceId, sectionId) => {
+                setHighlightedFeature(featureId);
+                if (raceId) {
+                  setHighlightedRaceId(raceId);
+                  // Auto-clear after 3 seconds
+                  setTimeout(() => {
+                    setHighlightedRaceId(null);
+                  }, 3000);
+                }
+              }}
+              zoomedFeature={zoomedFeature}
+              onFeatureZoom={setZoomedFeature}
+            />
+          </View>
 
-      {/* Features Section with 3 Phones */}
-      <View style={styles.featuresSection}>
-        <Text style={[styles.featuresTitle, isDesktop && styles.featuresTitleDesktop]}>
-          Built for every role in sailing
-        </Text>
-        <Text style={styles.featuresSubtitle}>
-          Powerful features tailored to sailors, coaches, and yacht clubs
-        </Text>
-
-        <View style={[styles.featuresGrid, isDesktop && styles.featuresGridDesktop]}>
-          {/* Sailor Features */}
-          <View style={styles.featureColumn}>
-            <View style={styles.featurePhoneContainer}>
-              <View style={styles.featurePhone}>
-                <View style={styles.phoneFrame}>
-                  <View style={styles.phoneScreen}>
-                    <View style={[styles.statusBar, { backgroundColor: '#3E92CC' }]}>
-                      <Text style={styles.statusText}>3:58</Text>
-                    </View>
-                    <View style={[styles.appHeader, { backgroundColor: '#3E92CC' }]}>
-                      <Text style={styles.appTitle}>SAILOR</Text>
-                    </View>
-                    <View style={styles.appContent}>
-                      <MiniSailorDashboard />
-                    </View>
-                  </View>
-                  <View style={styles.homeIndicator} />
-                </View>
+          {/* CENTER - /races Demo */}
+          <View 
+            style={[
+              styles.demoCenter,
+              shouldStackColumns && styles.demoCenterStacked,
+            ]}
+            {...(Platform.OS === 'web' ? { 'data-demo-center': true } : {})}
+          >
+            <View style={styles.demoContainerWrapper}>
+              <View 
+                style={styles.demoContainer}
+                {...(Platform.OS === 'web' ? { 'data-races-demo-container': true } : {})}
+              >
+                <EmbeddedRacesDemo
+                  mode="fullscreen"
+                  scrollable={true}
+                  readOnly={true}
+                  autoReset={false}
+                  hideHeader={true}
+                  highlightedFeature={highlightedFeature}
+                  highlightedRaceId={highlightedRaceId}
+                  showTabs={false}
+                />
               </View>
-            </View>
-
-            <Text style={styles.featureRole}>For Sailors</Text>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#3E92CC" />
-                <Text style={styles.featureText}>AI race strategy planning</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#3E92CC" />
-                <Text style={styles.featureText}>Real-time weather intelligence</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#3E92CC" />
-                <Text style={styles.featureText}>Performance analytics</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#3E92CC" />
-                <Text style={styles.featureText}>Venue intelligence</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#3E92CC" />
-                <Text style={styles.featureText}>Race timer & countdown</Text>
-              </View>
+              {/* Bottom fade gradient indicator */}
+              {Platform.OS === 'web' && (
+                <View style={styles.scrollFadeGradient} />
+              )}
             </View>
           </View>
 
-          {/* Coach Features */}
-          <View style={styles.featureColumn}>
-            <View style={styles.featurePhoneContainer}>
-              <View style={styles.featurePhone}>
-                <View style={styles.phoneFrame}>
-                  <View style={styles.phoneScreen}>
-                    <View style={[styles.statusBar, { backgroundColor: '#8B5CF6' }]}>
-                      <Text style={styles.statusText}>3:58</Text>
-                    </View>
-                    <View style={[styles.appHeader, { backgroundColor: '#8B5CF6' }]}>
-                      <Text style={styles.appTitle}>COACH</Text>
-                    </View>
-                    <View style={styles.appContent}>
-                      <MiniCoachDashboard />
-                    </View>
-                  </View>
-                  <View style={styles.homeIndicator} />
-                </View>
-              </View>
-            </View>
-
-            <Text style={styles.featureRole}>For Coaches</Text>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
-                <Text style={styles.featureText}>Session management</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
-                <Text style={styles.featureText}>Video analysis tools</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
-                <Text style={styles.featureText}>Progress tracking</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
-                <Text style={styles.featureText}>Payment processing</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
-                <Text style={styles.featureText}>Marketplace listing</Text>
-              </View>
-            </View>
+          {/* RIGHT COLUMN - Feature Cards */}
+          <View 
+            style={[
+              styles.featuresRight,
+              shouldStackColumns && styles.featuresRightStacked,
+            ]}
+            {...(Platform.OS === 'web' ? { 'data-features-right': true } : {})}
+          >
+            <FeatureDescriptions
+              column="right"
+              highlightedFeature={highlightedFeature}
+              onFeatureClick={(featureId, raceId, sectionId) => {
+                setHighlightedFeature(featureId);
+                if (raceId) {
+                  setHighlightedRaceId(raceId);
+                  // Auto-clear after 3 seconds
+                  setTimeout(() => {
+                    setHighlightedRaceId(null);
+                  }, 3000);
+                }
+              }}
+              zoomedFeature={zoomedFeature}
+              onFeatureZoom={setZoomedFeature}
+            />
           </View>
-
-          {/* Club Features */}
-          <View style={styles.featureColumn}>
-            <View style={styles.featurePhoneContainer}>
-              <View style={styles.featurePhone}>
-                <View style={styles.phoneFrame}>
-                  <View style={styles.phoneScreen}>
-                    <View style={[styles.statusBar, { backgroundColor: '#10B981' }]}>
-                      <Text style={styles.statusText}>3:58</Text>
-                    </View>
-                    <View style={[styles.appHeader, { backgroundColor: '#10B981' }]}>
-                      <Text style={styles.appTitle}>CLUB</Text>
-                    </View>
-                    <View style={styles.appContent}>
-                      <MiniClubDashboard />
-                    </View>
-                  </View>
-                  <View style={styles.homeIndicator} />
-                </View>
-              </View>
-            </View>
-
-            <Text style={styles.featureRole}>For Clubs</Text>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={styles.featureText}>Regatta management</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={styles.featureText}>Live race scoring</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={styles.featureText}>Entry management</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={styles.featureText}>Results publication</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={styles.featureText}>Member management</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Bottom CTA */}
-        <View style={styles.bottomCta}>
-          <TouchableOpacity style={styles.ctaPrimaryButton} onPress={handleGetStarted}>
-            <Text style={styles.ctaPrimaryButtonText}>Start Your Free Trial</Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Pricing Section */}
+      <View id="pricing-section" {...(Platform.OS === 'web' ? { 'data-section': 'pricing-section' } : {})}>
+        <PricingSection />
+      </View>
+
+      {/* Racing Academy Section */}
+      <RacingAcademySection />
+
+      {/* "Built for every role" section removed - sailor-first strategy */}
 
       {/* Mission Section */}
       <MissionSection />
 
-      {/* Founder Section */}
-      <FounderSection />
+      {/* Founder Section - Minimized for sailor-first strategy */}
+      {/* <FounderSection /> */}
 
       {/* Footer */}
       <Footer />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  rootContainer: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+    width: '100%',
+    ...Platform.select({
+      web: {
+        minWidth: 320,
+        maxWidth: '100vw',
+        overflowX: 'hidden',
+      },
+    }),
+  },
+  pageWrapper: {
+    width: '100%',
+    ...Platform.select({
+      web: {
+        minWidth: 320,
+        maxWidth: '100vw',
+        overflowX: 'hidden',
+        boxSizing: 'border-box',
+      },
+    }),
   },
 
   // DEV: Logout button
@@ -465,82 +617,124 @@ const styles = StyleSheet.create({
   heroSection: {
     paddingVertical: 80,
     paddingHorizontal: 24,
+    width: '100%',
     ...Platform.select({
       web: {
-        minHeight: 600,
-      },
+        minHeight: 500,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        position: 'relative',
+        '@media (max-width: 768px)': {
+          minHeight: 400,
+          paddingVertical: 60,
+          paddingHorizontal: 20,
+        },
+        '@media (max-width: 480px)': {
+          minHeight: 350,
+          paddingVertical: 40,
+          paddingHorizontal: 16,
+        },
+      } as any,
     }),
   },
   heroContent: {
-    maxWidth: 1200,
+    maxWidth: 800,
     alignSelf: 'center',
     width: '100%',
     alignItems: 'center',
-  },
-  heroContentDesktop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    ...Platform.select({
+      web: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        position: 'relative', // Not absolute
+      } as any,
+    }),
   },
   heroText: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 32,
+    paddingHorizontal: 24,
   },
   heroTextDesktop: {
-    flex: 1,
-    alignItems: 'flex-start',
-    marginBottom: 0,
-    paddingRight: 48,
-  },
-  badgeContainer: {
     alignItems: 'center',
     marginBottom: 24,
-    gap: 8,
+    paddingHorizontal: 48,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  // Simplified Logo Container
+  logoContainer: {
+    marginBottom: 32,
   },
   logoText: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  tagline: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#E3F2FD',
-    opacity: 0.9,
-  },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(62, 146, 204, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 24,
-    marginBottom: 24,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      },
+    }),
   },
   badgeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#E3F2FD',
-    marginLeft: 8,
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  heroTitleWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 24,
+    ...Platform.select({
+      web: {
+        display: 'block',
+        marginBottom: 20,
+      } as any,
+    }),
   },
   heroTitle: {
     fontSize: 36,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 44,
-  },
-  heroTitleDesktop: {
-    fontSize: 56,
-    textAlign: 'left',
-    lineHeight: 64,
+    lineHeight: 48,
+    maxWidth: 900,
+    // CRITICAL: Clean styles only - NO position, NO transform, NO animation, NO nested text
+    ...Platform.select({
+      web: {
+        fontSize: 'clamp(32px, 5vw, 56px)',
+        lineHeight: 1.2,
+        display: 'block',
+        width: '100%',
+        // Force single rendering
+        position: 'relative',
+        zIndex: 1,
+        '@media (max-width: 768px)': {
+          fontSize: 42,
+        },
+        '@media (max-width: 480px)': {
+          fontSize: 32,
+        },
+      } as any,
+    }),
   },
   heroSubtitle: {
     fontSize: 18,
@@ -548,20 +742,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 28,
-  },
-  heroSubtitleDesktop: {
-    fontSize: 20,
-    textAlign: 'left',
+    ...Platform.select({
+      web: {
+        fontSize: 'clamp(14px, 2.5vw, 18px)',
+        maxWidth: 700,
+      } as any,
+    }),
   },
   ctaButtons: {
     gap: 16,
     width: '100%',
     alignItems: 'center',
-    marginBottom: 48,
-  },
-  ctaButtonsDesktop: {
-    flexDirection: 'row',
-    width: 'auto',
+    marginBottom: 24,
+    ...Platform.select({
+      web: {
+        flexDirection: 'row',
+        width: 'auto',
+        '@media (max-width: 480px)': {
+          flexDirection: 'column',
+          width: '100%',
+          maxWidth: 300,
+        },
+      },
+    }),
   },
   primaryButton: {
     backgroundColor: '#FFFFFF',
@@ -604,12 +807,15 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  downloadButtonsDesktop: {
-    flexDirection: 'row',
-    width: 'auto',
-    gap: 12,
+    marginTop: 8,
+    ...Platform.select({
+      web: {
+        flexDirection: 'row',
+        width: 'auto',
+        gap: 12,
+        alignItems: 'flex-start',
+      },
+    }),
   },
   downloadButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -643,6 +849,58 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  otherUserTypes: {
+    marginTop: 32,
+    marginBottom: 24,
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        alignItems: 'flex-start',
+      },
+    }),
+  },
+  otherUserTypesText: {
+    fontSize: 14,
+    color: '#E3F2FD',
+    opacity: 0.9,
+  },
+  otherUserTypesLink: {
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
+  signInLink: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  signInLinkText: {
+    fontSize: 14,
+    color: '#E3F2FD',
+    opacity: 0.9,
+  },
+  signInLinkButton: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  demoMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  demoMessageText: {
+    fontSize: 14,
+    color: '#E3F2FD',
+    flex: 1,
+    lineHeight: 20,
+  },
   stats: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -670,39 +928,242 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
 
-  // Phones Container
-  phonesContainer: {
-    position: 'relative',
+  // Full-Width Demo Section
+  demoSection: {
     width: '100%',
-    height: 400,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 60,
+    paddingHorizontal: 0, // Remove horizontal padding
+    ...Platform.select({
+      web: {
+        paddingVertical: 80,
+        paddingHorizontal: '1%', // Minimal horizontal padding
+      },
+    }),
   },
-  phonesContainerDesktop: {
-    flex: 1,
-    height: 500,
+  demoWithFeatures: {
+    width: '100%',
+    alignSelf: 'center',
+    ...Platform.select({
+      web: {
+        display: 'flex',
+        flexDirection: 'row',
+        gap: 24,
+        alignItems: 'flex-start',
+        maxWidth: 1800,
+        alignSelf: 'center',
+        paddingVertical: 40,
+        paddingHorizontal: 24,
+        minWidth: 0,
+        boxSizing: 'border-box',
+        '@media (max-width: 1200px)': {
+          flexDirection: 'column',
+          paddingVertical: 30,
+          paddingHorizontal: 20,
+          gap: 20,
+        },
+      } as any,
+    }),
+    gap: 16,
   },
-  phone: {
-    position: 'absolute',
+  demoWithFeaturesStacked: {
+    ...Platform.select({
+      web: {
+        flexDirection: 'column',
+        paddingVertical: 30,
+        paddingHorizontal: 20,
+        gap: 20,
+      },
+    }),
   },
-  phoneLeft: {
-    left: 0,
-    zIndex: 1,
-    transform: [{ rotate: '-5deg' }],
+  featuresLeft: {
+    ...Platform.select({
+      web: {
+        flexGrow: 0,
+        flexShrink: 0,
+        flexBasis: 280,
+        maxWidth: 280,
+        minWidth: 280,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        position: 'sticky',
+        top: 80,
+        alignSelf: 'flex-start',
+        overflow: 'visible',
+        height: 'auto',
+      } as any,
+      default: {
+        width: '100%',
+      },
+    }),
   },
-  phoneCenter: {
-    zIndex: 3,
+  featuresLeftStacked: {
+    ...Platform.select({
+      web: {
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        width: '100%',
+        position: 'static',
+        maxHeight: 'none',
+        overflowY: 'visible',
+        order: 2, // Show after demo on mobile
+        marginTop: 24,
+        '@media (max-width: 1200px)': {
+          order: 2,
+        },
+      } as any,
+    }),
   },
-  phoneRight: {
-    right: 0,
-    zIndex: 2,
-    transform: [{ rotate: '5deg' }],
+  demoCenter: {
+    ...Platform.select({
+      web: {
+        flex: '1 1 auto',
+        minWidth: 0, // Important: allows flex child to shrink below content size
+        maxWidth: 1400,
+        display: 'flex',
+        flexDirection: 'column',
+      } as any,
+      default: {
+        width: '100%',
+      },
+    }),
+  },
+  demoCenterStacked: {
+    ...Platform.select({
+      web: {
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: '100%',
+        maxWidth: '100%',
+        width: '100%',
+        order: 1, // Show demo first on mobile
+        marginBottom: 24,
+        '@media (max-width: 1200px)': {
+          order: 1,
+        },
+      },
+    }),
+  },
+  featuresRight: {
+    ...Platform.select({
+      web: {
+        flexGrow: 0,
+        flexShrink: 0,
+        flexBasis: 280,
+        maxWidth: 280,
+        minWidth: 280,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        position: 'sticky',
+        top: 80,
+        alignSelf: 'flex-start',
+        overflow: 'visible',
+        height: 'auto',
+      } as any,
+      default: {
+        width: '100%',
+      },
+    }),
+  },
+  featuresRightStacked: {
+    ...Platform.select({
+      web: {
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        width: '100%',
+        position: 'static',
+        maxHeight: 'none',
+        overflowY: 'visible',
+        order: 3, // Show last on mobile
+        marginTop: 24,
+        '@media (max-width: 1200px)': {
+          order: 3,
+        },
+      } as any,
+    }),
+  },
+  demoContainerWrapper: {
+    width: '100%',
+    position: 'relative',
+    ...Platform.select({
+      web: {
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        backgroundColor: '#FFFFFF',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        boxSizing: 'border-box',
+      },
+      default: {
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        backgroundColor: '#FFFFFF',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+    }),
+  },
+  demoContainer: {
+    width: '100%',
+    maxHeight: 650,
+    ...Platform.select({
+      web: {
+        overflowY: 'auto',
+        overflowX: 'visible', // Allow horizontal scrolling for race cards
+        scrollBehavior: 'smooth',
+        // Scrollbar styling is handled via CSS injection (see useEffect)
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#2563eb #f1f1f1',
+        // CRITICAL: Ensure container constrains children - prevent expansion
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch', // Force children to respect container width
+        // Force width constraint
+        boxSizing: 'border-box',
+        // Prevent children from expanding beyond this container
+        minWidth: 0,
+        transition: 'all 0.3s ease',
+      },
+      default: {
+        // Native: use ScrollView wrapper if needed
+      },
+    }),
+  },
+  scrollFadeGradient: {
+    ...Platform.select({
+      web: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 8, // Leave space for scrollbar
+        height: 40,
+        pointerEvents: 'none',
+        background: 'linear-gradient(to top, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 50%, transparent 100%)',
+        zIndex: 1,
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16, // Match container border radius
+      } as any,
+      default: {},
+    }),
   },
   phoneFrame: {
-    width: 180,
-    height: 360,
     backgroundColor: '#1F2937',
-    borderRadius: 32,
+    borderRadius: 40,
     padding: 8,
     ...Platform.select({
       web: {
@@ -712,6 +1173,14 @@ const styles = StyleSheet.create({
         elevation: 8,
       },
     }),
+  },
+  phoneFrameMobile: {
+    width: 296, // 280 + 16 padding
+    height: 576, // 560 + 16 padding
+  },
+  phoneFrameTablet: {
+    width: 336, // 320 + 16 padding
+    height: 656, // 640 + 16 padding
   },
   phoneScreen: {
     flex: 1,
@@ -942,12 +1411,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 64,
   },
-  featuresGrid: {
-    gap: 48,
-    maxWidth: 1200,
-    alignSelf: 'center',
-    width: '100%',
-  },
   featuresGridDesktop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1024,3 +1487,4 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
