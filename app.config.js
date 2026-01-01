@@ -50,7 +50,7 @@ module.exports = {
     },
     web: {
       bundler: 'metro',
-      output: 'static',
+      output: 'single',
       favicon: './assets/images/favicon.png',
       name: 'RegattaFlow - Sailing Race Strategy & Performance',
       shortName: 'RegattaFlow',
