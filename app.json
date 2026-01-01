@@ -63,7 +63,7 @@
     "web": {
       "bundler": "webpack",
       "favicon": "./assets/images/favicon.png",
-      "output": "static",
+      "output": "single",
       "name": "RegattaFlow - Sailing Race Strategy & Performance",
       "shortName": "RegattaFlow",
       "description": "AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide",
