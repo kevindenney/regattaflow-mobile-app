@@ -275,9 +275,8 @@ export default function DevLogin() {
 
           {/* Login Form */}
           <View
-            accessibilityRole="form"
             accessible={true}
-            importantForAccessibility="yes"
+            accessibilityLabel="Login form"
           >
             <TextInput
               accessibilityLabel="identifier-input"

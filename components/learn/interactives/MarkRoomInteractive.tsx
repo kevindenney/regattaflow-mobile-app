@@ -910,19 +910,25 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
                 </G>
               )}
 
-              {/* Rounding paths */}
+              {/* Rounding paths / Laylines */}
               {currentStep.visualState.roundingPath?.opacity !== 0 && currentStep.visualState.roundingPath?.properPath && (
                 <G>
                   <Path
                     d={currentStep.visualState.roundingPath.properPath.d}
-                    stroke="#22C55E"
-                    strokeWidth="3"
+                    stroke={currentStep.visualState.roundingPath.properPath.label?.includes('LAYLINE') ? '#10B981' : '#22C55E'}
+                    strokeWidth="2"
                     strokeDasharray="8,4"
                     fill="none"
-                    opacity={0.8}
+                    opacity={0.7}
                   />
                   {currentStep.visualState.roundingPath.properPath.label && (
-                    <SvgText x="510" y="290" fill="#22C55E" fontSize="11" fontWeight="600">
+                    <SvgText
+                      x={currentStep.visualState.roundingPath.properPath.label?.includes('STARBOARD') ? 530 : 510}
+                      y={currentStep.visualState.roundingPath.properPath.label?.includes('LAYLINE') ? 340 : 290}
+                      fill="#10B981"
+                      fontSize="10"
+                      fontWeight="600"
+                    >
                       {currentStep.visualState.roundingPath.properPath.label}
                     </SvgText>
                   )}
@@ -933,14 +939,20 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
                 <G>
                   <Path
                     d={currentStep.visualState.roundingPath.improperPath.d}
-                    stroke="#EF4444"
+                    stroke={currentStep.visualState.roundingPath.improperPath.label?.includes('LAYLINE') ? '#EF4444' : '#EF4444'}
                     strokeWidth="2"
-                    strokeDasharray="5,5"
+                    strokeDasharray="8,4"
                     fill="none"
-                    opacity={0.6}
+                    opacity={0.7}
                   />
                   {currentStep.visualState.roundingPath.improperPath.label && (
-                    <SvgText x="540" y="280" fill="#EF4444" fontSize="11" fontWeight="600">
+                    <SvgText
+                      x={currentStep.visualState.roundingPath.improperPath.label?.includes('PORT') ? 220 : 540}
+                      y={currentStep.visualState.roundingPath.improperPath.label?.includes('LAYLINE') ? 340 : 280}
+                      fill="#EF4444"
+                      fontSize="10"
+                      fontWeight="600"
+                    >
                       {currentStep.visualState.roundingPath.improperPath.label}
                     </SvgText>
                   )}
@@ -1127,7 +1139,7 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
               {/* Zone entry indicator */}
               {currentStep.visualState.zoneEntry?.showOverlapIndicator && (
                 <G transform="translate(400, 460)">
-                  <Rect x="-80" y="-15" width="160" height="30" rx="15" fill="#1E293B" opacity={0.9} />
+                  <Rect x="-110" y="-15" width="220" height="30" rx="15" fill="#1E293B" opacity={0.9} />
                   <SvgText x="0" y="5" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="600">
                     {currentStep.visualState.zoneEntry.overlapText || 'OVERLAPPED'}
                   </SvgText>

@@ -152,9 +152,8 @@ export default function Login() {
 
           {/* Login Form */}
           <View
-            accessibilityRole="form"
             accessible={true}
-            importantForAccessibility="yes"
+            accessibilityLabel="Login form"
           >
             {/* Username or Email */}
             <TextInput

@@ -720,7 +720,7 @@ function CourseCard({ course, isDesktop, onPress, onEnroll }: CourseCardProps) {
       {/* Course Content */}
       <View style={styles.courseContent}>
         {/* Level Badge */}
-        <View style={styles.levelBadge}>
+        <View style={styles.courseLevelBadge}>
           <View style={[styles.levelDot, { backgroundColor: levelColor }]} />
           <Text style={styles.levelBadgeText}>{levelName}</Text>
         </View>
@@ -802,7 +802,7 @@ function CourseCard({ course, isDesktop, onPress, onEnroll }: CourseCardProps) {
                   <View style={styles.moduleNumber}>
                     <Text style={styles.moduleNumberText}>{idx + 1}</Text>
                   </View>
-                  <Text style={styles.moduleTitle} numberOfLines={1}>
+                  <Text style={styles.moduleItemTitle} numberOfLines={1}>
             {module.title}
           </Text>
                   {module.durationMinutes && (
@@ -1519,7 +1519,7 @@ const styles = StyleSheet.create({
     padding: 20,
     flex: 1,
   },
-  levelBadge: {
+  courseLevelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1689,7 +1689,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8B5CF6',
   },
-  moduleTitle: {
+  moduleItemTitle: {
     flex: 1,
     fontSize: 14,
     color: '#4B5563',
