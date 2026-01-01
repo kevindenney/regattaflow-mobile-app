@@ -8,7 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "NODE_OPTIONS='--max-old-space-size=12288' npx expo export --platform web && node scripts/copy-static.js",
+    "build:web": "NODE_OPTIONS='--max-old-space-size=6144' npx expo export --platform web && node scripts/copy-static.js",
     "postinstall": "node scripts/fix-peer-deps.js",
     "seed:rhkyc": "node scripts/seed-rhkyc-demo.mjs",
     "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx",
