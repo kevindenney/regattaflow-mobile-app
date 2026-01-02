@@ -4,6 +4,10 @@
 DROP POLICY IF EXISTS "race_participants_public_read" ON race_participants;
 DROP POLICY IF EXISTS "race_participants_fleet_read" ON race_participants;
 DROP POLICY IF EXISTS "race_participants_select" ON race_participants;
+DROP POLICY IF EXISTS "race_participants_own_read" ON race_participants;
+DROP POLICY IF EXISTS "race_participants_insert" ON race_participants;
+DROP POLICY IF EXISTS "race_participants_update" ON race_participants;
+DROP POLICY IF EXISTS "race_participants_delete" ON race_participants;
 
 -- Allow anyone to view public participants
 CREATE POLICY "race_participants_public_read"

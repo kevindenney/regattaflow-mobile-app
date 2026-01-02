@@ -17,6 +17,7 @@ interface EmailSequence {
   user_id: string
   email_type: string
   metadata: Record<string, any>
+  persona: 'sailor' | 'coach' | 'club'
   user_email: string
   user_name: string
   subscription_tier: string
@@ -34,9 +35,10 @@ interface EmailPayload {
   reply_to?: string
 }
 
-// Email template generator (simplified - full templates in SailorOnboardingEmailService.ts)
+// Email template generator - handles all personas
 function generateEmailContent(
   emailType: string,
+  persona: 'sailor' | 'coach' | 'club',
   data: {
     userName: string
     userEmail: string
@@ -46,171 +48,296 @@ function generateEmailContent(
     upgradeUrl: string
   }
 ): { subject: string; html: string; text: string } {
-  const firstName = data.userName.split(' ')[0] || 'Sailor'
-  
+  const firstName = data.userName.split(' ')[0] || getPersonaGreeting(persona)
+
+  // Generate persona-specific welcome email
+  if (emailType === 'welcome') {
+    return generateWelcomeEmail(firstName, persona, data)
+  }
+
+  // Generate persona-specific quick start email
+  if (emailType === 'quick_start') {
+    return generateQuickStartEmail(firstName, persona, data)
+  }
+
+  // Generate persona-specific feature tip email
+  if (emailType === 'feature_tip') {
+    return generateFeatureTipEmail(firstName, persona, data)
+  }
+
+  // Trial reminder emails (shared across personas)
   switch (emailType) {
-    case 'welcome':
-      return {
-        subject: `⛵ Welcome aboard, ${firstName}!`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #0ea5e9, #0369a1); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">Welcome to RegattaFlow!</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName}! 👋</p>
-              <p>Welcome to RegattaFlow — the AI-powered platform built by sailors, for sailors.</p>
-              <h3>🎯 Complete your setup in 2 minutes:</h3>
-              <ol>
-                <li>Set your home sailing venue</li>
-                <li>Add your boat details</li>
-                <li>Create your first race</li>
-              </ol>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.dashboardUrl}" style="background: #0ea5e9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Complete Setup →</a>
-              </div>
-              <p style="background: #fef3c7; padding: 12px; border-radius: 8px; color: #92400e;">
-                <strong>🎁 You have 7 days of full access</strong> — explore all premium features!
-              </p>
-            </div>
-          </div>
-        `,
-        text: `Welcome to RegattaFlow, ${firstName}!\n\nComplete your setup:\n1. Set your home sailing venue\n2. Add your boat details\n3. Create your first race\n\nVisit: ${data.dashboardUrl}`,
-      }
-      
-    case 'quick_start':
-      return {
-        subject: `⏰ ${firstName}, finish setting up RegattaFlow`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">Quick Start Guide</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName},</p>
-              <p>We noticed you started setting up RegattaFlow but haven't finished yet. Let's get you racing-ready!</p>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.dashboardUrl}" style="background: #8b5cf6; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Continue Setup</a>
-              </div>
-            </div>
-          </div>
-        `,
-        text: `Hi ${firstName},\n\nFinish setting up RegattaFlow to access AI race analysis and more.\n\nContinue: ${data.dashboardUrl}`,
-      }
-      
     case 'trial_reminder_5':
     case 'trial_reminder_2':
       const daysLeft = emailType === 'trial_reminder_5' ? 5 : 2
-      return {
-        subject: `📅 ${firstName}, ${daysLeft} days left in your trial`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">${daysLeft} Days Left</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName},</p>
-              <p>Your premium trial ends in <strong>${daysLeft} days</strong>. Keep all your features for just $9.99/month.</p>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.upgradeUrl}" style="background: #f59e0b; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Upgrade Now</a>
-              </div>
-            </div>
-          </div>
-        `,
-        text: `Hi ${firstName},\n\nYour trial ends in ${daysLeft} days. Upgrade to keep all features: ${data.upgradeUrl}`,
-      }
-      
+      return generateTrialReminderEmail(firstName, daysLeft, data)
+
     case 'trial_ending':
-      return {
-        subject: `⚡ ${firstName}, your trial ends TODAY`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">Trial Ends Today</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName},</p>
-              <p>Your premium trial ends <strong>today</strong>. Don't lose access to AI race analysis!</p>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.upgradeUrl}" style="background: #ef4444; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 18px;">Upgrade Now — $9.99/mo</a>
-              </div>
-            </div>
-          </div>
-        `,
-        text: `Hi ${firstName},\n\nYour trial ends TODAY. Upgrade now: ${data.upgradeUrl}`,
-      }
-      
+      return generateTrialEndingEmail(firstName, data)
+
     case 'trial_ended':
-      return {
-        subject: `📦 ${firstName}, you're now on the Free plan`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #6b7280, #4b5563); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">Welcome to Free</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName},</p>
-              <p>Your trial has ended. You're on our Free plan with limited features.</p>
-              <p>Ready to upgrade? All your data is safe and waiting.</p>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.upgradeUrl}" style="background: #3b82f6; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Upgrade to Pro</a>
-              </div>
-            </div>
-          </div>
-        `,
-        text: `Hi ${firstName},\n\nYour trial has ended. Upgrade anytime: ${data.upgradeUrl}`,
-      }
-      
-    case 'feature_tip':
-      return {
-        subject: `💡 Pro tip: AI race analysis for your next regatta`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">Feature Spotlight</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName},</p>
-              <p>Here's a killer feature most sailors don't discover right away:</p>
-              <div style="background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 16px 0;">
-                <h2 style="color: #059669; margin: 0 0 12px 0;">🤖 AI Race Analysis</h2>
-                <p style="color: #065f46; margin: 0;">Upload your race documents and get strategic recommendations, rule interpretations, and tactical suggestions!</p>
-              </div>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.appUrl}/add-race" style="background: #10b981; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Try AI Analysis →</a>
-              </div>
-            </div>
-          </div>
-        `,
-        text: `Hi ${firstName},\n\nTry our AI Race Analysis feature! Upload your race documents for strategic recommendations.\n\nTry it: ${data.appUrl}/add-race`,
-      }
-      
+      return generateTrialEndedEmail(firstName, data)
+
     case 're_engagement':
-      return {
-        subject: `🌊 ${firstName}, we miss you on the water!`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
-              <h1 style="color: white; margin: 0;">Time to Get Back Racing?</h1>
-            </div>
-            <div style="padding: 24px; background: #fff;">
-              <p>Hi ${firstName},</p>
-              <p>It's been a while! Are you ready for your next regatta?</p>
-              <div style="text-align: center; margin: 24px 0;">
-                <a href="${data.dashboardUrl}" style="background: #3b82f6; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Get Back to Racing</a>
-              </div>
-            </div>
-          </div>
-        `,
-        text: `Hi ${firstName},\n\nIt's been a while! Get back to racing: ${data.dashboardUrl}`,
-      }
-      
+      return generateReEngagementEmail(firstName, persona, data)
+
     default:
       return {
         subject: `RegattaFlow Update`,
         html: `<p>Hi ${firstName}, check out what's new in RegattaFlow!</p>`,
         text: `Hi ${firstName}, check out what's new in RegattaFlow!`,
       }
+  }
+}
+
+function getPersonaGreeting(persona: string): string {
+  switch (persona) {
+    case 'coach': return 'Coach'
+    case 'club': return 'there'
+    default: return 'Sailor'
+  }
+}
+
+function generateWelcomeEmail(firstName: string, persona: string, data: any) {
+  const configs: Record<string, { emoji: string; tagline: string; steps: string[]; gradient: string }> = {
+    sailor: {
+      emoji: '⛵',
+      tagline: 'the AI-powered platform built by sailors, for sailors',
+      steps: ['Set your home sailing venue', 'Add your boat details', 'Join your first race'],
+      gradient: 'linear-gradient(135deg, #0ea5e9, #0369a1)'
+    },
+    coach: {
+      emoji: '🎯',
+      tagline: 'the AI-powered coaching platform to elevate your athletes',
+      steps: ['Set up your coaching profile', 'Add your first athlete', 'Schedule a coaching session'],
+      gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)'
+    },
+    club: {
+      emoji: '🏠',
+      tagline: 'the complete platform for yacht club management',
+      steps: ['Configure your club settings', 'Create your first regatta', 'Invite your members'],
+      gradient: 'linear-gradient(135deg, #10b981, #059669)'
+    }
+  }
+
+  const config = configs[persona] || configs.sailor
+
+  return {
+    subject: `${config.emoji} Welcome aboard, ${firstName}!`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: ${config.gradient}; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">Welcome to RegattaFlow!</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName}! 👋</p>
+          <p>Welcome to RegattaFlow — ${config.tagline}.</p>
+          <h3>🎯 Get started in 2 minutes:</h3>
+          <ol>
+            ${config.steps.map(step => `<li>${step}</li>`).join('\n            ')}
+          </ol>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${data.dashboardUrl}" style="background: #0ea5e9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Get Started →</a>
+          </div>
+          <p style="background: #fef3c7; padding: 12px; border-radius: 8px; color: #92400e;">
+            <strong>🎁 You have 7 days of full access</strong> — explore all premium features!
+          </p>
+        </div>
+      </div>
+    `,
+    text: `Welcome to RegattaFlow, ${firstName}!\n\n${config.tagline}\n\nGet started:\n${config.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\nVisit: ${data.dashboardUrl}`,
+  }
+}
+
+function generateQuickStartEmail(firstName: string, persona: string, data: any) {
+  const configs: Record<string, { features: string[]; gradient: string }> = {
+    sailor: {
+      features: ['AI-powered race strategy analysis', 'Local venue intelligence & conditions', 'Weather integration for your location', 'Equipment optimization tips'],
+      gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)'
+    },
+    coach: {
+      features: ['Athlete performance tracking', 'Session planning tools', 'Video analysis integration', 'Progress reports for athletes'],
+      gradient: 'linear-gradient(135deg, #f59e0b, #d97706)'
+    },
+    club: {
+      features: ['Regatta management dashboard', 'Member communication tools', 'Race result publishing', 'Online registration system'],
+      gradient: 'linear-gradient(135deg, #10b981, #059669)'
+    }
+  }
+
+  const config = configs[persona] || configs.sailor
+
+  return {
+    subject: `⏰ ${firstName}, finish setting up RegattaFlow`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: ${config.gradient}; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">Quick Start Guide</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName},</p>
+          <p>We noticed you started setting up RegattaFlow but haven't finished yet. Let's get you ready!</p>
+          <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin: 24px 0; border-left: 4px solid #8b5cf6;">
+            <h3 style="color: #6d28d9; margin: 0 0 12px 0;">🚀 What you're missing:</h3>
+            <ul style="color: #475569; margin: 0; padding-left: 20px; line-height: 1.8;">
+              ${config.features.map(f => `<li>${f}</li>`).join('\n              ')}
+            </ul>
+          </div>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${data.dashboardUrl}" style="background: #8b5cf6; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Continue Setup</a>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nFinish setting up RegattaFlow to access:\n${config.features.map(f => `- ${f}`).join('\n')}\n\nContinue: ${data.dashboardUrl}`,
+  }
+}
+
+function generateFeatureTipEmail(firstName: string, persona: string, data: any) {
+  const configs: Record<string, { title: string; description: string; features: string[]; cta: string; ctaUrl: string; gradient: string }> = {
+    sailor: {
+      title: '🤖 AI Race Analysis',
+      description: 'Upload your race documents (NOR, Sailing Instructions) and get:',
+      features: ['Strategic recommendations based on course layout', 'Key rule interpretations', 'Weather-integrated tactical suggestions', 'Mark rounding priorities'],
+      cta: 'Try AI Analysis →',
+      ctaUrl: `${data.appUrl}/add-race`,
+      gradient: 'linear-gradient(135deg, #10b981, #059669)'
+    },
+    coach: {
+      title: '📊 Athlete Performance Dashboard',
+      description: 'Track your athletes\' progress with:',
+      features: ['Race-by-race performance trends', 'Skill development tracking', 'Session notes and feedback', 'Comparative analysis'],
+      cta: 'View Dashboard →',
+      ctaUrl: `${data.appUrl}/athletes`,
+      gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
+    },
+    club: {
+      title: '📋 Regatta Management',
+      description: 'Streamline your events with:',
+      features: ['Online registration system', 'Automated document distribution', 'Real-time results publishing', 'Member communications'],
+      cta: 'Create Regatta →',
+      ctaUrl: `${data.appUrl}/regattas/new`,
+      gradient: 'linear-gradient(135deg, #f59e0b, #d97706)'
+    }
+  }
+
+  const config = configs[persona] || configs.sailor
+
+  return {
+    subject: `💡 Pro tip: ${config.title.replace(/[🤖📊📋]/g, '').trim()}`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: ${config.gradient}; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">Feature Spotlight</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName},</p>
+          <p>Here's a feature you might have missed:</p>
+          <div style="background: #ecfdf5; border-radius: 12px; padding: 24px; margin: 24px 0;">
+            <h2 style="color: #059669; margin: 0 0 12px 0;">${config.title}</h2>
+            <p style="color: #065f46; margin: 0 0 16px 0;">${config.description}</p>
+            <ul style="color: #065f46; margin: 0; padding-left: 20px; line-height: 1.8;">
+              ${config.features.map(f => `<li>${f}</li>`).join('\n              ')}
+            </ul>
+          </div>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${config.ctaUrl}" style="background: #10b981; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">${config.cta}</a>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\n${config.title}\n\n${config.description}\n${config.features.map(f => `- ${f}`).join('\n')}\n\nTry it: ${config.ctaUrl}`,
+  }
+}
+
+function generateTrialReminderEmail(firstName: string, daysLeft: number, data: any) {
+  return {
+    subject: `📅 ${firstName}, ${daysLeft} days left in your trial`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">${daysLeft} Days Left</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName},</p>
+          <p>Your premium trial ends in <strong>${daysLeft} days</strong>. Keep all your features for just $9.99/month.</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${data.upgradeUrl}" style="background: #f59e0b; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Upgrade Now</a>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYour trial ends in ${daysLeft} days. Upgrade to keep all features: ${data.upgradeUrl}`,
+  }
+}
+
+function generateTrialEndingEmail(firstName: string, data: any) {
+  return {
+    subject: `⚡ ${firstName}, your trial ends TODAY`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #ef4444, #dc2626); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">Trial Ends Today</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName},</p>
+          <p>Your premium trial ends <strong>today</strong>. Don't lose access!</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${data.upgradeUrl}" style="background: #ef4444; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 18px;">Upgrade Now — $9.99/mo</a>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYour trial ends TODAY. Upgrade now: ${data.upgradeUrl}`,
+  }
+}
+
+function generateTrialEndedEmail(firstName: string, data: any) {
+  return {
+    subject: `📦 ${firstName}, you're now on the Free plan`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #6b7280, #4b5563); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">Welcome to Free</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName},</p>
+          <p>Your trial has ended. You're on our Free plan with limited features.</p>
+          <p>Ready to upgrade? All your data is safe and waiting.</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${data.upgradeUrl}" style="background: #3b82f6; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Upgrade to Pro</a>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYour trial has ended. Upgrade anytime: ${data.upgradeUrl}`,
+  }
+}
+
+function generateReEngagementEmail(firstName: string, persona: string, data: any) {
+  const messages: Record<string, string> = {
+    sailor: 'Racing season is always around the corner — are you ready for your next regatta?',
+    coach: 'Your athletes are waiting! Ready to plan your next coaching session?',
+    club: 'Your members are counting on you! Ready to organize your next event?'
+  }
+
+  return {
+    subject: `🌊 ${firstName}, we miss you!`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0;">Time to Get Back?</h1>
+        </div>
+        <div style="padding: 24px; background: #fff;">
+          <p>Hi ${firstName},</p>
+          <p>It's been a while since you've used RegattaFlow. ${messages[persona] || messages.sailor}</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${data.dashboardUrl}" style="background: #3b82f6; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Get Back to It</a>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nIt's been a while! ${messages[persona] || messages.sailor}\n\nGet back to it: ${data.dashboardUrl}`,
   }
 }
 
@@ -323,8 +450,8 @@ serve(async (req) => {
         continue
       }
       
-      // Generate email content
-      const content = generateEmailContent(email.email_type, {
+      // Generate email content (use persona, default to 'sailor' for backwards compatibility)
+      const content = generateEmailContent(email.email_type, email.persona || 'sailor', {
         userName: email.user_name,
         userEmail: email.user_email,
         subscriptionTier: email.subscription_tier,
