@@ -134,7 +134,10 @@ export default function NotificationsScreen() {
       <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200">
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center flex-1">
-            <Pressable onPress={() => router.back()} className="mr-4 p-2 -ml-2">
+            <Pressable
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+              className="mr-4 p-2 -ml-2"
+            >
               <ArrowLeft size={22} color="#111827" />
             </Pressable>
             <View>

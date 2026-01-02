@@ -147,7 +147,7 @@ export default function SettingsScreen() {
       {/* Header */}
       <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4">
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} className="mr-4">
             <ArrowLeft size={24} color="#1F2937" />
           </TouchableOpacity>
           <View>
