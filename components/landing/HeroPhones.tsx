@@ -80,6 +80,8 @@ export function HeroPhones() {
   const isDesktop = mounted && width > 1024; // MacBook on desktop (>1024px)
   const isTablet = mounted && width > 768 && width <= 1024;
   const isMobile = mounted && width <= 768;
+  const isSmallMobile = mounted && width <= 430; // iPhone Pro Max and smaller
+  const isExtraSmallMobile = mounted && width <= 375; // iPhone SE and smaller
   const isSmallDesktop = mounted && width > 1200; // For three-column layout
   const shouldStackColumns = mounted && width <= 1200; // Stack below 1200px
   const showDevControls =
@@ -172,25 +174,44 @@ export function HeroPhones() {
             padding: 60px 20px !important;
           }
         }
-        
-        @media (max-width: 480px) {
+
+        /* Small mobile (iPhone Pro Max and smaller) */
+        @media (max-width: 430px) {
           [data-hero-section] {
             min-height: 350px !important;
-            padding: 40px 16px !important;
+            padding: 48px 16px !important;
           }
           [data-hero-title] {
-            font-size: 36px !important;
+            font-size: 32px !important;
+            line-height: 1.3 !important;
+          }
+          [data-hero-subtitle] {
+            font-size: 15px !important;
+          }
+          [data-demo-with-features] {
+            padding: 16px !important;
+            gap: 12px !important;
+          }
+          [data-demo-center] {
+            padding: 0 8px !important;
+          }
+        }
+
+        /* Extra small mobile (iPhone SE and smaller) */
+        @media (max-width: 375px) {
+          [data-hero-section] {
+            min-height: 320px !important;
+            padding: 40px 12px !important;
+          }
+          [data-hero-title] {
+            font-size: 26px !important;
             line-height: 1.4 !important;
           }
           [data-hero-subtitle] {
-            font-size: 16px !important;
+            font-size: 14px !important;
           }
-        }
-        
-        @media (max-width: 480px) {
-          [data-hero-title] {
-            font-size: 28px !important;
-            line-height: 1.5 !important;
+          [data-demo-with-features] {
+            padding: 12px 8px !important;
           }
         }
         
@@ -234,24 +255,103 @@ export function HeroPhones() {
           scrollbar-width: thin;
           scrollbar-color: #2563eb #f1f1f1;
         }
-        
+
         [data-races-demo-container]::-webkit-scrollbar {
           width: 8px;
         }
-        
+
         [data-races-demo-container]::-webkit-scrollbar-track {
           background: #f1f1f1;
           border-radius: 4px;
         }
-        
+
         [data-races-demo-container]::-webkit-scrollbar-thumb {
           background: #2563eb;
           border-radius: 4px;
         }
-        
+
         [data-races-demo-container]::-webkit-scrollbar-thumb:hover {
           background: #1d4ed8;
         }
+
+        /* CRITICAL FIX: Native div wrappers for CSS containment */
+        /* Keep overflow clipping at outer level but allow inner scrolling */
+        .demo-center-wrapper {
+          flex: 1 1 0;
+          min-width: 0;
+          max-width: 1400px;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          /* Lower z-index so sidebar columns paint on top of any visual overflow */
+          z-index: 1;
+          /* Constrain width but allow inner scroll */
+          overflow: hidden;
+        }
+
+        .demo-center-stacked {
+          flex: 1 1 100% !important;
+          max-width: 100% !important;
+          width: 100% !important;
+          order: 1 !important;
+          margin-bottom: 24px !important;
+        }
+
+        .demo-container-wrapper {
+          width: 100%;
+          position: relative;
+          border-radius: 16px;
+          border: 1px solid #E5E7EB;
+          background-color: #FFFFFF;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+          /* overflow:hidden clips content but layout is constrained by parent */
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+        }
+
+        .demo-scroll-container {
+          width: 100%;
+          max-width: 100%;
+          max-height: 650px;
+          overflow-y: auto;
+          overflow-x: hidden; /* Container clips, but inner ScrollView handles horizontal */
+          scroll-behavior: smooth;
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          box-sizing: border-box;
+          min-width: 0;
+          scrollbar-width: thin;
+          scrollbar-color: #2563eb #f1f1f1;
+        }
+
+        /* Allow race cards horizontal ScrollView to scroll within clipped container */
+        .demo-scroll-container [class*="r-overflowX-auto"],
+        .demo-scroll-container [class*="r-WebkitOverflowScrolling"] {
+          overflow-x: auto !important;
+          max-width: 100% !important;
+        }
+
+        .demo-scroll-container::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .demo-scroll-container::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+
+        .demo-scroll-container::-webkit-scrollbar-thumb {
+          background: #2563eb;
+          border-radius: 4px;
+        }
+
+        .demo-scroll-container::-webkit-scrollbar-thumb:hover {
+          background: #1d4ed8;
+        }
+
       `;
       
       return () => {
@@ -325,11 +425,6 @@ export function HeroPhones() {
 
         {/* Hero Content - Centered */}
         <View style={styles.heroContent}>
-          {/* Trust Badge */}
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>🏆 Trusted by 500+ sailors worldwide</Text>
-          </View>
-
           {/* Simplified Logo - Text Only */}
           <View style={styles.logoContainer}>
             <Text style={styles.logoText}>RegattaFlow</Text>
@@ -407,35 +502,21 @@ export function HeroPhones() {
 
           {/* App Download Buttons */}
           <View style={styles.downloadButtons}>
-            <TouchableOpacity
-              style={styles.downloadButton}
-              onPress={() => {
-                if (Platform.OS === 'web') {
-                  window.open('https://apps.apple.com/app/regattaflow', '_blank');
-                }
-              }}
-            >
-              <Ionicons name="logo-apple" size={18} color="#FFFFFF" />
+            <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
+              <Ionicons name="logo-apple" size={18} color="rgba(255,255,255,0.6)" />
               <View style={styles.downloadButtonText}>
-                <Text style={styles.downloadButtonLabel}>Download on the</Text>
-                <Text style={styles.downloadButtonStore}>App Store</Text>
+                <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
+                <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>App Store</Text>
               </View>
-            </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity
-              style={styles.downloadButton}
-              onPress={() => {
-                if (Platform.OS === 'web') {
-                  window.open('https://play.google.com/store/apps/details?id=com.regattaflow', '_blank');
-                }
-              }}
-            >
-              <Ionicons name="logo-google-playstore" size={18} color="#FFFFFF" />
+            <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
+              <Ionicons name="logo-google-playstore" size={18} color="rgba(255,255,255,0.6)" />
               <View style={styles.downloadButtonText}>
-                <Text style={styles.downloadButtonLabel}>GET IT ON</Text>
-                <Text style={styles.downloadButtonStore}>Google Play</Text>
+                <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
+                <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>Google Play</Text>
               </View>
-            </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={styles.downloadButton}
@@ -447,7 +528,7 @@ export function HeroPhones() {
             >
               <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />
               <View style={styles.downloadButtonText}>
-                <Text style={styles.downloadButtonLabel}>Use On</Text>
+                <Text style={styles.downloadButtonLabel}>USE ON</Text>
                 <Text style={styles.downloadButtonStore}>Web Browser</Text>
               </View>
             </TouchableOpacity>
@@ -491,35 +572,55 @@ export function HeroPhones() {
           </View>
 
           {/* CENTER - /races Demo */}
-          <View 
-            style={[
-              styles.demoCenter,
-              shouldStackColumns && styles.demoCenterStacked,
-            ]}
-            {...(Platform.OS === 'web' ? { 'data-demo-center': true } : {})}
-          >
-            <View style={styles.demoContainerWrapper}>
-              <View 
-                style={styles.demoContainer}
-                {...(Platform.OS === 'web' ? { 'data-races-demo-container': true } : {})}
+          {Platform.OS === 'web' ? (
+            // @ts-ignore - Web only: use native div for data attributes and CSS containment
+            <div
+              data-demo-center="true"
+              className={`demo-center-wrapper ${shouldStackColumns ? 'demo-center-stacked' : ''}`}
+            >
+              {/* @ts-ignore */}
+              <div
+                data-races-demo-container="true"
+                className="demo-container-wrapper"
               >
-                <EmbeddedRacesDemo
-                  mode="fullscreen"
-                  scrollable={true}
-                  readOnly={true}
-                  autoReset={false}
-                  hideHeader={true}
-                  highlightedFeature={highlightedFeature}
-                  highlightedRaceId={highlightedRaceId}
-                  showTabs={false}
-                />
+                {/* @ts-ignore */}
+                <div className="demo-scroll-container">
+                  <EmbeddedRacesDemo
+                    mode={isSmallMobile ? 'mobile-native' : 'fullscreen'}
+                    scrollable={true}
+                    readOnly={true}
+                    autoReset={false}
+                    hideHeader={true}
+                    highlightedFeature={highlightedFeature}
+                    highlightedRaceId={highlightedRaceId}
+                    showTabs={false}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <View
+              style={[
+                styles.demoCenter,
+                shouldStackColumns && styles.demoCenterStacked,
+              ]}
+            >
+              <View style={styles.demoContainerWrapper}>
+                <View style={styles.demoContainer}>
+                  <EmbeddedRacesDemo
+                    mode={isSmallMobile ? 'mobile-native' : 'fullscreen'}
+                    scrollable={true}
+                    readOnly={true}
+                    autoReset={false}
+                    hideHeader={true}
+                    highlightedFeature={highlightedFeature}
+                    highlightedRaceId={highlightedRaceId}
+                    showTabs={false}
+                  />
+                </View>
               </View>
-              {/* Bottom fade gradient indicator */}
-              {Platform.OS === 'web' && (
-                <View style={styles.scrollFadeGradient} />
-              )}
             </View>
-          </View>
+          )}
 
           {/* RIGHT COLUMN - Feature Cards */}
           <View 
@@ -850,6 +951,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  downloadButtonDisabled: {
+    opacity: 0.6,
+    ...Platform.select({
+      web: {
+        cursor: 'default',
+      } as any,
+    }),
+  },
+  downloadButtonLabelDisabled: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  downloadButtonStoreDisabled: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
   otherUserTypes: {
     marginTop: 32,
     marginBottom: 24,
@@ -945,6 +1060,7 @@ const styles = StyleSheet.create({
   demoWithFeatures: {
     width: '100%',
     alignSelf: 'center',
+    overflow: 'hidden',
     ...Platform.select({
       web: {
         display: 'flex',
@@ -957,6 +1073,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         minWidth: 0,
         boxSizing: 'border-box',
+        overflow: 'hidden',
         '@media (max-width: 1200px)': {
           flexDirection: 'column',
           paddingVertical: 30,
@@ -1022,11 +1139,14 @@ const styles = StyleSheet.create({
   demoCenter: {
     ...Platform.select({
       web: {
-        flex: '1 1 auto',
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: 0,
         minWidth: 0, // Important: allows flex child to shrink below content size
         maxWidth: 1400,
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden', // Clip content that exceeds container bounds
       } as any,
       default: {
         width: '100%',
@@ -1105,6 +1225,11 @@ const styles = StyleSheet.create({
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
+        // CRITICAL FIX: CSS containment forces all descendants (including GPU-accelerated
+        // transformed elements from React Native Web's ScrollView) to paint within bounds
+        contain: 'paint',
+        // Create isolated stacking context
+        isolation: 'isolate',
       },
       default: {
         borderRadius: 16,
@@ -1125,20 +1250,17 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         overflowY: 'auto',
-        overflowX: 'visible', // Allow horizontal scrolling for race cards
+        overflowX: 'hidden',
         scrollBehavior: 'smooth',
-        // Scrollbar styling is handled via CSS injection (see useEffect)
         scrollbarWidth: 'thin',
         scrollbarColor: '#2563eb #f1f1f1',
-        // CRITICAL: Ensure container constrains children - prevent expansion
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'stretch', // Force children to respect container width
-        // Force width constraint
+        alignItems: 'stretch',
         boxSizing: 'border-box',
-        // Prevent children from expanding beyond this container
         minWidth: 0,
-        transition: 'all 0.3s ease',
+        // CSS containment prevents transformed children from painting outside bounds
+        contain: 'paint',
       },
       default: {
         // Native: use ScrollView wrapper if needed
@@ -1154,7 +1276,7 @@ const styles = StyleSheet.create({
         right: 8, // Leave space for scrollbar
         height: 40,
         pointerEvents: 'none',
-        background: 'linear-gradient(to top, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 50%, transparent 100%)',
+        backgroundImage: 'linear-gradient(to top, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 50%, transparent 100%)',
         zIndex: 1,
         borderBottomLeftRadius: 16,
         borderBottomRightRadius: 16, // Match container border radius

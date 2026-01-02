@@ -205,7 +205,6 @@ export function BoatAutocompleteInput({
               Platform.select({
                 web: {
                   backgroundColor: '#FFFFFF',
-                  background: '#FFFFFF',
                   opacity: 1,
                   zIndex: 100001,
                   position: 'absolute',
@@ -256,7 +255,6 @@ export function BoatAutocompleteInput({
                 Platform.select({
                   web: {
                     backgroundColor: '#FFFFFF',
-                    background: '#FFFFFF',
                     opacity: 1,
                   } as any,
                   default: {},
@@ -308,7 +306,6 @@ const styles = StyleSheet.create({
         zIndex: 100001,
         overflow: 'visible',
         backgroundColor: '#FFFFFF',
-        background: '#FFFFFF',
         opacity: 1,
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
         borderStyle: 'solid',
@@ -337,7 +334,6 @@ const styles = StyleSheet.create({
       web: {
         backgroundColor: '#FFFFFF',
         opacity: 1,
-        background: '#FFFFFF',
       } as any,
     }),
   },
