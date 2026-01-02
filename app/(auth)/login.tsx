@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
+import { supabase } from '../../services/supabase';
 
 const cardShadowStyle: ViewStyle =
   Platform.OS === 'web'
@@ -93,6 +94,29 @@ export default function Login() {
     }
   };
 
+  const onForgotPassword = () => {
+    const email = identifier.includes('@') ? identifier : '';
+
+    Alert.alert(
+      'Reset Password',
+      email ? `Send password reset link to ${email}?` : 'Enter your email address',
+      email ? [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Link',
+          onPress: async () => {
+            try {
+              await supabase.auth.resetPasswordForEmail(email);
+              Alert.alert('Success', 'Password reset link sent to your email');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to send reset link');
+            }
+          }
+        }
+      ] : [{ text: 'OK' }]
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -181,6 +205,11 @@ export default function Login() {
               textContentType="password"
               importantForAccessibility="yes"
             />
+
+            {/* Forgot Password Link */}
+            <TouchableOpacity onPress={onForgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               accessibilityRole="button"
@@ -333,6 +362,12 @@ const styles = StyleSheet.create({
   },
   footerText: { color: '#64748B' },
   linkText: { color: '#3B82F6', fontWeight: '600', marginLeft: 6 },
+  forgotPasswordText: {
+    color: '#3B82F6',
+    fontSize: 14,
+    textAlign: 'right',
+    marginBottom: 8,
+  },
   marketingText: {
     marginTop: 20,
     color: '#475569',
