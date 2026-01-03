@@ -135,6 +135,27 @@ export default function Callback(){
         const isNewUser = !profile || !profile.user_type
         const needsOnboarding = !profile?.onboarding_completed && (profile?.user_type || pendingPersona)
 
+        // Handle existing users with null user_type (fix their profile)
+        if (profile && !profile.user_type && !pendingPersona) {
+          logger.info('Existing user with null user_type, defaulting to sailor')
+          setStatus('Setting up your account...')
+
+          const { error: fixError } = await supabase
+            .from('users')
+            .update({
+              user_type: 'sailor',
+              onboarding_completed: true
+            })
+            .eq('id', session.user.id)
+
+          if (fixError) {
+            logger.warn('Failed to fix user_type, continuing anyway:', fixError)
+          } else {
+            logger.info('Fixed user profile with default sailor type')
+          }
+          effectiveUserType = 'sailor'
+        }
+
         if (pendingPersona && isNewUser) {
           logger.info('Applying pending persona to new OAuth user:', pendingPersona)
           setStatus('Setting up your account...')
@@ -145,7 +166,7 @@ export default function Callback(){
             email: session.user.email,
             full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
             user_type: pendingPersona,
-            onboarding_completed: false, // They still need to go through persona-specific onboarding
+            onboarding_completed: pendingPersona === 'sailor', // Sailors skip onboarding
           }
 
           const { error: upsertError } = await supabase
@@ -171,22 +192,21 @@ export default function Callback(){
 
         // Route based on the effective user type
         // Route to onboarding if: (1) new OAuth user with pending persona, OR (2) existing user who hasn't completed onboarding
+        // Sailors skip onboarding and go directly to the main app
         const personaForOnboarding = pendingPersona || effectiveUserType
-        if (needsOnboarding && personaForOnboarding) {
+        if (needsOnboarding && personaForOnboarding && personaForOnboarding !== 'sailor') {
           logger.info('Routing user to onboarding for persona:', personaForOnboarding)
           setStatus('Redirecting to setup...')
-          
+
           let onboardingRoute: string
-          if (personaForOnboarding === 'sailor') {
-            onboardingRoute = '/(auth)/sailor-onboarding-comprehensive'
-          } else if (personaForOnboarding === 'coach') {
+          if (personaForOnboarding === 'coach') {
             onboardingRoute = '/(auth)/coach-onboarding-welcome'
           } else if (personaForOnboarding === 'club') {
             onboardingRoute = '/(auth)/club-onboarding-chat'
           } else {
             onboardingRoute = getDashboardRoute(personaForOnboarding)
           }
-          
+
           setTimeout(() => {
             router.replace(onboardingRoute as any)
           }, 100)

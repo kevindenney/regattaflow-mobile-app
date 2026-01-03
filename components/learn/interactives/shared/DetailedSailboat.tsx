@@ -13,15 +13,10 @@
 
 import React from 'react';
 import { Platform } from 'react-native';
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import { G, Path, Line, Ellipse, Text as SvgText } from 'react-native-svg';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
+// Note: AnimatedG causes crashes on Android with New Architecture
+// Using static transforms for cross-platform compatibility
 
 interface DetailedSailboatProps {
   /** Unique identifier for the boat */
@@ -58,31 +53,8 @@ export function DetailedSailboat({
   animate = true,
   animationDuration = 500,
 }: DetailedSailboatProps) {
-  // Animation values
-  const posX = useSharedValue(x);
-  const posY = useSharedValue(y);
-  const opacity = useSharedValue(animate ? 0 : 1);
-
-  React.useEffect(() => {
-    if (animate) {
-      const duration = animationDuration;
-      posX.value = withSpring(x, { damping: 20, stiffness: 60 });
-      posY.value = withSpring(y, { damping: 20, stiffness: 60 });
-      opacity.value = withTiming(1, { duration: 300 });
-    } else {
-      posX.value = x;
-      posY.value = y;
-      opacity.value = 1;
-    }
-  }, [x, y, animate, animationDuration]);
-
-  const animatedProps = useAnimatedProps(() => ({
-    opacity: opacity.value,
-    transform: [
-      { translateX: posX.value },
-      { translateY: posY.value },
-    ],
-  }));
+  // Note: Animation removed due to AnimatedG crashes on Android with New Architecture
+  // Using static positioning with CSS transitions on web only
 
   const boatContent = (
     <G
@@ -228,26 +200,17 @@ export function DetailedSailboat({
     </G>
   );
 
-  // On web, use regular G with inline styles
-  // On native, use AnimatedG with animatedProps
-  if (Platform.OS === 'web') {
-    return (
-      <G
-        style={{
-          transform: `translate(${x}px, ${y}px)`,
-          opacity: 1,
-          transition: animate ? 'transform 0.5s ease-out' : 'none',
-        } as any}
-      >
-        {boatContent}
-      </G>
-    );
-  }
-
+  // Use regular G with transform for all platforms
+  // CSS transitions only work on web
   return (
-    <AnimatedG animatedProps={animatedProps}>
+    <G
+      transform={`translate(${x}, ${y})`}
+      style={Platform.OS === 'web' ? {
+        transition: animate ? 'transform 0.5s ease-out' : 'none',
+      } as any : undefined}
+    >
       {boatContent}
-    </AnimatedG>
+    </G>
   );
 }
 

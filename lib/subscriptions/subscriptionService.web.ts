@@ -16,17 +16,15 @@ export interface SubscriptionProduct {
   priceCurrencyCode: string;
   features: string[];
   isPopular?: boolean;
-  billingPeriod: 'monthly' | 'yearly';
-  trialPeriod?: number;
+  billingPeriod: 'yearly';
+  effectiveMonthly?: string;
 }
 
 export interface SubscriptionStatus {
   isActive: boolean;
   productId: string | null;
-  tier: 'free' | 'sailor_pro' | 'championship' | 'professional';
+  tier: 'free' | 'pro' | 'championship';
   expiresAt: Date | null;
-  isTrialing: boolean;
-  trialEndsAt: Date | null;
   willRenew: boolean;
   platform: 'ios' | 'android' | 'web';
 }
@@ -42,86 +40,55 @@ export interface PurchaseResult {
 
 const logger = createLogger('subscriptionService.web');
 
+/**
+ * Stripe Price IDs for individual subscriptions
+ * Created: 2026-01-02
+ */
+export const STRIPE_PRICE_IDS = {
+  // Individual Race Strategy Planner
+  pro_yearly: 'price_1Sl0i8BbfEeOhHXbmUQ5OBkV',           // $300/year
+  championship_yearly: 'price_1Sl0ljBbfEeOhHXbKmEU06Ha', // $480/year
+
+  // Racing Academy
+  academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',      // $30/year per module
+  academy_bundle: 'price_1Sl0nTBbfEeOhHXbnk5Yh5AE',      // $75/year all modules
+};
+
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
-  sailor_pro_monthly: {
-    id: 'price_sailor_pro_monthly',
-    title: 'Sailor Pro',
-    description: 'Full racing features for competitive sailors',
-    price: '$29.99/month',
-    priceAmountMicros: 29990000,
-    priceCurrencyCode: 'USD',
-    billingPeriod: 'monthly',
-    trialPeriod: 7,
-    features: [
-      '🌊 Unlimited race tracking and strategy',
-      '🗺️ Global venue intelligence (147+ venues)',
-      '🤖 AI-powered race analysis',
-      '📱 Offline racing capabilities',
-      '⚙️ Equipment optimization guides',
-      '📊 Performance analytics and trends',
-      '☁️ Cloud backup and sync',
-    ],
-  },
-  sailor_pro_yearly: {
-    id: 'price_sailor_pro_yearly',
-    title: 'Sailor Pro',
-    description: 'Full racing features - Save 25% annually',
-    price: '$269.99/year',
-    priceAmountMicros: 269990000,
+  pro: {
+    id: STRIPE_PRICE_IDS.pro_yearly,
+    title: 'Pro',
+    description: 'Full racing features for serious sailors',
+    price: '$300/year',
+    priceAmountMicros: 300000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    trialPeriod: 14,
+    effectiveMonthly: '$25/mo',
     isPopular: true,
     features: [
-      '🌊 Unlimited race tracking and strategy',
-      '🗺️ Global venue intelligence (147+ venues)',
-      '🤖 AI-powered race analysis',
-      '📱 Offline racing capabilities',
-      '⚙️ Equipment optimization guides',
-      '📊 Performance analytics and trends',
-      '☁️ Cloud backup and sync',
-      '💰 Save $90 compared to monthly',
+      'Unlimited AI queries',
+      'Full venue intelligence access',
+      'Advanced race strategy',
+      'Performance analytics',
+      'Offline mode',
+      'Cloud backup and sync',
     ],
   },
-  championship_monthly: {
-    id: 'price_championship_monthly',
+  championship: {
+    id: STRIPE_PRICE_IDS.championship_yearly,
     title: 'Championship',
-    description: 'Advanced AI and environmental intelligence',
-    price: '$49.99/month',
-    priceAmountMicros: 49990000,
-    priceCurrencyCode: 'USD',
-    billingPeriod: 'monthly',
-    trialPeriod: 7,
-    features: [
-      '⭐ Everything in Sailor Pro',
-      '🧠 Advanced AI strategy simulation',
-      '🌡️ Multi-model weather ensemble',
-      '🎯 Monte Carlo race predictions',
-      '🌍 Cultural venue adaptation',
-      '📈 Cross-venue performance analytics',
-      '🏆 Championship preparation tools',
-      '💼 Priority customer support',
-    ],
-  },
-  championship_yearly: {
-    id: 'price_championship_yearly',
-    title: 'Championship',
-    description: 'Advanced features - Save 25% annually',
-    price: '$449.99/year',
-    priceAmountMicros: 449990000,
+    description: 'For teams & serious competitors',
+    price: '$480/year',
+    priceAmountMicros: 480000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    trialPeriod: 14,
+    effectiveMonthly: '$40/mo',
     features: [
-      '⭐ Everything in Sailor Pro',
-      '🧠 Advanced AI strategy simulation',
-      '🌡️ Multi-model weather ensemble',
-      '🎯 Monte Carlo race predictions',
-      '🌍 Cultural venue adaptation',
-      '📈 Cross-venue performance analytics',
-      '🏆 Championship preparation tools',
-      '💼 Priority customer support',
-      '💰 Save $150 compared to monthly',
+      'Everything in Pro',
+      'Up to 5 team members',
+      'Advanced team analytics',
+      'All Racing Academy modules included',
+      'Priority support',
     ],
   },
 };
@@ -266,8 +233,6 @@ export class SubscriptionService {
         productId: data.subscription_tier || null,
         tier: data.subscription_tier || 'free',
         expiresAt: data.subscription_expires_at ? new Date(data.subscription_expires_at) : null,
-        isTrialing: data.subscription_status === 'trialing',
-        trialEndsAt: data.subscription_expires_at ? new Date(data.subscription_expires_at) : null,
         willRenew: data.subscription_status === 'active',
         platform: 'web',
       };
@@ -283,8 +248,6 @@ export class SubscriptionService {
       productId: null,
       tier: 'free',
       expiresAt: null,
-      isTrialing: false,
-      trialEndsAt: null,
       willRenew: false,
       platform: 'web',
     };

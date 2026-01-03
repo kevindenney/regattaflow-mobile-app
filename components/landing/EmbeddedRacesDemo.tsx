@@ -40,10 +40,10 @@ interface EmbeddedRacesDemoProps {
    */
   resetDelay?: number;
   /**
-   * Display mode: 'phone' (focused), 'desktop' (full scrollable), or 'fullscreen' (no frame, full-width)
+   * Display mode: 'phone' (focused), 'desktop' (full scrollable), 'fullscreen' (no frame, full-width), or 'mobile-native' (optimized for mobile web)
    * Default: 'phone'
    */
-  mode?: 'phone' | 'desktop' | 'fullscreen';
+  mode?: 'phone' | 'desktop' | 'fullscreen' | 'mobile-native';
   /**
    * Whether content is scrollable (for desktop/fullscreen mode)
    * Default: false
@@ -300,12 +300,39 @@ export function EmbeddedRacesDemo({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const hasAutoCentered = useRef(false);
-  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  // Track actual container width for accurate centering calculations
+  const [containerWidth, setContainerWidth] = useState(0);
+  const raceCardsContainerRef = useRef<View>(null);
+  // Use container width if available, otherwise fall back to window width
+  const SCREEN_WIDTH = containerWidth > 0 ? containerWidth : windowWidth;
 
   // GPS Track visualization controls
   const [showFleetTracks, setShowFleetTracks] = useState(true);
   const [showLap1, setShowLap1] = useState(true);
   const [showLap2, setShowLap2] = useState(true);
+
+  // Mobile-native mode detection - auto-switch on mobile web browsers
+  const isMobileWeb = Platform.OS === 'web' && windowWidth <= 480;
+  const effectiveMode = useMemo(() => {
+    // If explicitly set to mobile-native, use it
+    if (mode === 'mobile-native') return 'mobile-native';
+    // Auto-switch to mobile-native on small mobile web screens (unless in phone mockup mode)
+    if (isMobileWeb && mode !== 'phone') return 'mobile-native';
+    return mode;
+  }, [mode, isMobileWeb]);
+
+  // Responsive race card width based on screen size
+  const RACE_CARD_WIDTH = useMemo(() => {
+    if (effectiveMode === 'mobile-native') {
+      // On mobile, use nearly full-width cards with padding
+      if (windowWidth <= 375) return windowWidth - 40; // ~335px on iPhone SE
+      if (windowWidth <= 430) return Math.min(300, windowWidth - 48);
+      return 280;
+    }
+    // Desktop/tablet keeps original size
+    return 240;
+  }, [windowWidth, effectiveMode]);
 
   // DEBUG: Log scroll state changes
   useEffect(() => {
@@ -574,12 +601,16 @@ export function EmbeddedRacesDemo({
   }, [highlightedFeature, selectedRaceId, selectedRace, isSelectedRacePast, sortedRaces]);
   
   // Race card dimensions (match RaceCard component)
-  // Race card dimensions - original readable size
-  const RACE_CARD_WIDTH = 240; // Original readable size
+  // RACE_CARD_WIDTH is now defined above as a responsive useMemo value
   const RACE_CARD_HEIGHT = 400; // Original height
   const RACE_CARD_TOTAL_WIDTH = RACE_CARD_WIDTH + 16; // width + margin
+
+  // Content container left padding (must match raceCardsContent style)
+  const RACE_CARDS_LEFT_PADDING = Platform.OS === 'web'
+    ? (SCREEN_WIDTH > 768 ? 60 : SCREEN_WIDTH > 480 ? 16 : 12)
+    : 16;
   const NOW_BAR_WIDTH = 2 + 8; // bar + margin
-  const ADD_RACE_CARD_WIDTH = 380 + 24 + 8; // card + margins
+  const ADD_RACE_CARD_WIDTH = RACE_CARD_WIDTH + 24 + 8; // card + margins (same as race cards)
   
   // Calculate expected content width for horizontal scroll
   const expectedContentWidth = useMemo(() => {
@@ -591,26 +622,27 @@ export function EmbeddedRacesDemo({
   }, [sortedRaces.length, nowIndex]);
   
   // Auto-scroll to center on NOW bar (next race) - set initial position immediately to prevent flash
+  // Wait for containerWidth to be measured on web for accurate centering
   useEffect(() => {
-    if (!hasAutoCentered.current && raceCardsScrollViewRef.current && sortedRaces.length > 0 && nextRace && isVisible) {
+    const hasValidWidth = Platform.OS === 'web' ? containerWidth > 0 : true;
+    if (!hasAutoCentered.current && raceCardsScrollViewRef.current && sortedRaces.length > 0 && nextRace && isVisible && hasValidWidth) {
       const nextRaceIndex = sortedRaces.findIndex(race => race.id === nextRace.id);
       if (nextRaceIndex !== -1) {
         const scrollX = nextRaceIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
-        
+
         // Use double requestAnimationFrame to ensure DOM is ready
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             if (Platform.OS === 'web') {
               // @ts-ignore - web only
               const element = raceCardsScrollViewRef.current as any;
-              if (element && element._component) {
-                const domElement = element._component;
-                if (domElement) {
-                  // Set scroll position directly on DOM element (no animation)
-                  domElement.scrollLeft = Math.max(0, scrollX);
-                  hasAutoCentered.current = true;
-                  setIsScrollPositionSet(true); // Mark as set - show the cards
-                }
+              // Try multiple ways to access the DOM element on web
+              const domElement = element?._component || element?.getScrollableNode?.() || element;
+              if (domElement && typeof domElement.scrollLeft !== 'undefined') {
+                // Set scroll position directly on DOM element (no animation)
+                domElement.scrollLeft = Math.max(0, scrollX);
+                hasAutoCentered.current = true;
+                setIsScrollPositionSet(true); // Mark as set - show the cards
               }
             } else {
               // On native, use immediate scroll without animation
@@ -628,7 +660,7 @@ export function EmbeddedRacesDemo({
         });
       }
     }
-  }, [nextRace, sortedRaces.length, SCREEN_WIDTH, nowIndex, RACE_CARD_TOTAL_WIDTH, RACE_CARD_WIDTH, isVisible]);
+  }, [nextRace, sortedRaces.length, SCREEN_WIDTH, nowIndex, RACE_CARD_TOTAL_WIDTH, RACE_CARD_WIDTH, isVisible, containerWidth]);
 
   // Fallback: Show race cards after a delay even if scroll position isn't set
   // This ensures cards are always visible, even if auto-scroll logic fails
@@ -659,14 +691,13 @@ export function EmbeddedRacesDemo({
     if (Platform.OS === 'web') {
       // @ts-ignore - web only
       const element = raceCardsScrollViewRef.current as any;
-      if (element && element._component) {
-        const domElement = element._component;
-        if (domElement) {
-          domElement.scrollTo({
-            left: Math.max(0, scrollX),
-            behavior: 'smooth',
-          });
-        }
+      // Try multiple ways to access the DOM element on web
+      const domElement = element?._component || element?.getScrollableNode?.() || element;
+      if (domElement && typeof domElement.scrollTo === 'function') {
+        domElement.scrollTo({
+          left: Math.max(0, scrollX),
+          behavior: 'smooth',
+        });
       }
     } else {
       raceCardsScrollViewRef.current.scrollTo({
@@ -1097,8 +1128,8 @@ export function EmbeddedRacesDemo({
     );
   }
 
-  // Fullscreen or Desktop mode: full width, scrollable content
-  if (mode === 'fullscreen' || mode === 'desktop') {
+  // Fullscreen, Desktop, or Mobile-native mode: full width, scrollable content
+  if (effectiveMode === 'fullscreen' || effectiveMode === 'desktop' || effectiveMode === 'mobile-native') {
     const content = (
       <View 
         style={[
@@ -1225,7 +1256,7 @@ export function EmbeddedRacesDemo({
                 paddingBottom: showTabs ? 80 : 0,
               },
             ]}
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
           >
           {/* Header - Conditionally hide if hideHeader prop is true */}
@@ -1298,50 +1329,11 @@ export function EmbeddedRacesDemo({
             </View>
             <View
               style={[styles.raceCardsScrollContainer as any, { position: 'relative' }] as any}
-              ref={(ref) => {
-                if (Platform.OS === 'web' && ref) {
-                  // @ts-ignore - web only
-                  const element = ref as any;
-                  setTimeout(() => {
-                    if (element) {
-                      const computedStyle = window.getComputedStyle(element);
-                      const rect = element.getBoundingClientRect();
-                      console.log('[EmbeddedRacesDemo] RaceCardsScrollContainer:', {
-                        clientWidth: element.clientWidth,
-                        offsetWidth: element.offsetWidth,
-                        scrollWidth: element.scrollWidth,
-                        boundingRect: {
-                          left: rect.left,
-                          right: rect.right,
-                          top: rect.top,
-                          bottom: rect.bottom,
-                          width: rect.width,
-                          height: rect.height,
-                        },
-                        computedStyle: {
-                          position: computedStyle.position,
-                          overflow: computedStyle.overflow,
-                          overflowX: computedStyle.overflowX,
-                          overflowY: computedStyle.overflowY,
-                          zIndex: computedStyle.zIndex,
-                        },
-                        children: Array.from(element.children).map((child: any, idx) => ({
-                          index: idx,
-                          tagName: child.tagName,
-                          className: child.className,
-                          style: {
-                            position: window.getComputedStyle(child).position,
-                            left: window.getComputedStyle(child).left,
-                            right: window.getComputedStyle(child).right,
-                            zIndex: window.getComputedStyle(child).zIndex,
-                            display: window.getComputedStyle(child).display,
-                            visibility: window.getComputedStyle(child).visibility,
-                            opacity: window.getComputedStyle(child).opacity,
-                          },
-                        })),
-                      });
-                    }
-                  }, 100);
+              onLayout={(event) => {
+                // Measure container width for accurate centering calculations
+                const { width } = event.nativeEvent.layout;
+                if (width > 0 && width !== containerWidth) {
+                  setContainerWidth(width);
                 }
               }}
             >
@@ -1371,32 +1363,23 @@ export function EmbeddedRacesDemo({
                     requestAnimationFrame(() => {
                       // @ts-ignore - web only
                       const element = ref as any;
-                      if (element && element._component) {
-                        // Access the underlying DOM element
-                        const domElement = element._component;
-                        if (domElement && domElement.style) {
-                          // Ensure overflow is set for scrolling
+                      // Try multiple ways to access the DOM element on web
+                      const domElement = element?._component || element?.getScrollableNode?.() || element;
+                      if (domElement && typeof domElement.scrollLeft !== 'undefined') {
+                        // Ensure overflow is set for scrolling if style property exists
+                        if (domElement.style) {
                           domElement.style.overflowX = 'auto';
                           domElement.style.overflowY = 'hidden';
-                          // Ensure content width is set
-                          if (expectedContentWidth > 0) {
-                            const contentElement = domElement.querySelector('[class*="raceCardsContent"]') || 
-                                                   domElement.firstElementChild;
-                            if (contentElement) {
-                              contentElement.style.width = `${expectedContentWidth}px`;
-                              contentElement.style.minWidth = `${expectedContentWidth}px`;
-                            }
-                          }
-                          
-                          // Set initial scroll position immediately to prevent flash
-                          if (!hasAutoCentered.current && sortedRaces.length > 0 && nextRace) {
-                            const nextRaceIndex = sortedRaces.findIndex(race => race.id === nextRace.id);
-                            if (nextRaceIndex !== -1) {
-                              const scrollX = nextRaceIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
-                              domElement.scrollLeft = Math.max(0, scrollX);
-                              hasAutoCentered.current = true;
-                              setIsScrollPositionSet(true); // Mark as set - show the cards
-                            }
+                        }
+
+                        // Set initial scroll position immediately to prevent flash
+                        if (!hasAutoCentered.current && sortedRaces.length > 0 && nextRace) {
+                          const nextRaceIndex = sortedRaces.findIndex(race => race.id === nextRace.id);
+                          if (nextRaceIndex !== -1) {
+                            const scrollX = nextRaceIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
+                            domElement.scrollLeft = Math.max(0, scrollX);
+                            hasAutoCentered.current = true;
+                            setIsScrollPositionSet(true); // Mark as set - show the cards
                           }
                         }
                       }
@@ -1410,9 +1393,10 @@ export function EmbeddedRacesDemo({
                   styles.raceCardsContent as any,
                   mode === 'desktop' && (styles.raceCardsContentDesktop as any),
                   Platform.OS === 'web' && {
-                    // Always set content width on web to enable scrolling
-                    width: expectedContentWidth,
-                    minWidth: expectedContentWidth,
+                    // FIXED: Use flexbox to size content naturally instead of explicit width
+                    // This prevents the content from expanding parent containers
+                    flexShrink: 0,
+                    flexGrow: 0,
                   },
                 ] as any}
                 onScroll={(event) => {
@@ -1522,6 +1506,7 @@ export function EmbeddedRacesDemo({
                         results={race.results}
                         isPrimary={isNext}
                         showTimelineIndicator={false}
+                        cardWidth={RACE_CARD_WIDTH}
                       />
                     </Pressable>
                       
@@ -1554,7 +1539,52 @@ export function EmbeddedRacesDemo({
                     </View>
                   </View>
                 )}
-                
+
+                {/* Add Race Card - Right after NOW bar */}
+                <View style={[styles.addRaceCardWrapper, { width: RACE_CARD_WIDTH }]}>
+                  <View style={styles.addRaceCard}>
+                    {/* Card content */}
+                    <View style={styles.addRaceContent}>
+                      <Text style={styles.raceTimelineLabel}>RACE TIMELINE</Text>
+                      <Text style={styles.addRaceTitle}>Add your next race</Text>
+                      <Text style={styles.addRaceDescription}>
+                        Drop NOR / SI files, draw a racing box, and unlock tactical overlays instantly.
+                      </Text>
+
+                      {/* Feature Links */}
+                      <View style={styles.featureLinks}>
+                        <TouchableOpacity style={styles.featureLink} disabled={true}>
+                          <Text style={styles.featureLinkText}>Auto-plan docs</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.featureLink} disabled={true}>
+                          <Text style={styles.featureLinkText}>Draw race area</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.featureLink} disabled={true}>
+                          <Text style={styles.featureLinkText}>Share with crew</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Action Buttons */}
+                      <View style={styles.addRaceCardActions}>
+                        <TouchableOpacity
+                          style={[styles.addRaceButton, styles.addRaceCardButtonDisabled]}
+                          disabled={true}
+                        >
+                          <Ionicons name="add" size={16} color="#FFFFFF" />
+                          <Text style={styles.addRaceButtonText}>Add race</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.importCalendarButton, styles.addRaceCardButtonDisabled]}
+                          disabled={true}
+                        >
+                          <Ionicons name="calendar-outline" size={16} color="#10B981" />
+                          <Text style={styles.importCalendarText}>Import calendar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
                 {/* Render future races */}
                 {sortedRaces.slice(nowIndex).map((race: typeof DEMO_RACES[0], index: number) => {
                   const isPast = race.raceStatus === 'past';
@@ -1630,6 +1660,7 @@ export function EmbeddedRacesDemo({
                         results={race.results}
                         isPrimary={isNext}
                         showTimelineIndicator={false}
+                        cardWidth={RACE_CARD_WIDTH}
                       />
                     </Pressable>
                       
@@ -1652,59 +1683,6 @@ export function EmbeddedRacesDemo({
                     </View>
                   );
                 })}
-                
-                {/* Add Race Card - At end of timeline with NOW bar */}
-                <View style={styles.addRaceCardWrapper}>
-                  <View style={styles.addRaceCard}>
-                    {/* NOW bar on left side */}
-                    <View style={styles.nowBarVertical}>
-                      <View style={styles.nowBadgeCard}>
-                        <Text style={styles.nowTextCard}>NOW</Text>
-                      </View>
-                      <View style={styles.nowLineCard} />
-                    </View>
-                    
-                    {/* Card content */}
-                    <View style={styles.addRaceContent}>
-                      <Text style={styles.raceTimelineLabel}>RACE TIMELINE</Text>
-                      <Text style={styles.addRaceTitle}>Add your next race</Text>
-                      <Text style={styles.addRaceDescription}>
-                        Drop NOR / SI files, draw a racing box, and unlock tactical overlays instantly.
-                      </Text>
-                      
-                      {/* Feature Links */}
-                      <View style={styles.featureLinks}>
-                        <TouchableOpacity style={styles.featureLink} disabled={true}>
-                          <Text style={styles.featureLinkText}>Auto-plan docs</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.featureLink} disabled={true}>
-                          <Text style={styles.featureLinkText}>Draw race area</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.featureLink} disabled={true}>
-                          <Text style={styles.featureLinkText}>Share with crew</Text>
-                        </TouchableOpacity>
-                      </View>
-                      
-                      {/* Action Buttons */}
-                      <View style={styles.addRaceCardActions}>
-                        <TouchableOpacity
-                          style={[styles.addRaceButton, styles.addRaceCardButtonDisabled]}
-                          disabled={true}
-                        >
-                          <Ionicons name="add" size={20} color="#FFFFFF" />
-                          <Text style={styles.addRaceButtonText}>Add race</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.importCalendarButton, styles.addRaceCardButtonDisabled]}
-                          disabled={true}
-                        >
-                          <Ionicons name="calendar-outline" size={20} color="#10B981" />
-                          <Text style={styles.importCalendarText}>Import calendar</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                </View>
               </ScrollView>
               
               {/* Right Arrow Button - Always visible */}
@@ -1725,14 +1703,7 @@ export function EmbeddedRacesDemo({
                   />
                 </TouchableOpacity>
               
-              {/* Gradient Fades - Show scrollability */}
-              {Platform.OS === 'web' && canScrollLeft && (
-                <View style={styles.scrollGradientLeft} />
-              )}
-              {Platform.OS === 'web' && canScrollRight && (
-                <View style={styles.scrollGradientRight} />
-              )}
-            </View>
+              </View>
             
             {/* Scroll Hint */}
             {mode === 'fullscreen' && (
@@ -3380,8 +3351,8 @@ export function EmbeddedRacesDemo({
       </View>
     );
 
-    // Wrap in ScrollView for fullscreen mode to enable scrolling
-    if (mode === 'fullscreen' && scrollable) {
+    // Wrap in ScrollView for fullscreen or mobile-native mode to enable scrolling
+    if ((effectiveMode === 'fullscreen' || effectiveMode === 'mobile-native') && scrollable) {
       return (
         <View
           ref={containerRef}
@@ -3394,7 +3365,7 @@ export function EmbeddedRacesDemo({
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ flexGrow: 1 }}
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
             scrollEventThrottle={16}
           >
@@ -3404,14 +3375,15 @@ export function EmbeddedRacesDemo({
       );
     }
 
-    // Desktop mode without scroll wrapper (for fixed height containers)
+    // Desktop/mobile-native mode without scroll wrapper (for fixed height containers)
     return (
       <View
         ref={containerRef}
         style={[
           styles.container,
           styles.containerDesktop,
-          mode === 'fullscreen' && styles.containerFullscreen,
+          effectiveMode === 'fullscreen' && styles.containerFullscreen,
+          effectiveMode === 'mobile-native' && styles.containerMobileNative,
         ]}
       >
         {content}
@@ -4590,14 +4562,19 @@ const styles = StyleSheet.create({
   raceCardsScrollContainer: {
     position: 'relative',
     marginBottom: 24,
-    minHeight: 450, // Increased to accommodate full card height
+    minHeight: 620, // Increased to accommodate: 35px label + 450px cards + 140px callout
     zIndex: 1,
     width: '100%',
     ...Platform.select({
       web: {
-        overflow: 'visible', // Allow scroll buttons and full cards to be visible
+        overflowX: 'hidden', // Clip horizontal content
+        overflowY: 'visible', // Allow vertical elements (callout, label) to show
         maxWidth: '100%',
         boxSizing: 'border-box',
+        // CSS containment removed to allow tooltip/label to render outside bounds
+        isolation: 'isolate',
+        // Position relative required for absolutely positioned children
+        position: 'relative',
       },
     }),
   },
@@ -4633,10 +4610,10 @@ const styles = StyleSheet.create({
     }),
   },
   scrollButtonLeft: {
-    left: -20,
+    left: 8, // FIXED: Position inside container instead of outside
     ...Platform.select({
       web: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
         border: '2px solid #E5E7EB',
         ':hover': {
@@ -4652,10 +4629,10 @@ const styles = StyleSheet.create({
     }),
   },
   scrollButtonRight: {
-    right: -20,
+    right: 8, // FIXED: Position inside container instead of outside
     ...Platform.select({
       web: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
         border: '2px solid #E5E7EB',
         ':hover': {
@@ -4687,35 +4664,34 @@ const styles = StyleSheet.create({
     }),
   },
   raceCardsScrollView: {
-    minHeight: 450, // Increased to accommodate full card height
+    minHeight: 620, // Increased to accommodate: 35px label + 450px cards + 140px callout
     width: '100%',
     flexGrow: 0,
     flexShrink: 0,
     ...Platform.select({
       web: {
         overflowX: 'auto', // Enable horizontal scroll
-        overflowY: 'visible', // Allow cards to show full height
-        WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
-        // Force horizontal scrolling
-        touchAction: 'pan-x pan-y', // Allow both horizontal and vertical panning
+        overflowY: 'visible', // Allow cards to show full height with callout/label
+        // REMOVED: WebkitOverflowScrolling creates GPU layer that escapes containment
+        // WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-x pan-y',
         overscrollBehaviorX: 'contain',
-        // Ensure scrolling works
-        willChange: 'scroll-position',
-        // Critical for web: ensure ScrollView can scroll
         position: 'relative',
-        // Ensure the container itself is scrollable
         display: 'block',
-        // Remove fixed height - use minHeight instead
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        // Containment removed to allow tooltip/label to render
       },
     }),
   },
   raceCardsContainer: {
     // Keep for backward compatibility if referenced elsewhere
-    minHeight: 420,
+    minHeight: 620,
   },
   raceCardsContent: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 50, // Increased to accommodate highlight label (35px + buffer)
+    paddingBottom: 160, // Increased to accommodate callout (140px + buffer)
     gap: 8,
     paddingRight: 32, // Extra padding for NOW bar and Add Race card
     ...Platform.select({
@@ -4728,7 +4704,8 @@ const styles = StyleSheet.create({
         position: 'relative',
         flexShrink: 0,
         paddingHorizontal: 60,
-        paddingVertical: 20,
+        paddingTop: 50, // Increased to accommodate highlight label (35px + buffer)
+        paddingBottom: 160, // Increased to accommodate callout (140px + buffer)
         '@media (max-width: 768px)': {
           paddingHorizontal: 16,
           gap: 12,
@@ -4957,6 +4934,17 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  containerMobileNative: {
+    width: '100%',
+    maxWidth: '100vw',
+    ...Platform.select({
+      web: {
+        position: 'relative' as any,
+        overflowX: 'hidden' as any,
+        padding: 0,
+      },
+    }),
+  },
   screenDesktop: {
     width: '100%',
     backgroundColor: '#F9FAFB', // Match real races screen background (bg-gray-50)
@@ -5107,34 +5095,6 @@ const styles = StyleSheet.create({
         marginRight: 'auto',
         alignSelf: 'flex-start',
       } as any,
-    }),
-  },
-  scrollGradientLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 80,
-    zIndex: 10,
-    pointerEvents: 'none',
-    ...Platform.select({
-      web: {
-        background: 'linear-gradient(to right, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 100%)',
-      },
-    }),
-  },
-  scrollGradientRight: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 80,
-    zIndex: 10,
-    pointerEvents: 'none',
-    ...Platform.select({
-      web: {
-        background: 'linear-gradient(to left, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 100%)',
-      },
     }),
   },
   showcaseHeader: {
@@ -6763,6 +6723,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     position: 'relative',
+    overflow: 'visible',
+    flexShrink: 0,
   },
   nowBarLine: {
     width: 2,
@@ -6797,37 +6759,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  // Scroll gradient indicators
-  scrollGradient: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 40,
-    zIndex: 5,
-    pointerEvents: 'none',
-  },
-  scrollGradientLeft: {
-    left: 0,
-    ...Platform.select({
-      web: {
-        background: 'linear-gradient(to right, rgba(249, 250, 251, 1), rgba(249, 250, 251, 0))',
-      },
-      default: {
-        backgroundColor: 'rgba(249, 250, 251, 0.8)',
-      },
-    }),
-  },
-  scrollGradientRight: {
-    right: 0,
-    ...Platform.select({
-      web: {
-        background: 'linear-gradient(to left, rgba(249, 250, 251, 1), rgba(249, 250, 251, 0))',
-      },
-      default: {
-        backgroundColor: 'rgba(249, 250, 251, 0.8)',
-      },
-    }),
-  },
+  // NOTE: scrollGradientLeft and scrollGradientRight are defined earlier in this file (around line 5076)
+  // Do NOT define duplicates here as the later definition would override with incomplete properties
   readOnlyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6984,17 +6917,17 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 90, // Increased from 80 to match new tab bar height
   },
-  // Add Race Card in Timeline with NOW bar
+  // Add Race Card in Timeline - same size as race cards
   addRaceCardWrapper: {
-    marginRight: 24,
-    marginLeft: 8,
+    marginRight: 8,
     flexShrink: 0,
     flexGrow: 0,
-    width: 380, // Wider card for better content display
+    width: 240, // Same as RACE_CARD_WIDTH
     height: 400, // Match race card height
+    position: 'relative',
     ...Platform.select({
       web: {
-        display: 'block',
+        display: 'flex',
         visibility: 'visible',
         opacity: 1,
         flexBasis: 'auto',
@@ -7006,14 +6939,18 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#F0FDF4', // Light green background
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 2, // Use 2px for crisp rendering
     borderColor: '#10B981', // Green border
-    padding: 24,
-    flexDirection: 'row',
-    gap: 16,
+    borderStyle: 'solid',
+    padding: 14, // Adjusted for 2px border
+    flexDirection: 'column',
+    overflow: 'hidden',
     ...Platform.select({
       web: {
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+        // Ensure no subpixel rendering issues
+        backfaceVisibility: 'hidden',
+        transform: 'translateZ(0)',
       },
       default: {
         shadowColor: '#000',
@@ -7024,77 +6961,51 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  // NOW bar on left side of Add Race card
-  nowBarVertical: {
-    width: 2,
-    height: '100%',
-    position: 'relative',
-    alignItems: 'center',
-  },
-  nowBadgeCard: {
-    position: 'absolute',
-    top: 0,
-    left: -20,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    transform: [{ rotate: '-90deg' }],
-  },
-  nowTextCard: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  nowLineCard: {
-    width: 2,
-    height: '100%',
-    backgroundColor: '#10B981',
-  },
   // Add Race card content
   addRaceContent: {
     flex: 1,
     justifyContent: 'space-between',
+    backgroundColor: '#F0FDF4', // Same as parent to eliminate gaps
+    // DEBUG: Add red border to see exact bounds
+    // borderWidth: 2,
+    // borderColor: 'red',
   },
   raceTimelineLabel: {
     color: '#10B981',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   addRaceTitle: {
-    fontSize: 24,
+    fontSize: 16,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 8,
-    lineHeight: 32,
+    marginBottom: 6,
+    lineHeight: 20,
   },
   addRaceDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#4B5563',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   featureLinks: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 20,
+    flexDirection: 'column',
+    gap: 4,
+    marginBottom: 12,
   },
   featureLink: {
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   featureLinkText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     color: '#10B981', // Green color
   },
   addRaceCardActions: {
-    gap: 12,
+    gap: 8,
     marginTop: 'auto',
   },
   addRaceButton: {
@@ -7102,13 +7013,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#10B981', // Green background
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 8,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 6,
   },
   addRaceButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -7117,15 +7028,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: 8,
+    borderWidth: 1,
     borderColor: '#10B981', // Green border
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 6,
   },
   importCalendarText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#10B981', // Green text
   },

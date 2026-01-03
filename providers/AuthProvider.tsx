@@ -916,7 +916,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           email: trimmedEmail,
           full_name: displayName,
           user_type: personaRole,
-          onboarding_completed: false, // New users need to complete onboarding
+          onboarding_completed: personaRole === 'sailor', // Sailors skip onboarding
         }
 
         authDebugLog('[AUTH] Upserting user profile:', profilePayload)

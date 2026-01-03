@@ -1,0 +1,394 @@
+-- Venue Knowledge Platform Tables
+-- Enables community-driven local knowledge sharing for sailing venues
+
+-- ============================================
+-- DISCUSSIONS (Reddit-style threads)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS venue_discussions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venue_id TEXT NOT NULL REFERENCES sailing_venues(id) ON DELETE CASCADE,
+  author_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  category TEXT CHECK (category IN ('general', 'tactics', 'conditions', 'gear', 'services', 'racing', 'safety')),
+  is_public BOOLEAN DEFAULT true,
+  fleet_id UUID REFERENCES fleets(id) ON DELETE CASCADE, -- null = public
+  upvotes INTEGER DEFAULT 0,
+  downvotes INTEGER DEFAULT 0,
+  comment_count INTEGER DEFAULT 0,
+  pinned BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  last_activity_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS venue_discussion_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  discussion_id UUID NOT NULL REFERENCES venue_discussions(id) ON DELETE CASCADE,
+  parent_id UUID REFERENCES venue_discussion_comments(id) ON DELETE CASCADE, -- for threading
+  author_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL,
+  upvotes INTEGER DEFAULT 0,
+  downvotes INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS venue_discussion_votes (
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('discussion', 'comment')),
+  target_id UUID NOT NULL,
+  vote SMALLINT NOT NULL CHECK (vote IN (-1, 1)), -- -1 = downvote, 1 = upvote
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (user_id, target_type, target_id)
+);
+
+-- ============================================
+-- KNOWLEDGE DOCUMENTS (PDFs, guides, etc)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS venue_knowledge_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venue_id TEXT NOT NULL REFERENCES sailing_venues(id) ON DELETE CASCADE,
+  uploader_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  author_name TEXT, -- "Jamie McWilliam" - original author
+  document_url TEXT, -- Supabase storage URL
+  document_type TEXT CHECK (document_type IN ('pdf', 'video_link', 'external_url', 'presentation')),
+  original_source_url TEXT, -- where the document came from (e.g., rhkyc.org.hk)
+  published_date DATE, -- when originally published
+  description TEXT,
+  is_public BOOLEAN DEFAULT true,
+  fleet_id UUID REFERENCES fleets(id) ON DELETE CASCADE, -- null = public
+  upvotes INTEGER DEFAULT 0,
+  view_count INTEGER DEFAULT 0,
+  extraction_status TEXT DEFAULT 'pending' CHECK (extraction_status IN ('pending', 'processing', 'completed', 'failed')),
+  extraction_error TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ============================================
+-- KNOWLEDGE INSIGHTS (AI-extracted or manual)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS venue_knowledge_insights (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id UUID REFERENCES venue_knowledge_documents(id) ON DELETE CASCADE, -- null = manually created
+  venue_id TEXT NOT NULL REFERENCES sailing_venues(id) ON DELETE CASCADE,
+  author_id UUID REFERENCES auth.users(id) ON DELETE SET NULL, -- for manual insights
+  category TEXT NOT NULL CHECK (category IN (
+    'wind_pattern', 'tide_strategy', 'current_pattern', 'mark_tactic',
+    'start_line', 'hazard', 'shore_effect', 'seasonal', 'general'
+  )),
+  title TEXT,
+  content TEXT NOT NULL,
+  conditions_context JSONB DEFAULT '{}', -- {wind_direction: "NE", wind_speed_range: [10, 15], tide_phase: "ebb", season: "autumn"}
+  location_coords JSONB, -- {lat, lng} for "show on map"
+  location_name TEXT, -- "Near Kellett Island", "Green Island mark"
+  ai_extracted BOOLEAN DEFAULT false,
+  confidence_score FLOAT, -- AI confidence (0-1)
+  source_page_numbers TEXT, -- "pp. 12-14" for reference
+  community_verified BOOLEAN DEFAULT false,
+  verified_count INTEGER DEFAULT 0, -- how many people verified
+  disputed_count INTEGER DEFAULT 0, -- how many people disputed
+  upvotes INTEGER DEFAULT 0,
+  comment_count INTEGER DEFAULT 0,
+  is_public BOOLEAN DEFAULT true,
+  fleet_id UUID REFERENCES fleets(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ============================================
+-- CONTENT FRESHNESS (community markers)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS venue_content_freshness (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_type TEXT NOT NULL CHECK (content_type IN ('document', 'insight', 'tip')),
+  content_id UUID NOT NULL,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('still_accurate', 'needs_update', 'outdated')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(content_type, content_id, user_id)
+);
+
+-- ============================================
+-- INDEXES
+-- ============================================
+
+CREATE INDEX IF NOT EXISTS idx_venue_discussions_venue ON venue_discussions(venue_id);
+CREATE INDEX IF NOT EXISTS idx_venue_discussions_author ON venue_discussions(author_id);
+CREATE INDEX IF NOT EXISTS idx_venue_discussions_public ON venue_discussions(is_public) WHERE is_public = true;
+CREATE INDEX IF NOT EXISTS idx_venue_discussions_fleet ON venue_discussions(fleet_id) WHERE fleet_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_venue_discussions_activity ON venue_discussions(last_activity_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_venue_discussion_comments_discussion ON venue_discussion_comments(discussion_id);
+CREATE INDEX IF NOT EXISTS idx_venue_discussion_comments_parent ON venue_discussion_comments(parent_id) WHERE parent_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_venue_knowledge_documents_venue ON venue_knowledge_documents(venue_id);
+CREATE INDEX IF NOT EXISTS idx_venue_knowledge_documents_public ON venue_knowledge_documents(is_public) WHERE is_public = true;
+
+CREATE INDEX IF NOT EXISTS idx_venue_knowledge_insights_venue ON venue_knowledge_insights(venue_id);
+CREATE INDEX IF NOT EXISTS idx_venue_knowledge_insights_document ON venue_knowledge_insights(document_id) WHERE document_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_venue_knowledge_insights_category ON venue_knowledge_insights(category);
+CREATE INDEX IF NOT EXISTS idx_venue_knowledge_insights_public ON venue_knowledge_insights(is_public) WHERE is_public = true;
+
+CREATE INDEX IF NOT EXISTS idx_venue_content_freshness_content ON venue_content_freshness(content_type, content_id);
+
+-- ============================================
+-- ROW LEVEL SECURITY
+-- ============================================
+
+ALTER TABLE venue_discussions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venue_discussion_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venue_discussion_votes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venue_knowledge_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venue_knowledge_insights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE venue_content_freshness ENABLE ROW LEVEL SECURITY;
+
+-- Public content is readable by everyone (including anonymous)
+CREATE POLICY "Public discussions are readable by all"
+  ON venue_discussions FOR SELECT
+  USING (is_public = true);
+
+CREATE POLICY "Fleet discussions are readable by fleet members"
+  ON venue_discussions FOR SELECT
+  USING (
+    fleet_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM fleet_members
+      WHERE fleet_members.fleet_id = venue_discussions.fleet_id
+      AND fleet_members.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can create discussions"
+  ON venue_discussions FOR INSERT
+  WITH CHECK (auth.uid() = author_id);
+
+CREATE POLICY "Authors can update own discussions"
+  ON venue_discussions FOR UPDATE
+  USING (auth.uid() = author_id);
+
+CREATE POLICY "Authors can delete own discussions"
+  ON venue_discussions FOR DELETE
+  USING (auth.uid() = author_id);
+
+-- Comments on public discussions
+CREATE POLICY "Comments on public discussions are readable"
+  ON venue_discussion_comments FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM venue_discussions
+      WHERE venue_discussions.id = venue_discussion_comments.discussion_id
+      AND venue_discussions.is_public = true
+    )
+  );
+
+CREATE POLICY "Comments on fleet discussions are readable by members"
+  ON venue_discussion_comments FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM venue_discussions
+      WHERE venue_discussions.id = venue_discussion_comments.discussion_id
+      AND venue_discussions.fleet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM fleet_members
+        WHERE fleet_members.fleet_id = venue_discussions.fleet_id
+        AND fleet_members.user_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "Users can create comments"
+  ON venue_discussion_comments FOR INSERT
+  WITH CHECK (auth.uid() = author_id);
+
+CREATE POLICY "Authors can update own comments"
+  ON venue_discussion_comments FOR UPDATE
+  USING (auth.uid() = author_id);
+
+CREATE POLICY "Authors can delete own comments"
+  ON venue_discussion_comments FOR DELETE
+  USING (auth.uid() = author_id);
+
+-- Votes
+CREATE POLICY "Users can manage own votes"
+  ON venue_discussion_votes FOR ALL
+  USING (auth.uid() = user_id);
+
+-- Documents - public readable
+CREATE POLICY "Public documents are readable by all"
+  ON venue_knowledge_documents FOR SELECT
+  USING (is_public = true);
+
+CREATE POLICY "Fleet documents are readable by fleet members"
+  ON venue_knowledge_documents FOR SELECT
+  USING (
+    fleet_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM fleet_members
+      WHERE fleet_members.fleet_id = venue_knowledge_documents.fleet_id
+      AND fleet_members.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can upload documents"
+  ON venue_knowledge_documents FOR INSERT
+  WITH CHECK (auth.uid() = uploader_id);
+
+CREATE POLICY "Uploaders can update own documents"
+  ON venue_knowledge_documents FOR UPDATE
+  USING (auth.uid() = uploader_id);
+
+CREATE POLICY "Uploaders can delete own documents"
+  ON venue_knowledge_documents FOR DELETE
+  USING (auth.uid() = uploader_id);
+
+-- Insights - public readable
+CREATE POLICY "Public insights are readable by all"
+  ON venue_knowledge_insights FOR SELECT
+  USING (is_public = true);
+
+CREATE POLICY "Fleet insights are readable by fleet members"
+  ON venue_knowledge_insights FOR SELECT
+  USING (
+    fleet_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM fleet_members
+      WHERE fleet_members.fleet_id = venue_knowledge_insights.fleet_id
+      AND fleet_members.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can create insights"
+  ON venue_knowledge_insights FOR INSERT
+  WITH CHECK (auth.uid() = author_id OR document_id IS NOT NULL);
+
+CREATE POLICY "Authors can update own insights"
+  ON venue_knowledge_insights FOR UPDATE
+  USING (auth.uid() = author_id);
+
+-- Freshness markers
+CREATE POLICY "Freshness markers are readable by all"
+  ON venue_content_freshness FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can create freshness markers"
+  ON venue_content_freshness FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own freshness markers"
+  ON venue_content_freshness FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- ============================================
+-- TRIGGERS for updating counts
+-- ============================================
+
+-- Update comment count on discussions
+CREATE OR REPLACE FUNCTION update_discussion_comment_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE venue_discussions
+    SET comment_count = comment_count + 1,
+        last_activity_at = now()
+    WHERE id = NEW.discussion_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE venue_discussions
+    SET comment_count = GREATEST(0, comment_count - 1)
+    WHERE id = OLD.discussion_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_discussion_comment_count ON venue_discussion_comments;
+CREATE TRIGGER trigger_update_discussion_comment_count
+AFTER INSERT OR DELETE ON venue_discussion_comments
+FOR EACH ROW EXECUTE FUNCTION update_discussion_comment_count();
+
+-- Update vote counts
+CREATE OR REPLACE FUNCTION update_discussion_vote_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.target_type = 'discussion' THEN
+      IF OLD.vote = 1 THEN
+        UPDATE venue_discussions SET upvotes = GREATEST(0, upvotes - 1) WHERE id = OLD.target_id;
+      ELSE
+        UPDATE venue_discussions SET downvotes = GREATEST(0, downvotes - 1) WHERE id = OLD.target_id;
+      END IF;
+    ELSIF OLD.target_type = 'comment' THEN
+      IF OLD.vote = 1 THEN
+        UPDATE venue_discussion_comments SET upvotes = GREATEST(0, upvotes - 1) WHERE id = OLD.target_id;
+      ELSE
+        UPDATE venue_discussion_comments SET downvotes = GREATEST(0, downvotes - 1) WHERE id = OLD.target_id;
+      END IF;
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF NEW.target_type = 'discussion' THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.vote = 1 THEN
+        UPDATE venue_discussions SET upvotes = upvotes + 1 WHERE id = NEW.target_id;
+      ELSE
+        UPDATE venue_discussions SET downvotes = downvotes + 1 WHERE id = NEW.target_id;
+      END IF;
+    ELSIF TG_OP = 'UPDATE' AND OLD.vote != NEW.vote THEN
+      IF NEW.vote = 1 THEN
+        UPDATE venue_discussions SET upvotes = upvotes + 1, downvotes = GREATEST(0, downvotes - 1) WHERE id = NEW.target_id;
+      ELSE
+        UPDATE venue_discussions SET downvotes = downvotes + 1, upvotes = GREATEST(0, upvotes - 1) WHERE id = NEW.target_id;
+      END IF;
+    END IF;
+  ELSIF NEW.target_type = 'comment' THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.vote = 1 THEN
+        UPDATE venue_discussion_comments SET upvotes = upvotes + 1 WHERE id = NEW.target_id;
+      ELSE
+        UPDATE venue_discussion_comments SET downvotes = downvotes + 1 WHERE id = NEW.target_id;
+      END IF;
+    ELSIF TG_OP = 'UPDATE' AND OLD.vote != NEW.vote THEN
+      IF NEW.vote = 1 THEN
+        UPDATE venue_discussion_comments SET upvotes = upvotes + 1, downvotes = GREATEST(0, downvotes - 1) WHERE id = NEW.target_id;
+      ELSE
+        UPDATE venue_discussion_comments SET downvotes = downvotes + 1, upvotes = GREATEST(0, upvotes - 1) WHERE id = NEW.target_id;
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_vote_counts ON venue_discussion_votes;
+CREATE TRIGGER trigger_update_vote_counts
+AFTER INSERT OR UPDATE OR DELETE ON venue_discussion_votes
+FOR EACH ROW EXECUTE FUNCTION update_discussion_vote_counts();
+
+-- ============================================
+-- STORAGE BUCKET for documents
+-- ============================================
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('venue-documents', 'venue-documents', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Allow authenticated users to upload
+CREATE POLICY "Authenticated users can upload venue documents"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'venue-documents'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Allow public read access
+CREATE POLICY "Public can read venue documents"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'venue-documents');

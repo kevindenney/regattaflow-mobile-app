@@ -28,3 +28,7 @@ logs/
 # Debug files
 bugreport-*.txt
 bugreport-*.zip
+
+# Disabled API routes
+api/**/*.disabled/
+api/**/cron.disabled/

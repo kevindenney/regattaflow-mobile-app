@@ -32,6 +32,7 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
 
   /**
    * Load suggestions for the current user
+   * Non-blocking: returns quickly with cached/empty data, loads fresh in background
    */
   const loadSuggestions = useCallback(async () => {
     logger.debug('[loadSuggestions] invoked', { hasUser: !!user, userId: user?.id });
@@ -42,19 +43,23 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
       return;
     }
 
+    // Set loading briefly while we check cache
+    setLoading(true);
+    setError(null);
+
     try {
       logger.debug('[loadSuggestions] Starting suggestion fetch for user:', user.id);
-      setLoading(true);
-      setError(null);
 
-      logger.debug('[loadSuggestions] Fetching suggestions for user:', user.id);
-      
-      // Add timeout to prevent hanging - suggestions are nice-to-have, not critical
-      const timeoutMs = 8000;
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Suggestions request timed out')), timeoutMs)
+      // Fast path: Get suggestions with a short timeout
+      // The service will return cached data quickly if available
+      const timeoutMs = 3000; // Short timeout - just for cached data
+      const timeoutPromise = new Promise<CategorizedSuggestions>((resolve) =>
+        setTimeout(() => {
+          logger.debug('[loadSuggestions] Fast path timeout, returning empty');
+          resolve({ clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 });
+        }, timeoutMs)
       );
-      
+
       const data = await Promise.race([
         raceSuggestionService.getSuggestionsForUser(user.id),
         timeoutPromise
@@ -68,20 +73,29 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
         templates: data.templates.length,
       });
 
-      if (data.total === 0) {
-        logger.info('[loadSuggestions] No suggestions returned for user, showing empty state', {
-          userId: user.id,
-        });
-      }
-
       setSuggestions(data);
+      setLoading(false);
+
+      // If we got empty data (timeout or no cache), try loading in background
+      if (data.total === 0) {
+        logger.debug('[loadSuggestions] No suggestions yet, will try background refresh');
+        // Don't await - let it run in background
+        raceSuggestionService.getSuggestionsForUser(user.id)
+          .then((freshData) => {
+            if (freshData.total > 0) {
+              logger.debug('[loadSuggestions] Background refresh got data:', freshData.total);
+              setSuggestions(freshData);
+            }
+          })
+          .catch((err) => {
+            logger.debug('[loadSuggestions] Background refresh failed (non-critical):', err);
+          });
+      }
     } catch (err) {
       logger.error('[loadSuggestions] Error loading suggestions:', err);
       setError(err as Error);
       // Set empty suggestions on error so UI doesn't stay in loading state
       setSuggestions({ clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 });
-    } finally {
-      logger.debug('[loadSuggestions] Load complete, setting loading to false');
       setLoading(false);
     }
   }, [user?.id]);

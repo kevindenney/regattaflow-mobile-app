@@ -9,22 +9,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, ScrollView, Modal, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  useAnimatedProps,
+import {
   useSharedValue,
   withTiming,
   withRepeat,
   withSequence,
-  withDelay,
   Easing,
   cancelAnimation,
+  runOnJS,
+  useDerivedValue,
 } from 'react-native-reanimated';
-import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Marker, Polygon, Pattern, RadialGradient, Stop, Ellipse } from 'react-native-svg';
+import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Marker, Polygon, Pattern } from 'react-native-svg';
 import type { FavoredEndCourseStep, FavoredEndQuizQuestion } from './data/favoredEndData';
 import { FAVORED_END_STEPS, FAVORED_END_QUIZ, FAVORED_END_DEEP_DIVE } from './data/favoredEndData';
 import { PowerboatSVG, TopDownSailboatSVG } from './shared';
-
-const AnimatedG = Animated.createAnimatedComponent(G);
 
 // Responsive breakpoints
 const BREAKPOINTS = {
@@ -280,6 +278,23 @@ export function FavoredEndInteractive({
   // Track animated boat rotation for sail calculation
   const [animatedBoatRotationState, setAnimatedBoatRotationState] = useState(90);
 
+  // State-driven position for sailing boat (avoids AnimatedG crash on Android New Architecture)
+  const [sailingBoatPosition, setSailingBoatPosition] = useState({ x: 0, y: 0 });
+  const SAILING_BASE_Y = 360;
+
+  // Sync animated values to state for rendering
+  const updateSailingBoatPosition = (x: number, y: number, rotation: number) => {
+    setSailingBoatPosition({ x, y });
+    setAnimatedBoatRotationState(rotation);
+  };
+
+  useDerivedValue(() => {
+    if (isBoatSailing || isBoatTransitioning) {
+      runOnJS(updateSailingBoatPosition)(animatedBoatX.value, SAILING_BASE_Y + animatedBoatY.value, animatedBoatRotation.value);
+    }
+    return null;
+  }, [isBoatSailing, isBoatTransitioning]);
+
   // Sailing animation - boat sails from port layline to starboard layline and back
   // CRITICAL: All three animations (X, Y, rotation) must have exactly the same total cycle time
   useEffect(() => {
@@ -355,14 +370,8 @@ export function FavoredEndInteractive({
         -1,
         false
       );
-      
-      // Update rotation state for sail rendering
-      const rotationInterval = setInterval(() => {
-        setAnimatedBoatRotationState(animatedBoatRotation.value);
-      }, 100);
-      
+
       return () => {
-        clearInterval(rotationInterval);
         cancelAnimation(animatedBoatX);
         cancelAnimation(animatedBoatY);
         cancelAnimation(animatedBoatRotation);
@@ -561,19 +570,6 @@ export function FavoredEndInteractive({
     }
   }, [currentStep]);
 
-  const boatProps = useAnimatedProps(() => ({
-    opacity: boatOpacity.value,
-  }));
-  
-  // Animated props for sailing boat - combines position and rotation
-  // Boat pivots around its center (25, 40)
-  // Base Y of 360 puts the boat about 60 pixels below the start line (y=300)
-  const SAILING_BASE_Y = 360;
-  const sailingBoatProps = useAnimatedProps(() => ({
-    opacity: 1,
-    transform: `translate(${animatedBoatX.value}, ${SAILING_BASE_Y + animatedBoatY.value}) rotate(${animatedBoatRotation.value}, 25, 40)`,
-  }));
-
   const handleNext = () => {
     if (currentStepIndex < FAVORED_END_STEPS.length - 1) {
       const nextIndex = currentStepIndex + 1;
@@ -764,16 +760,16 @@ export function FavoredEndInteractive({
 
               {/* Sailboat - animated when sailing parallel to line or transitioning */}
               {(isBoatSailing || isBoatTransitioning) ? (
-                <AnimatedG animatedProps={sailingBoatProps}>
-                  <TopDownSailboatSVG 
-                    hullColor="#3B82F6" 
+                <G transform={`translate(${sailingBoatPosition.x}, ${sailingBoatPosition.y}) rotate(${animatedBoatRotationState}, 25, 40)`}>
+                  <TopDownSailboatSVG
+                    hullColor="#3B82F6"
                     rotation={animatedBoatRotationState}
-                    scale={0.8} 
+                    scale={0.8}
                     showWake={true}
                     externalRotation={true}
                     windDirection={currentWindAngle}
                   />
-                </AnimatedG>
+                </G>
               ) : (
                 <G transform={`translate(${boatState.x}, ${(boatState.y || 0) + 50}) rotate(${boatState.rotate || 0}, 25, 40)`}>
                   <TopDownSailboatSVG 

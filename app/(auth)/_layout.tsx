@@ -139,7 +139,9 @@ export default function AuthLayout() {
   // Don't render if user already has a role (will redirect above)
   const isOnboardingRoute = onboardingRoutes.has(currentRoute ?? '');
 
-  if (state === 'ready' && !isOnboardingRoute) {
+  // Only return null if user is ready AND has a userType
+  // If userType is missing, we need to show the page (login/signup)
+  if (state === 'ready' && userType && !isOnboardingRoute) {
     return null;
   }
 

@@ -142,7 +142,8 @@
                 {
                   "id": "lesson-1-4-2",
                   "title": "Upwind Tactics",
-                  "lessonType": "text",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "UpwindTacticsInteractive",
                   "orderIndex": 2,
                   "durationSeconds": 900,
                   "isFreePreview": false,
@@ -151,7 +152,8 @@
                 {
                   "id": "lesson-1-4-3",
                   "title": "Downwind Basics",
-                  "lessonType": "text",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "DownwindBasicsInteractive",
                   "orderIndex": 3,
                   "durationSeconds": 600,
                   "isFreePreview": false,

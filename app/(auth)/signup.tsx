@@ -96,8 +96,9 @@ export default function SignUp() {
       await signUp(trimmedEmail, trimmedUsername, password, persona);
       
       // Route to appropriate onboarding based on persona
+      // Sailors skip onboarding and go directly to the main app
       if (persona === 'sailor') {
-        router.replace('/(auth)/sailor-onboarding-comprehensive');
+        router.replace('/(tabs)/races');
       } else if (persona === 'coach') {
         router.replace('/(auth)/coach-onboarding-welcome');
       } else if (persona === 'club') {

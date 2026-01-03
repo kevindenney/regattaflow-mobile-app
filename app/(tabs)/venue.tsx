@@ -37,6 +37,10 @@ import { FleetCommunityCard } from '@/components/venue/FleetCommunityCard';
 import { RacingIntelSection } from '@/components/venue/RacingIntelSection';
 import { VenueComparisonModal, CompareVenuesButton } from '@/components/venue/VenueComparisonModal';
 import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
+import { VenueKnowledgeHub } from '@/components/venue/VenueKnowledgeHub';
+import { VenueConditionsBar } from '@/components/venue/VenueConditionsBar';
+
+type ViewMode = 'content' | 'map';
 
 interface Venue {
   id: string;
@@ -66,6 +70,7 @@ export default function VenueIntelligenceScreen() {
 
 
   // UI State
+  const [viewMode, setViewMode] = useState<ViewMode>('content'); // Default to content-first
   const [selectedVenueForSheet, setSelectedVenueForSheet] = useState<Venue | null>(null);
   const [areLayersVisible, setAreLayersVisible] = useState(true);
   const [showOnlySavedVenues, setShowOnlySavedVenues] = useState(false);
@@ -428,6 +433,69 @@ export default function VenueIntelligenceScreen() {
     );
   }
 
+  // Content-first view (default)
+  if (viewMode === 'content' && currentVenue) {
+    return (
+      <ThemedView style={styles.container}>
+        {/* Header */}
+        <View style={styles.contentHeader}>
+          <View style={styles.contentHeaderLeft}>
+            <ThemedText style={styles.contentVenueName}>{currentVenue.name}</ThemedText>
+            <ThemedText style={styles.contentVenueLocation}>
+              {currentVenue.region} · {currentVenue.country}
+            </ThemedText>
+          </View>
+          <View style={styles.contentHeaderRight}>
+            <TouchableOpacity
+              style={styles.mapToggleButton}
+              onPress={() => setViewMode('map')}
+            >
+              <Ionicons name="map-outline" size={18} color="#2563EB" />
+              <ThemedText style={styles.mapToggleText}>Map</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.saveButton, savedVenueIds.has(currentVenue.id) && styles.saveButtonActive]}
+              onPress={handleSaveVenue}
+            >
+              <Ionicons
+                name={savedVenueIds.has(currentVenue.id) ? 'bookmark' : 'bookmark-outline'}
+                size={20}
+                color={savedVenueIds.has(currentVenue.id) ? '#2563EB' : '#6B7280'}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Conditions Bar */}
+        <VenueConditionsBar
+          venueId={currentVenue.id}
+          venueName={currentVenue.name}
+          latitude={currentVenue.coordinates_lat}
+          longitude={currentVenue.coordinates_lng}
+        />
+
+        {/* Knowledge Hub with Tabs */}
+        <VenueKnowledgeHub
+          venueId={currentVenue.id}
+          venueName={currentVenue.name}
+          latitude={currentVenue.coordinates_lat}
+          longitude={currentVenue.coordinates_lng}
+          currentWindDirection={liveWeather?.windDirection}
+          currentWindSpeed={liveWeather?.windSpeed}
+          onShowMap={() => setViewMode('map')}
+        />
+
+        {/* Quick Access Panel */}
+        <QuickAccessPanel
+          savedVenueIds={savedVenueIds}
+          currentVenueId={currentVenue.id}
+          onVenueSelect={(venueId) => setVenueManually(venueId)}
+        />
+      </ThemedView>
+    );
+  }
+
+  // Map-centric view
   return (
     <ThemedView style={styles.container}>
       {/* Full-Screen Map Background */}
@@ -587,6 +655,18 @@ export default function VenueIntelligenceScreen() {
 
       {/* AI Venue Buttons - Floating Bottom Center */}
       <View style={styles.floatingButtonContainer}>
+        {/* Back to Content Button */}
+        {currentVenue && (
+          <TouchableOpacity
+            style={[styles.aiDetectionButton, { backgroundColor: '#2563EB', marginBottom: 12 }]}
+            onPress={() => setViewMode('content')}
+          >
+            <ThemedText style={styles.aiDetectionButtonText}>
+              ← Back to Knowledge Hub
+            </ThemedText>
+          </TouchableOpacity>
+        )}
+
         {/* Ask AI Button */}
         {currentVenue && (
           <TouchableOpacity
@@ -1173,5 +1253,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#78350F',
+  },
+
+  // Content-first view styles
+  contentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  contentHeaderLeft: {
+    flex: 1,
+  },
+  contentVenueName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  contentVenueLocation: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  contentHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mapToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  mapToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  saveButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  saveButtonActive: {
+    backgroundColor: '#EFF6FF',
   },
 });

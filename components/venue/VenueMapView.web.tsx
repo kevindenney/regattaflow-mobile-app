@@ -457,47 +457,31 @@ function GoogleMapComponent({
         return false;
       });
 
-      // Group services by location to handle stacking
-      const servicesByLocation = new Map<string, typeof services>();
+      // Render service markers at their actual coordinates
+      // MarkerClusterer will handle overlapping markers automatically
       filteredServices.forEach(service => {
         if (!service.coordinates_lat || !service.coordinates_lng) return;
-        const key = `${service.coordinates_lat.toFixed(4)},${service.coordinates_lng.toFixed(4)}`;
-        if (!servicesByLocation.has(key)) {
-          servicesByLocation.set(key, []);
-        }
-        servicesByLocation.get(key)!.push(service);
-      });
 
-      // Render markers with slight offsets for stacked services
-      servicesByLocation.forEach((servicesAtLocation, locationKey) => {
-        servicesAtLocation.forEach((service, index) => {
-          const { color } = getServiceStyle(service.service_type);
+        const { color } = getServiceStyle(service.service_type);
 
-          // Add small offset for stacked markers (in a circular pattern)
-          const offsetAmount = 0.0008; // ~88 meters
-          const angle = (index * (360 / servicesAtLocation.length)) * (Math.PI / 180);
-          const latOffset = servicesAtLocation.length > 1 ? Math.cos(angle) * offsetAmount : 0;
-          const lngOffset = servicesAtLocation.length > 1 ? Math.sin(angle) * offsetAmount : 0;
-
-          const marker = createMapMarker({
-            position: {
-              lat: service.coordinates_lat + latOffset,
-              lng: service.coordinates_lng + lngOffset
-            },
-            map: null, // Don't add to map yet - clusterer will handle it
-            title: service.business_name,
-            icon: createMarkerIcon(service.service_type, color),
-            optimized: false,
-          });
-
-          // Lazy InfoWindow: only create when clicked
-          marker.addListener('click', () => {
-            const content = createServiceInfoWindowContent(service);
-            showInfoWindow(marker, content);
-          });
-
-          markersRef.current.push(marker);
+        const marker = createMapMarker({
+          position: {
+            lat: service.coordinates_lat,
+            lng: service.coordinates_lng
+          },
+          map: null, // Don't add to map yet - clusterer will handle it
+          title: service.business_name,
+          icon: createMarkerIcon(service.service_type, color),
+          optimized: false,
         });
+
+        // Lazy InfoWindow: only create when clicked
+        marker.addListener('click', () => {
+          const content = createServiceInfoWindowContent(service);
+          showInfoWindow(marker, content);
+        });
+
+        markersRef.current.push(marker);
       });
     }
 

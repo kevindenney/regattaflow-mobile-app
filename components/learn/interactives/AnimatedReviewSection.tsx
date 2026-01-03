@@ -7,9 +7,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-import Animated, {
+import {
   useSharedValue,
-  useAnimatedProps,
   withTiming,
   withDelay,
   withSequence,
@@ -19,12 +18,10 @@ import Animated, {
   Extrapolate,
   runOnJS,
   cancelAnimation,
+  useDerivedValue,
 } from 'react-native-reanimated';
-import Svg, { G, Rect, Text as SvgText, Path, Circle, Line, Defs, Marker, Polygon } from 'react-native-svg';
+import Svg, { G, Rect, Text as SvgText, Line, Defs, Marker, Polygon } from 'react-native-svg';
 import { TopDownSailboatSVG } from './shared';
-
-const AnimatedG = Animated.createAnimatedComponent(G);
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 // Scenario definitions
 interface ScenarioConfig {
@@ -182,6 +179,17 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
 
   const scenario = SCENARIOS[activeScenarioIndex];
 
+  // State-driven transforms for boats (avoids AnimatedG crash on Android New Architecture)
+  const [boat1Transform, setBoat1Transform] = useState('translate(0, 0)');
+  const [boat2Transform, setBoat2Transform] = useState('translate(0, 0)');
+  const [boat1Rotation, setBoat1Rotation] = useState(0);
+  const [boat2Rotation, setBoat2Rotation] = useState(0);
+  const [ruleBoxStates, setRuleBoxStates] = useState([
+    { opacity: 0.4, scale: 1 },
+    { opacity: 0.4, scale: 1 },
+    { opacity: 0.4, scale: 1 },
+  ]);
+
   // Update scenario state safely
   const updateScenario = useCallback((nextIndex: number) => {
     if (isMounted.current) {
@@ -279,8 +287,8 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
     };
   }, [activeScenarioIndex, updateScenario]);
 
-  // Boat 1 animated props (give-way boat)
-  const boat1Props = useAnimatedProps(() => {
+  // Sync boat 1 position to state (give-way boat)
+  useDerivedValue(() => {
     const { boat1 } = scenario;
     const t = progress.value;
 
@@ -317,13 +325,13 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
       }
     }
 
-    return {
-      transform: `translate(${x}, ${y}) rotate(${rotation + boat1Bob.value}, 25, 40)`,
-    };
-  });
+    runOnJS(setBoat1Transform)(`translate(${x}, ${y}) rotate(${rotation + boat1Bob.value}, 25, 40)`);
+    runOnJS(setBoat1Rotation)(rotation);
+    return null;
+  }, [scenario]);
 
-  // Boat 2 animated props (stand-on boat)
-  const boat2Props = useAnimatedProps(() => {
+  // Sync boat 2 position to state (stand-on boat)
+  useDerivedValue(() => {
     const { boat2 } = scenario;
     const t = progress.value;
 
@@ -331,29 +339,24 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
     const x = interpolate(t, [0, 1], [boat2.startX, boat2.endX], Extrapolate.CLAMP);
     const y = interpolate(t, [0, 1], [boat2.startY, boat2.endY], Extrapolate.CLAMP);
 
-    return {
-      transform: `translate(${x}, ${y}) rotate(${boat2.rotation + boat2Bob.value}, 25, 40)`,
-    };
-  });
+    runOnJS(setBoat2Transform)(`translate(${x}, ${y}) rotate(${boat2.rotation + boat2Bob.value}, 25, 40)`);
+    runOnJS(setBoat2Rotation)(boat2.rotation);
+    return null;
+  }, [scenario]);
 
-  // Rule box highlight props
-  const createRuleBoxProps = (index: number) => {
-    return useAnimatedProps(() => {
+  // Sync rule box states
+  useDerivedValue(() => {
+    const newStates = RULE_BOXES.map((_, index) => {
       const isActive = index === scenario.ruleIndex;
-      const glowIntensity = isActive ? interpolate(ruleBoxGlow.value, [0.5, 1], [4, 8], Extrapolate.CLAMP) : 0;
       const scale = isActive ? 1.05 : 1;
-
       return {
         opacity: isActive ? 1 : 0.4,
-        transform: `scale(${scale})`,
+        scale,
       };
     });
-  };
-
-  const ruleBox0Props = createRuleBoxProps(0);
-  const ruleBox1Props = createRuleBoxProps(1);
-  const ruleBox2Props = createRuleBoxProps(2);
-  const ruleBoxPropsArray = [ruleBox0Props, ruleBox1Props, ruleBox2Props];
+    runOnJS(setRuleBoxStates)(newStates);
+    return null;
+  }, [scenario]);
 
   return (
     <View style={styles.container}>
@@ -384,9 +387,9 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
         </G>
 
         {/* Boats */}
-        <AnimatedG animatedProps={boat1Props}>
+        <G transform={boat1Transform}>
           <TopDownSailboatSVG
-            rotation={scenario.boat1.rotation}
+            rotation={boat1Rotation}
             color={scenario.boat1.color}
             size={50}
           />
@@ -397,11 +400,11 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
               {scenario.boat1.label}
             </SvgText>
           </G>
-        </AnimatedG>
+        </G>
 
-        <AnimatedG animatedProps={boat2Props}>
+        <G transform={boat2Transform}>
           <TopDownSailboatSVG
-            rotation={scenario.boat2.rotation}
+            rotation={boat2Rotation}
             color={scenario.boat2.color}
             size={50}
           />
@@ -412,7 +415,7 @@ export function AnimatedReviewSection({ width = 800, height = 520 }: AnimatedRev
               {scenario.boat2.label}
             </SvgText>
           </G>
-        </AnimatedG>
+        </G>
 
         {/* Give Way / Stand On badges */}
         {phase === 'give-way' && (

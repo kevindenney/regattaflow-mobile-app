@@ -20,8 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Animated, {
-  useAnimatedProps,
+import {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -53,10 +52,6 @@ import {
   type QuizQuestion,
 } from './data/whatIsSailboatRacingData';
 import { TopDownSailboatSVG, CustomTimelineSlider } from './shared';
-
-// Create animated SVG components
-const AnimatedG = Animated.createAnimatedComponent(G);
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SVG_WIDTH = Math.min(800, SCREEN_WIDTH - 32);

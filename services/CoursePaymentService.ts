@@ -9,6 +9,40 @@ import { Platform } from 'react-native';
 
 const logger = createLogger('CoursePaymentService');
 
+/**
+ * Racing Academy Stripe Price IDs
+ * Created: 2026-01-02
+ */
+export const ACADEMY_STRIPE_PRICE_IDS = {
+  singleModule: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',  // $30/year
+  bundle: 'price_1Sl0nTBbfEeOhHXbnk5Yh5AE',        // $75/year
+};
+
+/**
+ * Racing Academy Module Pricing (annual)
+ */
+export const ACADEMY_MODULE_PRICING = {
+  singleModule: {
+    price: 3000, // $30.00 in cents
+    priceFormatted: '$30',
+    period: '/year',
+    stripePriceId: ACADEMY_STRIPE_PRICE_IDS.singleModule,
+  },
+  allModulesBundle: {
+    price: 7500, // $75.00 in cents
+    priceFormatted: '$75',
+    period: '/year',
+    savings: 'Save $15',
+    stripePriceId: ACADEMY_STRIPE_PRICE_IDS.bundle,
+  },
+};
+
+export const ACADEMY_MODULES = [
+  'starting-line-strategy',
+  'wind-shift-tactics',
+  'mark-rounding-mastery',
+];
+
 export interface CoursePaymentResult {
   success: boolean;
   url?: string;

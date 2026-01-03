@@ -9,21 +9,12 @@
  * - Optional course information board
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Platform } from 'react-native';
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-  withRepeat,
-  withSequence,
-  Easing,
-} from 'react-native-reanimated';
 import { G, Path, Rect, Line, Text as SvgText } from 'react-native-svg';
 
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedG = Animated.createAnimatedComponent(G);
+// Note: AnimatedG causes crashes on Android with New Architecture
+// Using static opacity instead of animated props for cross-platform compatibility
 
 interface PowerboatSVGProps {
   /** Rotation angle in degrees */
@@ -53,34 +44,6 @@ export function PowerboatSVG({
     distance: '1.0 NM',
   },
 }: PowerboatSVGProps) {
-  // Flag opacity animation
-  const flagOpacity = useSharedValue(orangeFlagState === 'UP' ? 1 : 0);
-  // Flag wave animation (slight rotation)
-  const flagWave = useSharedValue(0);
-  
-  useEffect(() => {
-    flagOpacity.value = withTiming(orangeFlagState === 'UP' ? 1 : 0, { duration: 500 });
-    
-    // Start wave animation when flag is up
-    if (orangeFlagState === 'UP') {
-      flagWave.value = withRepeat(
-        withSequence(
-          withTiming(3, { duration: 400, easing: Easing.inOut(Easing.sin) }),
-          withTiming(-3, { duration: 400, easing: Easing.inOut(Easing.sin) }),
-        ),
-        -1, // Repeat indefinitely
-        true // Reverse
-      );
-    } else {
-      flagWave.value = withTiming(0, { duration: 300 });
-    }
-  }, [orangeFlagState]);
-
-  const flagProps = useAnimatedProps(() => ({
-    opacity: flagOpacity.value,
-    transform: [{ rotate: `${flagWave.value}deg` }],
-  }));
-
   // The boat pivots around its center (approximately 25px, 40px in the original)
   const transformOrigin = { x: 25, y: 40 };
   
@@ -176,32 +139,23 @@ export function PowerboatSVG({
         strokeWidth="1.5" 
       />
 
-      {/* Orange Flag on Staff - with waving animation */}
-      {Platform.OS === 'web' ? (
-        <G style={{ 
+      {/* Orange Flag on Staff - with waving animation on web */}
+      {/* Note: AnimatedG causes crashes on Android with New Architecture, using static on native */}
+      <G
+        opacity={orangeFlagState === 'UP' ? 1 : 0}
+        style={Platform.OS === 'web' ? {
           transformOrigin: '26px 9px',
           transition: 'opacity 0.5s ease-out',
-          opacity: orangeFlagState === 'UP' ? 1 : 0,
-        } as any}>
-          {/* Waving flag shape (wavy path instead of rectangle) */}
-          <Path
-            d="M 26,5 Q 30,6 34,5 Q 38,4 38,9 Q 38,14 34,13 Q 30,12 26,13 Z"
-            fill="orange"
-            stroke="black"
-            strokeWidth="0.8"
-          />
-        </G>
-      ) : (
-        <AnimatedG animatedProps={flagProps}>
-          {/* Waving flag shape */}
-          <Path
-            d="M 26,5 Q 30,6 34,5 Q 38,4 38,9 Q 38,14 34,13 Q 30,12 26,13 Z"
-            fill="orange"
-            stroke="black"
-            strokeWidth="0.8"
-          />
-        </AnimatedG>
-      )}
+        } as any : undefined}
+      >
+        {/* Waving flag shape (wavy path instead of rectangle) */}
+        <Path
+          d="M 26,5 Q 30,6 34,5 Q 38,4 38,9 Q 38,14 34,13 Q 30,12 26,13 Z"
+          fill="orange"
+          stroke="black"
+          strokeWidth="0.8"
+        />
+      </G>
     </G>
   );
 }

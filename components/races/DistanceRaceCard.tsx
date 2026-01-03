@@ -57,6 +57,7 @@ export interface DistanceRaceCardProps {
   
   // UI state
   isPrimary?: boolean;
+  isMock?: boolean; // True for demo/mock data
   raceStatus?: 'past' | 'next' | 'future';
   isSelected?: boolean;
   onSelect?: () => void;
@@ -80,6 +81,7 @@ export function DistanceRaceCard({
   wind,
   vhf_channel,
   isPrimary = false,
+  isMock = false,
   raceStatus = 'future',
   isSelected = false,
   onSelect,
@@ -221,13 +223,20 @@ export function DistanceRaceCard({
               <Navigation size={10} color="#7C3AED" />
               <Text style={styles.distanceBadgeText}>DISTANCE</Text>
             </View>
-            
-            {raceStatus === 'next' && (
+
+            {/* Demo Badge */}
+            {isMock && (
+              <View style={styles.mockBadge}>
+                <Text style={styles.mockBadgeText}>DEMO</Text>
+              </View>
+            )}
+
+            {raceStatus === 'next' && !isMock && (
               <View style={styles.nextBadge}>
                 <Text style={styles.nextBadgeText}>⚡ NEXT</Text>
               </View>
             )}
-            {raceStatus === 'past' && (
+            {raceStatus === 'past' && !isMock && (
               <View style={styles.pastBadge}>
                 <Text style={styles.pastBadgeText}>✓ COMPLETED</Text>
               </View>
@@ -494,6 +503,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#7C3AED',
     letterSpacing: 0.5,
+  },
+  mockBadge: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  mockBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
   },
   nextBadge: {
     backgroundColor: '#10B981',

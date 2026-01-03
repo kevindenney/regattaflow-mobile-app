@@ -10,9 +10,24 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-export function PricingSection() {
+interface PricingSectionProps {
+  variant?: 'sailor' | 'coach' | 'club';
+}
+
+export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
+  const isMobile = width <= 480;
+  const isSmallMobile = width <= 375;
+
+  // Show variant-specific pricing
+  if (variant === 'coach') {
+    return <CoachPricingSection isDesktop={isDesktop} />;
+  }
+
+  if (variant === 'club') {
+    return <ClubPricingSection isDesktop={isDesktop} />;
+  }
 
   return (
     <View id="pricing-section" style={styles.container}>
@@ -27,32 +42,47 @@ export function PricingSection() {
           </Text>
         </View>
 
-        {/* Sailor Pricing Tiers */}
-        <SailorsPricing isDesktop={isDesktop} />
-        
-        {/* Racing Academy Pricing Note */}
-        <View style={styles.academyPricingNote}>
-          <Ionicons name="school-outline" size={20} color="#3E92CC" />
-          <View style={styles.academyPricingText}>
-            <Text style={styles.academyPricingTitle}>Racing Academy Modules</Text>
-            <Text style={styles.academyPricingSubtitle}>
-              $30/year per module • Bundle all 3 for $75/year (save $15)
-            </Text>
-            <Text style={styles.academyPricingDetails}>
-              Starting Line Strategy • Wind Shift Tactics • Mark Rounding Mastery
-            </Text>
+        {/* Race Strategy Planner Section */}
+        <View style={styles.productSection}>
+          <View style={styles.productHeader}>
+            <Ionicons name="navigate" size={24} color="#3E92CC" />
+            <Text style={styles.productTitle}>Race Strategy Planner</Text>
           </View>
+          <Text style={styles.productSubtitle}>
+            AI-powered race planning & venue intelligence
+          </Text>
         </View>
+
+        {/* Sailor Pricing Tiers */}
+        <SailorsPricing isDesktop={isDesktop} isMobile={isMobile} isSmallMobile={isSmallMobile} />
+
+        {/* Racing Academy Section */}
+        <View style={[styles.productSection, { marginTop: 48 }]}>
+          <View style={styles.productHeader}>
+            <Ionicons name="school" size={24} color="#8B5CF6" />
+            <Text style={[styles.productTitle, { color: '#8B5CF6' }]}>Racing Academy</Text>
+          </View>
+          <Text style={styles.productSubtitle}>
+            Master racing strategy with structured courses
+          </Text>
+        </View>
+
+        {/* Racing Academy Pricing */}
+        <RacingAcademyPricing isDesktop={isDesktop} />
       </View>
     </View>
   );
 }
 
-function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
+function SailorsPricing({ isDesktop, isMobile, isSmallMobile }: { isDesktop: boolean; isMobile?: boolean; isSmallMobile?: boolean }) {
   return (
-    <View style={[styles.pricingContent, isDesktop && styles.pricingContentDesktop]}>
+    <View style={[
+      styles.pricingContent,
+      isDesktop && styles.pricingContentDesktop,
+      isMobile && styles.pricingContentMobile,
+    ]}>
       {/* Free */}
-      <View style={styles.pricingCard}>
+      <View style={[styles.pricingCard, isMobile && styles.pricingCardMobile]}>
         <Text style={styles.tierName}>Free</Text>
         <View style={styles.priceContainer}>
           <Text style={styles.price}>$0</Text>
@@ -82,21 +112,22 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           style={[styles.ctaButton, styles.ctaButtonOutline]}
           onPress={() => router.push('/(auth)/signup')}
         >
-          <Text style={styles.ctaButtonOutlineText}>Start Free Trial</Text>
+          <Text style={styles.ctaButtonOutlineText}>Get Started Free</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Sailor Pro */}
-      <View style={[styles.pricingCard, styles.pricingCardFeatured]}>
+      {/* Pro */}
+      <View style={[styles.pricingCard, styles.pricingCardFeatured, isMobile && styles.pricingCardMobile]}>
         <View style={styles.popularBadge}>
           <Text style={styles.popularText}>POPULAR</Text>
         </View>
-        <Text style={[styles.tierName, { color: '#3E92CC' }]}>Sailor Pro</Text>
+        <Text style={[styles.tierName, { color: '#3E92CC' }]}>Pro</Text>
         <View style={styles.priceContainer}>
-          <Text style={[styles.price, { color: '#3E92CC' }]}>$29</Text>
-          <Text style={styles.pricePeriod}>/mo</Text>
+          <Text style={[styles.price, { color: '#3E92CC' }]}>$300</Text>
+          <Text style={styles.pricePeriod}>/year</Text>
         </View>
-        <Text style={styles.tierTagline}>Full features for racers</Text>
+        <Text style={styles.effectiveMonthly}>$25/mo</Text>
+        <Text style={styles.tierTagline}>Full features for serious racers</Text>
 
         <View style={styles.features}>
           <View style={styles.feature}>
@@ -117,7 +148,7 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>1 Racing Academy module included</Text>
+            <Text style={styles.featureText}>Offline mode</Text>
           </View>
         </View>
 
@@ -125,35 +156,38 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           style={[styles.ctaButton, { backgroundColor: '#3E92CC' }]}
           onPress={() => router.push('/(auth)/signup')}
         >
-          <Text style={styles.ctaButtonText}>Start Free Trial</Text>
+          <Text style={styles.ctaButtonText}>Get Pro</Text>
         </TouchableOpacity>
       </View>
 
       {/* Championship */}
-      <View style={styles.pricingCard}>
+      <View style={[styles.pricingCard, isMobile && styles.pricingCardMobile]}>
         <Text style={styles.tierName}>Championship</Text>
         <View style={styles.priceContainer}>
-          <Text style={styles.price}>$49</Text>
-          <Text style={styles.pricePeriod}>/mo</Text>
+          <Text style={styles.price}>$480</Text>
+          <Text style={styles.pricePeriod}>/year</Text>
         </View>
-        <Text style={styles.tierTagline}>Advanced AI for champions</Text>
+        <Text style={styles.effectiveMonthly}>$40/mo</Text>
+        <Text style={styles.tierTagline}>For teams & serious competitors</Text>
 
         <View style={styles.features}>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Everything in Sailor Pro</Text>
+            <Text style={styles.featureText}>Everything in Pro</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Up to 5 users (team/coach access)</Text>
+            <Text style={styles.featureText}>Up to 5 team members</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
             <Text style={styles.featureText}>Advanced team analytics</Text>
           </View>
           <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>All Racing Academy modules included</Text>
+            <Ionicons name="star" size={16} color="#8B5CF6" />
+            <Text style={[styles.featureText, { color: '#8B5CF6', fontWeight: '600' }]}>
+              All Racing Academy modules included
+            </Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
@@ -165,8 +199,80 @@ function SailorsPricing({ isDesktop }: { isDesktop: boolean }) {
           style={[styles.ctaButton, styles.ctaButtonOutline]}
           onPress={() => router.push('/(auth)/signup')}
         >
-          <Text style={styles.ctaButtonOutlineText}>Start Free Trial</Text>
+          <Text style={styles.ctaButtonOutlineText}>Get Championship</Text>
         </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function RacingAcademyPricing({ isDesktop }: { isDesktop: boolean }) {
+  return (
+    <View style={[styles.academyPricingContainer, isDesktop && styles.academyPricingContainerDesktop]}>
+      {/* Single Module */}
+      <View style={styles.academyCard}>
+        <Ionicons name="book-outline" size={32} color="#8B5CF6" />
+        <Text style={styles.academyCardTitle}>Single Module</Text>
+        <View style={styles.priceContainer}>
+          <Text style={[styles.price, { fontSize: 36, color: '#8B5CF6' }]}>$30</Text>
+          <Text style={styles.pricePeriod}>/year</Text>
+        </View>
+        <Text style={styles.academyCardDesc}>Choose any one course</Text>
+        <View style={styles.moduleList}>
+          <Text style={styles.moduleItem}>Starting Line Strategy</Text>
+          <Text style={styles.moduleItem}>Wind Shift Tactics</Text>
+          <Text style={styles.moduleItem}>Mark Rounding Mastery</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.ctaButton, { backgroundColor: '#8B5CF6', marginTop: 16 }]}
+          onPress={() => router.push('/learn')}
+        >
+          <Text style={styles.ctaButtonText}>Choose Module</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* All Modules Bundle */}
+      <View style={[styles.academyCard, styles.academyCardFeatured]}>
+        <View style={[styles.popularBadge, { backgroundColor: '#8B5CF6' }]}>
+          <Text style={styles.popularText}>BEST VALUE</Text>
+        </View>
+        <Ionicons name="library" size={32} color="#8B5CF6" />
+        <Text style={styles.academyCardTitle}>All 3 Modules</Text>
+        <View style={styles.priceContainer}>
+          <Text style={[styles.price, { fontSize: 36, color: '#8B5CF6' }]}>$75</Text>
+          <Text style={styles.pricePeriod}>/year</Text>
+        </View>
+        <Text style={[styles.academyCardDesc, { color: '#10B981', fontWeight: '600' }]}>
+          Save $15
+        </Text>
+        <View style={styles.moduleList}>
+          <View style={styles.moduleItemWithCheck}>
+            <Ionicons name="checkmark" size={14} color="#8B5CF6" />
+            <Text style={styles.moduleItem}>Starting Line Strategy</Text>
+          </View>
+          <View style={styles.moduleItemWithCheck}>
+            <Ionicons name="checkmark" size={14} color="#8B5CF6" />
+            <Text style={styles.moduleItem}>Wind Shift Tactics</Text>
+          </View>
+          <View style={styles.moduleItemWithCheck}>
+            <Ionicons name="checkmark" size={14} color="#8B5CF6" />
+            <Text style={styles.moduleItem}>Mark Rounding Mastery</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.ctaButton, { backgroundColor: '#8B5CF6', marginTop: 16 }]}
+          onPress={() => router.push('/learn')}
+        >
+          <Text style={styles.ctaButtonText}>Get All Modules</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Championship Callout */}
+      <View style={styles.championshipCallout}>
+        <Ionicons name="gift" size={20} color="#8B5CF6" />
+        <Text style={styles.championshipCalloutText}>
+          All Racing Academy modules are included FREE with Championship subscription
+        </Text>
       </View>
     </View>
   );
@@ -303,6 +409,44 @@ function ClubsPricing({ isDesktop }: { isDesktop: boolean }) {
   );
 }
 
+// Wrapper component for Coach-specific pricing section
+function CoachPricingSection({ isDesktop }: { isDesktop: boolean }) {
+  return (
+    <View id="pricing-section" style={styles.container}>
+      <View style={[styles.content, isDesktop && styles.contentDesktop]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
+            Coach Pricing
+          </Text>
+          <Text style={[styles.headerSubtitle, isDesktop && styles.headerSubtitleDesktop]}>
+            Keep more of what you earn
+          </Text>
+        </View>
+        <CoachesPricing isDesktop={isDesktop} />
+      </View>
+    </View>
+  );
+}
+
+// Wrapper component for Club-specific pricing section
+function ClubPricingSection({ isDesktop }: { isDesktop: boolean }) {
+  return (
+    <View id="pricing-section" style={styles.container}>
+      <View style={[styles.content, isDesktop && styles.contentDesktop]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
+            Club Pricing
+          </Text>
+          <Text style={[styles.headerSubtitle, isDesktop && styles.headerSubtitleDesktop]}>
+            Complete regatta and member management
+          </Text>
+        </View>
+        <ClubsPricing isDesktop={isDesktop} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 80,
@@ -364,6 +508,17 @@ const styles = StyleSheet.create({
   pricingContentDesktop: {
     flexWrap: 'nowrap',
   },
+  pricingContentMobile: {
+    flexDirection: 'column',
+    gap: 16,
+    paddingHorizontal: 8,
+    ...Platform.select({
+      web: {
+        display: 'flex',
+        gridTemplateColumns: '1fr',
+      } as any,
+    }),
+  },
   pricingCard: {
     flex: 1,
     minWidth: 280,
@@ -384,6 +539,12 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
     }),
+  },
+  pricingCardMobile: {
+    minWidth: 0,
+    width: '100%',
+    padding: 24,
+    marginHorizontal: 0,
   },
   pricingCardFeatured: {
     borderColor: '#3E92CC',
@@ -461,9 +622,11 @@ const styles = StyleSheet.create({
 
   // CTA Button
   ctaButton: {
-    paddingVertical: 14,
+    paddingVertical: 16, // Increased from 14 for better mobile touch targets (minimum 44px height)
+    minHeight: 48, // Ensure minimum 48px touch target (iOS HIG recommends 44px minimum)
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   ctaButtonOutline: {
     backgroundColor: 'transparent',
@@ -530,36 +693,130 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   
-  // Racing Academy Pricing Note
-  academyPricingNote: {
+  // Product Section Headers
+  productSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  productHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F0F9FF',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 32,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    gap: 16,
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
   },
-  academyPricingText: {
-    flex: 1,
+  productTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#3E92CC',
   },
-  academyPricingTitle: {
+  productSubtitle: {
     fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+
+  // Effective Monthly Price
+  effectiveMonthly: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+
+  // Racing Academy Pricing
+  academyPricingContainer: {
+    flexDirection: 'row',
+    gap: 24,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 16,
+    ...Platform.select({
+      web: {
+        display: 'flex',
+        flexDirection: 'row',
+        gap: 24,
+        '@media (max-width: 768px)': {
+          flexDirection: 'column',
+          gap: 16,
+        },
+      } as any,
+    }),
+  },
+  academyPricingContainerDesktop: {
+    flexWrap: 'nowrap',
+  },
+  academyCard: {
+    flex: 1,
+    minWidth: 260,
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 28,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      } as any,
+      default: {
+        elevation: 2,
+      },
+    }),
+  },
+  academyCardFeatured: {
+    borderColor: '#8B5CF6',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.2)',
+      },
+      default: {
+        elevation: 4,
+      },
+    }),
+  },
+  academyCardTitle: {
+    fontSize: 20,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 4,
+    marginTop: 12,
+    marginBottom: 8,
   },
-  academyPricingSubtitle: {
+  academyCardDesc: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#3E92CC',
-    marginBottom: 4,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  academyPricingDetails: {
+  moduleList: {
+    gap: 8,
+    alignItems: 'center',
+  },
+  moduleItem: {
     fontSize: 13,
     color: '#6B7280',
-    marginTop: 4,
+  },
+  moduleItemWithCheck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  championshipCallout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 24,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  championshipCalloutText: {
+    fontSize: 14,
+    color: '#5B21B6',
+    flex: 1,
   },
 });

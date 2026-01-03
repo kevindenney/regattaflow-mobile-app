@@ -86,7 +86,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   // Content sections
   const contentSections: NavItem[] = [
     { label: 'Racing Academy', route: '/learn', icon: 'school-outline' },
-    { label: 'Podcast', route: '/podcast', icon: 'mic-outline', comingSoon: true },
+    { label: 'Podcast', route: '/podcasts', icon: 'mic-outline' },
   ];
 
   // Handle smooth scroll to Racing Academy section on landing page
@@ -273,20 +273,6 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
 
           {/* Utility Links */}
           <View style={styles.navUtility}>
-            <TouchableOpacity
-              style={styles.utilityLink}
-              onPress={() => handleNavClick('/pricing')}
-            >
-              <Text
-                style={[
-                  styles.utilityLinkText,
-                  isActiveRoute('/pricing') && styles.utilityLinkTextActive,
-                ]}
-              >
-                Pricing
-              </Text>
-            </TouchableOpacity>
-
             {!user ? (
               <>
                 <TouchableOpacity
@@ -411,14 +397,6 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
 
                 {/* Utility Links */}
                 <View style={styles.mobileMenuSection}>
-                  <TouchableOpacity
-                    style={styles.mobileUtilityLink}
-                    onPress={() => handleNavClick('/pricing')}
-                  >
-                    <Ionicons name="pricetag-outline" size={20} color="#374151" />
-                    <Text style={styles.mobileUtilityLinkText}>Pricing</Text>
-                  </TouchableOpacity>
-
                   {!user ? (
                     <>
                       <TouchableOpacity

@@ -53,13 +53,8 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
       ];
 
     default:
-      // Default to sailor tabs when type is unknown
-      return [
-        { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
-        { name: 'courses', title: 'Courses', icon: 'map-outline', iconFocused: 'map' },
-        { name: 'profile', title: 'Profile', icon: 'person-outline', iconFocused: 'person' },
-        { name: 'settings', title: 'Settings', icon: 'settings-outline', iconFocused: 'settings' },
-      ];
+      // No tabs for non-logged-in users - they see venue page only
+      return [];
   }
 };
 
@@ -264,10 +259,12 @@ function TabLayoutInner() {
             tabBarLabelPosition: 'below-icon',
             tabBarActiveTintColor: tabBarActiveColor,
             tabBarInactiveTintColor: tabBarInactiveColor,
-            tabBarStyle: [
-              styles.tabBarBase,
-              isClubUser ? styles.tabBarClub : styles.tabBarDefault,
-            ],
+            tabBarStyle: tabs.length === 0
+              ? { display: 'none' }
+              : [
+                  styles.tabBarBase,
+                  isClubUser ? styles.tabBarClub : styles.tabBarDefault,
+                ],
             tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
             tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
             tabBarItemStyle: visible

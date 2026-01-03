@@ -98,6 +98,7 @@ export interface RaceCardProps {
   isDimmed?: boolean; // True when another race is selected and this one should recede
   results?: RaceResultData; // Results data for completed races
   venueCoordinates?: { lat: number; lng: number } | null; // Coordinates for weather fetching
+  cardWidth?: number; // Custom card width for responsive layouts (default: 240)
 }
 
 export function RaceCard({
@@ -126,6 +127,7 @@ export function RaceCard({
   isDimmed = false,
   results,
   venueCoordinates,
+  cardWidth: propCardWidth,
 }: RaceCardProps) {
   // Debug: Log VHF channel data sources
   React.useEffect(() => {
@@ -402,7 +404,7 @@ export function RaceCard({
   };
 
   // Card dimensions - modern mobile-friendly card style
-  const cardWidth = 240; // Larger for better readability
+  const cardWidth = propCardWidth ?? 240; // Use prop if provided, otherwise default to 240
   const cardHeight = 400; // More spacious layout with proper spacing
 
   const hasRaceStartedOrPassed =

@@ -180,7 +180,8 @@ const COURSE_DATA = {
         {
           title: 'Upwind Tactics',
           description: 'Basic upwind sailing strategies',
-          lesson_type: 'text',
+          lesson_type: 'interactive',
+          interactive_component: 'UpwindTacticsInteractive',
           order_index: 2,
           is_free_preview: false,
           duration_seconds: 900,
@@ -188,7 +189,8 @@ const COURSE_DATA = {
         {
           title: 'Downwind Basics',
           description: 'Introduction to downwind sailing',
-          lesson_type: 'text',
+          lesson_type: 'interactive',
+          interactive_component: 'DownwindBasicsInteractive',
           order_index: 3,
           is_free_preview: false,
           duration_seconds: 600,

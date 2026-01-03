@@ -11,30 +11,20 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, ScrollView, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  useAnimatedProps,
+import {
   useSharedValue,
   withTiming,
-  withSpring,
   withRepeat,
   withSequence,
-  withDelay,
   Easing,
   interpolate,
-  Extrapolate,
-  cancelAnimation,
   runOnJS,
+  useDerivedValue,
 } from 'react-native-reanimated';
-import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Marker, Polygon, Pattern, LinearGradient, Stop, RadialGradient } from 'react-native-svg';
+import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Polygon, LinearGradient, Stop, RadialGradient } from 'react-native-svg';
 import type { MarkRoomStep, MarkRoomQuizQuestion, MarkRoomScenario, MarkRoomRole } from './data/markRoomData';
 import { MARK_ROOM_STEPS, MARK_ROOM_QUIZ, MARK_ROOM_DEEP_DIVE, PRACTICE_SCENARIOS } from './data/markRoomData';
 import { TopDownSailboatSVG } from './shared';
-
-const AnimatedG = Animated.createAnimatedComponent(G);
-const AnimatedLine = Animated.createAnimatedComponent(Line);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 // Quiz Component
 interface QuizProps {
@@ -267,6 +257,12 @@ function InteractiveScenarioTrainer({
   const otherBoatBob = useSharedValue(0);
   const zonePulse = useSharedValue(0);
 
+  // State-driven positions for boats (avoids AnimatedG crash on Android New Architecture)
+  const [yourBoatPos, setYourBoatPos] = useState({ x: 0, y: 0 });
+  const [otherBoatPos, setOtherBoatPos] = useState({ x: 0, y: 0 });
+  const [zoneRadius, setZoneRadius] = useState(90);
+  const [zoneOpacity, setZoneOpacity] = useState(0.2);
+
   // Start bobbing and zone pulse animations
   useEffect(() => {
     yourBoatBob.value = withRepeat(
@@ -363,8 +359,8 @@ function InteractiveScenarioTrainer({
     }
   };
 
-  // Animated props for your boat
-  const yourBoatProps = useAnimatedProps(() => {
+  // Sync animated values to state for your boat
+  useDerivedValue(() => {
     const progress = phase === 'resolution' ? resolutionProgress.value : approachProgress.value;
     const config = currentScenario.yourBoat;
 
@@ -393,13 +389,12 @@ function InteractiveScenarioTrainer({
       [phase === 'resolution' ? config.decisionY : config.startY, targetY]
     ) + yourBoatBob.value;
 
-    return {
-      transform: [{ translateX: x }, { translateY: y }],
-    };
-  });
+    runOnJS(setYourBoatPos)({ x, y });
+    return null;
+  }, [phase, currentScenario]);
 
-  // Animated props for other boat
-  const otherBoatProps = useAnimatedProps(() => {
+  // Sync animated values to state for other boat
+  useDerivedValue(() => {
     const progress = phase === 'resolution' ? resolutionProgress.value : approachProgress.value;
     const config = currentScenario.otherBoat;
 
@@ -428,19 +423,17 @@ function InteractiveScenarioTrainer({
       [phase === 'resolution' ? config.decisionY : config.startY, targetY]
     ) + otherBoatBob.value;
 
-    return {
-      transform: [{ translateX: x }, { translateY: y }],
-    };
-  });
+    runOnJS(setOtherBoatPos)({ x, y });
+    return null;
+  }, [phase, currentScenario]);
 
-  // Zone circle animated props
-  const zoneCircleProps = useAnimatedProps(() => {
+  // Sync zone circle animation to state
+  useDerivedValue(() => {
     const pulseAmount = interpolate(zonePulse.value, [0, 1], [0, 8]);
-    return {
-      r: currentScenario.zoneRadius + pulseAmount,
-      opacity: interpolate(zonePulse.value, [0, 1], [0.15, 0.25]),
-    };
-  });
+    runOnJS(setZoneRadius)(currentScenario.zoneRadius + pulseAmount);
+    runOnJS(setZoneOpacity)(interpolate(zonePulse.value, [0, 1], [0.15, 0.25]));
+    return null;
+  }, [currentScenario]);
 
   return (
     <View style={scenarioStyles.container}>
@@ -495,14 +488,15 @@ function InteractiveScenarioTrainer({
 
           {/* Zone circle - animated */}
           {currentScenario.showZone && (
-            <AnimatedCircle
+            <Circle
               cx={currentScenario.mark.x}
               cy={currentScenario.mark.y}
+              r={zoneRadius}
+              opacity={zoneOpacity}
               stroke="#F59E0B"
               strokeWidth="2"
               strokeDasharray="8,4"
               fill="url(#zoneGradient)"
-              animatedProps={zoneCircleProps}
             />
           )}
 
@@ -518,7 +512,7 @@ function InteractiveScenarioTrainer({
           </SvgText>
 
           {/* Your boat */}
-          <AnimatedG animatedProps={yourBoatProps}>
+          <G transform={`translate(${yourBoatPos.x}, ${yourBoatPos.y})`}>
             <TopDownSailboatSVG
               hullColor={currentScenario.yourBoat.color}
               rotation={currentScenario.yourBoat.rotate}
@@ -546,10 +540,10 @@ function InteractiveScenarioTrainer({
             >
               YOU
             </SvgText>
-          </AnimatedG>
+          </G>
 
           {/* Other boat */}
-          <AnimatedG animatedProps={otherBoatProps}>
+          <G transform={`translate(${otherBoatPos.x}, ${otherBoatPos.y})`}>
             <TopDownSailboatSVG
               hullColor={currentScenario.otherBoat.color}
               rotation={currentScenario.otherBoat.rotate}
@@ -577,7 +571,7 @@ function InteractiveScenarioTrainer({
             >
               OTHER
             </SvgText>
-          </AnimatedG>
+          </G>
 
           {/* Overlap status indicator */}
           {currentScenario.showOverlapIndicator && phase !== 'approaching' && (
@@ -673,6 +667,12 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
   const boat2Bob = useSharedValue(0);
   const zonePulse = useSharedValue(0);
 
+  // State-driven positions for boats and zone (avoids AnimatedG crash on Android New Architecture)
+  const [mainBoat1Pos, setMainBoat1Pos] = useState({ x: 0, y: 0 });
+  const [mainBoat2Pos, setMainBoat2Pos] = useState({ x: 0, y: 0 });
+  const [mainZoneRadius, setMainZoneRadius] = useState(90);
+  const [mainZoneOpacity, setMainZoneOpacity] = useState(0.2);
+
   // Start animations
   useEffect(() => {
     // Bobbing effect
@@ -744,10 +744,13 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
     onComplete?.();
   }, [onComplete]);
 
-  // Animated props for boat 1
-  const boat1AnimatedProps = useAnimatedProps(() => {
+  // Sync boat 1 position to state
+  useDerivedValue(() => {
     const boat = currentStep.visualState.boat1;
-    if (!boat || boat.opacity === 0) return { transform: [{ translateX: 0 }, { translateY: 0 }] };
+    if (!boat || boat.opacity === 0) {
+      runOnJS(setMainBoat1Pos)({ x: 0, y: 0 });
+      return null;
+    }
 
     const startX = boat.startX ?? boat.x ?? 0;
     const startY = boat.startY ?? boat.y ?? 0;
@@ -757,15 +760,17 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
     const x = interpolate(boat1Progress.value, [0, 1], [startX, endX]);
     const y = interpolate(boat1Progress.value, [0, 1], [startY, endY]) + boat1Bob.value;
 
-    return {
-      transform: [{ translateX: x }, { translateY: y }],
-    };
-  });
+    runOnJS(setMainBoat1Pos)({ x, y });
+    return null;
+  }, [currentStep]);
 
-  // Animated props for boat 2
-  const boat2AnimatedProps = useAnimatedProps(() => {
+  // Sync boat 2 position to state
+  useDerivedValue(() => {
     const boat = currentStep.visualState.boat2;
-    if (!boat || boat.opacity === 0) return { transform: [{ translateX: 0 }, { translateY: 0 }] };
+    if (!boat || boat.opacity === 0) {
+      runOnJS(setMainBoat2Pos)({ x: 0, y: 0 });
+      return null;
+    }
 
     const startX = boat.startX ?? boat.x ?? 0;
     const startY = boat.startY ?? boat.y ?? 0;
@@ -775,22 +780,24 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
     const x = interpolate(boat1Progress.value, [0, 1], [startX, endX]);
     const y = interpolate(boat1Progress.value, [0, 1], [startY, endY]) + boat2Bob.value;
 
-    return {
-      transform: [{ translateX: x }, { translateY: y }],
-    };
-  });
+    runOnJS(setMainBoat2Pos)({ x, y });
+    return null;
+  }, [currentStep]);
 
-  // Zone animated props
-  const zoneAnimatedProps = useAnimatedProps(() => {
+  // Sync zone animation to state
+  useDerivedValue(() => {
     const mark = currentStep.visualState.mark;
-    if (!mark?.showZone) return { r: 90, opacity: 0.2 };
+    if (!mark?.showZone) {
+      runOnJS(setMainZoneRadius)(90);
+      runOnJS(setMainZoneOpacity)(0.2);
+      return null;
+    }
 
     const pulseAmount = interpolate(zonePulse.value, [0, 1], [0, 6]);
-    return {
-      r: (mark.zoneRadius || 90) + pulseAmount,
-      opacity: interpolate(zonePulse.value, [0, 1], [0.15, 0.25]),
-    };
-  });
+    runOnJS(setMainZoneRadius)((mark.zoneRadius || 90) + pulseAmount);
+    runOnJS(setMainZoneOpacity)(interpolate(zonePulse.value, [0, 1], [0.15, 0.25]));
+    return null;
+  }, [currentStep]);
 
   // Show quiz if active
   if (showQuiz) {
@@ -864,14 +871,15 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
                 <G>
                   {/* Zone circle - animated */}
                   {currentStep.visualState.mark?.showZone && (
-                    <AnimatedCircle
+                    <Circle
                       cx={currentStep.visualState.mark.cx}
                       cy={currentStep.visualState.mark.cy}
+                      r={mainZoneRadius}
+                      opacity={mainZoneOpacity}
                       stroke="#F59E0B"
                       strokeWidth="2"
                       strokeDasharray="10,5"
                       fill="url(#zoneGradientMain)"
-                      animatedProps={zoneAnimatedProps}
                     />
                   )}
 
@@ -961,7 +969,7 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
 
               {/* Boat 1 */}
               {currentStep.visualState.boat1?.opacity !== 0 && (
-                <AnimatedG animatedProps={boat1AnimatedProps}>
+                <G transform={`translate(${mainBoat1Pos.x}, ${mainBoat1Pos.y})`}>
                   <TopDownSailboatSVG
                     hullColor={currentStep.visualState.boat1?.color || '#3B82F6'}
                     rotation={currentStep.visualState.boat1?.rotate || 0}
@@ -978,12 +986,12 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
                       </SvgText>
                     </G>
                   )}
-                </AnimatedG>
+                </G>
               )}
 
               {/* Boat 2 */}
               {currentStep.visualState.boat2?.opacity !== 0 && (
-                <AnimatedG animatedProps={boat2AnimatedProps}>
+                <G transform={`translate(${mainBoat2Pos.x}, ${mainBoat2Pos.y})`}>
                   <TopDownSailboatSVG
                     hullColor={currentStep.visualState.boat2?.color || '#10B981'}
                     rotation={currentStep.visualState.boat2?.rotate || 0}
@@ -1000,7 +1008,7 @@ export function MarkRoomInteractive({ onComplete }: MarkRoomInteractiveProps) {
                       </SvgText>
                     </G>
                   )}
-                </AnimatedG>
+                </G>
               )}
 
               {/* Position labels */}

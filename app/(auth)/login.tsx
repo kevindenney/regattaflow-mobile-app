@@ -94,27 +94,55 @@ export default function Login() {
     }
   };
 
-  const onForgotPassword = () => {
+  const onForgotPassword = async () => {
     const email = identifier.includes('@') ? identifier : '';
 
-    Alert.alert(
-      'Reset Password',
-      email ? `Send password reset link to ${email}?` : 'Enter your email address',
-      email ? [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send Link',
-          onPress: async () => {
-            try {
-              await supabase.auth.resetPasswordForEmail(email);
-              Alert.alert('Success', 'Password reset link sent to your email');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to send reset link');
+    if (Platform.OS === 'web') {
+      // Web: use window.prompt/confirm since Alert.alert doesn't work
+      let emailToReset = email;
+      if (!emailToReset) {
+        emailToReset = window.prompt('Enter your email address to reset your password:') || '';
+      }
+
+      if (!emailToReset || !emailToReset.includes('@')) {
+        setErrorMessage('Please enter a valid email address');
+        return;
+      }
+
+      const confirmed = window.confirm(`Send password reset link to ${emailToReset}?`);
+      if (confirmed) {
+        try {
+          const { error } = await supabase.auth.resetPasswordForEmail(emailToReset, {
+            redirectTo: `${window.location.origin}/(auth)/reset-password`,
+          });
+          if (error) throw error;
+          setErrorMessage(null);
+          window.alert('Password reset link sent! Check your email.');
+        } catch (error: any) {
+          setErrorMessage(error?.message || 'Failed to send reset link');
+        }
+      }
+    } else {
+      // Mobile: use Alert.alert
+      Alert.alert(
+        'Reset Password',
+        email ? `Send password reset link to ${email}?` : 'Enter your email address',
+        email ? [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Send Link',
+            onPress: async () => {
+              try {
+                await supabase.auth.resetPasswordForEmail(email);
+                Alert.alert('Success', 'Password reset link sent to your email');
+              } catch (error) {
+                Alert.alert('Error', 'Failed to send reset link');
+              }
             }
           }
-        }
-      ] : [{ text: 'OK' }]
-    );
+        ] : [{ text: 'OK' }]
+      );
+    }
   };
 
   return (

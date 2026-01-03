@@ -14,26 +14,22 @@ import Animated, {
   useAnimatedProps,
   useSharedValue,
   withTiming,
-  withSpring,
   withRepeat,
   withSequence,
   withDelay,
   Easing,
   interpolate,
-  Extrapolate,
   cancelAnimation,
   runOnJS,
+  useDerivedValue,
 } from 'react-native-reanimated';
-import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Marker, Polygon, Pattern, LinearGradient, Stop, RadialGradient } from 'react-native-svg';
+import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Polygon, LinearGradient, Stop, RadialGradient } from 'react-native-svg';
 import type { RightOfWayStep, RightOfWayQuizQuestion, PracticeScenario, UserRole } from './data/rightOfWayData';
 import { RIGHT_OF_WAY_STEPS, RIGHT_OF_WAY_QUIZ, RIGHT_OF_WAY_DEEP_DIVE, PRACTICE_SCENARIOS } from './data/rightOfWayData';
 import { TopDownSailboatSVG } from './shared';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
-const AnimatedLine = Animated.createAnimatedComponent(Line);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+// Note: AnimatedPath is still used for WakeTrail component (path 'd' attribute)
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 // Wake Trail Component - shows subtle V-shaped wake behind moving boats
 interface WakeTrailProps {
@@ -381,6 +377,16 @@ function InteractiveScenarioTrainer({
   const positionLabelOpacity = useSharedValue(0);
   const ruleAppliedOpacity = useSharedValue(0);
 
+  // State-driven positions for boats and overlays (avoids AnimatedG crash on Android New Architecture)
+  const [yourBoatTransform, setYourBoatTransform] = useState('translate(0, 0)');
+  const [yourBoatLabelTransform, setYourBoatLabelTransform] = useState('translate(0, 0)');
+  const [otherBoatTransform, setOtherBoatTransform] = useState('translate(0, 0)');
+  const [otherBoatLabelTransform, setOtherBoatLabelTransform] = useState('translate(0, 0)');
+  const [dangerGlowState, setDangerGlowState] = useState({ opacity: 0, scale: 1 });
+  const [tackLabelOpacityState, setTackLabelOpacityState] = useState(0);
+  const [positionLabelOpacityState, setPositionLabelOpacityState] = useState(0);
+  const [ruleAppliedOpacityState, setRuleAppliedOpacityState] = useState(0);
+
   // Start bobbing animations
   useEffect(() => {
     yourBoatBob.value = withRepeat(
@@ -505,8 +511,8 @@ function InteractiveScenarioTrainer({
     }, 300);
   }, [startScenario, feedbackOpacity, ruleAppliedOpacity]);
 
-  // Animated props for your boat
-  const yourBoatProps = useAnimatedProps(() => {
+  // Sync your boat position to state
+  useDerivedValue(() => {
     const boat = currentScenario.yourBoat;
     let x: number, y: number, rotation = boat.rotate;
 
@@ -556,14 +562,12 @@ function InteractiveScenarioTrainer({
       y = boat.startY;
     }
 
-    return {
-      opacity: 1,
-      transform: `translate(${x}, ${y}) rotate(${rotation + yourBoatBob.value}, 25, 40)`,
-    };
-  });
+    runOnJS(setYourBoatTransform)(`translate(${x}, ${y}) rotate(${rotation + yourBoatBob.value}, 25, 40)`);
+    return null;
+  }, [phase, currentScenario]);
 
-  // Animated props for other boat
-  const otherBoatProps = useAnimatedProps(() => {
+  // Sync other boat position to state
+  useDerivedValue(() => {
     const boat = currentScenario.otherBoat;
     let x: number, y: number, rotation = boat.rotate;
 
@@ -609,14 +613,12 @@ function InteractiveScenarioTrainer({
       y = boat.startY;
     }
 
-    return {
-      opacity: 1,
-      transform: `translate(${x}, ${y}) rotate(${rotation + otherBoatBob.value}, 25, 40)`,
-    };
-  });
+    runOnJS(setOtherBoatTransform)(`translate(${x}, ${y}) rotate(${rotation + otherBoatBob.value}, 25, 40)`);
+    return null;
+  }, [phase, currentScenario]);
 
-  // Animated props for your boat label (follows boat with configurable offset)
-  const yourBoatLabelProps = useAnimatedProps(() => {
+  // Sync your boat label position to state
+  useDerivedValue(() => {
     const boat = currentScenario.yourBoat;
     const offsetX = boat.labelOffsetX ?? 0;
     const offsetY = boat.labelOffsetY ?? -50; // Default above boat
@@ -647,13 +649,12 @@ function InteractiveScenarioTrainer({
       }
     }
 
-    return {
-      transform: `translate(${x}, ${y})`,
-    };
-  });
+    runOnJS(setYourBoatLabelTransform)(`translate(${x}, ${y})`);
+    return null;
+  }, [phase, currentScenario]);
 
-  // Animated props for other boat label (follows boat with configurable offset)
-  const otherBoatLabelProps = useAnimatedProps(() => {
+  // Sync other boat label position to state
+  useDerivedValue(() => {
     const boat = currentScenario.otherBoat;
     const offsetX = boat.labelOffsetX ?? 0;
     const offsetY = boat.labelOffsetY ?? -50; // Default above boat
@@ -684,43 +685,34 @@ function InteractiveScenarioTrainer({
       }
     }
 
-    return {
-      transform: `translate(${x}, ${y})`,
-    };
-  });
+    runOnJS(setOtherBoatLabelTransform)(`translate(${x}, ${y})`);
+    return null;
+  }, [phase, currentScenario]);
 
-  // Animated props for collision danger glow
-  const dangerGlowProps = useAnimatedProps(() => {
-    return {
+  // Sync danger glow state
+  useDerivedValue(() => {
+    runOnJS(setDangerGlowState)({
       opacity: collisionDanger.value * 0.7,
-      transform: `scale(${1 + collisionDanger.value * 0.3})`,
-    };
-  });
+      scale: 1 + collisionDanger.value * 0.3,
+    });
+    return null;
+  }, []);
 
-  // Animated props for decision overlay
-  const decisionOverlayProps = useAnimatedProps(() => ({
-    opacity: decisionOverlayOpacity.value,
-  }));
+  // Sync opacity states
+  useDerivedValue(() => {
+    runOnJS(setTackLabelOpacityState)(tackLabelOpacity.value);
+    return null;
+  }, []);
 
-  // Animated props for feedback
-  const feedbackProps = useAnimatedProps(() => ({
-    opacity: feedbackOpacity.value,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setPositionLabelOpacityState)(positionLabelOpacity.value);
+    return null;
+  }, []);
 
-  // Animated props for tack labels
-  const tackLabelProps = useAnimatedProps(() => ({
-    opacity: tackLabelOpacity.value,
-  }));
-
-  // Animated props for position labels
-  const positionLabelProps = useAnimatedProps(() => ({
-    opacity: positionLabelOpacity.value,
-  }));
-
-  // Animated props for rule applied badge
-  const ruleAppliedProps = useAnimatedProps(() => ({
-    opacity: ruleAppliedOpacity.value,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setRuleAppliedOpacityState)(ruleAppliedOpacity.value);
+    return null;
+  }, []);
 
   // Calculate collision point (midpoint between decision positions)
   const collisionPoint = {
@@ -801,14 +793,14 @@ function InteractiveScenarioTrainer({
 
           {/* Collision danger zone */}
           {(phase === 'approaching' || phase === 'decision') && (
-            <AnimatedG transform={`translate(${collisionPoint.x}, ${collisionPoint.y})`} animatedProps={dangerGlowProps}>
+            <G transform={`translate(${collisionPoint.x}, ${collisionPoint.y}) scale(${dangerGlowState.scale})`} opacity={dangerGlowState.opacity}>
               <Circle cx={0} cy={0} r={60} fill="url(#danger-scenario)" />
-            </AnimatedG>
+            </G>
           )}
 
           {/* Tack labels */}
           {currentScenario.showTackLabels && (
-            <AnimatedG animatedProps={tackLabelProps}>
+            <G opacity={tackLabelOpacityState}>
               {/* Your boat tack */}
               <G transform={`translate(${currentScenario.yourBoat.startX + 60}, ${currentScenario.yourBoat.startY - 20})`}>
                 <Rect x="-40" y="-12" width="80" height="24" rx="4" fill={currentScenario.yourBoat.tack === 'port' ? '#EF4444' : '#22C55E'} />
@@ -823,12 +815,12 @@ function InteractiveScenarioTrainer({
                   {currentScenario.otherBoat.tack.toUpperCase()}
                 </SvgText>
               </G>
-            </AnimatedG>
+            </G>
           )}
 
           {/* Position labels (windward/leeward) */}
           {currentScenario.showPositionLabels && (
-            <AnimatedG animatedProps={positionLabelProps}>
+            <G opacity={positionLabelOpacityState}>
               <G transform="translate(100, 120)">
                 <Rect x="-60" y="-12" width="120" height="24" rx="4" fill="#F59E0B" opacity={0.9} />
                 <SvgText x="0" y="4" textAnchor="middle" fontSize="11" fontWeight="700" fill="#FFFFFF">
@@ -843,11 +835,11 @@ function InteractiveScenarioTrainer({
               </G>
               {/* Wind direction arrow between positions */}
               <Line x1="100" y1="145" x2="100" y2="355" stroke="#94A3B8" strokeWidth="2" strokeDasharray="6,4" />
-            </AnimatedG>
+            </G>
           )}
 
           {/* Your boat */}
-          <AnimatedG animatedProps={yourBoatProps}>
+          <G transform={yourBoatTransform}>
             <TopDownSailboatSVG
               hullColor={currentScenario.yourBoat.color}
               rotation={currentScenario.yourBoat.rotate}
@@ -857,18 +849,18 @@ function InteractiveScenarioTrainer({
               windDirection={windDirection}
               outlined={false}
             />
-          </AnimatedG>
+          </G>
 
           {/* Your boat label */}
-          <AnimatedG animatedProps={yourBoatLabelProps}>
+          <G transform={yourBoatLabelTransform}>
             <Rect x="-55" y="-12" width="110" height="24" rx="4" fill="white" stroke={currentScenario.yourBoat.color} strokeWidth="2" />
             <SvgText x="0" y="4" textAnchor="middle" fontSize="12" fontWeight="700" fill={currentScenario.yourBoat.color}>
               Your Boat
             </SvgText>
-          </AnimatedG>
+          </G>
 
           {/* Other boat */}
-          <AnimatedG animatedProps={otherBoatProps}>
+          <G transform={otherBoatTransform}>
             <TopDownSailboatSVG
               hullColor={currentScenario.otherBoat.color}
               rotation={currentScenario.otherBoat.rotate}
@@ -878,19 +870,19 @@ function InteractiveScenarioTrainer({
               windDirection={windDirection}
               outlined={false}
             />
-          </AnimatedG>
+          </G>
 
           {/* Other boat label */}
-          <AnimatedG animatedProps={otherBoatLabelProps}>
+          <G transform={otherBoatLabelTransform}>
             <Rect x="-55" y="-12" width="110" height="24" rx="4" fill="white" stroke={currentScenario.otherBoat.color} strokeWidth="2" />
             <SvgText x="0" y="4" textAnchor="middle" fontSize="12" fontWeight="700" fill={currentScenario.otherBoat.color}>
               Other Boat
             </SvgText>
-          </AnimatedG>
+          </G>
 
           {/* GIVE WAY / STAND ON badges during resolution */}
           {(phase === 'resolution' || phase === 'complete') && (
-            <AnimatedG animatedProps={ruleAppliedProps}>
+            <G opacity={ruleAppliedOpacityState}>
               {/* Your boat badge - uses configurable offset */}
               <G transform={`translate(${currentScenario.yourBoat.decisionX + (currentScenario.yourBoatBadgeOffset?.x ?? 0)}, ${currentScenario.yourBoat.decisionY + (currentScenario.yourBoatBadgeOffset?.y ?? 50)})`}>
                 <Rect
@@ -926,7 +918,7 @@ function InteractiveScenarioTrainer({
                   {currentScenario.ruleText}
                 </SvgText>
               </G>
-            </AnimatedG>
+            </G>
           )}
         </Svg>
       </View>
@@ -1065,6 +1057,17 @@ export function RightOfWayInteractive({
   // Track boat rotations for sail rendering
   const [boat1Rotation, setBoat1Rotation] = useState(0);
   const [boat2Rotation, setBoat2Rotation] = useState(0);
+
+  // State-driven transforms for main component (avoids AnimatedG crash on Android New Architecture)
+  const [mainBoat1State, setMainBoat1State] = useState({ opacity: 0, transform: 'translate(0, 0)' });
+  const [mainBoat2State, setMainBoat2State] = useState({ opacity: 0, transform: 'translate(0, 0)' });
+  const [mainBoat1LabelTransform, setMainBoat1LabelTransform] = useState('translate(0, 0)');
+  const [mainBoat2LabelTransform, setMainBoat2LabelTransform] = useState('translate(0, 0)');
+  const [mainWindOpacity, setMainWindOpacity] = useState(0);
+  const [mainWakeOpacity, setMainWakeOpacity] = useState(0);
+  const [mainCollisionDangerState, setMainCollisionDangerState] = useState({ opacity: 0, scale: 1 });
+  const [mainLineDrawState, setMainLineDrawState] = useState({ strokeDashoffset: 400, strokeDasharray: '400' });
+  const [mainPathFollowState, setMainPathFollowState] = useState({ strokeDashoffset: 500, strokeDasharray: '500' });
 
   // Continuous looping animations (bobbing, pulsing, flowing)
   useEffect(() => {

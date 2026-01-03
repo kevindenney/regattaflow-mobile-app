@@ -14,6 +14,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -28,6 +29,7 @@ export default function SettingsScreen() {
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
   const [claimLoading, setClaimLoading] = useState(false);
   const [languageVisible, setLanguageVisible] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   // Get current language display name
   const currentLocale = getCurrentLocale();
@@ -205,19 +207,19 @@ export default function SettingsScreen() {
               icon="person-outline"
               title="Edit Profile"
               subtitle="Update your personal information"
-              onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available soon!')}
+              onPress={() => router.push('/settings/edit-profile')}
             />
             <SettingItem
               icon="key-outline"
               title="Change Password"
               subtitle="Update your password"
-              onPress={() => Alert.alert('Coming Soon', 'Password change will be available soon!')}
+              onPress={() => router.push('/settings/change-password')}
             />
             <SettingItem
               icon="card-outline"
               title="Subscription"
               subtitle={`Current plan: ${userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}`}
-              onPress={() => Alert.alert('Coming Soon', 'Subscription management will be available soon!')}
+              onPress={() => router.push('/subscription')}
             />
           </View>
         </View>
@@ -245,7 +247,7 @@ export default function SettingsScreen() {
               icon="notifications-outline"
               title="Notifications"
               subtitle="Configure your notification preferences"
-              onPress={() => Alert.alert('Coming Soon', 'Notification settings will be available soon!')}
+              onPress={() => router.push('/settings/notifications')}
             />
             <SettingItem
               icon="language-outline"
@@ -253,12 +255,23 @@ export default function SettingsScreen() {
               subtitle={currentLanguageName}
               onPress={() => setLanguageVisible(true)}
             />
-            <SettingItem
-              icon="moon-outline"
-              title="Dark Mode"
-              subtitle="Currently disabled"
-              onPress={() => Alert.alert('Coming Soon', 'Dark mode will be available soon!')}
-            />
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <View style={styles.settingIcon}>
+                  <Ionicons name="moon-outline" size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>Dark Mode</Text>
+                  <Text style={styles.settingSubtitle}>{darkMode ? 'Enabled' : 'Disabled'}</Text>
+                </View>
+              </View>
+              <Switch
+                value={darkMode}
+                onValueChange={setDarkMode}
+                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
           </View>
         </View>
 

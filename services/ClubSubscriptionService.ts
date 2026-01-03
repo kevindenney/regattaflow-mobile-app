@@ -8,41 +8,69 @@ import { supabase } from './supabase';
 export interface SubscriptionPlan {
   id: 'starter' | 'professional' | 'enterprise';
   name: string;
-  price: number; // in cents
-  priceFormatted: string;
-  period: string;
+  monthlyPrice: number; // in cents
+  annualPrice: number; // in cents
+  monthlyPriceFormatted: string;
+  annualPriceFormatted: string;
+  annualSavings: string;
   description: string;
   features: string[];
   popular: boolean;
-  stripePriceId?: string; // Set in environment or config
+  stripeMonthlyPriceId?: string;
+  stripeAnnualPriceId?: string;
 }
+
+/**
+ * Club Stripe Price IDs
+ * Created: 2026-01-02
+ */
+export const CLUB_STRIPE_PRICE_IDS = {
+  starter: {
+    monthly: 'price_1Sl0oHBbfEeOhHXbWRBa81j7',   // $249/month
+    annual: 'price_1Sl0oTBbfEeOhHXbAfA0x5gK',    // $2,499/year
+  },
+  professional: {
+    monthly: 'price_1Sl0pABbfEeOhHXbEaubR9jr',  // $499/month
+    annual: 'price_1Sl0pMBbfEeOhHXb9reoud5b',   // $4,999/year
+  },
+  enterprise: {
+    monthly: 'price_1Sl0q2BbfEeOhHXb89WAlrJC',  // $899/month
+    annual: 'price_1Sl0qRBbfEeOhHXbkVYk7YsW',   // $8,999/year
+  },
+};
 
 export const CLUB_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'starter',
     name: 'Club Starter',
-    price: 9900, // $99.00
-    priceFormatted: '$99',
-    period: '/per month',
-    description: 'Perfect for small yacht clubs',
+    monthlyPrice: 24900, // $249.00
+    annualPrice: 249900, // $2,499.00
+    monthlyPriceFormatted: '$249',
+    annualPriceFormatted: '$2,499',
+    annualSavings: 'Save $489',
+    description: 'Up to 500 members',
     features: [
-      'Up to 5 events per month',
+      'Up to 500 members',
       'Basic scoring system',
       'Entry management',
       'Results publication',
       'Email support',
     ],
     popular: false,
+    stripeMonthlyPriceId: CLUB_STRIPE_PRICE_IDS.starter.monthly,
+    stripeAnnualPriceId: CLUB_STRIPE_PRICE_IDS.starter.annual,
   },
   {
     id: 'professional',
-    name: 'Club Professional',
-    price: 29900, // $299.00
-    priceFormatted: '$299',
-    period: '/per month',
-    description: 'For active sailing clubs',
+    name: 'Club Pro',
+    monthlyPrice: 49900, // $499.00
+    annualPrice: 499900, // $4,999.00
+    monthlyPriceFormatted: '$499',
+    annualPriceFormatted: '$4,999',
+    annualSavings: 'Save $989',
+    description: 'Up to 2,000 members',
     features: [
-      'Unlimited events',
+      'Up to 2,000 members',
       'Advanced scoring options',
       'Live race tracking',
       'Custom branding',
@@ -50,16 +78,20 @@ export const CLUB_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Mobile race committee app',
     ],
     popular: true,
+    stripeMonthlyPriceId: CLUB_STRIPE_PRICE_IDS.professional.monthly,
+    stripeAnnualPriceId: CLUB_STRIPE_PRICE_IDS.professional.annual,
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 99900, // $999.00
-    priceFormatted: '$999',
-    period: '/per month',
-    description: 'For major sailing organizations',
+    monthlyPrice: 89900, // $899.00
+    annualPrice: 899900, // $8,999.00
+    monthlyPriceFormatted: '$899',
+    annualPriceFormatted: '$8,999',
+    annualSavings: 'Save $1,789',
+    description: 'Unlimited members',
     features: [
-      'Everything in Professional',
+      'Unlimited members',
       'Multiple venue management',
       'Advanced analytics',
       'API access',
@@ -67,12 +99,15 @@ export const CLUB_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Custom integrations',
     ],
     popular: false,
+    stripeMonthlyPriceId: CLUB_STRIPE_PRICE_IDS.enterprise.monthly,
+    stripeAnnualPriceId: CLUB_STRIPE_PRICE_IDS.enterprise.annual,
   },
 ];
 
 export interface CreateSubscriptionParams {
   userId: string;
   planId: 'starter' | 'professional' | 'enterprise';
+  billingPeriod: 'monthly' | 'annual';
   paymentMethodId: string; // Stripe payment method ID
   billingDetails?: {
     name: string;
@@ -168,6 +203,14 @@ export class ClubSubscriptionService {
       const subscriptionId = `sub_mock_${Date.now()}`;
       const customerId = `cus_mock_${Date.now()}`;
 
+      // Determine price and interval based on billing period
+      const price = params.billingPeriod === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+      const priceId = params.billingPeriod === 'annual'
+        ? (plan.stripeAnnualPriceId || `price_mock_${plan.id}_annual`)
+        : (plan.stripeMonthlyPriceId || `price_mock_${plan.id}_monthly`);
+      const interval = params.billingPeriod === 'annual' ? 'year' : 'month';
+      const periodDays = params.billingPeriod === 'annual' ? 365 : 30;
+
       // Create subscription record in database
       const { error: subError } = await supabase
         .from('club_subscriptions')
@@ -175,15 +218,16 @@ export class ClubSubscriptionService {
           club_profile_id: clubProfileId,
           stripe_subscription_id: subscriptionId,
           stripe_customer_id: customerId,
-          stripe_price_id: plan.stripePriceId || `price_mock_${plan.id}`,
+          stripe_price_id: priceId,
           plan_id: params.planId,
+          billing_period: params.billingPeriod,
           status: 'active', // In production, this would be 'trialing' or based on Stripe response
-          amount: plan.price,
+          amount: price,
           currency: 'usd',
-          interval: 'month',
+          interval,
           current_period_start: new Date().toISOString(),
           current_period_end: new Date(
-            Date.now() + 30 * 24 * 60 * 60 * 1000
+            Date.now() + periodDays * 24 * 60 * 60 * 1000
           ).toISOString(),
         });
 
@@ -308,7 +352,8 @@ export class ClubSubscriptionService {
    */
   static async updateSubscription(
     userId: string,
-    newPlanId: 'starter' | 'professional' | 'enterprise'
+    newPlanId: 'starter' | 'professional' | 'enterprise',
+    billingPeriod?: 'monthly' | 'annual'
   ): Promise<SubscriptionResult> {
     try {
       const subscription = await this.getSubscription(userId);
@@ -327,6 +372,13 @@ export class ClubSubscriptionService {
         };
       }
 
+      // Use existing billing period if not specified
+      const period = billingPeriod || subscription.billing_period || 'annual';
+      const price = period === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+      const priceId = period === 'annual'
+        ? (plan.stripeAnnualPriceId || `price_mock_${plan.id}_annual`)
+        : (plan.stripeMonthlyPriceId || `price_mock_${plan.id}_monthly`);
+
       // In production, call Stripe API to update subscription
       // TODO: Implement backend API endpoint
 
@@ -335,8 +387,10 @@ export class ClubSubscriptionService {
         .from('club_subscriptions')
         .update({
           plan_id: newPlanId,
-          stripe_price_id: plan.stripePriceId || `price_mock_${plan.id}`,
-          amount: plan.price,
+          billing_period: period,
+          stripe_price_id: priceId,
+          amount: price,
+          interval: period === 'annual' ? 'year' : 'month',
         })
         .eq('id', subscription.id);
 

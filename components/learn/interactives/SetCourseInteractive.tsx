@@ -14,6 +14,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Marker, Polygon, Pattern } from 'react-native-svg';
+
+// Note: AnimatedG (Animated.createAnimatedComponent(G)) causes crashes on Android with New Architecture
+// Using state-driven opacity instead for cross-platform compatibility
 import type { CourseStep } from './data/setCourseData';
 import { SET_COURSE_SEQUENCE_STEPS, SET_COURSE_QUIZ } from './data/setCourseData';
 import { PowerboatSVG } from './shared';
@@ -64,8 +67,8 @@ export function SetCourseInteractive({
   const finishPinOpacity = useSharedValue(0);
   const finishLineOpacity = useSharedValue(0);
 
-  // On web, sync shared values to state for CSS transitions
-  // On native, use AnimatedG with animatedProps
+  // State-driven opacity for all platforms (AnimatedG causes crashes on Android)
+  // On web, CSS transitions handle smooth animation
   const [opacities, setOpacities] = useState({
     wind: 0,
     rcBoat: 0,
@@ -114,11 +117,10 @@ export function SetCourseInteractive({
     finishPinOpacity.value = withTiming(targetValues.finishPin, { duration });
     finishLineOpacity.value = withTiming(targetValues.finishLine, { duration });
 
-    // On web, update state directly from target values (CSS transitions handle animation)
-    // This is much more efficient than continuous polling
-    if (Platform.OS === 'web') {
-      setOpacities(targetValues);
-    }
+    // Update state directly from target values
+    // On web, CSS transitions handle animation; on native, we use state-driven opacity
+    // (AnimatedG with animatedProps causes crashes on Android with New Architecture)
+    setOpacities(targetValues);
 
     // Animate course path drawing
     if (visualState.coursePath?.opacity) {
@@ -129,17 +131,8 @@ export function SetCourseInteractive({
     }
   }, [currentStep, coursePathLength]);
 
-  // Animated props for native (web uses state + CSS)
-  const windProps = useAnimatedProps(() => ({ opacity: windOpacity.value }));
-  const rcBoatProps = useAnimatedProps(() => ({ opacity: rcBoatOpacity.value }));
-  const pinProps = useAnimatedProps(() => ({ opacity: pinOpacity.value }));
-  const startLineProps = useAnimatedProps(() => ({ opacity: startLineOpacity.value }));
-  const windwardMarkProps = useAnimatedProps(() => ({ opacity: windwardMarkOpacity.value }));
-  const leewardGateProps = useAnimatedProps(() => ({ opacity: leewardGateOpacity.value }));
-  const coursePathPropsAnimated = useAnimatedProps(() => ({ opacity: coursePathOpacity.value }));
-  const finishBoatProps = useAnimatedProps(() => ({ opacity: finishBoatOpacity.value }));
-  const finishPinProps = useAnimatedProps(() => ({ opacity: finishPinOpacity.value }));
-  const finishLineProps = useAnimatedProps(() => ({ opacity: finishLineOpacity.value }));
+  // Note: Removed useAnimatedProps for G elements - they cause crashes on Android with New Architecture
+  // Keeping shared values in case we want to add smooth animations via a different technique later
 
   // Inject CSS for transitions on web
   useEffect(() => {
@@ -268,171 +261,87 @@ export function SetCourseInteractive({
           <Rect width="800" height="450" fill="url(#water-texture-sc)" />
           
           {/* Wind indicator */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.wind} data-animated-opacity="true">
-              <Line x1="400" y1="25" x2="400" y2="55" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
-              <SvgText x="400" y="18" textAnchor="middle" fontSize="16" fontWeight="bold" fill="#000">
-                WIND
-              </SvgText>
-            </G>
-          ) : (
-            <AnimatedG animatedProps={windProps}>
-              <Line x1="400" y1="25" x2="400" y2="55" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
-              <SvgText x="400" y="18" textAnchor="middle" fontSize="16" fontWeight="bold" fill="#000">
-                WIND
-              </SvgText>
-            </AnimatedG>
-          )}
+          <G opacity={opacities.wind} data-animated-opacity="true">
+            <Line x1="400" y1="25" x2="400" y2="55" stroke="#000" strokeWidth="3" markerEnd="url(#arrowhead-course)" />
+            <SvgText x="400" y="18" textAnchor="middle" fontSize="16" fontWeight="bold" fill="#000">
+              WIND
+            </SvgText>
+          </G>
 
           {/* Start Line */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.startLine} data-animated-opacity="true">
-              <Line x1="300" y1="350" x2="500" y2="350" stroke="black" strokeWidth="2" strokeDasharray="5,5" />
-              <SvgText x="400" y="370" textAnchor="middle" fontSize="14" fontWeight="600" fill="#000">
-                Start Line
-              </SvgText>
-            </G>
-          ) : (
-            <AnimatedG animatedProps={startLineProps}>
-              <Line x1="300" y1="350" x2="500" y2="350" stroke="black" strokeWidth="2" strokeDasharray="5,5" />
-              <SvgText x="400" y="370" textAnchor="middle" fontSize="14" fontWeight="600" fill="#000">
-                Start Line
-              </SvgText>
-            </AnimatedG>
-          )}
+          <G opacity={opacities.startLine} data-animated-opacity="true">
+            <Line x1="300" y1="350" x2="500" y2="350" stroke="black" strokeWidth="2" strokeDasharray="5,5" />
+            <SvgText x="400" y="370" textAnchor="middle" fontSize="14" fontWeight="600" fill="#000">
+              Start Line
+            </SvgText>
+          </G>
 
           {/* RC Boat (Start) */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.rcBoat} data-animated-opacity="true" transform="translate(490, 330)">
-              <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
-            </G>
-          ) : (
-            <AnimatedG animatedProps={rcBoatProps} transform="translate(490, 330)">
-              <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
-            </AnimatedG>
-          )}
+          <G opacity={opacities.rcBoat} data-animated-opacity="true" transform="translate(490, 330)">
+            <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
+          </G>
 
           {/* Pin (Start) */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.pin} data-animated-opacity="true">
-              <Circle cx="300" cy="350" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <SvgText x="300" y="375" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                Pin
-              </SvgText>
-            </G>
-          ) : (
-            <AnimatedG animatedProps={pinProps}>
-              <Circle cx="300" cy="350" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <SvgText x="300" y="375" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                Pin
-              </SvgText>
-            </AnimatedG>
-          )}
+          <G opacity={opacities.pin} data-animated-opacity="true">
+            <Circle cx="300" cy="350" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
+            <SvgText x="300" y="375" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
+              Pin
+            </SvgText>
+          </G>
 
           {/* Windward Mark */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.windwardMark} data-animated-opacity="true">
-              <Circle cx="400" cy="100" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <SvgText x="400" y="90" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                Windward Mark
-              </SvgText>
-            </G>
-          ) : (
-            <AnimatedG animatedProps={windwardMarkProps}>
-              <Circle cx="400" cy="100" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <SvgText x="400" y="90" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                Windward Mark
-              </SvgText>
-            </AnimatedG>
-          )}
+          <G opacity={opacities.windwardMark} data-animated-opacity="true">
+            <Circle cx="400" cy="100" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
+            <SvgText x="400" y="90" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
+              Windward Mark
+            </SvgText>
+          </G>
 
           {/* Leeward Gate */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.leewardGate} data-animated-opacity="true">
-              <Circle cx="350" cy="300" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <Circle cx="450" cy="300" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <SvgText x="400" y="330" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                Leeward Gate
-              </SvgText>
-            </G>
-          ) : (
-            <AnimatedG animatedProps={leewardGateProps}>
-              <Circle cx="350" cy="300" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <Circle cx="450" cy="300" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
-              <SvgText x="400" y="330" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
-                Leeward Gate
-              </SvgText>
-            </AnimatedG>
-          )}
+          <G opacity={opacities.leewardGate} data-animated-opacity="true">
+            <Circle cx="350" cy="300" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
+            <Circle cx="450" cy="300" r="8" fill="orange" stroke="black" strokeWidth="1.5" />
+            <SvgText x="400" y="330" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#000">
+              Leeward Gate
+            </SvgText>
+          </G>
 
           {/* Course Path */}
-          {Platform.OS === 'web' ? (
-            <G opacity={opacities.coursePath} data-animated-opacity="true">
-              {/* Main path - animated drawing */}
-              <AnimatedPath
-                d={coursePathD}
-                stroke="#FFD700"
-                strokeWidth="4"
-                strokeDasharray="1500"
-                fill="none"
-                animatedProps={coursePathDashProps}
-              />
-              {/* Start label */}
-              <G transform="translate(400, 360)">
-                <Circle r="12" fill="#22C55E" stroke="white" strokeWidth="2" />
-                <SvgText y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="white">S</SvgText>
-              </G>
-              {/* Finish label */}
-              <G transform="translate(540, 360)">
-                <Circle r="12" fill="#EF4444" stroke="white" strokeWidth="2" />
-                <SvgText y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="white">F</SvgText>
-              </G>
+          <G opacity={opacities.coursePath} data-animated-opacity="true">
+            {/* Main path - animated drawing */}
+            <AnimatedPath
+              d={coursePathD}
+              stroke="#FFD700"
+              strokeWidth="4"
+              strokeDasharray="1500"
+              fill="none"
+              animatedProps={coursePathDashProps}
+            />
+            {/* Start label */}
+            <G transform="translate(400, 360)">
+              <Circle r="12" fill="#22C55E" stroke="white" strokeWidth="2" />
+              <SvgText y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="white">S</SvgText>
             </G>
-          ) : (
-            <AnimatedG animatedProps={coursePathPropsAnimated}>
-              <AnimatedPath
-                d={coursePathD}
-                stroke="#FFD700"
-                strokeWidth="4"
-                strokeDasharray="1500"
-                fill="none"
-                animatedProps={coursePathDashProps}
-              />
-            </AnimatedG>
-          )}
+            {/* Finish label */}
+            <G transform="translate(540, 360)">
+              <Circle r="12" fill="#EF4444" stroke="white" strokeWidth="2" />
+              <SvgText y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="white">F</SvgText>
+            </G>
+          </G>
 
           {/* Finish Line Components */}
-          {Platform.OS === 'web' ? (
-            <>
-              <G opacity={opacities.finishBoat} data-animated-opacity="true" transform="translate(490, 330)">
-                <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
-              </G>
-              <G opacity={opacities.finishPin} data-animated-opacity="true">
-                <Circle cx="580" cy="350" r="6" fill="#ADD8E6" stroke="black" strokeWidth="1.5" />
-              </G>
-              <G opacity={opacities.finishLine} data-animated-opacity="true">
-                <Line x1="500" y1="350" x2="580" y2="350" stroke="green" strokeWidth="2" strokeDasharray="5,5" />
-                <SvgText x="540" y="335" textAnchor="middle" fontSize="14" fontWeight="600" fill="#22C55E">
-                  Finish Line
-                </SvgText>
-              </G>
-            </>
-          ) : (
-            <>
-              <AnimatedG animatedProps={finishBoatProps} transform="translate(490, 330)">
-                <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
-              </AnimatedG>
-              <AnimatedG animatedProps={finishPinProps}>
-                <Circle cx="580" cy="350" r="6" fill="#ADD8E6" stroke="black" strokeWidth="1.5" />
-              </AnimatedG>
-              <AnimatedG animatedProps={finishLineProps}>
-                <Line x1="500" y1="350" x2="580" y2="350" stroke="green" strokeWidth="2" strokeDasharray="5,5" />
-                <SvgText x="540" y="335" textAnchor="middle" fontSize="14" fontWeight="600" fill="#22C55E">
-                  Finish Line
-                </SvgText>
-              </AnimatedG>
-            </>
-          )}
+          <G opacity={opacities.finishBoat} data-animated-opacity="true" transform="translate(490, 330)">
+            <PowerboatSVG rotation={0} hideInfoBoard={true} scale={0.8} />
+          </G>
+          <G opacity={opacities.finishPin} data-animated-opacity="true">
+            <Circle cx="580" cy="350" r="6" fill="#ADD8E6" stroke="black" strokeWidth="1.5" />
+          </G>
+          <G opacity={opacities.finishLine} data-animated-opacity="true">
+            <Line x1="500" y1="350" x2="580" y2="350" stroke="green" strokeWidth="2" strokeDasharray="5,5" />
+            <SvgText x="540" y="335" textAnchor="middle" fontSize="14" fontWeight="600" fill="#22C55E">
+              Finish Line
+            </SvgText>
+          </G>
         </Svg>
       </View>
 

@@ -5694,6 +5694,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       totalDistanceNm={race.total_distance_nm}
                       vhf_channel={race.critical_details?.vhf_channel}
                       isPrimary={index === 0}
+                      isMock={true}
                       isSelected={selectedDemoRaceId === race.id}
                       isDimmed={selectedDemoRaceId !== race.id}
                       onSelect={() => setSelectedDemoRaceId(race.id)}

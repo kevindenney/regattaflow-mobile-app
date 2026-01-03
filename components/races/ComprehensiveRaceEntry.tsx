@@ -4460,8 +4460,7 @@ export function ComprehensiveRaceEntry({
                         Suggested class: {classSuggestion.name}
                       </Text>
                       <Text className="text-xs text-blue-600 mt-1">
-                        Based on boat {classSuggestion.boatName}
-                        {classSuggestion.sailNumber ? ` (${classSuggestion.sailNumber})` : ''}. You can change this if needed.
+                        {`Based on boat ${classSuggestion.boatName}${classSuggestion.sailNumber ? ` (${classSuggestion.sailNumber})` : ''}. You can change this if needed.`}
                       </Text>
                     </>
                   ) : (

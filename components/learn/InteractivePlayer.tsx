@@ -25,6 +25,9 @@ import { RightOfWayInteractive } from './interactives/RightOfWayInteractive';
 import { WhatIsSailboatRacingInteractive } from './interactives/WhatIsSailboatRacingInteractive';
 import { TypesOfRacesInteractive } from './interactives/TypesOfRacesInteractive';
 import { MarkRoomInteractive } from './interactives/MarkRoomInteractive';
+import { StartingBasicsInteractive } from './interactives/StartingBasicsInteractive';
+import { UpwindTacticsInteractive } from './interactives/UpwindTacticsInteractive';
+import { DownwindBasicsInteractive } from './interactives/DownwindBasicsInteractive';
 
 // Component registry
 const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -39,6 +42,9 @@ const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
   'WhatIsSailboatRacingInteractive': WhatIsSailboatRacingInteractive,
   'TypesOfRacesInteractive': TypesOfRacesInteractive,
   'MarkRoomInteractive': MarkRoomInteractive,
+  'StartingBasicsInteractive': StartingBasicsInteractive,
+  'UpwindTacticsInteractive': UpwindTacticsInteractive,
+  'DownwindBasicsInteractive': DownwindBasicsInteractive,
 };
 
 export function InteractivePlayer({ componentName, onComplete }: InteractivePlayerProps) {

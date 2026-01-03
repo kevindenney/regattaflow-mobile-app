@@ -31,13 +31,14 @@ const PLANS = [
   {
     id: 'starter',
     name: 'Starter',
-    price: 99,
-    period: '/month',
-    description: 'Perfect for small yacht clubs',
+    monthlyPrice: 249,
+    annualPrice: 2499,
+    annualSavings: 'Save $489',
+    description: 'Up to 500 members',
     icon: Zap,
     color: '#6b7280',
     features: [
-      'Up to 5 events per month',
+      'Up to 500 members',
       'Basic scoring system',
       'Entry management',
       'Results publication',
@@ -50,15 +51,16 @@ const PLANS = [
   },
   {
     id: 'professional',
-    name: 'Professional',
-    price: 299,
-    period: '/month',
-    description: 'For active sailing clubs',
+    name: 'Pro',
+    monthlyPrice: 499,
+    annualPrice: 4999,
+    annualSavings: 'Save $989',
+    description: 'Up to 2,000 members',
     icon: Crown,
     color: '#0284c7',
     popular: true,
     features: [
-      'Unlimited events',
+      'Up to 2,000 members',
       'Advanced scoring options',
       'Live race tracking',
       'Custom branding',
@@ -70,13 +72,14 @@ const PLANS = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 999,
-    period: '/month',
-    description: 'For major sailing organizations',
+    monthlyPrice: 899,
+    annualPrice: 8999,
+    annualSavings: 'Save $1,789',
+    description: 'Unlimited members',
     icon: Building2,
     color: '#7c3aed',
     features: [
-      'Everything in Professional',
+      'Unlimited members',
       'Multiple venue management',
       'Advanced analytics & reporting',
       'API access',
@@ -91,8 +94,9 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const { user, clubProfile } = useAuth();
   const trialStatus = useTrialStatus();
-  
+
   const [selectedPlan, setSelectedPlan] = useState<string>('professional');
+  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('annual');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleSelectPlan = async (planId: string) => {
@@ -130,6 +134,7 @@ export default function SubscriptionPage() {
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: {
           planId: selectedPlan,
+          billingPeriod,
           clubId: clubProfile.id,
           userId: user.id,
           successUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/subscription/success`,
@@ -194,6 +199,37 @@ export default function SubscriptionPage() {
             </Text>
           </View>
         )}
+
+        {/* Billing Period Toggle */}
+        <View className="flex-row justify-center items-center mx-4 mt-6 mb-2">
+          <View className="flex-row bg-gray-100 rounded-full p-1">
+            <TouchableOpacity
+              onPress={() => setBillingPeriod('monthly')}
+              className={`px-5 py-2 rounded-full ${
+                billingPeriod === 'monthly' ? 'bg-white' : ''
+              }`}
+            >
+              <Text className={billingPeriod === 'monthly' ? 'text-gray-900 font-semibold' : 'text-gray-500'}>
+                Monthly
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setBillingPeriod('annual')}
+              className={`px-5 py-2 rounded-full ${
+                billingPeriod === 'annual' ? 'bg-white' : ''
+              }`}
+            >
+              <Text className={billingPeriod === 'annual' ? 'text-gray-900 font-semibold' : 'text-gray-500'}>
+                Annual
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {billingPeriod === 'annual' && (
+            <View className="ml-3 bg-emerald-100 px-3 py-1 rounded-full">
+              <Text className="text-emerald-700 text-xs font-medium">2 months free</Text>
+            </View>
+          )}
+        </View>
 
         {/* Plans */}
         <View className="px-4 py-6">
@@ -264,9 +300,18 @@ export default function SubscriptionPage() {
                   {/* Price */}
                   <View className="mb-4">
                     <Text className="text-gray-900">
-                      <Text className="text-3xl font-bold">${plan.price}</Text>
-                      <Text className="text-gray-500">{plan.period}</Text>
+                      <Text className="text-3xl font-bold">
+                        ${billingPeriod === 'annual' ? plan.annualPrice.toLocaleString() : plan.monthlyPrice}
+                      </Text>
+                      <Text className="text-gray-500">
+                        {billingPeriod === 'annual' ? '/year' : '/month'}
+                      </Text>
                     </Text>
+                    {billingPeriod === 'annual' && (
+                      <Text className="text-emerald-600 text-sm font-medium mt-1">
+                        {plan.annualSavings}
+                      </Text>
+                    )}
                   </View>
 
                   {/* Features */}
