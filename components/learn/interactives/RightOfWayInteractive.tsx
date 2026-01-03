@@ -1068,6 +1068,8 @@ export function RightOfWayInteractive({
   const [mainCollisionDangerState, setMainCollisionDangerState] = useState({ opacity: 0, scale: 1 });
   const [mainLineDrawState, setMainLineDrawState] = useState({ strokeDashoffset: 400, strokeDasharray: '400' });
   const [mainPathFollowState, setMainPathFollowState] = useState({ strokeDashoffset: 500, strokeDasharray: '500' });
+  const [mainTextFadeOpacity, setMainTextFadeOpacity] = useState(0);
+  const [mainHighlightRadius, setMainHighlightRadius] = useState(25);
 
   // Continuous looping animations (bobbing, pulsing, flowing)
   useEffect(() => {
@@ -1339,8 +1341,8 @@ export function RightOfWayInteractive({
     }
   }, [currentStep]);
 
-  const boat1Props = useAnimatedProps(() => {
-    // Calculate position based on movement progress if movement is enabled
+  // Sync boat 1 position to state for main component
+  useDerivedValue(() => {
     const visualState = currentStep.visualState || {};
     const hasMovement = visualState.boatMovement && visualState.boatMovement.enabled;
     const useCurvedPath = visualState.boatMovement && visualState.boatMovement.curvedPath;
@@ -1358,9 +1360,6 @@ export function RightOfWayInteractive({
       const t = boatMovementProgress.value;
 
       if (useCurvedPath) {
-        // Use cubic Bezier curve for realistic give-way maneuver
-        // Control points can be customized via boatMovement.ctrl1 and ctrl2
-        // Default: Red boat starts heading NE, bears away to pass below/behind green, then resumes NE
         const customCtrl1 = visualState.boatMovement?.ctrl1;
         const customCtrl2 = visualState.boatMovement?.ctrl2;
         const ctrl1X = customCtrl1 ? startX + customCtrl1.x : startX + 100;
@@ -1368,7 +1367,6 @@ export function RightOfWayInteractive({
         const ctrl2X = customCtrl2 ? startX + customCtrl2.x : startX + 250;
         const ctrl2Y = customCtrl2 ? startY + customCtrl2.y : startY + 50;
 
-        // Cubic Bezier formula: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
         const oneMinusT = 1 - t;
         const oneMinusT2 = oneMinusT * oneMinusT;
         const oneMinusT3 = oneMinusT2 * oneMinusT;
@@ -1378,34 +1376,29 @@ export function RightOfWayInteractive({
         finalX = oneMinusT3 * startX + 3 * oneMinusT2 * t * ctrl1X + 3 * oneMinusT * t2 * ctrl2X + t3 * endX;
         finalY = oneMinusT3 * startY + 3 * oneMinusT2 * t * ctrl1Y + 3 * oneMinusT * t2 * ctrl2Y + t3 * endY;
 
-        // Calculate tangent (derivative) of Bezier curve for boat heading
-        // B'(t) = 3(1-t)²(P1-P0) + 6(1-t)t(P2-P1) + 3t²(P3-P2)
         const tangentX = 3 * oneMinusT2 * (ctrl1X - startX) +
                          6 * oneMinusT * t * (ctrl2X - ctrl1X) +
                          3 * t2 * (endX - ctrl2X);
         const tangentY = 3 * oneMinusT2 * (ctrl1Y - startY) +
                          6 * oneMinusT * t * (ctrl2Y - ctrl1Y) +
                          3 * t2 * (endY - ctrl2Y);
-
-        // Convert tangent to rotation angle (0° = North, 90° = East)
-        // atan2 gives angle from positive X axis, we need angle from positive Y axis (North)
         const angleRad = Math.atan2(tangentX, -tangentY);
         dynamicRotation = angleRad * (180 / Math.PI);
       } else {
-        // Linear interpolation for straight-line movement
         finalX = interpolate(t, [0, 1], [startX, endX], Extrapolate.CLAMP);
         finalY = interpolate(t, [0, 1], [startY, endY], Extrapolate.CLAMP);
       }
     }
 
-    return {
+    runOnJS(setMainBoat1State)({
       opacity: boat1Opacity.value,
       transform: `translate(${finalX}, ${finalY}) rotate(${dynamicRotation + boat1Bob.value}, 25, 40)`,
-    };
-  });
+    });
+    return null;
+  }, [currentStep]);
 
-  const boat2Props = useAnimatedProps(() => {
-    // Calculate position based on movement progress if movement is enabled
+  // Sync boat 2 position to state for main component
+  useDerivedValue(() => {
     const visualState = currentStep.visualState || {};
     const hasMovement = visualState.boatMovement && visualState.boatMovement.enabled;
     const boat2State = visualState.boat2 || {};
@@ -1414,41 +1407,31 @@ export function RightOfWayInteractive({
     let finalY = boat2Y.value;
 
     if (hasMovement && boat2State.startX !== undefined && boat2State.endX !== undefined) {
-      // Interpolate from start position to end position based on movement progress
       const startX = boat2State.startX;
       const startY = boat2State.startY || boat2State.y || 0;
       const endX = boat2State.endX;
       const endY = boat2State.endY || boat2State.y || 0;
 
-      finalX = interpolate(
-        boatMovementProgress.value,
-        [0, 1],
-        [startX, endX],
-        Extrapolate.CLAMP
-      );
-      finalY = interpolate(
-        boatMovementProgress.value,
-        [0, 1],
-        [startY, endY],
-        Extrapolate.CLAMP
-      );
+      finalX = interpolate(boatMovementProgress.value, [0, 1], [startX, endX], Extrapolate.CLAMP);
+      finalY = interpolate(boatMovementProgress.value, [0, 1], [startY, endY], Extrapolate.CLAMP);
     }
 
-    return {
+    runOnJS(setMainBoat2State)({
       opacity: boat2Opacity.value,
       transform: `translate(${finalX}, ${finalY}) rotate(${boat2Rotate.value + boat2Bob.value}, 25, 40)`,
-    };
-  });
+    });
+    return null;
+  }, [currentStep]);
 
-  // Animated props for dynamic label following boat 1
-  const boat1LabelProps = useAnimatedProps(() => {
+  // Sync boat 1 label position to state
+  useDerivedValue(() => {
     const visualState = currentStep.visualState || {};
     const hasMovement = visualState.boatMovement && visualState.boatMovement.enabled;
     const useCurvedPath = visualState.boatMovement && visualState.boatMovement.curvedPath;
     const boat1State = visualState.boat1 || {};
 
     let finalX = boat1State.x || 0;
-    let finalY = (boat1State.y || 0) - 50; // Label above boat
+    let finalY = (boat1State.y || 0) - 50;
 
     if (hasMovement && boat1State.startX !== undefined && boat1State.endX !== undefined) {
       const startX = boat1State.startX;
@@ -1479,19 +1462,18 @@ export function RightOfWayInteractive({
       }
     }
 
-    return {
-      transform: `translate(${finalX}, ${finalY})`,
-    };
-  });
+    runOnJS(setMainBoat1LabelTransform)(`translate(${finalX}, ${finalY})`);
+    return null;
+  }, [currentStep]);
 
-  // Animated props for dynamic label following boat 2
-  const boat2LabelProps = useAnimatedProps(() => {
+  // Sync boat 2 label position to state
+  useDerivedValue(() => {
     const visualState = currentStep.visualState || {};
     const hasMovement = visualState.boatMovement && visualState.boatMovement.enabled;
     const boat2State = visualState.boat2 || {};
 
     let finalX = boat2State.x || 0;
-    let finalY = (boat2State.y || 0) - 50; // Label above boat
+    let finalY = (boat2State.y || 0) - 50;
 
     if (hasMovement && boat2State.startX !== undefined && boat2State.endX !== undefined) {
       const startX = boat2State.startX;
@@ -1499,84 +1481,69 @@ export function RightOfWayInteractive({
       const endX = boat2State.endX;
       const endY = boat2State.endY || boat2State.y || 0;
 
-      finalX = interpolate(
-        boatMovementProgress.value,
-        [0, 1],
-        [startX, endX],
-        Extrapolate.CLAMP
-      );
-      finalY = interpolate(
-        boatMovementProgress.value,
-        [0, 1],
-        [startY - 50, endY - 50],
-        Extrapolate.CLAMP
-      );
+      finalX = interpolate(boatMovementProgress.value, [0, 1], [startX, endX], Extrapolate.CLAMP);
+      finalY = interpolate(boatMovementProgress.value, [0, 1], [startY - 50, endY - 50], Extrapolate.CLAMP);
     }
 
-    return {
-      transform: `translate(${finalX}, ${finalY})`,
-    };
-  });
+    runOnJS(setMainBoat2LabelTransform)(`translate(${finalX}, ${finalY})`);
+    return null;
+  }, [currentStep]);
 
-  const windProps = useAnimatedProps(() => ({
-    opacity: windOpacity.value,
-  }));
+  // Sync wind, wake, and other opacities to state
+  useDerivedValue(() => {
+    runOnJS(setMainWindOpacity)(windOpacity.value);
+    return null;
+  }, []);
 
-  // Animated props for collision point pulsing
-  const collisionPointProps = useAnimatedProps(() => ({
-    transform: `scale(${pulseScale.value})`,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setMainWakeOpacity)(wakeOpacity.value * 0.6);
+    return null;
+  }, []);
 
-  // Animated props for progressive line drawing
-  const lineDrawProps = useAnimatedProps(() => {
-    const dashLength = 400; // Approximate path length
+  // Sync collision danger glow to state
+  useDerivedValue(() => {
+    const intensity = collisionDangerGlow.value;
+    const pulseAmount = (pulseScale.value - 1) * 0.3 * intensity;
+    runOnJS(setMainCollisionDangerState)({
+      opacity: intensity * 0.8 + pulseAmount,
+      scale: 1 + intensity * 0.5 + pulseAmount,
+    });
+    return null;
+  }, []);
+
+  // Sync line draw and path follow states
+  useDerivedValue(() => {
+    const dashLength = 400;
     const offset = dashLength * (1 - lineProgress.value);
-    return {
+    runOnJS(setMainLineDrawState)({
       strokeDashoffset: offset,
       strokeDasharray: `${dashLength}`,
-    };
-  });
+    });
+    return null;
+  }, []);
 
-  // Animated props for path-following give-way maneuver
-  const pathFollowProps = useAnimatedProps(() => {
+  useDerivedValue(() => {
     const dashLength = 500;
     const offset = dashLength * (1 - pathProgress.value);
-    return {
+    runOnJS(setMainPathFollowState)({
       strokeDashoffset: offset,
       strokeDasharray: `${dashLength}`,
-    };
-  });
+    });
+    return null;
+  }, []);
 
-  // Animated props for text fade-in
-  const textFadeProps = useAnimatedProps(() => ({
-    opacity: textFadeOpacity.value,
-  }));
+  // Sync text fade opacity to state
+  useDerivedValue(() => {
+    runOnJS(setMainTextFadeOpacity)(textFadeOpacity.value);
+    return null;
+  }, []);
 
-  // Animated props for highlight circles pulsing
-  const highlightProps = useAnimatedProps(() => ({
-    r: 35 * highlightPulse.value,
-  }));
-
-  // Animated props for collision danger glow (intensifies as boats approach)
-  const collisionDangerProps = useAnimatedProps(() => {
-    const intensity = collisionDangerGlow.value;
-    // Pulsing effect tied to intensity
-    const pulseAmount = (pulseScale.value - 1) * 0.3 * intensity;
-    return {
-      opacity: intensity * 0.8 + pulseAmount,
-      transform: `scale(${1 + intensity * 0.5 + pulseAmount})`,
-    };
-  });
-
-  // Animated props for labels fading in
-  const labelFadeProps = useAnimatedProps(() => ({
-    opacity: labelOpacity.value,
-  }));
-
-  // Animated props for wake trails
-  const wakeProps = useAnimatedProps(() => ({
-    opacity: wakeOpacity.value * 0.6,
-  }));
+  // Sync highlight pulse to state (radius for pulsing circles)
+  useDerivedValue(() => {
+    const baseRadius = 25;
+    runOnJS(setMainHighlightRadius)(baseRadius * highlightPulse.value);
+    return null;
+  }, []);
 
   const handleNext = () => {
     if (currentStepIndex < RIGHT_OF_WAY_STEPS.length - 1) {
@@ -1721,7 +1688,7 @@ export function RightOfWayInteractive({
             </G>
 
             {/* Wind arrow - shows where wind is coming FROM */}
-            <AnimatedG animatedProps={windProps}>
+            <G opacity={mainWindOpacity}>
               <G transform={`translate(${windState.x || 400}, ${windState.y || 50})`}>
                 {/* Wind direction indicator (arrow pointing down = wind from North) */}
                 <G transform={`rotate(${windState.rotate || 0})`}>
@@ -1731,7 +1698,7 @@ export function RightOfWayInteractive({
                   </SvgText>
                 </G>
               </G>
-            </AnimatedG>
+            </G>
 
             {/* Mark (if present) */}
             {markState && markState.opacity && (
@@ -1749,7 +1716,7 @@ export function RightOfWayInteractive({
             {/* Collision Danger Zone - intensifying glow as boats approach */}
             {currentStep.visualState.collisionDanger?.enabled && currentStep.visualState.collisionCourse?.collisionPoint && (
               <G transform={`translate(${currentStep.visualState.collisionCourse.collisionPoint.cx}, ${currentStep.visualState.collisionCourse.collisionPoint.cy})`}>
-                <AnimatedG animatedProps={collisionDangerProps}>
+                <G opacity={mainCollisionDangerState.opacity} transform={`scale(${mainCollisionDangerState.scale})`}>
                   {/* Outer glow ring - only shows as danger increases, scales from center */}
                   <Circle
                     cx={0}
@@ -1757,7 +1724,7 @@ export function RightOfWayInteractive({
                     r={50}
                     fill="url(#dangerGradient)"
                   />
-                </AnimatedG>
+                </G>
               </G>
             )}
 
@@ -1766,7 +1733,7 @@ export function RightOfWayInteractive({
               <G opacity={currentStep.visualState.collisionCourse.opacity}>
                 {/* Boat 1's path (port tack - blue dotted line extending NE) - animated drawing */}
                 {currentStep.visualState.collisionCourse.boat1Path && (
-                  <AnimatedLine
+                  <Line
                     x1={currentStep.visualState.collisionCourse.boat1Path.x1}
                     y1={currentStep.visualState.collisionCourse.boat1Path.y1}
                     x2={currentStep.visualState.collisionCourse.boat1Path.x2}
@@ -1775,12 +1742,13 @@ export function RightOfWayInteractive({
                     strokeWidth="3"
                     opacity={0.9}
                     strokeLinecap="round"
-                    animatedProps={lineDrawProps}
+                    strokeDashoffset={mainLineDrawState.strokeDashoffset}
+                    strokeDasharray={mainLineDrawState.strokeDasharray}
                   />
                 )}
                 {/* Boat 2's path (starboard tack - red dotted line extending NW) - animated drawing */}
                 {currentStep.visualState.collisionCourse.boat2Path && (
-                  <AnimatedLine
+                  <Line
                     x1={currentStep.visualState.collisionCourse.boat2Path.x1}
                     y1={currentStep.visualState.collisionCourse.boat2Path.y1}
                     x2={currentStep.visualState.collisionCourse.boat2Path.x2}
@@ -1789,7 +1757,8 @@ export function RightOfWayInteractive({
                     strokeWidth="3"
                     opacity={0.9}
                     strokeLinecap="round"
-                    animatedProps={lineDrawProps}
+                    strokeDashoffset={mainLineDrawState.strokeDashoffset}
+                    strokeDasharray={mainLineDrawState.strokeDasharray}
                   />
                 )}
                 {/* Collision point marker - shows where paths intersect */}
@@ -1814,7 +1783,7 @@ export function RightOfWayInteractive({
                 {currentStep.visualState.giveWayManeuver.path && (
                   <G>
                     {/* Main curved path - draws progressively */}
-                    <AnimatedPath
+                    <Path
                       d={currentStep.visualState.giveWayManeuver.path.d}
                       stroke="#3B82F6"
                       strokeWidth="4"
@@ -1822,17 +1791,19 @@ export function RightOfWayInteractive({
                       opacity={0.9}
                       markerEnd="url(#arrowhead-row)"
                       strokeLinecap="round"
-                      animatedProps={pathFollowProps}
+                      strokeDashoffset={mainPathFollowState.strokeDashoffset}
+                      strokeDasharray={mainPathFollowState.strokeDasharray}
                     />
                     {/* Glow effect for visibility */}
-                    <AnimatedPath
+                    <Path
                       d={currentStep.visualState.giveWayManeuver.path.d}
                       stroke="#60A5FA"
                       strokeWidth="6"
                       fill="none"
                       opacity={0.3}
                       strokeLinecap="round"
-                      animatedProps={pathFollowProps}
+                      strokeDashoffset={mainPathFollowState.strokeDashoffset}
+                      strokeDasharray={mainPathFollowState.strokeDasharray}
                     />
                   </G>
                 )}
@@ -2085,7 +2056,7 @@ export function RightOfWayInteractive({
             )}
 
             {/* Wake Trail for Boat 1 - always render to preserve hook count */}
-            <AnimatedG animatedProps={wakeProps}>
+            <G opacity={mainWakeOpacity}>
               <WakeTrail
                 boatRotation={boat1Rotation}
                 boatColor={boat1State.color || '#3B82F6'}
@@ -2097,10 +2068,10 @@ export function RightOfWayInteractive({
                 curvedPath={currentStep.visualState.boatMovement?.curvedPath}
                 enabled={!!(boat1State.showWake && currentStep.visualState.boatMovement?.enabled)}
               />
-            </AnimatedG>
+            </G>
 
             {/* Boat 1 */}
-            <AnimatedG animatedProps={boat1Props}>
+            <G opacity={mainBoat1State.opacity} transform={mainBoat1State.transform}>
               <TopDownSailboatSVG
                 hullColor={boat1State.color || '#3B82F6'}
                 rotation={boat1Rotation}
@@ -2113,7 +2084,7 @@ export function RightOfWayInteractive({
                 showTackIndicator={boat1State.showTackIndicator || false}
                 highlightBoom={boat1State.highlightBoom || false}
               />
-            </AnimatedG>
+            </G>
 
             {/* Boat 1 Label */}
             {boat1State.label && (
@@ -2251,7 +2222,7 @@ export function RightOfWayInteractive({
             )}
 
             {/* Wake Trail for Boat 2 - always render to preserve hook count */}
-            <AnimatedG animatedProps={wakeProps}>
+            <G opacity={mainWakeOpacity}>
               <WakeTrail
                 boatRotation={boat2Rotation}
                 boatColor={boat2State.color || '#EF4444'}
@@ -2263,10 +2234,10 @@ export function RightOfWayInteractive({
                 curvedPath={false}
                 enabled={!!(boat2State.showWake && currentStep.visualState.boatMovement?.enabled)}
               />
-            </AnimatedG>
+            </G>
 
             {/* Boat 2 */}
-            <AnimatedG animatedProps={boat2Props}>
+            <G opacity={mainBoat2State.opacity} transform={mainBoat2State.transform}>
               <TopDownSailboatSVG
                 hullColor={boat2State.color || '#1E293B'}
                 rotation={boat2Rotation}
@@ -2278,7 +2249,7 @@ export function RightOfWayInteractive({
                 showTackIndicator={boat2State.showTackIndicator || false}
                 highlightBoom={boat2State.highlightBoom || false}
               />
-            </AnimatedG>
+            </G>
 
             {/* Boat 2 Label */}
             {boat2State.label && (
@@ -2302,7 +2273,7 @@ export function RightOfWayInteractive({
               <G>
                 {/* Boat 1 dynamic label */}
                 {currentStep.visualState.dynamicLabels.boat1Label && (
-                  <AnimatedG animatedProps={boat1LabelProps}>
+                  <G transform={mainBoat1LabelTransform}>
                     <Rect x="-60" y="-12" width="120" height="24" rx="4" fill="white" opacity={0.95} stroke={boat1State.color || '#EF4444'} strokeWidth="2" />
                     <SvgText
                       x="0"
@@ -2314,11 +2285,11 @@ export function RightOfWayInteractive({
                     >
                       {currentStep.visualState.dynamicLabels.boat1Label}
                     </SvgText>
-                  </AnimatedG>
+                  </G>
                 )}
                 {/* Boat 2 dynamic label */}
                 {currentStep.visualState.dynamicLabels.boat2Label && (
-                  <AnimatedG animatedProps={boat2LabelProps}>
+                  <G transform={mainBoat2LabelTransform}>
                     <Rect x="-60" y="-12" width="120" height="24" rx="4" fill="white" opacity={0.95} stroke={boat2State.color || '#10B981'} strokeWidth="2" />
                     <SvgText
                       x="0"
@@ -2330,7 +2301,7 @@ export function RightOfWayInteractive({
                     >
                       {currentStep.visualState.dynamicLabels.boat2Label}
                     </SvgText>
-                  </AnimatedG>
+                  </G>
                 )}
               </G>
             )}
@@ -2415,41 +2386,41 @@ export function RightOfWayInteractive({
 
             {/* Rule Text - with fade-in animation */}
             {currentStep.visualState.ruleText && currentStep.visualState.ruleText.opacity && (
-              <AnimatedG
+              <G
                 transform={`translate(${currentStep.visualState.ruleText.x || 400}, ${currentStep.visualState.ruleText.y || 150})`}
-                animatedProps={textFadeProps}
+                opacity={mainTextFadeOpacity}
               >
                 <SvgText x="0" y="0" textAnchor="middle" fontSize="16" fontWeight="600" fill="#1E293B">
                   {currentStep.visualState.ruleText.text}
                 </SvgText>
-              </AnimatedG>
+              </G>
             )}
 
             {/* Highlight indicators - pulsing animation */}
             {currentStep.visualState.highlight && (
               <G>
                 {currentStep.visualState.highlight.type === 'port' && (
-                  <AnimatedCircle
+                  <Circle
                     cx={currentStep.visualState.highlight.boat === 'boat1' ? (boat1State.x || 0) : (boat2State.x || 0)}
                     cy={currentStep.visualState.highlight.boat === 'boat1' ? (boat1State.y || 0) : (boat2State.y || 0)}
+                    r={mainHighlightRadius}
                     fill="none"
                     stroke="#F59E0B"
                     strokeWidth="3"
                     strokeDasharray="5,5"
                     opacity={0.7}
-                    animatedProps={highlightProps}
                   />
                 )}
                 {currentStep.visualState.highlight.type === 'starboard' && (
-                  <AnimatedCircle
+                  <Circle
                     cx={currentStep.visualState.highlight.boat === 'boat1' ? (boat1State.x || 0) : (boat2State.x || 0)}
                     cy={currentStep.visualState.highlight.boat === 'boat1' ? (boat1State.y || 0) : (boat2State.y || 0)}
+                    r={mainHighlightRadius}
                     fill="none"
                     stroke="#22C55E"
                     strokeWidth="3"
                     strokeDasharray="5,5"
                     opacity={0.7}
-                    animatedProps={highlightProps}
                   />
                 )}
               </G>

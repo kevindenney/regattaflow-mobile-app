@@ -35,7 +35,8 @@ function useResponsiveLayout() {
 }
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  useAnimatedProps,
+  runOnJS,
+  useDerivedValue,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -44,7 +45,8 @@ import type { LineBiasStep, LineBiasQuizQuestion } from './data/lineBiasData';
 import { LINE_BIAS_SEQUENCE_STEPS, LINE_BIAS_QUIZ, LINE_BIAS_DEEP_DIVE } from './data/lineBiasData';
 import { PowerboatSVG, TopDownSailboatSVG } from './shared';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
+// Note: AnimatedG removed to avoid crashes on Android New Architecture
+// Using state-driven transforms instead
 
 // Helper function to describe an SVG arc
 function describeArc(x: number, y: number, radius: number, startAngle: number, endAngle: number): string {
@@ -330,6 +332,13 @@ export function LineBiasInteractive({
   const effectiveLineOpacity = useSharedValue(0);
   const effectiveLineRotate = useSharedValue(0);
 
+  // State-driven transforms for boats and effects (avoids AnimatedG crash on Android New Architecture)
+  const [blueBoatTransform, setBlueBoatTransform] = useState(`translate(${currentStep.blueStart?.x || 480}, ${currentStep.blueStart?.y || 250}) rotate(${currentStep.blueStart?.rotate || -45}, 25, 40)`);
+  const [redBoatTransform, setRedBoatTransform] = useState(`translate(${currentStep.redStart?.x || 320}, ${currentStep.redStart?.y || 250}) rotate(${currentStep.redStart?.rotate || -45}, 25, 40)`);
+  const [ghostWindOpacityState, setGhostWindOpacityState] = useState(0);
+  const [shiftTextOpacityState, setShiftTextOpacityState] = useState(0);
+  const [effectiveLineOpacityState, setEffectiveLineOpacityState] = useState(0);
+
   useEffect(() => {
     const transition = { duration: 1500 };
     const newAngle = currentStep.visualState?.wind?.rotate ?? 0;
@@ -394,36 +403,36 @@ export function LineBiasInteractive({
     return `${angle}° ${currentWindAngle < 0 ? 'left' : currentWindAngle > 0 ? 'right' : ''}`;
   }, [currentWindAngle]);
 
-  // Animated props
-  const blueBoatProps = useAnimatedProps(() => ({
-    transform: `translate(${blueBoatX.value}, ${blueBoatY.value}) rotate(${blueBoatRotate.value}, 25, 40)`,
-  }));
+  // Sync boat positions to state using useDerivedValue (avoids AnimatedG crash on Android New Architecture)
+  useDerivedValue(() => {
+    runOnJS(setBlueBoatTransform)(`translate(${blueBoatX.value}, ${blueBoatY.value}) rotate(${blueBoatRotate.value}, 25, 40)`);
+    return null;
+  }, []);
 
-  const redBoatProps = useAnimatedProps(() => ({
-    transform: `translate(${redBoatX.value}, ${redBoatY.value}) rotate(${redBoatRotate.value}, 25, 40)`,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setRedBoatTransform)(`translate(${redBoatX.value}, ${redBoatY.value}) rotate(${redBoatRotate.value}, 25, 40)`);
+    return null;
+  }, []);
+
+  useDerivedValue(() => {
+    runOnJS(setGhostWindOpacityState)(ghostWindOpacity.value);
+    return null;
+  }, []);
+
+  useDerivedValue(() => {
+    runOnJS(setShiftTextOpacityState)(shiftTextOpacity.value);
+    return null;
+  }, []);
+
+  useDerivedValue(() => {
+    runOnJS(setEffectiveLineOpacityState)(effectiveLineOpacity.value);
+    return null;
+  }, []);
 
   // For SVG on web, we need to use transform string format
   const windTransform = `rotate(${currentWindAngle})`;
   const ghostWindTransform = `rotate(${previousAngle})`;
-  
-  const windProps = useAnimatedProps(() => ({
-    // Using rotation prop for react-native-svg
-  }));
-
-  const ghostWindProps = useAnimatedProps(() => ({
-    opacity: ghostWindOpacity.value,
-  }));
-
-  const shiftTextProps = useAnimatedProps(() => ({
-    opacity: shiftTextOpacity.value,
-  }));
-
   const effectiveLineTransform = `rotate(${currentWindAngle})`;
-  
-  const effectiveLineProps = useAnimatedProps(() => ({
-    opacity: effectiveLineOpacity.value,
-  }));
 
   const handleNext = () => {
     if (currentStepIndex < LINE_BIAS_SEQUENCE_STEPS.length - 1) {
@@ -607,10 +616,8 @@ export function LineBiasInteractive({
 
             {/* Ghost wind (previous position) - shows where wind was before shift */}
             {windShift !== 0 && (
-              <G transform={`translate(400, 120) ${ghostWindTransform}`}>
-                <AnimatedG animatedProps={ghostWindProps}>
-                  <Line x1="0" y1="-75" x2="0" y2="-55" stroke="#999" strokeWidth="2" strokeDasharray="3,3" markerEnd="url(#arrowhead-bias)" />
-                </AnimatedG>
+              <G transform={`translate(400, 120) ${ghostWindTransform}`} opacity={ghostWindOpacityState}>
+                <Line x1="0" y1="-75" x2="0" y2="-55" stroke="#999" strokeWidth="2" strokeDasharray="3,3" markerEnd="url(#arrowhead-bias)" />
               </G>
             )}
 
@@ -629,46 +636,44 @@ export function LineBiasInteractive({
 
           {/* Shift text */}
           {windShift !== 0 && (
-            <AnimatedG animatedProps={shiftTextProps}>
-                <SvgText x={textPos.x} y={textPos.y} textAnchor="middle" fontSize="14" fontWeight="bold" fill="#3B82F6">
+            <G opacity={shiftTextOpacityState}>
+              <SvgText x={textPos.x} y={textPos.y} textAnchor="middle" fontSize="14" fontWeight="bold" fill="#3B82F6">
                 {windShift > 0 ? `+${windShift}°` : `${windShift}°`}
               </SvgText>
-            </AnimatedG>
+            </G>
           )}
 
             {/* Effective line - rotates to stay perpendicular to wind */}
-            <G transform={`translate(400, 350) ${effectiveLineTransform}`}>
-              <AnimatedG animatedProps={effectiveLineProps}>
-                <Line x1="-200" y1="0" x2="200" y2="0" stroke="#EF4444" strokeWidth="2" strokeDasharray="10,5" />
-                <SvgText x="0" y="-10" textAnchor="middle" fontSize="12" fontWeight="600" fill="#EF4444">
-                  Effective Line
-                </SvgText>
-              </AnimatedG>
+            <G transform={`translate(400, 350) ${effectiveLineTransform}`} opacity={effectiveLineOpacityState}>
+              <Line x1="-200" y1="0" x2="200" y2="0" stroke="#EF4444" strokeWidth="2" strokeDasharray="10,5" />
+              <SvgText x="0" y="-10" textAnchor="middle" fontSize="12" fontWeight="600" fill="#EF4444">
+                Effective Line
+              </SvgText>
             </G>
 
             {/* Blue boat - starboard side */}
-          <AnimatedG animatedProps={blueBoatProps}>
-            <TopDownSailboatSVG 
-              hullColor="#3B82F6" 
+          <G transform={blueBoatTransform}>
+            <TopDownSailboatSVG
+              hullColor="#3B82F6"
               rotation={blueBoatRotation}
-                scale={0.9} 
+              scale={0.9}
               showWake={true}
               externalRotation={true}
               windDirection={currentWindAngle}
             />
-          </AnimatedG>
+          </G>
 
             {/* Red boat - port side */}
-          <AnimatedG animatedProps={redBoatProps}>
-            <TopDownSailboatSVG 
-              hullColor="#EF4444" 
+          <G transform={redBoatTransform}>
+            <TopDownSailboatSVG
+              hullColor="#EF4444"
               rotation={redBoatRotation}
-                scale={0.9} 
+              scale={0.9}
               showWake={true}
               externalRotation={true}
               windDirection={currentWindAngle}
             />
-          </AnimatedG>
+          </G>
 
             {/* Step indicator in SVG */}
             <G transform="translate(40, 30)">

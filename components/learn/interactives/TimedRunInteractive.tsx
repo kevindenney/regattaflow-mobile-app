@@ -9,7 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  useAnimatedProps,
+  runOnJS,
+  useDerivedValue,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -18,7 +19,8 @@ import type { TimedRunStep } from './data/timedRunData';
 import { TIMED_RUN_SEQUENCE_STEPS } from './data/timedRunData';
 import { PowerboatSVG } from './shared';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
+// Note: AnimatedG removed to avoid crashes on Android New Architecture
+// Using state-driven transforms instead
 
 interface TimedRunInteractiveProps {
   currentStep?: TimedRunStep;
@@ -40,6 +42,9 @@ export function TimedRunInteractive({
   const boatY = useSharedValue(250);
   const boatRotate = useSharedValue(90);
 
+  // State-driven transform (avoids AnimatedG crash on Android New Architecture)
+  const [boatState, setBoatState] = useState({ opacity: 0, transform: 'translate(400, 250) rotate(90)' });
+
   useEffect(() => {
     const visualState = currentStep.visualState || {};
     const duration = 1500;
@@ -52,14 +57,14 @@ export function TimedRunInteractive({
     }
   }, [currentStep]);
 
-  const boatProps = useAnimatedProps(() => ({
-    opacity: boatOpacity.value,
-    transform: [
-      { translateX: boatX.value },
-      { translateY: boatY.value },
-      { rotate: `${boatRotate.value}deg` },
-    ],
-  }));
+  // Sync boat position to state using useDerivedValue (avoids AnimatedG crash on Android New Architecture)
+  useDerivedValue(() => {
+    runOnJS(setBoatState)({
+      opacity: boatOpacity.value,
+      transform: `translate(${boatX.value}, ${boatY.value}) rotate(${boatRotate.value})`,
+    });
+    return null;
+  }, []);
 
   const handleNext = () => {
     if (currentStepIndex < TIMED_RUN_SEQUENCE_STEPS.length - 1) {
@@ -142,7 +147,7 @@ export function TimedRunInteractive({
           <Circle cx="200" cy="200" r="10" fill="orange" stroke="black" strokeWidth="2" />
 
           {/* Sailboat with detailed graphics */}
-          <AnimatedG animatedProps={boatProps}>
+          <G opacity={boatState.opacity} transform={boatState.transform}>
             <G transform="scale(0.5)">
               {/* Hull */}
               <Path
@@ -168,7 +173,7 @@ export function TimedRunInteractive({
               {/* Bow wave */}
               <Path d="M -45,0 Q -50,5 -48,8" stroke="#ffffff" strokeWidth="1.5" fill="none" opacity={0.6} strokeLinecap="round" />
             </G>
-          </AnimatedG>
+          </G>
         </Svg>
       </View>
 

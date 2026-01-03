@@ -13,7 +13,8 @@ import { Audio } from 'expo-av';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
-    useAnimatedProps,
+    runOnJS,
+    useDerivedValue,
     useSharedValue,
     withRepeat,
     withTiming,
@@ -23,8 +24,8 @@ import type { FlagState, SequenceStep } from './data/startSequenceData';
 import { PREPARATORY_FLAG_OPTIONS as PREP_FLAGS, RACING_SEQUENCE_STEPS, STARTING_SEQUENCE_QUIZ } from './data/startSequenceData';
 import { CustomTimelineSlider, PowerboatSVG, StartProcedurePanel, TopDownSailboatSVG } from './shared';
 
-// Create animated SVG components
-const AnimatedG = Animated.createAnimatedComponent(G);
+// Note: AnimatedG removed to avoid crashes on Android New Architecture
+// Using state-driven transforms instead
 
 // Quiz state interface
 interface QuizAnswer {
@@ -111,7 +112,11 @@ export function StartingSequenceInteractive({
   // Animation for water/wind
   const waterOffset = useSharedValue(0);
   const windOffset = useSharedValue(0);
-  
+
+  // State-driven transforms for boats (avoids AnimatedG crash on Android New Architecture)
+  const [blueBoatTransform, setBlueBoatTransform] = useState('translate(275, 275) rotate(135, 25, 40)');
+  const [redBoatTransform, setRedBoatTransform] = useState('translate(500, 300) rotate(-45, 25, 40)');
+
   const prevTimeRef = useRef(time);
   const animationFrameRef = useRef<number | null>(null);
   const lastTimestampRef = useRef<number | null>(null);
@@ -448,15 +453,17 @@ export function StartingSequenceInteractive({
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Animated props for boats (SVG transform) - using SVG transform string format
+  // Sync boat positions to state using useDerivedValue (avoids AnimatedG crash on Android New Architecture)
   // The boat SVG is centered at (25, 40), so we rotate around that point
-  const blueBoatProps = useAnimatedProps(() => ({
-    transform: `translate(${blueBoatX.value}, ${blueBoatY.value}) rotate(${blueBoatRotate.value}, 25, 40)`,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setBlueBoatTransform)(`translate(${blueBoatX.value}, ${blueBoatY.value}) rotate(${blueBoatRotate.value}, 25, 40)`);
+    return null;
+  }, []);
 
-  const redBoatProps = useAnimatedProps(() => ({
-    transform: `translate(${redBoatX.value}, ${redBoatY.value}) rotate(${redBoatRotate.value}, 25, 40)`,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setRedBoatTransform)(`translate(${redBoatX.value}, ${redBoatY.value}) rotate(${redBoatRotate.value}, 25, 40)`);
+    return null;
+  }, []);
 
   return (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
@@ -574,26 +581,26 @@ export function StartingSequenceInteractive({
                   </G>
                   
                   {/* Blue Racing Boat - Top-down view */}
-                  <AnimatedG animatedProps={blueBoatProps}>
-                    <TopDownSailboatSVG 
-                      hullColor="#3B82F6" 
+                  <G transform={blueBoatTransform}>
+                    <TopDownSailboatSVG
+                      hullColor="#3B82F6"
                       rotation={blueBoatRotation}
-                      scale={0.7} 
+                      scale={0.7}
                       showWake={true}
                       externalRotation={true}
                     />
-                  </AnimatedG>
-                  
+                  </G>
+
                   {/* Red Racing Boat - Top-down view */}
-                  <AnimatedG animatedProps={redBoatProps}>
-                    <TopDownSailboatSVG 
-                      hullColor="#EF4444" 
+                  <G transform={redBoatTransform}>
+                    <TopDownSailboatSVG
+                      hullColor="#EF4444"
                       rotation={redBoatRotation}
-                      scale={0.7} 
+                      scale={0.7}
                       showWake={true}
                       externalRotation={true}
                     />
-                  </AnimatedG>
+                  </G>
                 </Svg>
               </View>
 

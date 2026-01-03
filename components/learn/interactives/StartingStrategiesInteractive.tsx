@@ -9,7 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  useAnimatedProps,
+  runOnJS,
+  useDerivedValue,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -18,7 +19,8 @@ import type { StrategyStep } from './data/startingStrategiesData';
 import { PORT_TACK_APPROACH_STEPS } from './data/startingStrategiesData';
 import { PowerboatSVG } from './shared';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
+// Note: AnimatedG removed to avoid crashes on Android New Architecture
+// Using state-driven transforms instead
 
 interface StartingStrategiesInteractiveProps {
   currentStep?: StrategyStep;
@@ -44,6 +46,10 @@ export function StartingStrategiesInteractive({
   const redY = useSharedValue(0);
   const redRotate = useSharedValue(0);
 
+  // State-driven transforms (avoids AnimatedG crash on Android New Architecture)
+  const [blueBoatState, setBlueBoatState] = useState({ opacity: 0, transform: 'translate(0, 0) rotate(0)' });
+  const [redBoatState, setRedBoatState] = useState({ opacity: 0, transform: 'translate(0, 0) rotate(0)' });
+
   useEffect(() => {
     const visualState = currentStep.visualState || {};
     const duration = 1200;
@@ -63,23 +69,22 @@ export function StartingStrategiesInteractive({
     }
   }, [currentStep]);
 
-  const blueBoatProps = useAnimatedProps(() => ({
-    opacity: blueOpacity.value,
-    transform: [
-      { translateX: blueX.value },
-      { translateY: blueY.value },
-      { rotate: `${blueRotate.value}deg` },
-    ],
-  }));
+  // Sync boat positions to state using useDerivedValue (avoids AnimatedG crash on Android New Architecture)
+  useDerivedValue(() => {
+    runOnJS(setBlueBoatState)({
+      opacity: blueOpacity.value,
+      transform: `translate(${blueX.value}, ${blueY.value}) rotate(${blueRotate.value})`,
+    });
+    return null;
+  }, []);
 
-  const redBoatProps = useAnimatedProps(() => ({
-    opacity: redOpacity.value,
-    transform: [
-      { translateX: redX.value },
-      { translateY: redY.value },
-      { rotate: `${redRotate.value}deg` },
-    ],
-  }));
+  useDerivedValue(() => {
+    runOnJS(setRedBoatState)({
+      opacity: redOpacity.value,
+      transform: `translate(${redX.value}, ${redY.value}) rotate(${redRotate.value})`,
+    });
+    return null;
+  }, []);
 
   const handleNext = () => {
     if (currentStepIndex < PORT_TACK_APPROACH_STEPS.length - 1) {
@@ -148,7 +153,7 @@ export function StartingStrategiesInteractive({
           <Circle cx="200" cy="200" r="10" fill="orange" stroke="black" strokeWidth="2" />
 
           {/* Boats - Blue */}
-          <AnimatedG animatedProps={blueBoatProps}>
+          <G opacity={blueBoatState.opacity} transform={blueBoatState.transform}>
             <G transform="scale(0.4)">
               <Path d="M -45,0 Q -48,10 -40,12 L 35,12 Q 42,10 40,0 Q 42,-8 35,-10 L -40,-10 Q -48,-8 -45,0 Z" fill="#3B82F6" stroke="#0F172A" strokeWidth="2" />
               <Ellipse cx="-5" cy="0" rx="32" ry="8" fill="#3B82F6" opacity={0.6} />
@@ -156,10 +161,10 @@ export function StartingStrategiesInteractive({
               <Path d="M -5,-45 Q 15,-28 25,-5 L -5,-3 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" />
               <Path d="M -5,-40 Q -20,-22 -25,-3 L -5,-2 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" opacity={0.95} />
             </G>
-          </AnimatedG>
+          </G>
 
           {/* Boats - Red */}
-          <AnimatedG animatedProps={redBoatProps}>
+          <G opacity={redBoatState.opacity} transform={redBoatState.transform}>
             <G transform="scale(0.4)">
               <Path d="M -45,0 Q -48,10 -40,12 L 35,12 Q 42,10 40,0 Q 42,-8 35,-10 L -40,-10 Q -48,-8 -45,0 Z" fill="#EF4444" stroke="#0F172A" strokeWidth="2" />
               <Ellipse cx="-5" cy="0" rx="32" ry="8" fill="#EF4444" opacity={0.6} />
@@ -167,7 +172,7 @@ export function StartingStrategiesInteractive({
               <Path d="M -5,-45 Q 15,-28 25,-5 L -5,-3 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" />
               <Path d="M -5,-40 Q -20,-22 -25,-3 L -5,-2 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" opacity={0.95} />
             </G>
-          </AnimatedG>
+          </G>
         </Svg>
       </View>
 

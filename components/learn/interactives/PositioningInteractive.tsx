@@ -9,7 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  useAnimatedProps,
+  runOnJS,
+  useDerivedValue,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -18,8 +19,8 @@ import type { PositioningStep } from './data/positioningData';
 import { POSITIONING_SEQUENCE_STEPS } from './data/positioningData';
 import { PowerboatSVG } from './shared';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+// Note: AnimatedG/AnimatedCircle removed to avoid crashes on Android New Architecture
+// Using state-driven transforms instead
 
 interface PositioningInteractiveProps {
   currentStep?: PositioningStep;
@@ -49,6 +50,12 @@ export function PositioningInteractive({
   const yellowY = useSharedValue(350);
   const yellowRotate = useSharedValue(45);
   const holeOpacity = useSharedValue(0);
+
+  // State-driven transforms and opacities (avoids AnimatedG crash on Android New Architecture)
+  const [blueBoatState, setBlueBoatState] = useState({ opacity: 0, transform: 'translate(400, 240) rotate(-45)' });
+  const [redBoatState, setRedBoatState] = useState({ opacity: 0, transform: 'translate(460, 235) rotate(-45)' });
+  const [yellowBoatState, setYellowBoatState] = useState({ opacity: 0, transform: 'translate(250, 350) rotate(45)' });
+  const [holeOpacityState, setHoleOpacityState] = useState(0);
 
   useEffect(() => {
     const visualState = currentStep.visualState || {};
@@ -80,36 +87,35 @@ export function PositioningInteractive({
     }
   }, [currentStep]);
 
-  const blueBoatProps = useAnimatedProps(() => ({
-    opacity: blueOpacity.value,
-    transform: [
-      { translateX: blueX.value },
-      { translateY: blueY.value },
-      { rotate: `${blueRotate.value}deg` },
-    ],
-  }));
+  // Sync boat positions to state using useDerivedValue (avoids AnimatedG crash on Android New Architecture)
+  useDerivedValue(() => {
+    runOnJS(setBlueBoatState)({
+      opacity: blueOpacity.value,
+      transform: `translate(${blueX.value}, ${blueY.value}) rotate(${blueRotate.value})`,
+    });
+    return null;
+  }, []);
 
-  const redBoatProps = useAnimatedProps(() => ({
-    opacity: redOpacity.value,
-    transform: [
-      { translateX: redX.value },
-      { translateY: redY.value },
-      { rotate: `${redRotate.value}deg` },
-    ],
-  }));
+  useDerivedValue(() => {
+    runOnJS(setRedBoatState)({
+      opacity: redOpacity.value,
+      transform: `translate(${redX.value}, ${redY.value}) rotate(${redRotate.value})`,
+    });
+    return null;
+  }, []);
 
-  const yellowBoatProps = useAnimatedProps(() => ({
-    opacity: yellowOpacity.value,
-    transform: [
-      { translateX: yellowX.value },
-      { translateY: yellowY.value },
-      { rotate: `${yellowRotate.value}deg` },
-    ],
-  }));
+  useDerivedValue(() => {
+    runOnJS(setYellowBoatState)({
+      opacity: yellowOpacity.value,
+      transform: `translate(${yellowX.value}, ${yellowY.value}) rotate(${yellowRotate.value})`,
+    });
+    return null;
+  }, []);
 
-  const holeProps = useAnimatedProps(() => ({
-    opacity: holeOpacity.value,
-  }));
+  useDerivedValue(() => {
+    runOnJS(setHoleOpacityState)(holeOpacity.value);
+    return null;
+  }, []);
 
   const handleNext = () => {
     if (currentStepIndex < POSITIONING_SEQUENCE_STEPS.length - 1) {
@@ -172,16 +178,16 @@ export function PositioningInteractive({
           <Circle cx="200" cy="200" r="10" fill="orange" stroke="black" strokeWidth="2" />
 
           {/* Hole indicator */}
-          <AnimatedCircle
+          <Circle
             cx="350"
             cy="260"
             r="40"
             fill="yellow"
-            animatedProps={holeProps}
+            opacity={holeOpacityState}
           />
 
           {/* Boats - Blue */}
-          <AnimatedG animatedProps={blueBoatProps}>
+          <G opacity={blueBoatState.opacity} transform={blueBoatState.transform}>
             <G transform="scale(0.4)">
               <Path d="M -45,0 Q -48,10 -40,12 L 35,12 Q 42,10 40,0 Q 42,-8 35,-10 L -40,-10 Q -48,-8 -45,0 Z" fill="#3B82F6" stroke="#0F172A" strokeWidth="2" />
               <Ellipse cx="-5" cy="0" rx="32" ry="8" fill="#3B82F6" opacity={0.6} />
@@ -189,10 +195,10 @@ export function PositioningInteractive({
               <Path d="M -5,-45 Q 15,-28 25,-5 L -5,-3 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" />
               <Path d="M -5,-40 Q -20,-22 -25,-3 L -5,-2 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" opacity={0.95} />
             </G>
-          </AnimatedG>
+          </G>
 
           {/* Boats - Red */}
-          <AnimatedG animatedProps={redBoatProps}>
+          <G opacity={redBoatState.opacity} transform={redBoatState.transform}>
             <G transform="scale(0.4)">
               <Path d="M -45,0 Q -48,10 -40,12 L 35,12 Q 42,10 40,0 Q 42,-8 35,-10 L -40,-10 Q -48,-8 -45,0 Z" fill="#EF4444" stroke="#0F172A" strokeWidth="2" />
               <Ellipse cx="-5" cy="0" rx="32" ry="8" fill="#EF4444" opacity={0.6} />
@@ -200,10 +206,10 @@ export function PositioningInteractive({
               <Path d="M -5,-45 Q 15,-28 25,-5 L -5,-3 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" />
               <Path d="M -5,-40 Q -20,-22 -25,-3 L -5,-2 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" opacity={0.95} />
             </G>
-          </AnimatedG>
+          </G>
 
           {/* Boats - Yellow */}
-          <AnimatedG animatedProps={yellowBoatProps}>
+          <G opacity={yellowBoatState.opacity} transform={yellowBoatState.transform}>
             <G transform="scale(0.4)">
               <Path d="M -45,0 Q -48,10 -40,12 L 35,12 Q 42,10 40,0 Q 42,-8 35,-10 L -40,-10 Q -48,-8 -45,0 Z" fill="#F4B400" stroke="#0F172A" strokeWidth="2" />
               <Ellipse cx="-5" cy="0" rx="32" ry="8" fill="#F4B400" opacity={0.6} />
@@ -211,7 +217,7 @@ export function PositioningInteractive({
               <Path d="M -5,-45 Q 15,-28 25,-5 L -5,-3 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" />
               <Path d="M -5,-40 Q -20,-22 -25,-3 L -5,-2 Z" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.2" opacity={0.95} />
             </G>
-          </AnimatedG>
+          </G>
         </Svg>
       </View>
 
