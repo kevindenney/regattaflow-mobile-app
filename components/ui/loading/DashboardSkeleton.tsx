@@ -1,18 +1,24 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { Skeleton, SkeletonText } from '../skeleton';
 
 export const DashboardSkeleton = () => {
   return (
-    <View className="flex-1 bg-gray-50">
+    <View style={skeletonStyles.container}>
+      {/* DEBUG: Prominent loading indicator */}
+      <View style={skeletonStyles.debugHeader}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={skeletonStyles.debugText}>Loading Races...</Text>
+      </View>
+
       {/* Header Skeleton */}
-      <View className="bg-primary-500 pt-12 pb-6 px-4">
+      <View style={skeletonStyles.header}>
         <SkeletonText _lines={1} className="h-8 w-3/4 mb-4" startColor="bg-primary-400" />
         <SkeletonText _lines={1} className="h-4 w-1/2 mb-4" startColor="bg-primary-400" />
-        <View className="bg-primary-600 p-3 rounded-xl">
-          <View className="flex-row justify-between">
+        <View style={skeletonStyles.headerCard}>
+          <View style={skeletonStyles.headerRow}>
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} className="items-center">
+              <View key={i} style={skeletonStyles.headerItem}>
                 <Skeleton className="h-6 w-12 mb-1" startColor="bg-primary-500" />
                 <Skeleton className="h-3 w-16" startColor="bg-primary-500" />
               </View>
@@ -61,3 +67,41 @@ export const DashboardSkeleton = () => {
     </View>
   );
 };
+
+const skeletonStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB', // gray-50
+  },
+  debugHeader: {
+    backgroundColor: '#2563EB', // primary-500
+    paddingTop: 60,
+    paddingBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  debugText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  header: {
+    backgroundColor: '#2563EB', // primary-500
+    paddingTop: 12,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  headerCard: {
+    backgroundColor: '#1D4ED8', // primary-600
+    padding: 12,
+    borderRadius: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  headerItem: {
+    alignItems: 'center',
+  },
+});

@@ -4626,16 +4626,14 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
 
   // Auth loading state - show while auth is being initialized
   if (!ready) {
-    logger.debug('Waiting for auth to be ready');
     return <DashboardSkeleton />;
   }
 
   // Loading state - AFTER all hooks
-  // Show skeleton if: 
+  // Show skeleton if:
   // 1. Dashboard is loading and no profile yet, OR
   // 2. User is signed in but races haven't loaded yet (prevents flash of demo content)
   if ((loading && !profile) || (signedIn && liveRacesLoading && !hasLoadedRacesOnce.current)) {
-    logger.debug('Loading skeleton', { loading, hasProfile: !!profile, signedIn, liveRacesLoading, hasLoadedOnce: hasLoadedRacesOnce.current });
     return <DashboardSkeleton />;
   }
 
@@ -4656,10 +4654,11 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
 
   return (
     <View className="flex-1 bg-gray-50">
-      <PlanModeLayout
-        raceId={selectedRaceId}
-        raceData={selectedRaceData}
-      >
+      {/* DEBUG: Simple test element */}
+      <View style={{ backgroundColor: 'red', padding: 20, marginTop: 50 }}>
+        <Text style={{ color: 'white', fontSize: 20 }}>DEBUG: Races screen is rendering!</Text>
+      </View>
+      {/* Temporarily removed PlanModeLayout to debug blank screen issue */}
             {/* Header */}
             <View className="bg-primary-500 pt-10 pb-2 px-4">
         <View className="flex-row justify-between items-center mb-1">
@@ -4707,7 +4706,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
       {/* Main Content */}
       <ScrollView
         ref={mainScrollViewRef}
-        className="px-4 py-4"
+        className="flex-1 px-4 py-4"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -5972,7 +5971,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
         />
       )}
 
-      </PlanModeLayout>
+      {/* </PlanModeLayout> - temporarily removed */}
     </View>
   );
 }

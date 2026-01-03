@@ -257,7 +257,10 @@ export function useLiveRaces(userId?: string) {
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
 
     loadLiveRaces();
 
