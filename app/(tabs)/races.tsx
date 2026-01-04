@@ -80,8 +80,12 @@ import {
     Users,
     X
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+
+// AsyncStorage key for dismissing AddRaceTimelineCard
+const ADD_RACE_CARD_DISMISSED_KEY = '@regattaflow/add_race_card_dismissed';
 
 const logger = createLogger('RacesScreen');
 
@@ -643,9 +647,23 @@ export default function RacesScreen() {
   const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
   const hasAutoCenteredNextRace = useRef(false);
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
-  // Maintain card dimension constants in sync with RaceCard.tsx to keep scroll math accurate
-  const RACE_CARD_WIDTH = 170;
-  const RACE_CARD_TOTAL_WIDTH = RACE_CARD_WIDTH + 8; // width + combined horizontal margin (4px each side)
+
+  // Mobile detection - only actual native mobile platforms (not web at any size)
+  const isMobileNative = Platform.OS === 'ios' || Platform.OS === 'android';
+
+  // Full-screen card dimensions - cards take up most of the screen
+  const MOBILE_HORIZONTAL_PADDING = 16; // Small padding on edges
+  const MOBILE_CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 375); // Full-screen width
+  const MOBILE_CARD_GAP = 16;
+  const MOBILE_SNAP_INTERVAL = MOBILE_CARD_WIDTH + MOBILE_CARD_GAP;
+
+  // Web dimensions - also use full-screen cards
+  const DESKTOP_RACE_CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 375);
+  const DESKTOP_RACE_CARD_TOTAL_WIDTH = DESKTOP_RACE_CARD_WIDTH + MOBILE_CARD_GAP;
+
+  // Dynamic values - same for all platforms now (full-screen cards)
+  const RACE_CARD_WIDTH = MOBILE_CARD_WIDTH;
+  const RACE_CARD_TOTAL_WIDTH = MOBILE_SNAP_INTERVAL;
 
   // State for horizontal scroll arrows
   const [scrollX, setScrollX] = useState(0);
@@ -700,6 +718,7 @@ export default function RacesScreen() {
   const [sharingStrategy, setSharingStrategy] = useState(false);
   const [sharingRaceEventId, setSharingRaceEventId] = useState<string | null>(null);
   const [showBoatClassSelector, setShowBoatClassSelector] = useState(false);
+  const [addRaceCardDismissed, setAddRaceCardDismissed] = useState(false);
   const updateRacePosition = useRaceConditions(state => state.updatePosition);
   const updateEnvironment = useRaceConditions(state => state.updateEnvironment);
   const updateCourse = useRaceConditions(state => state.updateCourse);
@@ -712,6 +731,21 @@ export default function RacesScreen() {
   const previousCourseKeyRef = useRef<string | null>(null);
   const previousEnvironmentKeyRef = useRef<string | null>(null);
   const previousZonesKeyRef = useRef<string | null>(null);
+
+  // Load AddRaceCard dismissal state from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem(ADD_RACE_CARD_DISMISSED_KEY).then((value) => {
+      if (value === 'true') {
+        setAddRaceCardDismissed(true);
+      }
+    });
+  }, []);
+
+  // Handler to dismiss the AddRaceCard
+  const handleDismissAddRaceCard = useCallback(async () => {
+    setAddRaceCardDismissed(true);
+    await AsyncStorage.setItem(ADD_RACE_CARD_DISMISSED_KEY, 'true');
+  }, []);
 
   // Clear any stuck loading states on mount
 
@@ -1171,6 +1205,98 @@ const addRaceTimelineStyles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+  // NEW: Simplified card styles - matching RaceCard dimensions
+  cardSimple: {
+    width: 160, // Narrower than race cards for visual distinction
+    height: 180, // Fixed height matching race cards
+    backgroundColor: '#F8FFFB',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    justifyContent: 'space-between',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(15, 23, 42, 0.06)',
+      },
+      default: {
+        shadowColor: '#0F172A',
+        shadowOpacity: 0.06,
+        shadowOffset: { width: 0, height: 2 },
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
+  },
+  dismissButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  titleSimple: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#042F2E',
+    marginBottom: 4,
+    paddingRight: 20,
+  },
+  copySimple: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  primaryButtonSimple: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  primaryButtonTextSimple: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  secondaryButtonSimple: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    backgroundColor: '#FFFFFF',
+  },
+  compactCard: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#ECFDF5',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  compactText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#047857',
+  },
 });
 
 const documentTypePickerStyles = StyleSheet.create({
@@ -1235,60 +1361,74 @@ interface AddRaceTimelineCardProps {
   onAddRace: () => void;
   onImportCalendar: () => void;
   hasRealRaces: boolean;
+  onDismiss?: () => void;
+  isCompact?: boolean;
+  cardWidth?: number;
 }
 
-function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces }: AddRaceTimelineCardProps) {
+function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces, onDismiss, isCompact = false, cardWidth }: AddRaceTimelineCardProps) {
+  // Compact mode: just show a simple add button card
+  if (isCompact) {
+    return (
+      <TouchableOpacity
+        style={[
+          addRaceTimelineStyles.compactCard,
+          cardWidth ? { width: cardWidth, height: 180 } : null,
+        ]}
+        onPress={onAddRace}
+        accessibilityRole="button"
+        accessibilityLabel="Add a new race"
+        activeOpacity={0.85}
+      >
+        <Plus color="#047857" size={cardWidth ? 32 : 24} />
+        <Text style={addRaceTimelineStyles.compactText}>Add Race</Text>
+      </TouchableOpacity>
+    );
+  }
+
   return (
-    <View style={addRaceTimelineStyles.wrapper}>
-      <View style={addRaceTimelineStyles.timelineColumn}>
-        <View style={addRaceTimelineStyles.timelineBadge}>
-          <Text style={addRaceTimelineStyles.timelineBadgeText}>
-            {hasRealRaces ? 'NOW' : 'START'}
-          </Text>
-        </View>
-        <View style={addRaceTimelineStyles.timelineBar} />
+    <View style={[
+      addRaceTimelineStyles.cardSimple,
+      cardWidth ? { width: cardWidth, height: 180 } : null,
+    ]}>
+      {/* Dismiss button */}
+      {onDismiss && (
+        <TouchableOpacity
+          style={addRaceTimelineStyles.dismissButton}
+          onPress={onDismiss}
+          accessibilityLabel="Dismiss this card"
+          accessibilityRole="button"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <X color="#94A3B8" size={16} />
+        </TouchableOpacity>
+      )}
+      <View>
+        <Text style={addRaceTimelineStyles.titleSimple}>Add your next race</Text>
+        <Text style={addRaceTimelineStyles.copySimple}>
+          Import race docs or draw your racing area
+        </Text>
       </View>
-      <View style={addRaceTimelineStyles.card}>
-        <View>
-          <Text style={addRaceTimelineStyles.eyebrow}>Race timeline</Text>
-          <Text style={addRaceTimelineStyles.title}>Add your next race</Text>
-          <Text style={addRaceTimelineStyles.copy}>
-            Drop NOR / SI files, draw a racing box, and unlock tactical overlays instantly.
-          </Text>
-          <View style={addRaceTimelineStyles.chipsRow}>
-            <View style={addRaceTimelineStyles.chip}>
-              <Text style={addRaceTimelineStyles.chipText}>Auto-plan docs</Text>
-            </View>
-            <View style={addRaceTimelineStyles.chip}>
-              <Text style={addRaceTimelineStyles.chipText}>Draw race area</Text>
-            </View>
-            <View style={addRaceTimelineStyles.chip}>
-              <Text style={addRaceTimelineStyles.chipText}>Share with crew</Text>
-            </View>
-          </View>
-        </View>
-        <View>
-          <TouchableOpacity
-            style={addRaceTimelineStyles.primaryButton}
-            onPress={onAddRace}
-            accessibilityRole="button"
-            accessibilityLabel="Add a new race"
-            activeOpacity={0.9}
-          >
-            <Plus color="#FFFFFF" size={18} />
-            <Text style={addRaceTimelineStyles.primaryButtonText}>Add race</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={addRaceTimelineStyles.secondaryButton}
-            onPress={onImportCalendar}
-            accessibilityRole="button"
-            accessibilityLabel="Import race calendar"
-            activeOpacity={0.85}
-          >
-            <Calendar color="#047857" size={18} />
-            <Text style={addRaceTimelineStyles.secondaryButtonText}>Import calendar</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={addRaceTimelineStyles.buttonsRow}>
+        <TouchableOpacity
+          style={addRaceTimelineStyles.primaryButtonSimple}
+          onPress={onAddRace}
+          accessibilityRole="button"
+          accessibilityLabel="Add a new race"
+          activeOpacity={0.9}
+        >
+          <Plus color="#FFFFFF" size={16} />
+          <Text style={addRaceTimelineStyles.primaryButtonTextSimple}>Add race</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={addRaceTimelineStyles.secondaryButtonSimple}
+          onPress={onImportCalendar}
+          accessibilityRole="button"
+          accessibilityLabel="Import race calendar"
+          activeOpacity={0.85}
+        >
+          <Calendar color="#047857" size={16} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1306,12 +1446,12 @@ interface RigPlannerCardProps {
   onAddTuningGuide?: () => void;
 }
 
-function RigPlannerCard({ 
-  presets, 
-  selectedBand, 
-  onSelectBand, 
-  notes, 
-  onChangeNotes, 
+function RigPlannerCard({
+  presets,
+  selectedBand,
+  onSelectBand,
+  notes,
+  onChangeNotes,
   onOpenChat,
   isGenericDefaults = false,
   boatClassName,
@@ -1324,40 +1464,40 @@ function RigPlannerCard({
   const activePreset = presets.find((preset) => preset.id === selectedBand) ?? presets[0];
 
   return (
-    <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
-      <View className="flex-row items-center justify-between mb-3">
-        <Text className="text-base font-semibold text-slate-900">Rig &amp; Sail Planner</Text>
+    <View style={rigPlannerStyles.container}>
+      <View style={rigPlannerStyles.header}>
+        <Text style={rigPlannerStyles.title}>Rig &amp; Sail Planner</Text>
         <TouchableOpacity
           onPress={onOpenChat}
           accessibilityRole="button"
-          className="flex-row items-center"
+          style={rigPlannerStyles.chatButton}
         >
           <MaterialCommunityIcons name="chat-processing-outline" size={16} color="#2563EB" />
-          <Text className="text-xs font-semibold text-blue-600 ml-1">Review chat</Text>
+          <Text style={rigPlannerStyles.chatButtonText}>Review chat</Text>
         </TouchableOpacity>
       </View>
 
       {/* Warning when using generic defaults */}
       {isGenericDefaults && (
-        <View className="flex-row items-start gap-2 mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+        <View style={rigPlannerStyles.warningContainer}>
           <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#b45309" style={{ marginTop: 2 }} />
-          <View className="flex-1">
-            <Text className="text-xs font-semibold text-amber-700">Generic Settings Shown</Text>
-            <Text className="text-xs text-amber-600 mt-1">
-              These are generic rig settings, not specific to {boatClassName || 'your boat class'}. 
+          <View style={rigPlannerStyles.warningContent}>
+            <Text style={rigPlannerStyles.warningTitle}>Generic Settings Shown</Text>
+            <Text style={rigPlannerStyles.warningText}>
+              These are generic rig settings, not specific to {boatClassName || 'your boat class'}.
               Add a tuning guide for accurate {boatClassName || 'class'}-specific recommendations.
             </Text>
             {onAddTuningGuide && (
-              <Pressable onPress={onAddTuningGuide} className="flex-row items-center gap-1 mt-2">
+              <Pressable onPress={onAddTuningGuide} style={rigPlannerStyles.addGuideButton}>
                 <MaterialCommunityIcons name="book-plus-outline" size={14} color="#b45309" />
-                <Text className="text-xs font-semibold text-amber-700">Add tuning guide</Text>
+                <Text style={rigPlannerStyles.addGuideText}>Add tuning guide</Text>
               </Pressable>
             )}
           </View>
         </View>
       )}
 
-      <View className="flex-row flex-wrap gap-2 mb-3">
+      <View style={rigPlannerStyles.presetsContainer}>
         {presets.map((preset) => {
           const isActive = preset.id === activePreset.id;
           return (
@@ -1366,9 +1506,15 @@ function RigPlannerCard({
               onPress={() => onSelectBand(preset.id)}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
-              className={`px-3 py-2 rounded-full border ${isActive ? 'bg-blue-600 border-blue-600' : 'bg-blue-50 border-blue-200'}`}
+              style={[
+                rigPlannerStyles.presetButton,
+                isActive ? rigPlannerStyles.presetButtonActive : rigPlannerStyles.presetButtonInactive,
+              ]}
             >
-              <Text className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-blue-700'}`}>
+              <Text style={[
+                rigPlannerStyles.presetButtonText,
+                isActive ? rigPlannerStyles.presetButtonTextActive : rigPlannerStyles.presetButtonTextInactive,
+              ]}>
                 {preset.label} • {preset.windRange}
               </Text>
             </TouchableOpacity>
@@ -1376,12 +1522,12 @@ function RigPlannerCard({
         })}
       </View>
 
-      <View className="bg-blue-50 border border-blue-100 rounded-2xl p-3 mb-3">
+      <View style={rigPlannerStyles.detailsPanel}>
         <RigPlannerDetailRow label="Uppers" value={activePreset.uppers} />
         <RigPlannerDetailRow label="Lowers" value={activePreset.lowers} />
         <RigPlannerDetailRow label="Runners" value={activePreset.runners} />
         <RigPlannerDetailRow label="Mast Ram" value={activePreset.ram} />
-        <Text className="text-[11px] text-blue-900 mt-2">{activePreset.notes}</Text>
+        <Text style={rigPlannerStyles.detailsNotes}>{activePreset.notes}</Text>
       </View>
 
       <TextInput
@@ -1390,10 +1536,10 @@ function RigPlannerCard({
         placeholder="Notes or adjustments (e.g., traveller +1 cm, jib lead aft ½ hole)"
         multiline
         numberOfLines={3}
-        className="border border-slate-200 rounded-2xl px-3 py-2 text-sm text-slate-700"
+        style={rigPlannerStyles.notesInput}
         placeholderTextColor="#94A3B8"
       />
-      <Text className="text-[11px] text-slate-500 mt-2">
+      <Text style={rigPlannerStyles.helperText}>
         Track tweaks made dockside so the crew can sync after racing.
       </Text>
     </View>
@@ -1402,12 +1548,156 @@ function RigPlannerCard({
 
 function RigPlannerDetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-row items-start justify-between mt-1">
-      <Text className="text-xs font-semibold text-blue-900">{label}</Text>
-      <Text className="text-xs text-blue-800 text-right ml-3 flex-1">{value}</Text>
+    <View style={rigPlannerStyles.detailRow}>
+      <Text style={rigPlannerStyles.detailLabel}>{label}</Text>
+      <Text style={rigPlannerStyles.detailValue}>{value}</Text>
     </View>
   );
 }
+
+const rigPlannerStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
+    marginLeft: 4,
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 8,
+  },
+  warningContent: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#D97706',
+    marginTop: 4,
+  },
+  addGuideButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  addGuideText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+  presetsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  presetButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  presetButtonActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  presetButtonInactive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  presetButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  presetButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  presetButtonTextInactive: {
+    color: '#1D4ED8',
+  },
+  detailsPanel: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+  },
+  detailsNotes: {
+    fontSize: 11,
+    color: '#1E3A8A',
+    marginTop: 8,
+  },
+  notesInput: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#334155',
+    textAlignVertical: 'top',
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E3A8A',
+  },
+  detailValue: {
+    fontSize: 12,
+    color: '#1E40AF',
+    textAlign: 'right',
+    marginLeft: 12,
+    flex: 1,
+  },
+});
 
 interface RegulatoryDigestCardProps {
   digest: RegulatoryDigestData;
@@ -4654,24 +4944,19 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* DEBUG: Simple test element */}
-      <View style={{ backgroundColor: 'red', padding: 20, marginTop: 50 }}>
-        <Text style={{ color: 'white', fontSize: 20 }}>DEBUG: Races screen is rendering!</Text>
-      </View>
-      {/* Temporarily removed PlanModeLayout to debug blank screen issue */}
-            {/* Header */}
-            <View className="bg-primary-500 pt-10 pb-2 px-4">
-        <View className="flex-row justify-between items-center mb-1">
-          <Text className="text-white text-lg font-bold">Races</Text>
-          <View className="flex-row gap-2 items-center">
+      {/* Header */}
+      <View className="bg-primary-500 pt-12 pb-3 px-4">
+        <View className="flex-row justify-between items-center mb-2">
+          <Text className="text-white text-2xl font-bold">Races</Text>
+          <View className="flex-row gap-3 items-center">
             {!isOnline && <OfflineIndicator />}
             <AccessibleTouchTarget
               onPress={() => router.push('/notifications')}
               accessibilityLabel="Notifications"
               accessibilityHint="View your notifications and alerts"
-              className="bg-primary-600 rounded-full p-1"
+              className="bg-white/20 rounded-full p-2"
             >
-              <Bell color="white" size={18} />
+              <Bell color="white" size={20} />
             </AccessibleTouchTarget>
           </View>
         </View>
@@ -4753,9 +5038,16 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 ref={raceCardsScrollViewRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingRight: 16 }}
+                contentContainerStyle={{
+                  paddingLeft: MOBILE_HORIZONTAL_PADDING,
+                  paddingRight: MOBILE_HORIZONTAL_PADDING,
+                  gap: MOBILE_CARD_GAP,
+                }}
                 nestedScrollEnabled={true}
                 scrollEventThrottle={16}
+                decelerationRate="fast"
+                snapToInterval={MOBILE_SNAP_INTERVAL}
+                snapToAlignment="center"
                 onScroll={(event) => {
                   setScrollX(event.nativeEvent.contentOffset.x);
                 }}
@@ -4779,6 +5071,9 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         onAddRace={handleAddRaceNavigation}
                         onImportCalendar={handleOpenCalendarImport}
                         hasRealRaces={hasRealRaces}
+                        onDismiss={handleDismissAddRaceCard}
+                        isCompact={addRaceCardDismissed}
+                        cardWidth={MOBILE_CARD_WIDTH}
                       />,
                     );
                     addRaceCardInserted = true;
@@ -4838,6 +5133,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         onEdit={race.created_by === user?.id ? () => handleEditRace(race.id) : undefined}
                         onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
                         isDimmed={hasActiveRace && selectedRaceId !== race.id}
+                        cardWidth={MOBILE_CARD_WIDTH}
                       />,
                     );
                   } else {
@@ -4872,6 +5168,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         onHide={race.created_by !== user?.id ? () => handleHideRace(race.id, race.name) : undefined}
                         isDimmed={hasActiveRace && selectedRaceId !== race.id}
                         results={resultsData}
+                        cardWidth={MOBILE_CARD_WIDTH}
                       />,
                     );
                   }
@@ -4884,6 +5181,9 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                       onAddRace={handleAddRaceNavigation}
                       onImportCalendar={handleOpenCalendarImport}
                       hasRealRaces={hasRealRaces}
+                      onDismiss={handleDismissAddRaceCard}
+                      isCompact={addRaceCardDismissed}
+                      cardWidth={MOBILE_CARD_WIDTH}
                     />,
                   );
                 }
@@ -4891,8 +5191,8 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 return cardElements;
               })()}
               </ScrollView>
-              {/* Left Arrow Button */}
-              {scrollX > 10 && (
+              {/* Left Arrow Button - Hidden on mobile (swipe instead) */}
+              {!isMobileNative && scrollX > 10 && (
                 <TouchableOpacity
                   onPress={() => {
                     raceCardsScrollViewRef.current?.scrollTo({
@@ -4913,8 +5213,8 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   <ChevronLeft size={32} color="#2563EB" />
                 </TouchableOpacity>
               )}
-              {/* Right Arrow Button */}
-              {scrollContentWidth > SCREEN_WIDTH && scrollX < scrollContentWidth - SCREEN_WIDTH - 10 && (
+              {/* Right Arrow Button - Hidden on mobile (swipe instead) */}
+              {!isMobileNative && scrollContentWidth > SCREEN_WIDTH && scrollX < scrollContentWidth - SCREEN_WIDTH - 10 && (
                 <TouchableOpacity
                   onPress={() => {
                     raceCardsScrollViewRef.current?.scrollTo({
@@ -5661,22 +5961,32 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
             <View className="mb-3">
               <Text className="text-base font-bold text-gray-800">Demo Races</Text>
               <Text className="text-xs text-gray-500">
-                📋 Example races to get you started – use the Add Race card to drop your first real event.
+                Explore sample races to see how RegattaFlow works
               </Text>
             </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               className="mb-4"
-              contentContainerStyle={{ paddingRight: 16, pointerEvents: 'box-none' }}
+              contentContainerStyle={{
+                paddingLeft: 4,
+                paddingRight: 20,
+                gap: 8,
+                pointerEvents: 'box-none',
+              }}
               nestedScrollEnabled={true}
               scrollEventThrottle={16}
+              decelerationRate="fast"
+              snapToInterval={268}
+              snapToAlignment="start"
             >
               <AddRaceTimelineCard
                 key="add-race-cta-demo"
                 onAddRace={handleAddRaceNavigation}
                 onImportCalendar={handleOpenCalendarImport}
                 hasRealRaces={hasRealRaces}
+                onDismiss={handleDismissAddRaceCard}
+                isCompact={addRaceCardDismissed}
               />
               {MOCK_RACES.map((race, index) => {
                 const isDistanceRace = race.race_type === 'distance';
