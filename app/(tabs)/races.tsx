@@ -703,6 +703,16 @@ export default function RacesScreen() {
   // Post-race interview state
   const [showPostRaceInterview, setShowPostRaceInterview] = useState(false);
   const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
+
+  // Add race sheet state (Tufte-style: bottom sheet instead of inline button)
+  const [showAddRaceSheet, setShowAddRaceSheet] = useState(false);
+  const [isAddingRace, setIsAddingRace] = useState(false);
+  // FamilyButton inline form expanded state (lifted here to survive child remounts)
+  const [familyButtonExpanded, setFamilyButtonExpandedInternal] = useState(false);
+  const setFamilyButtonExpanded = useCallback((value: boolean) => {
+    console.log('[RacesScreen] setFamilyButtonExpanded called with:', value);
+    setFamilyButtonExpandedInternal(value);
+  }, []);
   const [completedRaceName, setCompletedRaceName] = useState<string>('');
   const [completedRaceId, setCompletedRaceId] = useState<string | null>(null);
   const [completedSessionGpsPoints, setCompletedSessionGpsPoints] = useState<number>(0);
@@ -809,6 +819,17 @@ export default function RacesScreen() {
     debounceMs: 1000,
   });
 
+  // Real-time race updates - moved early to avoid hoisting issues with callbacks
+  const { liveRaces, loading: liveRacesLoading, refresh: refetchRaces } = useLiveRaces(user?.id);
+
+  // Track if races have been loaded at least once to prevent flash of demo content
+  const hasLoadedRacesOnce = useRef(false);
+  useEffect(() => {
+    if (!liveRacesLoading && liveRaces !== undefined) {
+      hasLoadedRacesOnce.current = true;
+    }
+  }, [liveRacesLoading, liveRaces]);
+
   const scrollToPosition = useCallback((position: number) => {
     if (!mainScrollViewRef.current) {
       return;
@@ -834,6 +855,30 @@ export default function RacesScreen() {
   const handleAddRaceNavigation = useCallback(() => {
     router.push('/(tabs)/race/add');
   }, [router]);
+
+  // Handler for quick add race form (Tufte-style bottom sheet)
+  const handleQuickAddRaceSubmit = useCallback(async (data: { name: string; dateTime: string }) => {
+    setIsAddingRace(true);
+    try {
+      const { data: newRace, error } = await RaceEventService.createRaceEvent({
+        race_name: data.name,
+        start_time: data.dateTime,
+      });
+
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to create race');
+        return;
+      }
+
+      // Success - close sheet and refresh
+      setShowAddRaceSheet(false);
+      refetchRaces?.();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
+    } finally {
+      setIsAddingRace(false);
+    }
+  }, [refetchRaces]);
 
   const handleOpenCalendarImport = useCallback(() => {
     setShowCalendarImport(true);
@@ -1385,6 +1430,58 @@ const documentTypePickerStyles = StyleSheet.create({
   },
 });
 
+// Tufte-style add race sheet - minimal, typographic
+const addRaceSheetStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 20 : 16,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#111827',
+    letterSpacing: -0.2,
+  },
+  closeButton: {
+    padding: 4,
+  },
+});
+
+// Tufte-style header for add race section - horizontal flex row
+const addRaceHeaderStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginHorizontal: 4,
+    paddingHorizontal: 16,
+  },
+  countText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  addButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+});
+
 interface AddRaceTimelineCardProps {
   onAddRace: () => void;
   onImportCalendar: () => void;
@@ -1470,11 +1567,14 @@ interface AddRaceFamilyButtonProps {
   onRaceCreated: () => void;
   cardWidth?: number;
   cardHeight?: number;
+  // Lifted state from parent to survive remounts
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
 }
 
-function AddRaceFamilyButton({ onRaceCreated, cardWidth = 160, cardHeight = 180 }: AddRaceFamilyButtonProps) {
+function AddRaceFamilyButton({ onRaceCreated, cardWidth = 160, cardHeight = 180, expanded, onExpandedChange }: AddRaceFamilyButtonProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const familyButtonRef = useRef<{ collapse: () => void } | null>(null);
+  const isExpanded = expanded;
 
   const handleQuickAddRace = useCallback(async (data: { name: string; dateTime: string }) => {
     setIsSubmitting(true);
@@ -1490,7 +1590,7 @@ function AddRaceFamilyButton({ onRaceCreated, cardWidth = 160, cardHeight = 180 
       }
 
       // Success - collapse and refresh
-      familyButtonRef.current?.collapse();
+      onExpandedChange(false);
       onRaceCreated();
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
@@ -1500,8 +1600,12 @@ function AddRaceFamilyButton({ onRaceCreated, cardWidth = 160, cardHeight = 180 
   }, [onRaceCreated]);
 
   const handleCancel = useCallback(() => {
-    familyButtonRef.current?.collapse();
-  }, []);
+    onExpandedChange(false);
+  }, [onExpandedChange]);
+
+  const handleExpandChange = useCallback((newExpanded: boolean) => {
+    onExpandedChange(newExpanded);
+  }, [onExpandedChange]);
 
   return (
     <View
@@ -1515,7 +1619,8 @@ function AddRaceFamilyButton({ onRaceCreated, cardWidth = 160, cardHeight = 180 
       }}
     >
       <FamilyButton
-        ref={familyButtonRef}
+        expanded={isExpanded}
+        onExpandChange={handleExpandChange}
         width={cardWidth}
         height={cardHeight}
         variant="tufte"
@@ -1984,17 +2089,6 @@ function CourseOutlineCard({ groups }: { groups: CourseOutlineGroup[] }) {
 
   // Offline support
   const { isOnline, cacheNextRace } = useOffline();
-
-  // Real-time race updates
-  const { liveRaces, loading: liveRacesLoading, refresh: refetchRaces } = useLiveRaces(user?.id);
-  
-  // Track if races have been loaded at least once to prevent flash of demo content
-  const hasLoadedRacesOnce = useRef(false);
-  useEffect(() => {
-    if (!liveRacesLoading && liveRaces !== undefined) {
-      hasLoadedRacesOnce.current = true;
-    }
-  }, [liveRacesLoading, liveRaces]);
 
   // Enrich races with real weather data
   const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
@@ -5054,48 +5148,42 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
   }
 
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-primary-500 pt-12 pb-3 px-4">
-        <View className="flex-row justify-between items-center mb-2">
-          <Text className="text-white text-2xl font-bold">Races</Text>
-          <View className="flex-row gap-3 items-center">
+    <View className="flex-1" style={{ backgroundColor: '#EBEBED' }}>
+      {/* Minimal Header - Tufte/Apple style: data over chrome */}
+      <View className="pt-14 pb-2 px-4" style={{ backgroundColor: '#EBEBED' }}>
+        <View className="flex-row justify-between items-center">
+          {/* Venue as primary context */}
+          {currentVenue ? (
+            <TouchableOpacity
+              onPress={handleVenuePress}
+              className="flex-row items-center flex-1"
+              accessibilityLabel={`Current venue: ${currentVenue.name}`}
+              accessibilityHint="Tap to view venue details or change venue"
+              accessibilityRole="button"
+            >
+              <MapPin color="#6B7280" size={14} />
+              <Text className="text-gray-600 text-sm ml-1.5 font-medium">{currentVenue.name}</Text>
+              {(loadingInsights || weatherLoading) && (
+                <ActivityIndicator size="small" color="#9CA3AF" className="ml-2" />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View className="flex-1" />
+          )}
+
+          {/* Utilities - subtle */}
+          <View className="flex-row items-center gap-2">
             {!isOnline && <OfflineIndicator />}
             <AccessibleTouchTarget
               onPress={() => router.push('/notifications')}
               accessibilityLabel="Notifications"
               accessibilityHint="View your notifications and alerts"
-              className="bg-white/20 rounded-full p-2"
+              className="p-2"
             >
-              <Bell color="white" size={20} />
+              <Bell color="#9CA3AF" size={20} />
             </AccessibleTouchTarget>
           </View>
         </View>
-
-        {/* Venue Display */}
-        {currentVenue && (
-          <TouchableOpacity
-            className="flex-row items-center"
-            onPress={handleVenuePress}
-            accessibilityLabel={`Current venue: ${currentVenue.name}`}
-            accessibilityHint="Tap to view venue details or change venue"
-            accessibilityRole="button"
-            style={{ minHeight: 32 }}
-          >
-            <MapPin color="white" size={12} />
-            <View className="flex-row items-center flex-1">
-              <Text className="text-white text-xs ml-1">{currentVenue.name}</Text>
-              {(loadingInsights || weatherLoading) && (
-                <ActivityIndicator size="small" color="white" className="ml-1" />
-              )}
-              {!weatherLoading && raceWeather && (
-                <Text className="text-white/70 text-[10px] ml-1">
-                  (HKO)
-                </Text>
-              )}
-            </View>
-          </TouchableOpacity>
-        )}
       </View>
 
 
@@ -5133,17 +5221,28 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
         {hasRealRaces ? (
           // User has real races - show all upcoming races with fixed hero height
           <>
-            {/* Header - Outside hero zone for more card space */}
-            <View className="flex-row items-center justify-between mb-2">
-              <View>
-                <Text className="text-base font-bold text-gray-800">All Races</Text>
-                <Text className="text-xs text-gray-500">Swipe to browse</Text>
-              </View>
-              <View className="bg-blue-100 px-3 py-1 rounded-full">
-                <Text className="text-blue-800 font-semibold text-sm">
-                  {safeRecentRaces.length}
-                </Text>
-              </View>
+            {/* Data-forward summary with + Add link - Tufte style */}
+            <View style={addRaceHeaderStyles.container}>
+              <Text style={addRaceHeaderStyles.countText}>
+                {safeRecentRaces.length} {safeRecentRaces.length === 1 ? 'race' : 'races'}
+                {safeNextRace?.date && (() => {
+                  const daysUntil = Math.ceil((new Date(safeNextRace.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  if (daysUntil === 0) return ' · Next starts today';
+                  if (daysUntil === 1) return ' · Next starts tomorrow';
+                  if (daysUntil > 0 && daysUntil <= 7) return ` · Next in ${daysUntil} days`;
+                  return '';
+                })()}
+              </Text>
+              <Pressable
+                onPress={() => setShowAddRaceSheet(true)}
+                style={({ pressed }) => [
+                  addRaceHeaderStyles.addButton,
+                  pressed && { opacity: 0.6 }
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={addRaceHeaderStyles.addButtonText}>+ Add</Text>
+              </Pressable>
             </View>
             {/* Hero Zone - Fixed height race card timeline */}
             <View style={{ height: HERO_ZONE_HEIGHT }}>
@@ -5191,25 +5290,11 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 }}
               >
               {(() => {
-                let addRaceCardInserted = false;
                 const cardElements: React.ReactNode[] = [];
 
                 safeRecentRaces.forEach((race: any, index: number) => {
                   const isNextRace = !!(safeNextRace?.id && race.id === safeNextRace.id);
                   const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
-                  const shouldInsertAddCardBefore = !addRaceCardInserted && isNextRace;
-
-                  if (shouldInsertAddCardBefore) {
-                    cardElements.push(
-                      <AddRaceFamilyButton
-                        key="add-race-cta"
-                        onRaceCreated={() => refetchRaces?.()}
-                        cardWidth={MOBILE_CARD_WIDTH}
-                        cardHeight={RACE_CARD_HEIGHT}
-                      />,
-                    );
-                    addRaceCardInserted = true;
-                  }
 
                   // Get results for this race if it's past
                   const raceResult = raceStatus === 'past' && race.id ? userRaceResults.get(race.id) : undefined;
@@ -5296,16 +5381,17 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   }
                 });
 
-                if (!addRaceCardInserted) {
-                  cardElements.unshift(
-                    <AddRaceFamilyButton
-                      key="add-race-cta"
-                      onRaceCreated={() => refetchRaces?.()}
-                      cardWidth={MOBILE_CARD_WIDTH}
-                      cardHeight={RACE_CARD_HEIGHT}
-                    />,
-                  );
-                }
+                // Add the FamilyButton at the end for quick race creation
+                cardElements.push(
+                  <AddRaceFamilyButton
+                    key="add-race-family-button"
+                    onRaceCreated={() => refetchRaces?.()}
+                    cardWidth={MOBILE_CARD_WIDTH}
+                    cardHeight={RACE_CARD_HEIGHT}
+                    expanded={familyButtonExpanded}
+                    onExpandedChange={setFamilyButtonExpanded}
+                  />
+                );
 
                 return cardElements;
               })()}
@@ -6249,17 +6335,21 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
         ) : (
           // User has no races - show mock race cards horizontally with fixed hero height
           <>
-            {/* Header - Outside hero zone for more card space */}
-            <View className="flex-row items-center justify-between mb-2">
-              <View>
-                <Text className="text-base font-bold text-gray-800">Demo Races</Text>
-                <Text className="text-xs text-gray-500">Explore sample races</Text>
-              </View>
-              <View className="bg-purple-100 px-3 py-1 rounded-full">
-                <Text className="text-purple-800 font-semibold text-sm">
-                  {MOCK_RACES.length}
-                </Text>
-              </View>
+            {/* Data-forward summary with + Add link - Tufte style */}
+            <View style={addRaceHeaderStyles.container}>
+              <Text style={addRaceHeaderStyles.countText}>
+                {MOCK_RACES.length} sample races · Add your own to get started
+              </Text>
+              <Pressable
+                onPress={() => setShowAddRaceSheet(true)}
+                style={({ pressed }) => [
+                  addRaceHeaderStyles.addButton,
+                  pressed && { opacity: 0.6 }
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={addRaceHeaderStyles.addButtonText}>+ Add</Text>
+              </Pressable>
             </View>
             {/* Hero Zone - Fixed height race card timeline */}
             <View style={{ height: HERO_ZONE_HEIGHT }}>
@@ -6282,8 +6372,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                 onMomentumScrollEnd={(event) => {
                   // Calculate which demo race card is centered after scroll ends
                   const offsetX = event.nativeEvent.contentOffset.x;
-                  // Account for AddRaceFamilyButton at index 0
-                  const adjustedOffset = offsetX + MOBILE_CENTERING_PADDING - MOBILE_SNAP_INTERVAL;
+                  const adjustedOffset = offsetX + MOBILE_CENTERING_PADDING;
                   let rawIndex = Math.round(adjustedOffset / MOBILE_SNAP_INTERVAL);
 
                   // Clamp to valid demo race range
@@ -6300,12 +6389,6 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   }
                 }}
               >
-                <AddRaceFamilyButton
-                  key="add-race-cta-demo"
-                  onRaceCreated={() => refetchRaces?.()}
-                  cardWidth={MOBILE_CARD_WIDTH}
-                  cardHeight={RACE_CARD_HEIGHT}
-                />
                 {MOCK_RACES.map((race, index) => {
                   const isDistanceRace = race.race_type === 'distance';
                   if (isDistanceRace) {
@@ -6633,6 +6716,38 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
           onClassSelected={handleBoatClassSelected}
         />
       )}
+
+      {/* Quick Add Race Modal - Tufte-style bottom sheet */}
+      <Modal
+        visible={showAddRaceSheet}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        onRequestClose={() => setShowAddRaceSheet(false)}
+      >
+        <View style={addRaceSheetStyles.container}>
+          {/* Header with close button */}
+          <View style={addRaceSheetStyles.header}>
+            <Text style={addRaceSheetStyles.title}>Add Race</Text>
+            <Pressable
+              onPress={() => setShowAddRaceSheet(false)}
+              style={({ pressed }) => [
+                addRaceSheetStyles.closeButton,
+                pressed && { opacity: 0.6 }
+              ]}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <X size={20} color="#6B7280" />
+            </Pressable>
+          </View>
+
+          {/* Form content */}
+          <QuickAddRaceForm
+            onSubmit={handleQuickAddRaceSubmit}
+            onCancel={() => setShowAddRaceSheet(false)}
+            isSubmitting={isAddingRace}
+          />
+        </View>
+      </Modal>
 
       {/* </PlanModeLayout> - temporarily removed */}
     </View>
