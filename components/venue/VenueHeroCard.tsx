@@ -1,5 +1,5 @@
 import { ThemedText } from '@/components/themed-text';
-import { TufteTokens } from '@/constants/designSystem';
+import { TufteTokens, colors } from '@/constants/designSystem';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     ...TufteTokens.typography.primary,
     fontSize: 20,
     fontWeight: '600',
-    color: TufteTokens.colors.textPrimary,
+    color: colors.text.primary,
     flex: 1,
     lineHeight: 26,
   },
@@ -189,13 +189,13 @@ const styles = StyleSheet.create({
     borderRadius: TufteTokens.borderRadius.subtle,
   },
   saveButtonActive: {
-    backgroundColor: TufteTokens.colors.accentSubtle,
+    backgroundColor: colors.primary[50],
   },
 
   // Subtitle: country + conditions inline (Tufte: small multiples)
   subtitle: {
     ...TufteTokens.typography.secondary,
-    color: TufteTokens.colors.textSecondary,
+    color: colors.text.secondary,
     marginTop: -2,
   },
 
@@ -209,20 +209,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   conditionValue: {
-    ...TufteTokens.typography.data,
-    color: TufteTokens.colors.textPrimary,
+    ...TufteTokens.typography.secondary,
+    color: colors.text.primary,
     fontWeight: '600',
   },
   conditionLabel: {
     ...TufteTokens.typography.micro,
-    color: TufteTokens.colors.textTertiary,
+    color: colors.text.tertiary,
     textTransform: 'lowercase',
   },
 
   // Meta text: racing areas count
   metaText: {
     ...TufteTokens.typography.tertiary,
-    color: TufteTokens.colors.textSecondary,
+    color: colors.text.secondary,
   },
 
   // Divider: Tufte hairline
@@ -249,13 +249,13 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     ...TufteTokens.typography.secondary,
-    color: TufteTokens.colors.accent,
+    color: colors.primary[600],
     fontWeight: '500',
   },
 
   // Distance: secondary info
   distanceText: {
     ...TufteTokens.typography.tertiary,
-    color: TufteTokens.colors.textTertiary,
+    color: colors.text.tertiary,
   },
 });

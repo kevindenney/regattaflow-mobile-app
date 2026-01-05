@@ -20,7 +20,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TufteTokens } from '@/constants/designSystem';
+import { TufteTokens, colors } from '@/constants/designSystem';
 import { VenueHeroMap } from './VenueHeroMap';
 import { RacingAreaCard, RacingAreaCardList } from './RacingAreaCard';
 import { ConditionsBar } from './ConditionsSparkline';
@@ -418,18 +418,18 @@ const styles = StyleSheet.create({
     ...TufteTokens.typography.primary,
     fontSize: 20,
     fontWeight: '600',
-    color: TufteTokens.colors.textPrimary,
+    color: colors.text.primary,
   },
   venueSubtitle: {
     ...TufteTokens.typography.secondary,
-    color: TufteTokens.colors.textSecondary,
+    color: colors.text.secondary,
   },
   saveButton: {
     padding: TufteTokens.spacing.compact,
     borderRadius: TufteTokens.borderRadius.subtle,
   },
   saveButtonActive: {
-    backgroundColor: TufteTokens.colors.accentSubtle,
+    backgroundColor: colors.primary[50],
   },
 
   // Scroll

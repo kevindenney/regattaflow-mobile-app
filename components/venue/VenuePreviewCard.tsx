@@ -9,7 +9,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TufteTokens } from '@/constants/designSystem';
+import { TufteTokens, colors } from '@/constants/designSystem';
 import { WindSparkline, TideSparkline, CurrentSparkline } from './ConditionsSparkline';
 import type { VenueRacingArea } from '@/services/venue/CommunityVenueCreationService';
 
@@ -213,12 +213,12 @@ const styles = StyleSheet.create({
     ...TufteTokens.typography.primary,
     fontSize: 18,
     fontWeight: '600',
-    color: TufteTokens.colors.textPrimary,
+    color: colors.text.primary,
     flex: 1,
   },
   country: {
     ...TufteTokens.typography.tertiary,
-    color: TufteTokens.colors.textSecondary,
+    color: colors.text.secondary,
   },
 
   // Divider
@@ -238,13 +238,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   conditionValue: {
-    ...TufteTokens.typography.data,
+    ...TufteTokens.typography.secondary,
     fontWeight: '600',
-    color: TufteTokens.colors.textPrimary,
+    color: colors.text.primary,
   },
   conditionLabel: {
     ...TufteTokens.typography.micro,
-    color: TufteTokens.colors.textTertiary,
+    color: colors.text.tertiary,
     textTransform: 'lowercase',
   },
 
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   },
   sparklineLabel: {
     ...TufteTokens.typography.micro,
-    color: TufteTokens.colors.textTertiary,
+    color: colors.text.tertiary,
     marginTop: TufteTokens.spacing.tight,
   },
 
@@ -281,19 +281,19 @@ const styles = StyleSheet.create({
     gap: TufteTokens.spacing.tight,
   },
   statValue: {
-    ...TufteTokens.typography.data,
+    ...TufteTokens.typography.secondary,
     fontWeight: '600',
-    color: TufteTokens.colors.textPrimary,
+    color: colors.text.primary,
   },
   statLabel: {
     ...TufteTokens.typography.micro,
-    color: TufteTokens.colors.textSecondary,
+    color: colors.text.secondary,
   },
   statDot: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: TufteTokens.colors.textTertiary,
+    backgroundColor: colors.text.tertiary,
   },
 
   // Areas List
@@ -311,12 +311,12 @@ const styles = StyleSheet.create({
   },
   areaName: {
     ...TufteTokens.typography.tertiary,
-    color: TufteTokens.colors.textPrimary,
+    color: colors.text.primary,
     flex: 1,
   },
   moreAreas: {
     ...TufteTokens.typography.micro,
-    color: TufteTokens.colors.textSecondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     paddingTop: TufteTokens.spacing.tight,
   },
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   },
   devNoteText: {
     ...TufteTokens.typography.micro,
-    color: TufteTokens.colors.textTertiary,
+    color: colors.text.tertiary,
   },
 });
 
