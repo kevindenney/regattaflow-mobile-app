@@ -77,6 +77,19 @@ import { useTacticalSnapshots } from '@/hooks/useTacticalSnapshots';
 import { usePostRaceInterview } from '@/hooks/usePostRaceInterview';
 import { useSailorProfile } from '@/hooks/useSailorProfile';
 import { useStrategySharing } from '@/hooks/useStrategySharing';
+import { useAddRace } from '@/hooks/useAddRace';
+import { useNextMarkData } from '@/hooks/useNextMarkData';
+import { useTideDepthSnapshots } from '@/hooks/useTideDepthSnapshots';
+import { useCoachContext } from '@/hooks/useCoachContext';
+import { useRacePhaseInput } from '@/hooks/useRacePhaseInput';
+import { useRaceLayoutData } from '@/hooks/useRaceLayoutData';
+import { useRaceDebriefData } from '@/hooks/useRaceDebriefData';
+import { useRaceClassSelection } from '@/hooks/useRaceClassSelection';
+import { useRaceCourse } from '@/hooks/useRaceCourse';
+import { useVenueCenter } from '@/hooks/useVenueCenter';
+import { useRaceListData } from '@/hooks/useRaceListData';
+import { useActiveRaceSummary } from '@/hooks/useActiveRaceSummary';
+import { useRaceBriefData } from '@/hooks/useRaceBriefData';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceDocumentType, RaceDocumentWithDetails } from '@/services/RaceDocumentService';
@@ -339,12 +352,7 @@ export default function RacesScreen() {
   const [regulatorySectionY, setRegulatorySectionY] = useState(0);
   const [logisticsSectionY, setLogisticsSectionY] = useState(0);
 
-  // Add race sheet state (Tufte-style: bottom sheet instead of inline button)
-  const [showAddRaceSheet, setShowAddRaceSheet] = useState(false);
-  const [isAddingRace, setIsAddingRace] = useState(false);
-  // FamilyButton inline form expanded state (lifted here to survive child remounts)
-  const [familyButtonExpanded, setFamilyButtonExpanded] = useState(false);
-
+  // Add race state is now provided by useAddRace hook below
   // Post-race interview state is now provided by usePostRaceInterview hook below
 
   // Selected race detail state
@@ -353,13 +361,7 @@ export default function RacesScreen() {
   const [selectedRaceData, setSelectedRaceData] = useState<any>(null);
   const [selectedRaceMarks, setSelectedRaceMarks] = useState<any[]>([]);
   const [loadingRaceDetail, setLoadingRaceDetail] = useState(false);
-  const [raceDocuments, setRaceDocuments] = useState<RaceDocumentWithDetails[]>([]);
-  const [loadingRaceDocuments, setLoadingRaceDocuments] = useState(false);
-  const [raceDocumentsError, setRaceDocumentsError] = useState<string | null>(null);
-  const [raceDocumentsReloadKey, setRaceDocumentsReloadKey] = useState(0);
-  const [isUploadingRaceDocument, setIsUploadingRaceDocument] = useState(false);
-  const [documentTypePickerVisible, setDocumentTypePickerVisible] = useState(false);
-  const documentTypeResolverRef = useRef<((type: RaceDocumentType | null) => void) | null>(null);
+  // raceDocuments, loadingRaceDocuments, raceDocumentsError, upload handlers are now provided by useRaceDocuments hook below
   const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
   const [deletingRaceId, setDeletingRaceId] = useState<string | null>(null);
   const isDeletingRace = deletingRaceId !== null;
@@ -418,14 +420,7 @@ export default function RacesScreen() {
     setTacticalZones([]);
   }, [selectedRaceId]);
 
-  useEffect(() => {
-    return () => {
-      if (documentTypeResolverRef.current) {
-        documentTypeResolverRef.current(null);
-        documentTypeResolverRef.current = null;
-      }
-    };
-  }, []);
+  // documentTypeResolverRef cleanup is now handled by useRaceDocuments hook
 
   // Use race preparation hook for persistent storage
   const {
@@ -478,102 +473,8 @@ export default function RacesScreen() {
     scrollToPosition(logisticsSectionY);
   }, [logisticsSectionY, scrollToPosition]);
 
-  const handleAddRaceNavigation = useCallback(() => {
-    router.push('/(tabs)/race/add');
-  }, [router]);
-
-  // Handler for quick add race form (Tufte-style bottom sheet)
-  const handleQuickAddRaceSubmit = useCallback(async (data: { name: string; dateTime: string }) => {
-    setIsAddingRace(true);
-    try {
-      const { data: newRace, error } = await RaceEventService.createRaceEvent({
-        race_name: data.name,
-        start_time: data.dateTime,
-      });
-
-      if (error) {
-        Alert.alert('Error', error.message || 'Failed to create race');
-        return;
-      }
-
-      // Success - close sheet and refresh
-      setShowAddRaceSheet(false);
-      refetchRaces?.();
-    } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
-    } finally {
-      setIsAddingRace(false);
-    }
-  }, [refetchRaces]);
-
-  // Handler for new AddRaceDialog form with race type support
-  const handleAddRaceDialogSave = useCallback(async (formData: RaceFormData) => {
-    setIsAddingRace(true);
-    try {
-      // Build start_time from date and time
-      const startTime = `${formData.date}T${formData.time}:00`;
-
-      // Prepare type-specific data
-      const createParams: Parameters<typeof RaceEventService.createRaceEvent>[0] = {
-        race_name: formData.name,
-        start_time: startTime,
-        race_type: formData.raceType,
-        location: formData.location,
-        vhf_channel: formData.vhfChannel,
-        notes: formData.notes,
-      };
-
-      // Add type-specific fields
-      if (formData.raceType === 'fleet' && formData.fleet) {
-        createParams.course_type = formData.fleet.courseType;
-        createParams.number_of_laps = formData.fleet.numberOfLaps ? parseInt(formData.fleet.numberOfLaps) : undefined;
-        createParams.expected_fleet_size = formData.fleet.expectedFleetSize ? parseInt(formData.fleet.expectedFleetSize) : undefined;
-        createParams.boat_class = formData.fleet.boatClass;
-      } else if (formData.raceType === 'distance' && formData.distance) {
-        createParams.total_distance_nm = formData.distance.totalDistanceNm ? parseFloat(formData.distance.totalDistanceNm) : undefined;
-        createParams.time_limit_hours = formData.distance.timeLimitHours ? parseFloat(formData.distance.timeLimitHours) : undefined;
-        createParams.start_finish_same_location = formData.distance.startFinishSameLocation;
-        createParams.route_description = formData.distance.routeDescription;
-      } else if (formData.raceType === 'match' && formData.match) {
-        createParams.opponent_name = formData.match.opponentName;
-        createParams.match_round = formData.match.matchRound ? parseInt(formData.match.matchRound) : undefined;
-        createParams.total_rounds = formData.match.totalRounds ? parseInt(formData.match.totalRounds) : undefined;
-        createParams.series_format = formData.match.seriesFormat;
-        createParams.has_umpire = formData.match.hasUmpire;
-      } else if (formData.raceType === 'team' && formData.team) {
-        createParams.your_team_name = formData.team.yourTeamName;
-        createParams.opponent_team_name = formData.team.opponentTeamName;
-        createParams.heat_number = formData.team.heatNumber ? parseInt(formData.team.heatNumber) : undefined;
-        createParams.team_size = formData.team.teamSize ? parseInt(formData.team.teamSize) : undefined;
-        // Parse team members from string format
-        if (formData.team.teamMembers) {
-          const members = formData.team.teamMembers.split(',').map(m => {
-            const parts = m.trim().match(/^(.+?)(?:\s*#(\d+))?$/);
-            return {
-              name: parts?.[1]?.trim() || m.trim(),
-              sailNumber: parts?.[2] || '',
-            };
-          });
-          createParams.team_members = members;
-        }
-      }
-
-      const { data: newRace, error } = await RaceEventService.createRaceEvent(createParams);
-
-      if (error) {
-        Alert.alert('Error', error.message || 'Failed to create race');
-        return;
-      }
-
-      // Success - close dialog and refresh
-      setShowAddRaceSheet(false);
-      refetchRaces?.();
-    } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
-    } finally {
-      setIsAddingRace(false);
-    }
-  }, [refetchRaces]);
+  // handleAddRaceNavigation, handleQuickAddRaceSubmit, handleAddRaceDialogSave
+  // are now provided by useAddRace hook
 
   const handleOpenCalendarImport = useCallback(() => {
     setShowCalendarImport(true);
@@ -760,54 +661,23 @@ export default function RacesScreen() {
   // Enrich races with real weather data
   const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
 
-  // Get past race IDs for fetching results
-  const pastRaceIds = useMemo(() => {
-    const now = new Date();
-    return (liveRaces || [])
-      .filter((race: any) => {
-        const raceDate = new Date(race.start_date || race.date);
-        return raceDate < now;
-      })
-      .map((race: any) => race.id)
-      .filter(Boolean);
-  }, [liveRaces]);
+  // Race list data (extracted to useRaceListData hook)
+  const {
+    pastRaceIds,
+    normalizedLiveRaces,
+    safeRecentRaces,
+    safeNextRace,
+    nextRacePreview,
+    hasRealRaces,
+    recentRace,
+  } = useRaceListData({
+    liveRaces,
+    enrichedRaces,
+    recentRaces,
+  });
 
   // Fetch user results for past races
   const { results: userRaceResults } = useUserRaceResults(user?.id, pastRaceIds);
-  const normalizedLiveRaces = useMemo(
-    () => {
-      if (!liveRaces || liveRaces.length === 0) {
-        return [];
-      }
-
-      return liveRaces.map((regatta: any) => {
-        const metadata = regatta?.metadata ?? {};
-        const derivedStartTime =
-          regatta?.startTime ??
-          regatta?.warning_signal_time ??
-          (regatta?.start_date
-            ? new Date(regatta.start_date).toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-            : undefined);
-
-        return {
-          ...regatta,
-          venue: regatta?.venue ?? metadata?.venue_name ?? 'Venue TBD',
-          date: regatta?.date ?? regatta?.start_date,
-          startTime: derivedStartTime,
-          wind: regatta?.wind ?? metadata?.wind,
-          tide: regatta?.tide ?? metadata?.tide,
-          weatherStatus: regatta?.weatherStatus ?? metadata?.weatherStatus,
-          weatherError: regatta?.weatherError ?? metadata?.weatherError,
-          strategy: regatta?.strategy ?? metadata?.strategy,
-          critical_details: regatta?.critical_details ?? metadata?.critical_details,
-        };
-      });
-    },
-    [liveRaces]
-  );
 
   // Real-time weather for next race
   const { weather: raceWeather, loading: weatherLoading, error: weatherError } = useRaceWeather(
@@ -817,47 +687,6 @@ export default function RacesScreen() {
 
   // AI Venue Analysis state/handlers now provided by useVenueInsights hook above
 
-  // Memoize safeRecentRaces to prevent unnecessary re-renders and effect triggers
-  // Use enriched races with real weather data when available, fall back to recentRaces
-  const safeRecentRaces: any[] = useMemo(() => {
-    if (enrichedRaces && enrichedRaces.length > 0) {
-      return enrichedRaces;
-    }
-    if (normalizedLiveRaces.length > 0) {
-      return normalizedLiveRaces;
-    }
-    return Array.isArray(recentRaces as any[]) ? (recentRaces as any[]) : [];
-  }, [enrichedRaces, normalizedLiveRaces, recentRaces]);
-
-  // Calculate nextRace from safeRecentRaces (not from useDashboardData which may have stale/demo data)
-  // This ensures nextRace comes from the same data source as the displayed race cards
-  const safeNextRace: any = useMemo(() => {
-    if (safeRecentRaces.length === 0) return {};
-    
-    const now = new Date();
-    const nextRaceIndex = safeRecentRaces.findIndex((race: any) => {
-      const raceDateTime = new Date(race.date || race.start_date);
-      // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
-      const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
-      return raceEndEstimate > now;
-    });
-    
-    return nextRaceIndex >= 0 ? safeRecentRaces[nextRaceIndex] : {};
-  }, [safeRecentRaces]);
-
-  const recentRace = safeRecentRaces.length > 0 ? safeRecentRaces[0] : null;
-  const hasRealRaces = safeRecentRaces.length > 0 || !!safeNextRace?.id;
-
-  // Calculate next race preview text for header
-  const nextRacePreview = useMemo(() => {
-    if (!safeNextRace?.date) return null;
-    const daysUntil = Math.ceil((new Date(safeNextRace.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    if (daysUntil === 0) return 'Today';
-    if (daysUntil === 1) return 'Tomorrow';
-    if (daysUntil > 0 && daysUntil <= 7) return `in ${daysUntil} days`;
-    return null;
-  }, [safeNextRace?.date]);
-
   // Total race count (real or demo) for header
   const displayRaceCount = hasRealRaces ? safeRecentRaces.length : MOCK_RACES.length;
 
@@ -866,211 +695,22 @@ export default function RacesScreen() {
     [selectedDemoRaceId]
   );
 
-  const activeRace = useMemo<ActiveRaceSummary | null>(() => {
-    if (selectedRaceData) {
-      const metadata = selectedRaceData.metadata || {};
-      const startTime = selectedRaceData.start_date || selectedRaceData.date || metadata?.start_time;
-      return {
-        id: selectedRaceData.id,
-        name: selectedRaceData.name || metadata?.race_name || 'Upcoming Race',
-        series: metadata?.series_name || metadata?.series || metadata?.event_name || 'Corinthian Series',
-        venue: metadata?.venue_name || selectedRaceData.venue_name || currentVenue?.name || 'Port Shelter',
-        startTime: typeof startTime === 'string' ? startTime : startTime ? new Date(startTime).toISOString() : undefined,
-        warningSignal: metadata?.warning_signal || metadata?.first_warning || metadata?.signal_time || nextRace?.startTime || '13:36',
-        cleanRegatta: metadata?.clean_regatta !== false,
-        lastUpdated: metadata?.updated_at || selectedRaceData.updated_at || null,
-      };
-    }
+  // Active race summary (extracted to useActiveRaceSummary hook)
+  const { activeRace } = useActiveRaceSummary({
+    selectedRaceData,
+    nextRace,
+    selectedDemoRace,
+    currentVenue,
+  });
 
-    if (nextRace) {
-      const nextRaceAny = nextRace as any;
-      return {
-        id: nextRaceAny.id || 'next-race',
-        name: nextRaceAny.name || nextRaceAny.title || 'Upcoming Race',
-        series: nextRaceAny.series || nextRaceAny.event || 'Corinthian Series',
-        venue: nextRaceAny.venue || currentVenue?.name || 'Port Shelter',
-        startTime: nextRaceAny.date || nextRaceAny.startTime,
-        warningSignal: nextRaceAny.warningSignal || nextRaceAny.startTime || '13:36',
-        cleanRegatta: nextRaceAny.cleanRegatta ?? true,
-        lastUpdated: nextRaceAny.updated_at || null,
-      };
-    }
-
-    if (selectedDemoRace) {
-      return {
-        id: selectedDemoRace.id,
-        name: selectedDemoRace.name,
-        series: 'Demo Series',
-        venue: selectedDemoRace.venue,
-        startTime: selectedDemoRace.date,
-        warningSignal: selectedDemoRace.critical_details?.warning_signal || selectedDemoRace.startTime,
-        cleanRegatta: true,
-        lastUpdated: null,
-      };
-    }
-
-    return null;
-  }, [
-    // Only depend on specific fields used in calculation, not entire objects
-    selectedRaceData?.id,
-    selectedRaceData?.name,
-    selectedRaceData?.start_date,
-    selectedRaceData?.date,
-    selectedRaceData?.venue_name,
-    selectedRaceData?.updated_at,
-    // Extract only specific metadata fields to prevent unnecessary re-renders
-    selectedRaceData?.metadata?.race_name,
-    selectedRaceData?.metadata?.series_name,
-    selectedRaceData?.metadata?.series,
-    selectedRaceData?.metadata?.event_name,
-    selectedRaceData?.metadata?.venue_name,
-    selectedRaceData?.metadata?.warning_signal,
-    selectedRaceData?.metadata?.first_warning,
-    selectedRaceData?.metadata?.signal_time,
-    selectedRaceData?.metadata?.clean_regatta,
-    selectedRaceData?.metadata?.updated_at,
-    selectedRaceData?.metadata?.start_time,
-    // Next race fallbacks
-    nextRace?.id,
-    nextRace?.name,
-    nextRace?.title,
-    nextRace?.series,
-    nextRace?.event,
-    nextRace?.venue,
-    nextRace?.date,
-    nextRace?.startTime,
-    nextRace?.warningSignal,
-    nextRace?.cleanRegatta,
-    nextRace?.updated_at,
-    // Demo race fallbacks
-    selectedDemoRace?.id,
-    selectedDemoRace?.name,
-    selectedDemoRace?.venue,
-    selectedDemoRace?.date,
-    selectedDemoRace?.startTime,
-    selectedDemoRace?.critical_details?.warning_signal,
-    currentVenue?.name
-  ]);
-
-  // Stabilize countdown - only update every minute to prevent constant re-renders
-  const [currentMinute, setCurrentMinute] = useState(() => Math.floor(Date.now() / 60000));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentMinute(Math.floor(Date.now() / 60000));
-    }, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, []);
-
-  const lastRaceBriefRef = useRef<RaceBriefData | null>(null);
-  const lastRaceBriefKeyRef = useRef<string | null>(null);
-
-  const raceBrief = useMemo<RaceBriefData | null>(() => {
-    if (!activeRace) {
-      return null;
-    }
-
-    const startISO = activeRace.startTime;
-    const countdown = startISO ? calculateCountdown(startISO) : undefined;
-
-    const weatherSummary = (() => {
-      if (raceWeather?.wind) {
-        const min = raceWeather.wind.speedMin ?? raceWeather.wind.speed ?? 0;
-        const max = raceWeather.wind.speedMax ?? raceWeather.wind.speed ?? min;
-        const direction = raceWeather.wind.direction ?? raceWeather.wind.directionCardinal;
-        if (min && max) {
-          return `${direction ?? ''} ${Math.round(min)}-${Math.round(max)} kt`.trim();
-        }
-        if (direction) {
-          return `${direction}`;
-        }
-      }
-
-      const metadata = (selectedRaceData?.metadata || nextRace as any || {}) as Record<string, any>;
-      if (metadata?.wind_summary) {
-        return metadata.wind_summary;
-      }
-      if (metadata?.wind_direction && metadata?.wind_speed) {
-        return `${metadata.wind_direction} ${metadata.wind_speed}`;
-      }
-
-      if (selectedDemoRace) {
-        return `${selectedDemoRace.wind.direction} ${selectedDemoRace.wind.speedMin}-${selectedDemoRace.wind.speedMax} kt`;
-      }
-
-      return undefined;
-    })();
-
-    const tideSummary = (() => {
-      if (raceWeather?.tide) {
-        const state = raceWeather.tide.state || raceWeather.tide.phase;
-        const height = raceWeather.tide.height;
-        if (state || height) {
-          return `${state ? state.replace(/_/g, ' ') : ''}${height ? ` • ${height.toFixed(1)} m` : ''}`.trim();
-        }
-      }
-      const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
-      if (metadata?.tide_summary) {
-        return metadata.tide_summary;
-      }
-      if (selectedDemoRace) {
-        return `${selectedDemoRace.tide.state} • ${selectedDemoRace.tide.height} m`;
-      }
-      return undefined;
-    })();
-
-    const nextBrief: RaceBriefData = {
-      ...activeRace,
-      countdown,
-      weatherSummary,
-      tideSummary,
-    };
-
-    const briefKey = JSON.stringify(nextBrief);
-    if (lastRaceBriefKeyRef.current === briefKey && lastRaceBriefRef.current) {
-      return lastRaceBriefRef.current;
-    }
-
-    lastRaceBriefKeyRef.current = briefKey;
-    lastRaceBriefRef.current = nextBrief;
-    return nextBrief;
-  }, [
-    // Depend on specific activeRace fields, not the whole object
-    activeRace?.id,
-    activeRace?.name,
-    activeRace?.series,
-    activeRace?.venue,
-    activeRace?.startTime,
-    activeRace?.warningSignal,
-    activeRace?.cleanRegatta,
-    activeRace?.lastUpdated,
-    currentMinute,
-    // Only depend on specific weather values, not the entire object
-    raceWeather?.wind?.direction,
-    raceWeather?.wind?.speedMin,
-    raceWeather?.wind?.speedMax,
-    raceWeather?.wind?.directionCardinal,
-    raceWeather?.wind?.speed,
-    raceWeather?.tide?.state,
-    raceWeather?.tide?.height,
-    raceWeather?.tide?.phase,
-    // Only specific metadata fields used in weatherSummary and tideSummary
-    selectedRaceData?.metadata?.wind_summary,
-    selectedRaceData?.metadata?.wind_direction,
-    selectedRaceData?.metadata?.wind_speed,
-    selectedRaceData?.metadata?.tide_summary,
-    // Demo race fallbacks
-    selectedDemoRace?.wind?.direction,
-    selectedDemoRace?.wind?.speedMin,
-    selectedDemoRace?.wind?.speedMax,
-    selectedDemoRace?.tide?.state,
-    selectedDemoRace?.tide?.height,
-    // Next race fallbacks
-    nextRace?.wind_summary,
-    nextRace?.wind_direction,
-    nextRace?.wind_speed,
-    nextRace?.tide_summary
-  ]);
+  // Race brief data (extracted to useRaceBriefData hook)
+  const { raceBrief } = useRaceBriefData({
+    activeRace,
+    raceWeather,
+    selectedRaceData,
+    nextRace,
+    selectedDemoRace,
+  });
 
   // Sync race brief data to preparation service for AI context
   useEffect(() => {
@@ -1850,211 +1490,15 @@ export default function RacesScreen() {
     fetchRaceDetail();
   }, [selectedRaceId, raceDetailReloadKey]);
 
-  useEffect(() => {
-    let isActive = true;
+  // Race documents loading and upload are now handled by useRaceDocuments hook
 
-    if (!selectedRaceData?.id || isDemoSession) {
-      setRaceDocuments([]);
-      setRaceDocumentsError(null);
-      setLoadingRaceDocuments(false);
-      return () => {
-        isActive = false;
-      };
-    }
-
-    const loadRaceDocuments = async () => {
-      setLoadingRaceDocuments(true);
-      setRaceDocumentsError(null);
-
-      try {
-        const documents = await raceDocumentService.getRaceDocuments(selectedRaceData.id);
-        if (!isActive) {
-          return;
-        }
-        setRaceDocuments(documents);
-      } catch (error) {
-        if (!isActive) {
-          return;
-        }
-        logger.warn('[races.tsx] Unable to load race documents', {
-          error,
-          raceId: selectedRaceData.id,
-        });
-        setRaceDocuments([]);
-        setRaceDocumentsError('Unable to load race documents');
-      } finally {
-        if (isActive) {
-          setLoadingRaceDocuments(false);
-        }
-      }
-    };
-
-    loadRaceDocuments();
-
-    return () => {
-      isActive = false;
-    };
-  }, [selectedRaceData?.id, raceDetailReloadKey, raceDocumentsReloadKey, isDemoSession]);
-
-  const handleRefreshRaceDocuments = useCallback(() => {
-    setRaceDocumentsReloadKey((prev) => prev + 1);
-  }, []);
-
-  const requestDocumentTypeSelection = useCallback(() => {
-    return new Promise<RaceDocumentType | null>((resolve) => {
-      documentTypeResolverRef.current = resolve;
-      setDocumentTypePickerVisible(true);
-    });
-  }, []);
-
-  const handleDocumentTypeOptionSelect = useCallback((type: RaceDocumentType) => {
-    documentTypeResolverRef.current?.(type);
-    documentTypeResolverRef.current = null;
-    setDocumentTypePickerVisible(false);
-  }, []);
-
-  const handleDismissDocumentTypePicker = useCallback(() => {
-    documentTypeResolverRef.current?.(null);
-    documentTypeResolverRef.current = null;
-    setDocumentTypePickerVisible(false);
-  }, []);
-
-  const handleUploadRaceDocument = useCallback(async () => {
-    if (isUploadingRaceDocument) {
-      return;
-    }
-
-    if (isDemoSession) {
-      Alert.alert('Unavailable in demo mode', 'Sign in to upload race documents.');
-      return;
-    }
-
-    if (!user?.id) {
-      Alert.alert('Sign in required', 'Please sign in to upload documents.');
-      return;
-    }
-
-    if (!selectedRaceData?.id) {
-      Alert.alert('Select a race', 'Choose a race to attach documents to.');
-      return;
-    }
-
-    const documentType = await requestDocumentTypeSelection();
-    if (!documentType) {
-      logger.debug('[races.tsx] Document upload cancelled before selecting type');
-      return;
-    }
-
-    setIsUploadingRaceDocument(true);
-    try {
-      const uploadResult = await documentStorageService.pickAndUploadDocument(user.id);
-
-      if (!uploadResult.success || !uploadResult.document) {
-        const errorMessage = uploadResult.error || 'Unable to upload document. Please try again.';
-        const isUserCancel = errorMessage.toLowerCase().includes('cancel');
-
-        if (isUserCancel) {
-          logger.debug('[races.tsx] Document picker cancelled by user');
-        } else {
-          Alert.alert('Upload failed', errorMessage);
-        }
-        return;
-      }
-
-      const linked = await raceDocumentService.linkDocumentToRace({
-        regattaId: selectedRaceData.id,
-        documentId: uploadResult.document.id,
-        userId: user.id,
-        documentType,
-      });
-
-      if (!linked) {
-        Alert.alert('Upload failed', 'We uploaded the file but could not attach it to this race.');
-        return;
-      }
-
-      Alert.alert('Document uploaded', 'Your document is now attached to this race.');
-      handleRefreshRaceDocuments();
-    } catch (error) {
-      logger.error('[races.tsx] Document upload failed', error);
-      Alert.alert('Upload failed', 'We could not upload that document. Please try again.');
-    } finally {
-      setIsUploadingRaceDocument(false);
-    }
-  }, [
-    handleRefreshRaceDocuments,
-    isDemoSession,
-    isUploadingRaceDocument,
-    logger,
-    requestDocumentTypeSelection,
-    selectedRaceData?.id,
-    user?.id,
-  ]);
-
-const selectedRaceClassId = useMemo(() => {
-  if (!selectedRaceData) return null;
-  const classId = (
-    selectedRaceData.class_id ||
-    selectedRaceData.classId ||
-    selectedRaceData.metadata?.class_id ||
-    selectedRaceData.metadata?.classId ||
-    null
-  );
-  logger.debug('[races.tsx] Computed selectedRaceClassId', { classId, hasRaceData: !!selectedRaceData });
-  return classId;
-}, [selectedRaceData]);
-
-const selectedRaceClassName = useMemo(() => {
-  if (!selectedRaceData) return undefined;
-  const className = (
-    selectedRaceData.metadata?.class_name ||
-    selectedRaceData.class_divisions?.[0]?.name ||
-    undefined
-  );
-  logger.debug('[races.tsx] Computed selectedRaceClassName', { className });
-  return className;
-}, [selectedRaceData]);
-
-const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
-  if (!raceDocuments.length) {
-    return [];
-  }
-
-  return raceDocuments.map((doc) => {
-    const mergedMetadata = ((doc.document?.metadata || doc.metadata) ?? {}) as Record<string, any>;
-
-    const deriveName = (): string => {
-      const candidates = [mergedMetadata.displayName, mergedMetadata.title, doc.document?.filename];
-      const found = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
-      return found ? (found as string) : 'Document';
-    };
-
-    const deriveSize = (): number => {
-      const sizeCandidate =
-        doc.document?.file_size ?? mergedMetadata.file_size ?? mergedMetadata.size ?? mergedMetadata.fileSize;
-      return typeof sizeCandidate === 'number' && Number.isFinite(sizeCandidate) ? sizeCandidate : 0;
-    };
-
-    const uploadedTimestamp = (doc.document?.created_at as string) ?? doc.createdAt;
-
-    return {
-      id: doc.id,
-      name: deriveName(),
-      type: normalizeDocumentType(doc.documentType),
-      size: deriveSize(),
-      uploadedAt: uploadedTimestamp,
-      uploadedBy: (doc.document?.user_id as string) ?? doc.userId,
-      aiProcessed: Boolean(
-        mergedMetadata.aiProcessed ??
-          mergedMetadata.ai_processed ??
-          mergedMetadata.course_extract_id ??
-          mergedMetadata.course_extracted ??
-          mergedMetadata.ai_ready
-      ),
-      hasExtractedCourse: Boolean(mergedMetadata.course_extract_id ?? mergedMetadata.course_extracted),
-    } satisfies RaceDocumentsCardDocument;
+// Race class selection (extracted to useRaceClassSelection hook)
+  const {
+    selectedRaceClassId,
+    selectedRaceClassName,
+  } = useRaceClassSelection({
+    selectedRaceData,
   });
-}, [raceDocuments]);
 
   const matchedEnrichedRace = useMemo(() => {
     if (!selectedRaceId || !Array.isArray(enrichedRaces)) {
@@ -2119,6 +1563,80 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
     ensureRaceEventId,
   });
 
+  // Add race (extracted to useAddRace hook)
+  const {
+    showAddRaceSheet,
+    isAddingRace,
+    familyButtonExpanded,
+    handleShowAddRaceSheet,
+    handleCloseAddRaceSheet,
+    handleAddRaceNavigation,
+    handleQuickAddRaceSubmit,
+    handleAddRaceDialogSave,
+    setFamilyButtonExpanded,
+  } = useAddRace({
+    refetchRaces,
+  });
+
+  // Race documents hook (handles fetching, uploading, and deleting)
+  const {
+    documents: raceDocuments,
+    loading: loadingRaceDocuments,
+    error: raceDocumentsError,
+    isUploading: isUploadingRaceDocument,
+    typePickerVisible: documentTypePickerVisible,
+    refresh: handleRefreshRaceDocuments,
+    upload: handleUploadRaceDocument,
+    selectType: handleDocumentTypeOptionSelect,
+    dismissTypePicker: handleDismissDocumentTypePicker,
+  } = useRaceDocuments({
+    raceId: selectedRaceData?.id,
+    userId: user?.id,
+    isDemoSession,
+  });
+
+  // Transform raw documents into display format
+  const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
+    if (!raceDocuments?.length) {
+      return [];
+    }
+
+    return raceDocuments.map((doc) => {
+      const mergedMetadata = ((doc.document?.metadata || doc.metadata) ?? {}) as Record<string, any>;
+
+      const deriveName = (): string => {
+        const candidates = [mergedMetadata.displayName, mergedMetadata.title, doc.document?.filename];
+        const found = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+        return found ? (found as string) : 'Document';
+      };
+
+      const deriveSize = (): number => {
+        const sizeCandidate =
+          doc.document?.file_size ?? mergedMetadata.file_size ?? mergedMetadata.size ?? mergedMetadata.fileSize;
+        return typeof sizeCandidate === 'number' && Number.isFinite(sizeCandidate) ? sizeCandidate : 0;
+      };
+
+      const uploadedTimestamp = (doc.document?.created_at as string) ?? doc.createdAt;
+
+      return {
+        id: doc.id,
+        name: deriveName(),
+        type: normalizeDocumentType(doc.documentType),
+        size: deriveSize(),
+        uploadedAt: uploadedTimestamp,
+        uploadedBy: (doc.document?.user_id as string) ?? doc.userId,
+        aiProcessed: Boolean(
+          mergedMetadata.aiProcessed ??
+            mergedMetadata.ai_processed ??
+            mergedMetadata.course_extract_id ??
+            mergedMetadata.course_extracted ??
+            mergedMetadata.ai_ready
+        ),
+        hasExtractedCourse: Boolean(mergedMetadata.course_extract_id ?? mergedMetadata.course_extracted),
+      } satisfies RaceDocumentsCardDocument;
+    });
+  }, [raceDocuments]);
+
   const initialConditionsSnapshot = useMemo(() => {
     if (!selectedRaceData && !matchedEnrichedRace) {
       return null;
@@ -2153,452 +1671,56 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
   // Tactical snapshots (selectedRaceWeather, windSnapshot, currentSnapshot, boatDraftValue,
   // boatLengthValue, timeToStartMinutes, boatSpeedKnots) are now provided by useTacticalSnapshots hook above
 
-  const venueCenter = useMemo(() => {
-    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
+  // Venue center (extracted to useVenueCenter hook)
+  const { venueCenter } = useVenueCenter({
+    selectedRaceData,
+    selectedRaceMarks,
+  });
 
-    const lat = pickNumeric([
-      metadata.venue_lat,
-      metadata.latitude,
-      metadata.venue?.lat,
-      metadata.start_line?.center_lat,
-      metadata.center_lat,
-    ]);
-    const lng = pickNumeric([
-      metadata.venue_lng,
-      metadata.longitude,
-      metadata.venue?.lng,
-      metadata.start_line?.center_lng,
-      metadata.center_lng,
-    ]);
+  // Race course (extracted to useRaceCourse hook)
+  const { raceCourseForConsole } = useRaceCourse({
+    selectedRaceId,
+    selectedRaceData,
+    selectedRaceMarks,
+    windSnapshot,
+  });
 
-    if (lat !== null && lng !== null) {
-      return { latitude: lat, longitude: lng };
-    }
+  // Layout data (extracted to useRaceLayoutData hook)
+  const {
+    courseHeading,
+    layoutWindData,
+    layoutCurrentData,
+    vhfChannel,
+  } = useRaceLayoutData({
+    raceCourseForConsole,
+    windSnapshot,
+    currentSnapshot,
+    selectedRaceData,
+  });
 
-    const markWithCoords = selectedRaceMarks.find((mark) => {
-      const markLat = mark.latitude ?? mark.coordinates?.lat ?? mark.position?.lat;
-      const markLng = mark.longitude ?? mark.coordinates?.lng ?? mark.position?.lng;
-      return typeof markLat === 'number' && typeof markLng === 'number';
-    });
+  // Next mark calculations (extracted to useNextMarkData hook)
+  const {
+    nextMarkForCalculations,
+    overlayNextMark,
+    quickActionNextMark,
+  } = useNextMarkData({
+    raceMarks: selectedRaceMarks,
+    gpsPosition,
+  });
 
-    if (markWithCoords) {
-      const markLat = markWithCoords.latitude ?? markWithCoords.coordinates?.lat ?? markWithCoords.position?.lat;
-      const markLng = markWithCoords.longitude ?? markWithCoords.coordinates?.lng ?? markWithCoords.position?.lng;
-      if (typeof markLat === 'number' && typeof markLng === 'number') {
-        return { latitude: markLat, longitude: markLng };
-      }
-    }
+  // Tide and depth snapshots (extracted to useTideDepthSnapshots hook)
+  const {
+    effectiveDraft,
+    tideSnapshot,
+    depthSnapshot,
+  } = useTideDepthSnapshots({
+    selectedRaceData,
+    boatDraftValue,
+    currentDraft,
+  });
 
-    return null;
-  }, [selectedRaceData, selectedRaceMarks]);
-
-  const raceCourseForConsole = useMemo(() => {
-    if (!selectedRaceData && (!selectedRaceMarks || selectedRaceMarks.length === 0)) {
-      return null;
-    }
-
-    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
-
-    const marks = (selectedRaceMarks || [])
-      .map((mark, index) => {
-        const lat = mark.latitude ?? mark.coordinates?.lat ?? mark.position?.lat;
-        const lng = mark.longitude ?? mark.coordinates?.lng ?? mark.position?.lng;
-
-        if (typeof lat !== 'number' || typeof lng !== 'number') {
-          return null;
-        }
-
-        const rawType = (mark.mark_type || mark.type || mark.markType || '') as string;
-        const lowerType = rawType.toLowerCase();
-        const lowerName = (mark.mark_name || mark.name || '').toLowerCase();
-
-        let normalizedType: 'start-pin' | 'start-boat' | 'windward' | 'leeward' | 'offset' | 'finish' = 'windward';
-
-        if (lowerType.includes('start') && (lowerType.includes('pin') || lowerName.includes('pin'))) {
-          normalizedType = 'start-pin';
-        } else if (
-          lowerType.includes('start') &&
-          (lowerType.includes('boat') || lowerType.includes('committee') || lowerName.includes('committee'))
-        ) {
-          normalizedType = 'start-boat';
-        } else if (lowerType.includes('leeward') || lowerType.includes('gate')) {
-          normalizedType = 'leeward';
-        } else if (lowerType.includes('offset')) {
-          normalizedType = 'offset';
-        } else if (lowerType.includes('finish')) {
-          normalizedType = 'finish';
-        } else if (lowerType.includes('windward') || lowerName.includes('weather')) {
-          normalizedType = 'windward';
-        }
-
-        const rounding = (mark.rounding || mark.rounding_type || mark.roundingType) as 'port' | 'starboard' | undefined;
-
-        return {
-          id: mark.id ?? `mark-${index}`,
-          name: mark.mark_name || mark.name || `Mark ${index + 1}`,
-          position: { lat, lng },
-          type: normalizedType,
-          rounding,
-        };
-      })
-      .filter(Boolean) as Array<{
-        id: string;
-        name: string;
-        position: { lat: number; lng: number };
-        type: 'start-pin' | 'start-boat' | 'windward' | 'leeward' | 'offset' | 'finish';
-        rounding?: 'port' | 'starboard';
-      }>;
-
-    if (marks.length === 0) {
-      return null;
-    }
-
-    let startLine: Course['startLine'] | undefined;
-    const startLineMeta = (metadata.start_line || metadata.startLine) as Record<string, any> | undefined;
-
-    const resolveCoordinate = (value: unknown) => {
-      const candidate = value as any;
-      return pickNumeric([
-        candidate,
-        candidate?.lat,
-        candidate?.lng,
-        candidate?.latitude,
-        candidate?.longitude,
-      ]);
-    };
-
-    if (startLineMeta && typeof startLineMeta === 'object') {
-      const portLat = resolveCoordinate(startLineMeta.port_lat ?? startLineMeta.port?.lat ?? startLineMeta.port?.latitude);
-      const portLng = resolveCoordinate(startLineMeta.port_lng ?? startLineMeta.port?.lng ?? startLineMeta.port?.longitude);
-      const starboardLat = resolveCoordinate(
-        startLineMeta.starboard_lat ?? startLineMeta.starboard?.lat ?? startLineMeta.starboard?.latitude
-      );
-      const starboardLng = resolveCoordinate(
-        startLineMeta.starboard_lng ?? startLineMeta.starboard?.lng ?? startLineMeta.starboard?.longitude
-      );
-
-      if (
-        portLat !== null &&
-        portLng !== null &&
-        starboardLat !== null &&
-        starboardLng !== null
-      ) {
-        const heading = TacticalCalculations.calculateBearing(
-          portLat,
-          portLng,
-          starboardLat,
-          starboardLng
-        );
-        const lengthMeters = TacticalCalculations.calculateDistance(
-          portLat,
-          portLng,
-          starboardLat,
-          starboardLng
-        );
-        startLine = {
-          port: { latitude: portLat, longitude: portLng },
-          starboard: { latitude: starboardLat, longitude: starboardLng },
-          centerLat: (portLat + starboardLat) / 2,
-          centerLon: (portLng + starboardLng) / 2,
-          heading,
-          length: lengthMeters,
-        };
-      }
-    }
-
-    if (!startLine) {
-      const portMark = marks.find(mark => mark.type === 'start-pin');
-      const starboardMark = marks.find(mark => mark.type === 'start-boat');
-
-      if (portMark && starboardMark) {
-        const heading = TacticalCalculations.calculateBearing(
-          portMark.position.lat,
-          portMark.position.lng,
-          starboardMark.position.lat,
-          starboardMark.position.lng
-        );
-        const lengthMeters = TacticalCalculations.calculateDistance(
-          portMark.position.lat,
-          portMark.position.lng,
-          starboardMark.position.lat,
-          starboardMark.position.lng
-        );
-
-        startLine = {
-          port: { latitude: portMark.position.lat, longitude: portMark.position.lng },
-          starboard: { latitude: starboardMark.position.lat, longitude: starboardMark.position.lng },
-          centerLat: (portMark.position.lat + starboardMark.position.lat) / 2,
-          centerLon: (portMark.position.lng + starboardMark.position.lng) / 2,
-          heading,
-          length: lengthMeters,
-        };
-      }
-    }
-
-    const legs = marks.slice(0, -1).map((mark, index) => {
-      const next = marks[index + 1];
-      const heading = TacticalCalculations.calculateBearing(
-        mark.position.lat,
-        mark.position.lng,
-        next.position.lat,
-        next.position.lng
-      );
-      const distanceMeters = TacticalCalculations.calculateDistance(
-        mark.position.lat,
-        mark.position.lng,
-        next.position.lat,
-        next.position.lng
-      );
-      const distanceNm = distanceMeters / 1852;
-
-      let type: 'upwind' | 'downwind' | 'reach' = 'reach';
-      if (windSnapshot?.direction !== undefined && windSnapshot?.direction !== null) {
-        const angleDiff = Math.abs((heading - windSnapshot.direction + 360) % 360);
-        if (angleDiff < 60 || angleDiff > 300) {
-          type = 'upwind';
-        } else if (angleDiff > 120 && angleDiff < 240) {
-          type = 'downwind';
-        }
-      } else if (index === 0) {
-        type = 'upwind';
-      } else if (index % 2 === 1) {
-        type = 'downwind';
-      }
-
-      return {
-        id: `leg-${index}`,
-        name: `${mark.name} → ${next.name}`,
-        from: mark.id,
-        to: next.id,
-        type,
-        distance: Number.isFinite(distanceNm) ? distanceNm : 0,
-        heading,
-        estimatedTime: undefined,
-      };
-    });
-
-    const totalDistance = legs.reduce((sum, leg) => sum + (leg.distance ?? 0), 0);
-    const laps = pickNumeric([metadata.laps, metadata.course_laps, metadata.race_laps]) ?? undefined;
-
-    return {
-      id: selectedRaceId ?? 'race-course',
-      name: selectedRaceData?.name ?? 'Race Course',
-      marks,
-      legs,
-      startTime: selectedRaceData?.start_date ? new Date(selectedRaceData.start_date) : undefined,
-      startLine,
-      distance: totalDistance,
-      laps,
-    } as Course;
-  }, [selectedRaceData, selectedRaceMarks, selectedRaceId, windSnapshot]);
-
-  const courseHeading = useMemo(() => {
-    if (!raceCourseForConsole) return undefined;
-    if (raceCourseForConsole.legs && raceCourseForConsole.legs.length > 0) {
-      return raceCourseForConsole.legs[0].heading;
-    }
-    return raceCourseForConsole.startLine?.heading;
-  }, [raceCourseForConsole]);
-
-  const layoutWindData = useMemo(() => {
-    if (!windSnapshot) return undefined;
-    return {
-      speed: windSnapshot.speed,
-      direction: windSnapshot.direction,
-      gust: windSnapshot.gust,
-    };
-  }, [windSnapshot]);
-
-  const layoutCurrentData = useMemo(() => {
-    if (!currentSnapshot) return undefined;
-    return {
-      speed: currentSnapshot.speed,
-      direction: currentSnapshot.direction,
-      type: currentSnapshot.type,
-    };
-  }, [currentSnapshot]);
-
-  const nextMarkForCalculations = useMemo(() => {
-    if (!selectedRaceMarks || selectedRaceMarks.length === 0) {
-      return null;
-    }
-
-    const mark = selectedRaceMarks[0];
-    const lat = mark.latitude ?? mark.coordinates?.lat ?? mark.position?.lat;
-    const lng = mark.longitude ?? mark.coordinates?.lng ?? mark.position?.lng;
-    if (typeof lat !== 'number' || typeof lng !== 'number') {
-      return null;
-    }
-
-    return {
-      name: mark.name || mark.mark_name || 'Mark 1',
-      latitude: lat,
-      longitude: lng,
-    };
-  }, [selectedRaceMarks]);
-
-  const overlayNextMark = useMemo(() => {
-    if (!nextMarkForCalculations) return undefined;
-    return {
-      latitude: nextMarkForCalculations.latitude,
-      longitude: nextMarkForCalculations.longitude,
-      name: nextMarkForCalculations.name,
-    };
-  }, [nextMarkForCalculations]);
-
-  const quickActionNextMark = useMemo(() => {
-    if (!nextMarkForCalculations) {
-      return undefined;
-    }
-
-    if (!gpsPosition || typeof gpsPosition.latitude !== 'number' || typeof gpsPosition.longitude !== 'number') {
-      return {
-        name: nextMarkForCalculations.name,
-        distance: 0,
-        bearing: 0,
-      };
-    }
-
-    const distanceMeters = calculateDistance(
-      gpsPosition.latitude,
-      gpsPosition.longitude,
-      nextMarkForCalculations.latitude,
-      nextMarkForCalculations.longitude
-    );
-
-    const bearing = calculateBearing(
-      gpsPosition.latitude,
-      gpsPosition.longitude,
-      nextMarkForCalculations.latitude,
-      nextMarkForCalculations.longitude
-    );
-
-    return {
-      name: nextMarkForCalculations.name,
-      distance: distanceMeters / 1852,
-      bearing,
-    };
-  }, [gpsPosition, nextMarkForCalculations]);
-
-  const vhfChannel = useMemo(() => {
-    const metadata = selectedRaceData?.metadata as Record<string, any> | undefined;
-    return (
-      selectedRaceData?.vhf_channel ??
-      selectedRaceData?.critical_details?.vhf_channel ??
-      metadata?.vhf_channel ??
-      metadata?.vhfChannel ??
-      metadata?.communications?.vhf ??
-      metadata?.critical_details?.vhf_channel ??
-      null
-    );
-  }, [selectedRaceData]);
-
-  const effectiveDraft = useMemo(() => boatDraftValue ?? currentDraft ?? 2.5, [boatDraftValue, currentDraft]);
-
-  const tideSnapshot = useMemo(() => {
-    const metadata = selectedRaceData?.metadata as Record<string, any> | undefined;
-    if (!metadata) return null;
-
-    const height = pickNumeric([
-      metadata.tide_height,
-      metadata.tide?.height,
-      metadata.tideHeight,
-    ]) ?? 0;
-
-    const range = pickNumeric([
-      metadata.tide_range,
-      metadata.tide?.range,
-    ]) ?? 0;
-
-    const trendRaw = metadata.tide_trend ?? metadata.tide?.trend ?? metadata.tide_state;
-    const trend = typeof trendRaw === 'string'
-      ? trendRaw.toLowerCase().includes('rise')
-        ? 'rising'
-        : trendRaw.toLowerCase().includes('fall')
-          ? 'falling'
-          : 'slack'
-      : 'slack';
-
-    return {
-      height,
-      trend,
-      rate: 0,
-      range,
-    };
-  }, [selectedRaceData]);
-
-  const depthSnapshot = useMemo(() => {
-    const metadata = selectedRaceData?.metadata as Record<string, any> | undefined;
-    const draft = boatDraftValue ?? currentDraft ?? 2.5;
-
-    const depthCurrent = pickNumeric([
-      metadata?.depth_current,
-      metadata?.depth,
-      metadata?.water_depth,
-      metadata?.bathymetry_depth,
-    ]);
-
-    if (depthCurrent === null) {
-      return null;
-    }
-
-    const depthMinimum = pickNumeric([
-      metadata?.depth_minimum,
-      metadata?.depth_min,
-      metadata?.shoal_depth,
-    ]) ?? depthCurrent - 1;
-
-    return {
-      current: depthCurrent,
-      minimum: depthMinimum,
-      trend: 0,
-      clearance: depthCurrent - draft,
-    };
-  }, [selectedRaceData, boatDraftValue, currentDraft]);
-
-  const coachContext = useMemo(() => {
-    const metadata = (selectedRaceData?.metadata || {}) as Record<string, any>;
-    return {
-      race_id: selectedRaceId ?? undefined,
-      date_time: selectedRaceData?.start_date,
-      startTime: selectedRaceData?.start_date,
-      fleet_size:
-        metadata.fleet_size ??
-        metadata.fleetSize ??
-        selectedRaceData?.fleet_size ??
-        selectedRaceData?.fleetSize,
-      course: raceCourseForConsole,
-      marks: raceCourseForConsole?.marks,
-      weather: selectedRaceWeather,
-      wind: selectedRaceWeather?.wind,
-      current: selectedRaceWeather?.current,
-      tidal: tideSnapshot,
-      tidalIntel: tideSnapshot,
-      location: venueCenter
-        ? {
-            name:
-              metadata?.venue_name ??
-              selectedRaceData?.venue_name ??
-              selectedRaceData?.metadata?.venue_name ??
-              'Race Venue',
-            ...venueCenter,
-          }
-        : undefined,
-      position: gpsPosition
-        ? {
-            lat: gpsPosition.latitude,
-            lon: gpsPosition.longitude,
-            speed: typeof gpsPosition.speed === 'number' ? gpsPosition.speed : undefined,
-            heading:
-              typeof gpsPosition.heading === 'number' ? gpsPosition.heading : undefined,
-          }
-        : undefined,
-      boat: {
-        length: boatLengthValue ?? undefined,
-        draft: effectiveDraft,
-      },
-    };
-  }, [
+  // Coach context (extracted to useCoachContext hook)
+  const { coachContext } = useCoachContext({
     selectedRaceId,
     selectedRaceData,
     raceCourseForConsole,
@@ -2608,7 +1730,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
     gpsPosition,
     boatLengthValue,
     effectiveDraft,
-  ]);
+  });
 
   const fallbackPosition = useMemo(() => {
     if (venueCenter) {
@@ -2625,110 +1747,27 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
     fallbackPositionInitializedRef.current = false;
   }, [fallbackPosition?.latitude, fallbackPosition?.longitude, hasActiveRace]);
 
-  const phaseDetectionMarks = useMemo(() => {
-    const marks: Array<{
-      name: string;
-      type: 'start' | 'windward' | 'leeward' | 'jibe' | 'finish';
-      coordinates: { lat: number; lon: number };
-    }> = [];
-
-    if (raceCourseForConsole?.startLine) {
-      marks.push({
-        name: 'Start Line',
-        type: 'start',
-        coordinates: {
-          lat: raceCourseForConsole.startLine.centerLat,
-          lon: raceCourseForConsole.startLine.centerLon,
-        },
-      });
-    }
-
-    for (const mark of raceCourseForConsole?.marks ?? []) {
-      const lat = mark.position?.lat;
-      const lon = mark.position?.lng;
-      if (typeof lat !== 'number' || typeof lon !== 'number') {
-        continue;
-      }
-
-      let type: 'start' | 'windward' | 'leeward' | 'jibe' | 'finish' = 'windward';
-      switch (mark.type) {
-        case 'start-boat':
-        case 'start-pin':
-          type = 'start';
-          break;
-        case 'leeward':
-          type = 'leeward';
-          break;
-        case 'offset':
-          type = 'jibe';
-          break;
-        case 'finish':
-          type = 'finish';
-          break;
-        default:
-          type = 'windward';
-      }
-
-      marks.push({
-        name: mark.name,
-        type,
-        coordinates: { lat, lon },
-      });
-    }
-
-    return marks;
-  }, [raceCourseForConsole]);
-
-  const racePhaseInput = useMemo(() => {
-    const currentPosition = gpsPosition
-      ? {
-          lat: gpsPosition.latitude,
-          lon: gpsPosition.longitude,
-        }
-      : fallbackPosition
-        ? {
-            lat: fallbackPosition.latitude,
-            lon: fallbackPosition.longitude,
-          }
-        : undefined;
-
-    return {
-      startTime: selectedRaceData?.start_date,
-      currentPosition,
-      course: raceCourseForConsole,
-      marks: phaseDetectionMarks,
-      heading: gpsPosition?.heading ?? lastHeadingRef.current ?? undefined,
-      speed: boatSpeedKnots,
-    };
-  }, [
-    selectedRaceData?.start_date,
+  // Race phase input (extracted to useRacePhaseInput hook)
+  const { phaseDetectionMarks, racePhaseInput } = useRacePhaseInput({
+    raceCourseForConsole,
+    selectedRaceData,
     gpsPosition,
     fallbackPosition,
-    raceCourseForConsole,
-    phaseDetectionMarks,
+    lastHeadingRef,
     boatSpeedKnots,
-  ]);
+  });
 
   const racePhaseContext = useRacePhaseDetection(racePhaseInput);
 
-  const timeToStartSeconds = useMemo(() => {
-    if (timeToStartMinutes === null || timeToStartMinutes === undefined) {
-      return null;
-    }
-    return Math.round(timeToStartMinutes * 60);
-  }, [timeToStartMinutes]);
-
-  const currentGpsTrack: GPSPoint[] = useMemo(() => {
-    const metadataTrack = selectedRaceData?.metadata?.gps_track ?? selectedRaceData?.gps_track;
-    const parsed = parseGpsTrack(metadataTrack);
-    return parsed ?? []; // Don't show mock data - return empty array if no real track
-  }, [selectedRaceData]);
-
-  const currentSplitTimes: DebriefSplitTime[] = useMemo(() => {
-    const metadataSplits = selectedRaceData?.metadata?.split_times ?? selectedRaceData?.split_times;
-    const parsed = parseSplitTimes(metadataSplits);
-    return parsed ?? []; // Don't show mock data - return empty array if no real splits
-  }, [selectedRaceData]);
+  // Debrief data (extracted to useRaceDebriefData hook)
+  const {
+    currentGpsTrack,
+    currentSplitTimes,
+    timeToStartSeconds,
+  } = useRaceDebriefData({
+    selectedRaceData,
+    timeToStartMinutes,
+  });
 
   useEffect(() => {
     if (typeof boatDraftValue === 'number' && Math.abs(boatDraftValue - currentDraft) > 0.01) {
@@ -3199,7 +2238,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
         loadingInsights={loadingInsights}
         weatherLoading={weatherLoading}
         isOnline={isOnline}
-        onAddRace={() => setShowAddRaceSheet(true)}
+        onAddRace={handleShowAddRaceSheet}
         onOpenSettings={() => router.push('/(tabs)/settings')}
         userInitial={userInitial}
       />
@@ -3539,7 +2578,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
             selectedDemoRaceId={selectedDemoRaceId}
             onSelectDemoRace={setSelectedDemoRaceId}
             selectedDemoRace={selectedDemoRace}
-            onAddRace={() => setShowAddRaceSheet(true)}
+            onAddRace={handleShowAddRaceSheet}
             onAddRaceNavigation={handleAddRaceNavigation}
             onLogisticsSectionLayout={(y) => setLogisticsSectionY((prev) => (Math.abs(prev - y) > 4 ? y : prev))}
             onRegulatorySectionLayout={(y) => setRegulatorySectionY((prev) => (Math.abs(prev - y) > 4 ? y : prev))}
@@ -3596,7 +2635,7 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
         onBoatClassSelected={handleBoatClassSelected}
         // Add Race Dialog
         showAddRaceSheet={showAddRaceSheet}
-        onAddRaceClose={() => setShowAddRaceSheet(false)}
+        onAddRaceClose={handleCloseAddRaceSheet}
         onAddRaceSave={handleAddRaceDialogSave}
       />
 

@@ -9,8 +9,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
 import type { RaceDocumentType, RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { raceDocumentService } from '@/services/RaceDocumentService';
-import { documentStorageService } from '@/services/documentStorageService';
-import { useLogger } from '@/hooks/useLogger';
+import { documentStorageService } from '@/services/storage/DocumentStorageService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useRaceDocuments');
 
 export interface RaceDocumentsCardDocument {
   id: string;
@@ -65,7 +67,6 @@ export function useRaceDocuments(
   options: UseRaceDocumentsOptions
 ): UseRaceDocumentsReturn {
   const { raceId, userId, isDemoSession = false, reloadKey = 0 } = options;
-  const logger = useLogger('useRaceDocuments');
 
   // State
   const [documents, setDocuments] = useState<RaceDocumentWithDetails[]>([]);
@@ -126,7 +127,7 @@ export function useRaceDocuments(
     return () => {
       isActive = false;
     };
-  }, [raceId, reloadKey, internalReloadKey, isDemoSession, logger]);
+  }, [raceId, reloadKey, internalReloadKey, isDemoSession]);
 
   // Format documents for display
   const documentsForDisplay: RaceDocumentsCardDocument[] = documents.map((doc) => {
@@ -243,7 +244,7 @@ export function useRaceDocuments(
     } finally {
       setIsUploading(false);
     }
-  }, [isUploading, isDemoSession, userId, raceId, requestTypeSelection, refresh, logger]);
+  }, [isUploading, isDemoSession, userId, raceId, requestTypeSelection, refresh]);
 
   // Delete document
   const deleteDocument = useCallback(
@@ -264,7 +265,7 @@ export function useRaceDocuments(
         return false;
       }
     },
-    [isDemoSession, refresh, logger]
+    [isDemoSession, refresh]
   );
 
   return {
