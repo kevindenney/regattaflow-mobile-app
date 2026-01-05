@@ -1,107 +1,390 @@
+/**
+ * DashboardSkeleton - Apple/Tufte-inspired loading state
+ *
+ * Design principles:
+ * - No spinner, no "Loading..." text - shapes communicate state implicitly
+ * - Light, warm background matching actual races screen
+ * - Skeleton previews the actual RaceCard layout
+ * - Subtle shimmer animation (2-3 second cycle)
+ * - Content-first: user sees what's coming, not that they're waiting
+ */
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { Skeleton, SkeletonText } from '../skeleton';
+import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Skeleton } from '../skeleton';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Match races screen layout calculations
+const HEADER_HEIGHT = 100;
+const TAB_BAR_HEIGHT = 80;
+const AVAILABLE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TAB_BAR_HEIGHT;
+const HERO_ZONE_HEIGHT = Math.floor(AVAILABLE_HEIGHT * 0.72);
+const CARD_HEIGHT = HERO_ZONE_HEIGHT - 50;
+const CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 375);
 
 export const DashboardSkeleton = () => {
   return (
-    <View style={skeletonStyles.container}>
-      {/* DEBUG: Prominent loading indicator */}
-      <View style={skeletonStyles.debugHeader}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={skeletonStyles.debugText}>Loading Races...</Text>
-      </View>
-
-      {/* Header Skeleton */}
-      <View style={skeletonStyles.header}>
-        <SkeletonText _lines={1} className="h-8 w-3/4 mb-4" startColor="bg-primary-400" />
-        <SkeletonText _lines={1} className="h-4 w-1/2 mb-4" startColor="bg-primary-400" />
-        <View style={skeletonStyles.headerCard}>
-          <View style={skeletonStyles.headerRow}>
-            {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={skeletonStyles.headerItem}>
-                <Skeleton className="h-6 w-12 mb-1" startColor="bg-primary-500" />
-                <Skeleton className="h-3 w-16" startColor="bg-primary-500" />
-              </View>
-            ))}
+    <View style={styles.container}>
+      {/* Header skeleton - venue context */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          {/* Venue indicator */}
+          <View style={styles.venueRow}>
+            <Skeleton style={styles.venueIcon} speed={1.5} />
+            <Skeleton style={styles.venueText} speed={1.5} />
+          </View>
+          {/* Utility icons */}
+          <View style={styles.utilityRow}>
+            <Skeleton style={styles.utilityIcon} speed={1.5} />
           </View>
         </View>
       </View>
 
-      {/* Content Skeleton */}
-      <View className="px-4 py-4">
-        {/* Next Race Card Skeleton */}
-        <View className="bg-white rounded-xl shadow-md mb-4 overflow-hidden">
-          <Skeleton className="h-40 w-full" />
-          <View className="p-4">
-            <SkeletonText _lines={2} className="h-5 mb-3" />
-            <SkeletonText _lines={1} className="h-4 w-2/3 mb-3" />
-            <View className="flex-row mb-4">
-              <Skeleton className="h-6 w-24 rounded-full mr-2" />
-              <Skeleton className="h-6 w-24 rounded-full" />
-            </View>
-            <View className="flex-row">
-              <Skeleton className="h-10 flex-1 mr-2 rounded-lg" />
-              <Skeleton className="h-10 flex-1 rounded-lg" />
-            </View>
-          </View>
-        </View>
+      {/* Race count hint */}
+      <View style={styles.countRow}>
+        <Skeleton style={styles.countText} speed={1.5} />
+        <Skeleton style={styles.addButton} speed={1.5} />
+      </View>
 
-        {/* Recent Race Skeleton */}
-        <View className="bg-white rounded-xl shadow-md p-4 mb-4">
-          <SkeletonText _lines={1} className="h-6 w-1/3 mb-3" />
-          <SkeletonText _lines={1} className="h-5 w-1/2 mb-2" />
-          <Skeleton className="h-8 w-16 mb-3" />
+      {/* Hero zone - skeleton race cards */}
+      <View style={styles.heroZone}>
+        {/* Primary race card skeleton - centered */}
+        <View style={styles.cardContainer}>
+          <RaceCardSkeleton />
         </View>
+      </View>
 
-        {/* Venue Intelligence Skeleton */}
-        <View className="bg-white rounded-xl shadow-md p-4 mb-4">
-          <SkeletonText _lines={1} className="h-6 w-1/2 mb-3" />
-          <View className="flex-row mb-3">
-            <Skeleton className="h-16 w-20 rounded-lg" />
-            <View className="ml-3 flex-1">
-              <SkeletonText _lines={3} className="h-4 mb-1" />
-            </View>
-          </View>
-        </View>
+      {/* Timeline dots skeleton */}
+      <View style={styles.timelineDots}>
+        <Skeleton style={styles.timelineDotActive} speed={1.5} />
+        <Skeleton style={styles.timelineDot} speed={1.5} />
+        <Skeleton style={styles.timelineDot} speed={1.5} />
+      </View>
+
+      {/* Detail zone hint */}
+      <View style={styles.detailZone}>
+        <Skeleton style={styles.detailCard} speed={1.5} />
       </View>
     </View>
   );
 };
 
-const skeletonStyles = StyleSheet.create({
+/**
+ * Skeleton that mirrors actual RaceCard structure
+ */
+const RaceCardSkeleton = () => {
+  return (
+    <View style={styles.card}>
+      {/* Accent line at top */}
+      <View style={styles.accentLine} />
+
+      {/* Top badges - fleet, course, count */}
+      <View style={styles.topBadges}>
+        <Skeleton style={styles.badge} speed={1.5} />
+        <Skeleton style={styles.badge} speed={1.5} />
+      </View>
+
+      {/* Header zone - countdown + details */}
+      <View style={styles.headerZone}>
+        {/* Countdown box */}
+        <Skeleton style={styles.countdownBox} speed={1.5} />
+
+        {/* Race details */}
+        <View style={styles.headerDetails}>
+          <Skeleton style={styles.raceName} speed={1.5} />
+          <Skeleton style={styles.raceName2} speed={1.5} />
+          <View style={styles.metaRow}>
+            <Skeleton style={styles.metaIcon} speed={1.5} />
+            <Skeleton style={styles.metaText} speed={1.5} />
+          </View>
+          <View style={styles.startTimeRow}>
+            <Skeleton style={styles.startLabel} speed={1.5} />
+            <Skeleton style={styles.startValue} speed={1.5} />
+          </View>
+        </View>
+      </View>
+
+      {/* Conditions row - wind, tide, VHF chips */}
+      <View style={styles.conditionsRow}>
+        <Skeleton style={styles.conditionChip} speed={1.5} />
+        <Skeleton style={styles.conditionChip} speed={1.5} />
+        <Skeleton style={styles.conditionChipSmall} speed={1.5} />
+      </View>
+
+      {/* Timer section */}
+      <View style={styles.timerSection}>
+        <Skeleton style={styles.timerButton} speed={1.5} />
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // gray-50
+    backgroundColor: '#EBEBED', // Matches races screen
   },
-  debugHeader: {
-    backgroundColor: '#2563EB', // primary-500
-    paddingTop: 60,
-    paddingBottom: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  debugText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 12,
-  },
+
+  // Header
   header: {
-    backgroundColor: '#2563EB', // primary-500
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: 56,
+    paddingBottom: 8,
     paddingHorizontal: 16,
+    backgroundColor: '#EBEBED',
   },
-  headerCard: {
-    backgroundColor: '#1D4ED8', // primary-600
-    padding: 12,
-    borderRadius: 12,
-  },
-  headerRow: {
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  headerItem: {
     alignItems: 'center',
+  },
+  venueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  venueIcon: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#D1D5DB',
+  },
+  venueText: {
+    width: 120,
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  utilityRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  utilityIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#D1D5DB',
+  },
+
+  // Race count row
+  countRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  countText: {
+    width: 140,
+    height: 12,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  addButton: {
+    width: 48,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+
+  // Hero zone
+  heroZone: {
+    height: HERO_ZONE_HEIGHT - 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardContainer: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+  },
+
+  // Card skeleton
+  card: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    paddingTop: 24,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06), 0 6px 16px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        elevation: 8,
+      },
+    }),
+  },
+  accentLine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+
+  // Top badges
+  topBadges: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  badge: {
+    width: 52,
+    height: 18,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+  },
+
+  // Header zone
+  headerZone: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  countdownBox: {
+    width: 90,
+    height: 90,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+  },
+  headerDetails: {
+    flex: 1,
+    paddingRight: 60,
+    gap: 6,
+  },
+  raceName: {
+    width: '100%',
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: '#E5E7EB',
+  },
+  raceName2: {
+    width: '70%',
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: '#E5E7EB',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  metaIcon: {
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    backgroundColor: '#D1D5DB',
+  },
+  metaText: {
+    width: 140,
+    height: 11,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+  },
+  startTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  startLabel: {
+    width: 80,
+    height: 11,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+  },
+  startValue: {
+    width: 50,
+    height: 13,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+
+  // Conditions row
+  conditionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#F5F5F7', // Apple's warm gray
+    borderRadius: 14,
+    padding: 10,
+  },
+  conditionChip: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  conditionChipSmall: {
+    width: 80,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+
+  // Timer section
+  timerSection: {
+    marginTop: 'auto',
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  timerButton: {
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+
+  // Timeline dots
+  timelineDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  timelineDotActive: {
+    width: 24,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#9CA3AF',
+  },
+
+  // Detail zone
+  detailZone: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  detailCard: {
+    height: 80,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
   },
 });
