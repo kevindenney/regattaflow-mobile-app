@@ -1,6 +1,7 @@
 /**
  * MapControls Component
- * Apple Maps-style control bar for upper-right map controls
+ * Tufte-inspired minimal floating controls for map
+ * (Replaces horizontal segment bar with discrete floating buttons)
  */
 
 import React, { useState } from 'react';
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
+import { TufteTokens } from '@/constants/designSystem';
 
 export interface MapLayers {
   yachtClubs: boolean;

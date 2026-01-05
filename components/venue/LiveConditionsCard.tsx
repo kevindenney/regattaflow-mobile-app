@@ -32,31 +32,6 @@ function getWindDirectionText(degrees: number): string {
   return directions[index];
 }
 
-/**
- * Get color based on race readiness
- */
-function getReadinessColor(readiness: LiveWeatherData['raceReadiness']): string {
-  switch (readiness) {
-    case 'excellent': return '#059669'; // emerald-600
-    case 'good': return '#0284c7'; // sky-600
-    case 'marginal': return '#d97706'; // amber-600
-    case 'poor': return '#dc2626'; // red-600
-    default: return '#6b7280'; // gray-500
-  }
-}
-
-/**
- * Get background color based on race readiness
- */
-function getReadinessBgColor(readiness: LiveWeatherData['raceReadiness']): string {
-  switch (readiness) {
-    case 'excellent': return '#d1fae5'; // emerald-100
-    case 'good': return '#e0f2fe'; // sky-100
-    case 'marginal': return '#fef3c7'; // amber-100
-    case 'poor': return '#fee2e2'; // red-100
-    default: return '#f3f4f6'; // gray-100
-  }
-}
 
 /**
  * Get tide state icon
@@ -128,10 +103,9 @@ export function LiveConditionsCard({
   if (!weather) return null;
 
   const windDirection = getWindDirectionText(weather.windDirection);
-  const readinessColor = getReadinessColor(weather.raceReadiness);
-  const readinessBg = getReadinessBgColor(weather.raceReadiness);
 
   if (compact) {
+    // Tufte: compact shows just the essential data
     return (
       <View style={styles.compactContainer}>
         <View style={styles.compactRow}>
@@ -142,11 +116,6 @@ export function LiveConditionsCard({
           {weather.windGusts && weather.windGusts > weather.windSpeed + 3 && (
             <ThemedText style={styles.compactGusts}>G{weather.windGusts}</ThemedText>
           )}
-          <View style={[styles.compactBadge, { backgroundColor: readinessBg }]}>
-            <ThemedText style={[styles.compactBadgeText, { color: readinessColor }]}>
-              {weather.raceReadiness.toUpperCase()}
-            </ThemedText>
-          </View>
         </View>
       </View>
     );
@@ -154,17 +123,12 @@ export function LiveConditionsCard({
 
   return (
     <View style={styles.container}>
-      {/* Header with Race Readiness */}
-      <View style={[styles.readinessBanner, { backgroundColor: readinessBg }]}>
-        <View style={styles.readinessContent}>
-          <View style={[styles.readinessDot, { backgroundColor: readinessColor }]} />
-          <ThemedText style={[styles.readinessLabel, { color: readinessColor }]}>
-            {weather.raceReadiness === 'excellent' ? 'RACE READY' : 
-             weather.raceReadiness === 'good' ? 'GOOD CONDITIONS' :
-             weather.raceReadiness === 'marginal' ? 'MARGINAL' : 'NOT RECOMMENDED'}
-          </ThemedText>
-        </View>
-        <ThemedText style={styles.readinessReason}>{weather.raceReadinessReason}</ThemedText>
+      {/* Tufte: Show data summary without marketing interpretation */}
+      <View style={styles.conditionsSummary}>
+        <ThemedText style={styles.summaryText}>
+          {weather.windSpeed}kt {windDirection}
+          {weather.windGusts && weather.windGusts > weather.windSpeed + 3 && ` gusting ${weather.windGusts}`}
+        </ThemedText>
       </View>
 
       {/* Main Conditions Grid */}
@@ -342,33 +306,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Readiness Banner
-  readinessBanner: {
+  // Conditions Summary (Tufte: data-first, no marketing)
+  conditionsSummary: {
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
-  readinessContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  readinessDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  readinessLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  readinessReason: {
-    fontSize: 13,
-    color: '#4b5563',
-    marginLeft: 14,
+  summaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
   },
   
   // Conditions Grid
@@ -548,17 +496,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#d97706',
     fontWeight: '600',
-  },
-  compactBadge: {
-    marginLeft: 'auto',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  compactBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
 });
 

@@ -1,7 +1,8 @@
 import { ThemedText } from '@/components/themed-text';
+import { TufteTokens } from '@/constants/designSystem';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Linking, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 interface VenueHeroCardProps {
   venueName: string;
@@ -15,6 +16,13 @@ interface VenueHeroCardProps {
   isSaved?: boolean;
   latitude?: number;
   longitude?: number;
+  // New props for Tufte data density
+  racingAreaCount?: number;
+  currentConditions?: {
+    wind?: string;
+    tide?: string;
+    temp?: string;
+  };
 }
 
 export function VenueHeroCard({
@@ -22,13 +30,14 @@ export function VenueHeroCard({
   country,
   region,
   distanceLabel,
-  travelTip,
   windSummary,
   onNavigate,
   onSave,
   isSaved = false,
   latitude,
   longitude,
+  racingAreaCount,
+  currentConditions,
 }: VenueHeroCardProps) {
   const openMaps = () => {
     if (!latitude || !longitude) return;
@@ -45,69 +54,87 @@ export function VenueHeroCard({
     }
   };
 
+  // Build subtitle parts (Tufte: inline small multiples)
+  const subtitleParts: string[] = [];
+  if (country) subtitleParts.push(country);
+  if (windSummary) subtitleParts.push(windSummary);
+  else if (currentConditions?.wind) subtitleParts.push(currentConditions.wind);
+
   return (
     <View style={styles.container}>
-      <View style={styles.titleRow}>
-        <ThemedText style={styles.venueName}>{venueName}</ThemedText>
-        {!!country && (
-          <View style={styles.countryPill}>
-            <Ionicons name="flag-outline" size={14} color="#1f2937" />
-            <ThemedText style={styles.countryText}>
-              {region ? `${country} • ${region}` : country}
-            </ThemedText>
-          </View>
-        )}
-      </View>
-
-      {!!distanceLabel && (
-        <View style={styles.infoRow}>
-          <Ionicons name="pin-outline" size={16} color="#2563eb" />
-          <ThemedText style={styles.infoText}>{distanceLabel}</ThemedText>
-        </View>
-      )}
-
-      {!!windSummary && (
-        <View style={styles.infoRow}>
-          <Ionicons name="compass-outline" size={16} color="#2563eb" />
-          <ThemedText style={styles.infoText}>{windSummary}</ThemedText>
-        </View>
-      )}
-
-      {!!travelTip && (
-        <View style={styles.tipBubble}>
-          <ThemedText style={styles.tipText}>{travelTip}</ThemedText>
-        </View>
-      )}
-
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={onNavigate ?? openMaps}
-          disabled={!latitude || !longitude}
-        >
-          <Ionicons name="navigate" size={18} color="#fff" />
-          <ThemedText style={styles.primaryButtonText}>Navigate</ThemedText>
-        </TouchableOpacity>
-
+      {/* Header: Full venue name - NEVER truncate */}
+      <View style={styles.header}>
+        <ThemedText style={styles.venueName} numberOfLines={2}>
+          {venueName}
+        </ThemedText>
         {!!onSave && (
-          <TouchableOpacity
-            style={[styles.secondaryButton, isSaved && styles.secondaryButtonActive]}
+          <Pressable
+            style={[styles.saveButton, isSaved && styles.saveButtonActive]}
             onPress={onSave}
           >
             <Ionicons
               name={isSaved ? 'bookmark' : 'bookmark-outline'}
               size={18}
-              color={isSaved ? '#2563eb' : '#1f2937'}
+              color={isSaved ? '#2563eb' : '#6B7280'}
             />
-            <ThemedText
-              style={[
-                styles.secondaryButtonText,
-                isSaved && styles.secondaryButtonTextActive,
-              ]}
-            >
-              {isSaved ? 'Saved' : 'Save Venue'}
-            </ThemedText>
-          </TouchableOpacity>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Subtitle: Country + conditions inline */}
+      {subtitleParts.length > 0 && (
+        <ThemedText style={styles.subtitle}>
+          {subtitleParts.join(' · ')}
+        </ThemedText>
+      )}
+
+      {/* Conditions row (Tufte: data density) */}
+      {currentConditions && (
+        <View style={styles.conditionsRow}>
+          {currentConditions.wind && (
+            <View style={styles.conditionItem}>
+              <ThemedText style={styles.conditionValue}>{currentConditions.wind}</ThemedText>
+              <ThemedText style={styles.conditionLabel}>wind</ThemedText>
+            </View>
+          )}
+          {currentConditions.tide && (
+            <View style={styles.conditionItem}>
+              <ThemedText style={styles.conditionValue}>{currentConditions.tide}</ThemedText>
+              <ThemedText style={styles.conditionLabel}>tide</ThemedText>
+            </View>
+          )}
+          {currentConditions.temp && (
+            <View style={styles.conditionItem}>
+              <ThemedText style={styles.conditionValue}>{currentConditions.temp}</ThemedText>
+              <ThemedText style={styles.conditionLabel}>temp</ThemedText>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Racing areas count */}
+      {racingAreaCount !== undefined && racingAreaCount > 0 && (
+        <ThemedText style={styles.metaText}>
+          {racingAreaCount} racing area{racingAreaCount !== 1 ? 's' : ''} nearby
+        </ThemedText>
+      )}
+
+      {/* Minimal divider */}
+      <View style={styles.divider} />
+
+      {/* Actions: smaller, data-first (Tufte) */}
+      <View style={styles.actionRow}>
+        <Pressable
+          style={styles.actionButton}
+          onPress={onNavigate ?? openMaps}
+          disabled={!latitude || !longitude}
+        >
+          <Ionicons name="navigate-outline" size={16} color="#2563eb" />
+          <ThemedText style={styles.actionButtonText}>Navigate</ThemedText>
+        </Pressable>
+
+        {distanceLabel && (
+          <ThemedText style={styles.distanceText}>{distanceLabel}</ThemedText>
         )}
       </View>
     </View>
@@ -115,112 +142,120 @@ export function VenueHeroCard({
 }
 
 const styles = StyleSheet.create({
+  // Tufte: minimal container, subtle shadow
   container: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    backgroundColor: TufteTokens.backgrounds.paper,
+    borderRadius: TufteTokens.borderRadius.card,
+    paddingVertical: TufteTokens.spacing.section,
+    paddingHorizontal: TufteTokens.spacing.section,
     width: '100%',
     maxWidth: 420,
     ...Platform.select({
       web: {
-        boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.12)',
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
       },
       default: {
         shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: 8,
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 3,
       },
     }),
-    gap: 10,
+    gap: TufteTokens.spacing.compact,
   },
-  titleRow: {
+
+  // Header row: venue name + save button
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: TufteTokens.spacing.standard,
+  },
+
+  // Venue name: full display, never truncate primary data
+  venueName: {
+    ...TufteTokens.typography.primary,
+    fontSize: 20,
+    fontWeight: '600',
+    color: TufteTokens.colors.textPrimary,
+    flex: 1,
+    lineHeight: 26,
+  },
+
+  // Save button: minimal, unobtrusive
+  saveButton: {
+    padding: TufteTokens.spacing.tight,
+    borderRadius: TufteTokens.borderRadius.subtle,
+  },
+  saveButtonActive: {
+    backgroundColor: TufteTokens.colors.accentSubtle,
+  },
+
+  // Subtitle: country + conditions inline (Tufte: small multiples)
+  subtitle: {
+    ...TufteTokens.typography.secondary,
+    color: TufteTokens.colors.textSecondary,
+    marginTop: -2,
+  },
+
+  // Conditions row: data density
+  conditionsRow: {
+    flexDirection: 'row',
+    gap: TufteTokens.spacing.section,
+    marginTop: TufteTokens.spacing.compact,
+  },
+  conditionItem: {
+    alignItems: 'flex-start',
+  },
+  conditionValue: {
+    ...TufteTokens.typography.data,
+    color: TufteTokens.colors.textPrimary,
+    fontWeight: '600',
+  },
+  conditionLabel: {
+    ...TufteTokens.typography.micro,
+    color: TufteTokens.colors.textTertiary,
+    textTransform: 'lowercase',
+  },
+
+  // Meta text: racing areas count
+  metaText: {
+    ...TufteTokens.typography.tertiary,
+    color: TufteTokens.colors.textSecondary,
+  },
+
+  // Divider: Tufte hairline
+  divider: {
+    height: TufteTokens.borders.hairline,
+    backgroundColor: TufteTokens.borders.colorSubtle,
+    marginVertical: TufteTokens.spacing.compact,
+  },
+
+  // Action row: smaller buttons, data first
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
   },
-  venueName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
-    flex: 1,
-  },
-  countryPill: {
+
+  // Action button: minimal, text-link style
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+    gap: TufteTokens.spacing.tight,
+    paddingVertical: TufteTokens.spacing.tight,
+    paddingHorizontal: TufteTokens.spacing.compact,
   },
-  countryText: {
-    fontSize: 12,
-    color: '#1f2937',
-    fontWeight: '600',
+  actionButtonText: {
+    ...TufteTokens.typography.secondary,
+    color: TufteTokens.colors.accent,
+    fontWeight: '500',
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#1f2937',
-  },
-  tipBubble: {
-    backgroundColor: '#eff6ff',
-    borderRadius: 12,
-    padding: 12,
-  },
-  tipText: {
-    fontSize: 13,
-    color: '#1d4ed8',
-    lineHeight: 18,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: '#2563eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: '#f3f4f6',
-  },
-  secondaryButtonActive: {
-    backgroundColor: '#dbeafe',
-    borderWidth: 1,
-    borderColor: '#93c5fd',
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  secondaryButtonTextActive: {
-    color: '#2563eb',
+
+  // Distance: secondary info
+  distanceText: {
+    ...TufteTokens.typography.tertiary,
+    color: TufteTokens.colors.textTertiary,
   },
 });

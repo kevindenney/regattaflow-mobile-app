@@ -146,7 +146,7 @@ export function VenueDetailsSheet({ venue, onClose }: VenueDetailsSheetProps) {
           </ThemedText>
         </View>
         <View style={styles.headerInfo}>
-          <ThemedText style={styles.venueName}>{venue.name}</ThemedText>
+          <ThemedText style={styles.venueName} numberOfLines={2}>{venue.name}</ThemedText>
           <View style={styles.venueMetaRow}>
             <ThemedText style={styles.countryFlag}>{getFlag(venue.country)}</ThemedText>
             <ThemedText style={styles.venueCountry}>{venue.country}</ThemedText>
@@ -269,10 +269,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   venueName: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 2,
+    // Tufte: Never truncate primary data - allow wrapping
+    flexShrink: 1,
   },
   venueMetaRow: {
     flexDirection: 'row',
