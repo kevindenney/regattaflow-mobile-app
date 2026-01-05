@@ -31,11 +31,10 @@ import {
 } from '@/components/races';
 import {
   ADD_RACE_CARD_DISMISSED_KEY,
-  type RigPreset,
-  type RegulatoryDigestData,
-  type RegulatoryAcknowledgements,
-} from '@/lib/races';
-import {
+  MOCK_GPS_TRACK,
+  MOCK_SPLIT_TIMES,
+  normalizeDocumentType as normalizeDocumentTypeUtil,
+  detectRaceType,
   normalizeDirection,
   pickNumeric,
   normalizeCurrentType,
@@ -44,6 +43,11 @@ import {
   parseGpsTrack,
   parseSplitTimes,
   normalizeCourseMarkType,
+  type RigPreset,
+  type RegulatoryDigestData,
+  type RegulatoryAcknowledgements,
+  type ActiveRaceSummary,
+  type RaceBriefData,
   type TacticalWindSnapshot,
   type TacticalCurrentSnapshot,
   type GPSPoint,
@@ -123,177 +127,19 @@ const logger = createLogger('RacesScreen');
 // Destructure tactical calculations for easy access
 const { calculateDistance, calculateBearing } = TacticalCalculations;
 
-// Types imported from @/lib/races:
-// - RigPreset, RegulatoryDigestData, RegulatoryAcknowledgements
+// Types, constants, and utilities imported from @/lib/races:
+// - ActiveRaceSummary, RaceBriefData, RigPreset, RegulatoryDigestData, RegulatoryAcknowledgements
 // - TacticalWindSnapshot, TacticalCurrentSnapshot, GPSPoint, DebriefSplitTime
-// Constants imported from @/lib/races:
-// - DOCUMENT_TYPE_OPTIONS, ADD_RACE_CARD_DISMISSED_KEY
-// Utilities imported from @/lib/races:
-// - normalizeDirection, pickNumeric, normalizeCurrentType
-// - extractWindSnapshot, extractCurrentSnapshot, parseGpsTrack, parseSplitTimes
+// - DOCUMENT_TYPE_OPTIONS, ADD_RACE_CARD_DISMISSED_KEY, MOCK_GPS_TRACK, MOCK_SPLIT_TIMES
+// - normalizeDirection, pickNumeric, normalizeCurrentType, extractWindSnapshot
+// - extractCurrentSnapshot, parseGpsTrack, parseSplitTimes, detectRaceType
 
-interface ActiveRaceSummary {
-  id: string;
-  name: string;
-  series?: string;
-  venue?: string;
-  startTime?: string;
-  warningSignal?: string;
-  cleanRegatta?: boolean;
-  lastUpdated?: string | null;
-}
-
-interface RaceBriefData extends ActiveRaceSummary {
-  countdown?: {
-    days: number;
-    hours: number;
-    minutes: number;
-  };
-  weatherSummary?: string;
-  tideSummary?: string;
-}
-
-// CourseOutlineGroup type moved to useRacePreparationData hook
-
-// normalizeDocumentType: local helper for RaceDocumentsCard type conversion
+// Local helper for RaceDocumentsCard type conversion
 const normalizeDocumentType = (
   type: RaceDocumentWithDetails['documentType']
 ): RaceDocumentsCardDocument['type'] => {
-  switch (type) {
-    case 'sailing_instructions':
-    case 'nor':
-    case 'course_diagram':
-    case 'amendment':
-    case 'notam':
-      return type;
-    default:
-      return 'other';
-  }
+  return normalizeDocumentTypeUtil(type) as RaceDocumentsCardDocument['type'];
 };
-
-// Utility functions imported from @/lib/races:
-// - pickNumeric, normalizeCurrentType, extractWindSnapshot
-// - extractCurrentSnapshot, parseGpsTrack, parseSplitTimes
-
-// Mock GPS track data for DEBRIEF mode testing
-const MOCK_GPS_TRACK = Array.from({ length: 100 }, (_, i) => {
-  const t = i / 100;
-  const baseTime = new Date('2024-06-15T14:00:00Z');
-
-  return {
-    latitude: 37.8 + Math.sin(t * Math.PI * 4) * 0.01 + t * 0.02,
-    longitude: -122.4 + Math.cos(t * Math.PI * 4) * 0.01 + t * 0.015,
-    timestamp: new Date(baseTime.getTime() + i * 30000), // 30 seconds apart
-    speed: 5 + Math.random() * 3 + Math.sin(t * Math.PI * 2) * 2,
-    heading: (t * 360) % 360,
-    accuracy: 5 + Math.random() * 3,
-  };
-});
-
-// Mock split times data for DEBRIEF mode testing
-const MOCK_SPLIT_TIMES = [
-  {
-    markId: 'start',
-    markName: 'Start Line',
-    time: new Date('2024-06-15T14:00:00Z'),
-    position: 8,
-    roundingType: 'port' as const,
-    roundingTime: 0,
-  },
-  {
-    markId: 'mark1',
-    markName: 'Windward Mark',
-    time: new Date('2024-06-15T14:12:30Z'),
-    position: 5,
-    roundingType: 'port' as const,
-    roundingTime: 4.2,
-  },
-  {
-    markId: 'mark2',
-    markName: 'Leeward Gate',
-    time: new Date('2024-06-15T14:22:15Z'),
-    position: 4,
-    roundingType: 'starboard' as const,
-    roundingTime: 6.8,
-  },
-  {
-    markId: 'mark3',
-    markName: 'Windward Mark',
-    time: new Date('2024-06-15T14:34:45Z'),
-    position: 3,
-    roundingType: 'port' as const,
-    roundingTime: 3.9,
-  },
-  {
-    markId: 'finish',
-    markName: 'Finish Line',
-    time: new Date('2024-06-15T14:45:00Z'),
-    position: 3,
-    roundingType: 'port' as const,
-    roundingTime: 0,
-  },
-];
-
-/**
- * Detect race type based on name patterns, explicit type, or distance
- * Distance races have different strategic considerations than fleet races
- */
-function detectRaceType(
-  raceName: string | undefined,
-  explicitType: 'fleet' | 'distance' | undefined,
-  totalDistanceNm: number | undefined
-): 'fleet' | 'distance' {
-  // 1. Explicit type takes priority
-  if (explicitType) {
-    return explicitType;
-  }
-
-  // 2. Check distance threshold
-  if (totalDistanceNm && totalDistanceNm > 10) {
-    return 'distance';
-  }
-
-  // 3. Smart name detection for distance races
-  if (raceName) {
-    const lowerName = raceName.toLowerCase();
-    const distanceKeywords = [
-      'around',
-      'island race',
-      'offshore',
-      'ocean race',
-      'ocean racing',
-      'coastal',
-      'passage',
-      'distance race',
-      'long distance',
-      'overnight',
-      'multi-day',
-      'transat',
-      'transpac',
-      'fastnet',
-      'rolex',
-      'sydney hobart',
-      'bermuda',
-      'nm race',
-      'mile race',
-    ];
-
-    // Check for distance keywords
-    for (const keyword of distanceKeywords) {
-      if (lowerName.includes(keyword)) {
-        return 'distance';
-      }
-    }
-
-    // Check for distance patterns like "25nm", "50 mile", "100 nautical"
-    if (/\d+\s*(nm|nautical|mile)/i.test(raceName)) {
-      return 'distance';
-    }
-  }
-
-  // Default to fleet racing
-  return 'fleet';
-}
 
 export default function RacesScreen() {
   const auth = useAuth();
