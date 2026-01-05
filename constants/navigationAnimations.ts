@@ -40,6 +40,26 @@ export const FOCUS_SPRING_CONFIG = {
   mass: 0.4,
 } as const;
 
+/**
+ * Spring config for vertical detail card snapping
+ * Slightly damped for vertical feel - less bouncy than horizontal
+ */
+export const DETAIL_SNAP_SPRING_CONFIG = {
+  damping: 24,
+  stiffness: 85,
+  mass: 0.5,
+} as const;
+
+/**
+ * Spring config for zone height animations
+ * Smooth expansion/collapse without bounce
+ */
+export const ZONE_EXPAND_SPRING_CONFIG = {
+  damping: 30,
+  stiffness: 100,
+  mass: 0.6,
+} as const;
+
 // =============================================================================
 // TIMING CONFIGURATIONS
 // =============================================================================
@@ -89,6 +109,18 @@ export const GESTURE_PRIORITY_RATIO = 1.5;
  */
 export const GESTURE_ACTIVE_OFFSET = 10;
 
+/**
+ * Minimum displacement before committing to gesture axis
+ * Prevents accidental axis switching
+ */
+export const GESTURE_LOCK_DISTANCE = 15;
+
+/**
+ * Delay before allowing axis switch after gesture end
+ * Prevents rapid axis switching on quick consecutive gestures
+ */
+export const GESTURE_UNLOCK_DELAY = 300;
+
 // =============================================================================
 // CARD DIMENSIONS
 // =============================================================================
@@ -136,6 +168,33 @@ export const CARD_SCALE = {
 export const CARD_OPACITY = {
   active: 1.0,
   inactive: 0.7,
+} as const;
+
+/**
+ * Scale values for detail card states
+ * Less dramatic than hero cards for cleaner vertical scrolling
+ */
+export const DETAIL_CARD_SCALE = {
+  active: 1.0,
+  inactive: 0.94,
+  pressed: 0.97,
+} as const;
+
+/**
+ * Opacity values for detail card states
+ * Higher contrast to show depth in vertical stack
+ */
+export const DETAIL_CARD_OPACITY = {
+  active: 1.0,
+  inactive: 0.5,
+} as const;
+
+/**
+ * Zone heights as ratio of available height (after header)
+ */
+export const ZONE_HEIGHTS = {
+  hero: { collapsed: 0.50, normal: 0.58, expanded: 0.70 },
+  detail: { collapsed: 0.30, normal: 0.42, expanded: 0.50 },
 } as const;
 
 /**
@@ -192,13 +251,47 @@ export const INDICATOR = {
 // =============================================================================
 
 /**
- * Detail card types in order of appearance
+ * Detail card types in order of appearance (for upcoming races)
  */
 export const DETAIL_CARD_TYPES = [
+  'conditions',
   'strategy',
-  'rig-tuning',
-  'marks-course',
-  'performance',
+  'rig',
+  'course',
+  'fleet',
+  'regulatory',
 ] as const;
 
 export type DetailCardType = (typeof DETAIL_CARD_TYPES)[number];
+
+/**
+ * Detail card height as ratio of detail zone height
+ * Allows peek of next card
+ */
+export const DETAIL_CARD_HEIGHT_RATIO = 0.85;
+
+/**
+ * Gap between detail cards in pixels
+ */
+export const DETAIL_CARD_GAP = 12;
+
+/**
+ * Gesture lock visual feedback duration (ms)
+ * Quick acknowledgment that axis is locked
+ */
+export const GESTURE_LOCK_FEEDBACK_DURATION = 80;
+
+// =============================================================================
+// RACE STATUS
+// =============================================================================
+
+/**
+ * Race status thresholds (in hours)
+ */
+export const RACE_STATUS_THRESHOLDS = {
+  urgent: 2,     // Within 2 hours - red
+  soon: 24,      // Within 24 hours - amber
+  upcoming: 168, // Within 1 week - green
+} as const;
+
+export type RaceStatus = 'urgent' | 'soon' | 'upcoming' | 'inProgress' | 'completed';

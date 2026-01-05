@@ -12,7 +12,7 @@
  * - High data density in minimal space
  */
 
-import { TufteTokens, createTufteCardStyle } from '@/constants/designSystem';
+import { TufteTokens, createTufteCardStyle, getRaceStatus, getRaceStatusColors, type RaceStatusType } from '@/constants/designSystem';
 import { calculateCountdown } from '@/constants/mockData';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState, useEffect } from 'react';
@@ -480,24 +480,30 @@ export function RaceCardEnhanced({
     return `${countdown.minutes}m`;
   }, [countdown, raceStatus]);
 
-  // Countdown urgency color
-  const getCountdownStyle = () => {
-    if (raceStatus === 'past') return { bg: '#F3F4F6', text: '#6B7280' };
-    if (countdown.days > 7) return { bg: '#ECFDF5', text: '#065F46' };
-    if (countdown.days >= 2) return { bg: '#FEF9C3', text: '#854D0E' };
-    if (countdown.days >= 1) return { bg: '#FFEDD5', text: '#C2410C' };
-    return { bg: '#FEE2E2', text: '#DC2626' };
-  };
-  const countdownStyle = getCountdownStyle();
+  // Race status using centralized design system
+  // Converts legacy raceStatus prop and countdown to new status type
+  const computedStatus: RaceStatusType = useMemo(() => {
+    if (raceStatus === 'past') return 'completed';
 
-  // Apple-style card accent color based on race status
-  const getAccentColor = () => {
-    if (raceStatus === 'past') return '#9CA3AF'; // Gray for completed
-    if (countdown.days <= 1) return '#EF4444'; // Red - urgent
-    if (countdown.days <= 3) return '#F59E0B'; // Amber - soon
-    return '#10B981'; // Green - good conditions, upcoming
-  };
-  const accentColor = getAccentColor();
+    // Parse start time for status calculation
+    const raceDate = new Date(date);
+    const [hours, minutes] = startTime.split(':').map(Number);
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      raceDate.setHours(hours, minutes, 0, 0);
+    }
+
+    return getRaceStatus(raceDate, false, raceStatus === 'past');
+  }, [date, startTime, raceStatus]);
+
+  // Get status colors from design system
+  const statusColors = useMemo(() => getRaceStatusColors(computedStatus), [computedStatus]);
+  const accentColor = statusColors.accent;
+
+  // Countdown style uses the same status colors for consistency
+  const countdownStyle = useMemo(() => ({
+    bg: statusColors.badge,
+    text: statusColors.text,
+  }), [statusColors]);
 
   // Format date
   const formattedDate = useMemo(() => {

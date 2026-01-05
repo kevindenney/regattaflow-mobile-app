@@ -2,15 +2,15 @@
  * RaceTimelineLayout Component
  *
  * Two-zone layout for the races screen:
- * - Hero Zone (60%): Horizontal race card timeline
- * - Detail Zone (40%): Vertical scrolling detail cards
+ * - Hero Zone (58%): Horizontal race card timeline
+ * - Detail Zone (42%): Vertical snapping detail cards
  *
  * Navigation:
  * - Horizontal swipe: Navigate between races
- * - Vertical scroll: Navigate between detail sections
+ * - Vertical swipe: Navigate between detail cards (with card pager mode)
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, ReactElement } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -21,16 +21,18 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  ViewToken,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+
+import { ZONE_HEIGHTS, type DetailCardType } from '@/constants/navigationAnimations';
+import { DetailCardPager, DetailCardData } from './navigation/DetailCardPager';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Layout constants
 const HEADER_HEIGHT = 100; // Approximate header height including safe area
-const HERO_RATIO = 0.60; // 60% for hero zone
-const DETAIL_RATIO = 0.40; // 40% for detail zone
+const HERO_RATIO = ZONE_HEIGHTS.hero.normal; // 58% for hero zone
+const DETAIL_RATIO = ZONE_HEIGHTS.detail.normal; // 42% for detail zone
 const CARD_GAP = 16;
 const HORIZONTAL_PADDING = 16;
 
@@ -42,13 +44,25 @@ interface RaceTimelineLayoutProps {
 
   // Render functions
   renderRaceCard: (race: any, index: number) => React.ReactNode;
-  renderDetailContent: () => React.ReactNode;
+  /** Legacy: Render all detail content as scrollable content */
+  renderDetailContent?: () => React.ReactNode;
+  /** New: Render individual detail cards for card pager mode */
+  renderDetailCard?: (card: DetailCardData, index: number, isActive: boolean) => ReactElement;
+
+  // Detail cards data (for card pager mode)
+  detailCards?: DetailCardData[];
+  /** Callback when detail card changes (card pager mode) */
+  onDetailCardChange?: (index: number, cardType: DetailCardType) => void;
 
   // Optional props
   refreshing?: boolean;
   onRefresh?: () => void;
   headerContent?: React.ReactNode;
   cardWidth?: number;
+  /** Use card pager mode for detail zone instead of scroll view */
+  useCardPagerMode?: boolean;
+  /** Enable haptics (default: true) */
+  enableHaptics?: boolean;
 }
 
 export function RaceTimelineLayout({
@@ -57,14 +71,20 @@ export function RaceTimelineLayout({
   onRaceChange,
   renderRaceCard,
   renderDetailContent,
+  renderDetailCard,
+  detailCards,
+  onDetailCardChange,
   refreshing = false,
   onRefresh,
   headerContent,
   cardWidth: propCardWidth,
+  useCardPagerMode = false,
+  enableHaptics = true,
 }: RaceTimelineLayoutProps) {
   const flatListRef = useRef<FlatList>(null);
   const detailScrollRef = useRef<ScrollView>(null);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [activeDetailIndex, setActiveDetailIndex] = useState(0);
 
   // Calculate available height (screen minus header)
   const availableHeight = SCREEN_HEIGHT - HEADER_HEIGHT;
@@ -82,15 +102,24 @@ export function RaceTimelineLayout({
 
     if (newIndex !== selectedRaceIndex && newIndex >= 0 && newIndex < races.length) {
       // Haptic feedback on race change
-      if (Platform.OS !== 'web') {
+      if (enableHaptics && Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
       onRaceChange(newIndex);
 
-      // Reset detail scroll to top when race changes
-      detailScrollRef.current?.scrollTo({ y: 0, animated: true });
+      // Reset detail scroll/pager to first card when race changes
+      if (!useCardPagerMode) {
+        detailScrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
+      setActiveDetailIndex(0);
     }
-  }, [selectedRaceIndex, races.length, snapInterval, onRaceChange]);
+  }, [selectedRaceIndex, races.length, snapInterval, onRaceChange, enableHaptics, useCardPagerMode]);
+
+  // Handle detail card change (card pager mode)
+  const handleDetailCardChange = useCallback((index: number, cardType: DetailCardType) => {
+    setActiveDetailIndex(index);
+    onDetailCardChange?.(index, cardType);
+  }, [onDetailCardChange]);
 
   // Scroll to specific race index
   const scrollToRace = useCallback((index: number) => {
@@ -167,25 +196,39 @@ export function RaceTimelineLayout({
         )}
       </View>
 
-      {/* Detail Zone - Vertical Scroll (40%) */}
+      {/* Detail Zone - Vertical Scroll/Card Pager (42%) */}
       <View style={[styles.detailZone, { height: detailZoneHeight }]}>
-        <ScrollView
-          ref={detailScrollRef}
-          style={styles.detailScroll}
-          contentContainerStyle={styles.detailContent}
-          showsVerticalScrollIndicator={true}
-          refreshControl={
-            onRefresh ? (
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor="#2563EB"
-              />
-            ) : undefined
-          }
-        >
-          {renderDetailContent()}
-        </ScrollView>
+        {useCardPagerMode && renderDetailCard ? (
+          // New: Card pager mode with snapping detail cards
+          <DetailCardPager
+            cards={detailCards}
+            zoneHeight={detailZoneHeight}
+            selectedIndex={activeDetailIndex}
+            renderCard={renderDetailCard}
+            onCardChange={handleDetailCardChange}
+            enableHaptics={enableHaptics}
+            testID="detail-card-pager"
+          />
+        ) : (
+          // Legacy: Scrollable detail content
+          <ScrollView
+            ref={detailScrollRef}
+            style={styles.detailScroll}
+            contentContainerStyle={styles.detailContent}
+            showsVerticalScrollIndicator={true}
+            refreshControl={
+              onRefresh ? (
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor="#2563EB"
+                />
+              ) : undefined
+            }
+          >
+            {renderDetailContent?.()}
+          </ScrollView>
+        )}
       </View>
     </View>
   );

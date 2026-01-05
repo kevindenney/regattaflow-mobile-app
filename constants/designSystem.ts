@@ -609,6 +609,93 @@ export const components = {
 } as const;
 
 // =============================================================================
+// RACE STATUS COLORS
+// =============================================================================
+
+/**
+ * Race Status Color System
+ *
+ * Visual indicators for race timing status:
+ * - urgent: Within 2 hours (red) - immediate attention required
+ * - soon: Within 24 hours (amber) - prepare now
+ * - upcoming: More than 24 hours away (green) - planned/normal
+ * - inProgress: Race currently running (blue) - active
+ * - completed: Race finished (gray) - archived
+ */
+export const raceStatus = {
+  urgent: {
+    accent: colors.danger[500],        // #ef4444 - red accent bar
+    background: colors.danger[50],     // Light red background
+    badge: colors.danger[100],         // Badge background
+    text: colors.danger[700],          // Badge text
+    border: colors.danger[200],        // Border color
+  },
+  soon: {
+    accent: colors.warning[500],       // #f59e0b - amber accent bar
+    background: colors.warning[50],    // Light amber background
+    badge: colors.warning[100],        // Badge background
+    text: colors.warning[800],         // Badge text
+    border: colors.warning[200],       // Border color
+  },
+  upcoming: {
+    accent: colors.success[500],       // #22c55e - green accent bar
+    background: colors.success[50],    // Light green background
+    badge: colors.success[100],        // Badge background
+    text: colors.success[700],         // Badge text
+    border: colors.success[200],       // Border color
+  },
+  inProgress: {
+    accent: colors.primary[500],       // #3b82f6 - blue accent bar
+    background: colors.primary[50],    // Light blue background
+    badge: colors.primary[100],        // Badge background
+    text: colors.primary[700],         // Badge text
+    border: colors.primary[200],       // Border color
+  },
+  completed: {
+    accent: colors.neutral[400],       // #9ca3af - gray accent bar
+    background: colors.neutral[50],    // Light gray background
+    badge: colors.neutral[100],        // Badge background
+    text: colors.neutral[600],         // Badge text
+    border: colors.neutral[200],       // Border color
+  },
+} as const;
+
+export type RaceStatusType = keyof typeof raceStatus;
+
+/**
+ * Get race status based on time until start
+ * @param startTime - Race start time
+ * @param isInProgress - Whether race is currently in progress
+ * @param isCompleted - Whether race has completed
+ * @returns Race status type
+ */
+export function getRaceStatus(
+  startTime: Date | string | null,
+  isInProgress?: boolean,
+  isCompleted?: boolean
+): RaceStatusType {
+  if (isCompleted) return 'completed';
+  if (isInProgress) return 'inProgress';
+  if (!startTime) return 'upcoming';
+
+  const start = typeof startTime === 'string' ? new Date(startTime) : startTime;
+  const now = new Date();
+  const hoursUntilStart = (start.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  if (hoursUntilStart <= 0) return 'inProgress';
+  if (hoursUntilStart <= 2) return 'urgent';
+  if (hoursUntilStart <= 24) return 'soon';
+  return 'upcoming';
+}
+
+/**
+ * Get race status colors
+ */
+export function getRaceStatusColors(status: RaceStatusType) {
+  return raceStatus[status];
+}
+
+// =============================================================================
 // USAGE GUIDELINES
 // =============================================================================
 
@@ -756,8 +843,11 @@ export default {
   buttons,
   badges,
   components,
+  raceStatus,
   getButtonStyles,
   getBadgeStyles,
+  getRaceStatus,
+  getRaceStatusColors,
   hasValidContrast,
   createCardStyle,
   TufteTokens,
