@@ -1,35 +1,39 @@
 /**
  * DistanceRaceCard Component
- * Card for distance/offshore racing with route preview and distance-specific info
- * Different layout from fleet racing cards - focuses on route, waypoints, and time limits
- * 
+ * Compact card for distance/offshore racing matching fleet RaceCard layout
+ * Shows countdown box, race details, and condition chips
+ *
  * Visual Differentiation:
- * - Purple/violet color scheme (vs blue for fleet racing)
- * - Gradient background with nautical wave pattern
- * - Route visualization showing journey
- * - Different countdown layout emphasizing duration
+ * - Purple/violet accent color (vs blue for fleet racing)
+ * - "DISTANCE" badge to identify race type
+ * - Distance chip showing total nautical miles
  */
 
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { calculateCountdown } from '@/constants/mockData';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
-    Anchor,
-    Flag,
     MapPin,
     Navigation,
-    PlayCircle,
     Radio,
     Route,
-    Timer,
     Wind
 } from 'lucide-react-native';
 import React, { useMemo } from 'react';
 import { Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { RouteWaypoint } from './DistanceRouteMap';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Route waypoint type for distance races
+interface RouteWaypoint {
+  name: string;
+  latitude: number;
+  longitude: number;
+  type: 'start' | 'waypoint' | 'gate' | 'finish';
+  required: boolean;
+  passingSide?: 'port' | 'starboard' | 'either';
+  notes?: string;
+}
 
 export interface DistanceRaceCardProps {
   id: string;
@@ -65,6 +69,14 @@ export interface DistanceRaceCardProps {
   onDelete?: () => void;
   onHide?: () => void;
   isDimmed?: boolean;
+  cardWidth?: number;
+  cardHeight?: number;
+  numberOfLegs?: number; // Number of legs/waypoints in the race
+  rigTension?: {
+    uppers?: string;
+    lowers?: string;
+    description?: string;
+  } | null;
 }
 
 export function DistanceRaceCard({
@@ -89,44 +101,17 @@ export function DistanceRaceCard({
   onDelete,
   onHide,
   isDimmed = false,
+  cardWidth: propCardWidth,
+  cardHeight: propCardHeight,
+  numberOfLegs,
+  rigTension,
 }: DistanceRaceCardProps) {
   const router = useRouter();
-  
-  // Determine if it's a circumnavigation (same start/finish) or point-to-point
-  const isSameStartFinish = !finishVenue || finishVenue === startVenue;
-  
-  // Count waypoints (handle null/undefined)
-  const waypointCount = (routeWaypoints || []).filter(w => w.type === 'waypoint' || w.type === 'gate').length;
-  
-  // Format date
-  const formattedDate = useMemo(() => {
-    try {
-      const d = new Date(date);
-      return d.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
-    } catch {
-      return date;
-    }
-  }, [date]);
-  
+
   // Calculate countdown
   const countdown = useMemo(() => {
     return calculateCountdown(date, startTime);
   }, [date, startTime]);
-  
-  // Format time limit
-  const formattedTimeLimit = useMemo(() => {
-    if (!timeLimitHours) return null;
-    if (timeLimitHours < 24) {
-      return `${timeLimitHours}h`;
-    }
-    const days = Math.floor(timeLimitHours / 24);
-    const hours = timeLimitHours % 24;
-    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  }, [timeLimitHours]);
   
   // Menu items
   const menuItems = useMemo<CardMenuItem[]>(() => {
@@ -164,634 +149,602 @@ export function DistanceRaceCard({
     }
   };
   
-  // Card dimensions matching fleet RaceCard exactly
-  const cardWidth = 240;
-  const cardHeight = 400; // Match fleet RaceCard height for alignment
+  // Full-screen card dimensions for all platforms
+  const cardWidth = propCardWidth ?? Math.min(SCREEN_WIDTH - 32, 375);
+  const cardHeight = propCardHeight ?? 520;
   
+  // Color based on countdown urgency (matching RaceCard)
+  const getCountdownColor = () => {
+    if (raceStatus === 'past') return { bg: '#F3F4F6', text: '#6B7280' };
+    if (countdown.days > 7) return { bg: '#D1FAE5', text: '#065F46' }; // Green
+    if (countdown.days >= 2) return { bg: '#FEF3C7', text: '#92400E' }; // Yellow
+    if (countdown.days >= 1) return { bg: '#FFEDD5', text: '#C2410C' }; // Orange
+    return { bg: '#FEE2E2', text: '#DC2626' }; // Red - less than 24 hours
+  };
+  const countdownColors = getCountdownColor();
+
   return (
-    <View style={[
-      styles.cardWrapper,
-      isDimmed && styles.cardDimmed,
-    ]}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.card,
-          {
-            width: cardWidth,
-            height: cardHeight,
-            opacity: pressed ? 0.9 : 1,
-          },
-          isPrimary && styles.cardPrimary,
-          isSelected && styles.cardSelected,
-        ]}
-        onPress={handlePress}
-      >
-        {/* Gradient Background for Distance Racing */}
-        <LinearGradient
-          colors={
-            isSelected 
-              ? ['#EDE9FE', '#DDD6FE', '#C4B5FD']
-              : isPrimary 
-                ? ['#F5F3FF', '#EDE9FE', '#E9D5FF']
-                : ['#FAFAFA', '#F5F3FF', '#EDE9FE']
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientBackground}
-        />
-        
-        {/* Decorative Route Pattern */}
-        <View style={styles.decorativePattern}>
-          <View style={[styles.decorativeLine, styles.decorativeLine1]} />
-          <View style={[styles.decorativeLine, styles.decorativeLine2]} />
-          <View style={[styles.decorativeLine, styles.decorativeLine3]} />
-        </View>
-        
+    <View
+      style={{
+        width: cardWidth,
+        flexShrink: 0,
+        flexGrow: 0,
+      }}
+    >
+      <View style={[
+        styles.cardWrapper,
+        isDimmed && styles.cardDimmed,
+      ]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.card,
+            styles.cardFullScreen,
+            {
+              width: '100%',
+              height: cardHeight,
+              opacity: pressed ? 0.9 : 1,
+            },
+            isPrimary && styles.cardPrimary,
+            isSelected && styles.cardSelected,
+          ]}
+          onPress={handlePress}
+          accessibilityRole="button"
+          accessibilityLabel={`View details for ${name}`}
+        >
         {/* Menu in upper right corner */}
         {menuItems.length > 0 && (
           <View style={styles.menuContainer}>
             <CardMenu items={menuItems} />
           </View>
         )}
-        
-        {/* Card Content Wrapper for consistent flex layout */}
-        <View style={styles.cardContent}>
-          {/* Header with Badges */}
-          <View style={styles.header}>
-            {/* Distance Race Badge */}
-            <View style={styles.distanceBadge}>
-              <Navigation size={10} color="#7C3AED" />
-              <Text style={styles.distanceBadgeText}>DISTANCE</Text>
-            </View>
 
-            {/* Demo Badge */}
-            {isMock && (
-              <View style={styles.mockBadge}>
-                <Text style={styles.mockBadgeText}>DEMO</Text>
-              </View>
-            )}
-
-            {raceStatus === 'next' && !isMock && (
-              <View style={styles.nextBadge}>
-                <Text style={styles.nextBadgeText}>⚡ NEXT</Text>
-              </View>
-            )}
-            {raceStatus === 'past' && !isMock && (
-              <View style={styles.pastBadge}>
-                <Text style={styles.pastBadgeText}>✓ COMPLETED</Text>
-              </View>
-            )}
-          </View>
-          
-          {/* Race Name - Uniform styling with fleet card */}
-          <Text style={styles.raceName} numberOfLines={2}>
-            {name}
-          </Text>
-          
-          {/* Venue row */}
-          <View style={styles.venueRow}>
-            <MapPin size={12} color="#64748B" />
-            <Text style={styles.venueText}>{startVenue}</Text>
-          </View>
-          
-          {/* Course Name - show if selected */}
-          {courseName && (
-            <View style={styles.courseRow}>
-              <Route size={12} color="#7C3AED" />
-              <Text style={styles.courseText}>{courseName}</Text>
-            </View>
-          )}
-        
-          {/* Countdown Section - Right after name/venue to match Fleet card */}
-          {raceStatus !== 'past' ? (
-            <View style={styles.countdownSection}>
-              <View style={styles.countdownRow}>
-                {countdown.days > 0 && (
-                  <>
-                    <Text style={styles.countdownNumber}>{countdown.days}</Text>
-                    <Text style={styles.countdownUnit}>{countdown.days === 1 ? 'day' : 'days'}</Text>
-                  </>
-                )}
-                <Text style={styles.countdownNumber}>{countdown.hours}</Text>
-                <Text style={styles.countdownUnit}>h</Text>
-                <Text style={styles.countdownNumber}>{String(countdown.minutes).padStart(2, '0')}</Text>
-                <Text style={styles.countdownUnit}>m</Text>
-              </View>
-              <View style={styles.startPrompt}>
-                <PlayCircle size={14} color="#C4B5FD" />
-                <Text style={styles.startPromptText}>Tap when ready to start</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.completedSection}>
-              <Text style={styles.completedLabel}>RACE COMPLETED</Text>
-              <Text style={styles.completedDate}>
-                {new Date(date).toLocaleDateString('en-US', { 
-                  month: 'long', 
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
-              </Text>
-            </View>
-          )}
-          
-          {/* Route Visualization - Below timer */}
-          <View style={styles.routeVisualization}>
-            {/* Start Point */}
-            <View style={styles.routePoint}>
-              <View style={styles.routePointDotStart}>
-                <Flag size={8} color="#FFFFFF" />
-              </View>
-              <View style={styles.routePointInfo}>
-                <Text style={styles.routePointLabel}>START</Text>
-                <Text style={styles.routePointVenue} numberOfLines={1}>{startVenue}</Text>
-              </View>
-            </View>
-            
-            {/* Connecting Line with Waypoints */}
-            <View style={styles.routeLine}>
-              <View style={styles.routeLineInner} />
-              {waypointCount > 0 && (
-                <View style={styles.waypointIndicators}>
-                  {Array.from({ length: Math.min(waypointCount, 3) }).map((_, i) => (
-                    <View key={i} style={styles.waypointDot} />
-                  ))}
-                  {waypointCount > 3 && (
-                    <Text style={styles.moreWaypoints}>+{waypointCount - 3}</Text>
-                  )}
-                </View>
+        {/* Card Content - Full-screen Layout */}
+        <View style={[styles.cardContent, styles.cardContentFullScreen]}>
+          {/* Header Zone: Countdown box on left, details on right */}
+          <View style={[styles.headerZone, styles.headerZoneFullScreen]}>
+            {/* Countdown Box */}
+            <View style={[styles.countdownBox, styles.countdownBoxFullScreen, { backgroundColor: countdownColors.bg }]}>
+              {raceStatus === 'past' ? (
+                <Text style={[styles.countdownDone, styles.countdownDoneFullScreen, { color: countdownColors.text }]}>DONE</Text>
+              ) : (
+                <>
+                  <Text style={[styles.countdownNumber, styles.countdownNumberFullScreen, { color: countdownColors.text }]}>
+                    {countdown.days}
+                  </Text>
+                  <Text style={[styles.countdownLabel, styles.countdownLabelFullScreen, { color: countdownColors.text }]}>
+                    {countdown.days === 1 ? 'DAY' : 'DAYS'}
+                  </Text>
+                </>
               )}
             </View>
-            
-            {/* Finish Point */}
-            <View style={styles.routePoint}>
-              <View style={styles.routePointDotFinish}>
-                <Anchor size={8} color="#FFFFFF" />
+
+            {/* Race Details */}
+            <View style={[styles.raceDetails, styles.raceDetailsFullScreen]}>
+              {/* Distance Badge + Course + Demo Badge */}
+              <View style={styles.badgeRow}>
+                <View style={[styles.distanceBadge, styles.distanceBadgeFullScreen]}>
+                  <Navigation size={10} color="#7C3AED" />
+                  <Text style={[styles.distanceBadgeText, styles.distanceBadgeTextFullScreen]}>DISTANCE</Text>
+                </View>
+                {courseName && (
+                  <View style={styles.courseBadge}>
+                    <Route size={10} color="#059669" />
+                    <Text style={styles.courseBadgeText}>{courseName}</Text>
+                  </View>
+                )}
+                {(numberOfLegs || routeWaypoints.length > 0) && (
+                  <View style={styles.legCountBadge}>
+                    <Text style={styles.legCountBadgeText}>
+                      {numberOfLegs || routeWaypoints.length} {(numberOfLegs || routeWaypoints.length) === 1 ? 'leg' : 'legs'}
+                    </Text>
+                  </View>
+                )}
+                {isMock && (
+                  <View style={styles.mockBadge}>
+                    <Text style={styles.mockBadgeText}>DEMO</Text>
+                  </View>
+                )}
               </View>
-              <View style={styles.routePointInfo}>
-                <Text style={styles.routePointLabel}>FINISH</Text>
-                <Text style={styles.routePointVenue} numberOfLines={1}>
-                  {isSameStartFinish ? startVenue : finishVenue}
+
+              {/* Race Name */}
+              <Text style={[styles.raceName, styles.raceNameFullScreen]} numberOfLines={3}>
+                {name}
+              </Text>
+
+              {/* Venue + Date */}
+              <View style={styles.metaRow}>
+                <MapPin size={12} color="#64748B" />
+                <Text style={[styles.metaText, styles.metaTextFullScreen]} numberOfLines={1}>
+                  {startVenue}
+                </Text>
+                <Text style={styles.metaSeparator}>•</Text>
+                <Text style={[styles.metaText, styles.metaTextFullScreen]}>
+                  {new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </Text>
               </View>
+
+              {/* Finish Venue (if different) */}
+              {finishVenue && finishVenue !== startVenue && (
+                <View style={[styles.metaRow, { marginTop: 4 }]}>
+                  <MapPin size={12} color="#7C3AED" />
+                  <Text style={[styles.metaText, styles.metaTextFullScreen, { color: '#7C3AED' }]}>
+                    Finish: {finishVenue}
+                  </Text>
+                </View>
+              )}
+
+              {/* Start Time Row */}
+              <View style={styles.startTimeRow}>
+                <Text style={styles.startTimeLabel}>Start:</Text>
+                <Text style={styles.startTimeValue}>{startTime}</Text>
+                {timeLimitHours && (
+                  <View style={styles.timeLimitBadge}>
+                    <Text style={styles.timeLimitBadgeText}>{timeLimitHours}h limit</Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
-          
-          {/* Stats Grid - Distance Specific (compact) */}
-          <View style={styles.statsGrid}>
-            {/* Distance */}
-            <View style={styles.statBox}>
-              <Route size={14} color="#7C3AED" />
-              <Text style={styles.statValue}>
-                {totalDistanceNm ? `${totalDistanceNm}nm` : '—'}
+
+          {/* Conditions Row - Full-screen horizontal chips */}
+          <View style={[styles.conditionsRow, styles.conditionsRowFullScreen]}>
+            {/* Distance Chip */}
+            <View style={[styles.conditionChip, styles.conditionChipFullScreen]}>
+              <Route size={18} color="#7C3AED" strokeWidth={2.5} />
+              <Text style={[styles.conditionChipText, styles.conditionChipTextFullScreen]}>
+                {totalDistanceNm ? `${totalDistanceNm}nm` : '--'}
               </Text>
-              <Text style={styles.statLabel}>Distance</Text>
             </View>
-            
-            {/* Waypoints */}
-            <View style={styles.statBox}>
-              <Navigation size={14} color="#9333EA" />
-              <Text style={styles.statValue}>
-                {waypointCount > 0 ? waypointCount : '—'}
-              </Text>
-              <Text style={styles.statLabel}>Waypoints</Text>
+
+            {/* Wind Chip */}
+            <View style={[styles.conditionChip, styles.conditionChipFullScreen]}>
+              <Wind size={18} color="#3B82F6" strokeWidth={2.5} />
+              {wind ? (
+                <Text style={[styles.conditionChipText, styles.conditionChipTextFullScreen]}>
+                  {wind.direction} {wind.speedMin}-{wind.speedMax}kt
+                </Text>
+              ) : (
+                <Text style={[styles.conditionChipTextMuted, styles.conditionChipTextFullScreen]}>--</Text>
+              )}
             </View>
-            
-            {/* Time Limit */}
-            <View style={styles.statBox}>
-              <Timer size={14} color="#A855F7" />
-              <Text style={styles.statValue}>
-                {formattedTimeLimit || '—'}
-              </Text>
-              <Text style={styles.statLabel}>Limit</Text>
+
+            {/* VHF Chip */}
+            <View style={[styles.conditionChip, styles.conditionChipFullScreen]}>
+              <Radio size={18} color="#8B5CF6" strokeWidth={2.5} />
+              {vhf_channel ? (
+                <Text style={[styles.conditionChipText, styles.conditionChipTextFullScreen]}>Ch {vhf_channel}</Text>
+              ) : (
+                <Text style={[styles.conditionChipTextMuted, styles.conditionChipTextFullScreen]}>--</Text>
+              )}
             </View>
           </View>
-        
-          {/* Weather Footer - Pushed to bottom */}
-          {wind && (
-            <View style={styles.weatherFooter}>
-              <Wind size={12} color="#64748B" />
-              <Text style={styles.weatherText}>
-                {wind.direction} {wind.speedMin}-{wind.speedMax}kts
-              </Text>
+
+          {/* Rig Tension Indicator - compact display */}
+          {rigTension && raceStatus !== 'past' && (
+            <View style={styles.rigTensionRow}>
+              <View style={styles.rigTensionIndicator}>
+                <Text style={styles.rigTensionLabel}>Uppers</Text>
+                <Text style={styles.rigTensionValue}>{rigTension.uppers || '--'}</Text>
+              </View>
+              {rigTension.lowers && (
+                <View style={styles.rigTensionIndicator}>
+                  <Text style={styles.rigTensionLabel}>Lowers</Text>
+                  <Text style={styles.rigTensionValue}>{rigTension.lowers}</Text>
+                </View>
+              )}
+              {rigTension.description && (
+                <Text style={styles.rigTensionDescription}>{rigTension.description}</Text>
+              )}
             </View>
           )}
-          
-          {/* VHF Channel */}
-          {vhf_channel && (
-            <View style={styles.vhfFooter}>
-              <Radio size={12} color="#8B5CF6" />
-              <Text style={styles.vhfText}>Ch {vhf_channel}</Text>
+
+          {/* Waypoints Preview (if available) */}
+          {routeWaypoints.length > 0 && (
+            <View style={styles.waypointsPreview}>
+              <Text style={styles.waypointsTitle}>Route Waypoints</Text>
+              <View style={styles.waypointsList}>
+                {routeWaypoints.slice(0, 4).map((wp, idx) => (
+                  <View key={idx} style={styles.waypointItem}>
+                    <View style={styles.waypointDot} />
+                    <Text style={styles.waypointName} numberOfLines={1}>{wp.name}</Text>
+                  </View>
+                ))}
+                {routeWaypoints.length > 4 && (
+                  <Text style={styles.waypointsMore}>+{routeWaypoints.length - 4} more</Text>
+                )}
+              </View>
             </View>
           )}
         </View>
-      </Pressable>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   cardWrapper: {
-    marginHorizontal: 6,
-    marginVertical: 6,
+    // marginHorizontal removed - parent ScrollView handles gap via `gap` prop
+    marginVertical: 4,
   },
   cardDimmed: {
     opacity: 0.45,
   },
   card: {
-    borderRadius: 16, // Match fleet RaceCard
+    borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
     ...Platform.select({
       web: {
-        boxShadow: '0px 4px 12px rgba(124, 58, 237, 0.15)',
+        boxShadow: '0px 2px 6px rgba(124, 58, 237, 0.08)',
       },
       default: {
         shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 6,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+        elevation: 3,
       },
     }),
-    borderWidth: 1.5,
-    borderColor: '#DDD6FE',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     position: 'relative',
   },
-  cardContent: {
-    flex: 1,
-    padding: 12, // Match fleet RaceCard padding
-  },
-  menuContainer: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: 20,
+  cardFullScreen: {
+    borderRadius: 24,
   },
   cardPrimary: {
     borderWidth: 2,
     borderColor: '#7C3AED',
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 0px 16px rgba(124, 58, 237, 0.25)',
-      },
-      default: {
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
-      },
-    }),
   },
   cardSelected: {
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: '#7C3AED',
-    transform: [{ translateY: -4 }, { scale: 1.02 }],
+    borderStyle: 'dashed',
+    transform: [{ scale: 1.02 }],
   },
-  gradientBackground: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  decorativePattern: {
+  menuContainer: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 100,
-    height: 100,
-    overflow: 'hidden',
-    opacity: 0.1,
+    top: 8,
+    right: 8,
+    zIndex: 20,
   },
-  decorativeLine: {
-    position: 'absolute',
-    width: 150,
-    height: 2,
-    backgroundColor: '#7C3AED',
-    borderRadius: 1,
+  cardContent: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
   },
-  decorativeLine1: {
-    top: 20,
-    right: -30,
-    transform: [{ rotate: '-45deg' }],
+  cardContentFullScreen: {
+    padding: 20,
+    justifyContent: 'flex-start',
   },
-  decorativeLine2: {
-    top: 40,
-    right: -30,
-    transform: [{ rotate: '-45deg' }],
+  // Header zone: countdown on left, details on right
+  headerZone: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
   },
-  decorativeLine3: {
-    top: 60,
-    right: -30,
-    transform: [{ rotate: '-45deg' }],
+  headerZoneFullScreen: {
+    gap: 16,
+    marginBottom: 20,
   },
-  header: {
+  countdownBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdownBoxFullScreen: {
+    width: 90,
+    height: 90,
+    borderRadius: 16,
+  },
+  countdownNumber: {
+    fontSize: 22,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  countdownNumberFullScreen: {
+    fontSize: 42,
+  },
+  countdownLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginTop: -2,
+  },
+  countdownLabelFullScreen: {
+    fontSize: 12,
+    letterSpacing: 0.8,
+    marginTop: 0,
+  },
+  countdownDone: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  countdownDoneFullScreen: {
+    fontSize: 16,
+  },
+  raceDetails: {
+    flex: 1,
+    paddingRight: 24, // Space for menu
+  },
+  raceDetailsFullScreen: {
+    paddingRight: 32,
+  },
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-    paddingRight: 30, // Space for menu
-    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 4,
   },
   distanceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: '#EDE9FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  distanceBadgeFullScreen: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
+    gap: 4,
   },
   distanceBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 8,
+    fontWeight: '700',
     color: '#7C3AED',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  distanceBadgeTextFullScreen: {
+    fontSize: 10,
   },
   mockBadge: {
     backgroundColor: '#F59E0B',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   mockBadgeText: {
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  nextBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  nextBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  pastBadge: {
-    backgroundColor: '#6B7280',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  pastBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
   },
   raceName: {
-    fontSize: 13, // Match fleet RaceCard
+    fontSize: 14,
     fontWeight: '700',
-    color: '#1E1B4B',
+    color: '#1E293B',
+    lineHeight: 18,
     marginBottom: 4,
-    lineHeight: 17,
-    paddingRight: 30, // Space for menu
   },
-  venueRow: {
+  raceNameFullScreen: {
+    fontSize: 22,
+    lineHeight: 28,
+    marginBottom: 8,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
+    flexWrap: 'wrap',
   },
-  venueText: {
-    fontSize: 12,
+  metaText: {
+    fontSize: 11,
     fontWeight: '500',
     color: '#64748B',
   },
-  courseRow: {
+  metaTextFullScreen: {
+    fontSize: 14,
+  },
+  metaSeparator: {
+    fontSize: 11,
+    color: '#CBD5E1',
+  },
+  // Conditions row at bottom
+  conditionsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  conditionsRowFullScreen: {
+    gap: 10,
+    paddingTop: 16,
+    marginTop: 8,
+  },
+  conditionChip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
-    marginBottom: 4,
-  },
-  courseText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#7C3AED',
-  },
-  routeVisualization: {
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderRadius: 8,
-    padding: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
     borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.15)',
-    marginBottom: 4,
+    borderColor: '#E2E8F0',
   },
-  routePoint: {
+  conditionChipFullScreen: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  conditionChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  conditionChipTextFullScreen: {
+    fontSize: 15,
+  },
+  conditionChipTextMuted: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#94A3B8',
+  },
+  // Waypoints preview section
+  waypointsPreview: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  waypointsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  waypointsList: {
+    gap: 8,
+  },
+  waypointItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  routePointDotStart: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 1px 2px rgba(16, 185, 129, 0.2)',
-      },
-      default: {
-        shadowColor: '#10B981',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-        elevation: 2,
-      },
-    }),
+  waypointDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#7C3AED',
   },
-  routePointDotFinish: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 1px 2px rgba(239, 68, 68, 0.2)',
-      },
-      default: {
-        shadowColor: '#EF4444',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-        elevation: 2,
-      },
-    }),
-  },
-  routePointInfo: {
+  waypointName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1E293B',
     flex: 1,
   },
-  routePointLabel: {
-    fontSize: 8,
+  waypointsMore: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#7C3AED',
+    marginTop: 4,
+  },
+  // Time limit section
+  timeLimitContainer: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeLimitLabel: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#64748B',
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
-  routePointVenue: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1E293B',
+  timeLimitValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#7C3AED',
   },
-  routeLine: {
-    marginLeft: 12,
-    paddingLeft: 10,
-    borderLeftWidth: 2,
-    borderLeftColor: '#A855F7',
-    borderStyle: 'dashed',
-    minHeight: 18,
-    justifyContent: 'center',
-    marginVertical: 2,
-  },
-  routeLineInner: {
-    position: 'absolute',
-    left: -6,
-    top: '50%',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#A855F7',
-    opacity: 0.3,
-  },
-  waypointIndicators: {
+  // Course and leg count badges
+  courseBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingLeft: 4,
+    gap: 3,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
-  waypointDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#A855F7',
+  courseBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#059669',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  moreWaypoints: {
+  legCountBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  legCountBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#92400E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  // Start time row
+  startTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  startTimeLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  startTimeValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  timeLimitBadge: {
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  timeLimitBadgeText: {
     fontSize: 9,
     fontWeight: '600',
     color: '#7C3AED',
-    marginLeft: 2,
   },
-  statsGrid: {
+  // Rig tension indicator
+  rigTensionRow: {
     flexDirection: 'row',
-    marginBottom: 6,
-    gap: 4,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 8,
-    padding: 6,
     alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 12,
     borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.1)',
+    borderColor: '#E2E8F0',
   },
-  statValue: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#1E1B4B',
-    marginTop: 2,
+  rigTensionIndicator: {
+    alignItems: 'center',
   },
-  statLabel: {
-    fontSize: 8,
+  rigTensionLabel: {
+    fontSize: 9,
     fontWeight: '600',
     color: '#64748B',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-  countdownSection: {
-    backgroundColor: '#5B21B6', // Purple variant matching fleet's bg-gray-700 / bg-sky-600
-    borderRadius: 8,
-    padding: 12,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-      },
-    }),
-    marginBottom: 6,
-  },
-  countdownRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline', // Align numbers with unit text
-    gap: 2, // Tighter gap like RaceTimer
-    marginBottom: 4,
-  },
-  countdownNumber: {
-    fontSize: 20, // Match RaceTimer text-xl
+  rigTensionValue: {
+    fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
-    marginRight: 1,
+    color: '#1E293B',
   },
-  countdownUnit: {
-    fontSize: 12, // Match RaceTimer text-xs
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.8)', // Match RaceTimer text-white/80
-    marginRight: 8, // Space between units
-  },
-  startPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  startPromptText: {
-    fontSize: 12, // Match RaceTimer text-xs
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.7)', // Match RaceTimer text-white/70
-  },
-  completedSection: {
-    backgroundColor: '#F1F5F9', // Match fleet card pastCountdownSection
-    borderRadius: 10,
-    padding: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 6,
-  },
-  completedLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 1,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  completedDate: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  weatherFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 'auto', // Push to bottom
-    paddingTop: 6,
-  },
-  weatherText: {
+  rigTensionDescription: {
+    flex: 1,
     fontSize: 11,
     fontWeight: '500',
     color: '#64748B',
-  },
-  vhfFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingTop: 4,
-  },
-  vhfText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#8B5CF6',
+    fontStyle: 'italic',
   },
 });
 

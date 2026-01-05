@@ -28,15 +28,26 @@ import { StrategySharingModal } from '@/components/coaching/StrategySharingModal
 import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
+import {
+  CourseDetailCard,
+  FleetDetailCard,
+  RegulatoryDetailCard,
+  StrategyDetailCard,
+  RigDetailCard,
+} from '@/components/races/detail-cards';
 import { FleetPostRaceInsights } from '@/components/races/FleetPostRaceInsights';
 import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { PlanModeContent } from '@/components/races/plan';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
 import { PreRaceBriefingCard } from '@/components/races/PreRaceBriefingCard';
 import { RaceCard } from '@/components/races/RaceCard';
+import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
+import { AccordionSection } from '@/components/races/AccordionSection';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
 import { BoatClassSelectorModal } from '@/components/races/BoatClassSelectorModal';
+import { QuickAddRaceForm } from '@/components/races/QuickAddRaceForm';
 import { AccessibleTouchTarget } from '@/components/ui/AccessibleTouchTarget';
+import { FamilyButton } from '@/components/ui/FamilyButton';
 import { Button, ButtonIcon, ButtonText } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ErrorMessage } from '@/components/ui/error';
@@ -59,6 +70,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
 import type { RaceDocumentType, RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { raceDocumentService } from '@/services/RaceDocumentService';
+import { RaceEventService } from '@/services/RaceEventService';
 import { documentStorageService } from '@/services/storage/DocumentStorageService';
 import { supabase } from '@/services/supabase';
 import { TacticalZoneGenerator } from '@/services/TacticalZoneGenerator';
@@ -73,14 +85,19 @@ import {
     Calendar,
     ChevronLeft,
     ChevronRight,
+    Compass,
+    FileText,
+    Lightbulb,
     MapPin,
     Navigation,
     Plus,
+    Settings,
     TrendingUp,
     Users,
     X
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
@@ -645,16 +662,27 @@ export default function RacesScreen() {
   const [showCalendarImport, setShowCalendarImport] = useState(false);
   const mainScrollViewRef = useRef<ScrollView>(null); // Main vertical ScrollView
   const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
+  const demoRaceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal demo race cards ScrollView
   const hasAutoCenteredNextRace = useRef(false);
-  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
   // Mobile detection - only actual native mobile platforms (not web at any size)
   const isMobileNative = Platform.OS === 'ios' || Platform.OS === 'android';
 
+  // Two-zone layout constants: 70% hero (race cards), 30% detail cards
+  // Cards should dominate the screen for easy viewing and swiping
+  const HEADER_HEIGHT = Platform.OS === 'ios' ? 140 : 120; // Including safe area, nav header, and venue display
+  const TAB_BAR_HEIGHT = 80; // Bottom tab bar
+  const AVAILABLE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TAB_BAR_HEIGHT;
+  const HERO_ZONE_HEIGHT = Math.floor(AVAILABLE_HEIGHT * 0.72); // 72% for race card + timeline dots
+  const DETAIL_ZONE_HEIGHT = AVAILABLE_HEIGHT - HERO_ZONE_HEIGHT; // Remaining 28% for detail cards
+  const RACE_CARD_HEIGHT = HERO_ZONE_HEIGHT - 50; // Leave room for timeline dots only (header moved outside)
+
   // Full-screen card dimensions - cards take up most of the screen
-  const MOBILE_HORIZONTAL_PADDING = 16; // Small padding on edges
-  const MOBILE_CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 375); // Full-screen width
-  const MOBILE_CARD_GAP = 16;
+  // Calculate centering padding so cards snap to center of screen
+  const MOBILE_CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 375); // Card width
+  const MOBILE_CARD_GAP = 12; // Gap between cards
+  const MOBILE_CENTERING_PADDING = (SCREEN_WIDTH - MOBILE_CARD_WIDTH) / 2; // Padding to center cards
   const MOBILE_SNAP_INTERVAL = MOBILE_CARD_WIDTH + MOBILE_CARD_GAP;
 
   // Web dimensions - also use full-screen cards
@@ -1364,16 +1392,19 @@ interface AddRaceTimelineCardProps {
   onDismiss?: () => void;
   isCompact?: boolean;
   cardWidth?: number;
+  cardHeight?: number;
 }
 
-function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces, onDismiss, isCompact = false, cardWidth }: AddRaceTimelineCardProps) {
+function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces, onDismiss, isCompact = false, cardWidth, cardHeight }: AddRaceTimelineCardProps) {
+  const height = cardHeight ?? 180;
+
   // Compact mode: just show a simple add button card
   if (isCompact) {
     return (
       <TouchableOpacity
         style={[
           addRaceTimelineStyles.compactCard,
-          cardWidth ? { width: cardWidth, height: 180 } : null,
+          cardWidth ? { width: cardWidth, height } : null,
         ]}
         onPress={onAddRace}
         accessibilityRole="button"
@@ -1389,7 +1420,7 @@ function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces, onDism
   return (
     <View style={[
       addRaceTimelineStyles.cardSimple,
-      cardWidth ? { width: cardWidth, height: 180 } : null,
+      cardWidth ? { width: cardWidth, height } : null,
     ]}>
       {/* Dismiss button */}
       {onDismiss && (
@@ -1433,6 +1464,86 @@ function AddRaceTimelineCard({ onAddRace, onImportCalendar, hasRealRaces, onDism
     </View>
   );
 }
+
+// FamilyButton-based Add Race Card with inline form
+interface AddRaceFamilyButtonProps {
+  onRaceCreated: () => void;
+  cardWidth?: number;
+  cardHeight?: number;
+}
+
+function AddRaceFamilyButton({ onRaceCreated, cardWidth = 160, cardHeight = 180 }: AddRaceFamilyButtonProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const familyButtonRef = useRef<{ collapse: () => void } | null>(null);
+
+  const handleQuickAddRace = useCallback(async (data: { name: string; dateTime: string }) => {
+    setIsSubmitting(true);
+    try {
+      const { data: newRace, error } = await RaceEventService.createRaceEvent({
+        race_name: data.name,
+        start_time: data.dateTime,
+      });
+
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to create race');
+        return;
+      }
+
+      // Success - collapse and refresh
+      familyButtonRef.current?.collapse();
+      onRaceCreated();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [onRaceCreated]);
+
+  const handleCancel = useCallback(() => {
+    familyButtonRef.current?.collapse();
+  }, []);
+
+  return (
+    <View
+      style={{
+        width: cardWidth,
+        height: cardHeight,
+        flexShrink: 0,
+        flexGrow: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <FamilyButton
+        ref={familyButtonRef}
+        width={cardWidth}
+        height={cardHeight}
+        variant="tufte"
+      >
+        <FamilyButton.Trigger size={56}>
+          <Plus color="#047857" size={24} />
+          <Text style={addRaceFamilyButtonStyles.triggerLabel}>Add Race</Text>
+        </FamilyButton.Trigger>
+        <FamilyButton.Content>
+          <QuickAddRaceForm
+            onSubmit={handleQuickAddRace}
+            onCancel={handleCancel}
+            isSubmitting={isSubmitting}
+          />
+        </FamilyButton.Content>
+      </FamilyButton>
+    </View>
+  );
+}
+
+const addRaceFamilyButtonStyles = StyleSheet.create({
+  triggerLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#047857',
+    marginTop: 4,
+  },
+});
 
 interface RigPlannerCardProps {
   presets: RigPreset[];
@@ -5020,39 +5131,63 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
         )}
         {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
         {hasRealRaces ? (
-          // User has real races - show all upcoming races
+          // User has real races - show all upcoming races with fixed hero height
           <>
-            <View className="mb-3 flex-row items-center justify-between">
+            {/* Header - Outside hero zone for more card space */}
+            <View className="flex-row items-center justify-between mb-2">
               <View>
                 <Text className="text-base font-bold text-gray-800">All Races</Text>
-                <Text className="text-xs text-gray-500">Swipe to view all races chronologically</Text>
+                <Text className="text-xs text-gray-500">Swipe to browse</Text>
               </View>
               <View className="bg-blue-100 px-3 py-1 rounded-full">
                 <Text className="text-blue-800 font-semibold text-sm">
-                  {safeRecentRaces.length} races
+                  {safeRecentRaces.length}
                 </Text>
               </View>
             </View>
-            <View className="relative mb-4">
+            {/* Hero Zone - Fixed height race card timeline */}
+            <View style={{ height: HERO_ZONE_HEIGHT }}>
               <ScrollView
                 ref={raceCardsScrollViewRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                style={{ flex: 1 }}
                 contentContainerStyle={{
-                  paddingLeft: MOBILE_HORIZONTAL_PADDING,
-                  paddingRight: MOBILE_HORIZONTAL_PADDING,
+                  paddingLeft: MOBILE_CENTERING_PADDING,
+                  paddingRight: MOBILE_CENTERING_PADDING,
                   gap: MOBILE_CARD_GAP,
                 }}
                 nestedScrollEnabled={true}
                 scrollEventThrottle={16}
                 decelerationRate="fast"
                 snapToInterval={MOBILE_SNAP_INTERVAL}
-                snapToAlignment="center"
+                snapToAlignment="start"
                 onScroll={(event) => {
                   setScrollX(event.nativeEvent.contentOffset.x);
                 }}
                 onContentSizeChange={(contentWidth) => {
                   setScrollContentWidth(contentWidth);
+                }}
+                onMomentumScrollEnd={(event) => {
+                  // Calculate which race card is centered after scroll ends
+                  const offsetX = event.nativeEvent.contentOffset.x;
+                  // Account for padding and calculate raw index
+                  const adjustedOffset = offsetX + MOBILE_CENTERING_PADDING;
+                  let rawIndex = Math.round(adjustedOffset / MOBILE_SNAP_INTERVAL);
+
+                  // Clamp to valid range
+                  rawIndex = Math.max(0, Math.min(rawIndex, safeRecentRaces.length - 1));
+
+                  // Get the race at this index
+                  const targetRace = safeRecentRaces[rawIndex];
+                  if (targetRace?.id && targetRace.id !== selectedRaceId) {
+                    // Haptic feedback on race change
+                    if (Platform.OS !== 'web') {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    setSelectedRaceId(targetRace.id);
+                    setHasManuallySelected(true);
+                  }
                 }}
               >
               {(() => {
@@ -5066,14 +5201,11 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
 
                   if (shouldInsertAddCardBefore) {
                     cardElements.push(
-                      <AddRaceTimelineCard
+                      <AddRaceFamilyButton
                         key="add-race-cta"
-                        onAddRace={handleAddRaceNavigation}
-                        onImportCalendar={handleOpenCalendarImport}
-                        hasRealRaces={hasRealRaces}
-                        onDismiss={handleDismissAddRaceCard}
-                        isCompact={addRaceCardDismissed}
+                        onRaceCreated={() => refetchRaces?.()}
                         cardWidth={MOBILE_CARD_WIDTH}
+                        cardHeight={RACE_CARD_HEIGHT}
                       />,
                     );
                     addRaceCardInserted = true;
@@ -5134,41 +5266,31 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                         onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
                         isDimmed={hasActiveRace && selectedRaceId !== race.id}
                         cardWidth={MOBILE_CARD_WIDTH}
+                        cardHeight={RACE_CARD_HEIGHT}
                       />,
                     );
                   } else {
-                    // Default: Fleet racing card
+                    // Default: Fleet racing card with Tufte-style sparklines
                     cardElements.push(
-                      <RaceCard
+                      <RaceCardEnhanced
                         key={race.id || index}
                         id={race.id}
-                        name={race.name}
-                        venue={race.venue || 'Unknown Venue'}
-                        date={race.date || new Date().toISOString()}
+                        name={race.name || race.title || `Race ${index + 1}`}
+                        venue={race.venue || race.venue_name || race.location || 'Unknown Venue'}
+                        date={race.date || race.start_date || new Date().toISOString()}
                         startTime={race.startTime || '10:00'}
                         courseName={race.metadata?.selected_course_name}
                         wind={race.wind}
                         tide={race.tide}
-                        weatherStatus={race.weatherStatus}
-                        weatherError={race.weatherError}
-                        strategy={race.strategy || 'Race strategy will be generated based on conditions.'}
-                        critical_details={race.critical_details}
-                        vhf_channel={race.vhf_channel}
-                        venueCoordinates={race.venueCoordinates}
-                        isPrimary={isNextRace}
+                        vhf_channel={race.vhf_channel || race.critical_details?.vhf_channel}
                         raceStatus={raceStatus}
-                        onRaceComplete={(sessionId) => handleRaceComplete(sessionId, race.name, race.id)}
                         isSelected={selectedRaceId === race.id}
                         onSelect={() => {
                           setHasManuallySelected(true);
                           setSelectedRaceId(race.id);
                         }}
-                        onEdit={race.created_by === user?.id ? () => handleEditRace(race.id) : undefined}
-                        onDelete={race.created_by === user?.id ? () => handleDeleteRace(race.id, race.name) : undefined}
-                        onHide={race.created_by !== user?.id ? () => handleHideRace(race.id, race.name) : undefined}
-                        isDimmed={hasActiveRace && selectedRaceId !== race.id}
-                        results={resultsData}
                         cardWidth={MOBILE_CARD_WIDTH}
+                        fleetName={race.fleet?.name}
                       />,
                     );
                   }
@@ -5176,14 +5298,11 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
 
                 if (!addRaceCardInserted) {
                   cardElements.unshift(
-                    <AddRaceTimelineCard
+                    <AddRaceFamilyButton
                       key="add-race-cta"
-                      onAddRace={handleAddRaceNavigation}
-                      onImportCalendar={handleOpenCalendarImport}
-                      hasRealRaces={hasRealRaces}
-                      onDismiss={handleDismissAddRaceCard}
-                      isCompact={addRaceCardDismissed}
+                      onRaceCreated={() => refetchRaces?.()}
                       cardWidth={MOBILE_CARD_WIDTH}
+                      cardHeight={RACE_CARD_HEIGHT}
                     />,
                   );
                 }
@@ -5235,7 +5354,179 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
                   <ChevronRight size={32} color="#2563EB" />
                 </TouchableOpacity>
               )}
+              {/* Timeline Indicators (Dots) - Mobile Race Timeline Navigation */}
+              {safeRecentRaces.length > 1 && (() => {
+                const MAX_VISIBLE_DOTS = 7;
+                const currentIndex = safeRecentRaces.findIndex((r: any) => r.id === selectedRaceId);
+                const totalRaces = safeRecentRaces.length;
+
+                // If total races fit within max, show all
+                if (totalRaces <= MAX_VISIBLE_DOTS) {
+                  return (
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 8, gap: 6 }}>
+                      {safeRecentRaces.map((race: any, index: number) => {
+                        const isCurrentRace = race.id === selectedRaceId;
+                        return (
+                          <TouchableOpacity
+                            key={race.id || `dot-${index}`}
+                            onPress={() => {
+                              if (Platform.OS !== 'web') {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              }
+                              const scrollX = index * MOBILE_SNAP_INTERVAL;
+                              raceCardsScrollViewRef.current?.scrollTo({ x: scrollX, y: 0, animated: true });
+                              if (race.id) {
+                                setSelectedRaceId(race.id);
+                                setHasManuallySelected(true);
+                              }
+                            }}
+                            style={{
+                              width: isCurrentRace ? 24 : 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: isCurrentRace ? '#2563EB' : '#D1D5DB',
+                            }}
+                            hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                          />
+                        );
+                      })}
+                    </View>
+                  );
+                }
+
+                // Otherwise, show windowed view with position indicator
+                const halfWindow = Math.floor((MAX_VISIBLE_DOTS - 1) / 2);
+                let startIdx = Math.max(0, currentIndex - halfWindow);
+                let endIdx = startIdx + MAX_VISIBLE_DOTS - 1;
+                if (endIdx >= totalRaces) {
+                  endIdx = totalRaces - 1;
+                  startIdx = Math.max(0, endIdx - MAX_VISIBLE_DOTS + 1);
+                }
+
+                return (
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 8, gap: 4 }}>
+                    {/* Left indicator if more races before */}
+                    {startIdx > 0 && (
+                      <Text style={{ fontSize: 10, color: '#94A3B8', marginRight: 2 }}>‹</Text>
+                    )}
+                    {safeRecentRaces.slice(startIdx, endIdx + 1).map((race: any, idx: number) => {
+                      const actualIndex = startIdx + idx;
+                      const isCurrentRace = race.id === selectedRaceId;
+                      return (
+                        <TouchableOpacity
+                          key={race.id || `dot-${actualIndex}`}
+                          onPress={() => {
+                            if (Platform.OS !== 'web') {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }
+                            const scrollX = actualIndex * MOBILE_SNAP_INTERVAL;
+                            raceCardsScrollViewRef.current?.scrollTo({ x: scrollX, y: 0, animated: true });
+                            if (race.id) {
+                              setSelectedRaceId(race.id);
+                              setHasManuallySelected(true);
+                            }
+                          }}
+                          style={{
+                            width: isCurrentRace ? 20 : 6,
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: isCurrentRace ? '#2563EB' : '#D1D5DB',
+                          }}
+                          hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                        />
+                      );
+                    })}
+                    {/* Right indicator if more races after */}
+                    {endIdx < totalRaces - 1 && (
+                      <Text style={{ fontSize: 10, color: '#94A3B8', marginLeft: 2 }}>›</Text>
+                    )}
+                    {/* Position indicator */}
+                    <Text style={{ fontSize: 10, color: '#64748B', marginLeft: 8 }}>
+                      {currentIndex + 1}/{totalRaces}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
+
+            {/* Detail Zone - Accordion sections for race details */}
+            {selectedRaceData && (
+              <View style={{ height: DETAIL_ZONE_HEIGHT }}>
+                <ScrollView
+                  horizontal={false}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                >
+                  {/* Course & Strategy - expanded by default */}
+                  <AccordionSection
+                    title="Course & Strategy"
+                    icon={<Compass size={16} color="#0369A1" />}
+                    defaultExpanded={true}
+                    subtitle={selectedRaceData.metadata?.course_name || selectedRaceData.course?.name}
+                  >
+                    <CourseDetailCard
+                      raceId={selectedRaceData.id}
+                      courseName={selectedRaceData.metadata?.course_name || selectedRaceData.course?.name}
+                      courseType={selectedRaceData.race_type === 'distance' ? 'distance' : 'windward-leeward'}
+                      numberOfLegs={selectedRaceData.metadata?.number_of_legs}
+                      marks={selectedRaceMarks?.map((m: any) => ({
+                        id: m.id,
+                        name: m.name,
+                        type: m.mark_type || 'waypoint',
+                      }))}
+                    />
+                    <StrategyDetailCard
+                      raceId={selectedRaceData.id}
+                      aiInsight={selectedRaceData.metadata?.ai_strategy_summary}
+                    />
+                  </AccordionSection>
+
+                  {/* Boat Setup */}
+                  <AccordionSection
+                    title="Boat Setup"
+                    icon={<Settings size={16} color="#0369A1" />}
+                    subtitle={selectedRaceData.boat_class?.name}
+                  >
+                    <RigDetailCard
+                      raceId={selectedRaceData.id}
+                      boatClassName={selectedRaceData.boat_class?.name}
+                      settings={selectedRaceData.metadata?.rig_settings}
+                    />
+                  </AccordionSection>
+
+                  {/* Fleet */}
+                  <AccordionSection
+                    title="Fleet"
+                    icon={<Users size={16} color="#0369A1" />}
+                    subtitle={selectedRaceData.fleet?.name}
+                  >
+                    <FleetDetailCard
+                      raceId={selectedRaceData.id}
+                      totalCompetitors={0}
+                      confirmedCount={0}
+                      fleetName={selectedRaceData.fleet?.name}
+                    />
+                  </AccordionSection>
+
+                  {/* Regulatory & Documents */}
+                  <AccordionSection
+                    title="Regulatory"
+                    icon={<FileText size={16} color="#0369A1" />}
+                    count={raceDocuments?.length}
+                  >
+                    <RegulatoryDetailCard
+                      raceId={selectedRaceData.id}
+                      vhfChannel={selectedRaceData.metadata?.vhf_channel}
+                      documents={raceDocuments?.map((doc: any) => ({
+                        id: doc.id,
+                        name: doc.file_name,
+                        type: doc.document_type,
+                      }))}
+                    />
+                  </AccordionSection>
+                </ScrollView>
+              </View>
+            )}
 
             {/* Inline Comprehensive Race Detail Section */}
             {loadingRaceDetail && !selectedRaceData && (
@@ -5956,81 +6247,143 @@ const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
             })()}
           </>
         ) : (
-          // User has no races - show mock race cards horizontally
+          // User has no races - show mock race cards horizontally with fixed hero height
           <>
-            <View className="mb-3">
-              <Text className="text-base font-bold text-gray-800">Demo Races</Text>
-              <Text className="text-xs text-gray-500">
-                Explore sample races to see how RegattaFlow works
-              </Text>
+            {/* Header - Outside hero zone for more card space */}
+            <View className="flex-row items-center justify-between mb-2">
+              <View>
+                <Text className="text-base font-bold text-gray-800">Demo Races</Text>
+                <Text className="text-xs text-gray-500">Explore sample races</Text>
+              </View>
+              <View className="bg-purple-100 px-3 py-1 rounded-full">
+                <Text className="text-purple-800 font-semibold text-sm">
+                  {MOCK_RACES.length}
+                </Text>
+              </View>
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="mb-4"
-              contentContainerStyle={{
-                paddingLeft: 4,
-                paddingRight: 20,
-                gap: 8,
-                pointerEvents: 'box-none',
-              }}
-              nestedScrollEnabled={true}
-              scrollEventThrottle={16}
-              decelerationRate="fast"
-              snapToInterval={268}
-              snapToAlignment="start"
-            >
-              <AddRaceTimelineCard
-                key="add-race-cta-demo"
-                onAddRace={handleAddRaceNavigation}
-                onImportCalendar={handleOpenCalendarImport}
-                hasRealRaces={hasRealRaces}
-                onDismiss={handleDismissAddRaceCard}
-                isCompact={addRaceCardDismissed}
-              />
-              {MOCK_RACES.map((race, index) => {
-                const isDistanceRace = race.race_type === 'distance';
-                if (isDistanceRace) {
+            {/* Hero Zone - Fixed height race card timeline */}
+            <View style={{ height: HERO_ZONE_HEIGHT }}>
+              <ScrollView
+                ref={demoRaceCardsScrollViewRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flex: 1 }}
+                contentContainerStyle={{
+                  paddingLeft: MOBILE_CENTERING_PADDING,
+                  paddingRight: MOBILE_CENTERING_PADDING,
+                  gap: MOBILE_CARD_GAP,
+                  pointerEvents: 'box-none',
+                }}
+                nestedScrollEnabled={true}
+                scrollEventThrottle={16}
+                decelerationRate="fast"
+                snapToInterval={MOBILE_SNAP_INTERVAL}
+                snapToAlignment="start"
+                onMomentumScrollEnd={(event) => {
+                  // Calculate which demo race card is centered after scroll ends
+                  const offsetX = event.nativeEvent.contentOffset.x;
+                  // Account for AddRaceFamilyButton at index 0
+                  const adjustedOffset = offsetX + MOBILE_CENTERING_PADDING - MOBILE_SNAP_INTERVAL;
+                  let rawIndex = Math.round(adjustedOffset / MOBILE_SNAP_INTERVAL);
+
+                  // Clamp to valid demo race range
+                  rawIndex = Math.max(0, Math.min(rawIndex, MOCK_RACES.length - 1));
+
+                  // Get the demo race at this index
+                  const targetRace = MOCK_RACES[rawIndex];
+                  if (targetRace?.id && targetRace.id !== selectedDemoRaceId) {
+                    // Haptic feedback on race change
+                    if (Platform.OS !== 'web') {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    setSelectedDemoRaceId(targetRace.id);
+                  }
+                }}
+              >
+                <AddRaceFamilyButton
+                  key="add-race-cta-demo"
+                  onRaceCreated={() => refetchRaces?.()}
+                  cardWidth={MOBILE_CARD_WIDTH}
+                  cardHeight={RACE_CARD_HEIGHT}
+                />
+                {MOCK_RACES.map((race, index) => {
+                  const isDistanceRace = race.race_type === 'distance';
+                  if (isDistanceRace) {
+                    return (
+                      <DistanceRaceCard
+                        key={race.id}
+                        id={race.id}
+                        name={race.name}
+                        startVenue={race.venue}
+                        date={race.date}
+                        startTime={race.startTime}
+                        wind={race.wind}
+                        totalDistanceNm={race.total_distance_nm}
+                        vhf_channel={race.critical_details?.vhf_channel}
+                        isPrimary={index === 0}
+                        isMock={true}
+                        isSelected={selectedDemoRaceId === race.id}
+                        isDimmed={selectedDemoRaceId !== race.id}
+                        onSelect={() => setSelectedDemoRaceId(race.id)}
+                        cardWidth={MOBILE_CARD_WIDTH}
+                        cardHeight={RACE_CARD_HEIGHT}
+                      />
+                    );
+                  }
                   return (
-                    <DistanceRaceCard
+                    <RaceCardEnhanced
                       key={race.id}
                       id={race.id}
                       name={race.name}
-                      startVenue={race.venue}
+                      venue={race.venue}
                       date={race.date}
                       startTime={race.startTime}
                       wind={race.wind}
-                      totalDistanceNm={race.total_distance_nm}
+                      tide={race.tide}
                       vhf_channel={race.critical_details?.vhf_channel}
-                      isPrimary={index === 0}
-                      isMock={true}
                       isSelected={selectedDemoRaceId === race.id}
-                      isDimmed={selectedDemoRaceId !== race.id}
                       onSelect={() => setSelectedDemoRaceId(race.id)}
+                      cardWidth={MOBILE_CARD_WIDTH}
                     />
                   );
-                }
-                return (
-                  <RaceCard
-                    key={race.id}
-                    id={race.id}
-                    name={race.name}
-                    venue={race.venue}
-                    date={race.date}
-                    startTime={race.startTime}
-                    wind={race.wind}
-                    tide={race.tide}
-                    strategy={race.strategy}
-                    critical_details={race.critical_details}
-                    isPrimary={index === 0}
-                    isMock={true}
-                    isSelected={selectedDemoRaceId === race.id}
-                    isDimmed={selectedDemoRaceId !== race.id}
-                    onSelect={() => setSelectedDemoRaceId(race.id)}
-                  />
-                );
-              })}
-            </ScrollView>
+                })}
+              </ScrollView>
+              {/* Timeline Indicators (Dots) - Demo Race Navigation */}
+              {MOCK_RACES.length > 1 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 8, gap: 6 }}>
+                  {MOCK_RACES.map((race, index) => {
+                    const isCurrentRace = race.id === selectedDemoRaceId;
+                    return (
+                      <TouchableOpacity
+                        key={race.id || `dot-${index}`}
+                        onPress={() => {
+                          // Haptic feedback on tap
+                          if (Platform.OS !== 'web') {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          }
+                          // Scroll to this demo race (account for AddRaceTimelineCard at index 0)
+                          const scrollX = (index + 1) * MOBILE_SNAP_INTERVAL;
+                          demoRaceCardsScrollViewRef.current?.scrollTo({
+                            x: scrollX,
+                            y: 0,
+                            animated: true,
+                          });
+                          setSelectedDemoRaceId(race.id);
+                        }}
+                        style={{
+                          width: isCurrentRace ? 24 : 8,
+                          height: 8,
+                          borderRadius: 4,
+                          backgroundColor: isCurrentRace ? '#7C3AED' : '#D1D5DB',
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                      />
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+            {/* Detail Zone - scrolls independently */}
             {selectedDemoRace && (
               <DemoRaceDetail
                 race={selectedDemoRace}
