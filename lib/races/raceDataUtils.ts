@@ -457,3 +457,37 @@ export function detectRaceType(
   // Default to fleet racing
   return 'fleet';
 }
+
+// =============================================================================
+// COURSE MARK TYPE NORMALIZATION
+// =============================================================================
+
+/**
+ * Normalize course mark type to a consistent format
+ * Maps various mark type names to canonical values
+ */
+export function normalizeCourseMarkType(type?: string | null): string {
+  if (!type) return 'custom';
+
+  switch (type) {
+    case 'start_pin':
+    case 'pin':
+      return 'pin';
+    case 'start_boat':
+    case 'committee':
+    case 'committee_boat':
+      return 'committee_boat';
+    case 'gate_port':
+    case 'gate_left':
+      return 'gate_left';
+    case 'gate_starboard':
+    case 'gate_right':
+      return 'gate_right';
+    case 'windward_mark':
+      return 'windward';
+    case 'leeward_mark':
+      return 'leeward';
+    default:
+      return type;
+  }
+}

@@ -178,6 +178,8 @@ export { FleetRaceContentSection } from './FleetRaceContentSection';
 export type { FleetRaceContentSectionProps } from './FleetRaceContentSection';
 export { DocumentTypePickerModal } from './DocumentTypePickerModal';
 export type { DocumentTypePickerModalProps } from './DocumentTypePickerModal';
+export { AIVenueInsightsCard } from './AIVenueInsightsCard';
+export type { AIVenueInsightsCardProps, VenueInsights } from './AIVenueInsightsCard';
 
 // Re-export types
 export type { Document } from './DocumentList';

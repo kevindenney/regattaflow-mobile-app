@@ -14,6 +14,7 @@ export {
   parseGpsTrack,
   parseSplitTimes,
   detectRaceType,
+  normalizeCourseMarkType,
   CARDINAL_TO_DEGREES,
 } from './raceDataUtils';
 
