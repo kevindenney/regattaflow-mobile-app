@@ -8,10 +8,13 @@
  * 4. Comparative analysis ("compared to what?")
  * 5. Precise, credible data presentation
  * 6. No chartjunk (emojis, gradients, heavy shadows)
+ *
+ * Now uses TufteTokens from design system for consistent styling.
  */
 
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { TufteTokens, createTufteCardStyle } from '@/constants/designSystem';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -237,50 +240,36 @@ export function NextRaceCardTufte() {
 }
 
 const styles = StyleSheet.create({
+  // Using TufteTokens for consistent Tufte styling
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8, // Minimal rounding (was 16px)
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
+    ...createTufteCardStyle('medium'),
     marginHorizontal: 16,
     marginVertical: 8,
-    // Minimal shadow (was shadowOpacity: 0.1, shadowRadius: 8)
+    // Override with web-specific shadow
     ...Platform.select({
-      web: {
-        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-      },
+      web: TufteTokens.shadows.subtleWeb,
+      default: {},
     }),
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    marginBottom: TufteTokens.spacing.standard,
+    paddingBottom: TufteTokens.spacing.standard,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.color,
   },
   headerLeft: {
     flex: 1,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
+    ...TufteTokens.typography.primary,
+    fontSize: 18, // Slightly larger for card title
+    marginBottom: TufteTokens.spacing.tight,
   },
   venue: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6B7280',
+    ...TufteTokens.typography.tertiary,
   },
   countdown: {
     alignItems: 'flex-end',
@@ -288,70 +277,58 @@ const styles = StyleSheet.create({
   countdownValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0284C7',
+    color: TufteTokens.typography.primary.color,
     fontVariant: ['tabular-nums'],
   },
   countdownLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#6B7280',
+    ...TufteTokens.typography.micro,
   },
   timingRow: {
     flexDirection: 'row',
-    marginBottom: 16,
-    gap: 16,
+    marginBottom: TufteTokens.spacing.section,
+    gap: TufteTokens.spacing.section,
   },
   timingItem: {
     flex: 1,
   },
   timingLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
+    ...TufteTokens.typography.micro,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginBottom: 2,
   },
   timingValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
+    ...TufteTokens.typography.secondary,
     fontVariant: ['tabular-nums'],
   },
   contextRow: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    marginTop: TufteTokens.spacing.standard,
+    paddingTop: TufteTokens.spacing.standard,
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderTopColor: TufteTokens.borders.color,
   },
   contextText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#6B7280',
+    ...TufteTokens.typography.tertiary,
     lineHeight: 16,
   },
   footer: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    marginTop: TufteTokens.spacing.standard,
+    paddingTop: TufteTokens.spacing.standard,
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderTopColor: TufteTokens.borders.color,
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0284C7',
+    ...TufteTokens.typography.secondary,
+    color: '#111827', // Dark for action text
   },
   emptyText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
+    ...TufteTokens.typography.secondary,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: TufteTokens.spacing.tight,
   },
   emptySubtext: {
-    fontSize: 12,
-    color: '#6B7280',
+    ...TufteTokens.typography.tertiary,
     textAlign: 'center',
   },
 });

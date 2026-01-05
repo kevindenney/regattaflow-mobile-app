@@ -222,5 +222,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 COMMENT ON FUNCTION schedule_onboarding_emails_on_confirmation() IS
 'Schedules onboarding email sequences for all user types (sailor, coach, club) after email confirmation';
 
-COMMENT ON TRIGGER on_email_confirmed_welcome ON auth.users IS
-'Triggers welcome and onboarding email sequences after user confirms their email';
+-- Note: Cannot add COMMENT ON TRIGGER for auth.users as we don't have owner permissions

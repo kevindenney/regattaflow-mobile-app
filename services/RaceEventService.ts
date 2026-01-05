@@ -48,7 +48,41 @@ export class RaceEventService {
         racing_area_name: params.racing_area_name,
         source_documents: params.source_documents || [],
         extraction_method: params.source_url ? ExtractionMethod.AI_AUTO : ExtractionMethod.MANUAL,
-        extraction_status: params.source_url ? ExtractionStatus.PENDING : ExtractionStatus.COMPLETED
+        extraction_status: params.source_url ? ExtractionStatus.PENDING : ExtractionStatus.COMPLETED,
+
+        // Race type
+        race_type: params.race_type || 'fleet',
+
+        // Common fields
+        location: params.location,
+        vhf_channel: params.vhf_channel,
+        notes: params.notes,
+
+        // Fleet racing fields
+        course_type: params.course_type,
+        number_of_laps: params.number_of_laps,
+        expected_fleet_size: params.expected_fleet_size,
+
+        // Distance racing fields
+        route_waypoints: params.route_waypoints,
+        total_distance_nm: params.total_distance_nm,
+        time_limit_hours: params.time_limit_hours,
+        start_finish_same_location: params.start_finish_same_location,
+        route_description: params.route_description,
+
+        // Match racing fields
+        opponent_name: params.opponent_name,
+        match_round: params.match_round,
+        total_rounds: params.total_rounds,
+        series_format: params.series_format,
+        has_umpire: params.has_umpire,
+
+        // Team racing fields
+        your_team_name: params.your_team_name,
+        opponent_team_name: params.opponent_team_name,
+        heat_number: params.heat_number,
+        team_size: params.team_size,
+        team_members: params.team_members,
       };
 
       const { data, error } = await supabase

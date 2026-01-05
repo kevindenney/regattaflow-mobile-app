@@ -15,6 +15,19 @@ module.exports = {
       pattern:
         /(bg|border|text|stroke|fill)-(primary|secondary|tertiary|error|success|warning|info|typography|outline|background|indicator)-(0|50|100|200|300|400|500|600|700|800|900|950|white|gray|black|error|warning|muted|success|info|light|dark|primary)/,
     },
+    // Tufte utility patterns
+    {
+      pattern: /border-(hairline)/,
+    },
+    {
+      pattern: /rounded-(tufte|tufte-sm)/,
+    },
+    {
+      pattern: /shadow-(tufte|tufte-none)/,
+    },
+    {
+      pattern: /p-(tufte-tight|tufte-compact|tufte-standard|tufte-section)/,
+    },
   ],
   theme: {
     extend: {
@@ -173,6 +186,12 @@ module.exports = {
           info: "rgb(var(--color-indicator-info)/<alpha-value>)",
           error: "rgb(var(--color-indicator-error)/<alpha-value>)",
         },
+        // Apple Design System colors
+        apple: {
+          gray: "#F5F5F7",      // Apple's signature warm gray background
+          card: "#FFFFFF",      // Pure white for cards
+          divider: "#E5E5EA",   // Apple's divider color
+        },
       },
       fontFamily: {
         heading: undefined,
@@ -195,6 +214,25 @@ module.exports = {
         "soft-2": "0px 0px 20px rgba(38, 38, 38, 0.2)",
         "soft-3": "0px 0px 30px rgba(38, 38, 38, 0.1)",
         "soft-4": "0px 0px 40px rgba(38, 38, 38, 0.1)",
+        // Tufte shadows - nearly flat with minimal depth cue
+        "tufte": "0px 1px 2px rgba(0, 0, 0, 0.03)",
+        "tufte-none": "none",
+      },
+      // Tufte border widths - hairline borders
+      borderWidth: {
+        "hairline": "0.5px",
+      },
+      // Tufte border radius - minimal rounding
+      borderRadius: {
+        "tufte": "4px",
+        "tufte-sm": "2px",
+      },
+      // Tufte spacing - tighter for information density
+      spacing: {
+        "tufte-tight": "4px",
+        "tufte-compact": "8px",
+        "tufte-standard": "12px",
+        "tufte-section": "16px",
       },
     },
   },

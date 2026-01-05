@@ -19,16 +19,18 @@ const DEFAULT_DEMO_IDENTIFIERS: Record<DemoPersona, string> = {
   coachJimmy: 'coachkdenney@icloud.com',
 };
 
+// Tufte-inspired card shadow: nearly flat with minimal depth cue
 const cardShadowStyle: ViewStyle =
   Platform.OS === 'web'
     ? {
-        boxShadow: '0px 18px 35px rgba(15, 23, 42, 0.08)',
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.03)',
       }
     : {
         shadowColor: '#000',
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.03,
+        shadowRadius: 1,
+        shadowOffset: { width: 0, height: 1 },
+        elevation: 0,
       };
 
 // Helper to get user-friendly error messages
@@ -340,13 +342,14 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingVertical: 48,
   },
+  // Tufte: minimal decoration, clean white, hairline border
   card: {
     width: '100%',
     maxWidth: 520,
     backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 12,
-    borderWidth: Platform.OS === 'web' ? 1 : 0,
+    padding: 20,
+    borderRadius: 4, // Tufte: minimal rounding
+    borderWidth: 0.5, // Tufte: hairline border
     borderColor: '#E5E7EB',
     ...cardShadowStyle
   },
@@ -390,13 +393,14 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 12,
   },
+  // Tufte: clean white background, minimal decoration
   demoSection: {
-    marginBottom: 20,
+    marginBottom: 16,
     padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 4, // Tufte: minimal rounding
+    backgroundColor: '#FFFFFF', // Tufte: no colored backgrounds
+    borderWidth: 0.5, // Tufte: hairline border
+    borderColor: '#E5E7EB',
   },
   demoLabel: {
     fontSize: 12,
@@ -408,26 +412,29 @@ const styles = StyleSheet.create({
   demoButtonRow: {
     flexDirection: 'column',
   },
+  // Tufte: minimal decoration, tighter spacing
   demoButton: {
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 4, // Tufte: minimal rounding
+    paddingVertical: 8, // Tufte: tighter
+    paddingHorizontal: 12, // Tufte: tighter
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    marginBottom: 10,
+    borderWidth: 0.5, // Tufte: hairline border
+    borderColor: '#E5E7EB', // Tufte: subtle gray, not blue
+    marginBottom: 8,
   },
   demoButtonDisabled: {
     opacity: 0.6,
   },
+  // Tufte: no colored backgrounds, use typography to differentiate
   coachDemoButton: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FCD34D',
+    backgroundColor: '#FAFAFA', // Tufte: very subtle off-white instead of yellow
+    borderColor: '#E5E7EB',
   },
+  // Tufte: strong typography hierarchy instead of color
   demoButtonTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#1D4ED8',
+    fontWeight: '600',
+    color: '#111827', // Tufte: dark gray for primary text, not bright blue
   },
   demoButtonSubtitle: {
     fontSize: 12,
@@ -439,21 +446,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#DC2626',
   },
+  // Tufte: minimal decoration on inputs
   input: {
     width: '100%',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
+    borderWidth: 0.5, // Tufte: hairline
+    borderColor: '#E5E7EB',
+    borderRadius: 4, // Tufte: minimal
     paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-    fontSize: 16,
+    paddingVertical: 10, // Tufte: tighter
+    marginBottom: 10,
+    fontSize: 15,
     backgroundColor: '#FFFFFF'
   },
+  // Tufte: button uses solid color for action emphasis
   primaryButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: '#111827', // Tufte: dark, not bright blue
+    borderRadius: 4, // Tufte: minimal
+    paddingVertical: 10, // Tufte: tighter
     alignItems: 'center',
     marginTop: 8
   },
@@ -472,13 +481,14 @@ const styles = StyleSheet.create({
     marginTop: 16
   },
   linkText: { color: '#3B82F6', fontWeight: '600' },
+  // Tufte: minimal decoration, let text convey urgency
   errorBanner: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0.5, // Tufte: hairline
+    borderColor: '#DC2626', // Tufte: red border only, not red background
+    borderRadius: 4, // Tufte: minimal
+    padding: 12,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',

@@ -1,0 +1,281 @@
+/**
+ * AccordionSection Component
+ *
+ * Tufte-inspired collapsible section with minimal chrome
+ * Designed for mobile detail views with high information density
+ *
+ * Animation: spring-based expand/collapse with chevron rotation
+ */
+
+import { TufteTokens } from '@/constants/designSystem';
+import { ChevronDown } from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  Animated,
+  LayoutChangeEvent,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+export interface AccordionSectionProps {
+  /** Section title */
+  title: string;
+  /** Lucide icon component */
+  icon?: React.ReactNode;
+  /** Section content */
+  children: React.ReactNode;
+  /** Start expanded */
+  defaultExpanded?: boolean;
+  /** Callback when expanded/collapsed */
+  onToggle?: (expanded: boolean) => void;
+  /** Show count badge */
+  count?: number;
+  /** Subtitle text */
+  subtitle?: string;
+  /** Disabled state */
+  disabled?: boolean;
+}
+
+export function AccordionSection({
+  title,
+  icon,
+  children,
+  defaultExpanded = false,
+  onToggle,
+  count,
+  subtitle,
+  disabled = false,
+}: AccordionSectionProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [animation] = useState(new Animated.Value(defaultExpanded ? 1 : 0));
+
+  const toggleExpand = useCallback(() => {
+    if (disabled) return;
+
+    const newExpanded = !expanded;
+    setExpanded(newExpanded);
+
+    Animated.spring(animation, {
+      toValue: newExpanded ? 1 : 0,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 12,
+    }).start();
+
+    onToggle?.(newExpanded);
+  }, [expanded, disabled, animation, onToggle]);
+
+  const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    if (height > 0 && height !== contentHeight) {
+      setContentHeight(height);
+    }
+  }, [contentHeight]);
+
+  // Animated styles
+  const chevronRotation = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  const contentMaxHeight = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, contentHeight || 1000],
+  });
+
+  const contentOpacity = animation.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 0, 1],
+  });
+
+  return (
+    <View style={[styles.container, disabled && styles.containerDisabled]}>
+      {/* Header */}
+      <TouchableOpacity
+        style={styles.header}
+        onPress={toggleExpand}
+        activeOpacity={disabled ? 1 : 0.7}
+        disabled={disabled}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`${title} section, ${expanded ? 'expanded' : 'collapsed'}`}
+        accessibilityState={{ expanded }}
+      >
+        <View style={styles.headerLeft}>
+          {icon && <View style={styles.iconContainer}>{icon}</View>}
+          <View style={styles.titleContainer}>
+            <Text style={[styles.title, disabled && styles.titleDisabled]}>
+              {title}
+            </Text>
+            {subtitle && (
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.headerRight}>
+          {count !== undefined && count > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{count}</Text>
+            </View>
+          )}
+          <Animated.View
+            style={{
+              transform: [{ rotate: chevronRotation }],
+            }}
+          >
+            <ChevronDown
+              size={18}
+              color={disabled ? '#CBD5E1' : '#64748B'}
+            />
+          </Animated.View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Content */}
+      <Animated.View
+        style={[
+          styles.contentWrapper,
+          {
+            maxHeight: contentMaxHeight,
+            opacity: contentOpacity,
+          },
+        ]}
+      >
+        <View
+          style={styles.content}
+          onLayout={handleContentLayout}
+        >
+          {children}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * AccordionGroup - Container for multiple accordion sections
+ * Only one section can be expanded at a time (optional)
+ */
+interface AccordionGroupProps {
+  children: React.ReactNode;
+  /** Only allow one section expanded at a time */
+  exclusive?: boolean;
+}
+
+export function AccordionGroup({
+  children,
+  exclusive = false,
+}: AccordionGroupProps) {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
+  if (!exclusive) {
+    return <View style={groupStyles.container}>{children}</View>;
+  }
+
+  // Clone children with controlled expand state
+  const controlledChildren = React.Children.map(children, (child, index) => {
+    if (!React.isValidElement(child)) return child;
+
+    return React.cloneElement(child as React.ReactElement<AccordionSectionProps>, {
+      defaultExpanded: expandedIndex === index,
+      onToggle: (expanded: boolean) => {
+        setExpandedIndex(expanded ? index : null);
+        (child.props as AccordionSectionProps).onToggle?.(expanded);
+      },
+    });
+  });
+
+  return <View style={groupStyles.container}>{controlledChildren}</View>;
+}
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: TufteTokens.backgrounds.paper,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.color,
+  },
+  containerDisabled: {
+    opacity: 0.6,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: TufteTokens.spacing.standard,
+    paddingHorizontal: TufteTokens.spacing.section,
+    minHeight: 48,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: TufteTokens.spacing.standard,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: TufteTokens.spacing.compact,
+  },
+  iconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleContainer: {
+    flex: 1,
+  },
+  title: {
+    ...TufteTokens.typography.primary,
+    fontSize: 15,
+  },
+  titleDisabled: {
+    color: '#94A3B8',
+  },
+  subtitle: {
+    ...TufteTokens.typography.tertiary,
+    marginTop: 1,
+  },
+  countBadge: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0369A1',
+    fontVariant: ['tabular-nums'],
+  },
+  contentWrapper: {
+    overflow: 'hidden',
+  },
+  content: {
+    paddingHorizontal: TufteTokens.spacing.section,
+    paddingBottom: TufteTokens.spacing.section,
+  },
+});
+
+const groupStyles = StyleSheet.create({
+  container: {
+    backgroundColor: TufteTokens.backgrounds.paper,
+    borderRadius: TufteTokens.borderRadius.subtle,
+    ...Platform.select({
+      web: TufteTokens.shadows.subtleWeb,
+      default: TufteTokens.shadows.subtle,
+    }),
+    overflow: 'hidden',
+  },
+});
+
+export default AccordionSection;

@@ -8,6 +8,16 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('LessonProgressService');
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Check if a string is a valid UUID
+ */
+function isValidUUID(id: string): boolean {
+  return UUID_REGEX.test(id);
+}
+
 export interface LessonProgress {
   id: string;
   user_id: string;
@@ -56,6 +66,12 @@ export class LessonProgressService {
     lessonId: string
   ): Promise<LessonProgress | null> {
     try {
+      // Skip database operations if lessonId is not a valid UUID (e.g., catalog IDs like "lesson-1-1-1")
+      if (!isValidUUID(lessonId)) {
+        logger.debug('Skipping progress creation for non-UUID lesson ID:', lessonId);
+        return null;
+      }
+
       // Try to get existing progress
       const { data: existing, error: getError } = await supabase
         .from('learning_lesson_progress')
@@ -271,6 +287,12 @@ export class LessonProgressService {
     lessonId: string
   ): Promise<LessonProgress | null> {
     try {
+      // Skip database query if lessonId is not a valid UUID (e.g., catalog IDs like "lesson-1-1-1")
+      if (!isValidUUID(lessonId)) {
+        logger.debug('Skipping progress lookup for non-UUID lesson ID:', lessonId);
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('learning_lesson_progress')
         .select('*')

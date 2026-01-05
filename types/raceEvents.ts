@@ -480,6 +480,9 @@ export interface RaceDayTacticalViewProps {
 // Service Method Types
 // =============================================================================
 
+// Race type for all race formats
+export type RaceType = 'fleet' | 'distance' | 'match' | 'team';
+
 export interface CreateRaceEventParams {
   race_name: string;
   race_series?: string;
@@ -489,6 +492,56 @@ export interface CreateRaceEventParams {
   racing_area_name?: string;
   source_url?: string;
   source_documents?: SourceDocument[];
+
+  // Race type
+  race_type?: RaceType;
+
+  // Common optional fields
+  location?: string;
+  vhf_channel?: string;
+  notes?: string;
+
+  // Fleet racing fields
+  course_type?: string;
+  number_of_laps?: number;
+  expected_fleet_size?: number;
+
+  // Distance racing fields
+  route_waypoints?: RouteWaypoint[];
+  total_distance_nm?: number;
+  time_limit_hours?: number;
+  start_finish_same_location?: boolean;
+  route_description?: string;
+
+  // Match racing fields
+  opponent_name?: string;
+  match_round?: number;
+  total_rounds?: number;
+  series_format?: string;
+  has_umpire?: boolean;
+
+  // Team racing fields
+  your_team_name?: string;
+  opponent_team_name?: string;
+  heat_number?: number;
+  team_size?: number;
+  team_members?: TeamMember[];
+}
+
+// Route waypoint for distance races
+export interface RouteWaypoint {
+  name: string;
+  latitude: number;
+  longitude: number;
+  type: 'start' | 'waypoint' | 'gate' | 'finish';
+  required: boolean;
+  passingSide?: 'port' | 'starboard' | 'either';
+}
+
+// Team member for team racing
+export interface TeamMember {
+  name: string;
+  sailNumber: string;
 }
 
 export interface ProcessDocumentsParams {

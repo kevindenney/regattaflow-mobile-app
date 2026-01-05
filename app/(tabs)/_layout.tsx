@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Tabs, useRouter, useNavigation } from 'expo-router';
+import { Tabs, useRouter, useNavigation, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { BackHandler, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -26,13 +26,14 @@ const logger = createLogger('_layout');
 const getTabsForUserType = (userType: string | null): TabConfig[] => {
   switch (userType) {
     case 'sailor':
+      // Tufte-style: text-only tabs, no icons, singular forms
       return [
-        { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
-        { name: 'learn', title: 'Learn', icon: 'school-outline', iconFocused: 'school' },
-        { name: 'courses', title: 'Courses', icon: 'map-outline', iconFocused: 'map' },
-        { name: 'boat/index', title: 'Boats', icon: 'boat-outline', iconFocused: 'boat' },
-        { name: 'venue', title: 'Venues', icon: 'location-outline', iconFocused: 'location' },
-        { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
+        { name: 'races', title: 'Races', icon: '', iconFocused: '' },
+        { name: 'learn', title: 'Learn', icon: '', iconFocused: '' },
+        { name: 'courses', title: 'Courses', icon: '', iconFocused: '' },
+        { name: 'boat/index', title: 'Boat', icon: '', iconFocused: '' },  // singular
+        { name: 'venue', title: 'Venue', icon: '', iconFocused: '' },      // singular
+        { name: 'more', title: '•••', icon: '', isMenuTrigger: true },     // ellipsis
       ];
 
     case 'coach':
@@ -62,10 +63,21 @@ function TabLayoutInner() {
   const { userType, user, clubProfile, personaLoading } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
+  const pathname = usePathname();
+
+  // Get tabs based on user type
   const tabs = getTabsForUserType(userType ?? null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
+
+  // Debug: Log auth state
+  console.log('📱 [TabLayout] ====== RENDER ======');
+  console.log('📱 [TabLayout] userType:', userType, '(type:', typeof userType, ')');
+  console.log('📱 [TabLayout] userId:', user?.id);
+  console.log('📱 [TabLayout] personaLoading:', personaLoading);
+  console.log('📱 [TabLayout] tabsCount:', tabs.length);
+  console.log('📱 [TabLayout] tabs:', tabs.map(t => t.name).join(', ') || '(empty)');
 
   // Redirect coaches to /clients on initial load
   useEffect(() => {
@@ -165,9 +177,21 @@ function TabLayoutInner() {
     return items;
   }, [isProfileIncomplete, userType]);
 
+  // User type flags for conditional rendering
+  const isClubUser = userType === 'club';
+  const isSailorUser = userType === 'sailor';
+
   const handleMenuItemPress = (route: string) => {
     setMenuVisible(false);
     router.push(route as Parameters<typeof router.push>[0]);
+  };
+
+  // Helper to check if a tab is active based on pathname
+  const isTabActive = (tabName: string): boolean => {
+    // Handle special case for boat/index
+    const normalizedTabName = tabName === 'boat/index' ? 'boat' : tabName;
+    // Check if pathname matches the tab (e.g., /races, /learn, /boat)
+    return pathname === `/${normalizedTabName}` || pathname.startsWith(`/${normalizedTabName}/`);
   };
 
   const renderHamburgerButton = ({ accessibilityState, style }: BottomTabBarButtonProps) => {
@@ -176,9 +200,40 @@ function TabLayoutInner() {
     }
 
     const isActive = accessibilityState?.selected;
-    const tint = isActive ? '#007AFF' : '#6B7280';
     const moreTab = findTab('more');
 
+    // Tufte-style for sailors: text-only ellipsis, no icon
+    if (isSailorUser) {
+      // More tab is active when menu is visible or we're on a "more" menu page
+      const isMoreActive = isTabActive('more') || menuVisible;
+
+      return (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ ...accessibilityState, selected: isMoreActive }}
+          onPress={() => setMenuVisible(true)}
+          style={[style, styles.sailorTabButton]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <Text style={[
+            styles.sailorTabLabel,
+            { letterSpacing: 2 },  // Extra spacing for ellipsis
+            isMoreActive && styles.sailorTabLabelActive
+          ]}>
+            {moreTab?.title ?? '•••'}
+          </Text>
+          {isMoreActive && (
+            <View style={styles.sailorTabUnderlineContainer}>
+              <View style={styles.sailorTabUnderline} />
+            </View>
+          )}
+        </TouchableOpacity>
+      );
+    }
+
+    // Default style for non-sailors
+    const tint = isActive ? '#007AFF' : '#6B7280';
     return (
       <TouchableOpacity
         accessibilityRole="button"
@@ -187,10 +242,39 @@ function TabLayoutInner() {
         style={[style, styles.hamburgerButton]}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name={(moreTab?.icon ?? 'menu') as any} size={22} color={tint} />
+        <Ionicons name={(moreTab?.icon ?? 'menu') as any} size={24} color={tint} />
         <Text style={[styles.hamburgerLabel, { color: tint }]}>
           {moreTab?.title ?? 'More'}
         </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // Tufte-style tab button for sailors: text only with underline indicator
+  const renderSailorTabButton = (tabName: string, tabTitle: string) => (props: BottomTabBarButtonProps) => {
+    const { accessibilityState, onPress, style } = props;
+    // Use pathname-based active detection since accessibilityState.selected is undefined
+    const isActive = isTabActive(tabName);
+
+    return (
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityState={{ ...accessibilityState, selected: isActive }}
+        onPress={onPress}
+        style={[style, styles.sailorTabButton]}
+        activeOpacity={0.7}
+      >
+        <Text style={[
+          styles.sailorTabLabel,
+          isActive && styles.sailorTabLabelActive
+        ]}>
+          {tabTitle}
+        </Text>
+        {isActive && (
+          <View style={styles.sailorTabUnderlineContainer}>
+            <View style={styles.sailorTabUnderline} />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -220,9 +304,9 @@ function TabLayoutInner() {
     );
   };
 
-  const isClubUser = userType === 'club';
-  const tabBarActiveColor = isClubUser ? '#FFFFFF' : '#2563EB'; // White for active club tabs
-  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.7)' : '#9CA3AF'; // Subtle gray for inactive
+  // Tufte-style colors for sailors: gray tones, no blue accent
+  const tabBarActiveColor = isClubUser ? '#FFFFFF' : isSailorUser ? '#374151' : '#2563EB';
+  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.7)' : '#9CA3AF';
 
   const racesTab = findTab('races');
   const dashboardTab = findTab('dashboard'); // Legacy for non-sailor user types
@@ -246,7 +330,8 @@ function TabLayoutInner() {
 
   return (
     <View style={styles.container}>
-      <NavigationHeader backgroundColor="#F8FAFC" />
+      {/* Hide on races tab - races.tsx has its own consolidated floating header */}
+      <NavigationHeader backgroundColor="#F8FAFC" hidden={pathname === '/races' || pathname === '/(tabs)/races'} />
       <Tabs
         screenOptions={({ route }) => {
           const visible = isTabVisible(route.name);
@@ -280,14 +365,18 @@ function TabLayoutInner() {
           name="races"
           options={{
             title: racesTab?.title ?? 'Races',
-            tabBarIcon: ({ color, size, focused }) => (
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
                 name={getIconName(racesTab, focused, racesTab?.iconFocused ?? 'flag', racesTab?.icon ?? 'flag-outline') as any}
                 size={isClubUser ? 26 : size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('races') ? undefined : () => null,
+            tabBarButton: !isTabVisible('races')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('races', racesTab?.title ?? 'Races')
+                : undefined,
           }}
         />
         {/* Tab 2: Learn */}
@@ -295,14 +384,18 @@ function TabLayoutInner() {
           name="learn"
           options={{
             title: learnTab?.title ?? 'Learn',
-            tabBarIcon: ({ color, size, focused }) => (
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
                 name={getIconName(learnTab, focused, learnTab?.iconFocused ?? 'school', learnTab?.icon ?? 'school-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('learn') ? undefined : () => null,
+            tabBarButton: !isTabVisible('learn')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('learn', learnTab?.title ?? 'Learn')
+                : undefined,
           }}
         />
         {/* Tab 3: Courses (Race Courses) */}
@@ -310,7 +403,7 @@ function TabLayoutInner() {
           name="courses"
           options={{
             title: coursesTab?.title ?? 'Courses',
-            tabBarIcon: ({ color, size, focused }) =>
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) =>
               coursesTab?.emoji ? (
                 <EmojiTabIcon emoji={coursesTab.emoji} focused={focused} size={size} />
               ) : (
@@ -320,15 +413,19 @@ function TabLayoutInner() {
                   color={color}
                 />
               ),
-            tabBarButton: isTabVisible('courses') ? undefined : () => null,
+            tabBarButton: !isTabVisible('courses')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('courses', coursesTab?.title ?? 'Courses')
+                : undefined,
           }}
         />
-        {/* Tab 3: Boats */}
+        {/* Tab 4: Boat (singular) */}
         <Tabs.Screen
           name="boat/index"
           options={{
-            title: boatTab?.title ?? 'Boats',
-            tabBarIcon: ({ color, size, focused }) =>
+            title: boatTab?.title ?? 'Boat',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) =>
               boatTab?.emoji ? (
                 <EmojiTabIcon emoji={boatTab.emoji} focused={focused} size={size} />
               ) : (
@@ -338,22 +435,30 @@ function TabLayoutInner() {
                   color={color}
                 />
               ),
-            tabBarButton: isTabVisible('boat/index') ? undefined : () => null,
+            tabBarButton: !isTabVisible('boat/index')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('boat/index', boatTab?.title ?? 'Boat')
+                : undefined,
           }}
         />
-        {/* Tab 4: Venues */}
+        {/* Tab 5: Venue (singular) */}
         <Tabs.Screen
           name="venue"
           options={{
-            title: venueTab?.title ?? 'Venues',
-            tabBarIcon: ({ color, size, focused }) => (
+            title: venueTab?.title ?? 'Venue',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
                 name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'location', venueTab?.icon ?? 'location-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: isTabVisible('venue') ? undefined : () => null,
+            tabBarButton: !isTabVisible('venue')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('venue', venueTab?.title ?? 'Venue')
+                : undefined,
           }}
         />
         {/* Hidden tabs - Use tabBarButton to actually hide them on web */}
@@ -777,11 +882,12 @@ const styles = StyleSheet.create({
   },
   tabBarDefault: {
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    height: 72,
-    paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+    height: Platform.OS === 'ios' ? 52 + 34 : 52, // Tufte: reduced height + safe area
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 10,
+    paddingHorizontal: 16,
     ...Platform.select({
       web: {
         position: 'fixed',
@@ -829,11 +935,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabLabelDefault: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 4,
-    marginBottom: 4,
-    letterSpacing: 0.15,
+    fontSize: 13,                    // Tufte: larger, readable text
+    fontWeight: '400',               // Tufte: regular weight for inactive
+    marginTop: 0,                    // Tufte: no icon, so no margin
+    letterSpacing: 0.2,
     ...Platform.select({
       web: {
         display: 'block',
@@ -844,6 +949,10 @@ const styles = StyleSheet.create({
       } as any,
       default: {},
     }),
+  },
+  // Tufte: active tab gets medium weight
+  tabLabelDefaultActive: {
+    fontWeight: '500',
   },
   tabLabelClub: {
     fontSize: 11,
@@ -911,17 +1020,48 @@ const styles = StyleSheet.create({
   hiddenTabItem: {
     display: 'none',
   },
+  // Tufte-style sailor tab button
+  sailorTabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    position: 'relative',
+  },
+  sailorTabLabel: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: '#9CA3AF',
+    letterSpacing: 0.2,
+  },
+  sailorTabLabelActive: {
+    fontWeight: '500',
+    color: '#374151',
+  },
+  sailorTabUnderlineContainer: {
+    position: 'absolute',
+    bottom: 4,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  sailorTabUnderline: {
+    width: 32,
+    height: 2,
+    backgroundColor: '#374151',
+    borderRadius: 1,
+  },
   hamburgerButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 2,
-    paddingBottom: 4,
+    paddingVertical: 2,
+    gap: 2,
   },
   hamburgerLabel: {
     fontSize: 10,
-    marginTop: 4,
-    marginBottom: 4,
+    marginTop: 2,
     fontWeight: '500',
   },
   menuOverlay: {

@@ -38,6 +38,7 @@ import { RacingIntelSection } from '@/components/venue/RacingIntelSection';
 import { VenueComparisonModal, CompareVenuesButton } from '@/components/venue/VenueComparisonModal';
 import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
 import { VenueKnowledgeHub } from '@/components/venue/VenueKnowledgeHub';
+import { VenueKnowledgeHubRedesigned } from '@/components/venue/VenueKnowledgeHubRedesigned';
 import { VenueConditionsBar } from '@/components/venue/VenueConditionsBar';
 
 type ViewMode = 'content' | 'map';
@@ -433,56 +434,21 @@ export default function VenueIntelligenceScreen() {
     );
   }
 
-  // Content-first view (default)
+  // Content-first view (default) - Apple/Tufte redesigned
   if (viewMode === 'content' && currentVenue) {
     return (
       <ThemedView style={styles.container}>
-        {/* Header */}
-        <View style={styles.contentHeader}>
-          <View style={styles.contentHeaderLeft}>
-            <ThemedText style={styles.contentVenueName}>{currentVenue.name}</ThemedText>
-            <ThemedText style={styles.contentVenueLocation}>
-              {currentVenue.region} · {currentVenue.country}
-            </ThemedText>
-          </View>
-          <View style={styles.contentHeaderRight}>
-            <TouchableOpacity
-              style={styles.mapToggleButton}
-              onPress={() => setViewMode('map')}
-            >
-              <Ionicons name="map-outline" size={18} color="#2563EB" />
-              <ThemedText style={styles.mapToggleText}>Map</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveButton, savedVenueIds.has(currentVenue.id) && styles.saveButtonActive]}
-              onPress={handleSaveVenue}
-            >
-              <Ionicons
-                name={savedVenueIds.has(currentVenue.id) ? 'bookmark' : 'bookmark-outline'}
-                size={20}
-                color={savedVenueIds.has(currentVenue.id) ? '#2563EB' : '#6B7280'}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Conditions Bar */}
-        <VenueConditionsBar
+        {/* Redesigned Knowledge Hub with Hero Map */}
+        <VenueKnowledgeHubRedesigned
           venueId={currentVenue.id}
           venueName={currentVenue.name}
+          venueRegion={currentVenue.region}
+          venueCountry={currentVenue.country}
           latitude={currentVenue.coordinates_lat}
           longitude={currentVenue.coordinates_lng}
-        />
-
-        {/* Knowledge Hub with Tabs */}
-        <VenueKnowledgeHub
-          venueId={currentVenue.id}
-          venueName={currentVenue.name}
-          latitude={currentVenue.coordinates_lat}
-          longitude={currentVenue.coordinates_lng}
-          currentWindDirection={liveWeather?.windDirection}
-          currentWindSpeed={liveWeather?.windSpeed}
           onShowMap={() => setViewMode('map')}
+          onSaveVenue={handleSaveVenue}
+          isSaved={savedVenueIds.has(currentVenue.id)}
         />
 
         {/* Quick Access Panel */}

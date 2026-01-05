@@ -1,5 +1,7 @@
 import { supabase } from '@/services/supabase'
 import { createLogger } from '@/lib/utils/logger';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const logger = createLogger('auth-actions');
 const AUTH_ACTIONS_DEBUG_ENABLED = false
@@ -8,6 +10,43 @@ const authActionsLog = (...args: Parameters<typeof logger.debug>) => {
     return
   }
   logger.debug(...args)
+}
+
+/**
+ * Clear Supabase auth tokens from storage (AsyncStorage on native, localStorage on web)
+ */
+const clearAuthStorage = async () => {
+  if (Platform.OS === 'web') {
+    // Web: clear localStorage
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i)
+        if (key?.includes('supabase') || key?.includes('auth')) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach(key => {
+        authActionsLog('[AUTH] Clearing localStorage key:', key)
+        window.localStorage.removeItem(key)
+      })
+      authActionsLog('[AUTH] Cleared', keysToRemove.length, 'localStorage keys')
+    }
+  } else {
+    // Native (iOS/Android): clear AsyncStorage
+    try {
+      const allKeys = await AsyncStorage.getAllKeys()
+      const supabaseKeys = allKeys.filter(key =>
+        key.includes('supabase') || key.includes('auth') || key.includes('sb-')
+      )
+      if (supabaseKeys.length > 0) {
+        await AsyncStorage.multiRemove(supabaseKeys)
+        authActionsLog('[AUTH] Cleared', supabaseKeys.length, 'AsyncStorage keys:', supabaseKeys)
+      }
+    } catch (e) {
+      console.warn('[AUTH] AsyncStorage cleanup error:', e)
+    }
+  }
 }
 
 export const signOutEverywhere = async () => {
@@ -35,6 +74,8 @@ export const signOutEverywhere = async () => {
 
   authActionsLog('[AUTH] About to call supabase.auth.signOut with global scope...')
 
+  let signOutSucceeded = false
+
   try {
     // Add timeout to prevent infinite hanging
     const signOutPromise = supabase.auth.signOut({ scope: 'global' })
@@ -48,51 +89,22 @@ export const signOutEverywhere = async () => {
 
     if (error) {
       console.error('[AUTH] signOut error:', error)
-      // Don't throw on error - try to continue with manual cleanup
-      authActionsLog('[AUTH] Continuing despite Supabase error...')
     } else {
       authActionsLog('[AUTH] signOut success')
+      signOutSucceeded = true
     }
-
-    // Manual state cleanup as fallback
-    authActionsLog('[AUTH] Performing manual session cleanup...')
-    try {
-      // Clear local storage
-      if (typeof window !== 'undefined') {
-        const keysToRemove = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key?.includes('supabase') || key?.includes('auth')) {
-            keysToRemove.push(key)
-          }
-        }
-        keysToRemove.forEach(key => {
-          authActionsLog('[AUTH] Clearing localStorage key:', key)
-          localStorage.removeItem(key)
-        })
-      }
-    } catch (e) {
-      console.warn('[AUTH] Manual cleanup error:', e)
-    }
-
-    authActionsLog('[AUTH] signOutEverywhere completed successfully')
   } catch (error) {
-    console.error('[AUTH] signOutEverywhere failed with error:', error)
-
-    // Even if Supabase fails, try manual cleanup
-    authActionsLog('[AUTH] Attempting manual cleanup after failure...')
-    try {
-      if (typeof window !== 'undefined') {
-        Object.keys(localStorage).forEach(key => {
-          if (key.includes('supabase') || key.includes('auth')) {
-            localStorage.removeItem(key)
-          }
-        })
-      }
-    } catch (e) {
-      console.warn('[AUTH] Emergency cleanup failed:', e)
-    }
-
-    throw error
+    // Timeout or network error - continue with local cleanup
+    console.warn('[AUTH] Supabase signOut failed (likely network issue):', error)
   }
+
+  // Always clear local storage regardless of server response
+  // This ensures user is logged out locally even if network is unavailable
+  authActionsLog('[AUTH] Performing local session cleanup...')
+  await clearAuthStorage()
+
+  authActionsLog('[AUTH] signOutEverywhere completed, server success:', signOutSucceeded)
+
+  // Don't throw - local cleanup is sufficient for UX
+  // User will be logged out locally, and server session will expire naturally
 }

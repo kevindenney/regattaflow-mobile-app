@@ -37,6 +37,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import TacticalRaceMapNative from './TacticalRaceMapNative';
 const isWeb = Platform.OS === 'web';
 const logger = createLogger('TacticalRaceMap');
 const BATHYMETRY_LAYER_IDS = ['bathymetry-raster', 'bathymetry-fill', 'bathymetry-contours', 'bathymetry-labels'];
@@ -3439,12 +3440,17 @@ function convertStrategicZonesToOverlay(
   // ============================================================================
 
   if (!isWeb) {
+    // Use native map implementation for iOS/Android
     return (
-      <View style={styles.fallbackContainer}>
-        <Ionicons name="map-outline" size={64} color="#0066CC" />
-        <Text style={styles.fallbackText}>3D Tactical Race Map</Text>
-        <Text style={styles.fallbackSubtext}>Available on web platform</Text>
-      </View>
+      <TacticalRaceMapNative
+        raceEvent={raceEvent}
+        marks={marks}
+        environmental={environmental}
+        onMarkSelected={onMarkSelected}
+        showControls={showControls}
+        externalLayers={externalLayers}
+        onLayersChange={onLayersChange}
+      />
     );
   }
 

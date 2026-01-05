@@ -13,13 +13,14 @@ type PersonaRole = 'sailor' | 'coach' | 'club'
 // Storage key for pending persona from signup flow
 const OAUTH_PENDING_PERSONA_KEY = 'oauth_pending_persona'
 
-// Get and clear the pending persona from localStorage
+// Get and clear the pending persona from localStorage (web only)
 const getPendingPersona = (): PersonaRole | null => {
-  if (typeof window === 'undefined') return null
+  // Check both window and localStorage exist (localStorage doesn't exist on React Native)
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return null
   try {
-    const persona = localStorage.getItem(OAUTH_PENDING_PERSONA_KEY)
+    const persona = window.localStorage.getItem(OAUTH_PENDING_PERSONA_KEY)
     if (persona && ['sailor', 'coach', 'club'].includes(persona)) {
-      localStorage.removeItem(OAUTH_PENDING_PERSONA_KEY)
+      window.localStorage.removeItem(OAUTH_PENDING_PERSONA_KEY)
       logger.info('Retrieved pending persona from localStorage:', persona)
       return persona as PersonaRole
     }

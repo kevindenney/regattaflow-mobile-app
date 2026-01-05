@@ -1,6 +1,7 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { ViewStyle } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
 import { supabase } from '../../services/supabase';
@@ -156,6 +157,20 @@ export default function Login() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
+          {/* Header with close button */}
+          <View style={styles.cardHeader}>
+            <View style={styles.headerSpacer} />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Close sign in"
+              onPress={() => router.replace('/')}
+              style={styles.closeButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
           <Text accessibilityRole="header" accessibilityLabel="login-title" style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to continue to RegattaFlow</Text>
 
@@ -274,6 +289,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC'
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 8,
+    marginTop: -8,
+    marginRight: -8,
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
   },
   scrollContent: {
     flexGrow: 1,

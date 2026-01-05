@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { Play, Square, Navigation } from 'lucide-react-native';
 import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
@@ -249,26 +249,26 @@ export function RaceTimer({
   // Show tracking UI when race is active
   if (isTracking) {
     return (
-      <View className="bg-green-600 rounded-lg p-3">
-        <View className="flex-row items-center justify-between">
+      <View style={styles.trackingContainer}>
+        <View style={styles.rowSpaceBetween}>
           {/* Left: elapsed time and GPS count */}
-          <View className="flex-row items-center gap-4">
-            <View className="flex-row items-center">
+          <View style={styles.rowCenterGap}>
+            <View style={styles.rowCenter}>
               <Navigation color="white" size={16} />
-              <Text className="text-white text-xl font-bold ml-2">
+              <Text style={styles.elapsedTime}>
                 {formatElapsedTime(elapsedSeconds)}
               </Text>
             </View>
-            <View className="flex-row items-center">
-              <Text className="text-white/80 text-xs mr-1">GPS:</Text>
-              <Text className="text-white font-bold">{gpsPointCount}</Text>
+            <View style={styles.rowCenter}>
+              <Text style={styles.gpsLabel}>GPS:</Text>
+              <Text style={styles.gpsCount}>{gpsPointCount}</Text>
             </View>
           </View>
-          
+
           {/* Right: stop button */}
           <TouchableOpacity
             onPress={handleStopRace}
-            className="bg-red-600 rounded-full p-2"
+            style={styles.stopButton}
             accessibilityLabel="Stop race timer"
             accessibilityHint="Stop GPS tracking and complete the race"
           >
@@ -287,45 +287,141 @@ export function RaceTimer({
   return (
     <TouchableOpacity
       onPress={handleStartRace}
-      className={`rounded-lg p-3 ${isReadyToStart ? 'bg-green-600' : isRaceDay ? 'bg-sky-600' : 'bg-gray-700'}`}
+      style={[
+        styles.countdownContainer,
+        isReadyToStart ? styles.bgGreen : isRaceDay ? styles.bgSky : styles.bgGray
+      ]}
       accessibilityLabel={`Race countdown: ${days} days, ${hours} hours, ${minutes} minutes`}
       accessibilityHint="Tap to start race timer and GPS tracking"
     >
-      <View className="flex-row items-center justify-between">
+      <View style={styles.rowSpaceBetween}>
         {/* Left side: countdown or ready message */}
-        <View className="flex-1">
+        <View style={styles.flex1}>
           {isReadyToStart ? (
-            <Text className="text-white font-bold text-base">Ready to Race!</Text>
+            <Text style={styles.readyText}>Ready to Race!</Text>
           ) : (
-            <View className="flex-row items-baseline gap-1">
+            <View style={styles.countdownRow}>
               {days > 0 && (
                 <>
-                  <Text className="text-white text-xl font-bold">{days}</Text>
-                  <Text className="text-white/80 text-xs mr-2">{days === 1 ? 'day' : 'days'}</Text>
+                  <Text style={styles.countdownNumber}>{days}</Text>
+                  <Text style={styles.countdownUnit}>{days === 1 ? 'd' : 'd'}</Text>
                 </>
               )}
-              <Text className="text-white text-xl font-bold">{hours}</Text>
-              <Text className="text-white/80 text-xs mr-1">h</Text>
-              <Text className="text-white text-xl font-bold">{minutes}</Text>
-              <Text className="text-white/80 text-xs mr-1">m</Text>
+              <Text style={styles.countdownNumber}>{hours}</Text>
+              <Text style={styles.countdownUnit}>h</Text>
+              <Text style={styles.countdownNumber}>{minutes}</Text>
+              <Text style={styles.countdownUnit}>m</Text>
               {isRaceDay && (
                 <>
-                  <Text className="text-white text-xl font-bold">{seconds}</Text>
-                  <Text className="text-white/80 text-xs">s</Text>
+                  <Text style={styles.countdownNumber}>{seconds}</Text>
+                  <Text style={styles.countdownUnit}>s</Text>
                 </>
               )}
             </View>
           )}
-          <Text className="text-white/70 text-xs mt-0.5">
+          <Text style={styles.tapHint}>
             {isReadyToStart ? 'Tap to start GPS tracking' : 'Tap when ready to start'}
           </Text>
         </View>
-        
+
         {/* Right side: play button */}
-        <View className={`rounded-full p-2 ${isReadyToStart ? 'bg-white' : 'bg-white/20'}`}>
+        <View style={[styles.playButton, isReadyToStart ? styles.playButtonReady : styles.playButtonDefault]}>
           <Play color={isReadyToStart ? '#16a34a' : 'white'} size={18} fill={isReadyToStart ? '#16a34a' : 'transparent'} />
         </View>
       </View>
     </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  trackingContainer: {
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    padding: 12,
+  },
+  rowSpaceBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rowCenterGap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  rowCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  elapsedTime: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  gpsLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    marginRight: 4,
+  },
+  gpsCount: {
+    color: 'white',
+    fontWeight: '700',
+  },
+  stopButton: {
+    backgroundColor: '#dc2626',
+    borderRadius: 999,
+    padding: 8,
+  },
+  countdownContainer: {
+    borderRadius: 8,
+    padding: 12,
+  },
+  bgGreen: {
+    backgroundColor: '#16a34a',
+  },
+  bgSky: {
+    backgroundColor: '#0284c7',
+  },
+  bgGray: {
+    backgroundColor: '#374151',
+  },
+  flex1: {
+    flex: 1,
+  },
+  readyText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  countdownRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+  },
+  countdownNumber: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  countdownUnit: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    marginRight: 6,
+  },
+  tapHint: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  playButton: {
+    borderRadius: 999,
+    padding: 8,
+  },
+  playButtonReady: {
+    backgroundColor: 'white',
+  },
+  playButtonDefault: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+});

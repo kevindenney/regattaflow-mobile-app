@@ -1,14 +1,34 @@
 /**
  * RaceTypeSelector Component
- * Toggle selector for choosing between Fleet Racing and Distance Racing
+ * Toggle selector for choosing between different racing formats
  * Used in Add Race flow and potentially for filtering
  */
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Sailboat, Map, Navigation } from 'lucide-react-native';
+import { Sailboat, Navigation, Target, Users } from 'lucide-react-native';
 
-export type RaceType = 'fleet' | 'distance';
+export type RaceType = 'fleet' | 'distance' | 'match' | 'team';
+
+// Race type theme colors
+export const RACE_TYPE_COLORS = {
+  fleet: {
+    primary: '#0369A1',
+    badge: '#E0F2FE',
+  },
+  distance: {
+    primary: '#7C3AED',
+    badge: '#EDE9FE',
+  },
+  match: {
+    primary: '#EA580C',
+    badge: '#FFF7ED',
+  },
+  team: {
+    primary: '#0D9488',
+    badge: '#F0FDFA',
+  },
+} as const;
 
 interface RaceTypeSelectorProps {
   value: RaceType;
@@ -109,27 +129,44 @@ interface RaceTypeBadgeProps {
   size?: 'small' | 'normal';
 }
 
+const RACE_TYPE_CONFIG = {
+  fleet: {
+    icon: Sailboat,
+    label: 'Fleet',
+  },
+  distance: {
+    icon: Navigation,
+    label: 'Distance',
+  },
+  match: {
+    icon: Target,
+    label: 'Match',
+  },
+  team: {
+    icon: Users,
+    label: 'Team',
+  },
+} as const;
+
 export function RaceTypeBadge({ type, size = 'normal' }: RaceTypeBadgeProps) {
   const isSmall = size === 'small';
-  const isFleet = type === 'fleet';
-  
+  const config = RACE_TYPE_CONFIG[type];
+  const colors = RACE_TYPE_COLORS[type];
+  const IconComponent = config.icon;
+
   return (
     <View style={[
       styles.badge,
       isSmall && styles.badgeSmall,
-      isFleet ? styles.badgeFleet : styles.badgeDistance,
+      { backgroundColor: colors.badge },
     ]}>
-      {isFleet ? (
-        <Sailboat size={isSmall ? 10 : 12} color={isFleet ? '#0369A1' : '#7C3AED'} />
-      ) : (
-        <Navigation size={isSmall ? 10 : 12} color={isFleet ? '#0369A1' : '#7C3AED'} />
-      )}
+      <IconComponent size={isSmall ? 10 : 12} color={colors.primary} />
       <Text style={[
         styles.badgeText,
         isSmall && styles.badgeTextSmall,
-        isFleet ? styles.badgeTextFleet : styles.badgeTextDistance,
+        { color: colors.primary },
       ]}>
-        {isFleet ? 'Fleet' : 'Distance'}
+        {config.label}
       </Text>
     </View>
   );
@@ -216,24 +253,12 @@ const styles = StyleSheet.create({
     gap: 3,
     borderRadius: 4,
   },
-  badgeFleet: {
-    backgroundColor: '#E0F2FE',
-  },
-  badgeDistance: {
-    backgroundColor: '#EDE9FE',
-  },
   badgeText: {
     fontSize: 11,
     fontWeight: '600',
   },
   badgeTextSmall: {
     fontSize: 10,
-  },
-  badgeTextFleet: {
-    color: '#0369A1',
-  },
-  badgeTextDistance: {
-    color: '#7C3AED',
   },
 });
 

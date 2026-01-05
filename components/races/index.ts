@@ -1,7 +1,28 @@
+// Navigation Components (Tufte-inspired card pager)
+export {
+  CardNavigationPager,
+  AnimatedRaceCard,
+  NavigationIndicators,
+  DetailStack,
+} from './navigation';
+export type {
+  CardNavigationPagerProps,
+  RaceData as NavigationRaceData,
+  AnimatedRaceCardProps,
+  NavigationIndicatorsProps,
+  DetailStackProps,
+} from './navigation';
+
 // Legacy components
 export { RaceCard } from './RaceCard';
 export { RaceCardWithTuning } from './RaceCardWithTuning';
 export { AddRaceModal } from './AddRaceModal';
+
+// Tufte-style enhanced components
+export { RaceCardEnhanced } from './RaceCardEnhanced';
+export type { RaceCardEnhancedProps, RaceConditionsTimeline } from './RaceCardEnhanced';
+export { AccordionSection, AccordionGroup } from './AccordionSection';
+export type { AccordionSectionProps } from './AccordionSection';
 export { RaceTimer } from './RaceTimer';
 export { PostRaceInterview } from './PostRaceInterview';
 export { RaceAnalysisView } from './RaceAnalysisView';
@@ -65,13 +86,98 @@ export { RacePrepLearningCard } from './RacePrepLearningCard';
 export { StrategyPhaseSuggestion } from './StrategyPhaseSuggestion';
 
 // Race Type Components
-export { RaceTypeSelector, RaceTypeBadge } from './RaceTypeSelector';
+export { RaceTypeSelector, RaceTypeBadge, RACE_TYPE_COLORS } from './RaceTypeSelector';
 export { DistanceRaceCard } from './DistanceRaceCard';
 export { DistanceRouteMap } from './DistanceRouteMap';
 export { PreRaceBriefingCard } from './PreRaceBriefingCard';
 export type { RaceType } from './RaceTypeSelector';
 export type { RouteWaypoint } from './DistanceRouteMap';
 export type { DistanceRaceCardProps } from './DistanceRaceCard';
+
+// Add Race Dialog Components
+export { AddRaceDialog } from './AddRaceDialog';
+export { RaceTypeStep } from './AddRaceDialog/RaceTypeStep';
+export { InputMethodStep } from './AddRaceDialog/InputMethodStep';
+export { AIExtractionStep } from './AddRaceDialog/AIExtractionStep';
+export { RaceDetailsStep } from './AddRaceDialog/RaceDetailsStep';
+export { FleetRaceFields } from './AddRaceDialog/FleetRaceFields';
+export { DistanceRaceFields } from './AddRaceDialog/DistanceRaceFields';
+export { MatchRaceFields } from './AddRaceDialog/MatchRaceFields';
+export { TeamRaceFields } from './AddRaceDialog/TeamRaceFields';
+export type { RaceFormData, CommonRaceData } from './AddRaceDialog/RaceDetailsStep';
+export type { FleetRaceData } from './AddRaceDialog/FleetRaceFields';
+export type { DistanceRaceData } from './AddRaceDialog/DistanceRaceFields';
+export type { MatchRaceData } from './AddRaceDialog/MatchRaceFields';
+export type { TeamRaceData } from './AddRaceDialog/TeamRaceFields';
+export type { InputMethod } from './AddRaceDialog/InputMethodStep';
+
+// Match Racing Components
+export { MatchRaceCard } from './MatchRaceCard';
+export type { MatchRaceCardProps } from '@/types/matchRacing';
+
+// Team Racing Components
+export { TeamRaceCard } from './TeamRaceCard';
+export type { TeamRaceCardProps } from '@/types/teamRacing';
+
+// Compact Row Components (for list views)
+export {
+  CompactRaceRow,
+  CompactFleetRow,
+  CompactDistanceRow,
+  CompactMatchRow,
+  CompactTeamRow,
+} from './compact';
+export type {
+  CompactRaceRowProps,
+  CompactFleetRowProps,
+  CompactDistanceRowProps,
+  CompactMatchRowProps,
+  CompactTeamRowProps,
+} from './compact';
+
+// Extracted inline components (from races.tsx refactor)
+export { RigPlannerCard } from './RigPlannerCard';
+export type { RigPlannerCardProps } from './RigPlannerCard';
+export { AddRaceTimelineCard } from './AddRaceTimelineCard';
+export type { AddRaceTimelineCardProps } from './AddRaceTimelineCard';
+export { RegulatoryDigestCard } from './RegulatoryDigestCard';
+export type { RegulatoryDigestCardProps } from './RegulatoryDigestCard';
+export { CourseOutlineCard } from './CourseOutlineCard';
+export type { CourseOutlineCardProps } from './CourseOutlineCard';
+export { AddRaceFamilyButton } from './AddRaceFamilyButton';
+export type { AddRaceFamilyButtonProps } from './AddRaceFamilyButton';
+export { RacesFloatingHeader } from './RacesFloatingHeader';
+export type { RacesFloatingHeaderProps } from './RacesFloatingHeader';
+export { DemoNotice } from './DemoNotice';
+export type { DemoNoticeProps } from './DemoNotice';
+export { RaceDetailZone } from './RaceDetailZone';
+export type { RaceDetailZoneProps, RaceDocument as RaceDetailDocument, RaceMark } from './RaceDetailZone';
+export { TimelineIndicators } from './TimelineIndicators';
+export type { TimelineIndicatorsProps, TimelineRace } from './TimelineIndicators';
+export { CarouselNavArrows } from './CarouselNavArrows';
+export type { CarouselNavArrowsProps } from './CarouselNavArrows';
+export { DemoAddRaceHeader } from './DemoAddRaceHeader';
+export type { DemoAddRaceHeaderProps } from './DemoAddRaceHeader';
+export { FleetStrategySection } from './FleetStrategySection';
+export type { FleetStrategySectionProps } from './FleetStrategySection';
+export { BoatSetupSection } from './BoatSetupSection';
+export type { BoatSetupSectionProps } from './BoatSetupSection';
+export { PostRaceAnalysisSection } from './PostRaceAnalysisSection';
+export type { PostRaceAnalysisSectionProps } from './PostRaceAnalysisSection';
+export { DemoRacesCarousel } from './DemoRacesCarousel';
+export type { DemoRacesCarouselProps } from './DemoRacesCarousel';
+export { TeamLogisticsSection } from './TeamLogisticsSection';
+export type { TeamLogisticsSectionProps } from './TeamLogisticsSection';
+export { RaceModalsSection } from './RaceModalsSection';
+export type { RaceModalsSectionProps } from './RaceModalsSection';
+export { RealRacesCarousel } from './RealRacesCarousel';
+export type { RealRacesCarouselProps, UserRaceResult } from './RealRacesCarousel';
+export { DistanceRaceContentSection } from './DistanceRaceContentSection';
+export type { DistanceRaceContentSectionProps } from './DistanceRaceContentSection';
+export { FleetRaceContentSection } from './FleetRaceContentSection';
+export type { FleetRaceContentSectionProps } from './FleetRaceContentSection';
+export { DocumentTypePickerModal } from './DocumentTypePickerModal';
+export type { DocumentTypePickerModalProps } from './DocumentTypePickerModal';
 
 // Re-export types
 export type { Document } from './DocumentList';

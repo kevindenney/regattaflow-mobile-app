@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '../../providers/AuthProvider';
 
@@ -152,8 +153,27 @@ export default function SignUp() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Create your account</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          {/* Header with close button */}
+          <View style={styles.cardHeader}>
+            <View style={styles.headerSpacer} />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Close sign up"
+              onPress={() => router.replace('/')}
+              style={styles.closeButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.title}>Create your account</Text>
         <Text style={styles.subtitle}>Start your sailing journey with RegattaFlow</Text>
 
         {/* Error Message Banner */}
@@ -298,7 +318,8 @@ export default function SignUp() {
         >
           <Text style={styles.linkText}>Already have an account? Sign in</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -307,14 +328,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 48,
   },
   content: {
     width: '100%',
     maxWidth: 440,
-    paddingVertical: 32,
+    position: 'relative',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
   },
   title: {
     fontSize: 30,

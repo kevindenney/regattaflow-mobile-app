@@ -44,13 +44,12 @@ export function PlanModeLayout({
   }
 
   // Default: single column portrait layout
+  // Use View instead of ScrollView to avoid nested scroll issues on iOS/Android
+  // The consumer is responsible for handling scrolling
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-    >
+    <View style={[styles.container, { flex: 1 }]}>
       {children}
-    </ScrollView>
+    </View>
   );
 }
 

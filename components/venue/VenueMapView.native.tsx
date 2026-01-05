@@ -5,12 +5,30 @@
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { StyleSheet, View, ActivityIndicator, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
-import ClusteredMapView from 'react-native-maps-super-cluster';
+import { StyleSheet, View, ActivityIndicator, Platform, Text } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
+
+// Safely import react-native-maps (requires development build, not Expo Go)
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+let PROVIDER_DEFAULT: any = null;
+let ClusteredMapView: any = null;
+let mapsAvailable = false;
+
+try {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+  PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
+  ClusteredMapView = require('react-native-maps-super-cluster').default;
+  mapsAvailable = true;
+} catch (e) {
+  console.warn('[VenueMapView] react-native-maps not available (requires development build):', e);
+}
 
 interface Venue {
   id: string;
@@ -66,6 +84,20 @@ export function VenueMapView({
   savedVenueIds = new Set(),
   mapLayers = {},
 }: VenueMapViewProps) {
+  // Fallback when react-native-maps isn't available (Expo Go)
+  if (!mapsAvailable) {
+    return (
+      <View style={styles.fallbackContainer}>
+        <Ionicons name="map-outline" size={48} color="#94A3B8" />
+        <Text style={styles.fallbackTitle}>Map Unavailable</Text>
+        <Text style={styles.fallbackText}>
+          Native maps require a development build.{'\n'}
+          Use web version or run with EAS Build.
+        </Text>
+      </View>
+    );
+  }
+
   const mapRef = useRef<ClusteredMapView>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [yachtClubs, setYachtClubs] = useState<YachtClub[]>([]);
@@ -383,6 +415,26 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: '#666',
+  },
+  fallbackContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 24,
+  },
+  fallbackTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  fallbackText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   customMarker: {
     width: 44,

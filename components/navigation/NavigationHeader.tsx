@@ -3,7 +3,6 @@
 import { useAuth } from '@/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
-import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
 import React, { useRef, useState } from 'react';
 import {
   Modal,
@@ -15,194 +14,133 @@ import {
   useWindowDimensions,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TufteTokens } from '@/constants/designSystem';
+import { Sparkline } from '@/components/shared/charts/Sparkline';
+import { useUserActivityData } from '@/hooks/useUserActivityData';
 
 interface NavigationHeaderProps {
-  showLogo?: boolean;
   backgroundColor?: string;
   borderBottom?: boolean;
+  hidden?: boolean;
 }
 
 export function NavigationHeader({
-  showLogo = true,
   backgroundColor = '#FFFFFF',
-  borderBottom = true
+  borderBottom = true,
+  hidden = false
 }: NavigationHeaderProps) {
-  const { user, userProfile, signOut, userType } = useAuth();
+  // Allow pages to hide the global header and render their own
+  if (hidden) return null;
+  const { user, userProfile, signOut } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
-  const isDesktop = windowWidth > 768;
+  const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [quickActionsVisible, setQuickActionsVisible] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0 });
   const buttonRef = useRef<TouchableOpacity>(null);
-  const quickActionsRef = useRef<TouchableOpacity>(null);
+
+  // Activity data for profile sheet
+  const activityData = useUserActivityData();
 
   // Determine which page we're on
   const isLoginPage = pathname === '/(auth)/login' || pathname === '/login';
   const isSignupPage = pathname === '/(auth)/signup' || pathname === '/signup';
   const isOnboardingPage = pathname === '/(auth)/onboarding' || pathname === '/onboarding';
-  const isRacesTab =
-    pathname === '/(tabs)/races' ||
-    pathname === '/races' ||
-    pathname?.startsWith('/(tabs)/races/');
 
   const handleDropdownToggle = () => {
     if (dropdownVisible) {
       setDropdownVisible(false);
     } else {
-      // Get button position for dropdown placement
-      buttonRef.current?.measure((x, y, buttonWidth, height, pageX, pageY) => {
-        const dropdownWidth = 240; // match dropdown min width for web alignment
-        const horizontalPadding = 16;
-        const targetLeft = pageX + buttonWidth - dropdownWidth;
-        const maxLeft = windowWidth - dropdownWidth - horizontalPadding;
-        const adjustedLeft = Math.min(Math.max(targetLeft, horizontalPadding), Math.max(maxLeft, horizontalPadding));
-
+      // On web, use simpler positioning; on native, use measure()
+      if (Platform.OS === 'web') {
+        // Position dropdown in top-right area for web
         setDropdownPosition({
-          x: adjustedLeft,
-          y: pageY + height + 5, // Position below button with small gap
+          x: windowWidth - 280 - 16, // Right-aligned with padding
+          y: 50, // Below header
         });
         setDropdownVisible(true);
-      });
+      } else {
+        buttonRef.current?.measure((x, y, buttonWidth, height, pageX, pageY) => {
+          const dropdownWidth = 280;
+          const horizontalPadding = 16;
+          const targetLeft = pageX + buttonWidth - dropdownWidth;
+          const maxLeft = windowWidth - dropdownWidth - horizontalPadding;
+          const adjustedLeft = Math.min(Math.max(targetLeft, horizontalPadding), Math.max(maxLeft, horizontalPadding));
+
+          setDropdownPosition({
+            x: adjustedLeft,
+            y: pageY + height + 8,
+          });
+          setDropdownVisible(true);
+        });
+      }
     }
   };
 
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    if (signingOut) return
+    if (signingOut) return;
 
-    setSigningOut(true)
+    setSigningOut(true);
 
     try {
-      await signOut()
-      // AuthProvider handles navigation; no extra fallback needed here
+      await signOut();
     } catch (e) {
-      alert('Sign out failed. See console.')
+      alert('Sign out failed. See console.');
     } finally {
-      setSigningOut(false)
-      setDropdownVisible(false)
+      setSigningOut(false);
+      setDropdownVisible(false);
     }
-  }
+  };
 
   const handleNavigation = (route: string) => {
     setDropdownVisible(false);
-    setQuickActionsVisible(false);
     router.push(route);
   };
 
-  const handleQuickActionsToggle = () => {
-    if (quickActionsVisible) {
-      setQuickActionsVisible(false);
-    } else {
-      // Get button position for dropdown placement
-      quickActionsRef.current?.measure((x, y, width, height, pageX, pageY) => {
-        setDropdownPosition({
-          x: pageX - 160, // Position dropdown to the left of button
-          y: pageY + height + 5, // Position below button with small gap
-        });
-        setQuickActionsVisible(true);
-      });
-    }
-  };
-
-  const getQuickActions = () => {
-    switch (userType) {
-      case 'sailor':
-        return [
-          { key: 'create-strategy', label: 'Create Strategy', icon: 'bulb-outline', route: '/(tabs)/dashboard' },
-          { key: 'upload-document', label: 'Upload Document', icon: 'document-outline', route: '/(tabs)/dashboard' },
-          { key: 'view-races', label: 'Upcoming Races', icon: 'trophy-outline', route: '/(tabs)/dashboard' },
-        ];
-      case 'coach':
-        return [
-          { key: 'schedule-session', label: 'Schedule Session', icon: 'calendar-outline', route: '/(tabs)/dashboard' },
-          { key: 'add-client', label: 'Add Client', icon: 'person-add-outline', route: '/(tabs)/dashboard' },
-          { key: 'view-earnings', label: 'View Earnings', icon: 'card-outline', route: '/(tabs)/dashboard' },
-        ];
-      case 'club':
-        return [
-          { key: 'create-event', label: 'Create Event', icon: 'add-circle-outline', route: '/(tabs)/dashboard' },
-          { key: 'manage-members', label: 'Manage Members', icon: 'people-outline', route: '/(tabs)/dashboard' },
-          { key: 'facility-status', label: 'Facilities', icon: 'business-outline', route: '/(tabs)/dashboard' },
-        ];
-      default:
-        return [];
-    }
-  };
-
-  const quickActions = getQuickActions();
+  // Get user initial for avatar
+  const userInitial = (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
 
   return (
     <>
       <View style={[
         styles.navigationHeader,
-        { backgroundColor },
+        {
+          backgroundColor,
+          paddingTop: Platform.OS !== 'web' ? insets.top + 8 : 12
+        },
         borderBottom && styles.withBorder
       ]}>
-        <View
-          style={[
-            styles.navigationContent,
-            showLogo && styles.navigationContentCentered
-          ]}
-        >
-          {/* Logo */}
-          {showLogo && (
-            <TouchableOpacity
-              style={styles.logoContainer}
-              onPress={() => {
-                // For authenticated users, link to landing page with bypass flag
-                // For unauthenticated users, link to landing page normally
-                if (user) {
-                  router.push('/?view=landing' as any);
-                } else {
-                  router.push('/');
-                }
-              }}
-            >
-              <RegattaFlowLogo size={32} variant="filled" />
-              <Text style={styles.logoText}>RegattaFlow</Text>
-            </TouchableOpacity>
-          )}
+        <View style={styles.navigationContent}>
+          {/* Spacer to push avatar to the right */}
+          <View style={styles.spacer} />
 
           {/* Navigation Actions */}
           <View style={styles.navigationActions}>
             {user && !isOnboardingPage ? (
-              /* Authenticated User Actions */
-              <View style={styles.userActions}>
-                {/* User Dropdown */}
-                <TouchableOpacity
-                  ref={buttonRef}
-                  style={styles.userButton}
-                  onPress={handleDropdownToggle}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.userInfo}>
-                    <View style={styles.avatar}>
-                      <Ionicons name="person" size={20} color="#FFFFFF" />
-                    </View>
-                    {isDesktop && userProfile && (
-                      <Text style={styles.userName} numberOfLines={1}>
-                        {userProfile.full_name}
-                      </Text>
-                    )}
-                  </View>
-                  <Ionicons
-                    name={dropdownVisible ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color="#6B7280"
-                  />
-                </TouchableOpacity>
-              </View>
+              /* Minimal Avatar Button */
+              <TouchableOpacity
+                ref={buttonRef}
+                style={styles.avatarButton}
+                onPress={handleDropdownToggle}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Open profile menu"
+              >
+                <View style={styles.smallAvatar}>
+                  <Text style={styles.avatarInitial}>{userInitial}</Text>
+                </View>
+              </TouchableOpacity>
             ) : !user ? (
-              /* Unauthenticated User Buttons - Context Aware */
+              /* Unauthenticated User Buttons */
               <View style={styles.authButtons}>
                 {!isLoginPage && (
                   <TouchableOpacity
                     style={styles.signInButton}
                     onPress={() => router.push('/(auth)/login')}
                   >
-                    <Ionicons name="log-in-outline" size={20} color="#374151" />
                     <Text style={styles.signInText}>Sign In</Text>
                   </TouchableOpacity>
                 )}
@@ -212,32 +150,34 @@ export function NavigationHeader({
                     style={styles.signUpButton}
                     onPress={() => router.push('/(auth)/signup')}
                   >
-                    <Ionicons name="person-add-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.signUpText}>Sign Up</Text>
                   </TouchableOpacity>
                 )}
               </View>
-            ) : null /* Hide all buttons during onboarding */}
+            ) : null}
           </View>
         </View>
       </View>
 
-      {/* Dropdown Modal */}
+      {/* Profile Sheet Modal */}
       {user && (
         <Modal
           visible={dropdownVisible}
           transparent={true}
-          animationType="fade"
+          animationType={Platform.OS === 'web' ? 'fade' : 'slide'}
           onRequestClose={() => setDropdownVisible(false)}
         >
-          <View style={styles.modalContainer}>
-            {/* Backdrop - handles outside clicks */}
+          <View style={[
+            styles.modalContainer,
+            Platform.OS !== 'web' && styles.bottomSheetContainer
+          ]}>
+            {/* Backdrop */}
             <Pressable
               style={styles.modalBackdrop}
               onPress={() => setDropdownVisible(false)}
             />
 
-            {/* Content - positioned dropdown menu */}
+            {/* Content */}
             <View
               style={[
                 styles.dropdown,
@@ -246,131 +186,103 @@ export function NavigationHeader({
                   top: dropdownPosition.y,
                   left: dropdownPosition.x,
                   zIndex: 1000,
-                } : {}
+                } : styles.bottomSheet
               ]}
             >
-              {/* User Profile Section */}
-              <View style={styles.dropdownHeader}>
-                <View style={styles.dropdownAvatar}>
-                  <Ionicons name="person" size={24} color="#FFFFFF" />
+              {/* Drag Handle for mobile */}
+              {Platform.OS !== 'web' && (
+                <View style={styles.bottomSheetHandle}>
+                  <View style={styles.handleBar} />
                 </View>
-                <View style={styles.dropdownUserInfo}>
-                  <Text style={styles.dropdownUserName} numberOfLines={1}>
-                    {userProfile?.full_name || 'User'}
-                  </Text>
-                  <Text style={styles.dropdownUserEmail} numberOfLines={1}>
-                    {user.email}
-                  </Text>
+              )}
+
+              {/* User Info Section - Tufte style */}
+              <View style={styles.userSection}>
+                <View style={styles.userInfoRow}>
+                  <View style={styles.userDetails}>
+                    <Text style={styles.userName} numberOfLines={1}>
+                      {userProfile?.full_name || 'Sailor'}
+                    </Text>
+                    <Text style={styles.userEmail} numberOfLines={1}>
+                      {user.email}
+                    </Text>
+                  </View>
+                  <View style={styles.profileAvatar}>
+                    <Text style={styles.profileAvatarText}>{userInitial}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.dropdownDivider} />
+              <View style={styles.hairlineDivider} />
 
-              {/* Menu Items */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dropdownItem,
-                  pressed && styles.dropdownItemPressed
-                ]}
-                onPress={() => handleNavigation('/?view=landing')}
-              >
-                <Ionicons name="home-outline" size={20} color="#374151" />
-                <Text style={styles.dropdownItemText}>Home / Landing</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dropdownItem,
-                  pressed && styles.dropdownItemPressed
-                ]}
-                onPress={() => handleNavigation('/(tabs)/settings')}
-              >
-                <Ionicons name="settings-outline" size={20} color="#374151" />
-                <Text style={styles.dropdownItemText}>Settings</Text>
-              </Pressable>
-
-              <View style={styles.dropdownDivider} />
-
-              <Pressable
-                onPress={async () => {
-                  try {
-                    await signOut()
-                  } catch (error) {
-                  }
-                }}
-                style={({ pressed }) => ({
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  borderRadius: 8,
-                  backgroundColor: pressed ? 'rgba(0,0,0,0.06)' : 'transparent'
-                })}
-                disabled={signingOut}
-              >
-                <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-                <Text style={[styles.dropdownItemText, styles.signOutText]}>
-                  {signingOut ? 'Signing out...' : 'Sign Out'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
-      )}
-
-      {/* Quick Actions Modal */}
-      {user && (
-        <Modal
-          visible={quickActionsVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setQuickActionsVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            {/* Backdrop */}
-            <Pressable
-              style={styles.modalBackdrop}
-              onPress={() => setQuickActionsVisible(false)}
-            />
-
-            {/* Quick Actions Dropdown */}
-            <View
-              style={[
-                styles.quickActionsDropdown,
-                Platform.OS === 'web' ? {
-                  position: 'absolute',
-                  top: dropdownPosition.y,
-                  left: dropdownPosition.x,
-                  zIndex: 1000,
-                } : {}
-              ]}
-            >
-              <View style={styles.quickActionsHeader}>
-                <Ionicons name="flash" size={20} color="#3B82F6" />
-                <Text style={styles.quickActionsTitle}>
-                  {userType === 'sailor' && 'Sailor Actions'}
-                  {userType === 'coach' && 'Coach Actions'}
-                  {userType === 'club' && 'Club Actions'}
+              {/* Your Week Section */}
+              <View style={styles.dataSection}>
+                <Text style={styles.sectionLabel}>YOUR WEEK</Text>
+                <Text style={styles.dataRow}>
+                  {activityData.loading ? '...' : (
+                    `${activityData.upcomingRacesCount} races  ·  ${activityData.trainingSessionsThisWeek} training`
+                  )}
                 </Text>
               </View>
 
-              <View style={styles.dropdownDivider} />
+              {/* Activity Section with Sparkline */}
+              <View style={styles.dataSection}>
+                <View style={styles.activityHeader}>
+                  <Text style={styles.sectionLabel}>ACTIVITY</Text>
+                  {activityData.activityData.length >= 2 && (
+                    <Sparkline
+                      data={activityData.activityData}
+                      width={100}
+                      height={20}
+                      color="#6B7280"
+                      strokeWidth={1.5}
+                      highlightMax={true}
+                    />
+                  )}
+                </View>
+                <Text style={styles.dataRow}>
+                  {activityData.loading ? '...' : (
+                    `${activityData.monthlyTotal} sessions this month${activityData.monthlyVsAvg !== 0 ? ` (${activityData.monthlyVsAvg > 0 ? '+' : ''}${activityData.monthlyVsAvg} vs avg)` : ''}`
+                  )}
+                </Text>
+              </View>
 
-              {quickActions.map((action) => (
-                <Pressable
-                  key={action.key}
-                  style={({ pressed }) => [
-                    styles.dropdownItem,
-                    pressed && styles.dropdownItemPressed
-                  ]}
-                  onPress={() => {
-                    handleNavigation(action.route);
-                  }}
+              <View style={styles.hairlineDivider} />
+
+              {/* Minimal Menu */}
+              <View style={styles.menuSection}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleNavigation('/notifications')}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons name={action.icon as any} size={18} color="#3B82F6" />
-                  <Text style={[styles.dropdownItemText, styles.quickActionItemText]}>
-                    {action.label}
+                  <Text style={styles.menuItemText}>Notifications</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleNavigation('/(tabs)/settings')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.menuItemText}>Settings</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleSignOut}
+                  activeOpacity={0.7}
+                  disabled={signingOut}
+                >
+                  <Text style={styles.signOutText}>
+                    {signingOut ? 'Signing out...' : 'Sign out'}
                   </Text>
-                </Pressable>
-              ))}
+                </TouchableOpacity>
+              </View>
+
+              {/* Safe area padding for bottom sheet */}
+              {Platform.OS !== 'web' && <View style={{ height: insets.bottom + 8 }} />}
             </View>
           </View>
         </Modal>
@@ -380,115 +292,59 @@ export function NavigationHeader({
 }
 
 const styles = StyleSheet.create({
+  // Header
   navigationHeader: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: TufteTokens.spacing.standard,
+    paddingHorizontal: TufteTokens.spacing.section,
     zIndex: 1000,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)' }
-      : {
-          boxShadow: '0px 1px',
-          elevation: 1,
-        }
-    ),
   },
   withBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.color,
   },
   navigationContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     width: '100%',
-  },
-  navigationContentCentered: {
     maxWidth: 1200,
-    width: '100%',
     alignSelf: 'center',
   },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#3B82F6',
+  spacer: {
+    flex: 1,
   },
   navigationActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginLeft: 'auto',
-    flexShrink: 0,
-    paddingRight: 12,
   },
-  userActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+
+  // Avatar Button
+  avatarButton: {
+    padding: 4,
   },
-  quickActionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-    gap: 6,
-  },
-  quickActionsText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#3B82F6',
-  },
-  userButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    gap: 8,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#3B82F6',
+  smallAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userName: {
-    fontSize: 14,
-    fontWeight: '500',
+  avatarInitial: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#374151',
-    maxWidth: 120,
   },
+
+  // Auth Buttons
   authButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
   signInButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   signInText: {
     fontSize: 14,
@@ -496,22 +352,24 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   signUpButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: TufteTokens.borderRadius.subtle,
     backgroundColor: '#3B82F6',
-    gap: 6,
   },
   signUpText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#FFFFFF',
   },
+
+  // Modal
   modalContainer: {
     flex: 1,
     position: 'relative',
+  },
+  bottomSheetContainer: {
+    justifyContent: 'flex-end',
   },
   modalBackdrop: {
     position: 'absolute',
@@ -519,106 +377,123 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   dropdown: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    minWidth: 240,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: TufteTokens.backgrounds.paper,
+    borderRadius: TufteTokens.borderRadius.subtle,
+    minWidth: 280,
+    borderWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
     overflow: 'hidden',
     ...(Platform.OS === 'web'
-      ? { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }
-      : {
-          boxShadow: '0px 4px',
-          elevation: 8,
-        }
+      ? { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }
+      : { elevation: 4 }
     ),
   },
-  dropdownHeader: {
+  bottomSheet: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    minWidth: '100%',
+    paddingBottom: 12,
+  },
+  bottomSheetHandle: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  handleBar: {
+    width: 36,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+  },
+
+  // User Section
+  userSection: {
+    padding: TufteTokens.spacing.section,
+    paddingBottom: TufteTokens.spacing.standard,
+  },
+  userInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-    gap: 12,
+    justifyContent: 'space-between',
   },
-  dropdownAvatar: {
+  userDetails: {
+    flex: 1,
+    marginRight: TufteTokens.spacing.standard,
+  },
+  userName: {
+    ...TufteTokens.typography.primary,
+    marginBottom: 2,
+  },
+  userEmail: {
+    ...TufteTokens.typography.tertiary,
+  },
+  profileAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dropdownUserInfo: {
-    flex: 1,
-  },
-  dropdownUserName: {
-    fontSize: 16,
+  profileAvatarText: {
+    fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  dropdownUserEmail: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  dropdownDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-  dropdownItemPressed: {
-    backgroundColor: '#F3F4F6',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    fontWeight: '500',
     color: '#374151',
   },
-  signOutItem: {
-    backgroundColor: '#FEF2F2',
+
+  // Data Sections
+  dataSection: {
+    paddingHorizontal: TufteTokens.spacing.section,
+    paddingVertical: TufteTokens.spacing.compact,
   },
-  signOutItemPressed: {
-    backgroundColor: '#FEE2E2',
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: TufteTokens.spacing.tight,
   },
-  signOutText: {
-    color: '#EF4444',
+  dataRow: {
+    ...TufteTokens.typography.secondary,
   },
-  quickActionsDropdown: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    minWidth: 200,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }
-      : {
-          boxShadow: '0px 4px',
-          elevation: 8,
-        }
-    ),
-  },
-  quickActionsHeader: {
+  activityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8FAFC',
-    gap: 8,
+    justifyContent: 'space-between',
+    marginBottom: TufteTokens.spacing.tight,
   },
-  quickActionsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
+
+  // Dividers
+  hairlineDivider: {
+    height: TufteTokens.borders.hairline,
+    backgroundColor: TufteTokens.borders.colorSubtle,
+    marginVertical: TufteTokens.spacing.compact,
+    marginHorizontal: TufteTokens.spacing.section,
   },
-  quickActionItemText: {
-    color: '#3B82F6',
+
+  // Menu
+  menuSection: {
+    paddingHorizontal: TufteTokens.spacing.section,
+    paddingVertical: TufteTokens.spacing.compact,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: TufteTokens.spacing.standard,
+  },
+  menuItemText: {
+    ...TufteTokens.typography.secondary,
+    fontWeight: '500',
+  },
+  signOutText: {
+    ...TufteTokens.typography.secondary,
+    fontWeight: '500',
+    color: '#DC2626',
   },
 });

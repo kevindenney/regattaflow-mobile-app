@@ -5,7 +5,7 @@ import { bindAuthDiagnostics } from '@/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/utils/errToText'
 import { AuthApiError } from '@supabase/supabase-js'
 import { router } from 'expo-router'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform } from 'react-native'
 
 // Re-export UserType for backward compatibility
@@ -25,6 +25,26 @@ const authDebugLog = (...args: Parameters<typeof logger.debug>) => {
   }
   logger.debug(...args)
 }
+
+// Safe localStorage access - returns null on native platforms where localStorage doesn't exist
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      return window.localStorage.getItem(key);
+    }
+    return null;
+  },
+  setItem: (key: string, value: string): void => {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem(key, value);
+    }
+  },
+  removeItem: (key: string): void => {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.removeItem(key);
+    }
+  }
+};
 
 const isInvalidRefreshTokenError = (error: unknown): error is AuthApiError => {
   if (!error || typeof (error as any)?.message !== 'string') {
@@ -139,6 +159,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [coachProfile, setCoachProfile] = useState<any | null>(null)
   const [isDemoSession, setIsDemoSession] = useState(false)
 
+  // Ref to prevent duplicate profile fetches during race conditions
+  const profileFetchInProgress = useRef<string | null>(null)
+
+  // Ref to track if initial auth check is in progress (prevents onAuthStateChange from racing with initializeAuth)
+  const initialAuthInProgress = useRef(true)
+
   const clearInvalidSession = useCallback(async (context: string, error?: unknown) => {
     authDebugLog(`[AUTH] Clearing invalid session (${context})`, {
       message: (error as any)?.message,
@@ -160,11 +186,24 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
+    console.log('🔍 [PROFILE FETCH] ====== START ======')
+    console.log('🔍 [PROFILE FETCH] userId param:', userId)
+    console.log('🔍 [PROFILE FETCH] user?.id fallback:', user?.id)
+    console.log('🔍 [PROFILE FETCH] Using uid:', uid)
     authDebugLog('[fetchUserProfile] Called with userId:', uid)
     if (!uid) {
+      console.log('🔍 [PROFILE FETCH] ❌ No uid - returning null')
       authDebugLog('[fetchUserProfile] ❌ No userId provided')
       return null
     }
+
+    // Prevent duplicate fetches during race conditions (e.g., initializeAuth + onAuthStateChange)
+    if (profileFetchInProgress.current === uid) {
+      console.log('🔍 [PROFILE FETCH] ⏭️ Skipping - fetch already in progress for:', uid)
+      authDebugLog('[fetchUserProfile] Skipping duplicate fetch for:', uid)
+      return null
+    }
+    profileFetchInProgress.current = uid
 
     const inferUserType = async (): Promise<PersonaRole> => {
       // 1. Check coach profile
@@ -204,13 +243,25 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     };
 
     try {
+      console.log('🔍 [PROFILE FETCH] Querying Supabase users table...')
       authDebugLog('[fetchUserProfile] Querying database for user:', uid)
-      const { data, error } = await supabase
+
+      // Add timeout to prevent hanging forever on network issues
+      const queryPromise = supabase
         .from('users')
         .select('*')
         .eq('id', uid)
         .maybeSingle()
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Profile fetch timeout after 5 seconds')), 5000)
+      )
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any
+
+      console.log('🔍 [PROFILE FETCH] Query complete!')
+      console.log('🔍 [PROFILE FETCH] data:', JSON.stringify(data, null, 2))
+      console.log('🔍 [PROFILE FETCH] error:', error)
       authDebugLog('[fetchUserProfile] Database response:', {
         hasData: !!data,
         hasError: !!error,
@@ -220,20 +271,25 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       })
 
       if (error) {
-        console.error('[fetchUserProfile] Database error:', error)
+        console.error('🔍 [PROFILE FETCH] ❌ Database error:', error)
         return null
       }
 
       if (!data) {
-        console.warn('[fetchUserProfile] No profile found for user:', uid)
+        console.warn('🔍 [PROFILE FETCH] ⚠️ No profile found for user:', uid)
         return null
       }
 
       let resolvedProfile = data
       const userTypeWasMissing = !data?.user_type
+      console.log('🔍 [PROFILE FETCH] user_type from DB:', data?.user_type)
+      console.log('🔍 [PROFILE FETCH] userTypeWasMissing:', userTypeWasMissing)
+
       let resolvedUserType: PersonaRole = userTypeWasMissing
         ? await inferUserType()
         : (data.user_type as PersonaRole)
+
+      console.log('🔍 [PROFILE FETCH] resolvedUserType:', resolvedUserType)
 
       if (userTypeWasMissing) {
         authDebugLog('[fetchUserProfile] No user_type found, defaulting to', resolvedUserType)
@@ -256,12 +312,28 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         }
       }
 
+      console.log('🔍 [PROFILE FETCH] ✅ Setting userProfile and userType to:', resolvedUserType)
       authDebugLog('[fetchUserProfile] Setting userProfile and userType')
       setUserProfile(resolvedProfile)
       setUserType(resolvedUserType as UserType)
+      console.log('🔍 [PROFILE FETCH] ====== END SUCCESS ======')
+      profileFetchInProgress.current = null
       return resolvedProfile
     } catch (error) {
-      console.error('[fetchUserProfile] Exception:', error)
+      // On timeout or error, default to 'sailor' so user can still use the app
+      const isTimeout = error instanceof Error && error.message.includes('timeout')
+      if (isTimeout) {
+        // Use warn instead of error for handled timeouts - this is expected behavior
+        console.warn('🔍 [PROFILE FETCH] ⚠️ Timeout - defaulting to sailor persona')
+        setUserType('sailor' as UserType)
+        setUserProfile({ id: uid, user_type: 'sailor' })
+        console.log('🔍 [PROFILE FETCH] ====== END (TIMEOUT FALLBACK) ======')
+        profileFetchInProgress.current = null
+        return { id: uid, user_type: 'sailor' }
+      }
+
+      console.log('🔍 [PROFILE FETCH] ====== END ERROR ======')
+      profileFetchInProgress.current = null
       return null
     }
   }
@@ -488,14 +560,21 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
   // Initial auth state setup with proper session restoration
   useEffect(() => {
+    console.log('🚀 [AUTH INIT] ====== useEffect FIRING ======')
     authDebugLog('🔥 [AUTH] useEffect initialization starting...')
     let alive = true
 
     const initializeAuth = async () => {
       try {
+        console.log('🚀 [AUTH INIT] Starting initializeAuth()...')
         authDebugLog('[AUTH] Starting initialization...')
 
+        console.log('🚀 [AUTH INIT] Calling supabase.auth.getSession()...')
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+        console.log('🚀 [AUTH INIT] getSession returned!')
+        console.log('🚀 [AUTH INIT] sessionData:', sessionData ? 'exists' : 'null')
+        console.log('🚀 [AUTH INIT] session.user.id:', sessionData?.session?.user?.id)
+        console.log('🚀 [AUTH INIT] sessionError:', sessionError)
 
         if (sessionError) {
           console.warn('[AUTH] getSession error:', sessionError)
@@ -517,10 +596,18 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           }
         }
 
-        if (!alive) return
+        if (!alive) {
+          console.log('🚀 [AUTH INIT] alive=false, returning early')
+          return
+        }
 
         const session = sessionData?.session
         const authUser = session?.user
+
+        console.log('🚀 [AUTH INIT] session exists:', !!session)
+        console.log('🚀 [AUTH INIT] authUser exists:', !!authUser)
+        console.log('🚀 [AUTH INIT] authUser.id:', authUser?.id)
+        console.log('🚀 [AUTH INIT] authUser.email:', authUser?.email)
 
         authDebugLog('[AUTH] Session check result:', {
           hasSession: !!session,
@@ -532,9 +619,13 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setUser(authUser || null)
 
         if (authUser?.id) {
+          console.log('🚀 [AUTH INIT] Has authUser.id, calling fetchUserProfile...')
           authDebugLog('[AUTH] Fetching user profile for:', authUser.id)
+          console.log('[AUTH DEBUG] Starting profile fetch for userId:', authUser.id)
           try {
             const profile = await fetchUserProfile(authUser.id)
+            console.log('🚀 [AUTH INIT] fetchUserProfile returned:', profile ? 'profile object' : 'null')
+            console.log('[AUTH DEBUG] Profile fetch complete:', JSON.stringify(profile, null, 2))
             authDebugLog('[AUTH] Profile fetch result:', {
               hasProfile: !!profile,
               user_type: profile?.user_type,
@@ -542,25 +633,35 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
               email: profile?.email
             })
             if (profile?.user_type) {
+              console.log('🚀 [AUTH INIT] ✅ Setting userType to:', profile.user_type)
               setUserType(profile.user_type as UserType)
+              console.log('[AUTH DEBUG] ✅ setUserType called with:', profile.user_type)
               authDebugLog('[AUTH] userType set to:', profile.user_type)
             } else {
+              console.log('🚀 [AUTH INIT] ⚠️ No user_type on profile, setting to null')
               setUserType(null)
+              console.warn('[AUTH DEBUG] ⚠️ No user_type on profile! Profile keys:', profile ? Object.keys(profile) : 'null')
               console.warn('[AUTH] No user_type on profile; consider forcing onboarding for user', authUser.email)
             }
           } catch (e) {
+            console.error('🚀 [AUTH INIT] ❌ Profile fetch exception:', e)
+            console.error('[AUTH DEBUG] ❌ Profile fetch failed:', e)
             console.error('[AUTH] User profile fetch failed:', e)
             setUserType(null)
           }
         } else {
+          console.log('🚀 [AUTH INIT] ⚠️ No authUser.id, setting userType to null')
           setUserType(null)
+          console.log('[AUTH DEBUG] No authUser.id available')
           authDebugLog('[AUTH] No authUser.id')
         }
 
         authDebugLog('[AUTH] Initialization complete, setting ready=true')
+        initialAuthInProgress.current = false
         setReady(true)
       } catch (e) {
         console.error('[AUTH] Initialization failed:', e)
+        initialAuthInProgress.current = false
         if (alive) setReady(true)
       }
     }
@@ -568,6 +669,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     // Set a watchdog timer as fallback
     const watchdogTimer = setTimeout(() => {
       if (alive && !ready) {
+        initialAuthInProgress.current = false
         setReady(true)
       }
     }, 3000)
@@ -684,6 +786,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       if (evt === 'SIGNED_IN' && session?.user?.id) {
         authDebugLog('🔔 [AUTH] SIGNED_IN event - fetching profile...')
+
+        // Skip profile fetch if initial auth is still in progress - initializeAuth will handle it
+        if (initialAuthInProgress.current) {
+          authDebugLog('🔔 [AUTH] ⏭️ Skipping profile fetch - initial auth in progress')
+          return
+        }
 
         // Use loading state instead of toggling ready (prevents infinite loop)
         setLoading(true)
@@ -820,8 +928,20 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('🚪 [AUTH] About to call signOutEverywhere()...')
       await signOutEverywhere()
       authDebugLog('🚪 [AUTH] signOutEverywhere() completed successfully')
-      authDebugLog('🚪 [AUTH] Waiting for SIGNED_OUT event to clear loading...')
-      // Don't set loading(false) here - let onAuthStateChange SIGNED_OUT handler clear it
+
+      // Clear state immediately - don't wait for SIGNED_OUT event
+      // (Event may not fire if network is down but local storage was cleared)
+      authDebugLog('🚪 [AUTH] Clearing auth state immediately after local cleanup...')
+      setSignedIn(false)
+      setUser(null)
+      setUserProfile(null)
+      setUserType(null)
+      setLoading(false)
+      setPersonaLoading(false)
+      setClubProfile(null)
+      setCoachProfile(null)
+      clearTimeout(fallbackTimer)
+      authDebugLog('🚪 [AUTH] Auth state cleared successfully')
     } catch (error) {
       console.error('🚪 [AUTH] ERROR in signOut process:', error)
       authDebugLog('🚪 [AUTH] Manual cleanup due to error')
@@ -960,9 +1080,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('🔍 [LOGIN] Google sign-in button clicked')
       authDebugLog('🔍 [LOGIN] Calling signInWithGoogle() with persona:', persona)
 
-      // Store the selected persona in localStorage before OAuth redirect
-      if (persona && typeof window !== 'undefined') {
-        localStorage.setItem('oauth_pending_persona', persona)
+      // Store the selected persona in localStorage before OAuth redirect (web only)
+      if (persona && typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.setItem('oauth_pending_persona', persona)
         authDebugLog('🔍 [LOGIN] Stored pending persona in localStorage:', persona)
       }
 
@@ -987,9 +1107,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       }
     } catch (error) {
       console.error('🔍 [LOGIN] Google sign-in failed:', error)
-      // Clear the stored persona on error
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('oauth_pending_persona')
+      // Clear the stored persona on error (web only)
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.removeItem('oauth_pending_persona')
       }
       throw error
     } finally {
@@ -1003,9 +1123,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('🔍 [LOGIN] Apple sign-in button clicked')
       authDebugLog('🔍 [LOGIN] Calling signInWithApple() with persona:', persona)
 
-      // Store the selected persona in localStorage before OAuth redirect
-      if (persona && typeof window !== 'undefined') {
-        localStorage.setItem('oauth_pending_persona', persona)
+      // Store the selected persona in localStorage before OAuth redirect (web only)
+      if (persona && typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.setItem('oauth_pending_persona', persona)
         authDebugLog('🔍 [LOGIN] Stored pending persona in localStorage:', persona)
       }
 
@@ -1028,9 +1148,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       }
     } catch (error) {
       console.error('🔍 [LOGIN] Apple sign-in failed:', error)
-      // Clear the stored persona on error
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('oauth_pending_persona')
+      // Clear the stored persona on error (web only)
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.removeItem('oauth_pending_persona')
       }
       throw error
     } finally {

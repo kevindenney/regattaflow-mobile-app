@@ -15,7 +15,6 @@
 import { TufteTokens, createTufteCardStyle } from '@/constants/designSystem';
 import { calculateCountdown } from '@/constants/mockData';
 import { useRouter } from 'expo-router';
-import { MapPin } from 'lucide-react-native';
 import React, { useMemo, useState, useEffect } from 'react';
 import { Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sparkline, WindArrow } from '@/components/shared/charts';
@@ -491,6 +490,15 @@ export function RaceCardEnhanced({
   };
   const countdownStyle = getCountdownStyle();
 
+  // Apple-style card accent color based on race status
+  const getAccentColor = () => {
+    if (raceStatus === 'past') return '#9CA3AF'; // Gray for completed
+    if (countdown.days <= 1) return '#EF4444'; // Red - urgent
+    if (countdown.days <= 3) return '#F59E0B'; // Amber - soon
+    return '#10B981'; // Green - good conditions, upcoming
+  };
+  const accentColor = getAccentColor();
+
   // Format date
   const formattedDate = useMemo(() => {
     const d = new Date(date);
@@ -512,6 +520,7 @@ export function RaceCardEnhanced({
       <Pressable
         style={({ pressed }) => [
           styles.card,
+          styles.cardApple,
           { width: '100%' },
           isSelected && styles.cardSelected,
           pressed && styles.cardPressed,
@@ -521,7 +530,10 @@ export function RaceCardEnhanced({
         accessibilityRole="button"
         accessibilityLabel={`View details for ${name}`}
       >
-      {/* Header Zone */}
+        {/* Status Accent Line - Apple-style top indicator */}
+        <View style={[styles.accentLine, { backgroundColor: accentColor }]} />
+
+        {/* Header Zone */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           {/* Fleet badge */}
@@ -533,38 +545,16 @@ export function RaceCardEnhanced({
           <Text style={styles.title} numberOfLines={1}>
             {name}
           </Text>
-          <View style={styles.venueRow}>
-            <MapPin size={12} color="#64748B" />
-            <Text style={styles.venue} numberOfLines={1}>
-              {venue}
-            </Text>
-          </View>
-        </View>
-
-        {/* Countdown */}
-        <View
-          style={[styles.countdown, { backgroundColor: countdownStyle.bg }]}
-        >
-          <Text style={[styles.countdownValue, { color: countdownStyle.text }]}>
-            {countdownDisplay}
-          </Text>
-          <Text style={styles.countdownLabel}>
-            {raceStatus === 'past' ? '' : 'until start'}
+          {/* Consolidated info line: venue · date · time */}
+          <Text style={styles.infoLine} numberOfLines={1}>
+            {venue} · {formattedDate} · {startTime}
           </Text>
         </View>
-      </View>
 
-      {/* Date + Time Row */}
-      <View style={styles.dateRow}>
-        <Text style={styles.dateText}>{formattedDate}</Text>
-        <Text style={styles.dateSeparator}>|</Text>
-        <Text style={styles.dateText}>Start: {startTime}</Text>
-        {vhf_channel && (
-          <>
-            <Text style={styles.dateSeparator}>|</Text>
-            <Text style={styles.dateText}>VHF {vhf_channel}</Text>
-          </>
-        )}
+        {/* Countdown - simplified, no box */}
+        <Text style={[styles.countdownValue, { color: countdownStyle.text }]}>
+          {countdownDisplay}
+        </Text>
       </View>
 
       {/* Summary Section with Sparklines */}
@@ -572,18 +562,6 @@ export function RaceCardEnhanced({
 
       {/* Full Timeline Table */}
       <FullTimelineTable timeline={effectiveTimeline} />
-
-      {/* Units Footer */}
-      <View style={styles.unitsFooter}>
-        <Text style={styles.unitsFooterText}>
-          Wind: knots • Current: knots • Waves: meters
-        </Text>
-      </View>
-
-      {/* Action hint */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Tap for full race details</Text>
-      </View>
       </Pressable>
     </View>
   );
@@ -591,21 +569,61 @@ export function RaceCardEnhanced({
 
 const styles = StyleSheet.create({
   card: {
-    ...createTufteCardStyle('medium'),
-    // Note: margins removed - parent ScrollView handles gap via `gap` prop
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
     marginVertical: 8,
-    overflow: 'hidden', // Prevent content from bleeding outside card bounds
+    marginHorizontal: 8,
+    overflow: 'visible', // Allow shadow to show
+    // Apple-style multi-layer shadow + subtle border for mobile distinction
     ...Platform.select({
-      web: TufteTokens.shadows.subtleWeb,
-      default: {},
+      web: {
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06), 0 6px 16px rgba(0, 0, 0, 0.1), 0 12px 32px rgba(0, 0, 0, 0.06)',
+      },
+      default: {
+        // Apple-style card lift: border + shadow work together
+        // Border provides crisp edge definition
+        borderWidth: 1,
+        borderColor: '#E5E7EB', // gray-200 - subtle but visible
+        // Shadow provides depth perception (stronger than before to match web)
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 5,
+      },
     }),
   },
+  // Status accent line at top of card
+  accentLine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    zIndex: 10,
+  },
   cardSelected: {
-    borderColor: '#3B82F6',
-    borderWidth: 1,
+    backgroundColor: '#F0F7FF',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.1), 0 8px 20px rgba(37, 99, 235, 0.15), 0 16px 40px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        borderWidth: 1.5,
+        borderColor: '#93C5FD', // blue-300 - visible selection indicator
+        shadowColor: '#2563EB',
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 6,
+      },
+    }),
   },
   cardPressed: {
-    opacity: 0.95,
+    opacity: 0.98,
+    transform: [{ scale: 0.98 }],
   },
   header: {
     flexDirection: 'row',
@@ -637,64 +655,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     marginBottom: 4,
   },
-  venueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  venue: {
+  // Consolidated info line: venue · date · time (Tufte: single line, no icons)
+  infoLine: {
     ...TufteTokens.typography.tertiary,
-    flex: 1,
+    marginTop: 2,
   },
-  countdown: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: TufteTokens.borderRadius.subtle,
-    alignItems: 'center',
-  },
+  // Simplified countdown (no box, just typography)
   countdownValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
-  },
-  countdownLabel: {
-    ...TufteTokens.typography.micro,
-    marginTop: 1,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: TufteTokens.spacing.standard,
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.color,
-    marginBottom: TufteTokens.spacing.standard,
-  },
-  dateText: {
-    ...TufteTokens.typography.secondary,
-    fontVariant: ['tabular-nums'],
-  },
-  dateSeparator: {
-    ...TufteTokens.typography.tertiary,
-    marginHorizontal: 8,
-  },
-  unitsFooter: {
-    paddingTop: TufteTokens.spacing.tight,
-    alignItems: 'center',
-  },
-  unitsFooterText: {
-    fontSize: 10,
-    color: '#CBD5E1',
-    textAlign: 'center',
-  },
-  footer: {
-    paddingTop: TufteTokens.spacing.standard,
-    borderTopWidth: TufteTokens.borders.hairline,
-    borderTopColor: TufteTokens.borders.color,
-    alignItems: 'center',
-  },
-  footerText: {
-    ...TufteTokens.typography.secondary,
-    color: '#475569',
+    color: '#374151',
   },
 });
 
@@ -704,8 +675,6 @@ const summaryStyles = StyleSheet.create({
     gap: 8,
     paddingBottom: 12,
     marginBottom: TufteTokens.spacing.standard,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
   },
   row: {
     flexDirection: 'row',
@@ -766,19 +735,17 @@ const summaryStyles = StyleSheet.create({
   },
 });
 
-// Table styles - 5-column layout matching RaceConditionsCard
+// Table styles - 5-column layout matching RaceConditionsCard (Tufte: minimal borders)
 const tableStyles = StyleSheet.create({
   container: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
     borderRadius: 6,
     overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',
-    backgroundColor: '#F8FAFC',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FAFAFA',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
@@ -803,8 +770,6 @@ const tableStyles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 8,
     paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   dataRowHighlight: {
     backgroundColor: '#FFFBEB',

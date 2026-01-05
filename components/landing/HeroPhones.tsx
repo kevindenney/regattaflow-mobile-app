@@ -458,10 +458,17 @@ export function HeroPhones() {
           </Text>
 
           <View style={styles.ctaButtons}>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
-              <Text style={styles.primaryButtonText}>Start Free Trial</Text>
-              <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-            </TouchableOpacity>
+            {user ? (
+              <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/(tabs)/races')}>
+                <Text style={styles.primaryButtonText}>Go to App</Text>
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
+                <Text style={styles.primaryButtonText}>Start Free Trial</Text>
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={styles.secondaryButton} onPress={handleExploreVenues}>
               <Text style={styles.secondaryButtonText}>Explore Venues</Text>
@@ -500,39 +507,39 @@ export function HeroPhones() {
             </Text>
           </View>
 
-          {/* App Download Buttons */}
-          <View style={styles.downloadButtons}>
-            <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
-              <Ionicons name="logo-apple" size={18} color="rgba(255,255,255,0.6)" />
-              <View style={styles.downloadButtonText}>
-                <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
-                <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>App Store</Text>
+          {/* App Download Buttons - only show on web */}
+          {Platform.OS === 'web' && (
+            <View style={styles.downloadButtons}>
+              <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
+                <Ionicons name="logo-apple" size={18} color="rgba(255,255,255,0.6)" />
+                <View style={styles.downloadButtonText}>
+                  <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
+                  <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>App Store</Text>
+                </View>
               </View>
-            </View>
 
-            <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
-              <Ionicons name="logo-google-playstore" size={18} color="rgba(255,255,255,0.6)" />
-              <View style={styles.downloadButtonText}>
-                <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
-                <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>Google Play</Text>
+              <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
+                <Ionicons name="logo-google-playstore" size={18} color="rgba(255,255,255,0.6)" />
+                <View style={styles.downloadButtonText}>
+                  <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
+                  <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>Google Play</Text>
+                </View>
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={styles.downloadButton}
-              onPress={() => {
-                if (Platform.OS === 'web') {
+              <TouchableOpacity
+                style={styles.downloadButton}
+                onPress={() => {
                   alert('You\'re already using the web version!');
-                }
-              }}
-            >
-              <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />
-              <View style={styles.downloadButtonText}>
-                <Text style={styles.downloadButtonLabel}>USE ON</Text>
-                <Text style={styles.downloadButtonStore}>Web Browser</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+                }}
+              >
+                <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />
+                <View style={styles.downloadButtonText}>
+                  <Text style={styles.downloadButtonLabel}>USE ON</Text>
+                  <Text style={styles.downloadButtonStore}>Web Browser</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </LinearGradient>
 

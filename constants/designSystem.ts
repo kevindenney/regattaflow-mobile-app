@@ -8,6 +8,108 @@
  */
 
 // =============================================================================
+// TUFTE DESIGN TOKENS
+// =============================================================================
+
+/**
+ * Tufte-specific design tokens
+ * "Modern Tufte" approach: Tufte principles with subtle mobile touch affordance
+ *
+ * Key Principles:
+ * 1. Maximize data-ink ratio (remove decorative elements)
+ * 2. Nearly flat - minimal shadows for subtle depth cue
+ * 3. Hairline borders (0.5px) or none
+ * 4. Minimal border radius (4px max)
+ * 5. Whitespace replaces boxes for separation
+ * 6. Typography hierarchy does the work
+ */
+export const TufteTokens = {
+  // Shadows - Nearly flat with minimal depth cue for touch affordance
+  shadows: {
+    subtle: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.03,
+      shadowRadius: 1,
+      elevation: 0,
+    },
+    // Web-specific shadow
+    subtleWeb: {
+      boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.03)',
+    },
+  },
+
+  // Borders - Ultra-thin hairlines or none
+  borders: {
+    hairline: 0.5, // 0.5px hairline border
+    subtle: 1, // 1px subtle border for touch affordance
+    color: '#E5E7EB', // neutral-200
+    colorSubtle: '#F3F4F6', // neutral-100
+  },
+
+  // Border Radius - Minimal rounding (Tufte prefers sharp corners)
+  borderRadius: {
+    none: 0,
+    minimal: 2, // 2px - barely noticeable
+    subtle: 4, // 4px - max for Tufte purists
+  },
+
+  // Backgrounds - No fills or very subtle off-white
+  backgrounds: {
+    transparent: 'transparent',
+    subtle: '#FAFAFA', // Very subtle off-white
+    paper: '#FFFFFF', // Clean white
+  },
+
+  // Spacing - Tighter for information density
+  spacing: {
+    tight: 4, // Very tight grouping
+    compact: 8, // Compact spacing
+    standard: 12, // Standard internal padding
+    section: 16, // Section separation
+  },
+
+  // Typography for Tufte hierarchy
+  typography: {
+    // Critical data (wind speed, position)
+    critical: {
+      fontSize: 28,
+      fontWeight: '700' as const,
+      lineHeight: 32,
+      color: '#111827',
+    },
+    // Primary labels (race name, venue)
+    primary: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      lineHeight: 20,
+      color: '#111827',
+    },
+    // Secondary data (labels, units)
+    secondary: {
+      fontSize: 13,
+      fontWeight: '500' as const,
+      lineHeight: 18,
+      color: '#374151',
+    },
+    // Tertiary (metadata, timestamps)
+    tertiary: {
+      fontSize: 11,
+      fontWeight: '500' as const,
+      lineHeight: 14,
+      color: '#6B7280',
+    },
+    // Micro (captions, notes)
+    micro: {
+      fontSize: 10,
+      fontWeight: '500' as const,
+      lineHeight: 12,
+      color: '#9CA3AF',
+    },
+  },
+} as const;
+
+// =============================================================================
 // TYPOGRAPHY SYSTEM
 // =============================================================================
 
@@ -619,6 +721,28 @@ export const createCardStyle = (size: 'small' | 'medium' | 'large' = 'medium') =
   };
 };
 
+/**
+ * Create Tufte-style card styles
+ * Minimal decoration, maximum data-ink ratio
+ */
+export const createTufteCardStyle = (size: 'small' | 'medium' | 'large' = 'medium') => {
+  const paddingMap = {
+    small: TufteTokens.spacing.compact, // 8px
+    medium: TufteTokens.spacing.standard, // 12px
+    large: TufteTokens.spacing.section, // 16px
+  };
+
+  return {
+    backgroundColor: TufteTokens.backgrounds.paper,
+    borderRadius: TufteTokens.borderRadius.subtle, // 4px
+    borderWidth: TufteTokens.borders.hairline, // 0.5px
+    borderColor: TufteTokens.borders.color,
+    padding: paddingMap[size],
+    marginBottom: Spacing.sm,
+    ...TufteTokens.shadows.subtle,
+  };
+};
+
 // =============================================================================
 // EXPORTS
 // =============================================================================
@@ -636,4 +760,6 @@ export default {
   getBadgeStyles,
   hasValidContrast,
   createCardStyle,
+  TufteTokens,
+  createTufteCardStyle,
 };

@@ -112,6 +112,7 @@
     "jszip": "^3.10.1",
     "lucide-react-native": "^0.548.0",
     "maplibre-gl": "^5.10.0",
+    "moti": "^0.30.0",
     "nativewind": "^4.2.1",
     "node-fetch": "^2.7.0",
     "pdf-parse": "^2.4.5",

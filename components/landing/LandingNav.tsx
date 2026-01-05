@@ -339,13 +339,32 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
               <Text style={[styles.logoText, styles.logoTextMobile]}>RegattaFlow</Text>
             </TouchableOpacity>
 
-            {/* Hamburger Menu Button */}
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() => setMobileMenuOpen(true)}
-            >
-              <Ionicons name="menu" size={24} color="#1F2937" />
-            </TouchableOpacity>
+            {/* Right side: Sign In + Hamburger */}
+            <View style={styles.mobileNavRight}>
+              {!user ? (
+                <TouchableOpacity
+                  style={styles.mobileSignInButton}
+                  onPress={() => handleNavClick('/(auth)/login')}
+                >
+                  <Text style={styles.mobileSignInText}>Sign In</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.mobileUserButton}
+                  onPress={() => handleNavClick('/(tabs)/races')}
+                >
+                  <Ionicons name="person-circle-outline" size={24} color="#3E92CC" />
+                </TouchableOpacity>
+              )}
+
+              {/* Hamburger Menu Button */}
+              <TouchableOpacity
+                style={styles.menuButton}
+                onPress={() => setMobileMenuOpen(true)}
+              >
+                <Ionicons name="menu" size={24} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Border */}
@@ -485,9 +504,12 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   navContentMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    width: '100%',
   },
   logoContainer: {
     flexDirection: 'row',
@@ -633,6 +655,23 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   menuButton: {
+    padding: 4,
+  },
+  mobileNavRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mobileSignInButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  mobileSignInText: {
+    color: '#3E92CC',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  mobileUserButton: {
     padding: 4,
   },
   // Mobile Menu Styles
