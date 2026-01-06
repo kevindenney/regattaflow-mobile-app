@@ -1,5 +1,13 @@
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import type {
+  RaceIntentions,
+  RaceIntentionUpdate,
+  ArrivalTimeIntention,
+  SailSelectionIntention,
+  RigIntentions,
+  CourseSelectionIntention,
+} from '@/types/raceIntentions';
 
 const logger = createLogger('SailorRacePreparationService');
 
@@ -35,6 +43,7 @@ export interface SailorRacePreparation {
   selected_rig_preset_id?: string;
   regulatory_acknowledgements?: RegulatoryAcknowledgements;
   race_brief_data?: RaceBriefData;
+  user_intentions?: RaceIntentions;
   created_at?: string;
   updated_at?: string;
 }
@@ -101,6 +110,7 @@ class SailorRacePreparationService {
             selected_rig_preset_id: preparation.selected_rig_preset_id,
             regulatory_acknowledgements: preparation.regulatory_acknowledgements,
             race_brief_data: preparation.race_brief_data,
+            user_intentions: preparation.user_intentions,
           },
           {
             onConflict: 'race_event_id,sailor_id',
@@ -414,6 +424,141 @@ class SailorRacePreparationService {
       logger.error('Failed to toggle acknowledgement:', error);
       return false;
     }
+  }
+
+  // ============================================================
+  // User Intentions Methods
+  // ============================================================
+
+  /**
+   * Get user intentions for a race
+   */
+  async getIntentions(
+    raceEventId: string,
+    sailorId: string
+  ): Promise<RaceIntentions | null> {
+    try {
+      const { data, error } = await supabase
+        .from('sailor_race_preparation')
+        .select('user_intentions')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      if (error) {
+        logger.error('Error fetching intentions:', error);
+        throw error;
+      }
+
+      return data?.user_intentions || null;
+    } catch (error) {
+      logger.error('Failed to get intentions:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update full user intentions object
+   */
+  async updateIntentions(
+    raceEventId: string,
+    sailorId: string,
+    intentions: RaceIntentionUpdate
+  ): Promise<boolean> {
+    try {
+      // Validate that the race_event exists
+      const { data: raceEventExists, error: raceEventError } = await supabase
+        .from('race_events')
+        .select('id')
+        .eq('id', raceEventId)
+        .maybeSingle();
+
+      if (raceEventError) {
+        logger.error('Error checking race event existence:', raceEventError);
+        throw raceEventError;
+      }
+
+      if (!raceEventExists) {
+        logger.info(`Race event ${raceEventId} does not exist, skipping intentions update`);
+        return false;
+      }
+
+      // Get current intentions to merge
+      const current = await this.getIntentions(raceEventId, sailorId);
+      const mergedIntentions: RaceIntentions = {
+        ...current,
+        ...intentions,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('sailor_race_preparation')
+        .upsert(
+          {
+            race_event_id: raceEventId,
+            sailor_id: sailorId,
+            user_intentions: mergedIntentions,
+          },
+          {
+            onConflict: 'race_event_id,sailor_id',
+          }
+        );
+
+      if (error) {
+        logger.error('Error updating intentions:', error);
+        throw error;
+      }
+
+      logger.info('Intentions updated successfully');
+      return true;
+    } catch (error) {
+      logger.error('Failed to update intentions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Update arrival time intention
+   */
+  async updateArrivalIntention(
+    raceEventId: string,
+    sailorId: string,
+    arrivalTime: ArrivalTimeIntention
+  ): Promise<boolean> {
+    return this.updateIntentions(raceEventId, sailorId, { arrivalTime });
+  }
+
+  /**
+   * Update sail selection intention
+   */
+  async updateSailSelection(
+    raceEventId: string,
+    sailorId: string,
+    sailSelection: SailSelectionIntention
+  ): Promise<boolean> {
+    return this.updateIntentions(raceEventId, sailorId, { sailSelection });
+  }
+
+  /**
+   * Update rig intentions
+   */
+  async updateRigIntentions(
+    raceEventId: string,
+    sailorId: string,
+    rigIntentions: RigIntentions
+  ): Promise<boolean> {
+    return this.updateIntentions(raceEventId, sailorId, { rigIntentions });
+  }
+
+  /**
+   * Update course selection intention
+   */
+  async updateCourseSelection(
+    raceEventId: string,
+    sailorId: string,
+    courseSelection: CourseSelectionIntention
+  ): Promise<boolean> {
+    return this.updateIntentions(raceEventId, sailorId, { courseSelection });
   }
 }
 
