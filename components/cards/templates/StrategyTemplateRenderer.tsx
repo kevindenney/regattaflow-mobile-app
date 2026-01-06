@@ -77,6 +77,8 @@ import {
   EnhancedStrategyData,
   CardRaceData,
 } from '../types';
+import type { WatchSchedule } from '@/types/watchSchedule';
+import { getWatchSystemName } from '@/types/watchSchedule';
 
 // =============================================================================
 // TYPES
@@ -101,6 +103,8 @@ interface StrategyTemplateRendererProps {
   userNotes?: Record<string, string>;
   /** Callback when user note changes (auto-saves on blur) */
   onUserNoteChange?: (sectionId: string, note: string) => void;
+  /** Saved watch schedule (displayed in watch schedule section) */
+  savedWatchSchedule?: WatchSchedule | null;
 }
 
 // =============================================================================
@@ -224,6 +228,77 @@ function UserNotesInput({ sectionId, initialValue, onNoteChange }: UserNotesInpu
 // =============================================================================
 
 /**
+ * Watch Schedule Summary - displayed when a schedule has been saved
+ */
+function WatchScheduleSummary({
+  schedule,
+  onEdit,
+}: {
+  schedule: WatchSchedule;
+  onEdit?: () => void;
+}) {
+  const watchACount = schedule.crew.filter((c) => c.watch === 'A').length;
+  const watchBCount = schedule.crew.filter((c) => c.watch === 'B').length;
+
+  return (
+    <View style={watchScheduleStyles.container}>
+      {/* System badge */}
+      <View style={watchScheduleStyles.header}>
+        <View style={watchScheduleStyles.systemBadge}>
+          <Clock size={12} color="#7C3AED" />
+          <Text style={watchScheduleStyles.systemText}>
+            {getWatchSystemName(schedule.system)}
+          </Text>
+        </View>
+        {onEdit && (
+          <Pressable onPress={onEdit} style={watchScheduleStyles.editButton}>
+            <Text style={watchScheduleStyles.editButtonText}>Edit</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Watch teams */}
+      <View style={watchScheduleStyles.teamsRow}>
+        <View style={watchScheduleStyles.teamCard}>
+          <Text style={watchScheduleStyles.teamLabel}>Watch A</Text>
+          <Text style={watchScheduleStyles.teamCrew}>
+            {schedule.crew
+              .filter((c) => c.watch === 'A')
+              .map((c) => c.name)
+              .join(', ') || 'No crew'}
+          </Text>
+        </View>
+        <View style={watchScheduleStyles.teamCard}>
+          <Text style={watchScheduleStyles.teamLabel}>Watch B</Text>
+          <Text style={watchScheduleStyles.teamCrew}>
+            {schedule.crew
+              .filter((c) => c.watch === 'B')
+              .map((c) => c.name)
+              .join(', ') || 'No crew'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Schedule summary */}
+      <View style={watchScheduleStyles.summaryRow}>
+        <View style={watchScheduleStyles.summaryItem}>
+          <Users size={14} color="#6B7280" />
+          <Text style={watchScheduleStyles.summaryText}>
+            {schedule.crew.length} crew ({watchACount}A / {watchBCount}B)
+          </Text>
+        </View>
+        <View style={watchScheduleStyles.summaryItem}>
+          <Timer size={14} color="#6B7280" />
+          <Text style={watchScheduleStyles.summaryText}>
+            {schedule.estimatedDuration}h race
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
  * Render a static section (can be interactive if it has an action)
  * Includes collapsible user notes functionality
  */
@@ -234,6 +309,8 @@ function StaticSection({
   onUserNoteChange,
   isCollapsed,
   onToggleCollapse,
+  onExpand,
+  savedWatchSchedule,
 }: {
   section: TemplateSection;
   onAction?: (action: TemplateSectionAction, sectionId: string) => void;
@@ -241,6 +318,8 @@ function StaticSection({
   onUserNoteChange?: (sectionId: string, note: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onExpand?: () => void;
+  savedWatchSchedule?: WatchSchedule | null;
 }) {
   const Icon = getIcon(section.icon);
   const hasAction = !!section.action;
@@ -253,9 +332,14 @@ function StaticSection({
   }, [section.action, section.id, onAction]);
 
   const handleToggle = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     onToggleCollapse?.();
   }, [onToggleCollapse]);
+
+  // Handle clicking on the "Add plan" badge - always expands
+  const handleAddPlanPress = useCallback((e: any) => {
+    e.stopPropagation();
+    onExpand?.();
+  }, [onExpand]);
 
   return (
     <View style={[styles.section, hasNote && styles.sectionWithNote]}>
@@ -270,15 +354,19 @@ function StaticSection({
           {/* Plan status badge (when collapsed) */}
           {isCollapsed && (
             hasNote ? (
-              <View style={styles.hasPlanBadge}>
-                <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
-                <Text style={styles.hasPlanBadgeText}>Plan set</Text>
-              </View>
+              <Pressable onPress={handleAddPlanPress}>
+                <View style={styles.hasPlanBadge}>
+                  <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
+                  <Text style={styles.hasPlanBadgeText}>Plan set</Text>
+                </View>
+              </Pressable>
             ) : (
-              <View style={styles.addPlanBadge}>
-                <Ionicons name="add-circle-outline" size={12} color={colors.primary.default} />
-                <Text style={styles.addPlanBadgeText}>Add plan</Text>
-              </View>
+              <Pressable onPress={handleAddPlanPress}>
+                <View style={styles.addPlanBadge}>
+                  <Ionicons name="add-circle-outline" size={12} color={colors.primary.default} />
+                  <Text style={styles.addPlanBadgeText}>Add plan</Text>
+                </View>
+              </Pressable>
             )
           )}
 
@@ -314,13 +402,19 @@ function StaticSection({
         <>
           <Text style={styles.sectionContent}>{section.staticContent}</Text>
 
-          {hasAction && section.action?.label && (
+          {/* Watch Schedule Summary - show if saved */}
+          {section.action?.toolId === 'watch-schedule-creator' && savedWatchSchedule ? (
+            <WatchScheduleSummary
+              schedule={savedWatchSchedule}
+              onEdit={handleActionPress}
+            />
+          ) : hasAction && section.action?.label ? (
             <Pressable onPress={handleActionPress}>
               <View style={styles.actionHint}>
                 <Text style={styles.actionHintText}>Tap to {section.action.label}</Text>
               </View>
             </Pressable>
-          )}
+          ) : null}
 
           {/* User notes input */}
           {onUserNoteChange && (
@@ -347,6 +441,7 @@ function DynamicSection({
   onUserNoteChange,
   isCollapsed,
   onToggleCollapse,
+  onExpand,
 }: {
   section: TemplateSection;
   race: CardRaceData;
@@ -354,14 +449,20 @@ function DynamicSection({
   onUserNoteChange?: (sectionId: string, note: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onExpand?: () => void;
 }) {
   const Icon = getIcon(section.icon);
   const hasNote = !!userNote && userNote.trim().length > 0;
 
   const handleToggle = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     onToggleCollapse?.();
   }, [onToggleCollapse]);
+
+  // Handle clicking on the "Add plan" badge - always expands
+  const handleAddPlanPress = useCallback((e: any) => {
+    e.stopPropagation();
+    onExpand?.();
+  }, [onExpand]);
 
   // Get dynamic value from race data
   const getValue = (): string => {
@@ -398,15 +499,19 @@ function DynamicSection({
           {/* Plan status badge (when collapsed) */}
           {isCollapsed && (
             hasNote ? (
-              <View style={styles.hasPlanBadge}>
-                <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
-                <Text style={styles.hasPlanBadgeText}>Plan set</Text>
-              </View>
+              <Pressable onPress={handleAddPlanPress}>
+                <View style={styles.hasPlanBadge}>
+                  <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
+                  <Text style={styles.hasPlanBadgeText}>Plan set</Text>
+                </View>
+              </Pressable>
             ) : (
-              <View style={styles.addPlanBadge}>
-                <Ionicons name="add-circle-outline" size={12} color={colors.primary.default} />
-                <Text style={styles.addPlanBadgeText}>Add plan</Text>
-              </View>
+              <Pressable onPress={handleAddPlanPress}>
+                <View style={styles.addPlanBadge}>
+                  <Ionicons name="add-circle-outline" size={12} color={colors.primary.default} />
+                  <Text style={styles.addPlanBadgeText}>Add plan</Text>
+                </View>
+              </Pressable>
             )
           )}
 
@@ -462,6 +567,7 @@ function AISection({
   onUserNoteChange,
   isCollapsed,
   onToggleCollapse,
+  onExpand,
 }: {
   section: TemplateSection;
   enhancedContent?: string;
@@ -470,15 +576,21 @@ function AISection({
   onUserNoteChange?: (sectionId: string, note: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onExpand?: () => void;
 }) {
   const Icon = getIcon(section.icon);
   const hasEnhancement = !!enhancedContent;
   const hasNote = !!userNote && userNote.trim().length > 0;
 
   const handleToggle = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     onToggleCollapse?.();
   }, [onToggleCollapse]);
+
+  // Handle clicking on the "Add plan" badge - always expands
+  const handleAddPlanPress = useCallback((e: any) => {
+    e.stopPropagation();
+    onExpand?.();
+  }, [onExpand]);
 
   return (
     <View style={[styles.section, hasEnhancement && styles.sectionEnhanced, hasNote && styles.sectionWithNote]}>
@@ -499,15 +611,19 @@ function AISection({
           {/* Plan status badge (when collapsed) */}
           {isCollapsed && (
             hasNote ? (
-              <View style={styles.hasPlanBadge}>
-                <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
-                <Text style={styles.hasPlanBadgeText}>Plan set</Text>
-              </View>
+              <Pressable onPress={handleAddPlanPress}>
+                <View style={styles.hasPlanBadge}>
+                  <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
+                  <Text style={styles.hasPlanBadgeText}>Plan set</Text>
+                </View>
+              </Pressable>
             ) : (
-              <View style={styles.addPlanBadge}>
-                <Ionicons name="add-circle-outline" size={12} color={colors.primary.default} />
-                <Text style={styles.addPlanBadgeText}>Add plan</Text>
-              </View>
+              <Pressable onPress={handleAddPlanPress}>
+                <View style={styles.addPlanBadge}>
+                  <Ionicons name="add-circle-outline" size={12} color={colors.primary.default} />
+                  <Text style={styles.addPlanBadgeText}>Add plan</Text>
+                </View>
+              </Pressable>
             )
           )}
 
@@ -576,6 +692,7 @@ export function StrategyTemplateRenderer({
   onSectionAction,
   userNotes = {},
   onUserNoteChange,
+  savedWatchSchedule,
 }: StrategyTemplateRendererProps) {
   // Track collapsed state for each section (first section starts expanded)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
@@ -587,6 +704,7 @@ export function StrategyTemplateRenderer({
   });
 
   const toggleSection = useCallback((sectionId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setCollapsedSections((prev) => {
       const next = new Set(prev);
       if (next.has(sectionId)) {
@@ -594,6 +712,16 @@ export function StrategyTemplateRenderer({
       } else {
         next.add(sectionId);
       }
+      return next;
+    });
+  }, []);
+
+  // Expand a specific section (used when clicking "Add plan")
+  const expandSection = useCallback((sectionId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      next.delete(sectionId); // Always remove from collapsed = expand
       return next;
     });
   }, []);
@@ -625,6 +753,8 @@ export function StrategyTemplateRenderer({
                 onUserNoteChange={onUserNoteChange}
                 isCollapsed={isCollapsed}
                 onToggleCollapse={() => toggleSection(section.id)}
+                onExpand={() => expandSection(section.id)}
+                savedWatchSchedule={savedWatchSchedule}
               />
             );
           case 'dynamic':
@@ -637,6 +767,7 @@ export function StrategyTemplateRenderer({
                 onUserNoteChange={onUserNoteChange}
                 isCollapsed={isCollapsed}
                 onToggleCollapse={() => toggleSection(section.id)}
+                onExpand={() => expandSection(section.id)}
               />
             );
           case 'ai_enhanced':
@@ -650,6 +781,7 @@ export function StrategyTemplateRenderer({
                 onUserNoteChange={onUserNoteChange}
                 isCollapsed={isCollapsed}
                 onToggleCollapse={() => toggleSection(section.id)}
+                onExpand={() => expandSection(section.id)}
               />
             );
           default:
@@ -946,6 +1078,96 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: colors.primary.default,
+  },
+});
+
+// =============================================================================
+// WATCH SCHEDULE SUMMARY STYLES
+// =============================================================================
+
+const watchScheduleStyles = StyleSheet.create({
+  container: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  systemBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  systemText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  editButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  editButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#7C3AED',
+  },
+  teamsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  teamCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  teamLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  teamCrew: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#111827',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#DDD6FE',
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  summaryText: {
+    fontSize: 12,
+    color: '#6B7280',
   },
 });
 
