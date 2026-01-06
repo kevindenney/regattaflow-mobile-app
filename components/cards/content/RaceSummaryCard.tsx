@@ -2,31 +2,69 @@
  * RaceSummaryCard - Position 0 (Default View)
  *
  * The primary race card showing:
- * - Race name and series
+ * - Race name and series (full display, no truncation)
  * - Date and time
- * - Countdown timer
+ * - Countdown timer with iOS styling
  * - Venue
- * - Weather conditions (wind, tide)
- * - VHF channel
- * - Fleet size/class
+ * - Conditions preview (wind, tide, VHF)
  *
- * This is the first card users see when navigating to a race.
+ * Apple Human Interface Guidelines (HIG) compliant design:
+ * - iOS system colors
+ * - SF Pro typography
+ * - Clean visual hierarchy
  */
 
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View, Platform } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   MapPin,
-  Radio,
-  Wind,
-  Waves,
-  Sailboat,
   Clock,
   Calendar,
+  Navigation,
+  Route,
+  Timer,
+  Wind,
+  Waves,
+  Radio,
+  Trophy,
+  Users,
+  Flag,
 } from 'lucide-react-native';
 
 import { CardContentProps } from '../types';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
+import { RaceCountdownTimer } from '@/components/races/RaceCountdownTimer';
+import { detectRaceType } from '@/lib/races/raceDataUtils';
+
+// =============================================================================
+// iOS SYSTEM COLORS (Apple HIG)
+// =============================================================================
+
+const IOS_COLORS = {
+  blue: '#007AFF',
+  green: '#34C759',
+  orange: '#FF9500',
+  red: '#FF3B30',
+  purple: '#AF52DE',
+  gray: '#8E8E93',
+  gray2: '#AEAEB2',
+  gray3: '#C7C7CC',
+  gray4: '#D1D1D6',
+  gray5: '#E5E5EA',
+  gray6: '#F2F2F7',
+  label: '#000000',
+  secondaryLabel: '#3C3C43',
+  tertiaryLabel: '#3C3C4399',
+};
+
+// Distance racing purple theme
+const DISTANCE_COLORS = {
+  primary: '#7C3AED',
+  accent: '#8B5CF6',
+  badgeBg: '#EDE9FE',
+  badgeText: '#7C3AED',
+  routeBg: '#F5F3FF',
+} as const;
 
 // =============================================================================
 // HELPERS
@@ -99,7 +137,7 @@ function formatTime(time?: string): string {
 }
 
 /**
- * Get urgency color based on countdown
+ * Get urgency color based on countdown (iOS system colors)
  */
 function getUrgencyColor(days: number, hours: number, isPast: boolean): {
   bg: string;
@@ -107,21 +145,79 @@ function getUrgencyColor(days: number, hours: number, isPast: boolean): {
   label: string;
 } {
   if (isPast) {
-    return { bg: '#F3F4F6', text: '#6B7280', label: 'Completed' };
+    return { bg: IOS_COLORS.gray6, text: IOS_COLORS.gray, label: 'Completed' };
   }
   if (days === 0 && hours < 2) {
-    return { bg: '#FEE2E2', text: '#DC2626', label: 'Starting Soon' };
+    return { bg: '#FFEBE9', text: IOS_COLORS.red, label: 'Starting Soon' };
   }
   if (days === 0) {
-    return { bg: '#FFEDD5', text: '#C2410C', label: 'Today' };
+    return { bg: '#FFF4E5', text: IOS_COLORS.orange, label: 'Today' };
   }
   if (days <= 1) {
-    return { bg: '#FEF3C7', text: '#92400E', label: 'Tomorrow' };
+    return { bg: '#FFF8E5', text: '#CC7A00', label: 'Tomorrow' };
   }
   if (days <= 7) {
-    return { bg: '#D1FAE5', text: '#065F46', label: 'This Week' };
+    return { bg: '#E8FAE9', text: IOS_COLORS.green, label: 'This Week' };
   }
-  return { bg: '#E0E7FF', text: '#3730A3', label: 'Upcoming' };
+  return { bg: '#E5F1FF', text: IOS_COLORS.blue, label: 'Upcoming' };
+}
+
+/**
+ * Get race type badge styling (iOS system colors)
+ */
+function getRaceTypeBadge(raceType: 'fleet' | 'distance' | 'match' | 'team'): {
+  bg: string;
+  text: string;
+  label: string;
+  icon: React.ComponentType<{ size: number; color: string }>;
+} {
+  switch (raceType) {
+    case 'distance':
+      return {
+        bg: '#F3E8FF',
+        text: IOS_COLORS.purple,
+        label: 'DISTANCE',
+        icon: Navigation,
+      };
+    case 'match':
+      return {
+        bg: '#FFF4E5',
+        text: IOS_COLORS.orange,
+        label: 'MATCH',
+        icon: Trophy,
+      };
+    case 'team':
+      return {
+        bg: '#E5F1FF',
+        text: IOS_COLORS.blue,
+        label: 'TEAM',
+        icon: Users,
+      };
+    case 'fleet':
+    default:
+      return {
+        bg: '#E8FAE9',
+        text: IOS_COLORS.green,
+        label: 'FLEET',
+        icon: Flag,
+      };
+  }
+}
+
+/**
+ * Format tide state for display
+ */
+function formatTideState(state: string): string {
+  const stateMap: Record<string, string> = {
+    flooding: 'Flood',
+    ebbing: 'Ebb',
+    slack: 'Slack',
+    rising: 'Rising',
+    falling: 'Falling',
+    high: 'High',
+    low: 'Low',
+  };
+  return stateMap[state] || state;
 }
 
 // =============================================================================
@@ -132,11 +228,29 @@ export function RaceSummaryCard({
   race,
   cardType,
   isActive,
+  isExpanded,
+  onToggleExpand,
   dimensions,
   canManage,
   onEdit,
   onDelete,
+  onRaceComplete,
 }: CardContentProps) {
+  // Detect race type from name or explicit setting
+  const detectedRaceType = useMemo(() => {
+    const explicit = race.race_type as 'fleet' | 'distance' | 'match' | 'team' | undefined;
+    const distance = (race as any).total_distance_nm;
+    return detectRaceType(race.name, explicit, distance) as 'fleet' | 'distance' | 'match' | 'team';
+  }, [race.name, race.race_type, (race as any).total_distance_nm]);
+
+  const isDistanceRace = detectedRaceType === 'distance';
+
+  // Get race type badge styling
+  const raceTypeBadge = useMemo(
+    () => getRaceTypeBadge(detectedRaceType),
+    [detectedRaceType]
+  );
+
   // Calculate countdown
   const countdown = useMemo(
     () => calculateCountdown(race.date, race.startTime),
@@ -149,8 +263,19 @@ export function RaceSummaryCard({
     [countdown.days, countdown.hours, countdown.isPast]
   );
 
-  // Extract VHF channel
-  const vhfChannel = race.vhf_channel || (race as any).critical_details?.vhf_channel;
+  // Extract distance race fields
+  const totalDistanceNm = (race as any).total_distance_nm;
+  const timeLimitHours = race.time_limit_hours || (race as any).time_limit_hours;
+  const routeWaypoints = (race as any).route_waypoints || [];
+  const numberOfLegs = (race as any).number_of_legs || routeWaypoints.length || 0;
+
+  // Extract conditions data
+  const windData = race.wind;
+  const tideData = race.tide;
+  const vhfChannel = race.vhf_channel;
+
+  // Check if we have any conditions to show
+  const hasConditions = windData || tideData || vhfChannel;
 
   // Build menu items for card management
   const menuItems = useMemo((): CardMenuItem[] => {
@@ -164,138 +289,269 @@ export function RaceSummaryCard({
     return items;
   }, [onEdit, onDelete]);
 
-  return (
-    <View style={styles.container}>
-      {/* Header: Race Name & Status */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.raceName} numberOfLines={2}>
-            {race.name}
-          </Text>
-          {race.venue && (
-            <View style={styles.venueRow}>
-              <MapPin size={14} color="#6B7280" />
-              <Text style={styles.venueText}>{race.venue}</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.headerRight}>
+  // Render race type badge component
+  const RaceTypeBadgeIcon = raceTypeBadge.icon;
+
+  // ==========================================================================
+  // COLLAPSED VIEW (Apple HIG Design)
+  // ==========================================================================
+  if (!isExpanded) {
+    return (
+      <View style={styles.container}>
+        {/* Header: Badges Row */}
+        <View style={styles.badgesRow}>
+          {/* Race Type Badge (always shown) */}
+          <View style={[styles.typeBadge, { backgroundColor: raceTypeBadge.bg }]}>
+            <RaceTypeBadgeIcon size={10} color={raceTypeBadge.text} />
+            <Text style={[styles.typeBadgeText, { color: raceTypeBadge.text }]}>
+              {raceTypeBadge.label}
+            </Text>
+          </View>
+          {/* Status Badge */}
           <View style={[styles.statusBadge, { backgroundColor: urgency.bg }]}>
             <Text style={[styles.statusText, { color: urgency.text }]}>
               {urgency.label}
             </Text>
           </View>
-          {canManage && menuItems.length > 0 && (
-            <CardMenu items={menuItems} />
-          )}
         </View>
-      </View>
 
-      {/* Countdown Timer */}
-      <View style={styles.countdownSection}>
-        {countdown.isPast ? (
-          <Text style={styles.countdownPast}>Race Completed</Text>
-        ) : (
-          <>
-            <View style={styles.countdownRow}>
-              {countdown.days > 0 && (
-                <View style={styles.countdownUnit}>
-                  <Text style={styles.countdownValue}>{countdown.days}</Text>
-                  <Text style={styles.countdownLabel}>days</Text>
-                </View>
-              )}
-              <View style={styles.countdownUnit}>
-                <Text style={styles.countdownValue}>{countdown.hours}</Text>
-                <Text style={styles.countdownLabel}>hrs</Text>
+        {/* Race Name (full display, no truncation) */}
+        <Text style={styles.raceName} numberOfLines={3}>
+          {race.name}
+        </Text>
+
+        {/* Venue */}
+        {race.venue && (
+          <View style={styles.venueRow}>
+            <MapPin size={14} color={IOS_COLORS.gray} />
+            <Text style={styles.venueText} numberOfLines={2}>{race.venue}</Text>
+          </View>
+        )}
+
+        {/* Countdown Timer (iOS styled) */}
+        <View style={styles.collapsedCountdown}>
+          {countdown.isPast ? (
+            <View style={styles.countdownPastContainer}>
+              <Text style={styles.countdownPastCompact}>Race Completed</Text>
+            </View>
+          ) : (
+            <View style={styles.countdownCompactRow}>
+              <View style={styles.countdownCompactUnit}>
+                <Text style={[styles.countdownCompactValue, { color: IOS_COLORS.blue }]}>
+                  {countdown.days}
+                </Text>
+                <Text style={styles.countdownCompactLabel}>days</Text>
               </View>
-              <View style={styles.countdownUnit}>
-                <Text style={styles.countdownValue}>{countdown.minutes}</Text>
-                <Text style={styles.countdownLabel}>min</Text>
+              <Text style={styles.countdownCompactSeparator}>:</Text>
+              <View style={styles.countdownCompactUnit}>
+                <Text style={[styles.countdownCompactValue, { color: IOS_COLORS.blue }]}>
+                  {countdown.hours}
+                </Text>
+                <Text style={styles.countdownCompactLabel}>hrs</Text>
+              </View>
+              <Text style={styles.countdownCompactSeparator}>:</Text>
+              <View style={styles.countdownCompactUnit}>
+                <Text style={[styles.countdownCompactValue, { color: IOS_COLORS.blue }]}>
+                  {countdown.minutes}
+                </Text>
+                <Text style={styles.countdownCompactLabel}>min</Text>
               </View>
             </View>
-            <Text style={styles.countdownSubtext}>until start</Text>
-          </>
+          )}
+        </View>
+
+        {/* Conditions Preview Row */}
+        {hasConditions && (
+          <View style={styles.conditionsPreview}>
+            {windData && (
+              <View style={styles.conditionItem}>
+                <Wind size={14} color={IOS_COLORS.blue} />
+                <Text style={styles.conditionText}>
+                  {windData.direction} {windData.speedMin}-{windData.speedMax}kt
+                </Text>
+              </View>
+            )}
+            {tideData && (
+              <View style={styles.conditionItem}>
+                <Waves size={14} color={IOS_COLORS.blue} />
+                <Text style={styles.conditionText}>
+                  {formatTideState(tideData.state)}
+                  {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
+                </Text>
+              </View>
+            )}
+            {vhfChannel && (
+              <View style={styles.conditionItem}>
+                <Radio size={14} color={IOS_COLORS.orange} />
+                <Text style={styles.conditionText}>Ch {vhfChannel}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Date & Time Row */}
+        <View style={styles.dateTimeRow}>
+          <View style={styles.dateTimeItem}>
+            <Calendar size={16} color={IOS_COLORS.gray} />
+            <Text style={styles.dateTimeText}>{formatDate(race.date)}</Text>
+          </View>
+          <View style={styles.dateTimeItem}>
+            <Clock size={16} color={IOS_COLORS.gray} />
+            <Text style={styles.dateTimeText}>{formatTime(race.startTime)}</Text>
+          </View>
+        </View>
+
+        {/* Swipe indicator (subtle) */}
+        <View style={styles.swipeHintBottom}>
+          <View style={styles.swipeIndicator} />
+        </View>
+      </View>
+    );
+  }
+
+  // ==========================================================================
+  // EXPANDED VIEW (Apple HIG Design)
+  // ==========================================================================
+  return (
+    <View style={styles.container}>
+      {/* Header: Badges Row with Menu */}
+      <View style={styles.expandedHeader}>
+        <View style={styles.badgesRow}>
+          {/* Race Type Badge (always shown) */}
+          <View style={[styles.typeBadge, { backgroundColor: raceTypeBadge.bg }]}>
+            <RaceTypeBadgeIcon size={10} color={raceTypeBadge.text} />
+            <Text style={[styles.typeBadgeText, { color: raceTypeBadge.text }]}>
+              {raceTypeBadge.label}
+            </Text>
+          </View>
+          {/* Distance race leg count */}
+          {isDistanceRace && numberOfLegs > 0 && (
+            <View style={[styles.typeBadge, { backgroundColor: IOS_COLORS.gray6 }]}>
+              <Text style={[styles.typeBadgeText, { color: IOS_COLORS.gray }]}>
+                {numberOfLegs} legs
+              </Text>
+            </View>
+          )}
+          {/* Status Badge */}
+          <View style={[styles.statusBadge, { backgroundColor: urgency.bg }]}>
+            <Text style={[styles.statusText, { color: urgency.text }]}>
+              {urgency.label}
+            </Text>
+          </View>
+        </View>
+        {canManage && menuItems.length > 0 && (
+          <CardMenu items={menuItems} />
         )}
       </View>
+
+      {/* Race Name (full display) */}
+      <Text style={styles.raceName}>
+        {race.name}
+      </Text>
+
+      {/* Venue */}
+      {race.venue && (
+        <View style={styles.venueRow}>
+          <MapPin size={14} color={IOS_COLORS.gray} />
+          <Text style={styles.venueText}>{race.venue}</Text>
+        </View>
+      )}
+
+      {/* Countdown Timer with GPS Tracking */}
+      <View style={styles.countdownSection}>
+        {countdown.isPast ? (
+          <View style={styles.countdownPastContainer}>
+            <Text style={styles.countdownPast}>Race Completed</Text>
+          </View>
+        ) : (
+          <RaceCountdownTimer
+            raceId={race.id}
+            raceName={race.name}
+            raceDate={race.date}
+            raceTime={race.startTime || ''}
+            raceType={isDistanceRace ? 'distance' : (race.race_type || 'fleet')}
+            timeLimitHours={timeLimitHours}
+            onRaceComplete={(sessionId) => {
+              onRaceComplete?.(sessionId, race.name, race.id);
+            }}
+          />
+        )}
+      </View>
+
+      {/* Distance Race Info: Time Limit & Distance */}
+      {isDistanceRace && !countdown.isPast && (timeLimitHours || totalDistanceNm) && (
+        <View style={styles.distanceInfoRow}>
+          {timeLimitHours && (
+            <View style={styles.distanceInfoItem}>
+              <Timer size={14} color={IOS_COLORS.purple} />
+              <Text style={[styles.distanceInfoText, { color: IOS_COLORS.purple }]}>
+                {timeLimitHours}h limit
+              </Text>
+            </View>
+          )}
+          {totalDistanceNm && (
+            <View style={styles.distanceInfoItem}>
+              <Route size={14} color={IOS_COLORS.purple} />
+              <Text style={[styles.distanceInfoText, { color: IOS_COLORS.purple }]}>
+                {totalDistanceNm}nm
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Conditions Preview Row (expanded shows more detail) */}
+      {hasConditions && (
+        <View style={styles.conditionsPreviewExpanded}>
+          {windData && (
+            <View style={styles.conditionItemExpanded}>
+              <Wind size={16} color={IOS_COLORS.blue} />
+              <View>
+                <Text style={styles.conditionLabel}>Wind</Text>
+                <Text style={styles.conditionValueExpanded}>
+                  {windData.direction} {windData.speedMin}-{windData.speedMax}kt
+                </Text>
+              </View>
+            </View>
+          )}
+          {tideData && (
+            <View style={styles.conditionItemExpanded}>
+              <Waves size={16} color={IOS_COLORS.blue} />
+              <View>
+                <Text style={styles.conditionLabel}>Tide</Text>
+                <Text style={styles.conditionValueExpanded}>
+                  {formatTideState(tideData.state)}
+                  {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
+                </Text>
+              </View>
+            </View>
+          )}
+          {vhfChannel && (
+            <View style={styles.conditionItemExpanded}>
+              <Radio size={16} color={IOS_COLORS.orange} />
+              <View>
+                <Text style={styles.conditionLabel}>VHF</Text>
+                <Text style={styles.conditionValueExpanded}>Ch {vhfChannel}</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Date & Time */}
       <View style={styles.dateTimeRow}>
         <View style={styles.dateTimeItem}>
-          <Calendar size={16} color="#6B7280" />
+          <Calendar size={16} color={IOS_COLORS.gray} />
           <Text style={styles.dateTimeText}>{formatDate(race.date)}</Text>
         </View>
         <View style={styles.dateTimeItem}>
-          <Clock size={16} color="#6B7280" />
+          <Clock size={16} color={IOS_COLORS.gray} />
           <Text style={styles.dateTimeText}>{formatTime(race.startTime)}</Text>
         </View>
       </View>
 
-      {/* Divider */}
-      <View style={styles.divider} />
-
-      {/* Conditions */}
-      <View style={styles.conditionsSection}>
-        <View style={styles.conditionsGrid}>
-          {/* Wind */}
-          <View style={styles.conditionCard}>
-            <View style={styles.conditionHeader}>
-              <Wind size={18} color="#3B82F6" />
-              <Text style={styles.conditionLabel}>Wind</Text>
-            </View>
-            {race.wind ? (
-              <View>
-                <Text style={styles.conditionValue}>
-                  {race.wind.speedMin}-{race.wind.speedMax} kts
-                </Text>
-                <Text style={styles.conditionDetail}>{race.wind.direction}</Text>
-              </View>
-            ) : (
-              <Text style={styles.conditionEmpty}>--</Text>
-            )}
-          </View>
-
-          {/* Tide */}
-          <View style={styles.conditionCard}>
-            <View style={styles.conditionHeader}>
-              <Waves size={18} color="#06B6D4" />
-              <Text style={styles.conditionLabel}>Tide</Text>
-            </View>
-            {race.tide ? (
-              <View>
-                <Text style={styles.conditionValue}>
-                  {race.tide.state.charAt(0).toUpperCase() + race.tide.state.slice(1)}
-                </Text>
-                {race.tide.height !== undefined && (
-                  <Text style={styles.conditionDetail}>{race.tide.height.toFixed(1)}m</Text>
-                )}
-              </View>
-            ) : (
-              <Text style={styles.conditionEmpty}>--</Text>
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* Footer: VHF & Class */}
-      <View style={styles.footer}>
-        {vhfChannel && (
-          <View style={styles.footerItem}>
-            <Radio size={14} color="#10B981" />
-            <Text style={styles.footerLabel}>VHF</Text>
-            <Text style={styles.footerValue}>{vhfChannel}</Text>
-          </View>
-        )}
-        {race.boatClass && (
-          <View style={styles.footerItem}>
-            <Sailboat size={14} color="#8B5CF6" />
-            <Text style={styles.footerLabel}>Class</Text>
-            <Text style={styles.footerValue}>{race.boatClass}</Text>
-          </View>
-        )}
-      </View>
-
       {/* Swipe indicator */}
-      <View style={styles.swipeHint}>
+      <View style={styles.swipeHintBottom}>
         <View style={styles.swipeIndicator} />
       </View>
     </View>
@@ -303,7 +559,7 @@ export function RaceSummaryCard({
 }
 
 // =============================================================================
-// STYLES
+// STYLES (Apple HIG Compliant)
 // =============================================================================
 
 const styles = StyleSheet.create({
@@ -313,91 +569,208 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 
-  // Header
-  header: {
+  // Badges Row (top of card)
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Expanded header (with menu)
+  expandedHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+
+  // Race Name (Apple typography)
+  raceName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    lineHeight: 28,
+    marginBottom: 6,
+    letterSpacing: -0.3,
+  },
+
+  // Venue
+  venueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 16,
   },
-  headerLeft: {
+  venueText: {
+    fontSize: 15,
+    color: IOS_COLORS.gray,
     flex: 1,
-    marginRight: 12,
   },
-  headerRight: {
+
+  // Countdown Section
+  countdownSection: {
+    marginBottom: 16,
+  },
+  countdownPastContainer: {
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 14,
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  countdownPast: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
+  },
+
+  // Collapsed countdown (iOS blue styling)
+  collapsedCountdown: {
+    flex: 1,
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  countdownPastCompact: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
+  },
+  countdownCompactRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.gray6,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    gap: 6,
+  },
+  countdownCompactUnit: {
+    alignItems: 'center',
+    minWidth: 48,
+  },
+  countdownCompactValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  countdownCompactLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  countdownCompactSeparator: {
+    fontSize: 24,
+    fontWeight: '300',
+    color: IOS_COLORS.gray3,
+    paddingBottom: 10,
+  },
+
+  // Conditions Preview (collapsed)
+  conditionsPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    backgroundColor: IOS_COLORS.gray6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  conditionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  conditionText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Conditions Preview (expanded - more detail)
+  conditionsPreviewExpanded: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: IOS_COLORS.gray6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginBottom: 16,
+  },
+  conditionItemExpanded: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  raceName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
+  conditionLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  venueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  venueText: {
+  conditionValueExpanded: {
     fontSize: 14,
-    color: '#6B7280',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  statusText: {
-    fontSize: 12,
     fontWeight: '600',
+    color: IOS_COLORS.label,
   },
 
-  // Countdown
-  countdownSection: {
+  // Distance Race Info Row
+  distanceInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 24,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 16,
+    gap: 20,
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
     marginBottom: 16,
   },
-  countdownRow: {
+  distanceInfoItem: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 16,
-  },
-  countdownUnit: {
     alignItems: 'center',
+    gap: 6,
   },
-  countdownValue: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#111827',
-    fontVariant: ['tabular-nums'],
-  },
-  countdownLabel: {
+  distanceInfoText: {
     fontSize: 14,
-    color: '#6B7280',
-    marginTop: -4,
-  },
-  countdownSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 8,
-  },
-  countdownPast: {
-    fontSize: 24,
     fontWeight: '600',
-    color: '#6B7280',
   },
 
-  // Date & Time
+  // Date & Time Row
   dateTimeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 24,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   dateTimeItem: {
     flexDirection: 'row',
@@ -406,105 +779,22 @@ const styles = StyleSheet.create({
   },
   dateTimeText: {
     fontSize: 15,
-    color: '#374151',
+    color: IOS_COLORS.secondaryLabel,
     fontWeight: '500',
   },
 
-  // Divider
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-  },
-
-  // Conditions
-  conditionsSection: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  conditionsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  conditionCard: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 12,
-  },
-  conditionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  conditionLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  conditionValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  conditionDetail: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  conditionEmpty: {
-    fontSize: 18,
-    color: '#D1D5DB',
-  },
-
-  // Footer
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  footerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  footerLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  footerValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-
-  // Swipe hint
-  swipeHint: {
+  // Swipe indicator (subtle, positioned at bottom)
+  swipeHintBottom: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 12,
     left: 0,
     right: 0,
     alignItems: 'center',
   },
-  swipeHintText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 6,
-  },
   swipeIndicator: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: IOS_COLORS.gray4,
     borderRadius: 2,
   },
 });
