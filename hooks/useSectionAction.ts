@@ -15,12 +15,20 @@ import { TemplateSectionAction } from '@/components/cards/types';
 
 /**
  * Tool definitions with their routes and availability
+ * Tools can be:
+ * - route-based: opens a new screen
+ * - modal-based: triggers a callback to open a modal in the parent component
  */
-const TOOL_ROUTES: Record<string, { route: string; available: boolean; name: string }> = {
+const TOOL_ROUTES: Record<string, {
+  route?: string;
+  available: boolean;
+  name: string;
+  modalBased?: boolean;
+}> = {
   'watch-schedule-creator': {
-    route: '/tools/watch-schedule',
-    available: false, // Not yet built
+    available: true,
     name: 'Watch Schedule Creator',
+    modalBased: true, // Opens as a modal in the parent component
   },
   'pace-calculator': {
     route: '/tools/pace-calculator',
@@ -73,15 +81,22 @@ const LEARN_MODULE_ROUTES: Record<string, { courseId: string; name: string }> = 
   },
 };
 
+/**
+ * Callback for modal-based tools
+ */
+export type ToolOpenCallback = (toolId: string, toolName: string) => void;
+
 interface UseSectionActionOptions {
   /** Race ID for context-aware tool launches */
   raceId?: string;
   /** Callback after successful navigation */
   onNavigated?: (action: TemplateSectionAction) => void;
+  /** Callback for opening modal-based tools */
+  onOpenTool?: ToolOpenCallback;
 }
 
 export function useSectionAction(options: UseSectionActionOptions = {}) {
-  const { raceId, onNavigated } = options;
+  const { raceId, onNavigated, onOpenTool } = options;
 
   const handleSectionAction = useCallback(
     (action: TemplateSectionAction, sectionId: string) => {
@@ -115,10 +130,27 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
             return;
           }
 
-          // Navigate to tool with race context
-          const params = raceId ? { raceId } : {};
-          router.push({ pathname: toolConfig.route as any, params });
-          onNavigated?.(action);
+          // Modal-based tools - call the callback to open modal
+          if (toolConfig.modalBased) {
+            if (onOpenTool) {
+              onOpenTool(action.toolId!, toolConfig.name);
+              onNavigated?.(action);
+            } else {
+              // Fallback: show alert if no callback provided
+              Alert.alert(
+                toolConfig.name,
+                'This tool requires a parent component to handle modal display.',
+              );
+            }
+            return;
+          }
+
+          // Route-based tools - navigate to tool with race context
+          if (toolConfig.route) {
+            const params = raceId ? { raceId } : {};
+            router.push({ pathname: toolConfig.route as any, params });
+            onNavigated?.(action);
+          }
           break;
         }
 
@@ -158,7 +190,7 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
           console.warn('[useSectionAction] Unknown action type:', (action as any).type);
       }
     },
-    [raceId, onNavigated]
+    [raceId, onNavigated, onOpenTool]
   );
 
   return { handleSectionAction };

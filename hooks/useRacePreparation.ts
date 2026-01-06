@@ -5,10 +5,23 @@ import {
   type RaceBriefData,
   type SailorRacePreparation,
 } from '@/services/SailorRacePreparationService';
+import type {
+  RaceIntentions,
+  RaceIntentionUpdate,
+  ArrivalTimeIntention,
+  SailSelectionIntention,
+  RigIntentions,
+  CourseSelectionIntention,
+  StrategyNotes,
+} from '@/types/raceIntentions';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useRacePreparation');
+
+const DEFAULT_INTENTIONS: RaceIntentions = {
+  updatedAt: new Date().toISOString(),
+};
 
 interface UseRacePreparationOptions {
   raceEventId: string | null;
@@ -22,6 +35,7 @@ interface UseRacePreparationReturn {
   selectedRigPresetId: string | null;
   acknowledgements: RegulatoryAcknowledgements;
   raceBriefData: RaceBriefData | null;
+  intentions: RaceIntentions;
   isLoading: boolean;
   isSaving: boolean;
 
@@ -31,6 +45,12 @@ interface UseRacePreparationReturn {
   setAcknowledgements: (acks: RegulatoryAcknowledgements) => void;
   toggleAcknowledgement: (key: keyof RegulatoryAcknowledgements) => void;
   updateRaceBrief: (data: RaceBriefData) => void;
+  updateIntentions: (update: RaceIntentionUpdate) => void;
+  updateArrivalIntention: (arrival: ArrivalTimeIntention) => void;
+  updateSailSelection: (sails: SailSelectionIntention) => void;
+  updateRigIntentions: (rig: RigIntentions) => void;
+  updateCourseSelection: (course: CourseSelectionIntention) => void;
+  updateStrategyNote: (sectionId: string, note: string) => void;
   save: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -60,6 +80,7 @@ export function useRacePreparation({
     DEFAULT_ACKNOWLEDGEMENTS
   );
   const [raceBriefData, setRaceBriefData] = useState<RaceBriefData | null>(null);
+  const [intentions, setIntentions] = useState<RaceIntentions>(DEFAULT_INTENTIONS);
 
   // Refs for debouncing
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
@@ -83,6 +104,7 @@ export function useRacePreparation({
         setSelectedRigPresetIdState(data.selected_rig_preset_id || null);
         setAcknowledgements(data.regulatory_acknowledgements || DEFAULT_ACKNOWLEDGEMENTS);
         setRaceBriefData(data.race_brief_data || null);
+        setIntentions(data.user_intentions || DEFAULT_INTENTIONS);
         logger.info('Loaded race preparation data');
       } else {
         // No existing data, reset to defaults
@@ -90,6 +112,7 @@ export function useRacePreparation({
         setSelectedRigPresetIdState(null);
         setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
         setRaceBriefData(null);
+        setIntentions(DEFAULT_INTENTIONS);
         logger.info('No existing race preparation data');
       }
     } catch (error) {
@@ -232,6 +255,95 @@ export function useRacePreparation({
   );
 
   /**
+   * Update user intentions (partial update, merges with existing)
+   */
+  const updateIntentions = useCallback(
+    (update: RaceIntentionUpdate) => {
+      setIntentions((prev) => {
+        const merged: RaceIntentions = {
+          ...prev,
+          ...update,
+          updatedAt: new Date().toISOString(),
+        };
+        pendingChangesRef.current = {
+          ...pendingChangesRef.current,
+          user_intentions: merged,
+        };
+        scheduleSave();
+        return merged;
+      });
+    },
+    [scheduleSave]
+  );
+
+  /**
+   * Update arrival time intention
+   */
+  const updateArrivalIntention = useCallback(
+    (arrival: ArrivalTimeIntention) => {
+      updateIntentions({ arrivalTime: arrival });
+    },
+    [updateIntentions]
+  );
+
+  /**
+   * Update sail selection intention
+   */
+  const updateSailSelection = useCallback(
+    (sails: SailSelectionIntention) => {
+      updateIntentions({ sailSelection: sails });
+    },
+    [updateIntentions]
+  );
+
+  /**
+   * Update rig intentions
+   */
+  const updateRigIntentions = useCallback(
+    (rig: RigIntentions) => {
+      updateIntentions({ rigIntentions: rig });
+    },
+    [updateIntentions]
+  );
+
+  /**
+   * Update course selection intention
+   */
+  const updateCourseSelection = useCallback(
+    (course: CourseSelectionIntention) => {
+      updateIntentions({ courseSelection: course });
+    },
+    [updateIntentions]
+  );
+
+  /**
+   * Update a single strategy note by section ID
+   */
+  const updateStrategyNote = useCallback(
+    (sectionId: string, note: string) => {
+      setIntentions((prev) => {
+        const existingNotes = prev.strategyNotes || {};
+        const updatedNotes: StrategyNotes = {
+          ...existingNotes,
+          [sectionId]: note,
+        };
+        const merged: RaceIntentions = {
+          ...prev,
+          strategyNotes: updatedNotes,
+          updatedAt: new Date().toISOString(),
+        };
+        pendingChangesRef.current = {
+          ...pendingChangesRef.current,
+          user_intentions: merged,
+        };
+        scheduleSave();
+        return merged;
+      });
+    },
+    [scheduleSave]
+  );
+
+  /**
    * Manually trigger a save
    */
   const save = useCallback(async () => {
@@ -272,6 +384,7 @@ export function useRacePreparation({
     selectedRigPresetId,
     acknowledgements,
     raceBriefData,
+    intentions,
     isLoading,
     isSaving,
 
@@ -281,6 +394,12 @@ export function useRacePreparation({
     setAcknowledgements: setAcknowledgementsCallback,
     toggleAcknowledgement,
     updateRaceBrief,
+    updateIntentions,
+    updateArrivalIntention,
+    updateSailSelection,
+    updateRigIntentions,
+    updateCourseSelection,
+    updateStrategyNote,
     save,
     refresh,
   };
