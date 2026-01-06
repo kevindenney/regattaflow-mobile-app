@@ -11,6 +11,7 @@
 
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { Sparkline, WindArrow } from '@/components/shared/charts';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { TufteTokens } from '@/constants/designSystem';
 import { calculateCountdown } from '@/constants/mockData';
 import { useRouter } from 'expo-router';
@@ -271,7 +272,7 @@ function SummarySection({
             data={windData}
             width={80}
             height={20}
-            color="#3B82F6"
+            color={IOS_COLORS.blue}
             strokeWidth={1.5}
             highlightMax
           />
@@ -298,7 +299,7 @@ function SummarySection({
             data={currentData}
             width={80}
             height={20}
-            color="#10B981"
+            color={IOS_COLORS.green}
             strokeWidth={1.5}
             highlightMax
           />
@@ -328,7 +329,7 @@ function SummarySection({
             data={waveData}
             width={80}
             height={20}
-            color="#0EA5E9"
+            color={IOS_COLORS.teal}
             strokeWidth={1.5}
             highlightMax
           />
@@ -566,19 +567,19 @@ export function DistanceRaceCard({
 
   // Countdown style
   const getCountdownStyle = () => {
-    if (raceStatus === 'past') return { text: '#6B7280' };
-    if (countdown.days > 7) return { text: '#7C3AED' };
-    if (countdown.days >= 2) return { text: '#854D0E' };
-    if (countdown.days >= 1) return { text: '#C2410C' };
-    return { text: '#DC2626' };
+    if (raceStatus === 'past') return { text: IOS_COLORS.gray };
+    if (countdown.days > 7) return { text: DISTANCE_COLORS.primary };
+    if (countdown.days >= 2) return { text: IOS_COLORS.orange };
+    if (countdown.days >= 1) return { text: IOS_COLORS.orange };
+    return { text: IOS_COLORS.red };
   };
   const countdownStyle = getCountdownStyle();
 
   // Accent color
   const getAccentColor = () => {
-    if (raceStatus === 'past') return '#9CA3AF';
-    if (countdown.days <= 1) return '#EF4444';
-    if (countdown.days <= 3) return '#F59E0B';
+    if (raceStatus === 'past') return IOS_COLORS.gray4;
+    if (countdown.days <= 1) return IOS_COLORS.red;
+    if (countdown.days <= 3) return IOS_COLORS.orange;
     return DISTANCE_COLORS.primary;
   };
   const accentColor = getAccentColor();
@@ -684,7 +685,7 @@ export function DistanceRaceCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IOS_COLORS.systemBackground,
     borderRadius: 20,
     padding: 16,
     marginVertical: 8,
@@ -698,7 +699,7 @@ const styles = StyleSheet.create({
       default: {
         // Apple-style card lift: border + shadow work together
         borderWidth: 1,
-        borderColor: '#E5E7EB', // gray-200 - subtle but visible
+        borderColor: IOS_COLORS.separator,
         // Shadow provides depth perception (stronger to match web)
         shadowColor: DISTANCE_COLORS.primary,
         shadowOffset: { width: 0, height: 4 },
@@ -782,7 +783,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   legBadge: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: `${IOS_COLORS.yellow}30`,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 2,
@@ -790,10 +791,10 @@ const styles = StyleSheet.create({
   legBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#92400E',
+    color: IOS_COLORS.orange,
   },
   mockBadge: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: IOS_COLORS.orange,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 2,
@@ -801,7 +802,7 @@ const styles = StyleSheet.create({
   mockBadgeText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: IOS_COLORS.systemBackground,
   },
   title: {
     ...TufteTokens.typography.primary,
@@ -858,7 +859,7 @@ const summaryStyles = StyleSheet.create({
   },
   labelText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
     fontWeight: '500',
   },
   sparklineContainer: {
@@ -874,12 +875,12 @@ const summaryStyles = StyleSheet.create({
   valueMain: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
     fontVariant: ['tabular-nums'],
   },
   valueUnit: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: IOS_COLORS.gray,
   },
   directionContainer: {
     flexDirection: 'row',
@@ -889,21 +890,21 @@ const summaryStyles = StyleSheet.create({
   },
   directionText: {
     fontSize: 12,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
     fontWeight: '500',
   },
   directionArrow: {
     fontSize: 10,
-    color: '#CBD5E1',
+    color: IOS_COLORS.gray5,
   },
   phaseText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
     textTransform: 'capitalize',
   },
   periodText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
   },
 });
 
@@ -943,12 +944,12 @@ const routeStyles = StyleSheet.create({
     marginBottom: 4,
   },
   pointStart: {
-    backgroundColor: '#10B981',
-    borderColor: '#059669',
+    backgroundColor: IOS_COLORS.green,
+    borderColor: IOS_COLORS.green,
   },
   pointFinish: {
-    backgroundColor: '#EF4444',
-    borderColor: '#DC2626',
+    backgroundColor: IOS_COLORS.red,
+    borderColor: IOS_COLORS.red,
   },
   pointSmall: {
     width: 8,
@@ -962,7 +963,7 @@ const routeStyles = StyleSheet.create({
   pointLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
   },
   waypointsContainer: {
@@ -994,12 +995,12 @@ const routeStyles = StyleSheet.create({
     position: 'absolute',
     bottom: -2,
     right: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IOS_COLORS.systemBackground,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: IOS_COLORS.separator,
   },
   distanceValue: {
     fontSize: 12,
@@ -1016,16 +1017,16 @@ const tableStyles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: IOS_COLORS.gray6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: IOS_COLORS.separator,
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
   headerCell: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -1052,20 +1053,20 @@ const tableStyles = StyleSheet.create({
   },
   dataCell: {
     fontSize: 12,
-    color: '#334155',
+    color: IOS_COLORS.secondaryLabel,
   },
   timeText: {
     fontVariant: ['tabular-nums'],
     fontWeight: '500',
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
   },
   eventText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
   },
   eventTextBold: {
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
   },
   dataCellRow: {
     flexDirection: 'row',
@@ -1075,16 +1076,16 @@ const tableStyles = StyleSheet.create({
   dataValue: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
     fontVariant: ['tabular-nums'],
     minWidth: 22,
   },
   dataValueStrong: {
-    color: '#F59E0B',
+    color: IOS_COLORS.orange,
   },
   dataLabel: {
     fontSize: 10,
-    color: '#94A3B8',
+    color: IOS_COLORS.gray,
   },
 });
 

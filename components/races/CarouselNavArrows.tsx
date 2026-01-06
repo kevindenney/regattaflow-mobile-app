@@ -8,6 +8,7 @@
 import React from 'react';
 import { TouchableOpacity, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -20,7 +21,7 @@ export interface CarouselNavArrowsProps {
   scrollContentWidth: number;
   /** Reference to the ScrollView to control scrolling */
   scrollViewRef: React.RefObject<ScrollView>;
-  /** Arrow icon color (default: #2563EB) */
+  /** Arrow icon color (default: IOS_COLORS.blue) */
   arrowColor?: string;
 }
 
@@ -32,7 +33,7 @@ export function CarouselNavArrows({
   scrollX,
   scrollContentWidth,
   scrollViewRef,
-  arrowColor = '#2563EB',
+  arrowColor = IOS_COLORS.blue,
 }: CarouselNavArrowsProps) {
   // Don't render on mobile - use swipe instead
   if (isMobileNative) {
@@ -90,7 +91,7 @@ const styles = StyleSheet.create({
     width: 40,
     zIndex: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#000',
+    shadowColor: IOS_COLORS.label,
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
