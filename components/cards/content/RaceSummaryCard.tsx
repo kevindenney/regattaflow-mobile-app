@@ -14,8 +14,8 @@
  * - Clean visual hierarchy
  */
 
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation } from 'react-native';
 import {
   MapPin,
   Clock,
@@ -29,12 +29,18 @@ import {
   Trophy,
   Users,
   Flag,
+  Anchor,
+  ChevronDown,
+  ChevronUp,
+  Check,
 } from 'lucide-react-native';
 
 import { CardContentProps } from '../types';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { RaceCountdownTimer } from '@/components/races/RaceCountdownTimer';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
+import type { ArrivalTimeIntention } from '@/types/raceIntentions';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -220,6 +226,47 @@ function formatTideState(state: string): string {
   return stateMap[state] || state;
 }
 
+/**
+ * Arrival time options in minutes before the start
+ */
+const ARRIVAL_TIME_OPTIONS = [
+  { minutes: 15, label: '15 min' },
+  { minutes: 30, label: '30 min' },
+  { minutes: 45, label: '45 min' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 90, label: '1.5 hrs' },
+  { minutes: 120, label: '2 hrs' },
+];
+
+/**
+ * Calculate planned arrival time from race start and minutes before
+ */
+function calculateArrivalTime(raceDate: string, startTime: string | undefined, minutesBefore: number): string {
+  const d = new Date(raceDate);
+  if (startTime) {
+    const [hours, minutes] = startTime.split(':').map(Number);
+    d.setHours(hours || 0, minutes || 0, 0, 0);
+  }
+  d.setMinutes(d.getMinutes() - minutesBefore);
+  return d.toISOString();
+}
+
+/**
+ * Format arrival time for display
+ */
+function formatArrivalTimeDisplay(plannedArrival: string, minutesBefore?: number): string {
+  if (minutesBefore) {
+    if (minutesBefore >= 60) {
+      const hours = Math.floor(minutesBefore / 60);
+      const mins = minutesBefore % 60;
+      return mins > 0 ? `${hours}h ${mins}m before` : `${hours}h before`;
+    }
+    return `${minutesBefore}m before`;
+  }
+  const d = new Date(plannedArrival);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -236,6 +283,53 @@ export function RaceSummaryCard({
   onDelete,
   onRaceComplete,
 }: CardContentProps) {
+  // Arrival plan section state
+  const [arrivalExpanded, setArrivalExpanded] = useState(false);
+  const [arrivalNotes, setArrivalNotes] = useState('');
+
+  // Hook for race preparation data (includes arrival intentions)
+  const { intentions, updateArrivalIntention, isSaving } = useRacePreparation({
+    raceEventId: race.id,
+    autoSave: true,
+    debounceMs: 1000,
+  });
+
+  // Get current arrival intention
+  const arrivalIntention = intentions.arrivalTime;
+
+  // Sync local notes with saved intention
+  React.useEffect(() => {
+    if (arrivalIntention?.notes !== undefined && arrivalIntention.notes !== arrivalNotes) {
+      setArrivalNotes(arrivalIntention.notes);
+    }
+  }, [arrivalIntention?.notes]);
+
+  // Handle selecting an arrival time option
+  const handleSelectArrivalTime = useCallback((minutesBefore: number) => {
+    const plannedArrival = calculateArrivalTime(race.date, race.startTime, minutesBefore);
+    updateArrivalIntention({
+      plannedArrival,
+      minutesBefore,
+      notes: arrivalNotes,
+    });
+  }, [race.date, race.startTime, arrivalNotes, updateArrivalIntention]);
+
+  // Handle notes change (on blur)
+  const handleArrivalNotesBlur = useCallback(() => {
+    if (arrivalIntention) {
+      updateArrivalIntention({
+        ...arrivalIntention,
+        notes: arrivalNotes,
+      });
+    }
+  }, [arrivalIntention, arrivalNotes, updateArrivalIntention]);
+
+  // Toggle arrival section
+  const toggleArrivalSection = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setArrivalExpanded(prev => !prev);
+  }, []);
+
   // Detect race type from name or explicit setting
   const detectedRaceType = useMemo(() => {
     const explicit = race.race_type as 'fleet' | 'distance' | 'match' | 'team' | undefined;
@@ -538,6 +632,96 @@ export function RaceSummaryCard({
         </View>
       )}
 
+      {/* Arrival Plan Section */}
+      {!countdown.isPast && (
+        <View style={styles.arrivalSection}>
+          {/* Section Header (tappable) */}
+          <Pressable onPress={toggleArrivalSection} style={styles.arrivalHeader}>
+            <View style={styles.arrivalHeaderLeft}>
+              <Anchor size={16} color={IOS_COLORS.blue} />
+              <Text style={styles.arrivalHeaderText}>Arrival Plan</Text>
+              {arrivalIntention && (
+                <View style={styles.arrivalSetBadge}>
+                  <Check size={10} color={IOS_COLORS.green} />
+                  <Text style={styles.arrivalSetBadgeText}>
+                    {formatArrivalTimeDisplay(arrivalIntention.plannedArrival, arrivalIntention.minutesBefore)}
+                  </Text>
+                </View>
+              )}
+              {!arrivalIntention && !arrivalExpanded && (
+                <View style={styles.arrivalAddBadge}>
+                  <Text style={styles.arrivalAddBadgeText}>Set arrival</Text>
+                </View>
+              )}
+            </View>
+            {arrivalExpanded ? (
+              <ChevronUp size={18} color={IOS_COLORS.gray} />
+            ) : (
+              <ChevronDown size={18} color={IOS_COLORS.gray} />
+            )}
+          </Pressable>
+
+          {/* Expanded Content */}
+          {arrivalExpanded && (
+            <View style={styles.arrivalContent}>
+              {/* Time Option Buttons */}
+              <Text style={styles.arrivalSubLabel}>Arrive at start area:</Text>
+              <View style={styles.arrivalOptionsGrid}>
+                {ARRIVAL_TIME_OPTIONS.map((option) => {
+                  const isSelected = arrivalIntention?.minutesBefore === option.minutes;
+                  return (
+                    <Pressable
+                      key={option.minutes}
+                      style={[
+                        styles.arrivalOption,
+                        isSelected && styles.arrivalOptionSelected,
+                      ]}
+                      onPress={() => handleSelectArrivalTime(option.minutes)}
+                    >
+                      <Text
+                        style={[
+                          styles.arrivalOptionText,
+                          isSelected && styles.arrivalOptionTextSelected,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.arrivalOptionSubtext,
+                          isSelected && styles.arrivalOptionSubtextSelected,
+                        ]}
+                      >
+                        before start
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Notes Input */}
+              <View style={styles.arrivalNotesContainer}>
+                <Text style={styles.arrivalSubLabel}>Approach notes:</Text>
+                <TextInput
+                  style={styles.arrivalNotesInput}
+                  placeholder="e.g., Anchor setup, equipment checks, team briefing..."
+                  placeholderTextColor={IOS_COLORS.gray3}
+                  value={arrivalNotes}
+                  onChangeText={setArrivalNotes}
+                  onBlur={handleArrivalNotesBlur}
+                  multiline
+                  numberOfLines={2}
+                />
+              </View>
+
+              {isSaving && (
+                <Text style={styles.savingText}>Saving...</Text>
+              )}
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Date & Time */}
       <View style={styles.dateTimeRow}>
         <View style={styles.dateTimeItem}>
@@ -781,6 +965,129 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: IOS_COLORS.secondaryLabel,
     fontWeight: '500',
+  },
+
+  // Arrival Plan Section
+  arrivalSection: {
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 14,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  arrivalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  arrivalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  arrivalHeaderText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  arrivalSetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E8FAE9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  arrivalSetBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.green,
+  },
+  arrivalAddBadge: {
+    backgroundColor: '#E5F1FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  arrivalAddBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  arrivalContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+  arrivalSubLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    marginTop: 12,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  arrivalOptionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  arrivalOption: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: IOS_COLORS.gray4,
+    minWidth: 80,
+  },
+  arrivalOptionSelected: {
+    backgroundColor: IOS_COLORS.blue,
+    borderColor: IOS_COLORS.blue,
+  },
+  arrivalOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  arrivalOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  arrivalOptionSubtext: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    marginTop: 2,
+  },
+  arrivalOptionSubtextSelected: {
+    color: 'rgba(255,255,255,0.8)',
+  },
+  arrivalNotesContainer: {
+    marginTop: 4,
+  },
+  arrivalNotesInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.gray4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  savingText: {
+    fontSize: 11,
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
+    marginTop: 8,
   },
 
   // Swipe indicator (subtle, positioned at bottom)
