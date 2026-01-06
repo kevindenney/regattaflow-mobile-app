@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 
 import { CardContentProps } from '../types';
+import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 
 // =============================================================================
 // HELPERS
@@ -132,6 +133,9 @@ export function RaceSummaryCard({
   cardType,
   isActive,
   dimensions,
+  canManage,
+  onEdit,
+  onDelete,
 }: CardContentProps) {
   // Calculate countdown
   const countdown = useMemo(
@@ -148,6 +152,18 @@ export function RaceSummaryCard({
   // Extract VHF channel
   const vhfChannel = race.vhf_channel || (race as any).critical_details?.vhf_channel;
 
+  // Build menu items for card management
+  const menuItems = useMemo((): CardMenuItem[] => {
+    const items: CardMenuItem[] = [];
+    if (onEdit) {
+      items.push({ label: 'Edit Race', icon: 'create-outline', onPress: onEdit });
+    }
+    if (onDelete) {
+      items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
+    }
+    return items;
+  }, [onEdit, onDelete]);
+
   return (
     <View style={styles.container}>
       {/* Header: Race Name & Status */}
@@ -163,10 +179,15 @@ export function RaceSummaryCard({
             </View>
           )}
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: urgency.bg }]}>
-          <Text style={[styles.statusText, { color: urgency.text }]}>
-            {urgency.label}
-          </Text>
+        <View style={styles.headerRight}>
+          <View style={[styles.statusBadge, { backgroundColor: urgency.bg }]}>
+            <Text style={[styles.statusText, { color: urgency.text }]}>
+              {urgency.label}
+            </Text>
+          </View>
+          {canManage && menuItems.length > 0 && (
+            <CardMenu items={menuItems} />
+          )}
         </View>
       </View>
 
@@ -214,8 +235,6 @@ export function RaceSummaryCard({
 
       {/* Conditions */}
       <View style={styles.conditionsSection}>
-        <Text style={styles.sectionTitle}>Conditions</Text>
-
         <View style={styles.conditionsGrid}>
           {/* Wind */}
           <View style={styles.conditionCard}>
@@ -275,6 +294,10 @@ export function RaceSummaryCard({
         )}
       </View>
 
+      {/* Swipe indicator */}
+      <View style={styles.swipeHint}>
+        <View style={styles.swipeIndicator} />
+      </View>
     </View>
   );
 }
@@ -300,6 +323,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     marginRight: 12,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   raceName: {
     fontSize: 24,
@@ -458,6 +486,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
+  },
+
+  // Swipe hint
+  swipeHint: {
+    position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  swipeHintText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 6,
+  },
+  swipeIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
   },
 });
 
