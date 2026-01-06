@@ -22,6 +22,7 @@ import {
 import { ChevronLeft, X, Sparkles } from 'lucide-react-native';
 import { Typography, Spacing, BorderRadius, colors, Shadows } from '@/constants/designSystem';
 import { RaceType, RACE_TYPE_COLORS } from '../RaceTypeSelector';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { RaceTypeStep } from './RaceTypeStep';
 import { InputMethodStep, InputMethod } from './InputMethodStep';
 import { AIExtractionStep } from './AIExtractionStep';
@@ -125,7 +126,9 @@ export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) 
     }
   };
 
-  const accentColor = selectedType ? RACE_TYPE_COLORS[selectedType].primary : colors.primary[600];
+  // Use iOS blue for progress indicator, race type colors for badges
+  const accentColor = IOS_COLORS.blue;
+  const typeColor = selectedType ? RACE_TYPE_COLORS[selectedType].primary : IOS_COLORS.blue;
 
   return (
     <Modal
@@ -144,7 +147,7 @@ export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) 
             <View style={styles.header}>
               {step !== 'type' ? (
                 <Pressable style={styles.backButton} onPress={handleBack}>
-                  <ChevronLeft size={24} color={colors.text.primary} />
+                  <ChevronLeft size={24} color={IOS_COLORS.blue} />
                 </Pressable>
               ) : (
                 <View style={styles.backButton} />
@@ -154,13 +157,13 @@ export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) 
                 <Text style={styles.title}>{getStepTitle()}</Text>
                 {(step === 'details' || step === 'input-method') && selectedType && (
                   <View style={[styles.typeBadge, { backgroundColor: RACE_TYPE_COLORS[selectedType].badge }]}>
-                    <View style={[styles.typeDot, { backgroundColor: accentColor }]} />
+                    <View style={[styles.typeDot, { backgroundColor: typeColor }]} />
                   </View>
                 )}
               </View>
 
               <Pressable style={styles.closeButton} onPress={handleClose}>
-                <X size={24} color={colors.text.secondary} />
+                <X size={24} color={IOS_COLORS.gray} />
               </Pressable>
             </View>
           )}
@@ -172,23 +175,23 @@ export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) 
               <View style={[
                 styles.stepDot,
                 getStepNumber() >= 1 && styles.stepDotActive,
-                { backgroundColor: getStepNumber() >= 1 ? accentColor : colors.border.medium }
+                { backgroundColor: getStepNumber() >= 1 ? accentColor : IOS_COLORS.gray5 }
               ]} />
-              <View style={[styles.stepLine, { backgroundColor: getStepNumber() >= 2 ? accentColor : colors.border.medium }]} />
+              <View style={[styles.stepLine, { backgroundColor: getStepNumber() >= 2 ? accentColor : IOS_COLORS.gray5 }]} />
 
               {/* Step 2: Input Method */}
               <View style={[
                 styles.stepDot,
                 getStepNumber() >= 2 && styles.stepDotActive,
-                { backgroundColor: getStepNumber() >= 2 ? accentColor : colors.border.medium }
+                { backgroundColor: getStepNumber() >= 2 ? accentColor : IOS_COLORS.gray5 }
               ]} />
-              <View style={[styles.stepLine, { backgroundColor: getStepNumber() >= 3 ? accentColor : colors.border.medium }]} />
+              <View style={[styles.stepLine, { backgroundColor: getStepNumber() >= 3 ? accentColor : IOS_COLORS.gray5 }]} />
 
               {/* Step 3: Details */}
               <View style={[
                 styles.stepDot,
                 getStepNumber() >= 3 && styles.stepDotActive,
-                { backgroundColor: getStepNumber() >= 3 ? accentColor : colors.border.medium }
+                { backgroundColor: getStepNumber() >= 3 ? accentColor : IOS_COLORS.gray5 }
               ]} />
             </View>
           )}
@@ -238,7 +241,7 @@ export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   keyboardView: {
     flex: 1,
@@ -247,14 +250,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -263,11 +265,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
+    gap: 8,
   },
   title: {
-    ...Typography.h3,
-    color: colors.text.primary,
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
     textAlign: 'center',
   },
   typeBadge: {
@@ -283,8 +286,8 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   closeButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -292,8 +295,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.md,
+    paddingVertical: 12,
+    paddingBottom: 4,
     gap: 4,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   stepDot: {
     width: 8,
@@ -301,12 +306,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   stepDotActive: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   stepLine: {
-    width: 40,
+    width: 32,
     height: 2,
     borderRadius: 1,
   },

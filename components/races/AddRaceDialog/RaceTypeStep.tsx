@@ -2,13 +2,22 @@
  * RaceTypeStep Component
  *
  * Step 1 of AddRaceDialog: Choose race type
- * Displays a 2x2 grid of race type cards with themed colors
+ * Apple-style vertical selection list with fixed footer
  */
 
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Flag, Navigation, Target, Users, LucideIcon } from 'lucide-react-native';
-import { Typography, Spacing, BorderRadius, colors, Shadows } from '@/constants/designSystem';
+import React, { useCallback } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  Platform,
+} from 'react-native';
+import { Flag, Navigation, Target, Users, Check, LucideIcon } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { RaceType, RACE_TYPE_COLORS } from '../RaceTypeSelector';
 
 interface RaceTypeStepProps {
@@ -17,14 +26,14 @@ interface RaceTypeStepProps {
   onNext: () => void;
 }
 
-interface RaceTypeCardConfig {
+interface RaceTypeOption {
   type: RaceType;
   icon: LucideIcon;
   title: string;
   subtitle: string;
 }
 
-const RACE_TYPE_CARDS: RaceTypeCardConfig[] = [
+const RACE_TYPE_OPTIONS: RaceTypeOption[] = [
   {
     type: 'fleet',
     icon: Flag,
@@ -52,80 +61,119 @@ const RACE_TYPE_CARDS: RaceTypeCardConfig[] = [
 ];
 
 export function RaceTypeStep({ selectedType, onSelect, onNext }: RaceTypeStepProps) {
+  const handleSelect = useCallback(
+    (type: RaceType) => {
+      // Haptic feedback on selection
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      onSelect(type);
+    },
+    [onSelect]
+  );
+
+  const handleContinue = useCallback(() => {
+    if (selectedType) {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      onNext();
+    }
+  }, [selectedType, onNext]);
+
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.subtitle}>What type of race?</Text>
-      </View>
+      {/* Scrollable content */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Title */}
+        <Text style={styles.title}>What type of race?</Text>
 
-      {/* Grid of race type cards */}
-      <View style={styles.grid}>
-        {RACE_TYPE_CARDS.map((card) => {
-          const isSelected = selectedType === card.type;
-          const typeColors = RACE_TYPE_COLORS[card.type];
-          const IconComponent = card.icon;
+        {/* Selection list card */}
+        <View style={styles.listCard}>
+          {RACE_TYPE_OPTIONS.map((option, index) => {
+            const isSelected = selectedType === option.type;
+            const isLast = index === RACE_TYPE_OPTIONS.length - 1;
+            const typeColors = RACE_TYPE_COLORS[option.type];
+            const IconComponent = option.icon;
 
-          return (
-            <Pressable
-              key={card.type}
-              style={({ pressed }) => [
-                styles.card,
-                isSelected && styles.cardSelected,
-                isSelected && { borderColor: typeColors.primary },
-                pressed && styles.cardPressed,
-              ]}
-              onPress={() => onSelect(card.type)}
-            >
-              <View
-                style={[
-                  styles.iconContainer,
-                  { backgroundColor: isSelected ? typeColors.primary : typeColors.badge },
+            return (
+              <Pressable
+                key={option.type}
+                style={({ pressed }) => [
+                  styles.rowContainer,
+                  !isLast && styles.rowWithSeparator,
+                  pressed && styles.rowPressed,
                 ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleSelect(option.type);
+                }}
               >
-                <IconComponent
-                  size={28}
-                  color={isSelected ? '#FFFFFF' : typeColors.primary}
-                />
-              </View>
+                <View style={styles.rowInner}>
+                  {/* Icon */}
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      { backgroundColor: typeColors.badge },
+                    ]}
+                  >
+                    <IconComponent size={22} color={typeColors.primary} />
+                  </View>
 
-              <Text
-                style={[
-                  styles.cardTitle,
-                  isSelected && { color: typeColors.primary },
-                ]}
-              >
-                {card.title}
-              </Text>
+                  {/* Text content */}
+                  <View style={styles.rowContent}>
+                    <Text style={styles.rowTitle}>{option.title}</Text>
+                    <Text style={styles.rowSubtitle}>{option.subtitle}</Text>
+                  </View>
 
-              <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
-
-              {/* Selection indicator */}
-              {isSelected && (
-                <View style={[styles.selectedIndicator, { backgroundColor: typeColors.primary }]}>
-                  <View style={styles.selectedDot} />
+                  {/* Checkmark */}
+                  <View style={styles.checkmarkContainer}>
+                    {isSelected && (
+                      <Animated.View
+                        entering={FadeIn.duration(150)}
+                        exiting={FadeOut.duration(100)}
+                      >
+                        <Check size={22} color={IOS_COLORS.blue} strokeWidth={3} />
+                      </Animated.View>
+                    )}
+                  </View>
                 </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
 
-      {/* Next button */}
+      {/* Fixed footer */}
       <View style={styles.footer}>
         <Pressable
-          style={({ pressed }) => [
-            styles.nextButton,
-            !selectedType && styles.nextButtonDisabled,
-            selectedType && { backgroundColor: RACE_TYPE_COLORS[selectedType].primary },
-            pressed && selectedType && styles.nextButtonPressed,
-          ]}
-          onPress={onNext}
+          onPress={handleContinue}
           disabled={!selectedType}
         >
-          <Text style={[styles.nextButtonText, !selectedType && styles.nextButtonTextDisabled]}>
-            Next
-          </Text>
+          {({ pressed }) => (
+            <View
+              style={[
+                styles.continueButtonBase,
+                {
+                  backgroundColor: selectedType ? IOS_COLORS.blue : IOS_COLORS.gray5,
+                  opacity: pressed && selectedType ? 0.85 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.continueButtonTextBase,
+                  { color: selectedType ? IOS_COLORS.systemBackground : IOS_COLORS.gray },
+                ]}
+              >
+                Continue
+              </Text>
+            </View>
+          )}
         </Pressable>
       </View>
     </View>
@@ -135,100 +183,106 @@ export function RaceTypeStep({ selectedType, onSelect, onNext }: RaceTypeStepPro
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
-  header: {
-    paddingVertical: Spacing.lg,
-    alignItems: 'center',
+  scrollView: {
+    flex: 1,
   },
-  subtitle: {
-    ...Typography.body,
-    color: colors.text.secondary,
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
     textAlign: 'center',
+    marginBottom: 24,
+    marginTop: 8,
   },
-  grid: {
+  listCard: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: IOS_COLORS.label,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+      web: {
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+      },
+    }),
+  },
+  rowContainer: {
+    backgroundColor: IOS_COLORS.systemBackground,
+  },
+  rowInner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-    justifyContent: 'center',
-  },
-  card: {
-    width: '47%',
-    backgroundColor: colors.background.primary,
-    borderRadius: BorderRadius.large,
-    borderWidth: 2,
-    borderColor: colors.border.light,
-    padding: Spacing.lg,
     alignItems: 'center',
-    ...Shadows.small,
-    position: 'relative',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 72,
   },
-  cardSelected: {
-    borderWidth: 2,
-    ...Shadows.medium,
+  rowWithSeparator: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
   },
-  cardPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
+  rowPressed: {
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.md,
+    marginRight: 12,
+    flexShrink: 0,
   },
-  cardTitle: {
-    ...Typography.bodyBold,
-    color: colors.text.primary,
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
+  rowContent: {
+    flex: 1,
+    marginRight: 12,
   },
-  cardSubtitle: {
-    ...Typography.caption,
-    color: colors.text.secondary,
-    textAlign: 'center',
-  },
-  selectedIndicator: {
-    position: 'absolute',
-    top: Spacing.sm,
-    right: Spacing.sm,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  checkmarkContainer: {
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  selectedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
+  rowTitle: {
+    fontSize: 17,
+    fontWeight: '400',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  rowSubtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
   },
   footer: {
-    marginTop: 'auto',
-    paddingVertical: Spacing.xl,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
-  nextButton: {
-    backgroundColor: colors.primary[600],
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.medium,
+  continueButtonBase: {
+    height: 50,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nextButtonDisabled: {
-    backgroundColor: colors.neutral[300],
-  },
-  nextButtonPressed: {
-    opacity: 0.9,
-  },
-  nextButtonText: {
-    ...Typography.bodyBold,
-    color: '#FFFFFF',
-  },
-  nextButtonTextDisabled: {
-    color: colors.text.tertiary,
+  continueButtonTextBase: {
+    fontSize: 17,
+    fontWeight: '600',
   },
 });
 
