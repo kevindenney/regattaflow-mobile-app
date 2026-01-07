@@ -202,19 +202,11 @@ export function StrategyDetailCard({
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      {/* Header - Always visible */}
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <MaterialCommunityIcons name="strategy" size={18} color={IOS_COLORS.purple} />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>Strategy</Text>
-          <Text style={styles.headerSubtitle}>Race tactics & approach</Text>
-        </View>
+      {/* Header - Tufte typography-only */}
+      <View style={styles.tufteHeader}>
+        <Text style={styles.tufteHeaderTitle}>STRATEGY</Text>
         {sectionsWithData > 0 && (
-          <View style={styles.dataBadge}>
-            <Text style={styles.dataBadgeText}>{sectionsWithData} insights</Text>
-          </View>
+          <Text style={styles.tufteInsightCount}>{sectionsWithData} insights</Text>
         )}
         <Animated.View style={chevronStyle}>
           <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
@@ -320,51 +312,27 @@ export function StrategyDetailCard({
           )}
         </View>
       ) : (
-        /* Collapsed Preview */
+        /* Collapsed Preview - Tufte flat typography */
         hasLegacyContent ? (
-          <View style={styles.collapsedContent}>
+          <View style={styles.tufteCollapsedContent}>
             {primaryStrategy && (
-              <Text style={styles.collapsedStrategy} numberOfLines={1}>
+              <Text style={styles.tufteCollapsedStrategy} numberOfLines={2}>
                 {primaryStrategy}
               </Text>
             )}
-            <View style={styles.collapsedChips}>
-              {startPreference && (
-                <View style={styles.chip}>
-                  <MaterialCommunityIcons name="flag-checkered" size={12} color={IOS_COLORS.red} />
-                  <Text style={styles.chipText}>
-                    {startPreference === 'pin' ? 'Pin End' : startPreference === 'boat' ? 'Boat End' : 'Middle'}
-                  </Text>
-                </View>
-              )}
-              {laylineApproach && (
-                <View style={styles.chip}>
-                  <MaterialCommunityIcons name="vector-line" size={12} color={IOS_COLORS.blue} />
-                  <Text style={styles.chipText}>{laylineApproach}</Text>
-                </View>
-              )}
-              {sectionsWithData > 0 && (
-                <View style={styles.chip}>
-                  <Ionicons name="bulb" size={12} color={colors.accent.default} />
-                  <Text style={styles.chipText}>{sectionsWithData} insights</Text>
-                </View>
-              )}
-            </View>
+            <Text style={styles.tufteCollapsedMeta}>
+              {[
+                startPreference && (startPreference === 'pin' ? 'Pin end' : startPreference === 'boat' ? 'Boat end' : 'Middle start'),
+                laylineApproach && `${laylineApproach} layline`,
+              ].filter(Boolean).join(' · ')}
+            </Text>
           </View>
         ) : (
-          /* Empty state */
-          <View style={styles.emptyContent}>
-            <MaterialCommunityIcons name="lightbulb-outline" size={32} color={IOS_COLORS.gray3} />
-            <Text style={styles.emptyTitle}>Plan Your Strategy</Text>
-            <Text style={styles.emptySubtext}>
-              Tap to add tactics based on your past performance
+          /* Empty state - minimal */
+          <View style={styles.tufteEmptyContent}>
+            <Text style={styles.tufteEmptyText}>
+              Tap to plan race tactics
             </Text>
-            {onGenerateStrategy && (
-              <TouchableOpacity style={styles.generateButton} onPress={onGenerateStrategy}>
-                <MaterialCommunityIcons name="auto-fix" size={14} color={IOS_COLORS.purple} />
-                <Text style={styles.generateButtonText}>Generate with AI</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )
       )}
@@ -593,5 +561,57 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: IOS_COLORS.purple,
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Typography-driven, flat design
+  // ==========================================================================
+  tufteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tufteHeaderTitle: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tufteInsightCount: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteCollapsedContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+    gap: 6,
+  },
+  tufteCollapsedStrategy: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  tufteCollapsedMeta: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+  },
+  tufteEmptyContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+  tufteEmptyText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
   },
 });

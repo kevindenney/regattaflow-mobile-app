@@ -158,25 +158,14 @@ export function CourseDetailCard({
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      {/* Header - Always visible */}
-      <View style={styles.header}>
-        <View style={[styles.headerIcon, isDistanceRace && styles.headerIconDistance]}>
-          <MaterialCommunityIcons
-            name={isDistanceRace ? "map-marker-path" : "map-outline"}
-            size={18}
-            color={isDistanceRace ? IOS_COLORS.purple : IOS_COLORS.green}
-          />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>
-            {customTitle || (isDistanceRace ? 'Route' : 'Course')}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {isDistanceRace
-              ? (totalDistanceNm ? `${totalDistanceNm}nm passage` : 'Passage waypoints')
-              : (courseName || 'Race course layout')}
-          </Text>
-        </View>
+      {/* Header - Tufte typography-only */}
+      <View style={styles.tufteHeader}>
+        <Text style={styles.tufteHeaderTitle}>
+          {isDistanceRace ? 'ROUTE' : 'COURSE'}
+        </Text>
+        {courseName && (
+          <Text style={styles.tufteHeaderSubtitle}>{courseName}</Text>
+        )}
         <Animated.View style={chevronStyle}>
           <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
         </Animated.View>
@@ -185,42 +174,23 @@ export function CourseDetailCard({
       {/* Content */}
       {hasData ? (
         <>
-          {/* Collapsed: Key info */}
+          {/* Collapsed: Tufte flat typography */}
           {!isExpanded && (
-            <View style={styles.collapsedContent}>
-              {courseType && (
-                <View style={styles.typeBadge}>
-                  <MaterialCommunityIcons
-                    name={getCourseIcon(courseType) as any}
-                    size={14}
-                    color={IOS_COLORS.green}
-                  />
-                  <Text style={styles.typeBadgeText}>
-                    {getCourseTypeLabel(courseType)}
-                  </Text>
-                </View>
+            <View style={styles.tufteCollapsedContent}>
+              <Text style={styles.tufteCollapsedData}>
+                {[
+                  courseType && getCourseTypeLabel(courseType),
+                  numberOfLegs !== undefined && `${numberOfLegs} legs`,
+                  marks && marks.length > 0 && `${marks.length} marks`,
+                  approximateDistance,
+                  totalDistanceNm && `${totalDistanceNm}nm`,
+                ].filter(Boolean).join(' · ')}
+              </Text>
+              {hasCourseSelected && (
+                <Text style={styles.tufteSelectedCourse}>
+                  Selected: {courseSelection?.selectedCourseName}
+                </Text>
               )}
-              <View style={styles.collapsedStats}>
-                {marks && marks.length > 0 && (
-                  <View style={styles.statChip}>
-                    <Text style={styles.statValue}>{marks.length}</Text>
-                    <Text style={styles.statLabel}>marks</Text>
-                  </View>
-                )}
-                {numberOfLegs !== undefined && (
-                  <View style={styles.statChip}>
-                    <Text style={styles.statValue}>{numberOfLegs}</Text>
-                    <Text style={styles.statLabel}>legs</Text>
-                  </View>
-                )}
-                {/* Course selection indicator */}
-                {hasCourseSelected && (
-                  <View style={styles.courseSelectedBadge}>
-                    <Ionicons name="checkmark-circle" size={12} color={colors.success.default} />
-                    <Text style={styles.courseSelectedText}>{courseSelection?.selectedCourseName}</Text>
-                  </View>
-                )}
-              </View>
             </View>
           )}
 
@@ -474,5 +444,44 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: IOS_COLORS.gray6,
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Typography-driven, flat design
+  // ==========================================================================
+  tufteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tufteHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tufteHeaderSubtitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  tufteCollapsedContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+    gap: 4,
+  },
+  tufteCollapsedData: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  tufteSelectedCourse: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
   },
 });
