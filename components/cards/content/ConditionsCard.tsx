@@ -1,17 +1,16 @@
 /**
  * ConditionsCard - Position 1
  *
- * Full-card display of weather and water conditions:
- * - Wind (direction, speed range)
- * - Tide (state, height, direction)
- * - Waves (height, period)
- * - Temperature
- * - Sail selection recommendations and user selection
+ * Tufte-inspired conditions display:
+ * - Flat aligned grid layout (no colored box containers)
+ * - Sparklines for wind/tide trends
+ * - Reduced color palette
+ * - Maximum data-ink ratio
  *
  * Apple Human Interface Guidelines (HIG) compliant design:
- * - iOS system colors
+ * - iOS system colors (muted)
  * - SF Pro typography
- * - Clean visual hierarchy without header icons
+ * - Clean visual hierarchy
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
@@ -36,6 +35,9 @@ import {
 import { CardContentProps } from '../types';
 import { useSailInventory, formatSailDisplayName, getSailConditionColor } from '@/hooks/useSailInventory';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { TinySparkline } from '@/components/shared/charts';
+import { AnnotatedSparkline } from '@/components/shared/charts';
+import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import type { SailInventoryItem, SailSelectionIntention } from '@/types/raceIntentions';
 
 // =============================================================================
@@ -388,6 +390,10 @@ export function ConditionsCard({
   // Get boat ID from race for sail inventory
   const boatId = (race as any).boat_id || (race as any).boatId || null;
 
+  // Fetch weather forecast for sparklines
+  const venue = (race as any).venue_data || (race as any).venue_info;
+  const { data: forecastData } = useRaceWeatherForecast(venue, race.date, !!venue);
+
   // Fetch sail inventory for the boat
   const { sails, hasSails, isLoading: sailsLoading } = useSailInventory({
     boatId,
@@ -471,7 +477,7 @@ export function ConditionsCard({
   const hasSailSelections = sailSelection?.mainsail || sailSelection?.jib || sailSelection?.spinnaker;
 
   // ==========================================================================
-  // COLLAPSED VIEW (Apple HIG Design)
+  // COLLAPSED VIEW - Tufte Grid Layout
   // ==========================================================================
   if (!isExpanded) {
     return (
@@ -480,100 +486,77 @@ export function ConditionsCard({
         <Text style={styles.sectionLabel}>CONDITIONS</Text>
 
         {hasData ? (
-          <View style={styles.collapsedContent}>
-            {/* Primary Wind Display */}
+          <View style={styles.tufteCollapsed}>
+            {/* Wind Row - Tufte flat grid */}
             {wind && (
-              <View style={styles.primaryMetricCard}>
-                <View style={styles.primaryMetricHeader}>
-                  <Wind size={18} color={IOS_COLORS.blue} />
-                  <Text style={styles.primaryMetricLabel}>Wind</Text>
-                  {windStrength && (
-                    <View style={[styles.strengthBadge, { backgroundColor: windStrength.bgColor }]}>
-                      <Text style={[styles.strengthBadgeText, { color: windStrength.color }]}>
-                        {windStrength.label}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.primaryMetricValue}>
-                  <Text style={styles.bigNumber}>{wind.speedMin}-{wind.speedMax}</Text>
-                  <Text style={styles.bigUnit}>kts</Text>
-                  <View style={styles.directionBadge}>
-                    <Navigation size={14} color={IOS_COLORS.blue} />
-                    <Text style={styles.directionText}>{wind.direction}</Text>
+              <View style={styles.tufteRow}>
+                <Text style={styles.tufteLabel}>Wind</Text>
+                <Text style={styles.tufteValue}>
+                  {wind.direction} {wind.speedMin}–{wind.speedMax}kt
+                </Text>
+                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
+                  <View style={styles.tufteSparkline}>
+                    <TinySparkline
+                      data={forecastData.windForecast}
+                      width={50}
+                      height={16}
+                      color={IOS_COLORS.secondaryLabel}
+                      nowIndex={forecastData.forecastNowIndex}
+                    />
                   </View>
-                </View>
+                )}
               </View>
             )}
 
-            {/* Secondary Metrics Row */}
-            <View style={styles.secondaryMetricsRow}>
-              {/* Tide */}
-              {tide && (
-                <View style={[styles.secondaryMetricCard, { backgroundColor: tideDisplay?.bgColor }]}>
-                  <TideIcon size={16} color={tideDisplay?.color} />
-                  <View>
-                    <Text style={styles.secondaryMetricLabel}>Tide</Text>
-                    <Text style={[styles.secondaryMetricValue, { color: tideDisplay?.color }]}>
-                      {tideDisplay?.label}
-                      {tide.height !== undefined ? ` ${tide.height.toFixed(1)}m` : ''}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Temperature */}
-              {temperature !== undefined && (
-                <View style={[styles.secondaryMetricCard, { backgroundColor: '#FFEBE9' }]}>
-                  <Thermometer size={16} color={IOS_COLORS.red} />
-                  <View>
-                    <Text style={styles.secondaryMetricLabel}>Water</Text>
-                    <Text style={[styles.secondaryMetricValue, { color: IOS_COLORS.red }]}>
-                      {temperature}°C
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Waves */}
-              {waves && (
-                <View style={[styles.secondaryMetricCard, { backgroundColor: '#F3E8FF' }]}>
-                  <Droplets size={16} color={IOS_COLORS.purple} />
-                  <View>
-                    <Text style={styles.secondaryMetricLabel}>Waves</Text>
-                    <Text style={[styles.secondaryMetricValue, { color: IOS_COLORS.purple }]}>
-                      {waves.height.toFixed(1)}m
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* Sail Selection Status Badge */}
-            {(hasSailSelections || (wind && boatId)) && (
-              <View
-                style={[
-                  styles.sailStatusBadge,
-                  hasSailSelections
-                    ? { backgroundColor: '#E8FAE9' }
-                    : { backgroundColor: IOS_COLORS.gray6 },
-                ]}
-              >
-                <Sailboat
-                  size={14}
-                  color={hasSailSelections ? IOS_COLORS.green : IOS_COLORS.gray}
-                />
-                <Text
-                  style={[
-                    styles.sailStatusText,
-                    { color: hasSailSelections ? IOS_COLORS.green : IOS_COLORS.gray },
-                  ]}
-                >
-                  {hasSailSelections
-                    ? `Sails selected${sailSelection?.mainsailName ? ': ' + sailSelection.mainsailName : ''}`
-                    : 'Tap to select sails'}
+            {/* Tide Row - Tufte flat grid */}
+            {tide && (
+              <View style={styles.tufteRow}>
+                <Text style={styles.tufteLabel}>Tide</Text>
+                <Text style={styles.tufteValue}>
+                  {tideDisplay?.label}
+                  {tide.height !== undefined ? ` ${tide.height.toFixed(1)}m` : ''}
                 </Text>
-                {hasSailSelections && <Check size={14} color={IOS_COLORS.green} />}
+                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
+                  <View style={styles.tufteSparkline}>
+                    <TinySparkline
+                      data={forecastData.tideForecast}
+                      width={50}
+                      height={16}
+                      color={IOS_COLORS.secondaryLabel}
+                      nowIndex={forecastData.forecastNowIndex}
+                      variant="area"
+                    />
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Waves Row */}
+            {waves && (
+              <View style={styles.tufteRow}>
+                <Text style={styles.tufteLabel}>Waves</Text>
+                <Text style={styles.tufteValue}>
+                  {waves.height.toFixed(1)}m
+                  {waves.period ? ` · ${waves.period}s` : ''}
+                </Text>
+              </View>
+            )}
+
+            {/* Temperature Row */}
+            {temperature !== undefined && (
+              <View style={styles.tufteRow}>
+                <Text style={styles.tufteLabel}>Temp</Text>
+                <Text style={styles.tufteValue}>{temperature}°C</Text>
+              </View>
+            )}
+
+            {/* Sail Status - compact single line */}
+            {hasSailSelections && (
+              <View style={styles.tufteSailStatus}>
+                <Text style={styles.tufteSailLabel}>Sails</Text>
+                <Text style={styles.tufteSailValue}>
+                  {sailSelection?.mainsailName || 'Selected'} ✓
+                </Text>
               </View>
             )}
           </View>
@@ -594,7 +577,7 @@ export function ConditionsCard({
   }
 
   // ==========================================================================
-  // EXPANDED VIEW (Apple HIG Design)
+  // EXPANDED VIEW - Tufte Grid with Annotated Sparklines
   // ==========================================================================
   return (
     <View style={styles.container}>
@@ -608,109 +591,84 @@ export function ConditionsCard({
           showsVerticalScrollIndicator={true}
           nestedScrollEnabled={true}
         >
-          {/* Wind Section */}
-          {wind && (
-            <View style={styles.expandedSection}>
-              <View style={styles.expandedSectionHeader}>
-                <Wind size={20} color={IOS_COLORS.blue} />
-                <Text style={styles.expandedSectionTitle}>Wind</Text>
-                {windStrength && (
-                  <View style={[styles.strengthBadge, { backgroundColor: windStrength.bgColor }]}>
-                    <Text style={[styles.strengthBadgeText, { color: windStrength.color }]}>
-                      {windStrength.label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.expandedSectionContent}>
-                <View style={styles.expandedMetricRow}>
-                  <View style={styles.expandedPrimaryMetric}>
-                    <Text style={[styles.expandedBigNumber, { color: IOS_COLORS.blue }]}>
-                      {wind.speedMin}-{wind.speedMax}
-                    </Text>
-                    <Text style={styles.expandedBigUnit}>kts</Text>
-                  </View>
-                  <View style={styles.expandedDirectionBadge}>
-                    <Navigation size={16} color={IOS_COLORS.blue} />
-                    <Text style={styles.expandedDirectionText}>{wind.direction}</Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Tide Section */}
-          {tide && (
-            <View style={[styles.expandedSection, { backgroundColor: tideDisplay?.bgColor }]}>
-              <View style={styles.expandedSectionHeader}>
-                <TideIcon size={20} color={tideDisplay?.color} />
-                <Text style={styles.expandedSectionTitle}>Tide</Text>
-                <View style={[styles.tideBadge, { backgroundColor: `${tideDisplay?.color}20` }]}>
-                  <Text style={[styles.tideBadgeText, { color: tideDisplay?.color }]}>
-                    {tideDisplay?.label}
+          {/* Tufte Grid - All conditions in flat rows */}
+          <View style={styles.tufteExpandedGrid}>
+            {/* Wind Row with Annotated Sparkline */}
+            {wind && (
+              <View style={styles.tufteExpandedRow}>
+                <Text style={styles.tufteExpandedLabel}>Wind</Text>
+                <View style={styles.tufteExpandedValueGroup}>
+                  <Text style={styles.tufteExpandedValue}>
+                    {wind.direction} {wind.speedMin}–{wind.speedMax}kt
                   </Text>
-                </View>
-              </View>
-              <View style={styles.expandedSectionContent}>
-                {tide.height !== undefined && (
-                  <View style={styles.expandedMetricRow}>
-                    <View style={styles.expandedPrimaryMetric}>
-                      <Text style={[styles.expandedBigNumber, { color: tideDisplay?.color }]}>
-                        {tide.height.toFixed(1)}
-                      </Text>
-                      <Text style={styles.expandedBigUnit}>m</Text>
-                    </View>
-                    {tide.direction && (
-                      <View style={styles.expandedDirectionBadge}>
-                        <Compass size={16} color={tideDisplay?.color} />
-                        <Text style={styles.expandedDirectionText}>{tide.direction}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Bottom Row: Waves + Temperature */}
-          {(waves || temperature !== undefined) && (
-            <View style={styles.bottomMetricsRow}>
-              {/* Waves */}
-              {waves && (
-                <View style={[styles.bottomMetricCard, { backgroundColor: '#F3E8FF' }]}>
-                  <View style={styles.bottomMetricHeader}>
-                    <Droplets size={18} color={IOS_COLORS.purple} />
-                    <Text style={styles.bottomMetricTitle}>Waves</Text>
-                  </View>
-                  <View style={styles.bottomMetricValue}>
-                    <Text style={[styles.bottomBigNumber, { color: IOS_COLORS.purple }]}>
-                      {waves.height.toFixed(1)}
-                    </Text>
-                    <Text style={styles.bottomUnit}>m</Text>
-                  </View>
-                  {waves.period && (
-                    <Text style={styles.bottomSubtext}>{waves.period}s period</Text>
+                  {windStrength && (
+                    <Text style={styles.tufteStrengthHint}>{windStrength.label}</Text>
                   )}
                 </View>
-              )}
+                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
+                  <View style={styles.tufteExpandedSparkline}>
+                    <AnnotatedSparkline
+                      data={forecastData.windForecast}
+                      width={90}
+                      height={22}
+                      color={IOS_COLORS.secondaryLabel}
+                      nowIndex={forecastData.forecastNowIndex}
+                      trendText={forecastData.windTrend}
+                      variant="line"
+                    />
+                  </View>
+                )}
+              </View>
+            )}
 
-              {/* Temperature */}
-              {temperature !== undefined && (
-                <View style={[styles.bottomMetricCard, { backgroundColor: '#FFEBE9' }]}>
-                  <View style={styles.bottomMetricHeader}>
-                    <Thermometer size={18} color={IOS_COLORS.red} />
-                    <Text style={styles.bottomMetricTitle}>Water</Text>
-                  </View>
-                  <View style={styles.bottomMetricValue}>
-                    <Text style={[styles.bottomBigNumber, { color: IOS_COLORS.red }]}>
-                      {temperature}
-                    </Text>
-                    <Text style={styles.bottomUnit}>°C</Text>
-                  </View>
+            {/* Tide Row with Annotated Sparkline */}
+            {tide && (
+              <View style={styles.tufteExpandedRow}>
+                <Text style={styles.tufteExpandedLabel}>Tide</Text>
+                <View style={styles.tufteExpandedValueGroup}>
+                  <Text style={styles.tufteExpandedValue}>
+                    {tideDisplay?.label}
+                    {tide.height !== undefined ? ` ${tide.height.toFixed(1)}m` : ''}
+                  </Text>
+                  {tide.direction && (
+                    <Text style={styles.tufteStrengthHint}>→ {tide.direction}</Text>
+                  )}
                 </View>
-              )}
-            </View>
-          )}
+                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
+                  <View style={styles.tufteExpandedSparkline}>
+                    <AnnotatedSparkline
+                      data={forecastData.tideForecast}
+                      width={90}
+                      height={22}
+                      color={IOS_COLORS.secondaryLabel}
+                      nowIndex={forecastData.forecastNowIndex}
+                      peakTime={forecastData.tidePeakTime}
+                      variant="area"
+                    />
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Waves Row */}
+            {waves && (
+              <View style={styles.tufteExpandedRow}>
+                <Text style={styles.tufteExpandedLabel}>Waves</Text>
+                <Text style={styles.tufteExpandedValue}>
+                  {waves.height.toFixed(1)}m
+                  {waves.period ? ` · ${waves.period}s period` : ''}
+                </Text>
+              </View>
+            )}
+
+            {/* Temperature Row */}
+            {temperature !== undefined && (
+              <View style={styles.tufteExpandedRow}>
+                <Text style={styles.tufteExpandedLabel}>Water</Text>
+                <Text style={styles.tufteExpandedValue}>{temperature}°C</Text>
+              </View>
+            )}
+          </View>
 
           {/* Sail Selection Section */}
           {wind && (
@@ -839,6 +797,100 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 16,
   },
+
+  // ==========================================================================
+  // TUFTE STYLES - Collapsed View
+  // ==========================================================================
+  tufteCollapsed: {
+    flex: 1,
+    gap: 12,
+  },
+  tufteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: IOS_COLORS.gray6,
+  },
+  tufteLabel: {
+    width: 50,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  tufteValue: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+  tufteSparkline: {
+    marginLeft: 'auto',
+  },
+  tufteSailStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  tufteSailLabel: {
+    width: 50,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
+  },
+  tufteSailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Expanded View
+  // ==========================================================================
+  tufteExpandedGrid: {
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 14,
+    padding: 16,
+    gap: 12,
+  },
+  tufteExpandedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tufteExpandedLabel: {
+    width: 50,
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteExpandedValueGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  tufteExpandedValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+  tufteStrengthHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  tufteExpandedSparkline: {
+    marginLeft: 'auto',
+    alignItems: 'flex-end',
+  },
+
+  // ==========================================================================
+  // OLD STYLES (kept for backwards compatibility)
+  // ==========================================================================
 
   // Collapsed Content
   collapsedContent: {
