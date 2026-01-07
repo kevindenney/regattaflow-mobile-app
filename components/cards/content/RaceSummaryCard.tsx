@@ -422,34 +422,22 @@ export function RaceSummaryCard({
           </View>
         )}
 
-        {/* Countdown Timer (iOS styled) */}
+        {/* Countdown Timer - Tufte compact format */}
         <View style={styles.collapsedCountdown}>
           {countdown.isPast ? (
             <View style={styles.countdownPastContainer}>
               <Text style={styles.countdownPastCompact}>Race Completed</Text>
             </View>
           ) : (
-            <View style={styles.countdownCompactRow}>
-              <View style={styles.countdownCompactUnit}>
-                <Text style={[styles.countdownCompactValue, { color: IOS_COLORS.blue }]}>
-                  {countdown.days}
-                </Text>
-                <Text style={styles.countdownCompactLabel}>days</Text>
-              </View>
-              <Text style={styles.countdownCompactSeparator}>:</Text>
-              <View style={styles.countdownCompactUnit}>
-                <Text style={[styles.countdownCompactValue, { color: IOS_COLORS.blue }]}>
-                  {countdown.hours}
-                </Text>
-                <Text style={styles.countdownCompactLabel}>hrs</Text>
-              </View>
-              <Text style={styles.countdownCompactSeparator}>:</Text>
-              <View style={styles.countdownCompactUnit}>
-                <Text style={[styles.countdownCompactValue, { color: IOS_COLORS.blue }]}>
-                  {countdown.minutes}
-                </Text>
-                <Text style={styles.countdownCompactLabel}>min</Text>
-              </View>
+            <View style={styles.countdownTufteRow}>
+              <Text style={styles.countdownTufteValue}>
+                {countdown.days > 0
+                  ? `${countdown.days}d ${countdown.hours}h`
+                  : countdown.hours > 0
+                    ? `${countdown.hours}h ${countdown.minutes}m`
+                    : `${countdown.minutes}m`}
+              </Text>
+              <Text style={styles.countdownTufteLabel}>until start</Text>
             </View>
           )}
         </View>
@@ -875,6 +863,30 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     color: IOS_COLORS.gray3,
     paddingBottom: 10,
+  },
+
+  // Tufte compact countdown (single line, maximizes data-ink ratio)
+  countdownTufteRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: IOS_COLORS.gray6,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+  },
+  countdownTufteValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  countdownTufteLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
   },
 
   // Conditions Preview (collapsed)

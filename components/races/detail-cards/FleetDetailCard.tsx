@@ -1,11 +1,37 @@
 /**
  * Fleet Detail Card
- * Compact view of fleet/competitor information for the detail zone
+ *
+ * Apple Human Interface Guidelines (HIG) compliant design:
+ * - iOS system colors from shared constants
+ * - Expandable card showing fleet/competitor information
+ * - Collapsed: Header + total entries + registration status
+ * - Expanded: Full competitor list, detailed stats
  */
 
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+} from 'react-native';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+  useSharedValue,
+  interpolate,
+} from 'react-native-reanimated';
+import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/navigationAnimations';
+import { IOS_COLORS } from '@/components/cards/constants';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface Competitor {
   id: string;
@@ -22,6 +48,8 @@ interface FleetDetailCardProps {
   competitors?: Competitor[];
   fleetName?: string;
   isRegistered?: boolean;
+  isExpanded?: boolean;
+  onToggle?: () => void;
   onPress?: () => void;
   onRegister?: () => void;
 }
@@ -33,219 +61,406 @@ export function FleetDetailCard({
   competitors,
   fleetName,
   isRegistered,
+  isExpanded = false,
+  onToggle,
   onPress,
   onRegister,
 }: FleetDetailCardProps) {
-  const displayCompetitors = competitors?.slice(0, 3) || [];
+  const rotation = useSharedValue(isExpanded ? 1 : 0);
+
+  // Update rotation when isExpanded changes
+  React.useEffect(() => {
+    rotation.value = withTiming(isExpanded ? 1 : 0, {
+      duration: isExpanded ? CARD_EXPAND_DURATION : CARD_COLLAPSE_DURATION,
+    });
+  }, [isExpanded, rotation]);
+
+  // Animated chevron rotation
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 90])}deg` }],
+  }));
+
+  const handlePress = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: isExpanded ? CARD_COLLAPSE_DURATION : CARD_EXPAND_DURATION,
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+    });
+
+    if (onToggle) {
+      onToggle();
+    } else if (onPress) {
+      onPress();
+    }
+  }, [isExpanded, onToggle, onPress]);
+
+  const getStatusIcon = (status: Competitor['status']) => {
+    switch (status) {
+      case 'confirmed': return 'checkmark-circle';
+      case 'registered': return 'time-outline';
+      case 'tentative': return 'help-circle-outline';
+      default: return 'ellipse-outline';
+    }
+  };
+
+  const getStatusColor = (status: Competitor['status']) => {
+    switch (status) {
+      case 'confirmed': return IOS_COLORS.green;
+      case 'registered': return IOS_COLORS.orange;
+      case 'tentative': return IOS_COLORS.gray;
+      default: return IOS_COLORS.gray2;
+    }
+  };
 
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
+      onPress={handlePress}
+      activeOpacity={0.7}
     >
+      {/* Header - Always visible */}
       <View style={styles.header}>
         <View style={styles.headerIcon}>
-          <MaterialCommunityIcons name="sail-boat" size={18} color="#6366F1" />
+          <MaterialCommunityIcons name="sail-boat" size={18} color={IOS_COLORS.indigo} />
         </View>
-        <Text style={styles.headerTitle}>Fleet</Text>
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>Fleet</Text>
+          <Text style={styles.headerSubtitle}>
+            {fleetName || 'Competitors & entries'}
+          </Text>
+        </View>
         <View style={styles.countBadge}>
           <Text style={styles.countText}>{totalCompetitors}</Text>
         </View>
-        <MaterialCommunityIcons name="chevron-right" size={18} color="#94A3B8" />
+        <Animated.View style={chevronStyle}>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
+        </Animated.View>
       </View>
 
-      <View style={styles.content}>
-        {/* Registration Status */}
-        {isRegistered !== undefined && (
-          <View style={[styles.registrationBadge, isRegistered ? styles.registeredBadge : styles.notRegisteredBadge]}>
-            <Ionicons
-              name={isRegistered ? "checkmark-circle" : "add-circle"}
-              size={14}
-              color={isRegistered ? "#059669" : "#6366F1"}
-            />
-            <Text style={[styles.registrationText, isRegistered ? styles.registeredText : styles.notRegisteredText]}>
-              {isRegistered ? 'Registered' : 'Not Registered'}
-            </Text>
-            {!isRegistered && onRegister && (
-              <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
-                <Text style={styles.registerButtonText}>Join</Text>
-              </TouchableOpacity>
+      {/* Content */}
+      <>
+        {/* Collapsed: Key stats */}
+        {!isExpanded && (
+          <View style={styles.collapsedContent}>
+            {/* Registration Status */}
+            {isRegistered !== undefined && (
+              <View style={[
+                styles.registrationChip,
+                isRegistered ? styles.registeredChip : styles.notRegisteredChip
+              ]}>
+                <Ionicons
+                  name={isRegistered ? "checkmark-circle" : "add-circle"}
+                  size={14}
+                  color={isRegistered ? IOS_COLORS.green : IOS_COLORS.indigo}
+                />
+                <Text style={[
+                  styles.registrationText,
+                  isRegistered ? styles.registeredText : styles.notRegisteredText
+                ]}>
+                  {isRegistered ? 'Registered' : 'Not registered'}
+                </Text>
+              </View>
             )}
+
+            <View style={styles.collapsedStats}>
+              <View style={styles.statChip}>
+                <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.green} />
+                <Text style={styles.statValue}>{confirmedCount}</Text>
+                <Text style={styles.statLabel}>confirmed</Text>
+              </View>
+            </View>
           </View>
         )}
 
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-            <Text style={styles.statValue}>{confirmedCount}</Text>
-            <Text style={styles.statLabel}>confirmed</Text>
-          </View>
-          {fleetName && (
-            <View style={styles.stat}>
-              <MaterialCommunityIcons name="account-group" size={14} color="#6366F1" />
-              <Text style={styles.statValue}>{fleetName}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Competitors Preview */}
-        {displayCompetitors.length > 0 && (
-          <View style={styles.competitorsPreview}>
-            {displayCompetitors.map((competitor) => (
-              <View key={competitor.id} style={styles.competitorRow}>
-                <MaterialCommunityIcons name="account-circle" size={20} color="#CBD5E1" />
-                <Text style={styles.competitorName} numberOfLines={1}>
-                  {competitor.name}
+        {/* Expanded: Full content */}
+        {isExpanded && (
+          <View style={styles.expandedContent}>
+            {/* Registration Status */}
+            {isRegistered !== undefined && (
+              <View style={[
+                styles.expandedRegistration,
+                isRegistered ? styles.expandedRegistered : styles.expandedNotRegistered
+              ]}>
+                <Ionicons
+                  name={isRegistered ? "checkmark-circle" : "add-circle"}
+                  size={18}
+                  color={isRegistered ? IOS_COLORS.green : IOS_COLORS.indigo}
+                />
+                <Text style={[
+                  styles.expandedRegistrationText,
+                  isRegistered ? styles.expandedRegisteredText : styles.expandedNotRegisteredText
+                ]}>
+                  {isRegistered ? 'You are registered' : 'You are not registered'}
                 </Text>
-                {competitor.sailNumber && (
-                  <Text style={styles.sailNumber}>{competitor.sailNumber}</Text>
+                {!isRegistered && onRegister && (
+                  <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
+                    <Text style={styles.registerButtonText}>Join</Text>
+                  </TouchableOpacity>
                 )}
               </View>
-            ))}
-            {totalCompetitors > 3 && (
-              <Text style={styles.moreText}>+{totalCompetitors - 3} more sailors</Text>
+            )}
+
+            {/* Stats Row */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.expandedStatValue}>{totalCompetitors}</Text>
+                <Text style={styles.expandedStatLabel}>Total Entries</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.expandedStatValue}>{confirmedCount}</Text>
+                <Text style={styles.expandedStatLabel}>Confirmed</Text>
+              </View>
+            </View>
+
+            {/* Competitors List - Tufte style: sail number first, minimal status */}
+            {competitors && competitors.length > 0 && (
+              <View style={styles.competitorsSection}>
+                <View style={styles.tufteCompetitorsList}>
+                  {competitors.map((competitor) => (
+                    <View key={competitor.id} style={styles.tufteCompetitorRow}>
+                      <Text style={styles.tufteSailNumber}>
+                        {competitor.sailNumber || '—'}
+                      </Text>
+                      <Text style={styles.tufteCompetitorName} numberOfLines={1}>
+                        {competitor.name}
+                      </Text>
+                      <Text style={styles.tufteStatus}>
+                        {competitor.status === 'confirmed' ? '✓' : '·'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                {competitors.length < totalCompetitors && (
+                  <Text style={styles.tufteMoreCount}>
+                    ... {totalCompetitors - competitors.length} more
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {totalCompetitors === 0 && (
+              <View style={styles.noCompetitors}>
+                <MaterialCommunityIcons name="account-group-outline" size={24} color={IOS_COLORS.gray3} />
+                <Text style={styles.noCompetitorsText}>No competitors registered yet</Text>
+              </View>
             )}
           </View>
         )}
-
-        {totalCompetitors === 0 && (
-          <Text style={styles.emptyText}>No competitors registered yet</Text>
-        )}
-      </View>
+      </>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    padding: 12,
+    backgroundColor: IOS_COLORS.systemBackground,
+    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: IOS_COLORS.gray5,
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    gap: 8,
+    gap: 12,
   },
   headerIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#EEF2FF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: `${IOS_COLORS.indigo}15`,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerText: {
     flex: 1,
-    fontSize: 14,
+  },
+  headerTitle: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 1,
   },
   countBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    backgroundColor: `${IOS_COLORS.indigo}15`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   countText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#6366F1',
+    color: IOS_COLORS.indigo,
   },
-  content: {
+
+  // Collapsed content
+  collapsedContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: IOS_COLORS.gray6,
     gap: 10,
   },
-  registrationBadge: {
+  registrationChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
   },
-  registeredBadge: {
-    backgroundColor: '#D1FAE5',
+  registeredChip: {
+    backgroundColor: `${IOS_COLORS.green}15`,
   },
-  notRegisteredBadge: {
-    backgroundColor: '#EEF2FF',
+  notRegisteredChip: {
+    backgroundColor: `${IOS_COLORS.indigo}15`,
   },
   registrationText: {
-    flex: 1,
     fontSize: 12,
     fontWeight: '600',
   },
   registeredText: {
-    color: '#059669',
+    color: IOS_COLORS.green,
   },
   notRegisteredText: {
-    color: '#6366F1',
+    color: IOS_COLORS.indigo,
   },
-  registerButton: {
-    backgroundColor: '#6366F1',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  registerButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  statsRow: {
+  collapsedStats: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
-  stat: {
+  statChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   statValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
   },
   statLabel: {
     fontSize: 12,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
   },
-  competitorsPreview: {
-    gap: 6,
-    marginTop: 4,
+
+  // Expanded content
+  expandedContent: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: IOS_COLORS.gray6,
+    gap: 16,
   },
-  competitorRow: {
+  expandedRegistration: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+  },
+  expandedRegistered: {
+    backgroundColor: `${IOS_COLORS.green}15`,
+  },
+  expandedNotRegistered: {
+    backgroundColor: `${IOS_COLORS.indigo}15`,
+  },
+  expandedRegistrationText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  expandedRegisteredText: {
+    color: IOS_COLORS.green,
+  },
+  expandedNotRegisteredText: {
+    color: IOS_COLORS.indigo,
+  },
+  registerButton: {
+    backgroundColor: IOS_COLORS.indigo,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  registerButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: IOS_COLORS.systemBackground,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  expandedStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+  },
+  expandedStatLabel: {
+    fontSize: 11,
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  competitorsSection: {
     gap: 8,
   },
-  competitorName: {
-    flex: 1,
+  // Tufte-style competitors list (no avatars, sail number first)
+  tufteCompetitorsList: {
+    gap: 4,
+  },
+  tufteCompetitorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: IOS_COLORS.gray6,
+  },
+  tufteSailNumber: {
+    width: 60,
     fontSize: 13,
-    color: '#334155',
-  },
-  sailNumber: {
-    fontSize: 11,
     fontWeight: '600',
-    color: '#64748B',
-    fontFamily: 'monospace',
+    color: IOS_COLORS.secondaryLabel,
+    fontVariant: ['tabular-nums'],
   },
-  moreText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontStyle: 'italic',
-    marginLeft: 28,
+  tufteCompetitorName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
   },
-  emptyText: {
-    fontSize: 12,
-    color: '#94A3B8',
+  tufteStatus: {
+    width: 16,
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.green,
     textAlign: 'center',
-    paddingVertical: 8,
+  },
+  tufteMoreCount: {
+    fontSize: 12,
+    color: IOS_COLORS.gray,
+    marginTop: 4,
+  },
+  noCompetitors: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  noCompetitorsText: {
+    fontSize: 13,
+    color: IOS_COLORS.gray,
   },
 });

@@ -19,6 +19,10 @@ export { useRaceCommsDraft } from './ai/useRaceCommsDraft';
 export { useVenueLiveWeather } from './useVenueLiveWeather';
 export type { LiveWeatherData, UseVenueLiveWeatherResult } from './useVenueLiveWeather';
 
+// Race Weather Forecast for Sparklines
+export { useRaceWeatherForecast, extractForecastForSparklines } from './useRaceWeatherForecast';
+export type { RaceWeatherForecastData, UseRaceWeatherForecastResult } from './useRaceWeatherForecast';
+
 export { useVenueRaces } from './useVenueRaces';
 export type { VenueRace, UseVenueRacesResult } from './useVenueRaces';
 

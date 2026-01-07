@@ -1,11 +1,34 @@
 /**
  * Regulatory Detail Card
- * Compact view of sailing instructions, NOR, and amendments for the detail zone
+ * Expandable card showing race documents, SI, NOR, amendments
+ * Collapsed: Header + document count + VHF channel
+ * Expanded: Full document list with download actions
  */
 
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+  useSharedValue,
+  interpolate,
+} from 'react-native-reanimated';
+import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/navigationAnimations';
+import { IOS_COLORS } from '@/components/cards/constants';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface Document {
   id: string;
@@ -19,6 +42,8 @@ interface RegulatoryDetailCardProps {
   documents?: Document[];
   vhfChannel?: string;
   protestDeadline?: string;
+  isExpanded?: boolean;
+  onToggle?: () => void;
   onPress?: () => void;
   onDocumentPress?: (doc: Document) => void;
 }
@@ -28,43 +53,68 @@ export function RegulatoryDetailCard({
   documents = [],
   vhfChannel,
   protestDeadline,
+  isExpanded = false,
+  onToggle,
   onPress,
   onDocumentPress,
 }: RegulatoryDetailCardProps) {
   const hasDocuments = documents.length > 0;
-  const hasInfo = hasDocuments || vhfChannel || protestDeadline;
+  const rotation = useSharedValue(isExpanded ? 1 : 0);
+
+  // Update rotation when isExpanded changes
+  React.useEffect(() => {
+    rotation.value = withTiming(isExpanded ? 1 : 0, {
+      duration: isExpanded ? CARD_EXPAND_DURATION : CARD_COLLAPSE_DURATION,
+    });
+  }, [isExpanded, rotation]);
+
+  // Animated chevron rotation
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 90])}deg` }],
+  }));
+
+  const handlePress = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: isExpanded ? CARD_COLLAPSE_DURATION : CARD_EXPAND_DURATION,
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+    });
+
+    if (onToggle) {
+      onToggle();
+    } else if (onPress) {
+      onPress();
+    }
+  }, [isExpanded, onToggle, onPress]);
 
   const getDocumentIcon = (type: Document['type']) => {
     switch (type) {
-      case 'sailing_instructions':
-        return 'document-text';
-      case 'nor':
-        return 'newspaper';
-      case 'amendment':
-        return 'alert-circle';
-      case 'notam':
-        return 'warning';
-      default:
-        return 'document';
+      case 'sailing_instructions': return 'document-text';
+      case 'nor': return 'newspaper';
+      case 'amendment': return 'alert-circle';
+      case 'notam': return 'warning';
+      default: return 'document';
     }
   };
 
   const getDocumentLabel = (type: Document['type']) => {
     switch (type) {
-      case 'sailing_instructions':
-        return 'SI';
-      case 'nor':
-        return 'NOR';
-      case 'amendment':
-        return 'AMD';
-      case 'notam':
-        return 'NOTAM';
-      default:
-        return 'DOC';
+      case 'sailing_instructions': return 'SI';
+      case 'nor': return 'NOR';
+      case 'amendment': return 'AMD';
+      case 'notam': return 'NOTAM';
+      default: return 'DOC';
     }
   };
 
-  // Sort documents: amendments first (most important for race day), then SI, then NOR
+  const getDocumentColor = (type: Document['type']) => {
+    switch (type) {
+      case 'amendment': return IOS_COLORS.red;
+      case 'notam': return IOS_COLORS.orange;
+      default: return IOS_COLORS.indigo;
+    }
+  };
+
+  // Sort documents: amendments first, then SI, then NOR
   const sortedDocs = [...documents].sort((a, b) => {
     const priority = { amendment: 0, notam: 1, sailing_instructions: 2, nor: 3, other: 4 };
     return (priority[a.type] ?? 4) - (priority[b.type] ?? 4);
@@ -73,180 +123,275 @@ export function RegulatoryDetailCard({
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
+      onPress={handlePress}
+      activeOpacity={0.7}
     >
+      {/* Header - Always visible */}
       <View style={styles.header}>
         <View style={styles.headerIcon}>
-          <Ionicons name="documents" size={18} color="#F59E0B" />
+          <Ionicons name="documents" size={18} color={IOS_COLORS.orange} />
         </View>
-        <Text style={styles.headerTitle}>Race Documents</Text>
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>Race Documents</Text>
+          <Text style={styles.headerSubtitle}>
+            SI, NOR & amendments
+          </Text>
+        </View>
         {documents.length > 0 && (
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{documents.length}</Text>
           </View>
         )}
-        <MaterialCommunityIcons name="chevron-right" size={18} color="#94A3B8" />
+        <Animated.View style={chevronStyle}>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
+        </Animated.View>
       </View>
 
-      <View style={styles.content}>
-        {/* Key Info Row */}
-        {(vhfChannel || protestDeadline) && (
-          <View style={styles.infoRow}>
+      {/* Content */}
+      <>
+        {/* Collapsed: Quick info */}
+        {!isExpanded && (
+          <View style={styles.collapsedContent}>
             {vhfChannel && (
               <View style={styles.infoChip}>
-                <MaterialCommunityIcons name="radio" size={12} color="#DC2626" />
+                <MaterialCommunityIcons name="radio" size={14} color={IOS_COLORS.red} />
                 <Text style={styles.infoChipText}>VHF {vhfChannel}</Text>
               </View>
             )}
-            {protestDeadline && (
+            {hasDocuments && (
               <View style={styles.infoChip}>
-                <Ionicons name="time" size={12} color="#7C3AED" />
-                <Text style={styles.infoChipText}>Protest: {protestDeadline}</Text>
+                <Ionicons name="documents-outline" size={14} color={IOS_COLORS.orange} />
+                <Text style={styles.infoChipText}>
+                  {documents.length} document{documents.length !== 1 ? 's' : ''}
+                </Text>
               </View>
+            )}
+            {!vhfChannel && !hasDocuments && (
+              <Text style={styles.noDocsText}>No documents available</Text>
             )}
           </View>
         )}
 
-        {/* Documents List */}
-        {hasDocuments ? (
-          <View style={styles.documentsList}>
-            {sortedDocs.slice(0, 3).map((doc) => (
-              <TouchableOpacity
-                key={doc.id}
-                style={styles.documentRow}
-                onPress={() => onDocumentPress?.(doc)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name={getDocumentIcon(doc.type)} size={16} color="#64748B" />
-                <View style={styles.docTypeBadge}>
-                  <Text style={styles.docTypeText}>{getDocumentLabel(doc.type)}</Text>
+        {/* Expanded: Full content */}
+        {isExpanded && (
+          <View style={styles.expandedContent}>
+            {/* Key Info */}
+            {(vhfChannel || protestDeadline) && (
+              <View style={styles.keyInfoRow}>
+                {vhfChannel && (
+                  <View style={styles.keyInfo}>
+                    <View style={[styles.keyInfoIcon, { backgroundColor: `${IOS_COLORS.red}15` }]}>
+                      <MaterialCommunityIcons name="radio" size={16} color={IOS_COLORS.red} />
+                    </View>
+                    <View>
+                      <Text style={styles.keyInfoLabel}>VHF Channel</Text>
+                      <Text style={styles.keyInfoValue}>{vhfChannel}</Text>
+                    </View>
+                  </View>
+                )}
+                {protestDeadline && (
+                  <View style={styles.keyInfo}>
+                    <View style={[styles.keyInfoIcon, { backgroundColor: `${IOS_COLORS.purple}15` }]}>
+                      <Ionicons name="time" size={16} color={IOS_COLORS.purple} />
+                    </View>
+                    <View>
+                      <Text style={styles.keyInfoLabel}>Protest Deadline</Text>
+                      <Text style={styles.keyInfoValue}>{protestDeadline}</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Documents List - Tufte style: full names, minimal icons */}
+            {hasDocuments ? (
+              <View style={styles.documentsSection}>
+                <View style={styles.tufteDocumentsList}>
+                  {sortedDocs.map((doc) => (
+                    <TouchableOpacity
+                      key={doc.id}
+                      style={styles.tufteDocumentRow}
+                      onPress={() => onDocumentPress?.(doc)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.tufteDocumentName} numberOfLines={1}>
+                        {doc.name}
+                      </Text>
+                      {(doc.type === 'amendment' || doc.type === 'notam') && (
+                        <Text style={styles.tufteDocumentAlert}>!</Text>
+                      )}
+                      <MaterialCommunityIcons name="download" size={16} color={IOS_COLORS.gray} />
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <Text style={styles.documentName} numberOfLines={1}>
-                  {doc.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {documents.length > 3 && (
-              <Text style={styles.moreText}>+{documents.length - 3} more documents</Text>
+              </View>
+            ) : (
+              <View style={styles.noDocsContainer}>
+                <Ionicons name="folder-open-outline" size={28} color={IOS_COLORS.gray3} />
+                <Text style={styles.noDocsTitle}>No Documents</Text>
+                <Text style={styles.noDocsSubtext}>Race documents will appear here when available</Text>
+              </View>
             )}
           </View>
-        ) : (
-          <View style={styles.emptyDocs}>
-            <Ionicons name="folder-open-outline" size={24} color="#CBD5E1" />
-            <Text style={styles.emptyText}>No documents uploaded</Text>
-          </View>
         )}
-      </View>
+      </>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    padding: 12,
+    backgroundColor: IOS_COLORS.systemBackground,
+    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: IOS_COLORS.gray5,
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    gap: 8,
+    gap: 12,
   },
   headerIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FEF3C7',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: `${IOS_COLORS.orange}15`,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerText: {
     flex: 1,
-    fontSize: 14,
+  },
+  headerTitle: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 1,
   },
   countBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    backgroundColor: `${IOS_COLORS.orange}15`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   countText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#D97706',
+    color: IOS_COLORS.orange,
   },
-  content: {
-    gap: 10,
-  },
-  infoRow: {
+
+  // Collapsed content
+  collapsedContent: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: IOS_COLORS.gray6,
   },
   infoChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    gap: 6,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   infoChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  documentsList: {
-    gap: 6,
-  },
-  documentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  docTypeBadge: {
-    backgroundColor: '#E0E7FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    minWidth: 36,
-    alignItems: 'center',
-  },
-  docTypeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#4F46E5',
-    letterSpacing: 0.5,
-  },
-  documentName: {
-    flex: 1,
     fontSize: 12,
-    color: '#334155',
+    fontWeight: '600',
+    color: IOS_COLORS.label,
   },
-  moreText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontStyle: 'italic',
-    marginLeft: 52,
+  noDocsText: {
+    fontSize: 13,
+    color: IOS_COLORS.gray,
   },
-  emptyDocs: {
+
+  // Expanded content
+  expandedContent: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: IOS_COLORS.gray6,
+    gap: 16,
+  },
+  keyInfoRow: {
     flexDirection: 'row',
+    gap: 16,
+  },
+  keyInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  keyInfoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
   },
-  emptyText: {
-    fontSize: 12,
-    color: '#94A3B8',
+  keyInfoLabel: {
+    fontSize: 11,
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  keyInfoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  documentsSection: {
+    gap: 8,
+  },
+  // Tufte-style documents list (no type badges, full names)
+  tufteDocumentsList: {
+    gap: 4,
+  },
+  tufteDocumentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: IOS_COLORS.gray6,
+  },
+  tufteDocumentName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  tufteDocumentAlert: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: IOS_COLORS.red,
+    width: 16,
+    textAlign: 'center',
+  },
+  noDocsContainer: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  noDocsTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  noDocsSubtext: {
+    fontSize: 13,
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
   },
 });
