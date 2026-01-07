@@ -16,6 +16,9 @@ export interface UseRaceClassSelectionParams {
   selectedRaceData: {
     class_id?: string | null;
     classId?: string | null;
+    boatClass?: string | null;
+    /** Database column: boat_classes JSONB array */
+    boat_classes?: Array<{ id?: string; name?: string }> | null;
     metadata?: {
       class_id?: string | null;
       classId?: string | null;
@@ -46,17 +49,20 @@ export function useRaceClassSelection({
       selectedRaceData.classId ||
       selectedRaceData.metadata?.class_id ||
       selectedRaceData.metadata?.classId ||
+      selectedRaceData.boat_classes?.[0]?.id ||
       null
     );
     return classId;
   }, [selectedRaceData]);
 
-  // Extract class name from metadata or divisions
+  // Extract class name from metadata, divisions, boatClass, or boat_classes
   const selectedRaceClassName = useMemo((): string | undefined => {
     if (!selectedRaceData) return undefined;
     const className = (
       selectedRaceData.metadata?.class_name ||
       selectedRaceData.class_divisions?.[0]?.name ||
+      selectedRaceData.boatClass ||
+      selectedRaceData.boat_classes?.[0]?.name ||
       undefined
     );
     return className;

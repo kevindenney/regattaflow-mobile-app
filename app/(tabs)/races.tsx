@@ -3,6 +3,17 @@ import {
     RaceConditionsCard,
     RacePhaseHeader,
 } from '@/components/race-detail';
+import {
+    CardGrid,
+    getCardContentComponent,
+    CARD_TYPES,
+    TUFTE_BACKGROUND,
+    type CardType,
+    type CardRaceData,
+    type CardDimensions,
+    calculateCardDimensions,
+} from '@/components/cards';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/race-detail/RaceDocumentsCard';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
 import { PlanModeLayout } from '@/components/races/modes';
@@ -539,6 +550,100 @@ export default function RacesScreen() {
   const selectedDemoRace = useMemo(
     () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
     [selectedDemoRaceId]
+  );
+
+  // ==========================================================================
+  // CARD GRID NAVIGATION (Feature Flag)
+  // ==========================================================================
+
+  // Calculate card dimensions for CardGrid
+  const cardGridDimensions = useMemo(
+    () => calculateCardDimensions(SCREEN_WIDTH, SCREEN_HEIGHT),
+    [SCREEN_WIDTH, SCREEN_HEIGHT]
+  );
+
+  // Base race data for CardGrid (without detailed enrichment)
+  // This is used initially; enrichment happens in cardGridRacesEnriched below
+  const baseCardGridRaces: CardRaceData[] = useMemo(() => {
+    return safeRecentRaces.map((race: any) => ({
+      id: race.id,
+      name: race.name || race.race_name || 'Unnamed Race',
+      venue: race.venue || race.venue_name,
+      date: race.start_date || race.date || new Date().toISOString(),
+      startTime: race.start_time || race.startTime,
+      boatClass: race.boat_class || race.boatClass,
+      vhf_channel: race.vhf_channel || race.critical_details?.vhf_channel,
+      wind: race.wind,
+      tide: race.tide,
+      waves: race.waves,
+      temperature: race.temperature || race.waterTemperature,
+      critical_details: race.critical_details,
+      venueCoordinates: race.venueCoordinates,
+      created_by: race.created_by,
+      // Basic defaults for new cards (will be enriched for selected race later)
+      rigSettings: race.rigSettings || race.tuningRecommendation,
+      fleet: race.fleet || {
+        totalCompetitors: race.competitor_count || race.entry_count || 0,
+        fleetName: race.fleet_name,
+        isRegistered: race.is_registered,
+      },
+      regulatory: race.regulatory || {
+        documents: race.documents || [],
+        vhfChannel: race.vhf_channel || race.critical_details?.vhf_channel,
+        protestDeadline: race.protest_deadline || race.critical_details?.protest_deadline,
+      },
+    }));
+  }, [safeRecentRaces]);
+
+  // Render card content for CardGrid
+  const renderCardGridContent = useCallback(
+    (
+      race: CardRaceData,
+      cardType: CardType,
+      isActive: boolean,
+      isExpanded: boolean,
+      onToggleExpand: () => void,
+      canManage: boolean,
+      onEdit?: () => void,
+      onDelete?: () => void,
+      onUploadDocument?: () => void,
+      onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void
+    ) => {
+      const ContentComponent = getCardContentComponent(cardType);
+      return (
+        <ContentComponent
+          race={race}
+          cardType={cardType}
+          isActive={isActive}
+          isExpanded={isExpanded}
+          onToggleExpand={onToggleExpand}
+          dimensions={cardGridDimensions}
+          canManage={canManage}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onUploadDocument={onUploadDocument}
+          onRaceComplete={onRaceComplete}
+        />
+      );
+    },
+    [cardGridDimensions]
+  );
+
+  // Handle race change from CardGrid
+  const handleCardGridRaceChange = useCallback(
+    (index: number, race: CardRaceData) => {
+      setHasManuallySelected(true);
+      setSelectedRaceId(race.id);
+    },
+    []
+  );
+
+  // Handle card (vertical) change from CardGrid
+  const handleCardGridCardChange = useCallback(
+    (cardType: CardType, cardIndex: number) => {
+      logger.debug('Card changed:', { cardType, cardIndex });
+    },
+    []
   );
 
   // Active race summary (extracted to useActiveRaceSummary hook)
@@ -1436,10 +1541,40 @@ export default function RacesScreen() {
     selectType: handleDocumentTypeOptionSelect,
     dismissTypePicker: handleDismissDocumentTypePicker,
   } = useRaceDocuments({
-    raceId: selectedRaceData?.id,
+    raceId: selectedRaceId,
     userId: user?.id,
     isDemoSession,
   });
+
+  // Track pending document upload (for race switching)
+  const pendingDocumentUploadRef = useRef<boolean>(false);
+
+  // Handle document upload from CardGrid
+  // If uploading for a different race, select that race first
+  const handleCardGridUploadDocument = useCallback(
+    (raceId: string) => {
+      // If this is a different race, select it first and mark upload pending
+      if (raceId !== selectedRaceId) {
+        setSelectedRaceId(raceId);
+        setHasManuallySelected(true);
+        pendingDocumentUploadRef.current = true;
+      } else {
+        handleUploadRaceDocument();
+      }
+    },
+    [selectedRaceId, handleUploadRaceDocument]
+  );
+
+  // Trigger pending document upload after race selection changes
+  useEffect(() => {
+    if (pendingDocumentUploadRef.current && selectedRaceId) {
+      pendingDocumentUploadRef.current = false;
+      // Small delay to ensure hook has updated
+      setTimeout(() => {
+        handleUploadRaceDocument();
+      }, 50);
+    }
+  }, [selectedRaceId, handleUploadRaceDocument]);
 
   // Transform raw documents into display format
   const raceDocumentsForDisplay = useMemo<RaceDocumentsCardDocument[]>(() => {
@@ -1974,6 +2109,49 @@ export default function RacesScreen() {
     enabled: !!(selectedRaceClassId || selectedRaceClassName),
   });
 
+  // Enriched CardGrid races - merges detailed data for the selected race
+  const cardGridRaces: CardRaceData[] = useMemo(() => {
+    return baseCardGridRaces.map((race) => {
+      // Only enrich the selected race with detailed data from hooks
+      if (race.id === selectedRaceId) {
+        return {
+          ...race,
+          // Rig settings from tuning recommendation hook
+          rigSettings: selectedRaceTuningRecommendation ? {
+            boatClassName: selectedRaceClassName,
+            conditionSummary: selectedRaceTuningRecommendation.conditionSummary,
+            settings: selectedRaceTuningRecommendation.settings,
+            isAIGenerated: selectedRaceTuningRecommendation.isAIGenerated,
+            confidence: selectedRaceTuningRecommendation.confidence,
+            guideName: selectedRaceTuningRecommendation.guideTitle,
+          } : race.rigSettings,
+          // Fleet data from selected race detail
+          fleet: {
+            totalCompetitors: selectedRaceData?.entry_count || selectedRaceData?.competitor_count || race.fleet?.totalCompetitors || 0,
+            confirmedCount: selectedRaceData?.confirmed_count || race.fleet?.confirmedCount || 0,
+            fleetName: selectedRaceData?.fleet?.name || race.fleet?.fleetName,
+            isRegistered: selectedRaceData?.is_registered ?? race.fleet?.isRegistered,
+            competitors: selectedRaceData?.competitors || race.fleet?.competitors || [],
+          },
+          // Regulatory data from documents hook and race metadata
+          regulatory: {
+            documents: raceDocumentsForDisplay?.length > 0
+              ? raceDocumentsForDisplay.map(doc => ({
+                  id: doc.id,
+                  name: doc.name,
+                  type: doc.type as any,
+                  uploadedAt: doc.uploadedAt,
+                }))
+              : race.regulatory?.documents || [],
+            vhfChannel: selectedRaceData?.metadata?.vhf_channel || race.regulatory?.vhfChannel,
+            protestDeadline: selectedRaceData?.metadata?.protest_deadline || race.regulatory?.protestDeadline,
+          },
+        };
+      }
+      return race;
+    });
+  }, [baseCardGridRaces, selectedRaceId, selectedRaceData, selectedRaceTuningRecommendation, selectedRaceClassName, raceDocumentsForDisplay]);
+
   const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
 
   const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
@@ -2077,7 +2255,7 @@ export default function RacesScreen() {
   const userInitial = (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
 
   return (
-    <View className="flex-1" style={{ backgroundColor: '#EBEBED' }}>
+    <View style={{ flex: 1, backgroundColor: TUFTE_BACKGROUND }}>
       {/* Floating Header */}
       <RacesFloatingHeader
         topInset={insets.top}
@@ -2089,7 +2267,26 @@ export default function RacesScreen() {
         userInitial={userInitial}
       />
 
-      {/* Main Content */}
+      {/* Main Content - CardGrid or ScrollView based on feature flag */}
+      {FEATURE_FLAGS.USE_CARD_GRID_NAVIGATION && hasRealRaces ? (
+        // New CardGrid 2D navigation system - CardGrid handles its own flex
+        <CardGrid
+          races={cardGridRaces}
+          renderCardContent={renderCardGridContent}
+          onRaceChange={handleCardGridRaceChange}
+          onCardChange={handleCardGridCardChange}
+          initialRaceIndex={Math.max(0, cardGridRaces.findIndex(r => r.id === (selectedRaceId || safeNextRace?.id)))}
+          nextRaceIndex={safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
+          enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
+          persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION}
+          style={{ flex: 1 }}
+          userId={user?.id}
+          onEditRace={handleEditRace}
+          onDeleteRace={handleDeleteRace}
+          onUploadDocument={handleCardGridUploadDocument}
+          onRaceComplete={handleRaceComplete}
+        />
+      ) : (
       <ScrollView
         ref={mainScrollViewRef}
         className="flex-1 px-4 py-4"
@@ -2110,7 +2307,7 @@ export default function RacesScreen() {
         />
         {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
         {hasRealRaces ? (
-          // User has real races - show carousel with detail zone
+          // Legacy carousel with detail zone
           <>
             <RealRacesCarousel
               races={safeRecentRaces}
@@ -2130,6 +2327,20 @@ export default function RacesScreen() {
               getRaceStatus={getRaceStatus}
               onEditRace={handleEditRace}
               onDeleteRace={handleDeleteRace}
+              useTimelineLayout={true}
+              useAppleStyle={FEATURE_FLAGS.USE_APPLE_STYLE_CARDS}
+              useRefinedStyle={FEATURE_FLAGS.USE_REFINED_STYLE_CARDS}
+              pastRaceIds={pastRaceIds}
+              onAddDebrief={(raceId) => {
+                // Ensure the race is selected, then open the post-race interview
+                if (raceId !== selectedRaceId) {
+                  setSelectedRaceId(raceId);
+                }
+                // Small delay to allow selection to update, then open interview
+                setTimeout(() => {
+                  handleOpenPostRaceInterviewManually();
+                }, 100);
+              }}
             />
 
             {/* Inline Comprehensive Race Detail Section */}
@@ -2442,6 +2653,7 @@ export default function RacesScreen() {
           />
         )}
       </ScrollView>
+      )}
 
       <RaceModalsSection
         // Document Type Picker
