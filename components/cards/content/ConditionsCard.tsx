@@ -18,18 +18,12 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-nati
 import {
   Wind,
   Waves,
-  Thermometer,
-  Compass,
   ArrowUp,
   ArrowDown,
   Minus,
-  Droplets,
-  Navigation,
-  Sailboat,
   Check,
   ChevronDown,
   ChevronUp,
-  Sparkles,
 } from 'lucide-react-native';
 
 import { CardContentProps } from '../types';
@@ -477,14 +471,11 @@ export function ConditionsCard({
   const hasSailSelections = sailSelection?.mainsail || sailSelection?.jib || sailSelection?.spinnaker;
 
   // ==========================================================================
-  // COLLAPSED VIEW - Tufte Grid Layout
+  // COLLAPSED VIEW - Tufte Grid Layout (no header - card context is obvious)
   // ==========================================================================
   if (!isExpanded) {
     return (
       <View style={styles.container}>
-        {/* Section Label */}
-        <Text style={styles.sectionLabel}>CONDITIONS</Text>
-
         {hasData ? (
           <View style={styles.tufteCollapsed}>
             {/* Wind Row - Tufte flat grid */}
@@ -581,9 +572,6 @@ export function ConditionsCard({
   // ==========================================================================
   return (
     <View style={styles.container}>
-      {/* Section Label */}
-      <Text style={styles.sectionLabel}>CONDITIONS</Text>
-
       {hasData ? (
         <ScrollView
           style={styles.expandedScrollView}
@@ -670,44 +658,26 @@ export function ConditionsCard({
             )}
           </View>
 
-          {/* Sail Selection Section */}
+          {/* Sail Selection Section - Tufte flat design */}
           {wind && (
-            <View style={styles.sailSelectionSection}>
-              {/* Section Header */}
-              <View style={styles.sailSelectionHeader}>
-                <View style={styles.sailSelectionHeaderLeft}>
-                  <Sailboat size={20} color={IOS_COLORS.cyan} />
-                  <Text style={styles.sailSelectionTitle}>Sail Selection</Text>
-                </View>
+            <View style={styles.tufteSailSection}>
+              {/* Section Header - typography only */}
+              <View style={styles.tufteSailHeader}>
+                <Text style={styles.tufteSailTitle}>SAIL SELECTION</Text>
                 {hasSailSelections && (
-                  <View style={styles.sailSetBadge}>
-                    <Check size={12} color={IOS_COLORS.green} />
-                    <Text style={styles.sailSetBadgeText}>Set</Text>
-                  </View>
+                  <Text style={styles.tufteSailSet}>✓ Set</Text>
                 )}
               </View>
 
-              {/* AI Recommendations */}
+              {/* AI Recommendations - inline Tufte style */}
               {sailRecommendations.length > 0 && (
-                <View style={styles.recommendationsCard}>
-                  <View style={styles.recommendationsHeader}>
-                    <Sparkles size={14} color={IOS_COLORS.purple} />
-                    <Text style={styles.recommendationsTitle}>AI Recommendations</Text>
-                    <Text style={styles.recommendationsContext}>
-                      {wind.speedMin}-{wind.speedMax} kts
-                    </Text>
-                  </View>
-                  <View style={styles.recommendationsList}>
-                    {sailRecommendations.map((rec, idx) => (
-                      <View key={idx} style={styles.recommendationItem}>
-                        <Text style={styles.recommendationIcon}>{rec.icon}</Text>
-                        <View style={styles.recommendationContent}>
-                          <Text style={styles.recommendationText}>{rec.recommendation}</Text>
-                          <Text style={styles.recommendationReasoning}>{rec.reasoning}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
+                <View style={styles.tufteRecommendations}>
+                  <Text style={styles.tufteRecHeader}>
+                    Recommended for {wind.speedMin}–{wind.speedMax}kt:
+                  </Text>
+                  <Text style={styles.tufteRecList}>
+                    {sailRecommendations.map((rec) => rec.recommendation).join(' · ')}
+                  </Text>
                 </View>
               )}
 
@@ -1409,6 +1379,48 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: IOS_COLORS.gray4,
     borderRadius: 2,
+  },
+
+  // ==========================================================================
+  // TUFTE SAIL SECTION - Flat typography-driven design
+  // ==========================================================================
+  tufteSailSection: {
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray4,
+    gap: 12,
+  },
+  tufteSailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tufteSailTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tufteSailSet: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
+  },
+  tufteRecommendations: {
+    gap: 4,
+  },
+  tufteRecHeader: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteRecList: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 20,
   },
 });
 

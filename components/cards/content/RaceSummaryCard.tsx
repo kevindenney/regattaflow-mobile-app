@@ -1,31 +1,21 @@
 /**
  * RaceSummaryCard - Position 0 (Default View)
  *
- * The primary race card showing:
- * - Race name and series (full display, no truncation)
- * - Date and time
- * - Countdown timer with iOS styling
- * - Venue
- * - Conditions preview (wind, tide, VHF)
- *
- * Apple Human Interface Guidelines (HIG) compliant design:
- * - iOS system colors
- * - SF Pro typography
- * - Clean visual hierarchy
+ * Tufte-inspired race summary:
+ * - Typography IS the interface (no colored badges)
+ * - Maximum data density with sparklines
+ * - Single encoding per concept (no icon + label)
+ * - Every pixel shows data, not decoration
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
 import { StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation } from 'react-native';
 import {
-  MapPin,
   Clock,
   Calendar,
   Navigation,
   Route,
   Timer,
-  Wind,
-  Waves,
-  Radio,
   Trophy,
   Users,
   Flag,
@@ -40,6 +30,8 @@ import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { RaceCountdownTimer } from '@/components/races/RaceCountdownTimer';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { TinySparkline } from '@/components/shared/charts';
+import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import type { ArrivalTimeIntention } from '@/types/raceIntentions';
 
 // =============================================================================
@@ -371,6 +363,15 @@ export function RaceSummaryCard({
   // Check if we have any conditions to show
   const hasConditions = windData || tideData || vhfChannel;
 
+  // Fetch weather forecast for sparklines
+  const venue = (race as any).venue_data || (race as any).venue_info;
+  const { data: forecastData } = useRaceWeatherForecast(venue, race.date, !!venue);
+
+  // Extract additional data for Tufte density
+  const fleetSize = (race as any).fleet_size || (race as any).entry_count || (race as any).competitors?.length;
+  const courseType = (race as any).course_type || (race as any).course?.type;
+  const courseDistance = (race as any).course_distance_nm || (race as any).total_distance_nm;
+
   // Build menu items for card management
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
@@ -387,103 +388,108 @@ export function RaceSummaryCard({
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
 
   // ==========================================================================
-  // COLLAPSED VIEW (Apple HIG Design)
+  // COLLAPSED VIEW - Aggressive Tufte Design
+  // Typography hierarchy, no badges, maximum data density
   // ==========================================================================
   if (!isExpanded) {
     return (
       <View style={styles.container}>
-        {/* Header: Badges Row */}
-        <View style={styles.badgesRow}>
-          {/* Race Type Badge (always shown) */}
-          <View style={[styles.typeBadge, { backgroundColor: raceTypeBadge.bg }]}>
-            <RaceTypeBadgeIcon size={10} color={raceTypeBadge.text} />
-            <Text style={[styles.typeBadgeText, { color: raceTypeBadge.text }]}>
-              {raceTypeBadge.label}
-            </Text>
-          </View>
-          {/* Status Badge */}
-          <View style={[styles.statusBadge, { backgroundColor: urgency.bg }]}>
-            <Text style={[styles.statusText, { color: urgency.text }]}>
-              {urgency.label}
-            </Text>
-          </View>
-        </View>
+        {/* Typographic Header - Race type + status as text, not badges */}
+        <Text style={styles.tufteTypeLabel}>
+          {raceTypeBadge.label} RACE
+          {!countdown.isPast && ` · ${urgency.label}`}
+        </Text>
 
-        {/* Race Name (full display, no truncation) */}
-        <Text style={styles.raceName} numberOfLines={3}>
+        {/* Race Name - Primary visual element */}
+        <Text style={styles.tufteRaceName} numberOfLines={2}>
           {race.name}
         </Text>
 
-        {/* Venue */}
+        {/* Venue - No icon, just typography */}
         {race.venue && (
-          <View style={styles.venueRow}>
-            <MapPin size={14} color={IOS_COLORS.gray} />
-            <Text style={styles.venueText} numberOfLines={2}>{race.venue}</Text>
-          </View>
+          <Text style={styles.tufteVenue} numberOfLines={1}>{race.venue}</Text>
         )}
 
-        {/* Countdown Timer - Tufte compact format */}
-        <View style={styles.collapsedCountdown}>
+        {/* Time Block - Countdown + Date/Time inline */}
+        <View style={styles.tufteTimeBlock}>
           {countdown.isPast ? (
-            <View style={styles.countdownPastContainer}>
-              <Text style={styles.countdownPastCompact}>Race Completed</Text>
-            </View>
+            <Text style={styles.tufteCountdownPast}>Race Completed</Text>
           ) : (
-            <View style={styles.countdownTufteRow}>
-              <Text style={styles.countdownTufteValue}>
+            <Text style={styles.tufteCountdownInline}>
+              <Text style={styles.tufteCountdownValue}>
                 {countdown.days > 0
                   ? `${countdown.days}d ${countdown.hours}h`
                   : countdown.hours > 0
                     ? `${countdown.hours}h ${countdown.minutes}m`
                     : `${countdown.minutes}m`}
               </Text>
-              <Text style={styles.countdownTufteLabel}>until start</Text>
-            </View>
+              {' to start · '}
+              {formatDate(race.date)} {formatTime(race.startTime)}
+            </Text>
           )}
         </View>
 
-        {/* Conditions Preview Row */}
+        {/* Conditions Grid - Flat typography with sparklines */}
         {hasConditions && (
-          <View style={styles.conditionsPreview}>
+          <View style={styles.tufteConditionsGrid}>
             {windData && (
-              <View style={styles.conditionItem}>
-                <Wind size={14} color={IOS_COLORS.blue} />
-                <Text style={styles.conditionText}>
-                  {windData.direction} {windData.speedMin}-{windData.speedMax}kt
+              <View style={styles.tufteConditionRow}>
+                <Text style={styles.tufteConditionLabel}>Wind</Text>
+                <Text style={styles.tufteConditionValue}>
+                  {windData.direction} {windData.speedMin}–{windData.speedMax}kt
                 </Text>
+                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
+                  <TinySparkline
+                    data={forecastData.windForecast}
+                    width={50}
+                    height={14}
+                    color={IOS_COLORS.secondaryLabel}
+                    nowIndex={forecastData.forecastNowIndex}
+                  />
+                )}
               </View>
             )}
             {tideData && (
-              <View style={styles.conditionItem}>
-                <Waves size={14} color={IOS_COLORS.blue} />
-                <Text style={styles.conditionText}>
+              <View style={styles.tufteConditionRow}>
+                <Text style={styles.tufteConditionLabel}>Tide</Text>
+                <Text style={styles.tufteConditionValue}>
                   {formatTideState(tideData.state)}
                   {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
                 </Text>
+                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
+                  <TinySparkline
+                    data={forecastData.tideForecast}
+                    width={50}
+                    height={14}
+                    color={IOS_COLORS.secondaryLabel}
+                    nowIndex={forecastData.forecastNowIndex}
+                    variant="area"
+                  />
+                )}
               </View>
             )}
             {vhfChannel && (
-              <View style={styles.conditionItem}>
-                <Radio size={14} color={IOS_COLORS.orange} />
-                <Text style={styles.conditionText}>Ch {vhfChannel}</Text>
+              <View style={styles.tufteConditionRow}>
+                <Text style={styles.tufteConditionLabel}>VHF</Text>
+                <Text style={styles.tufteConditionValue}>Ch {vhfChannel}</Text>
               </View>
             )}
           </View>
         )}
 
-        {/* Date & Time Row */}
-        <View style={styles.dateTimeRow}>
-          <View style={styles.dateTimeItem}>
-            <Calendar size={16} color={IOS_COLORS.gray} />
-            <Text style={styles.dateTimeText}>{formatDate(race.date)}</Text>
-          </View>
-          <View style={styles.dateTimeItem}>
-            <Clock size={16} color={IOS_COLORS.gray} />
-            <Text style={styles.dateTimeText}>{formatTime(race.startTime)}</Text>
-          </View>
-        </View>
+        {/* Data Density Row - Fleet size, course info */}
+        {(fleetSize || courseType || courseDistance || numberOfLegs > 0) && (
+          <Text style={styles.tufteDataDensity}>
+            {[
+              fleetSize && `${fleetSize} boats`,
+              courseType && courseType,
+              courseDistance && `${courseDistance}nm`,
+              numberOfLegs > 0 && `${numberOfLegs} legs`,
+            ].filter(Boolean).join(' · ')}
+          </Text>
+        )}
 
-        {/* Swipe indicator (subtle) */}
+        {/* Swipe indicator */}
         <View style={styles.swipeHintBottom}>
           <View style={styles.swipeIndicator} />
         </View>
@@ -492,51 +498,29 @@ export function RaceSummaryCard({
   }
 
   // ==========================================================================
-  // EXPANDED VIEW (Apple HIG Design)
+  // EXPANDED VIEW - Tufte Design with Interactive Elements
   // ==========================================================================
   return (
     <View style={styles.container}>
-      {/* Header: Badges Row with Menu */}
-      <View style={styles.expandedHeader}>
-        <View style={styles.badgesRow}>
-          {/* Race Type Badge (always shown) */}
-          <View style={[styles.typeBadge, { backgroundColor: raceTypeBadge.bg }]}>
-            <RaceTypeBadgeIcon size={10} color={raceTypeBadge.text} />
-            <Text style={[styles.typeBadgeText, { color: raceTypeBadge.text }]}>
-              {raceTypeBadge.label}
-            </Text>
-          </View>
-          {/* Distance race leg count */}
-          {isDistanceRace && numberOfLegs > 0 && (
-            <View style={[styles.typeBadge, { backgroundColor: IOS_COLORS.gray6 }]}>
-              <Text style={[styles.typeBadgeText, { color: IOS_COLORS.gray }]}>
-                {numberOfLegs} legs
-              </Text>
-            </View>
-          )}
-          {/* Status Badge */}
-          <View style={[styles.statusBadge, { backgroundColor: urgency.bg }]}>
-            <Text style={[styles.statusText, { color: urgency.text }]}>
-              {urgency.label}
-            </Text>
-          </View>
-        </View>
+      {/* Typographic Header with Menu */}
+      <View style={styles.tufteExpandedHeader}>
+        <Text style={styles.tufteTypeLabel}>
+          {raceTypeBadge.label} RACE
+          {numberOfLegs > 0 && ` · ${numberOfLegs} legs`}
+        </Text>
         {canManage && menuItems.length > 0 && (
           <CardMenu items={menuItems} />
         )}
       </View>
 
-      {/* Race Name (full display) */}
-      <Text style={styles.raceName}>
+      {/* Race Name */}
+      <Text style={styles.tufteRaceName}>
         {race.name}
       </Text>
 
       {/* Venue */}
       {race.venue && (
-        <View style={styles.venueRow}>
-          <MapPin size={14} color={IOS_COLORS.gray} />
-          <Text style={styles.venueText}>{race.venue}</Text>
-        </View>
+        <Text style={styles.tufteVenue}>{race.venue}</Text>
       )}
 
       {/* Countdown Timer with GPS Tracking */}
@@ -582,41 +566,60 @@ export function RaceSummaryCard({
         </View>
       )}
 
-      {/* Conditions Preview Row (expanded shows more detail) */}
+      {/* Conditions Section - Tufte flat grid with larger sparklines */}
       {hasConditions && (
-        <View style={styles.conditionsPreviewExpanded}>
-          {windData && (
-            <View style={styles.conditionItemExpanded}>
-              <Wind size={16} color={IOS_COLORS.blue} />
-              <View>
-                <Text style={styles.conditionLabel}>Wind</Text>
-                <Text style={styles.conditionValueExpanded}>
-                  {windData.direction} {windData.speedMin}-{windData.speedMax}kt
+        <View style={styles.tufteConditionsExpanded}>
+          <Text style={styles.tufteSectionLabel}>CONDITIONS</Text>
+          <View style={styles.tufteConditionsGrid}>
+            {windData && (
+              <View style={styles.tufteConditionRowExpanded}>
+                <Text style={styles.tufteConditionLabelExpanded}>Wind</Text>
+                <Text style={styles.tufteConditionValueExpanded}>
+                  {windData.direction} {windData.speedMin}–{windData.speedMax}kt
                 </Text>
+                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
+                  <TinySparkline
+                    data={forecastData.windForecast}
+                    width={70}
+                    height={18}
+                    color={IOS_COLORS.secondaryLabel}
+                    nowIndex={forecastData.forecastNowIndex}
+                  />
+                )}
+                {forecastData?.windTrend && (
+                  <Text style={styles.tufteTrendText}>{forecastData.windTrend}</Text>
+                )}
               </View>
-            </View>
-          )}
-          {tideData && (
-            <View style={styles.conditionItemExpanded}>
-              <Waves size={16} color={IOS_COLORS.blue} />
-              <View>
-                <Text style={styles.conditionLabel}>Tide</Text>
-                <Text style={styles.conditionValueExpanded}>
+            )}
+            {tideData && (
+              <View style={styles.tufteConditionRowExpanded}>
+                <Text style={styles.tufteConditionLabelExpanded}>Tide</Text>
+                <Text style={styles.tufteConditionValueExpanded}>
                   {formatTideState(tideData.state)}
                   {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
                 </Text>
+                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
+                  <TinySparkline
+                    data={forecastData.tideForecast}
+                    width={70}
+                    height={18}
+                    color={IOS_COLORS.secondaryLabel}
+                    nowIndex={forecastData.forecastNowIndex}
+                    variant="area"
+                  />
+                )}
+                {forecastData?.tidePeakTime && (
+                  <Text style={styles.tufteTrendText}>peak {forecastData.tidePeakTime}</Text>
+                )}
               </View>
-            </View>
-          )}
-          {vhfChannel && (
-            <View style={styles.conditionItemExpanded}>
-              <Radio size={16} color={IOS_COLORS.orange} />
-              <View>
-                <Text style={styles.conditionLabel}>VHF</Text>
-                <Text style={styles.conditionValueExpanded}>Ch {vhfChannel}</Text>
+            )}
+            {vhfChannel && (
+              <View style={styles.tufteConditionRowExpanded}>
+                <Text style={styles.tufteConditionLabelExpanded}>VHF</Text>
+                <Text style={styles.tufteConditionValueExpanded}>Channel {vhfChannel}</Text>
               </View>
-            </View>
-          )}
+            )}
+          </View>
         </View>
       )}
 
@@ -1115,6 +1118,164 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: IOS_COLORS.gray4,
     borderRadius: 2,
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Typography IS the interface
+  // Maximum data-ink ratio, no decorative elements
+  // ==========================================================================
+
+  // Typographic header - race type as small caps text, not a badge
+  tufteTypeLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+
+  // Expanded header with menu
+  tufteExpandedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+
+  // Race name - primary visual element, large and bold
+  tufteRaceName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    lineHeight: 30,
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+
+  // Venue - secondary text, no icon
+  tufteVenue: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 16,
+  },
+
+  // Time block - contains countdown inline with date
+  tufteTimeBlock: {
+    marginBottom: 14,
+  },
+
+  // Countdown inline - single line format: "2h 47m to start · Wed, Jan 7 10:25 AM"
+  tufteCountdownInline: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Countdown value - the actual time, emphasized
+  tufteCountdownValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Past race text
+  tufteCountdownPast: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
+  },
+
+  // Conditions grid - flat layout, no icons
+  tufteConditionsGrid: {
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  // Condition row - label, value, sparkline
+  tufteConditionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  // Condition label - fixed width for alignment
+  tufteConditionLabel: {
+    width: 36,
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Condition value - the data
+  tufteConditionValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Data density row - additional info in one line
+  tufteDataDensity: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    marginBottom: 16,
+  },
+
+  // Section label - small caps header for sections
+  tufteSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+
+  // Expanded conditions container
+  tufteConditionsExpanded: {
+    marginBottom: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+
+  // Expanded condition row - more space
+  tufteConditionRowExpanded: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+  },
+
+  // Expanded condition label
+  tufteConditionLabelExpanded: {
+    width: 44,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Expanded condition value
+  tufteConditionValueExpanded: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Trend annotation text
+  tufteTrendText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
   },
 });
 
