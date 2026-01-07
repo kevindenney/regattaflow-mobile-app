@@ -117,20 +117,15 @@ export function FleetDetailCard({
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      {/* Header - Always visible */}
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <MaterialCommunityIcons name="sail-boat" size={18} color={IOS_COLORS.indigo} />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>Fleet</Text>
-          <Text style={styles.headerSubtitle}>
-            {fleetName || 'Competitors & entries'}
-          </Text>
-        </View>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{totalCompetitors}</Text>
-        </View>
+      {/* Header - Tufte typography-only */}
+      <View style={styles.tufteHeader}>
+        <Text style={styles.tufteHeaderTitle}>FLEET</Text>
+        {fleetName && (
+          <Text style={styles.tufteHeaderSubtitle}>{fleetName}</Text>
+        )}
+        {!fleetName && totalCompetitors > 0 && (
+          <Text style={styles.tufteHeaderSubtitle}>{totalCompetitors} entries</Text>
+        )}
         <Animated.View style={chevronStyle}>
           <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
         </Animated.View>
@@ -138,78 +133,42 @@ export function FleetDetailCard({
 
       {/* Content */}
       <>
-        {/* Collapsed: Key stats */}
+        {/* Collapsed: Tufte flat typography */}
         {!isExpanded && (
-          <View style={styles.collapsedContent}>
-            {/* Registration Status */}
-            {isRegistered !== undefined && (
-              <View style={[
-                styles.registrationChip,
-                isRegistered ? styles.registeredChip : styles.notRegisteredChip
-              ]}>
-                <Ionicons
-                  name={isRegistered ? "checkmark-circle" : "add-circle"}
-                  size={14}
-                  color={isRegistered ? IOS_COLORS.green : IOS_COLORS.indigo}
-                />
-                <Text style={[
-                  styles.registrationText,
-                  isRegistered ? styles.registeredText : styles.notRegisteredText
-                ]}>
-                  {isRegistered ? 'Registered' : 'Not registered'}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.collapsedStats}>
-              <View style={styles.statChip}>
-                <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.green} />
-                <Text style={styles.statValue}>{confirmedCount}</Text>
-                <Text style={styles.statLabel}>confirmed</Text>
-              </View>
-            </View>
+          <View style={styles.tufteCollapsedContent}>
+            <Text style={styles.tufteCollapsedData}>
+              {[
+                totalCompetitors > 0 && `${totalCompetitors} entries`,
+                confirmedCount > 0 && `${confirmedCount} confirmed`,
+                isRegistered === true && 'You: ✓',
+                isRegistered === false && 'Not registered',
+              ].filter(Boolean).join(' · ')}
+            </Text>
           </View>
         )}
 
-        {/* Expanded: Full content */}
+        {/* Expanded: Tufte flat content */}
         {isExpanded && (
           <View style={styles.expandedContent}>
-            {/* Registration Status */}
+            {/* Registration Status - Tufte flat row */}
             {isRegistered !== undefined && (
-              <View style={[
-                styles.expandedRegistration,
-                isRegistered ? styles.expandedRegistered : styles.expandedNotRegistered
-              ]}>
-                <Ionicons
-                  name={isRegistered ? "checkmark-circle" : "add-circle"}
-                  size={18}
-                  color={isRegistered ? IOS_COLORS.green : IOS_COLORS.indigo}
-                />
-                <Text style={[
-                  styles.expandedRegistrationText,
-                  isRegistered ? styles.expandedRegisteredText : styles.expandedNotRegisteredText
-                ]}>
-                  {isRegistered ? 'You are registered' : 'You are not registered'}
+              <View style={styles.tufteRegistrationRow}>
+                <Text style={styles.tufteRegistrationLabel}>You</Text>
+                <Text style={styles.tufteRegistrationValue}>
+                  {isRegistered ? 'Registered ✓' : 'Not registered'}
                 </Text>
                 {!isRegistered && onRegister && (
-                  <TouchableOpacity style={styles.registerButton} onPress={onRegister}>
-                    <Text style={styles.registerButtonText}>Join</Text>
+                  <TouchableOpacity style={styles.tufteRegisterButton} onPress={onRegister}>
+                    <Text style={styles.tufteRegisterButtonText}>Join →</Text>
                   </TouchableOpacity>
                 )}
               </View>
             )}
 
-            {/* Stats Row */}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.expandedStatValue}>{totalCompetitors}</Text>
-                <Text style={styles.expandedStatLabel}>Total Entries</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.expandedStatValue}>{confirmedCount}</Text>
-                <Text style={styles.expandedStatLabel}>Confirmed</Text>
-              </View>
-            </View>
+            {/* Stats - Tufte summary line */}
+            <Text style={styles.tufteSummary}>
+              {totalCompetitors} entries · {confirmedCount} confirmed
+            </Text>
 
             {/* Competitors List - Tufte style: sail number first, minimal status */}
             {competitors && competitors.length > 0 && (
@@ -462,5 +421,70 @@ const styles = StyleSheet.create({
   noCompetitorsText: {
     fontSize: 13,
     color: IOS_COLORS.gray,
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Typography-only, flat design
+  // ==========================================================================
+  tufteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tufteHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tufteHeaderSubtitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  tufteCollapsedContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+  tufteCollapsedData: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  tufteRegistrationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tufteRegistrationLabel: {
+    width: 40,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteRegistrationValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  tufteRegisterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  tufteRegisterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  tufteSummary: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 8,
   },
 });

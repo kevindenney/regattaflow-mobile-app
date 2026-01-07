@@ -126,22 +126,12 @@ export function RegulatoryDetailCard({
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      {/* Header - Always visible */}
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <Ionicons name="documents" size={18} color={IOS_COLORS.orange} />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>Race Documents</Text>
-          <Text style={styles.headerSubtitle}>
-            SI, NOR & amendments
-          </Text>
-        </View>
-        {documents.length > 0 && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{documents.length}</Text>
-          </View>
-        )}
+      {/* Header - Tufte typography-only */}
+      <View style={styles.tufteHeader}>
+        <Text style={styles.tufteHeaderTitle}>DOCUMENTS</Text>
+        <Text style={styles.tufteHeaderSubtitle}>
+          {documents.length > 0 ? `${documents.length} files` : 'Race documents'}
+        </Text>
         <Animated.View style={chevronStyle}>
           <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
         </Animated.View>
@@ -149,55 +139,35 @@ export function RegulatoryDetailCard({
 
       {/* Content */}
       <>
-        {/* Collapsed: Quick info */}
+        {/* Collapsed: Tufte flat typography */}
         {!isExpanded && (
-          <View style={styles.collapsedContent}>
-            {vhfChannel && (
-              <View style={styles.infoChip}>
-                <MaterialCommunityIcons name="radio" size={14} color={IOS_COLORS.red} />
-                <Text style={styles.infoChipText}>VHF {vhfChannel}</Text>
-              </View>
-            )}
-            {hasDocuments && (
-              <View style={styles.infoChip}>
-                <Ionicons name="documents-outline" size={14} color={IOS_COLORS.orange} />
-                <Text style={styles.infoChipText}>
-                  {documents.length} document{documents.length !== 1 ? 's' : ''}
-                </Text>
-              </View>
-            )}
-            {!vhfChannel && !hasDocuments && (
-              <Text style={styles.noDocsText}>No documents available</Text>
-            )}
+          <View style={styles.tufteCollapsedContent}>
+            <Text style={styles.tufteCollapsedData}>
+              {[
+                vhfChannel && `VHF Ch ${vhfChannel}`,
+                protestDeadline && `Protest by ${protestDeadline}`,
+                hasDocuments && `${documents.length} document${documents.length !== 1 ? 's' : ''}`,
+              ].filter(Boolean).join(' · ') || 'No documents available'}
+            </Text>
           </View>
         )}
 
-        {/* Expanded: Full content */}
+        {/* Expanded: Tufte flat content */}
         {isExpanded && (
           <View style={styles.expandedContent}>
-            {/* Key Info */}
+            {/* Key Info - Tufte flat rows */}
             {(vhfChannel || protestDeadline) && (
-              <View style={styles.keyInfoRow}>
+              <View style={styles.tufteKeyInfoGrid}>
                 {vhfChannel && (
-                  <View style={styles.keyInfo}>
-                    <View style={[styles.keyInfoIcon, { backgroundColor: `${IOS_COLORS.red}15` }]}>
-                      <MaterialCommunityIcons name="radio" size={16} color={IOS_COLORS.red} />
-                    </View>
-                    <View>
-                      <Text style={styles.keyInfoLabel}>VHF Channel</Text>
-                      <Text style={styles.keyInfoValue}>{vhfChannel}</Text>
-                    </View>
+                  <View style={styles.tufteKeyInfoRow}>
+                    <Text style={styles.tufteKeyInfoLabel}>VHF</Text>
+                    <Text style={styles.tufteKeyInfoValue}>Channel {vhfChannel}</Text>
                   </View>
                 )}
                 {protestDeadline && (
-                  <View style={styles.keyInfo}>
-                    <View style={[styles.keyInfoIcon, { backgroundColor: `${IOS_COLORS.purple}15` }]}>
-                      <Ionicons name="time" size={16} color={IOS_COLORS.purple} />
-                    </View>
-                    <View>
-                      <Text style={styles.keyInfoLabel}>Protest Deadline</Text>
-                      <Text style={styles.keyInfoValue}>{protestDeadline}</Text>
-                    </View>
+                  <View style={styles.tufteKeyInfoRow}>
+                    <Text style={styles.tufteKeyInfoLabel}>Protest</Text>
+                    <Text style={styles.tufteKeyInfoValue}>by {protestDeadline}</Text>
                   </View>
                 )}
               </View>
@@ -393,5 +363,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.gray,
     textAlign: 'center',
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Typography-only, flat design
+  // ==========================================================================
+  tufteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tufteHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tufteHeaderSubtitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  tufteCollapsedContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+  tufteCollapsedData: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  tufteKeyInfoGrid: {
+    gap: 8,
+  },
+  tufteKeyInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tufteKeyInfoLabel: {
+    width: 50,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteKeyInfoValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
   },
 });

@@ -171,23 +171,14 @@ export function ConditionsDetailCard({
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      {/* Header - Always visible */}
-      <View style={styles.header}>
-        <View style={[styles.headerIcon, isDistanceRace && styles.headerIconDistance]}>
-          <MaterialCommunityIcons
-            name={isDistanceRace ? "weather-cloudy-clock" : "weather-partly-cloudy"}
-            size={18}
-            color={isDistanceRace ? IOS_COLORS.purple : IOS_COLORS.blue}
-          />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>
-            {customTitle || (isDistanceRace ? 'Weather Outlook' : 'Conditions')}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {isDistanceRace ? 'Multi-hour weather forecast' : 'Weather & water conditions'}
-          </Text>
-        </View>
+      {/* Header - Tufte typography-only */}
+      <View style={styles.tufteHeader}>
+        <Text style={styles.tufteHeaderTitle}>
+          {isDistanceRace ? 'WEATHER' : 'CONDITIONS'}
+        </Text>
+        <Text style={styles.tufteHeaderSubtitle}>
+          {customTitle || (wind ? `${wind.direction} ${wind.speedMin}–${wind.speedMax}kt` : 'Weather forecast')}
+        </Text>
         <Animated.View style={chevronStyle}>
           <MaterialCommunityIcons
             name="chevron-right"
@@ -200,15 +191,16 @@ export function ConditionsDetailCard({
       {/* Content */}
       {hasData ? (
         <>
-          {/* Collapsed: Key metrics row */}
+          {/* Collapsed: Tufte flat typography */}
           {!isExpanded && (
-            <View style={styles.collapsedContent}>
-              {keyMetrics.slice(0, 3).map((metric, index) => (
-                <View key={index} style={styles.collapsedMetric}>
-                  <MaterialCommunityIcons name={metric.icon} size={14} color={IOS_COLORS.secondaryLabel} />
-                  <Text style={styles.collapsedValue}>{metric.value}</Text>
-                </View>
-              ))}
+            <View style={styles.tufteCollapsedContent}>
+              <Text style={styles.tufteCollapsedData}>
+                {[
+                  tide && `${tide.state.charAt(0).toUpperCase() + tide.state.slice(1)}${tide.height ? ` ${tide.height.toFixed(1)}m` : ''}`,
+                  waves && `${waves.height.toFixed(1)}m waves`,
+                  temperature !== undefined && `${temperature}°C`,
+                ].filter(Boolean).join(' · ')}
+              </Text>
             </View>
           )}
 
@@ -455,6 +447,39 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 15,
     fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+
+  // ==========================================================================
+  // TUFTE STYLES - Typography-only, flat design
+  // ==========================================================================
+  tufteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tufteHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  tufteHeaderSubtitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  tufteCollapsedContent: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+  tufteCollapsedData: {
+    fontSize: 15,
+    fontWeight: '500',
     color: IOS_COLORS.label,
   },
 
