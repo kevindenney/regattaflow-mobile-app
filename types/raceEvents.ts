@@ -38,7 +38,10 @@ export interface RaceEvent {
   boat_class?: string | null;
   start_time: string;
   venue_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   racing_area_name?: string | null;
+  season_id?: string | null;
   source_url?: string | null;
   source_documents?: SourceDocument[];
   extraction_method?: ExtractionMethod | null;
@@ -498,8 +501,14 @@ export interface CreateRaceEventParams {
 
   // Common optional fields
   location?: string;
+  latitude?: number;
+  longitude?: number;
   vhf_channel?: string;
   notes?: string;
+
+  // Boat and club references (FKs to sailor_boats and clubs)
+  boat_id?: string;
+  club_id?: string;
 
   // Fleet racing fields
   course_type?: string;

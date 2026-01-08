@@ -31,6 +31,8 @@ export interface CommonRaceData {
   date: string;
   time: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   vhfChannel?: string;
   notes?: string;
 }

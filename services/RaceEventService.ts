@@ -55,8 +55,14 @@ export class RaceEventService {
 
         // Common fields
         location: params.location,
+        latitude: params.latitude,
+        longitude: params.longitude,
         vhf_channel: params.vhf_channel,
         notes: params.notes,
+
+        // Boat and club references
+        boat_id: params.boat_id,
+        club_id: params.club_id,
 
         // Fleet racing fields
         course_type: params.course_type,

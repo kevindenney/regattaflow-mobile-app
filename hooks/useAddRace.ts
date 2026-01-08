@@ -8,7 +8,11 @@
 import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { RaceEventService } from '@/services/RaceEventService';
+import { SeasonService } from '@/services/SeasonService';
+import { useAuth } from '@/providers/AuthProvider';
+import { seasonKeys } from '@/hooks/useSeason';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useAddRace');
@@ -28,6 +32,8 @@ export interface RaceFormData {
   time: string;
   raceType: 'fleet' | 'distance' | 'match' | 'team';
   location?: string;
+  latitude?: number;
+  longitude?: number;
   vhfChannel?: string;
   notes?: string;
   fleet?: {
@@ -35,6 +41,8 @@ export interface RaceFormData {
     numberOfLaps?: string;
     expectedFleetSize?: string;
     boatClass?: string;
+    /** Selected boat ID from user's boats */
+    boatId?: string;
   };
   distance?: {
     totalDistanceNm?: string;
@@ -61,6 +69,8 @@ export interface RaceFormData {
 export interface UseAddRaceParams {
   /** Function to refresh races after creating */
   refetchRaces?: () => void;
+  /** Callback when a race is successfully created (receives new race ID) */
+  onRaceCreated?: (raceId: string) => void;
 }
 
 export interface UseAddRaceReturn {
@@ -91,8 +101,11 @@ export interface UseAddRaceReturn {
  */
 export function useAddRace({
   refetchRaces,
+  onRaceCreated,
 }: UseAddRaceParams): UseAddRaceReturn {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [showAddRaceSheet, setShowAddRaceSheet] = useState(false);
   const [isAddingRace, setIsAddingRace] = useState(false);
@@ -127,15 +140,36 @@ export function useAddRace({
         return;
       }
 
+      // Auto-assign season based on race date
+      if (newRace?.id && user?.id) {
+        try {
+          const season = await SeasonService.getOrCreateSeasonForDate(
+            user.id,
+            new Date(data.dateTime)
+          );
+          await RaceEventService.updateRaceEvent(newRace.id, { season_id: season.id });
+          queryClient.invalidateQueries({ queryKey: seasonKeys.current(user.id) });
+          queryClient.invalidateQueries({ queryKey: seasonKeys.lists() });
+        } catch (err) {
+          logger.warn('[useAddRace] Failed to assign season to race', err);
+          // Non-blocking - race is created, just not assigned to season
+        }
+      }
+
       // Success - close sheet and refresh
       setShowAddRaceSheet(false);
       refetchRaces?.();
+
+      // Notify caller of new race for auto-selection
+      if (newRace?.id) {
+        onRaceCreated?.(newRace.id);
+      }
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
     } finally {
       setIsAddingRace(false);
     }
-  }, [refetchRaces]);
+  }, [refetchRaces, onRaceCreated, user?.id, queryClient]);
 
   // Handler for full add race dialog with race type support
   const handleAddRaceDialogSave = useCallback(async (formData: RaceFormData) => {
@@ -150,6 +184,8 @@ export function useAddRace({
         start_time: startTime,
         race_type: formData.raceType,
         location: formData.location,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
         vhf_channel: formData.vhfChannel,
         notes: formData.notes,
       };
@@ -160,6 +196,7 @@ export function useAddRace({
         createParams.number_of_laps = formData.fleet.numberOfLaps ? parseInt(formData.fleet.numberOfLaps) : undefined;
         createParams.expected_fleet_size = formData.fleet.expectedFleetSize ? parseInt(formData.fleet.expectedFleetSize) : undefined;
         createParams.boat_class = formData.fleet.boatClass;
+        createParams.boat_id = formData.fleet.boatId;
       } else if (formData.raceType === 'distance' && formData.distance) {
         createParams.total_distance_nm = formData.distance.totalDistanceNm ? parseFloat(formData.distance.totalDistanceNm) : undefined;
         createParams.time_limit_hours = formData.distance.timeLimitHours ? parseFloat(formData.distance.timeLimitHours) : undefined;
@@ -196,15 +233,36 @@ export function useAddRace({
         return;
       }
 
+      // Auto-assign season based on race date
+      if (newRace?.id && user?.id) {
+        try {
+          const season = await SeasonService.getOrCreateSeasonForDate(
+            user.id,
+            new Date(startTime)
+          );
+          await RaceEventService.updateRaceEvent(newRace.id, { season_id: season.id });
+          queryClient.invalidateQueries({ queryKey: seasonKeys.current(user.id) });
+          queryClient.invalidateQueries({ queryKey: seasonKeys.lists() });
+        } catch (err) {
+          logger.warn('[useAddRace] Failed to assign season to race', err);
+          // Non-blocking - race is created, just not assigned to season
+        }
+      }
+
       // Success - close dialog and refresh
       setShowAddRaceSheet(false);
       refetchRaces?.();
+
+      // Notify caller of new race for auto-selection
+      if (newRace?.id) {
+        onRaceCreated?.(newRace.id);
+      }
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
     } finally {
       setIsAddingRace(false);
     }
-  }, [refetchRaces]);
+  }, [refetchRaces, onRaceCreated, user?.id, queryClient]);
 
   return {
     showAddRaceSheet,

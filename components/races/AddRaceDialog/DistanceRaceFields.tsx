@@ -9,11 +9,14 @@ import { View, Text, TextInput, Switch, StyleSheet } from 'react-native';
 import { Navigation, Clock, MapPin, RotateCcw } from 'lucide-react-native';
 import { Typography, Spacing, BorderRadius, colors } from '@/constants/designSystem';
 
+import type { RouteWaypoint } from '@/types/raceEvents';
+
 export interface DistanceRaceData {
   totalDistanceNm?: string;
   timeLimitHours?: string;
   startFinishSameLocation?: boolean;
   routeDescription?: string;
+  routeWaypoints?: RouteWaypoint[];
 }
 
 interface DistanceRaceFieldsProps {
