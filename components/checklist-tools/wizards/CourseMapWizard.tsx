@@ -1,0 +1,1187 @@
+/**
+ * CourseMapWizard
+ *
+ * Wizard for reviewing and studying the race course layout.
+ * Shows course marks on a map, displays course details, and
+ * allows reviewing/confirming understanding of the course.
+ */
+
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  Platform,
+  ActivityIndicator,
+  Dimensions,
+  TextInput,
+  KeyboardAvoidingView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  X,
+  ChevronRight,
+  ChevronLeft,
+  CheckCircle2,
+  Circle,
+  AlertTriangle,
+  Map,
+  Navigation,
+  Flag,
+  Anchor,
+  Wind,
+  ArrowDown,
+  ArrowUp,
+  RotateCw,
+  BookOpen,
+  Check,
+  FileText,
+  Upload,
+  Eye,
+  Link2,
+} from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
+import { useRaceDocuments } from '@/hooks/useRaceDocuments';
+import { useAuth } from '@/providers/AuthProvider';
+import type { CourseMark } from '@/types/raceEvents';
+
+// iOS System Colors
+const IOS_COLORS = {
+  blue: '#007AFF',
+  purple: '#5856D6',
+  green: '#34C759',
+  orange: '#FF9500',
+  red: '#FF3B30',
+  gray: '#8E8E93',
+  gray2: '#636366',
+  gray3: '#48484A',
+  background: '#F2F2F7',
+  secondaryBackground: '#FFFFFF',
+  label: '#000000',
+  secondaryLabel: '#3C3C43',
+  tertiaryLabel: '#3C3C4399',
+  separator: '#3C3C4349',
+};
+
+// Mark type colors
+const MARK_COLORS: Record<string, string> = {
+  start: '#22c55e',
+  committee_boat: '#22c55e',
+  pin: '#22c55e',
+  finish: '#ef4444',
+  windward: '#3b82f6',
+  leeward: '#f59e0b',
+  gate_left: '#8b5cf6',
+  gate_right: '#8b5cf6',
+  offset: '#ec4899',
+};
+
+// Course check items
+const COURSE_CHECK_ITEMS = [
+  {
+    id: 'marks',
+    label: 'Identify All Marks',
+    description: 'Colors, shapes, and positions of each mark',
+    icon: <Anchor size={20} color={IOS_COLORS.blue} />,
+  },
+  {
+    id: 'rounding',
+    label: 'Rounding Directions',
+    description: 'Which side to round each mark (port/starboard)',
+    icon: <RotateCw size={20} color={IOS_COLORS.orange} />,
+  },
+  {
+    id: 'start_line',
+    label: 'Start Line Setup',
+    description: 'Committee boat, pin position, and line bias',
+    icon: <Flag size={20} color={IOS_COLORS.green} />,
+  },
+  {
+    id: 'finish',
+    label: 'Finish Location',
+    description: 'Where and how to finish the race',
+    icon: <CheckCircle2 size={20} color={IOS_COLORS.red} />,
+  },
+  {
+    id: 'hazards',
+    label: 'Hazards & Restrictions',
+    description: 'Restricted areas, shallow water, exclusion zones',
+    icon: <AlertTriangle size={20} color={IOS_COLORS.purple} />,
+  },
+];
+
+type WizardStep = 'overview' | 'map' | 'marks' | 'review';
+
+interface CourseMapWizardProps extends ChecklistToolProps {
+  /** Race course data if available */
+  course?: {
+    marks?: CourseMark[];
+    startLine?: { latitude: number; longitude: number }[];
+    finishLine?: { latitude: number; longitude: number }[];
+    type?: string;
+    description?: string;
+  } | null;
+  /** Venue for context */
+  venue?: { id: string; name: string; latitude?: number; longitude?: number } | null;
+}
+
+export function CourseMapWizard({
+  item,
+  raceEventId,
+  boatId,
+  onComplete,
+  onCancel,
+  course,
+  venue,
+}: CourseMapWizardProps) {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  // State
+  const [step, setStep] = useState<WizardStep>('overview');
+  const [completedChecks, setCompletedChecks] = useState<Set<string>>(new Set());
+  const [selectedMark, setSelectedMark] = useState<CourseMark | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlValue, setUrlValue] = useState('');
+  const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
+
+  // Load documents to check for course diagrams
+  const {
+    documentsForDisplay,
+    loading: docsLoading,
+    upload,
+    addFromUrl,
+  } = useRaceDocuments({
+    raceId: raceEventId,
+    userId: user?.id,
+  });
+
+  // Check if course diagram exists
+  const courseDiagram = useMemo(() => {
+    return documentsForDisplay.find((doc) => doc.type === 'course_diagram');
+  }, [documentsForDisplay]);
+
+  // Check if SI exists (course info often comes from SI)
+  const sailingInstructions = useMemo(() => {
+    return documentsForDisplay.find((doc) => doc.type === 'sailing_instructions');
+  }, [documentsForDisplay]);
+
+  // Has course data
+  const hasCourseData = course?.marks && course.marks.length > 0;
+
+  // Progress calculation
+  const progress = completedChecks.size / COURSE_CHECK_ITEMS.length;
+  const allChecksComplete = completedChecks.size === COURSE_CHECK_ITEMS.length;
+
+  // Toggle a check item
+  const toggleCheck = useCallback((checkId: string) => {
+    setCompletedChecks((prev) => {
+      const next = new Set(prev);
+      if (next.has(checkId)) {
+        next.delete(checkId);
+      } else {
+        next.add(checkId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Handle learn more
+  const handleLearnMore = useCallback(() => {
+    if (item.learningModuleSlug) {
+      router.push({
+        pathname: '/(tabs)/learn',
+        params: {
+          courseSlug: item.learningModuleSlug,
+          lessonId: item.learningModuleId,
+        },
+      });
+      onCancel();
+    }
+  }, [item.learningModuleSlug, item.learningModuleId, router, onCancel]);
+
+  // Handle upload - default to course_diagram type
+  const handleUpload = useCallback(async () => {
+    await upload('course_diagram');
+  }, [upload]);
+
+  // Handle URL submit
+  const handleUrlSubmit = useCallback(async () => {
+    if (!urlValue.trim()) return;
+    setIsSubmittingUrl(true);
+    try {
+      const success = await addFromUrl(urlValue.trim(), 'course_diagram');
+      if (success) {
+        setUrlValue('');
+        setShowUrlInput(false);
+      }
+    } finally {
+      setIsSubmittingUrl(false);
+    }
+  }, [urlValue, addFromUrl]);
+
+  // Get mark color
+  const getMarkColor = (type?: string | null): string => {
+    if (!type) return IOS_COLORS.gray;
+    return MARK_COLORS[type] || IOS_COLORS.gray;
+  };
+
+  // Get mark icon
+  const getMarkIcon = (type?: string | null) => {
+    switch (type) {
+      case 'windward':
+        return <ArrowUp size={16} color="#FFFFFF" />;
+      case 'leeward':
+        return <ArrowDown size={16} color="#FFFFFF" />;
+      case 'gate_left':
+      case 'gate_right':
+        return <Navigation size={16} color="#FFFFFF" />;
+      case 'start':
+      case 'pin':
+        return <Flag size={16} color="#FFFFFF" />;
+      case 'finish':
+        return <CheckCircle2 size={16} color="#FFFFFF" />;
+      default:
+        return <Anchor size={16} color="#FFFFFF" />;
+    }
+  };
+
+  // Handle complete
+  const handleComplete = useCallback(() => {
+    onComplete();
+  }, [onComplete]);
+
+  // Render based on step
+  const renderContent = () => {
+    switch (step) {
+      case 'overview':
+        return renderOverview();
+      case 'map':
+        return renderMapView();
+      case 'marks':
+        return renderMarks();
+      case 'review':
+        return renderReview();
+      default:
+        return null;
+    }
+  };
+
+  const renderOverview = () => (
+    <ScrollView
+      style={styles.scrollContent}
+      contentContainerStyle={styles.scrollContentInner}
+    >
+      <View style={styles.overviewHeader}>
+        <View style={styles.iconCircle}>
+          <Map size={32} color={IOS_COLORS.blue} />
+        </View>
+        <Text style={styles.overviewTitle}>Course Review</Text>
+        <Text style={styles.overviewDescription}>
+          Study the race course layout, marks, and key features before race day.
+        </Text>
+      </View>
+
+      {/* Course Status */}
+      <View style={styles.statusSection}>
+        {hasCourseData ? (
+          <View style={styles.statusCard}>
+            <View style={[styles.statusIcon, styles.statusIconSuccess]}>
+              <CheckCircle2 size={20} color={IOS_COLORS.green} />
+            </View>
+            <View style={styles.statusContent}>
+              <Text style={styles.statusTitle}>Course Data Available</Text>
+              <Text style={styles.statusDescription}>
+                {course?.marks?.length || 0} marks • {course?.type || 'Standard course'}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.statusCard}>
+            <View style={[styles.statusIcon, styles.statusIconWarning]}>
+              <AlertTriangle size={20} color={IOS_COLORS.orange} />
+            </View>
+            <View style={styles.statusContent}>
+              <Text style={styles.statusTitle}>No Course Data</Text>
+              <Text style={styles.statusDescription}>
+                Upload Sailing Instructions or Course Diagram to extract course info
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Document status */}
+        <View style={styles.documentsRow}>
+          <View style={styles.docStatus}>
+            <FileText size={16} color={sailingInstructions ? IOS_COLORS.green : IOS_COLORS.gray} />
+            <Text style={[styles.docStatusText, sailingInstructions && styles.docStatusTextActive]}>
+              SI {sailingInstructions ? '✓' : 'missing'}
+            </Text>
+          </View>
+          <View style={styles.docStatus}>
+            <Map size={16} color={courseDiagram ? IOS_COLORS.green : IOS_COLORS.gray} />
+            <Text style={[styles.docStatusText, courseDiagram && styles.docStatusTextActive]}>
+              Diagram {courseDiagram ? '✓' : 'missing'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Navigation Options */}
+      <View style={styles.optionsList}>
+        <Pressable
+          style={styles.optionItem}
+          onPress={() => setStep('marks')}
+        >
+          <View style={[styles.optionIcon, { backgroundColor: `${IOS_COLORS.blue}15` }]}>
+            <Anchor size={22} color={IOS_COLORS.blue} />
+          </View>
+          <View style={styles.optionContent}>
+            <Text style={styles.optionLabel}>Review Marks</Text>
+            <Text style={styles.optionDescription}>
+              {hasCourseData
+                ? `${course?.marks?.length} marks to review`
+                : 'Add course data to see marks'}
+            </Text>
+          </View>
+          <ChevronRight size={20} color={IOS_COLORS.gray} />
+        </Pressable>
+
+        <Pressable
+          style={styles.optionItem}
+          onPress={() => setStep('review')}
+        >
+          <View style={[styles.optionIcon, { backgroundColor: `${IOS_COLORS.purple}15` }]}>
+            <Eye size={22} color={IOS_COLORS.purple} />
+          </View>
+          <View style={styles.optionContent}>
+            <Text style={styles.optionLabel}>Course Checklist</Text>
+            <Text style={styles.optionDescription}>
+              {completedChecks.size}/{COURSE_CHECK_ITEMS.length} items reviewed
+            </Text>
+          </View>
+          <ChevronRight size={20} color={IOS_COLORS.gray} />
+        </Pressable>
+
+        {!hasCourseData && (
+          <Pressable
+            style={styles.optionItem}
+            onPress={handleUpload}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: `${IOS_COLORS.orange}15` }]}>
+              <Upload size={22} color={IOS_COLORS.orange} />
+            </View>
+            <View style={styles.optionContent}>
+              <Text style={styles.optionLabel}>Upload Documents</Text>
+              <Text style={styles.optionDescription}>
+                Add SI or course diagram to extract course data
+              </Text>
+            </View>
+            <ChevronRight size={20} color={IOS_COLORS.gray} />
+          </Pressable>
+        )}
+      </View>
+
+      {/* Quick Tips */}
+      {item.quickTips && item.quickTips.length > 0 && (
+        <View style={styles.tipsContainer}>
+          <Text style={styles.tipsTitle}>Quick Tips</Text>
+          {item.quickTips.map((tip, index) => (
+            <View key={index} style={styles.tipRow}>
+              <View style={styles.tipBullet} />
+              <Text style={styles.tipText}>{tip}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+
+  const renderMapView = () => (
+    <View style={styles.mapContainer}>
+      <Text style={styles.mapPlaceholder}>
+        Map view coming soon...
+        {'\n\n'}
+        Course data will be displayed on an interactive map.
+      </Text>
+    </View>
+  );
+
+  const renderMarks = () => (
+    <ScrollView
+      style={styles.scrollContent}
+      contentContainerStyle={styles.scrollContentInner}
+    >
+      <Text style={styles.sectionTitle}>Course Marks</Text>
+      {hasCourseData ? (
+        <>
+          <Text style={styles.sectionDescription}>
+            Tap each mark to review its details and rounding direction.
+          </Text>
+          <View style={styles.marksGrid}>
+            {course?.marks?.map((mark, index) => {
+              const color = getMarkColor(mark.type);
+              return (
+                <Pressable
+                  key={mark.id || index}
+                  style={styles.markCard}
+                  onPress={() => setSelectedMark(mark)}
+                >
+                  <View style={[styles.markIcon, { backgroundColor: color }]}>
+                    {getMarkIcon(mark.type)}
+                  </View>
+                  <View style={styles.markContent}>
+                    <Text style={styles.markName}>
+                      {mark.name || `Mark ${mark.sequence || index + 1}`}
+                    </Text>
+                    <Text style={styles.markType}>
+                      {mark.type?.replace('_', ' ') || 'Course mark'}
+                    </Text>
+                    {mark.rounding && (
+                      <View style={styles.roundingBadge}>
+                        <RotateCw size={10} color={IOS_COLORS.secondaryLabel} />
+                        <Text style={styles.roundingText}>{mark.rounding}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.sequenceBadge, { backgroundColor: `${color}20` }]}>
+                    <Text style={[styles.sequenceText, { color }]}>
+                      {mark.sequence || index + 1}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIcon}>
+            <Anchor size={40} color={IOS_COLORS.gray} />
+          </View>
+          <Text style={styles.emptyTitle}>No Course Data</Text>
+          <Text style={styles.emptyDescription}>
+            Upload Sailing Instructions or a Course Diagram to see the marks.
+          </Text>
+
+          {showUrlInput ? (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.urlInputContainer}
+            >
+              <View style={styles.urlInputWrapper}>
+                <TextInput
+                  style={styles.urlInput}
+                  placeholder="Paste URL to course diagram..."
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                  value={urlValue}
+                  onChangeText={setUrlValue}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  returnKeyType="go"
+                  onSubmitEditing={handleUrlSubmit}
+                  editable={!isSubmittingUrl}
+                />
+                <Pressable
+                  style={[
+                    styles.urlLinkButton,
+                    (!urlValue.trim() || isSubmittingUrl) && styles.uploadButtonDisabled,
+                  ]}
+                  onPress={handleUrlSubmit}
+                  disabled={!urlValue.trim() || isSubmittingUrl}
+                >
+                  {isSubmittingUrl ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Link2 size={18} color="#FFFFFF" />
+                  )}
+                </Pressable>
+              </View>
+              <Pressable
+                style={styles.cancelUrlButton}
+                onPress={() => {
+                  setShowUrlInput(false);
+                  setUrlValue('');
+                }}
+              >
+                <Text style={styles.cancelUrlText}>Cancel</Text>
+              </Pressable>
+            </KeyboardAvoidingView>
+          ) : (
+            <View style={styles.uploadActionsRow}>
+              <Pressable style={styles.uploadButton} onPress={handleUpload}>
+                <Upload size={18} color="#FFFFFF" />
+                <Text style={styles.uploadButtonText}>Upload</Text>
+              </Pressable>
+              <Pressable
+                style={styles.urlButton}
+                onPress={() => setShowUrlInput(true)}
+              >
+                <Link2 size={18} color={IOS_COLORS.blue} />
+                <Text style={styles.urlButtonText}>Add URL</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Course Type Info */}
+      {course?.type && (
+        <View style={styles.courseTypeCard}>
+          <Text style={styles.courseTypeLabel}>Course Type</Text>
+          <Text style={styles.courseTypeName}>
+            {course.type.replace(/_/g, ' ')}
+          </Text>
+          {course.description && (
+            <Text style={styles.courseTypeDescription}>{course.description}</Text>
+          )}
+        </View>
+      )}
+    </ScrollView>
+  );
+
+  const renderReview = () => (
+    <ScrollView
+      style={styles.scrollContent}
+      contentContainerStyle={styles.scrollContentInner}
+    >
+      <Text style={styles.sectionTitle}>Course Review Checklist</Text>
+      <Text style={styles.sectionDescription}>
+        Confirm you've reviewed each aspect of the course layout.
+      </Text>
+
+      <View style={styles.checklistContainer}>
+        {COURSE_CHECK_ITEMS.map((checkItem) => {
+          const isChecked = completedChecks.has(checkItem.id);
+
+          return (
+            <Pressable
+              key={checkItem.id}
+              style={[
+                styles.checkItem,
+                isChecked && styles.checkItemChecked,
+              ]}
+              onPress={() => toggleCheck(checkItem.id)}
+            >
+              <View style={styles.checkItemIcon}>{checkItem.icon}</View>
+              <View style={styles.checkItemContent}>
+                <Text
+                  style={[
+                    styles.checkItemLabel,
+                    isChecked && styles.checkItemLabelChecked,
+                  ]}
+                >
+                  {checkItem.label}
+                </Text>
+                <Text style={styles.checkItemDescription}>
+                  {checkItem.description}
+                </Text>
+              </View>
+              <View style={styles.checkItemCheckbox}>
+                {isChecked ? (
+                  <CheckCircle2 size={24} color={IOS_COLORS.green} />
+                ) : (
+                  <Circle size={24} color={IOS_COLORS.gray} />
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable
+          style={styles.closeButton}
+          onPress={step === 'overview' ? onCancel : () => setStep('overview')}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          {step === 'overview' ? (
+            <X size={24} color={IOS_COLORS.gray} />
+          ) : (
+            <ChevronLeft size={24} color={IOS_COLORS.blue} />
+          )}
+        </Pressable>
+        <Text style={styles.headerTitle}>
+          {step === 'marks' ? 'Course Marks' : step === 'review' ? 'Checklist' : 'Course Study'}
+        </Text>
+        <View style={styles.headerRight}>
+          {item.learningModuleSlug && (
+            <Pressable style={styles.learnIconButton} onPress={handleLearnMore}>
+              <BookOpen size={20} color={IOS_COLORS.purple} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* Progress Bar (for review step) */}
+      {step === 'review' && (
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progress * 100}%` },
+                allChecksComplete && styles.progressComplete,
+              ]}
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {completedChecks.size} of {COURSE_CHECK_ITEMS.length} reviewed
+          </Text>
+        </View>
+      )}
+
+      {/* Content */}
+      {renderContent()}
+
+      {/* Bottom Action */}
+      {(step === 'overview' || step === 'review') && (
+        <View style={styles.bottomAction}>
+          {step === 'overview' ? (
+            <Pressable
+              style={styles.primaryButton}
+              onPress={() => setStep('review')}
+            >
+              <Eye size={20} color="#FFFFFF" />
+              <Text style={styles.primaryButtonText}>Start Review</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[
+                styles.primaryButton,
+                allChecksComplete
+                  ? styles.primaryButtonSuccess
+                  : styles.primaryButtonWarning,
+              ]}
+              onPress={handleComplete}
+            >
+              <Check size={20} color="#FFFFFF" />
+              <Text style={styles.primaryButtonText}>
+                {allChecksComplete ? 'Complete' : 'Mark as Studied'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {step === 'marks' && (
+        <View style={styles.bottomAction}>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => setStep('review')}
+          >
+            <ChevronRight size={20} color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>Continue to Checklist</Text>
+          </Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  closeButton: {
+    padding: 4,
+    minWidth: 40,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  headerRight: {
+    minWidth: 40,
+    alignItems: 'flex-end',
+  },
+  learnIconButton: {
+    padding: 4,
+  },
+  progressContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    gap: 6,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: IOS_COLORS.separator,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 2,
+  },
+  progressComplete: {
+    backgroundColor: IOS_COLORS.green,
+  },
+  progressText: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+    textAlign: 'center',
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentInner: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  // Overview
+  overviewHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  overviewTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  overviewDescription: {
+    fontSize: 16,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  // Status
+  statusSection: {
+    marginBottom: 24,
+  },
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 12,
+  },
+  statusIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusIconSuccess: {
+    backgroundColor: `${IOS_COLORS.green}15`,
+  },
+  statusIconWarning: {
+    backgroundColor: `${IOS_COLORS.orange}15`,
+  },
+  statusContent: {
+    flex: 1,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  statusDescription: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  documentsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingHorizontal: 4,
+  },
+  docStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  docStatusText: {
+    fontSize: 13,
+    color: IOS_COLORS.gray,
+  },
+  docStatusTextActive: {
+    color: IOS_COLORS.green,
+    fontWeight: '500',
+  },
+  // Options
+  optionsList: {
+    gap: 10,
+    marginBottom: 24,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    gap: 12,
+  },
+  optionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionContent: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  optionDescription: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  // Tips
+  tipsContainer: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 16,
+  },
+  tipsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 10,
+  },
+  tipBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: IOS_COLORS.blue,
+    marginTop: 7,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  // Sections
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    marginBottom: 6,
+  },
+  sectionDescription: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  // Marks
+  marksGrid: {
+    gap: 10,
+    marginBottom: 20,
+  },
+  markCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    gap: 12,
+  },
+  markIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markContent: {
+    flex: 1,
+  },
+  markName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  markType: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'capitalize',
+  },
+  roundingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  roundingText: {
+    fontSize: 11,
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'capitalize',
+  },
+  sequenceBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sequenceText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // Course type
+  courseTypeCard: {
+    padding: 16,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+  },
+  courseTypeLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.tertiaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  courseTypeName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    textTransform: 'capitalize',
+    marginBottom: 4,
+  },
+  courseTypeDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+  },
+  // Empty state
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: IOS_COLORS.separator,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 10,
+    gap: 8,
+  },
+  uploadButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  uploadButtonDisabled: {
+    opacity: 0.5,
+  },
+  uploadActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  urlButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 10,
+    gap: 8,
+  },
+  urlButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  urlInputContainer: {
+    width: '100%',
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 12,
+  },
+  urlInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    paddingHorizontal: 12,
+    width: '100%',
+    gap: 8,
+  },
+  urlInput: {
+    flex: 1,
+    height: 44,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+  },
+  urlLinkButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelUrlButton: {
+    padding: 8,
+  },
+  cancelUrlText: {
+    fontSize: 15,
+    color: IOS_COLORS.blue,
+  },
+  // Checklist
+  checklistContainer: {
+    gap: 10,
+  },
+  checkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    gap: 12,
+  },
+  checkItemChecked: {
+    backgroundColor: `${IOS_COLORS.green}08`,
+  },
+  checkItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkItemContent: {
+    flex: 1,
+  },
+  checkItemLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  checkItemLabelChecked: {
+    color: IOS_COLORS.secondaryLabel,
+  },
+  checkItemDescription: {
+    fontSize: 13,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  checkItemCheckbox: {
+    width: 24,
+    height: 24,
+  },
+  // Map
+  mapContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  mapPlaceholder: {
+    fontSize: 16,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  // Bottom action
+  bottomAction: {
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: IOS_COLORS.blue,
+    gap: 8,
+  },
+  primaryButtonSuccess: {
+    backgroundColor: IOS_COLORS.green,
+  },
+  primaryButtonWarning: {
+    backgroundColor: IOS_COLORS.orange,
+  },
+  primaryButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+});
+
+export default CourseMapWizard;

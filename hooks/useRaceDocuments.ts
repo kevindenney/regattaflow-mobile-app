@@ -50,8 +50,10 @@ export interface UseRaceDocumentsReturn {
   typePickerVisible: boolean;
   /** Refresh documents */
   refresh: () => void;
-  /** Upload a new document */
-  upload: () => Promise<void>;
+  /** Upload a new document (optionally with pre-selected type to skip picker) */
+  upload: (preselectedType?: RaceDocumentType) => Promise<void>;
+  /** Add a document via URL */
+  addFromUrl: (url: string, documentType: RaceDocumentType, name?: string) => Promise<boolean>;
   /** Select document type (for picker) */
   selectType: (type: RaceDocumentType) => void;
   /** Dismiss document type picker */
@@ -171,8 +173,13 @@ export function useRaceDocuments(
 
   // Handle type selection
   const selectType = useCallback((type: RaceDocumentType) => {
-    typeResolverRef.current?.(type);
-    typeResolverRef.current = null;
+    logger.debug('selectType called', { type, hasResolver: !!typeResolverRef.current });
+    if (typeResolverRef.current) {
+      typeResolverRef.current(type);
+      typeResolverRef.current = null;
+    } else {
+      logger.warn('selectType called but no resolver found');
+    }
     setTypePickerVisible(false);
   }, []);
 
@@ -184,7 +191,7 @@ export function useRaceDocuments(
   }, []);
 
   // Upload document
-  const upload = useCallback(async () => {
+  const upload = useCallback(async (preselectedType?: RaceDocumentType) => {
     if (isUploading) return;
 
     if (isDemoSession) {
@@ -202,15 +209,24 @@ export function useRaceDocuments(
       return;
     }
 
-    const documentType = await requestTypeSelection();
+    // Use pre-selected type if provided, otherwise show picker
+    let documentType: RaceDocumentType | null = preselectedType || null;
     if (!documentType) {
-      logger.debug('Document upload cancelled before selecting type');
-      return;
+      documentType = await requestTypeSelection();
+      logger.debug('Document type selected', { documentType });
+      if (!documentType) {
+        logger.debug('Document upload cancelled before selecting type');
+        return;
+      }
+    } else {
+      logger.debug('Using pre-selected document type', { documentType });
     }
 
+    logger.debug('Opening file picker...');
     setIsUploading(true);
     try {
       const uploadResult = await documentStorageService.pickAndUploadDocument(userId);
+      logger.debug('File picker result', { success: uploadResult.success, error: uploadResult.error });
 
       if (!uploadResult.success || !uploadResult.document) {
         const errorMessage = uploadResult.error || 'Unable to upload document. Please try again.';
@@ -246,6 +262,66 @@ export function useRaceDocuments(
     }
   }, [isUploading, isDemoSession, userId, raceId, requestTypeSelection, refresh]);
 
+  // Add document from URL
+  const addFromUrl = useCallback(
+    async (url: string, documentType: RaceDocumentType, name?: string): Promise<boolean> => {
+      if (isDemoSession) {
+        Alert.alert('Unavailable in demo mode', 'Sign in to add documents.');
+        return false;
+      }
+
+      if (!userId) {
+        Alert.alert('Sign in required', 'Please sign in to add documents.');
+        return false;
+      }
+
+      if (!raceId) {
+        Alert.alert('Select a race', 'Choose a race to attach documents to.');
+        return false;
+      }
+
+      if (!url.trim()) {
+        Alert.alert('Invalid URL', 'Please enter a valid URL.');
+        return false;
+      }
+
+      setIsUploading(true);
+      try {
+        // Save document from URL
+        const result = await documentStorageService.saveDocumentFromUrl(userId, url.trim(), name);
+
+        if (!result.success || !result.document) {
+          Alert.alert('Failed to add document', result.error || 'Unable to save document.');
+          return false;
+        }
+
+        // Link to race
+        const linked = await raceDocumentService.linkDocumentToRace({
+          regattaId: raceId,
+          documentId: result.document.id,
+          userId,
+          documentType,
+        });
+
+        if (!linked) {
+          Alert.alert('Failed to link document', 'Document saved but could not be linked to this race.');
+          return false;
+        }
+
+        // Refresh to show new document
+        refresh();
+        return true;
+      } catch (err) {
+        logger.error('Error adding document from URL', { error: err });
+        Alert.alert('Error', 'An unexpected error occurred.');
+        return false;
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [isDemoSession, userId, raceId, refresh]
+  );
+
   // Delete document
   const deleteDocument = useCallback(
     async (documentId: string): Promise<boolean> => {
@@ -277,6 +353,7 @@ export function useRaceDocuments(
     typePickerVisible,
     refresh,
     upload,
+    addFromUrl,
     selectType,
     dismissTypePicker,
     deleteDocument,

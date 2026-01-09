@@ -34,11 +34,23 @@ const logger = createLogger('DocumentStorageService');
 export class DocumentStorageService {
   private readonly bucketName = 'documents';
   private readonly maxFileSize = 10 * 1024 * 1024; // 10MB
+  private isPickerOpen = false;
 
   /**
    * Pick and upload a document
    */
   async pickAndUploadDocument(userId: string): Promise<UploadResult> {
+
+    // Prevent concurrent picker operations
+    if (this.isPickerOpen) {
+      console.warn('DocumentStorageService: Picker already open, ignoring request');
+      return {
+        success: false,
+        error: 'Document picker already open. Please complete or cancel the current selection first.'
+      };
+    }
+
+    this.isPickerOpen = true;
 
     try {
 
@@ -47,7 +59,7 @@ export class DocumentStorageService {
 
         // Test if DocumentPicker is available on web
         if (!DocumentPicker.getDocumentAsync) {
-
+          this.isPickerOpen = false;
           return {
             success: false,
             error: 'Document picker not supported on web platform. Please use the mobile app for file uploads.'
@@ -55,26 +67,26 @@ export class DocumentStorageService {
         }
       }
 
-      // Add timeout for document picker
-      const pickerPromise = DocumentPicker.getDocumentAsync({
+      // Call document picker
+      logger.debug('Opening document picker...');
+      console.log('📄 DocumentStorageService: Opening document picker');
+
+      const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
         multiple: false,
+        copyToCacheDirectory: true,
       });
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          console.error('⏰ DocumentStorageService: Document picker timeout after 30 seconds');
-          reject(new Error('Document picker timeout - please try again'));
-        }, 30000);
-      });
-
-      const result = await Promise.race([pickerPromise, timeoutPromise]) as any;
+      logger.debug('Document picker result', { canceled: result.canceled, assetCount: result.assets?.length });
+      console.log('📄 DocumentStorageService: Picker result', result);
 
       if (result.canceled) {
+        this.isPickerOpen = false;
         return { success: false, error: 'Document selection cancelled' };
       }
 
       if (!result.assets || result.assets.length === 0) {
+        this.isPickerOpen = false;
         return { success: false, error: 'No document selected' };
       }
 
@@ -82,6 +94,7 @@ export class DocumentStorageService {
 
       // Validate file size
       if (file.size && file.size > this.maxFileSize) {
+        this.isPickerOpen = false;
         return {
           success: false,
           error: `File size exceeds ${this.maxFileSize / 1024 / 1024}MB limit`
@@ -89,9 +102,11 @@ export class DocumentStorageService {
       }
 
       // Upload to Supabase
+      this.isPickerOpen = false;
       return await this.uploadDocument(userId, file);
 
     } catch (error: any) {
+      this.isPickerOpen = false;
 
       // Check for specific web-related errors
       if (error.message?.includes('user activation') || error.message?.includes('gesture')) {
@@ -219,13 +234,9 @@ export class DocumentStorageService {
           .insert({
             user_id: userId,
             filename: file.name,
-            file_type: file.mimeType || 'unknown',
+            mime_type: file.mimeType || 'unknown',
             file_size: file.size || 0,
-            storage_path: fileName,
-            public_url: urlData.publicUrl,
-            metadata: {
-              original_uri: file.uri,
-            },
+            file_path: fileName,
           })
           .select()
           .single();
@@ -358,7 +369,7 @@ export class DocumentStorageService {
       // Get document details
       const { data: doc, error: fetchError } = await supabase
         .from('documents')
-        .select('storage_path')
+        .select('file_path')
         .eq('id', documentId)
         .eq('user_id', userId)
         .single();
@@ -370,7 +381,7 @@ export class DocumentStorageService {
       // Delete from storage
       const { error: storageError } = await supabase.storage
         .from(this.bucketName)
-        .remove([doc.storage_path]);
+        .remove([doc.file_path]);
 
       if (storageError) {
         console.error('Storage deletion error:', storageError);
@@ -394,6 +405,132 @@ export class DocumentStorageService {
   }
 
   /**
+   * Save a document from a URL (external link)
+   * This stores metadata about an external document without downloading it
+   */
+  async saveDocumentFromUrl(
+    userId: string,
+    url: string,
+    name?: string
+  ): Promise<UploadResult> {
+    try {
+      // Validate URL
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return { success: false, error: 'Invalid URL format' };
+      }
+
+      // Only allow http/https
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return { success: false, error: 'Only HTTP and HTTPS URLs are supported' };
+      }
+
+      // Extract filename from URL if not provided
+      const filename = name || this.extractFilenameFromUrl(url) || 'External Document';
+
+      // Determine file type from URL
+      const fileType = this.guessFileTypeFromUrl(url);
+
+      // Check if using local storage fallback
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+      const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web';
+
+      if (useLocalFallback) {
+        // Create a mock document object for local storage
+        const mockDocument: StoredDocument = {
+          id: `url_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          user_id: userId,
+          filename: filename,
+          file_type: fileType,
+          file_size: 0, // Unknown for external URLs
+          storage_path: '', // No local storage path
+          public_url: url, // Use the external URL directly
+          metadata: {
+            external_url: url,
+            source: 'url',
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        // Store in localStorage for persistence
+        try {
+          const existingDocs = localStorage.getItem('regattaflow_documents');
+          const documents = existingDocs ? JSON.parse(existingDocs) : [];
+          documents.push(mockDocument);
+          localStorage.setItem('regattaflow_documents', JSON.stringify(documents));
+
+          return {
+            success: true,
+            document: mockDocument,
+          };
+        } catch (localError) {
+          throw new Error('Failed to store document locally');
+        }
+      } else {
+        // Store in Supabase database (no file upload, just metadata)
+        const { data: docData, error: dbError } = await supabase
+          .from('documents')
+          .insert({
+            user_id: userId,
+            filename: filename,
+            mime_type: fileType,
+            file_size: 0,
+            file_path: url, // Store URL as file_path for external URLs
+            description: `External URL: ${url}`,
+          })
+          .select()
+          .single();
+
+        if (dbError) {
+          throw dbError;
+        }
+
+        return {
+          success: true,
+          document: docData,
+        };
+      }
+    } catch (error: any) {
+      logger.error('Error saving document from URL', { error, url });
+      return { success: false, error: error.message || 'Failed to save document' };
+    }
+  }
+
+  /**
+   * Extract filename from URL
+   */
+  private extractFilenameFromUrl(url: string): string | null {
+    try {
+      const pathname = new URL(url).pathname;
+      const segments = pathname.split('/').filter(Boolean);
+      const lastSegment = segments[segments.length - 1];
+      if (lastSegment && lastSegment.includes('.')) {
+        return decodeURIComponent(lastSegment);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Guess file type from URL
+   */
+  private guessFileTypeFromUrl(url: string): string {
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes('.pdf')) return 'application/pdf';
+    if (lowerUrl.includes('.doc') || lowerUrl.includes('.docx')) return 'application/msword';
+    if (lowerUrl.includes('.png')) return 'image/png';
+    if (lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg')) return 'image/jpeg';
+    if (lowerUrl.includes('.gif')) return 'image/gif';
+    // Default for web pages / unknown
+    return 'text/html';
+  }
+
+  /**
    * Download document content
    */
   async downloadDocument(documentId: string, userId: string): Promise<Blob | null> {
@@ -401,7 +538,7 @@ export class DocumentStorageService {
       // Get document details
       const { data: doc, error: fetchError } = await supabase
         .from('documents')
-        .select('storage_path')
+        .select('file_path')
         .eq('id', documentId)
         .eq('user_id', userId)
         .single();
@@ -413,7 +550,7 @@ export class DocumentStorageService {
       // Download from storage
       const { data, error } = await supabase.storage
         .from(this.bucketName)
-        .download(doc.storage_path);
+        .download(doc.file_path);
 
       if (error) throw error;
       return data;
