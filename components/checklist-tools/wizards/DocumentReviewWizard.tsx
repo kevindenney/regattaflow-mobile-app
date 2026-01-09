@@ -24,6 +24,7 @@ import {
   X,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   CheckCircle2,
   Circle,
   AlertTriangle,
@@ -41,12 +42,21 @@ import {
   Users,
   Shield,
   Link2,
+  Sparkles,
+  Loader2,
+  RefreshCw,
+  DollarSign,
+  Trophy,
+  Ship,
+  Calendar,
+  Navigation,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceDocumentType } from '@/services/RaceDocumentService';
+import { documentExtractionService } from '@/services/DocumentExtractionService';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -166,6 +176,858 @@ const DOCUMENT_CONFIGS: Record<string, DocumentTypeConfig> = {
 
 type WizardStep = 'check_document' | 'review' | 'complete';
 
+// ============================================================================
+// Extracted Data for Checklist Items - Inline display of extracted NOR data
+// ============================================================================
+
+interface ExtractedField {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  url?: string;
+}
+
+/**
+ * Maps checklist item IDs to relevant extracted data fields
+ */
+function getExtractedDataForChecklistItem(
+  itemId: string,
+  data: any | null
+): ExtractedField[] | null {
+  if (!data) return null;
+
+  const fields: ExtractedField[] = [];
+
+  switch (itemId) {
+    case 'entry_requirements':
+      if (data.eligibilityRequirements) {
+        fields.push({
+          icon: <Users size={14} color={IOS_COLORS.blue} />,
+          label: 'Eligibility',
+          value: data.eligibilityRequirements,
+        });
+      }
+      if (data.entryDeadline) {
+        fields.push({
+          icon: <Calendar size={14} color={IOS_COLORS.orange} />,
+          label: 'Entry Deadline',
+          value: data.entryDeadline,
+        });
+      }
+      if (data.entryFees && data.entryFees.length > 0) {
+        const feeText = data.entryFees.map((fee: any) =>
+          `${fee.type}: ${fee.amount}${fee.deadline ? ` (by ${fee.deadline})` : ''}`
+        ).join(', ');
+        fields.push({
+          icon: <DollarSign size={14} color={IOS_COLORS.green} />,
+          label: 'Entry Fees',
+          value: feeText,
+        });
+      }
+      if (data.entryFormUrl) {
+        fields.push({
+          icon: <Link2 size={14} color={IOS_COLORS.blue} />,
+          label: 'Entry Form',
+          value: 'Open Entry Form',
+          url: data.entryFormUrl,
+        });
+      }
+      if (data.minimumCrew) {
+        fields.push({
+          icon: <Users size={14} color={IOS_COLORS.purple} />,
+          label: 'Min Crew',
+          value: String(data.minimumCrew),
+        });
+      }
+      if (data.crewRequirements) {
+        fields.push({
+          icon: <Users size={14} color={IOS_COLORS.gray} />,
+          label: 'Crew Rules',
+          value: data.crewRequirements,
+        });
+      }
+      if (data.minorSailorRules) {
+        fields.push({
+          icon: <AlertCircle size={14} color={IOS_COLORS.orange} />,
+          label: 'Under 18',
+          value: data.minorSailorRules,
+        });
+      }
+      if (data.lateEntryPolicy) {
+        fields.push({
+          icon: <AlertCircle size={14} color={IOS_COLORS.red} />,
+          label: 'Late Entry',
+          value: data.lateEntryPolicy,
+        });
+      }
+      break;
+
+    case 'schedule':
+      if (data.raceDate) {
+        fields.push({
+          icon: <Calendar size={14} color={IOS_COLORS.blue} />,
+          label: 'Race Date',
+          value: data.raceDate,
+        });
+      }
+      if (data.warningSignalTime) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.orange} />,
+          label: 'Warning Signal',
+          value: data.warningSignalTime,
+        });
+      }
+      if (data.skipperBriefingTime) {
+        fields.push({
+          icon: <Users size={14} color={IOS_COLORS.purple} />,
+          label: 'Skipper Briefing',
+          value: data.skipperBriefingTime,
+        });
+      }
+      if (data.checkInTime) {
+        fields.push({
+          icon: <Clock size={14} color={IOS_COLORS.green} />,
+          label: 'Check-in',
+          value: data.checkInTime,
+        });
+      }
+      if (data.racingDays && data.racingDays.length > 0) {
+        fields.push({
+          icon: <Calendar size={14} color={IOS_COLORS.blue} />,
+          label: 'Racing Days',
+          value: data.racingDays.join(', '),
+        });
+      }
+      if (data.racesPerDay) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.gray} />,
+          label: 'Races/Day',
+          value: String(data.racesPerDay),
+        });
+      }
+      if (data.schedule && data.schedule.length > 0) {
+        // Show first 3 schedule items
+        const scheduleItems = data.schedule.slice(0, 3);
+        scheduleItems.forEach((event: any, idx: number) => {
+          fields.push({
+            icon: idx === 0 ? <Calendar size={14} color={IOS_COLORS.orange} /> : <View style={{ width: 14 }} />,
+            label: event.date || '',
+            value: `${event.time ? event.time + ' - ' : ''}${event.event}${event.mandatory ? ' [MANDATORY]' : ''}`,
+          });
+        });
+        if (data.schedule.length > 3) {
+          fields.push({
+            icon: <View style={{ width: 14 }} />,
+            label: '',
+            value: `+${data.schedule.length - 3} more events`,
+          });
+        }
+      }
+      if (data.reserveDays && data.reserveDays.length > 0) {
+        fields.push({
+          icon: <Calendar size={14} color={IOS_COLORS.gray} />,
+          label: 'Reserve Days',
+          value: data.reserveDays.join(', '),
+        });
+      }
+      break;
+
+    case 'venue':
+      if (data.venue) {
+        fields.push({
+          icon: <MapPin size={14} color={IOS_COLORS.green} />,
+          label: 'Venue',
+          value: data.venue,
+        });
+      }
+      if (data.racingAreaName) {
+        fields.push({
+          icon: <Navigation size={14} color={IOS_COLORS.blue} />,
+          label: 'Racing Area',
+          value: data.racingAreaName,
+        });
+      }
+      if (data.racingAreaDescription) {
+        fields.push({
+          icon: <View style={{ width: 14 }} />,
+          label: '',
+          value: data.racingAreaDescription,
+        });
+      }
+      if (data.startAreaName) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.orange} />,
+          label: 'Start Area',
+          value: data.startAreaName,
+        });
+      }
+      if (data.finishAreaName && data.finishAreaName !== data.startAreaName) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.purple} />,
+          label: 'Finish Area',
+          value: data.finishAreaName,
+        });
+      }
+      // Route waypoints (for distance races)
+      if (data.routeWaypoints && data.routeWaypoints.length > 0) {
+        const routeText = data.routeWaypoints.map((wp: any) => wp.name).join(' → ');
+        fields.push({
+          icon: <Navigation size={14} color={IOS_COLORS.blue} />,
+          label: 'Route',
+          value: routeText,
+        });
+      }
+      // Prohibited areas
+      if (data.prohibitedAreas && data.prohibitedAreas.length > 0) {
+        const areaNames = data.prohibitedAreas.slice(0, 3).map((a: any) => a.name).join(', ');
+        const moreCount = data.prohibitedAreas.length > 3 ? ` +${data.prohibitedAreas.length - 3} more` : '';
+        fields.push({
+          icon: <AlertTriangle size={14} color={IOS_COLORS.red} />,
+          label: 'Prohibited',
+          value: areaNames + moreCount,
+        });
+      }
+      if (data.raceControlLocation) {
+        fields.push({
+          icon: <Radio size={14} color={IOS_COLORS.blue} />,
+          label: 'Race Control',
+          value: data.raceControlLocation,
+        });
+      }
+      if (data.berthingInfo) {
+        fields.push({
+          icon: <Ship size={14} color={IOS_COLORS.gray} />,
+          label: 'Berthing',
+          value: data.berthingInfo,
+        });
+      }
+      if (data.parkingInfo) {
+        fields.push({
+          icon: <MapPin size={14} color={IOS_COLORS.gray} />,
+          label: 'Parking',
+          value: data.parkingInfo,
+        });
+      }
+      if (data.launchingInfo) {
+        fields.push({
+          icon: <Ship size={14} color={IOS_COLORS.green} />,
+          label: 'Launching',
+          value: data.launchingInfo,
+        });
+      }
+      break;
+
+    case 'equipment':
+      if (data.safetyRequirements) {
+        fields.push({
+          icon: <Shield size={14} color={IOS_COLORS.red} />,
+          label: 'Safety Gear',
+          value: data.safetyRequirements,
+        });
+      }
+      if (data.classRestrictions) {
+        fields.push({
+          icon: <AlertCircle size={14} color={IOS_COLORS.orange} />,
+          label: 'Restrictions',
+          value: data.classRestrictions,
+        });
+      }
+      if (data.classRules && data.classRules.length > 0) {
+        fields.push({
+          icon: <FileText size={14} color={IOS_COLORS.blue} />,
+          label: 'Class Rules',
+          value: data.classRules.slice(0, 3).join('; ') + (data.classRules.length > 3 ? '...' : ''),
+        });
+      }
+      if (data.minimumInsuranceCoverage) {
+        fields.push({
+          icon: <Shield size={14} color={IOS_COLORS.green} />,
+          label: 'Min Insurance',
+          value: typeof data.minimumInsuranceCoverage === 'number'
+            ? `$${data.minimumInsuranceCoverage.toLocaleString()}`
+            : String(data.minimumInsuranceCoverage),
+        });
+      }
+      break;
+
+    case 'scoring':
+      if (data.scoringFormulaDescription) {
+        fields.push({
+          icon: <Trophy size={14} color={IOS_COLORS.orange} />,
+          label: 'Scoring',
+          value: data.scoringFormulaDescription,
+        });
+      }
+      if (data.handicapSystem && data.handicapSystem.length > 0) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.blue} />,
+          label: 'Handicap',
+          value: data.handicapSystem.join(', '),
+        });
+      }
+      if (data.seriesRacesRequired) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.purple} />,
+          label: 'Series Races',
+          value: String(data.seriesRacesRequired),
+        });
+      }
+      if (data.discardsPolicy) {
+        fields.push({
+          icon: <AlertCircle size={14} color={IOS_COLORS.gray} />,
+          label: 'Discards',
+          value: data.discardsPolicy,
+        });
+      }
+      if (data.prizesDescription) {
+        fields.push({
+          icon: <Trophy size={14} color={IOS_COLORS.green} />,
+          label: 'Prizes',
+          value: data.prizesDescription,
+        });
+      }
+      break;
+
+    // SI Review items
+    case 'signals':
+      if (data.warningSignalType) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.orange} />,
+          label: 'Warning Signal',
+          value: data.warningSignalType,
+        });
+      }
+      if (data.preparatoryMinutes) {
+        fields.push({
+          icon: <Clock size={14} color={IOS_COLORS.blue} />,
+          label: 'Prep Time',
+          value: `${data.preparatoryMinutes} min`,
+        });
+      }
+      if (data.classIntervalMinutes) {
+        fields.push({
+          icon: <Clock size={14} color={IOS_COLORS.purple} />,
+          label: 'Class Interval',
+          value: `${data.classIntervalMinutes} min`,
+        });
+      }
+      break;
+
+    case 'course':
+      if (data.courseName) {
+        fields.push({
+          icon: <Navigation size={14} color={IOS_COLORS.blue} />,
+          label: 'Course',
+          value: data.courseName,
+        });
+      }
+      if (data.courseDescription) {
+        fields.push({
+          icon: <View style={{ width: 14 }} />,
+          label: '',
+          value: data.courseDescription,
+        });
+      }
+      if (data.marks && data.marks.length > 0) {
+        const markNames = data.marks.map((m: any) => m.name).slice(0, 5).join(', ');
+        fields.push({
+          icon: <MapPin size={14} color={IOS_COLORS.orange} />,
+          label: 'Marks',
+          value: markNames + (data.marks.length > 5 ? '...' : ''),
+        });
+      }
+      break;
+
+    case 'vhf':
+      if (data.vhfChannels && data.vhfChannels.length > 0) {
+        data.vhfChannels.forEach((ch: any) => {
+          fields.push({
+            icon: <Radio size={14} color={IOS_COLORS.green} />,
+            label: ch.purpose || 'Race',
+            value: `Ch ${ch.channel}`,
+          });
+        });
+      } else if (data.vhfChannel) {
+        fields.push({
+          icon: <Radio size={14} color={IOS_COLORS.green} />,
+          label: 'Race Channel',
+          value: `Ch ${data.vhfChannel}`,
+        });
+      }
+      if (data.safetyChannel) {
+        fields.push({
+          icon: <Radio size={14} color={IOS_COLORS.red} />,
+          label: 'Safety Channel',
+          value: `Ch ${data.safetyChannel}`,
+        });
+      }
+      if (data.rcBoatName) {
+        fields.push({
+          icon: <Ship size={14} color={IOS_COLORS.blue} />,
+          label: 'RC Boat',
+          value: data.rcBoatName,
+        });
+      }
+      break;
+
+    case 'time_limits':
+      if (data.timeLimitMinutes) {
+        fields.push({
+          icon: <Clock size={14} color={IOS_COLORS.purple} />,
+          label: 'Race Time Limit',
+          value: `${data.timeLimitMinutes} min`,
+        });
+      }
+      if (data.timeLimitHours) {
+        fields.push({
+          icon: <Clock size={14} color={IOS_COLORS.purple} />,
+          label: 'Time Limit',
+          value: `${data.timeLimitHours} hours`,
+        });
+      }
+      if (data.plannedFinishTime) {
+        fields.push({
+          icon: <Flag size={14} color={IOS_COLORS.green} />,
+          label: 'Target Finish',
+          value: data.plannedFinishTime,
+        });
+      }
+      break;
+
+    case 'penalties':
+      if (data.penaltyDetails) {
+        fields.push({
+          icon: <AlertCircle size={14} color={IOS_COLORS.red} />,
+          label: 'Penalties',
+          value: data.penaltyDetails,
+        });
+      }
+      if (data.protestDeadline) {
+        fields.push({
+          icon: <Clock size={14} color={IOS_COLORS.orange} />,
+          label: 'Protest Deadline',
+          value: data.protestDeadline,
+        });
+      }
+      break;
+  }
+
+  return fields.length > 0 ? fields : null;
+}
+
+/**
+ * Component to display extracted data inline below a checklist item
+ */
+function ExtractedItemData({
+  itemId,
+  data
+}: {
+  itemId: string;
+  data: any | null;
+}) {
+  const fields = getExtractedDataForChecklistItem(itemId, data);
+
+  if (!fields || fields.length === 0) {
+    return null;
+  }
+
+  const handleOpenUrl = (url: string) => {
+    Linking.openURL(url);
+  };
+
+  return (
+    <View style={extractedItemStyles.container}>
+      {fields.map((field, index) => (
+        <View key={index} style={extractedItemStyles.row}>
+          <View style={extractedItemStyles.iconContainer}>
+            {field.icon}
+          </View>
+          {field.label ? (
+            <>
+              <Text style={extractedItemStyles.label}>{field.label}:</Text>
+              {field.url ? (
+                <Pressable onPress={() => handleOpenUrl(field.url!)}>
+                  <Text style={extractedItemStyles.linkValue}>{field.value} ↗</Text>
+                </Pressable>
+              ) : (
+                <Text style={extractedItemStyles.value} numberOfLines={2}>{field.value}</Text>
+              )}
+            </>
+          ) : (
+            <Text style={[extractedItemStyles.value, { marginLeft: 0 }]} numberOfLines={2}>
+              {field.value}
+            </Text>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const extractedItemStyles = StyleSheet.create({
+  container: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+    gap: 6,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  iconContainer: {
+    width: 14,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  label: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    fontWeight: '500',
+    minWidth: 70,
+  },
+  value: {
+    fontSize: 12,
+    color: IOS_COLORS.label,
+    flex: 1,
+    lineHeight: 16,
+  },
+  linkValue: {
+    fontSize: 12,
+    color: IOS_COLORS.blue,
+    fontWeight: '500',
+    flex: 1,
+  },
+});
+
+// ============================================================================
+// ExtractedDataSection Component - Shows comprehensive extracted race data
+// ============================================================================
+
+interface ExtractedDataSectionProps {
+  data: any;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function ExtractedDataSection({ data, expanded, onToggle }: ExtractedDataSectionProps) {
+  // Count categories with data
+  const detailCount = [
+    data.schedule?.length,
+    data.minimumCrew || data.crewRequirements,
+    data.prohibitedAreas?.length,
+    data.entryFees?.length,
+    data.scoringFormulaDescription,
+    data.motoringDivisionAvailable,
+    data.routeWaypoints?.length,
+    data.classRules?.length,
+    data.organizingAuthority || data.eventWebsite,
+  ].filter(Boolean).length;
+
+  // Basic info fields count
+  const basicInfoCount = [
+    data.venue,
+    data.raceDate,
+    data.warningSignalTime,
+    data.vhfChannels?.[0] || data.vhfChannel,
+    data.raceType,
+  ].filter(Boolean).length;
+
+  return (
+    <View style={styles.extractedDataCard}>
+      {/* Header - always visible */}
+      <Pressable
+        style={styles.extractedDataHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+      >
+        <View style={styles.extractedDataHeaderLeft}>
+          <Sparkles size={18} color={IOS_COLORS.green} />
+          <Text style={styles.extractedDataTitle}>Extracted Information</Text>
+          {detailCount > 0 && (
+            <View style={styles.extractedBadge}>
+              <Text style={styles.extractedBadgeText}>{basicInfoCount + detailCount}</Text>
+            </View>
+          )}
+        </View>
+        {detailCount > 0 && (
+          expanded ? (
+            <ChevronDown size={20} color={IOS_COLORS.gray} />
+          ) : (
+            <ChevronRight size={20} color={IOS_COLORS.gray} />
+          )
+        )}
+      </Pressable>
+
+      {/* Basic Info - always shown */}
+      <View style={styles.extractedBasicInfo}>
+        {data.venue && (
+          <View style={styles.extractedDataRow}>
+            <MapPin size={16} color={IOS_COLORS.green} />
+            <Text style={styles.extractedDataLabel}>Venue:</Text>
+            <Text style={styles.extractedDataValue}>{data.venue}</Text>
+          </View>
+        )}
+        {data.raceDate && (
+          <View style={styles.extractedDataRow}>
+            <Clock size={16} color={IOS_COLORS.orange} />
+            <Text style={styles.extractedDataLabel}>Date:</Text>
+            <Text style={styles.extractedDataValue}>{data.raceDate}</Text>
+          </View>
+        )}
+        {data.warningSignalTime && (
+          <View style={styles.extractedDataRow}>
+            <Flag size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.extractedDataLabel}>Start:</Text>
+            <Text style={styles.extractedDataValue}>{data.warningSignalTime}</Text>
+          </View>
+        )}
+        {(data.vhfChannels?.[0] || data.vhfChannel) && (
+          <View style={styles.extractedDataRow}>
+            <Radio size={16} color={IOS_COLORS.purple} />
+            <Text style={styles.extractedDataLabel}>VHF:</Text>
+            <Text style={styles.extractedDataValue}>
+              Ch {data.vhfChannels?.[0]?.channel || data.vhfChannel}
+            </Text>
+          </View>
+        )}
+        {data.raceType && (
+          <View style={styles.extractedDataRow}>
+            <Sailboat size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.extractedDataLabel}>Type:</Text>
+            <Text style={styles.extractedDataValue}>
+              {data.raceType === 'distance' ? 'Distance Race' :
+               data.raceType === 'match' ? 'Match Race' :
+               data.raceType === 'team' ? 'Team Race' : 'Fleet Race'}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Expanded Details */}
+      {expanded && detailCount > 0 && (
+        <View style={styles.extractedDetailsContent}>
+          {/* Schedule */}
+          {data.schedule && data.schedule.length > 0 && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <Calendar size={16} color={IOS_COLORS.orange} />
+                <Text style={styles.extractedSectionTitle}>Schedule</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.schedule.map((event: any, i: number) => (
+                  <View key={i} style={styles.scheduleItem}>
+                    <Text style={styles.scheduleDate}>
+                      {event.date} {event.time}
+                    </Text>
+                    <Text style={styles.scheduleEvent}>
+                      {event.event}
+                      {event.mandatory && (
+                        <Text style={styles.mandatoryTag}> [MANDATORY]</Text>
+                      )}
+                    </Text>
+                    {event.location && (
+                      <Text style={styles.scheduleLocation}>{event.location}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Route Waypoints */}
+          {data.routeWaypoints && data.routeWaypoints.length > 0 && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <Navigation size={16} color={IOS_COLORS.blue} />
+                <Text style={styles.extractedSectionTitle}>Route</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                <Text style={styles.routeText}>
+                  {data.routeWaypoints.map((wp: any) => wp.name).join(' → ')}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Crew Requirements */}
+          {(data.minimumCrew || data.crewRequirements || data.minorSailorRules) && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <Users size={16} color={IOS_COLORS.purple} />
+                <Text style={styles.extractedSectionTitle}>Crew Requirements</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.minimumCrew && (
+                  <Text style={styles.detailText}>
+                    Minimum crew: <Text style={styles.highlightText}>{data.minimumCrew}</Text>
+                  </Text>
+                )}
+                {data.crewRequirements && (
+                  <Text style={styles.detailText}>{data.crewRequirements}</Text>
+                )}
+                {data.minorSailorRules && (
+                  <Text style={styles.detailTextSecondary}>Under 18: {data.minorSailorRules}</Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Prohibited Areas */}
+          {data.prohibitedAreas && data.prohibitedAreas.length > 0 && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <AlertTriangle size={16} color={IOS_COLORS.red} />
+                <Text style={styles.extractedSectionTitle}>
+                  Prohibited Areas ({data.prohibitedAreas.length})
+                </Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.prohibitedAreas.map((area: any, i: number) => (
+                  <Text key={i} style={styles.listItem}>
+                    • {area.name}
+                    {area.description && area.description !== 'Out of bounds' && (
+                      <Text style={styles.listItemNote}> ({area.description})</Text>
+                    )}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Entry Fees */}
+          {data.entryFees && data.entryFees.length > 0 && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <DollarSign size={16} color={IOS_COLORS.green} />
+                <Text style={styles.extractedSectionTitle}>Entry Fees</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.entryFees.map((fee: any, i: number) => (
+                  <Text key={i} style={styles.detailText}>
+                    {fee.type}: <Text style={styles.highlightText}>{fee.amount}</Text>
+                    {fee.deadline && <Text style={styles.listItemNote}> (by {fee.deadline})</Text>}
+                  </Text>
+                ))}
+                {data.entryDeadline && (
+                  <Text style={styles.detailTextSecondary}>
+                    Entry deadline: {data.entryDeadline}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Scoring */}
+          {data.scoringFormulaDescription && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <Trophy size={16} color={IOS_COLORS.orange} />
+                <Text style={styles.extractedSectionTitle}>Scoring</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                <Text style={styles.detailText}>{data.scoringFormulaDescription}</Text>
+                {data.handicapSystem && data.handicapSystem.length > 0 && (
+                  <Text style={styles.detailTextSecondary}>
+                    Handicap: {data.handicapSystem.join(', ')}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Motoring Division */}
+          {data.motoringDivisionAvailable && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <Ship size={16} color={IOS_COLORS.blue} />
+                <Text style={styles.extractedSectionTitle}>Motoring Division</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                <Text style={styles.detailText}>
+                  {data.motoringDivisionRules || 'Available - see sailing instructions'}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Start/Finish Areas */}
+          {(data.startAreaName || data.finishAreaName) && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <MapPin size={16} color={IOS_COLORS.blue} />
+                <Text style={styles.extractedSectionTitle}>Course Areas</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.startAreaName && (
+                  <Text style={styles.detailText}>Start: {data.startAreaName}</Text>
+                )}
+                {data.finishAreaName && (
+                  <Text style={styles.detailText}>Finish: {data.finishAreaName}</Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Rules & Requirements */}
+          {data.classRules && data.classRules.length > 0 && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <Shield size={16} color={IOS_COLORS.gray} />
+                <Text style={styles.extractedSectionTitle}>Rules & Requirements</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.classRules.map((rule: string, i: number) => (
+                  <Text key={i} style={styles.listItem}>• {rule}</Text>
+                ))}
+                {data.eligibilityRequirements && (
+                  <Text style={styles.detailTextSecondary}>
+                    Eligibility: {data.eligibilityRequirements}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Contact & Organization */}
+          {(data.organizingAuthority || data.eventWebsite || data.contactEmail) && (
+            <View style={styles.extractedSection}>
+              <View style={styles.extractedSectionHeader}>
+                <FileText size={16} color={IOS_COLORS.gray} />
+                <Text style={styles.extractedSectionTitle}>Contact</Text>
+              </View>
+              <View style={styles.extractedSectionContent}>
+                {data.organizingAuthority && (
+                  <Text style={styles.detailText}>{data.organizingAuthority}</Text>
+                )}
+                {data.eventWebsite && (
+                  <Text style={styles.linkText}>{data.eventWebsite}</Text>
+                )}
+                {data.contactEmail && (
+                  <Text style={styles.linkText}>{data.contactEmail}</Text>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Expand prompt if collapsed and has details */}
+      {!expanded && detailCount > 0 && (
+        <Pressable style={styles.expandPrompt} onPress={onToggle}>
+          <Text style={styles.expandPromptText}>
+            Tap to see {detailCount} more detail{detailCount > 1 ? 's' : ''}: schedule, crew, fees, rules...
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 interface DocumentReviewWizardProps extends ChecklistToolProps {
   /** Optional venue for context */
   venue?: { id: string; name: string } | null;
@@ -189,8 +1051,11 @@ export function DocumentReviewWizard({
   const [step, setStep] = useState<WizardStep>('check_document');
   const [completedChecks, setCompletedChecks] = useState<Set<string>>(new Set());
   const [showUrlInput, setShowUrlInput] = useState(false);
+  const [inputMode, setInputMode] = useState<'url' | 'text'>('url');
   const [urlValue, setUrlValue] = useState('');
+  const [textContent, setTextContent] = useState('');
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
+  const [extractedDetailsExpanded, setExtractedDetailsExpanded] = useState(true);
 
   // Load documents for this race
   const {
@@ -199,9 +1064,16 @@ export function DocumentReviewWizard({
     loading: docsLoading,
     upload,
     addFromUrl,
+    addFromText,
+    deleteDocument,
+    isExtracting,
+    extractionResult,
+    storedExtractionChecked,
     typePickerVisible,
     selectType,
     dismissTypePicker,
+    triggerExtraction,
+    clearExtractionResult,
   } = useRaceDocuments({
     raceId: raceEventId,
     userId: user?.id,
@@ -212,12 +1084,35 @@ export function DocumentReviewWizard({
     return documentsForDisplay.find((doc) => doc.type === config.type);
   }, [documentsForDisplay, config.type]);
 
+  // Track if we've attempted extraction for this document
+  const [extractionAttempted, setExtractionAttempted] = useState<string | null>(null);
+
   // Auto-advance to review if document exists
   useEffect(() => {
     if (!docsLoading && document && step === 'check_document') {
       setStep('review');
     }
   }, [docsLoading, document, step]);
+
+  // Auto-trigger extraction when document exists but no extraction result
+  // Wait for storedExtractionChecked to prevent re-extracting when stored data exists
+  useEffect(() => {
+    if (
+      document &&
+      document.url &&
+      !isExtracting &&
+      !extractionResult &&
+      storedExtractionChecked && // Wait until we've checked for stored extraction
+      extractionAttempted !== document.id &&
+      (config.type === 'nor' || config.type === 'sailing_instructions')
+    ) {
+      // Mark as attempted to prevent re-triggering
+      setExtractionAttempted(document.id);
+      // Trigger extraction - use documentId (actual documents table ID) for storage
+      const docId = document.documentId || document.id;
+      triggerExtraction(document.url, docId, config.type);
+    }
+  }, [document, isExtracting, extractionResult, storedExtractionChecked, extractionAttempted, config.type, triggerExtraction]);
 
   // Progress calculation
   const progress = completedChecks.size / config.checkItems.length;
@@ -245,7 +1140,9 @@ export function DocumentReviewWizard({
 
   // Handle URL submission
   const handleUrlSubmit = useCallback(async () => {
-    if (!urlValue.trim()) return;
+    if (!urlValue.trim()) {
+      return;
+    }
 
     setIsSubmittingUrl(true);
     try {
@@ -260,12 +1157,54 @@ export function DocumentReviewWizard({
     }
   }, [urlValue, addFromUrl, config.type]);
 
+  // Handle text content submission
+  const handleTextSubmit = useCallback(async () => {
+    if (!textContent.trim()) {
+      return;
+    }
+
+    setIsSubmittingUrl(true);
+    try {
+      const success = await addFromText(textContent.trim(), config.type);
+      if (success) {
+        setTextContent('');
+        setShowUrlInput(false);
+        setInputMode('url'); // Reset for next time
+        // The useEffect will advance to review step when document is loaded
+      }
+    } finally {
+      setIsSubmittingUrl(false);
+    }
+  }, [textContent, addFromText, config.type]);
+
   // Handle opening document
   const handleOpenDocument = useCallback(() => {
     if (document?.url) {
       Linking.openURL(document.url);
     }
   }, [document?.url]);
+
+  // Handle replacing document
+  const handleReplaceDocument = useCallback(async () => {
+    if (document?.id) {
+      await deleteDocument(document.id);
+      setCompletedChecks(new Set()); // Reset checklist
+      setStep('check_document'); // Go back to upload step
+    }
+  }, [document?.id, deleteDocument]);
+
+  // Handle re-extraction (force fresh extraction)
+  const handleReExtract = useCallback(() => {
+    if (document?.url && document?.id) {
+      // Clear current extraction result
+      clearExtractionResult();
+      // Reset extraction attempt tracking
+      setExtractionAttempted(null);
+      // Trigger fresh extraction - use documentId (actual documents table ID) for storage
+      const docId = document.documentId || document.id;
+      triggerExtraction(document.url, docId, config.type);
+    }
+  }, [document?.url, document?.id, document?.documentId, clearExtractionResult, triggerExtraction, config.type]);
 
   // Handle learn more
   const handleLearnMore = useCallback(() => {
@@ -311,41 +1250,117 @@ export function DocumentReviewWizard({
           <Text style={styles.loadingText}>Checking documents...</Text>
         </View>
       ) : showUrlInput ? (
-        // URL Input Mode
+        // URL/Text Input Mode with Tab Toggle
         <View style={styles.urlInputContainer}>
           <View style={styles.iconCircle}>
-            <Link2 size={32} color={IOS_COLORS.blue} />
+            {inputMode === 'url' ? (
+              <Link2 size={32} color={IOS_COLORS.blue} />
+            ) : (
+              <FileText size={32} color={IOS_COLORS.purple} />
+            )}
           </View>
           <Text style={styles.centeredTitle}>
-            Add {config.shortLabel} URL
+            Add {config.shortLabel}
           </Text>
           <Text style={styles.centeredDescription}>
-            Paste the link to the {config.label} document.
+            {inputMode === 'url'
+              ? `Paste the link to the ${config.label} document.`
+              : `Paste the ${config.label} text content (copy from PDF).`}
           </Text>
 
-          <View style={styles.urlInputWrapper}>
-            <TextInput
-              style={styles.urlInput}
-              placeholder={`https://example.com/${config.shortLabel.toLowerCase()}.pdf`}
-              placeholderTextColor={IOS_COLORS.tertiaryLabel}
-              value={urlValue}
-              onChangeText={setUrlValue}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              returnKeyType="done"
-              onSubmitEditing={handleUrlSubmit}
-              editable={!isSubmittingUrl}
-            />
+          {/* Tab Toggle */}
+          <View style={styles.tabToggleContainer}>
+            <Pressable
+              style={[
+                styles.tabToggleButton,
+                inputMode === 'url' && styles.tabToggleButtonActive,
+              ]}
+              onPress={() => setInputMode('url')}
+              disabled={isSubmittingUrl}
+            >
+              <Link2 size={16} color={inputMode === 'url' ? '#FFFFFF' : IOS_COLORS.blue} />
+              <Text
+                style={[
+                  styles.tabToggleText,
+                  inputMode === 'url' && styles.tabToggleTextActive,
+                ]}
+              >
+                Paste URL
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.tabToggleButton,
+                inputMode === 'text' && styles.tabToggleButtonActive,
+              ]}
+              onPress={() => setInputMode('text')}
+              disabled={isSubmittingUrl}
+            >
+              <FileText size={16} color={inputMode === 'text' ? '#FFFFFF' : IOS_COLORS.purple} />
+              <Text
+                style={[
+                  styles.tabToggleText,
+                  inputMode === 'text' && styles.tabToggleTextActive,
+                ]}
+              >
+                Paste Text
+              </Text>
+            </Pressable>
           </View>
+
+          {inputMode === 'url' ? (
+            // URL Input
+            <View style={styles.urlInputWrapper}>
+              <TextInput
+                style={styles.urlInput}
+                placeholder={`https://example.com/${config.shortLabel.toLowerCase()}.pdf`}
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                value={urlValue}
+                onChangeText={setUrlValue}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="done"
+                onSubmitEditing={handleUrlSubmit}
+                editable={!isSubmittingUrl}
+              />
+            </View>
+          ) : (
+            // Text Input (multiline)
+            <View style={styles.textInputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                placeholder={`Paste ${config.shortLabel} document text here...\n\nTip: Open the PDF, select all text (Cmd+A), copy (Cmd+C), and paste here.`}
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                value={textContent}
+                onChangeText={setTextContent}
+                multiline
+                numberOfLines={10}
+                textAlignVertical="top"
+                editable={!isSubmittingUrl}
+              />
+              {textContent.trim().length > 0 && (
+                <Text style={styles.textInputCharCount}>
+                  {textContent.trim().length.toLocaleString()} characters
+                </Text>
+              )}
+            </View>
+          )}
 
           <Pressable
             style={[
               styles.uploadButton,
-              (!urlValue.trim() || isSubmittingUrl) && styles.uploadButtonDisabled,
+              ((inputMode === 'url' && !urlValue.trim()) ||
+                (inputMode === 'text' && !textContent.trim()) ||
+                isSubmittingUrl) &&
+                styles.uploadButtonDisabled,
             ]}
-            onPress={handleUrlSubmit}
-            disabled={!urlValue.trim() || isSubmittingUrl}
+            onPress={inputMode === 'url' ? handleUrlSubmit : handleTextSubmit}
+            disabled={
+              (inputMode === 'url' && !urlValue.trim()) ||
+              (inputMode === 'text' && !textContent.trim()) ||
+              isSubmittingUrl
+            }
           >
             {isSubmittingUrl ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
@@ -353,11 +1368,17 @@ export function DocumentReviewWizard({
               <Check size={20} color="#FFFFFF" />
             )}
             <Text style={styles.uploadButtonText}>
-              {isSubmittingUrl ? 'Adding...' : 'Add Document'}
+              {isSubmittingUrl ? 'Processing...' : 'Add Document'}
             </Text>
           </Pressable>
 
-          <Pressable style={styles.skipButton} onPress={() => setShowUrlInput(false)}>
+          <Pressable
+            style={styles.skipButton}
+            onPress={() => {
+              setShowUrlInput(false);
+              setInputMode('url');
+            }}
+          >
             <Text style={styles.skipButtonText}>Back</Text>
           </Pressable>
         </View>
@@ -419,20 +1440,216 @@ export function DocumentReviewWizard({
         </Pressable>
       )}
 
-      {/* No document warning */}
-      {!document && (
-        <Pressable style={styles.warningCard} onPress={handleUpload}>
-          <AlertTriangle size={20} color={IOS_COLORS.orange} />
-          <View style={styles.warningContent}>
-            <Text style={styles.warningTitle}>
-              No {config.shortLabel} uploaded
+      {/* Replace Document Button */}
+      {document && (
+        <Pressable style={styles.replaceButton} onPress={handleReplaceDocument}>
+          <RefreshCw size={16} color={IOS_COLORS.blue} />
+          <Text style={styles.replaceButtonText}>Replace Document</Text>
+        </Pressable>
+      )}
+
+      {/* AI Extraction Status */}
+      {isExtracting && (
+        <View style={styles.extractionCard}>
+          <ActivityIndicator size="small" color={IOS_COLORS.purple} />
+          <View style={styles.extractionContent}>
+            <Text style={styles.extractionTitle}>
+              Extracting race data...
             </Text>
-            <Text style={styles.warningDescription}>
-              Tap to upload the document for easier review
+            <Text style={styles.extractionDescription}>
+              AI is parsing the document for entry, schedule, venue, and more
             </Text>
           </View>
-          <Upload size={18} color={IOS_COLORS.orange} />
+        </View>
+      )}
+
+      {/* Extraction Result */}
+      {!isExtracting && extractionResult && (
+        <View style={[
+          styles.extractionCard,
+          extractionResult.success ? styles.extractionSuccess : styles.extractionError,
+        ]}>
+          {extractionResult.success ? (
+            <>
+              <Sparkles size={20} color={IOS_COLORS.green} />
+              <View style={styles.extractionContent}>
+                <Text style={[styles.extractionTitle, { color: IOS_COLORS.green }]}>
+                  Race data extracted
+                </Text>
+                <Text style={styles.extractionDescription}>
+                  {extractionResult.extractedFields?.length || 0} fields updated from document
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <AlertCircle size={20} color={IOS_COLORS.orange} />
+              <View style={styles.extractionContent}>
+                <Text style={[styles.extractionTitle, { color: IOS_COLORS.orange }]}>
+                  Extraction incomplete
+                </Text>
+                <Text style={styles.extractionDescription}>
+                  {extractionResult.error || 'Some fields could not be extracted'}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+      )}
+
+      {/* Re-extract Button (only when extraction succeeded) */}
+      {!isExtracting && extractionResult?.success && document && (
+        <Pressable style={styles.reExtractButton} onPress={handleReExtract}>
+          <RefreshCw size={14} color={IOS_COLORS.secondaryLabel} />
+          <Text style={styles.reExtractButtonText}>Re-extract from document</Text>
         </Pressable>
+      )}
+
+      {/* Extracted data is now shown inline with each checklist item */}
+
+      {/* No document - show upload options */}
+      {!document && !showUrlInput && (
+        <View style={styles.noDocumentCard}>
+          <View style={styles.noDocumentHeader}>
+            <AlertTriangle size={20} color={IOS_COLORS.orange} />
+            <Text style={styles.noDocumentTitle}>
+              No {config.shortLabel} uploaded
+            </Text>
+          </View>
+          <Text style={styles.noDocumentDescription}>
+            Add the document to extract race details automatically
+          </Text>
+          <View style={styles.noDocumentActions}>
+            <Pressable style={styles.noDocumentUploadButton} onPress={handleUpload}>
+              <Upload size={18} color="#FFFFFF" />
+              <Text style={styles.noDocumentUploadText}>Upload File</Text>
+            </Pressable>
+            <Pressable
+              style={styles.noDocumentUrlButton}
+              onPress={() => setShowUrlInput(true)}
+            >
+              <Link2 size={18} color={IOS_COLORS.blue} />
+              <Text style={styles.noDocumentUrlText}>Add from URL</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* URL/Text Input Mode in Review Step */}
+      {!document && showUrlInput && (
+        <View style={styles.reviewUrlInputCard}>
+          <View style={styles.reviewUrlInputHeader}>
+            {inputMode === 'url' ? (
+              <Link2 size={20} color={IOS_COLORS.blue} />
+            ) : (
+              <FileText size={20} color={IOS_COLORS.purple} />
+            )}
+            <Text style={styles.reviewUrlInputTitle}>
+              Add {config.shortLabel}
+            </Text>
+          </View>
+
+          {/* Tab Toggle */}
+          <View style={styles.reviewTabToggle}>
+            <Pressable
+              style={[
+                styles.reviewTabButton,
+                inputMode === 'url' && styles.reviewTabButtonActive,
+              ]}
+              onPress={() => setInputMode('url')}
+              disabled={isSubmittingUrl}
+            >
+              <Text style={[
+                styles.reviewTabText,
+                inputMode === 'url' && styles.reviewTabTextActive,
+              ]}>
+                Paste URL
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.reviewTabButton,
+                inputMode === 'text' && styles.reviewTabButtonActive,
+              ]}
+              onPress={() => setInputMode('text')}
+              disabled={isSubmittingUrl}
+            >
+              <Text style={[
+                styles.reviewTabText,
+                inputMode === 'text' && styles.reviewTabTextActive,
+              ]}>
+                Paste Text
+              </Text>
+            </Pressable>
+          </View>
+
+          {inputMode === 'url' ? (
+            <TextInput
+              style={styles.reviewUrlInput}
+              placeholder={`https://example.com/${config.shortLabel.toLowerCase()}.pdf`}
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              value={urlValue}
+              onChangeText={setUrlValue}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              returnKeyType="done"
+              onSubmitEditing={handleUrlSubmit}
+              editable={!isSubmittingUrl}
+            />
+          ) : (
+            <TextInput
+              style={styles.reviewTextInput}
+              placeholder={`Paste ${config.shortLabel} text here...`}
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              value={textContent}
+              onChangeText={setTextContent}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              editable={!isSubmittingUrl}
+            />
+          )}
+
+          <View style={styles.reviewUrlInputActions}>
+            <Pressable
+              style={styles.reviewUrlCancelButton}
+              onPress={() => {
+                setShowUrlInput(false);
+                setInputMode('url');
+                setUrlValue('');
+                setTextContent('');
+              }}
+              disabled={isSubmittingUrl}
+            >
+              <Text style={styles.reviewUrlCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.reviewUrlSubmitButton,
+                ((inputMode === 'url' && !urlValue.trim()) ||
+                  (inputMode === 'text' && !textContent.trim()) ||
+                  isSubmittingUrl) &&
+                  styles.reviewUrlSubmitButtonDisabled,
+              ]}
+              onPress={inputMode === 'url' ? handleUrlSubmit : handleTextSubmit}
+              disabled={
+                (inputMode === 'url' && !urlValue.trim()) ||
+                (inputMode === 'text' && !textContent.trim()) ||
+                isSubmittingUrl
+              }
+            >
+              {isSubmittingUrl ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Check size={18} color="#FFFFFF" />
+              )}
+              <Text style={styles.reviewUrlSubmitText}>
+                {isSubmittingUrl ? 'Processing...' : 'Add Document'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {/* Check Items */}
@@ -444,38 +1661,53 @@ export function DocumentReviewWizard({
       <View style={styles.checklistContainer}>
         {config.checkItems.map((checkItem) => {
           const isChecked = completedChecks.has(checkItem.id);
+          const extractedData = extractionResult?.data;
+          const hasExtractedData = extractedData && getExtractedDataForChecklistItem(checkItem.id, extractedData);
 
           return (
-            <Pressable
+            <View
               key={checkItem.id}
               style={[
                 styles.checkItem,
                 isChecked && styles.checkItemChecked,
               ]}
-              onPress={() => toggleCheck(checkItem.id)}
             >
-              <View style={styles.checkItemIcon}>{checkItem.icon}</View>
-              <View style={styles.checkItemContent}>
-                <Text
-                  style={[
-                    styles.checkItemLabel,
-                    isChecked && styles.checkItemLabelChecked,
-                  ]}
-                >
-                  {checkItem.label}
-                </Text>
-                <Text style={styles.checkItemDescription}>
-                  {checkItem.description}
-                </Text>
-              </View>
-              <View style={styles.checkItemCheckbox}>
-                {isChecked ? (
-                  <CheckCircle2 size={24} color={IOS_COLORS.green} />
-                ) : (
-                  <Circle size={24} color={IOS_COLORS.gray} />
-                )}
-              </View>
-            </Pressable>
+              {/* Header row with icon, label, description, and checkbox */}
+              <Pressable
+                style={styles.checkItemHeader}
+                onPress={() => toggleCheck(checkItem.id)}
+              >
+                <View style={styles.checkItemIcon}>{checkItem.icon}</View>
+                <View style={styles.checkItemContent}>
+                  <Text
+                    style={[
+                      styles.checkItemLabel,
+                      isChecked && styles.checkItemLabelChecked,
+                    ]}
+                  >
+                    {checkItem.label}
+                  </Text>
+                  <Text style={styles.checkItemDescription}>
+                    {checkItem.description}
+                  </Text>
+                </View>
+                <View style={styles.checkItemCheckbox}>
+                  {isChecked ? (
+                    <CheckCircle2 size={24} color={IOS_COLORS.green} />
+                  ) : (
+                    <Circle size={24} color={IOS_COLORS.gray} />
+                  )}
+                </View>
+              </Pressable>
+
+              {/* Inline extracted data - always visible */}
+              {hasExtractedData && (
+                <ExtractedItemData
+                  itemId={checkItem.id}
+                  data={extractedData}
+                />
+              )}
+            </View>
           );
         })}
       </View>
@@ -746,6 +1978,59 @@ const styles = StyleSheet.create({
   uploadButtonDisabled: {
     opacity: 0.5,
   },
+  // Tab Toggle styles
+  tabToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: IOS_COLORS.separator,
+    borderRadius: 10,
+    padding: 2,
+    marginBottom: 20,
+    width: '100%',
+  },
+  tabToggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    gap: 6,
+  },
+  tabToggleButtonActive: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+  tabToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  tabToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  // Text Input styles
+  textInputWrapper: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  textInput: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    minHeight: 200,
+    maxHeight: 300,
+  },
+  textInputCharCount: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+    marginTop: 6,
+    textAlign: 'right',
+  },
   loadingContainer: {
     alignItems: 'center',
     gap: 16,
@@ -785,6 +2070,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
   },
+  // Replace button
+  replaceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: -12,
+    marginBottom: 16,
+  },
+  replaceButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  // Re-extract button
+  reExtractButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  reExtractButtonText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+  },
   // Warning card
   warningCard: {
     flexDirection: 'row',
@@ -810,6 +2125,186 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: IOS_COLORS.secondaryLabel,
   },
+  // Extraction card
+  extractionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.purple}10`,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.purple}30`,
+  },
+  extractionSuccess: {
+    backgroundColor: `${IOS_COLORS.green}10`,
+    borderColor: `${IOS_COLORS.green}30`,
+  },
+  extractionError: {
+    backgroundColor: `${IOS_COLORS.orange}10`,
+    borderColor: `${IOS_COLORS.orange}30`,
+  },
+  extractionContent: {
+    flex: 1,
+  },
+  extractionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.purple,
+    marginBottom: 2,
+  },
+  extractionDescription: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  // Extracted data card
+  extractedDataCard: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  extractedDataHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingBottom: 12,
+  },
+  extractedDataHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  extractedDataTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  extractedBadge: {
+    backgroundColor: IOS_COLORS.green,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  extractedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  extractedBasicInfo: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  extractedDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  extractedDataLabel: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    width: 100,
+  },
+  extractedDataValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    flex: 1,
+  },
+  extractedDetailsContent: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 16,
+  },
+  extractedSection: {
+    gap: 8,
+  },
+  extractedSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  extractedSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  extractedSectionContent: {
+    paddingLeft: 24,
+    gap: 4,
+  },
+  scheduleItem: {
+    marginBottom: 8,
+  },
+  scheduleDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  scheduleEvent: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+  },
+  scheduleLocation: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+    fontStyle: 'italic',
+  },
+  mandatoryTag: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.red,
+  },
+  routeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  detailText: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  detailTextSecondary: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  highlightText: {
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  listItem: {
+    fontSize: 13,
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  listItemNote: {
+    color: IOS_COLORS.tertiaryLabel,
+    fontStyle: 'italic',
+  },
+  linkText: {
+    fontSize: 13,
+    color: IOS_COLORS.blue,
+    lineHeight: 20,
+  },
+  expandPrompt: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 4,
+  },
+  expandPromptText: {
+    fontSize: 13,
+    color: IOS_COLORS.blue,
+    fontStyle: 'italic',
+  },
   // Section
   sectionTitle: {
     fontSize: 20,
@@ -829,11 +2324,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   checkItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 16,
     backgroundColor: IOS_COLORS.secondaryBackground,
     borderRadius: 12,
+  },
+  checkItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
   checkItemChecked: {
@@ -925,6 +2422,163 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // No document card (in review step)
+  noDocumentCard: {
+    backgroundColor: `${IOS_COLORS.orange}10`,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.orange}30`,
+  },
+  noDocumentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  noDocumentTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.orange,
+  },
+  noDocumentDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 16,
+  },
+  noDocumentActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  noDocumentUploadButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.blue,
+    gap: 8,
+  },
+  noDocumentUploadText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  noDocumentUrlButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    gap: 8,
+  },
+  noDocumentUrlText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  // URL Input in Review Step
+  reviewUrlInputCard: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  reviewUrlInputHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  reviewUrlInputTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  reviewTabToggle: {
+    flexDirection: 'row',
+    backgroundColor: IOS_COLORS.separator,
+    borderRadius: 8,
+    padding: 2,
+    marginBottom: 12,
+  },
+  reviewTabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  reviewTabButtonActive: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+  reviewTabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  reviewTabTextActive: {
+    color: '#FFFFFF',
+  },
+  reviewUrlInput: {
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    marginBottom: 12,
+  },
+  reviewTextInput: {
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    marginBottom: 12,
+    minHeight: 120,
+    maxHeight: 180,
+  },
+  reviewUrlInputActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  reviewUrlCancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.background,
+  },
+  reviewUrlCancelText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  reviewUrlSubmitButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.blue,
+    gap: 8,
+  },
+  reviewUrlSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
+  reviewUrlSubmitText: {
+    fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
   },

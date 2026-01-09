@@ -49,9 +49,8 @@ class RaceDocumentService {
     try {
       // First, upload the document using DocumentStorageService
       const uploadResult = await documentStorageService.uploadDocument(
-        params.file,
         params.userId,
-        params.filename
+        params.file as any // Cast to handle File/Blob to DocumentPickerAsset conversion
       );
 
       if (!uploadResult.success || !uploadResult.document) {
@@ -87,6 +86,7 @@ class RaceDocumentService {
 
   /**
    * Link existing document to a race
+   * Note: The ID can be either a regatta_id or a race_event_id - we'll resolve appropriately
    */
   async linkDocumentToRace(params: {
     regattaId: string;
@@ -97,10 +97,19 @@ class RaceDocumentService {
     fleetId?: string;
   }): Promise<RaceDocument | null> {
     try {
+      // Resolve the race reference - could be regatta_id or race_event_id
+      const raceRef = await this.resolveRaceReference(params.regattaId);
+
+      if (!raceRef) {
+        logger.error('Could not resolve race reference for:', params.regattaId);
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('race_documents')
         .insert({
-          regatta_id: params.regattaId,
+          regatta_id: raceRef.regattaId || null,
+          race_event_id: raceRef.raceEventId || null,
           document_id: params.documentId,
           user_id: params.userId,
           document_type: params.documentType,
@@ -123,15 +132,66 @@ class RaceDocumentService {
   }
 
   /**
+   * Resolve race reference from either a direct regatta_id or a race_event_id
+   * Returns either { regattaId } or { raceEventId } depending on what we find
+   */
+  private async resolveRaceReference(id: string): Promise<{ regattaId?: string; raceEventId?: string } | null> {
+    // First, check if it's a valid regatta ID
+    const { data: regatta } = await supabase
+      .from('regattas')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (regatta) {
+      return { regattaId: regatta.id };
+    }
+
+    // Not a regatta - check if it's a race_event
+    const { data: raceEvent } = await supabase
+      .from('race_events')
+      .select('id, regatta_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (raceEvent) {
+      // If race_event has a regatta_id, use that; otherwise link directly to race_event
+      if (raceEvent.regatta_id) {
+        return { regattaId: raceEvent.regatta_id };
+      }
+      return { raceEventId: raceEvent.id };
+    }
+
+    // Could not resolve
+    logger.warn('Could not resolve race reference - not found in regattas or race_events:', id);
+    return null;
+  }
+
+  /**
    * Get all documents for a race
+   * Note: The ID can be either a regatta_id or a race_event_id - we'll query appropriately
    */
   async getRaceDocuments(regattaId: string): Promise<RaceDocumentWithDetails[]> {
     try {
-      const { data, error } = await supabase
+      // Resolve the race reference - could be regatta_id or race_event_id
+      const raceRef = await this.resolveRaceReference(regattaId);
+
+      if (!raceRef) {
+        return [];
+      }
+
+      // Query by either regatta_id or race_event_id depending on what we resolved
+      let query = supabase
         .from('race_documents')
-        .select('*')
-        .eq('regatta_id', regattaId)
-        .order('created_at', { ascending: false });
+        .select('*');
+
+      if (raceRef.regattaId) {
+        query = query.eq('regatta_id', raceRef.regattaId);
+      } else if (raceRef.raceEventId) {
+        query = query.eq('race_event_id', raceRef.raceEventId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         logger.error('Error fetching race documents:', error);
@@ -153,15 +213,28 @@ class RaceDocumentService {
               return this.mapRaceDocument(raceDoc);
             }
 
+            // Construct public URL from storage path
+            let publicUrl = docData.file_path;
+            if (docData.file_path && !docData.file_path.startsWith('http')) {
+              // Get public URL from Supabase storage
+              const { data: urlData } = supabase.storage
+                .from('documents')
+                .getPublicUrl(docData.file_path);
+              publicUrl = urlData?.publicUrl || docData.file_path;
+            }
+
             return {
               ...this.mapRaceDocument(raceDoc),
               document: {
                 id: docData.id,
                 user_id: docData.user_id,
                 filename: docData.filename,
-                file_type: docData.file_type,
+                name: docData.filename,  // Alias for display
+                file_type: docData.mime_type,  // DB column is mime_type
                 file_size: docData.file_size,
-                storage_path: docData.storage_path,
+                storage_path: docData.file_path,  // DB column is file_path
+                url: publicUrl,  // Constructed public URL
+                public_url: publicUrl,  // For compatibility
                 created_at: docData.created_at,
                 updated_at: docData.updated_at,
                 metadata: docData.metadata,
