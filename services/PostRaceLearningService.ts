@@ -275,10 +275,8 @@ function deriveRecurringInsightsFromPatterns(
 function getResolvedApiKey(): string | undefined {
   const configExtra =
     Constants.expoConfig?.extra ||
-    // @ts-expect-error manifest exists in classic builds
-    Constants.manifest?.extra ||
-    // @ts-expect-error manifest2 exists in Expo Go
-    Constants.manifest2?.extra ||
+    (Constants as any).manifest?.extra ||
+    (Constants as any).manifest2?.extra ||
     {};
 
   const envKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
@@ -1072,37 +1070,16 @@ class PostRaceLearningService {
         .slice(-3)
         .map(s => s.notes);
 
-      const betas = this.customSkillId
-        ? ['code-execution-2025-08-25', 'skills-2025-10-02']
-        : ['code-execution-2025-08-25'];
-
-      const response = await this.anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 200,
-        temperature: 0.4,
-        betas,
-        ...(this.customSkillId && {
-          container: {
-            skills: [
+      // Beta skills API disabled - format changed, container now expects string
+      const response = await this.anthropic.messages.create({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 200,
+            temperature: 0.4,
+            system: 'You are a sailing coach providing brief, specific strategic advice for a sailor planning their next race. Be encouraging but direct. Focus on actionable tactics.',
+            messages: [
               {
-                type: 'custom',
-                skill_id: this.customSkillId,
-                version: 'latest',
-              },
-            ],
-          },
-        }),
-        system: 'You are a sailing coach providing brief, specific strategic advice for a sailor planning their next race. Be encouraging but direct. Focus on actionable tactics.',
-        tools: [
-          {
-            type: 'code_execution_20250825',
-            name: 'code_execution',
-          },
-        ],
-        messages: [
-          {
-            role: 'user',
-            content: `Based on past performance, provide ONE concise strategic suggestion (2-3 sentences max) for the ${phaseLabels[phase]} phase.
+                role: 'user',
+                content: `Based on past performance, provide ONE concise strategic suggestion (2-3 sentences max) for the ${phaseLabels[phase]} phase.
 
 Performance data:
 - Average rating: ${pattern.average.toFixed(1)}/5.0
@@ -1113,9 +1090,9 @@ Performance data:
 ${pattern.average >= 4.0 ? 'This is a STRENGTH - help them leverage it.' : pattern.average <= 3.0 ? 'This is a FOCUS AREA - provide specific technique advice.' : 'Provide balanced guidance for improvement.'}
 
 Return ONLY the suggestion text, no preamble.`,
-          },
-        ],
-      });
+              },
+            ],
+          });
 
       const textBlocks = (response.content as Array<{ type: string; text?: string }>)
         .filter((block) => block.type === 'text' && typeof block.text === 'string')
@@ -1160,38 +1137,9 @@ Return ONLY the suggestion text, no preamble.`,
         executionInsights,
       };
 
-      const betas = this.customSkillId
-        ? ['code-execution-2025-08-25', 'skills-2025-10-02']
-        : ['code-execution-2025-08-25'];
-
-      const response = await this.anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 900,
-        temperature: 0.35,
-        betas,
-        ...(this.customSkillId && {
-          container: {
-            skills: [
-              {
-                type: 'custom',
-                skill_id: this.customSkillId,
-                version: 'latest',
-              },
-            ],
-          },
-        }),
-        system:
-          "You are RegattaFlow's race learning analyst. Blend RegattaFlow Playbook theory with on-boat execution detail. You MUST respond with ONLY valid JSON - no explanatory text before or after the JSON object.",
-        tools: [
-          {
-            type: 'code_execution_20250825',
-            name: 'code_execution',
-          },
-        ],
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze the race data and return a JSON object with this exact structure:
+      // Beta skills API disabled - format changed, container now expects string
+      const systemPrompt = "You are RegattaFlow's race learning analyst. Blend RegattaFlow Playbook theory with on-boat execution detail. You MUST respond with ONLY valid JSON - no explanatory text before or after the JSON object.";
+      const userPrompt = `Analyze the race data and return a JSON object with this exact structure:
 {
   "headline": "string - concise one-line summary",
   "keepDoing": ["string array - things going well"],
@@ -1204,9 +1152,14 @@ Return ONLY the suggestion text, no preamble.`,
 Race data:
 ${JSON.stringify(payload, null, 2)}
 
-Return ONLY the JSON object, no other text.`,
-          },
-        ],
+Return ONLY the JSON object, no other text.`;
+
+      const response = await this.anthropic.messages.create({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 900,
+        temperature: 0.35,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
       });
 
       const textBlocks = (response.content as Array<{ type: string; text?: string }>)

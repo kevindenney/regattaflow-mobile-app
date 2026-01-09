@@ -22,8 +22,9 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/providers/AuthProvider';
+import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
-import { SailorBoatService } from '@/services/SailorBoatService';
+import { sailorBoatService } from '@/services/SailorBoatService';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
@@ -61,6 +62,7 @@ export default function AccountScreen() {
   const [claimLoading, setClaimLoading] = useState(false);
   const [boats, setBoats] = useState<UserBoat[]>([]);
   const [boatsLoading, setBoatsLoading] = useState(true);
+  const [resetSampleLoading, setResetSampleLoading] = useState(false);
 
   // Derived state
   const currentLocale = getCurrentLocale();
@@ -96,12 +98,12 @@ export default function AccountScreen() {
     if (!user?.id) return;
     setBoatsLoading(true);
     try {
-      const userBoats = await SailorBoatService.listBoatsForSailor(user.id);
+      const userBoats = await sailorBoatService.listBoatsForSailor(user.id);
       setBoats(
         userBoats.slice(0, 3).map((b) => ({
           id: b.id,
-          boat_name: b.boat_name || b.boat_class_name,
-          boat_class_name: b.boat_class_name,
+          boat_name: b.name || b.boat_class?.name || 'Unnamed Boat',
+          boat_class_name: b.boat_class?.name || 'Unknown Class',
           sail_number: b.sail_number,
           status: (b.status as UserBoat['status']) || 'active',
           is_primary: b.is_primary,
@@ -175,6 +177,39 @@ export default function AccountScreen() {
       setClaimPasswordConfirm('');
     }
   }, [claimPassword, claimPasswordConfirm, user, userProfile, updateUserProfile]);
+
+  const handleResetSampleData = useCallback(async () => {
+    Alert.alert(
+      'Reset Sample Data',
+      'This will create sample races to help you explore the app. Any existing sample races will remain.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create',
+          onPress: async () => {
+            setResetSampleLoading(true);
+            try {
+              const result = await createSailorSampleData({
+                userId: user!.id,
+                userName: userProfile?.full_name || 'Sailor',
+                force: true,
+              });
+              if (result.success) {
+                Alert.alert('Success', 'Sample races have been created! Check your races list.');
+              } else {
+                Alert.alert('Error', result.error || 'Failed to create sample data.');
+              }
+            } catch (error: any) {
+              console.error('[Account] Reset sample data error:', error);
+              Alert.alert('Error', 'Failed to create sample data. Please try again.');
+            } finally {
+              setResetSampleLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [user, userProfile]);
 
   // Early return for unauthenticated
   if (!user) {
@@ -294,6 +329,12 @@ export default function AccountScreen() {
             label="Terms of Service"
             onPress={() => Alert.alert('Coming Soon', 'Terms of service link will be available soon!')}
           />
+          {userProfile?.user_type === 'sailor' && (
+            <TufteSettingRow
+              label="Reset Sample Data"
+              onPress={handleResetSampleData}
+            />
+          )}
           <TufteSettingRow
             label="Help & Support"
             onPress={() => Alert.alert('Support', 'Email us at support@regattaflow.com')}

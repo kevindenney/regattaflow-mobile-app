@@ -13,8 +13,71 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useRaceWeatherForecast');
 
-/** Number of hourly data points for sparklines */
+/** Default number of hourly data points for sparklines */
 const FORECAST_HOURS = 8;
+/** Default race duration in minutes */
+const DEFAULT_RACE_DURATION_MINUTES = 90;
+
+/**
+ * Convert wind direction in degrees to cardinal direction
+ */
+function degreesToCardinal(degrees: number | undefined): string {
+  if (degrees === undefined) return '';
+
+  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+                      'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const index = Math.round(((degrees % 360) + 360) % 360 / 22.5) % 16;
+  return directions[index];
+}
+
+/**
+ * Format timestamp to HH:MM string
+ */
+function formatTime(timestamp: string | Date): string {
+  const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+}
+
+/** Hourly data point for HourlyForecastTable */
+export interface HourlyDataPoint {
+  time: string;        // "09:00" format
+  value: number;
+  direction?: string;  // "E", "NE", etc. for wind
+}
+
+/** Tide time with height */
+export interface TideTimeData {
+  time: string;     // "14:32" format
+  height: number;   // meters
+}
+
+/** Race-window specific forecast values */
+export interface RaceWindowData {
+  /** Wind speed at race start (knots) */
+  windAtStart: number;
+  /** Wind speed at race end (knots) */
+  windAtEnd: number;
+  /** Wind direction at race start */
+  windDirectionAtStart: string;
+  /** Tide height at race start (meters) */
+  tideAtStart: number;
+  /** Tide height at race end (meters) */
+  tideAtEnd: number;
+  /** Peak tide during race window */
+  tidePeakDuringRace?: TideTimeData;
+  /** Slack water turn time if within race window */
+  turnTimeDuringRace?: string;
+  /** Is the turn time during the race window? */
+  hasTurnDuringRace: boolean;
+  /** Start time for race window display */
+  raceStartTime: string;
+  /** End time for race window display */
+  raceEndTime: string;
+  /** Beaufort scale at start */
+  beaufortAtStart: number;
+  /** Beaufort scale at end */
+  beaufortAtEnd: number;
+}
 
 export interface RaceWeatherForecastData {
   /** Hourly wind speed values (knots) for sparkline */
@@ -23,12 +86,36 @@ export interface RaceWeatherForecastData {
   tideForecast: number[];
   /** Index in the array representing "now" */
   forecastNowIndex: number;
+  /** Index in the array representing race start */
+  raceStartIndex: number;
+  /** Index in the array representing race end */
+  raceEndIndex: number;
   /** Time of tide peak (HH:MM format) if available */
   tidePeakTime?: string;
   /** Wind trend description */
   windTrend?: 'building' | 'steady' | 'easing';
   /** Raw forecast data for expanded view */
   rawForecasts?: WeatherForecast[];
+
+  // === Detailed time-series data ===
+
+  /** Formatted hourly wind data for HourlyForecastTable */
+  hourlyWind?: HourlyDataPoint[];
+  /** Formatted hourly tide/wave data for HourlyForecastTable */
+  hourlyTide?: HourlyDataPoint[];
+  /** High water time and height */
+  highTide?: TideTimeData;
+  /** Low water time and height */
+  lowTide?: TideTimeData;
+  /** Tidal range in meters */
+  tideRange?: number;
+  /** Estimated tide turn time (slack water) */
+  turnTime?: string;
+
+  // === Race-window specific data (Tufte redesign) ===
+
+  /** Race-window specific values: start, end, peak, turn */
+  raceWindow?: RaceWindowData;
 }
 
 export interface UseRaceWeatherForecastResult {
@@ -36,6 +123,22 @@ export interface UseRaceWeatherForecastResult {
   loading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+}
+
+/**
+ * Convert wind speed in knots to Beaufort scale
+ */
+function knotsToBeaufort(knots: number): number {
+  if (knots < 1) return 0;
+  if (knots < 4) return 1;
+  if (knots < 7) return 2;
+  if (knots < 11) return 3;
+  if (knots < 17) return 4;
+  if (knots < 22) return 5;
+  if (knots < 28) return 6;
+  if (knots < 34) return 7;
+  if (knots < 41) return 8;
+  return 9;
 }
 
 /**
@@ -76,23 +179,199 @@ function findTidePeakTime(forecasts: WeatherForecast[], tideValues: number[]): s
 }
 
 /**
+ * Extract high and low tide times from forecast data
+ */
+function extractTideTimes(
+  forecasts: WeatherForecast[],
+  tideValues: number[]
+): { highTide?: TideTimeData; lowTide?: TideTimeData; tideRange?: number; turnTime?: string } {
+  if (forecasts.length < 3 || tideValues.length < 3) {
+    return {};
+  }
+
+  const maxValue = Math.max(...tideValues);
+  const minValue = Math.min(...tideValues);
+  const maxIndex = tideValues.indexOf(maxValue);
+  const minIndex = tideValues.indexOf(minValue);
+
+  const highTide: TideTimeData | undefined = forecasts[maxIndex] ? {
+    time: formatTime(forecasts[maxIndex].timestamp),
+    height: maxValue,
+  } : undefined;
+
+  const lowTide: TideTimeData | undefined = forecasts[minIndex] ? {
+    time: formatTime(forecasts[minIndex].timestamp),
+    height: minValue,
+  } : undefined;
+
+  const tideRange = maxValue - minValue;
+
+  // Estimate turn time (slack water) - midpoint between HW and LW
+  let turnTime: string | undefined;
+  if (highTide && lowTide) {
+    const hwDate = new Date(forecasts[maxIndex].timestamp);
+    const lwDate = new Date(forecasts[minIndex].timestamp);
+    const midMs = (hwDate.getTime() + lwDate.getTime()) / 2;
+    const midDate = new Date(midMs);
+    turnTime = `${midDate.getHours().toString().padStart(2, '0')}:${midDate.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  return { highTide, lowTide, tideRange, turnTime };
+}
+
+/**
+ * Extract race-window specific data for Tufte display
+ */
+function extractRaceWindowData(
+  forecasts: WeatherForecast[],
+  tideValues: number[],
+  raceStartMs: number,
+  raceDurationMinutes: number,
+  turnTime?: string,
+  highTide?: TideTimeData
+): RaceWindowData | undefined {
+  if (forecasts.length < 2) return undefined;
+
+  const raceEndMs = raceStartMs + raceDurationMinutes * 60 * 1000;
+
+  // Find forecasts closest to race start and end
+  let startIdx = 0;
+  let endIdx = forecasts.length - 1;
+  let minStartDiff = Infinity;
+  let minEndDiff = Infinity;
+
+  forecasts.forEach((f, i) => {
+    const ts = new Date(f.timestamp).getTime();
+    const startDiff = Math.abs(ts - raceStartMs);
+    const endDiff = Math.abs(ts - raceEndMs);
+
+    if (startDiff < minStartDiff) {
+      minStartDiff = startDiff;
+      startIdx = i;
+    }
+    if (endDiff < minEndDiff) {
+      minEndDiff = endDiff;
+      endIdx = i;
+    }
+  });
+
+  const startForecast = forecasts[startIdx];
+  const endForecast = forecasts[endIdx];
+
+  if (!startForecast || !endForecast) return undefined;
+
+  const windAtStart = Math.round(startForecast.windSpeed);
+  const windAtEnd = Math.round(endForecast.windSpeed);
+
+  // Find tide peak during race window
+  let tidePeakDuringRace: TideTimeData | undefined;
+  let maxTideInWindow = -Infinity;
+  let maxTideIdx = -1;
+
+  for (let i = startIdx; i <= endIdx && i < tideValues.length; i++) {
+    if (tideValues[i] > maxTideInWindow) {
+      maxTideInWindow = tideValues[i];
+      maxTideIdx = i;
+    }
+  }
+
+  if (maxTideIdx >= 0 && forecasts[maxTideIdx]) {
+    tidePeakDuringRace = {
+      time: formatTime(forecasts[maxTideIdx].timestamp),
+      height: maxTideInWindow,
+    };
+  }
+
+  // Check if turn time (slack water) is within race window
+  let hasTurnDuringRace = false;
+  let turnTimeDuringRace: string | undefined;
+
+  if (turnTime) {
+    // Parse turn time (HH:MM) into today's date
+    const [hours, mins] = turnTime.split(':').map(Number);
+    const raceDate = new Date(raceStartMs);
+    const turnDate = new Date(raceDate);
+    turnDate.setHours(hours, mins, 0, 0);
+    const turnMs = turnDate.getTime();
+
+    hasTurnDuringRace = turnMs >= raceStartMs && turnMs <= raceEndMs;
+    if (hasTurnDuringRace) {
+      turnTimeDuringRace = turnTime;
+    }
+  }
+
+  return {
+    windAtStart,
+    windAtEnd,
+    windDirectionAtStart: degreesToCardinal(startForecast.windDirection),
+    tideAtStart: tideValues[startIdx] ?? 0,
+    tideAtEnd: tideValues[endIdx] ?? 0,
+    tidePeakDuringRace,
+    turnTimeDuringRace,
+    hasTurnDuringRace,
+    raceStartTime: formatTime(startForecast.timestamp),
+    raceEndTime: formatTime(endForecast.timestamp),
+    beaufortAtStart: knotsToBeaufort(windAtStart),
+    beaufortAtEnd: knotsToBeaufort(windAtEnd),
+  };
+}
+
+/**
+ * Extract hourly wind data with directions
+ */
+function extractHourlyWind(forecasts: WeatherForecast[]): HourlyDataPoint[] {
+  return forecasts.map(f => ({
+    time: formatTime(f.timestamp),
+    value: Math.round(f.windSpeed),
+    direction: degreesToCardinal(f.windDirection),
+  }));
+}
+
+/**
+ * Extract hourly tide/wave data
+ */
+function extractHourlyTide(forecasts: WeatherForecast[], tideValues: number[]): HourlyDataPoint[] {
+  return forecasts.map((f, i) => ({
+    time: formatTime(f.timestamp),
+    value: tideValues[i] ?? 0,
+  }));
+}
+
+/**
  * Fetch hourly weather forecast for race sparklines
  *
  * @param venue - Sailing venue with coordinates
  * @param raceDate - ISO date string of the race
  * @param enabled - Whether to enable fetching (default: true)
+ * @param expectedDurationMinutes - Expected race duration (default: 90 minutes)
  */
 export function useRaceWeatherForecast(
   venue: SailingVenue | null | undefined,
   raceDate: string | null | undefined,
-  enabled: boolean = true
+  enabled: boolean = true,
+  expectedDurationMinutes: number = DEFAULT_RACE_DURATION_MINUTES
 ): UseRaceWeatherForecastResult {
   const [data, setData] = useState<RaceWeatherForecastData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchForecast = async () => {
+    // Debug logging
+    logger.debug('🔍 [useRaceWeatherForecast] fetchForecast called:', {
+      hasVenue: !!venue,
+      venueId: venue?.id,
+      venueName: venue?.name,
+      venueCoords: venue?.coordinates,
+      raceDate,
+      enabled,
+    });
+
     if (!venue || !raceDate || !enabled) {
+      logger.debug('🔴 [useRaceWeatherForecast] Early return - missing data:', {
+        hasVenue: !!venue,
+        hasRaceDate: !!raceDate,
+        enabled,
+      });
       setData(null);
       return;
     }
@@ -106,15 +385,50 @@ export function useRaceWeatherForecast(
       const now = new Date();
       const hoursUntil = Math.max(0, (raceDateObj.getTime() - now.getTime()) / (1000 * 60 * 60));
 
-      // Don't fetch for past races or races too far in future
-      if (raceDateObj < now || hoursUntil > 240) {
+      // Debug: Log date parsing
+      // IMPORTANT: If raceDate is just "YYYY-MM-DD" without time, it parses as midnight.
+      // For today's races, this means raceDateObj < now is TRUE even though the race hasn't started!
+      const isDateOnly = !raceDate.includes('T') && !raceDate.includes(' ');
+      logger.debug('📅 [useRaceWeatherForecast] Date check:', {
+        raceDate,
+        isDateOnly,
+        raceDateParsed: raceDateObj.toISOString(),
+        now: now.toISOString(),
+        hoursUntil,
+        isPast: raceDateObj < now,
+        isTooFar: hoursUntil > 240,
+        ISSUE: isDateOnly && raceDateObj < now ? '⚠️ DATE-ONLY STRING CAUSES FALSE PAST CHECK!' : 'OK',
+      });
+
+      // For date-only strings, treat as "sometime today" - don't skip
+      // Only skip if the parsed date is definitely past (>24 hours ago)
+      const isPastRace = isDateOnly
+        ? (now.getTime() - raceDateObj.getTime()) > 24 * 60 * 60 * 1000 // More than 24 hours ago
+        : raceDateObj < now;
+
+      if (isPastRace || hoursUntil > 240) {
+        logger.debug('🔴 [useRaceWeatherForecast] Skipping - race date out of range', {
+          isPastRace,
+          hoursUntil,
+        });
         setData(null);
         return;
       }
 
       // Fetch weather data - request enough hours to cover race window + buffer
       const hoursToFetch = Math.min(240, Math.ceil(hoursUntil) + FORECAST_HOURS);
+      logger.debug('[useRaceWeatherForecast] Fetching weather:', {
+        venueId: venue.id,
+        venueName: venue.name,
+        coordinates: venue.coordinates,
+        hoursToFetch,
+      });
       const weatherData = await regionalWeatherService.getVenueWeather(venue, hoursToFetch);
+
+      logger.debug('[useRaceWeatherForecast] Weather result:', {
+        hasData: !!weatherData,
+        forecastLength: weatherData?.forecast?.length,
+      });
 
       if (!weatherData || !weatherData.forecast || weatherData.forecast.length === 0) {
         throw new Error('Unable to fetch forecast data');
@@ -181,24 +495,81 @@ export function useRaceWeatherForecast(
       // Ensure nowIndex is within bounds
       nowIndex = Math.max(0, Math.min(nowIndex, relevantForecasts.length - 1));
 
+      // Calculate race start and end indices
+      let raceStartIndex = 0;
+      let raceEndIndex = relevantForecasts.length - 1;
+      let minStartDiff = Infinity;
+      let minEndDiff = Infinity;
+      const raceEndMs = raceStartMs + expectedDurationMinutes * 60 * 1000;
+
+      relevantForecasts.forEach((f, i) => {
+        const ts = new Date(f.timestamp).getTime();
+        const startDiff = Math.abs(ts - raceStartMs);
+        const endDiff = Math.abs(ts - raceEndMs);
+
+        if (startDiff < minStartDiff) {
+          minStartDiff = startDiff;
+          raceStartIndex = i;
+        }
+        if (endDiff < minEndDiff) {
+          minEndDiff = endDiff;
+          raceEndIndex = i;
+        }
+      });
+
+      // Ensure indices are within bounds
+      raceStartIndex = Math.max(0, Math.min(raceStartIndex, relevantForecasts.length - 1));
+      raceEndIndex = Math.max(0, Math.min(raceEndIndex, relevantForecasts.length - 1));
+
       // Calculate trends and peak times
       const windTrend = calculateWindTrend(windForecast);
       const tidePeakTime = findTidePeakTime(relevantForecasts, tideForecast);
+
+      // Extract detailed time-series data
+      const hourlyWind = extractHourlyWind(relevantForecasts);
+      const hourlyTide = extractHourlyTide(relevantForecasts, tideForecast);
+      const { highTide, lowTide, tideRange, turnTime } = extractTideTimes(relevantForecasts, tideForecast);
+
+      // Extract race-window specific data for Tufte display
+      const raceWindow = extractRaceWindowData(
+        relevantForecasts,
+        tideForecast,
+        raceStartMs,
+        expectedDurationMinutes,
+        turnTime,
+        highTide
+      );
 
       logger.debug('[useRaceWeatherForecast] Extracted forecast data:', {
         hours: relevantForecasts.length,
         windRange: `${Math.min(...windForecast)}-${Math.max(...windForecast)}`,
         nowIndex,
+        raceStartIndex,
+        raceEndIndex,
         windTrend,
+        highTide: highTide?.time,
+        lowTide: lowTide?.time,
+        raceWindow: raceWindow ? `${raceWindow.windAtStart}→${raceWindow.windAtEnd}kt` : 'N/A',
       });
 
       setData({
         windForecast,
         tideForecast,
         forecastNowIndex: nowIndex,
+        raceStartIndex,
+        raceEndIndex,
         tidePeakTime,
         windTrend,
         rawForecasts: relevantForecasts,
+        // Detailed time-series data
+        hourlyWind,
+        hourlyTide,
+        highTide,
+        lowTide,
+        tideRange,
+        turnTime,
+        // Race-window specific data
+        raceWindow,
       });
 
     } catch (err: any) {
@@ -218,7 +589,7 @@ export function useRaceWeatherForecast(
 
     fetchForecast();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venue?.id, raceDate, enabled]);
+  }, [venue?.id, raceDate, enabled, expectedDurationMinutes]);
 
   return {
     data,
@@ -235,7 +606,8 @@ export function useRaceWeatherForecast(
 export function extractForecastForSparklines(
   weatherData: WeatherData | null | undefined,
   raceDate: string | null | undefined,
-  hours: number = FORECAST_HOURS
+  hours: number = FORECAST_HOURS,
+  expectedDurationMinutes: number = DEFAULT_RACE_DURATION_MINUTES
 ): RaceWeatherForecastData | null {
   if (!weatherData || !raceDate || !weatherData.forecast || weatherData.forecast.length === 0) {
     return null;
@@ -245,6 +617,7 @@ export function extractForecastForSparklines(
   const raceDateObj = new Date(raceDate);
   const raceStartMs = raceDateObj.getTime();
   const nowMs = now.getTime();
+  const raceEndMs = raceStartMs + expectedDurationMinutes * 60 * 1000;
 
   // Find starting point
   const windowStartMs = Math.max(nowMs, raceStartMs - 2 * 60 * 60 * 1000);
@@ -288,12 +661,62 @@ export function extractForecastForSparklines(
 
   nowIndex = Math.max(0, Math.min(nowIndex, relevantForecasts.length - 1));
 
+  // Calculate race start and end indices
+  let raceStartIndex = 0;
+  let raceEndIndex = relevantForecasts.length - 1;
+  let minStartDiff = Infinity;
+  let minEndDiff = Infinity;
+
+  relevantForecasts.forEach((f, i) => {
+    const ts = new Date(f.timestamp).getTime();
+    const startDiff = Math.abs(ts - raceStartMs);
+    const endDiff = Math.abs(ts - raceEndMs);
+
+    if (startDiff < minStartDiff) {
+      minStartDiff = startDiff;
+      raceStartIndex = i;
+    }
+    if (endDiff < minEndDiff) {
+      minEndDiff = endDiff;
+      raceEndIndex = i;
+    }
+  });
+
+  raceStartIndex = Math.max(0, Math.min(raceStartIndex, relevantForecasts.length - 1));
+  raceEndIndex = Math.max(0, Math.min(raceEndIndex, relevantForecasts.length - 1));
+
+  // Extract detailed time-series data
+  const hourlyWind = extractHourlyWind(relevantForecasts);
+  const hourlyTide = extractHourlyTide(relevantForecasts, tideForecast);
+  const { highTide, lowTide, tideRange, turnTime } = extractTideTimes(relevantForecasts, tideForecast);
+
+  // Extract race-window specific data
+  const raceWindow = extractRaceWindowData(
+    relevantForecasts,
+    tideForecast,
+    raceStartMs,
+    expectedDurationMinutes,
+    turnTime,
+    highTide
+  );
+
   return {
     windForecast,
     tideForecast,
     forecastNowIndex: nowIndex,
+    raceStartIndex,
+    raceEndIndex,
     windTrend: calculateWindTrend(windForecast),
     tidePeakTime: findTidePeakTime(relevantForecasts, tideForecast),
     rawForecasts: relevantForecasts,
+    // Detailed time-series data
+    hourlyWind,
+    hourlyTide,
+    highTide,
+    lowTide,
+    tideRange,
+    turnTime,
+    // Race-window specific data
+    raceWindow,
   };
 }

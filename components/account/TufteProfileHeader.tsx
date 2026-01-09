@@ -33,8 +33,8 @@ export function TufteProfileHeader({
         </View>
         <View style={styles.profileInfo}>
           <Text style={styles.profileName}>{name || 'User'}</Text>
-          {email && <Text style={styles.profileEmail}>{email}</Text>}
-          {memberSinceText && <Text style={styles.profileMeta}>{memberSinceText}</Text>}
+          {email ? <Text style={styles.profileEmail}>{email}</Text> : null}
+          {memberSinceText ? <Text style={styles.profileMeta}>{memberSinceText}</Text> : null}
         </View>
         {onEditPress && (
           <TouchableOpacity onPress={onEditPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

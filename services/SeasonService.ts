@@ -669,8 +669,8 @@ class SeasonServiceClass {
         const existing = sailorResults.get(usrId) || {
           userId: standing.user_id,
           sailorName: (standing as any).profiles?.full_name || 'Unknown',
-          regattaResults: [],
-          raceResults: [],
+          regattaResults: [] as RegattaResult[],
+          raceResults: [] as RaceResult[],
           totalPoints: 0,
         };
 

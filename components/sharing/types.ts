@@ -51,7 +51,7 @@ export interface RaceInfo {
   boatClass?: string;
   weather?: WeatherForecast;
   rigTuning?: RigTuning;
-  raceType?: 'fleet' | 'distance';
+  raceType?: 'fleet' | 'distance' | 'match' | 'team';
   totalDistanceNm?: number;
   startTime?: string;
   courseName?: string;

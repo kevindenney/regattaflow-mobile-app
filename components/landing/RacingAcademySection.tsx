@@ -16,6 +16,7 @@ import courseCatalogData from '../../docs/academy/course-catalog.json';
 
 // Type definition for course catalog (matches JSON structure)
 type CourseCatalog = typeof courseCatalogData;
+type Course = CourseCatalog['levels'][number]['courses'][number];
 
 // Use imported course catalog data
 const COURSE_CATALOG = courseCatalogData as CourseCatalog;
@@ -42,16 +43,16 @@ export function RacingAcademySection() {
     return showAllCourses ? currentLevel.courses : currentLevel.courses.slice(0, 3);
   }, [currentLevel, showAllCourses]);
 
-  const freeCourse = useMemo(
+  const freeCourse = useMemo<Course | undefined>(
     () => COURSE_CATALOG.levels
-      .flatMap((level) => level.courses)
+      .flatMap((level): Course[] => level.courses)
       .find((course) => course.price.cents === 0 && course.status === 'available'),
     []
   );
 
-  const comingSoonCourses = useMemo(
+  const comingSoonCourses = useMemo<Course[]>(
     () => COURSE_CATALOG.levels
-      .flatMap((level) => level.courses)
+      .flatMap((level): Course[] => level.courses)
       .filter((course) => course.status === 'coming-soon')
       .sort((a, b) => new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime())
       .slice(0, 6),
@@ -59,7 +60,7 @@ export function RacingAcademySection() {
   );
 
   // Enhanced navigation handlers with analytics tracking
-  const handleCoursePress = (course: CourseCatalog['levels'][0]['courses'][0]) => {
+  const handleCoursePress = (course: Course) => {
     // Track analytics (if analytics service is available)
     if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).gtag) {
       (window as any).gtag('event', 'course_clicked', {
@@ -114,7 +115,7 @@ export function RacingAcademySection() {
     router.push('/(tabs)/learn');
   };
 
-  const handleEnroll = (course: CourseCatalog['levels'][0]['courses'][0]) => {
+  const handleEnroll = (course: Course) => {
     if (course.status === 'coming-soon') {
       // Show notification signup
       if (Platform.OS === 'web') {

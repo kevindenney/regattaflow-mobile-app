@@ -322,9 +322,9 @@ export function formatPostRaceContent(content: ShareableContent): string {
 
     // Show first few coaching insights
     postRace.coachingFeedback.slice(0, 3).forEach(feedback => {
-      const phase = feedback.race_phase || 'General';
-      const rating = feedback.execution_rating;
-      const icon = rating && rating >= 4 ? '✅' : rating && rating >= 2 ? '⚡' : '❌';
+      const phase = feedback.phase || 'General';
+      const score = feedback.execution_score;
+      const icon = score && score >= 80 ? '✅' : score && score >= 50 ? '⚡' : '❌';
       lines.push(`${icon} ${phase}: ${feedback.execution_feedback || 'Good'}`);
     });
     lines.push('');
