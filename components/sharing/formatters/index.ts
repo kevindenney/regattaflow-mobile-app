@@ -139,6 +139,109 @@ export function formatPreRaceContent(content: ShareableContent): string {
     lines.push('');
   }
 
+  // NOR/SI Document Data (crew briefing info)
+  if (preRace?.documentData) {
+    const doc = preRace.documentData;
+
+    // Key Schedule
+    if (doc.schedule && doc.schedule.length > 0) {
+      lines.push(`📅 KEY DATES`);
+      // Sort by date and time
+      const sortedSchedule = [...doc.schedule].sort((a, b) => {
+        const dateA = `${a.date} ${a.time}`;
+        const dateB = `${b.date} ${b.time}`;
+        return dateA.localeCompare(dateB);
+      });
+      sortedSchedule.forEach(item => {
+        const mandatory = item.mandatory ? ' ⚠️' : '';
+        const eventDate = new Date(item.date);
+        const dateStr = eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        lines.push(`• ${dateStr} ${item.time} - ${item.event}${mandatory}`);
+        if (item.location) {
+          lines.push(`  📍 ${item.location}`);
+        }
+      });
+      lines.push('');
+    } else if (doc.warningSignalTime) {
+      // Fallback if no schedule but we have warning signal time
+      lines.push(`📅 WARNING SIGNAL`);
+      lines.push(`⏰ ${doc.warningSignalTime}`);
+      lines.push('');
+    }
+
+    // Entry Requirements
+    const hasEntryInfo = doc.entryDeadline || doc.entryFees?.length || doc.crewRequirements || doc.minimumCrew || doc.minorSailorRules;
+    if (hasEntryInfo) {
+      lines.push(`📋 ENTRY`);
+      if (doc.entryDeadline) {
+        lines.push(`Deadline: ${doc.entryDeadline}`);
+      }
+      if (doc.entryFees && doc.entryFees.length > 0) {
+        doc.entryFees.forEach(fee => {
+          const deadline = fee.deadline ? ` (by ${fee.deadline})` : '';
+          lines.push(`${fee.type}: ${fee.amount}${deadline}`);
+        });
+      }
+      if (doc.minimumCrew) {
+        lines.push(`Min Crew: ${doc.minimumCrew}`);
+      }
+      if (doc.crewRequirements) {
+        lines.push(`Crew Rules: ${doc.crewRequirements}`);
+      }
+      if (doc.minorSailorRules) {
+        lines.push(`Under 18: ${doc.minorSailorRules}`);
+      }
+      lines.push('');
+    }
+
+    // Route (for distance races)
+    if (doc.routeWaypoints && doc.routeWaypoints.length > 0) {
+      lines.push(`🗺️ ROUTE`);
+      if (doc.totalDistanceNm) {
+        lines.push(`Total Distance: ${doc.totalDistanceNm} nm`);
+      }
+      const sortedWaypoints = [...doc.routeWaypoints].sort((a, b) => (a.order || 0) - (b.order || 0));
+      sortedWaypoints.forEach((wp, idx) => {
+        const notes = wp.notes ? ` (${wp.notes})` : '';
+        lines.push(`${idx + 1}. ${wp.name}${notes}`);
+      });
+      lines.push('');
+    }
+
+    // Communications
+    if (doc.vhfChannels && doc.vhfChannels.length > 0) {
+      lines.push(`📻 VHF CHANNELS`);
+      doc.vhfChannels.forEach(ch => {
+        const classes = ch.classes?.length ? ` [${ch.classes.join(', ')}]` : '';
+        lines.push(`• Ch ${ch.channel}: ${ch.purpose}${classes}`);
+      });
+      lines.push('');
+    }
+
+    // Safety & Prohibited Areas
+    const hasSafetyInfo = doc.safetyRequirements || (doc.prohibitedAreas && doc.prohibitedAreas.length > 0);
+    if (hasSafetyInfo) {
+      lines.push(`⚠️ SAFETY`);
+      if (doc.safetyRequirements) {
+        lines.push(doc.safetyRequirements);
+      }
+      if (doc.prohibitedAreas && doc.prohibitedAreas.length > 0) {
+        lines.push('Prohibited Areas:');
+        doc.prohibitedAreas.forEach(area => {
+          const consequence = area.consequence ? ` → ${area.consequence}` : '';
+          lines.push(`• ${area.name}${consequence}`);
+        });
+      }
+      lines.push('');
+    }
+
+    // Time limit (for distance races)
+    if (doc.timeLimitHours) {
+      lines.push(`⏱️ Time Limit: ${doc.timeLimitHours} hours`);
+      lines.push('');
+    }
+  }
+
   // Check if we have any meaningful content beyond basic info
   const hasContent = preRace?.raceInfo?.weather ||
                      preRace?.raceInfo?.rigTuning ||

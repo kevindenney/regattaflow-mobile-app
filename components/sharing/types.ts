@@ -76,6 +76,85 @@ export interface PostRaceShareContent {
   focusNextRace?: string;
 }
 
+/**
+ * Schedule event from NOR/SI extraction
+ */
+export interface ScheduleEvent {
+  date: string;
+  time: string;
+  event: string;
+  location?: string;
+  mandatory?: boolean;
+}
+
+/**
+ * Entry fee from NOR/SI extraction
+ */
+export interface EntryFee {
+  type: string;
+  amount: string;
+  deadline?: string;
+}
+
+/**
+ * Route waypoint from NOR/SI extraction (distance races)
+ */
+export interface RouteWaypoint {
+  name: string;
+  order?: number;
+  notes?: string;
+}
+
+/**
+ * VHF channel info from NOR/SI extraction
+ */
+export interface VHFChannel {
+  channel: string;
+  purpose: string;
+  classes?: string[];
+}
+
+/**
+ * Prohibited area from NOR/SI extraction
+ */
+export interface ProhibitedArea {
+  name: string;
+  description?: string;
+  consequence?: string;
+}
+
+/**
+ * Document data extracted from NOR/SI for sharing with crew
+ */
+export interface DocumentShareData {
+  // Schedule & Dates
+  schedule?: ScheduleEvent[];
+  warningSignalTime?: string;
+
+  // Entry Requirements
+  entryDeadline?: string;
+  entryFees?: EntryFee[];
+  crewRequirements?: string;
+  minimumCrew?: number;
+  minorSailorRules?: string;
+  eligibilityRequirements?: string;
+
+  // Location & Route
+  startAreaName?: string;
+  racingAreaName?: string;
+  routeWaypoints?: RouteWaypoint[];
+  totalDistanceNm?: number;
+
+  // Communications
+  vhfChannels?: VHFChannel[];
+
+  // Safety & Rules
+  safetyRequirements?: string;
+  prohibitedAreas?: ProhibitedArea[];
+  penaltySystem?: string;
+  timeLimitHours?: number;
+}
+
 export interface PreRaceShareContent {
   raceInfo: RaceInfo;
   userNotes?: string;
@@ -89,6 +168,9 @@ export interface PreRaceShareContent {
   windStrategy?: string;
   tideStrategy?: string;
   currentStrategy?: string;
+
+  /** Extracted NOR/SI data for crew briefing */
+  documentData?: DocumentShareData;
 }
 
 export interface ShareableContent {

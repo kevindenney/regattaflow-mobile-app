@@ -14,10 +14,11 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useTeamSharing } from '@/hooks/useTeamSharing';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
 import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { UnifiedSharingSheet } from '@/components/sharing/UnifiedSharingSheet';
 import { ShareChannelGrid } from '@/components/sharing/ShareChannelGrid';
 import { useShareHandlers } from '@/components/sharing/hooks/useShareHandlers';
-import type { ShareChannel } from '@/components/sharing/types';
+import type { ShareChannel, DocumentShareData } from '@/components/sharing/types';
 import type { CardRaceData } from '@/components/cards/types';
 import type { ShareableContent, PreRaceShareContent } from '@/components/sharing/types';
 
@@ -76,6 +77,12 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
   } = useRacePreparation({
     raceEventId: race.id,
     autoSave: false, // Read-only for sharing
+  });
+
+  // Load extracted NOR/SI data for crew briefing
+  const { extractionResult } = useRaceDocuments({
+    raceId: race.id,
+    userId: user?.id,
   });
 
   // Build venue object for weather fetching (like RaceMorningContent does)
@@ -184,6 +191,65 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
     ].filter(Boolean);
     const userNotes = userNoteParts.length > 0 ? userNoteParts.join('\n\n') : undefined;
 
+    // Build document data from NOR/SI extraction for crew briefing
+    let documentData: DocumentShareData | undefined;
+    if (extractionResult?.data) {
+      const d = extractionResult.data as any; // ComprehensiveRaceData
+      documentData = {
+        // Schedule & Dates
+        schedule: d.schedule,
+        warningSignalTime: d.warningSignalTime,
+        // Entry Requirements
+        entryDeadline: d.entryDeadline,
+        entryFees: d.entryFees?.map((fee: any) => ({
+          type: fee.type || 'Entry',
+          amount: typeof fee.amount === 'number' ? `$${fee.amount}` : fee.amount,
+          deadline: fee.deadline,
+        })),
+        crewRequirements: d.crewRequirements,
+        minimumCrew: d.minimumCrew,
+        minorSailorRules: d.minorSailorRules,
+        eligibilityRequirements: d.eligibilityRequirements,
+        // Location & Route
+        startAreaName: d.startAreaName,
+        racingAreaName: d.racingAreaName,
+        routeWaypoints: d.routeWaypoints?.map((wp: any) => ({
+          name: wp.name,
+          order: wp.order,
+          notes: wp.notes,
+        })),
+        totalDistanceNm: d.totalDistanceNm,
+        // Communications
+        vhfChannels: d.vhfChannels?.map((ch: any) => ({
+          channel: ch.channel,
+          purpose: ch.purpose,
+          classes: ch.classes,
+        })),
+        // Safety & Rules
+        safetyRequirements: d.safetyRequirements,
+        prohibitedAreas: d.prohibitedAreas?.map((area: any) => ({
+          name: area.name,
+          description: area.description,
+          consequence: area.consequence,
+        })),
+        penaltySystem: d.penaltySystem,
+        timeLimitHours: d.timeLimitHours,
+      };
+
+      // Remove undefined/empty values to keep payload clean
+      Object.keys(documentData).forEach(key => {
+        const k = key as keyof DocumentShareData;
+        if (documentData![k] === undefined || (Array.isArray(documentData![k]) && (documentData![k] as any[]).length === 0)) {
+          delete documentData![k];
+        }
+      });
+
+      // If no meaningful data, set to undefined
+      if (Object.keys(documentData).length === 0) {
+        documentData = undefined;
+      }
+    }
+
     const preRace: PreRaceShareContent = {
       raceInfo: {
         id: race.id,
@@ -204,6 +270,8 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
       downwindStrategy: strategyNotes['downwind'] || strategyNotes['downwind-strategy'] || undefined,
       // AI-generated insights from conditions
       aiInsights: aiInsights.length > 0 ? aiInsights : undefined,
+      // NOR/SI extracted data for crew briefing
+      documentData,
     };
 
     return {
@@ -215,7 +283,7 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
       boatClass: boatClassName,
       preRace,
     };
-  }, [race, boatClassName, intentions, rigNotes, selectedRigPresetId, forecastData]);
+  }, [race, boatClassName, intentions, rigNotes, selectedRigPresetId, forecastData, extractionResult]);
 
   // Share handlers for external sharing
   const { handleShare } = useShareHandlers({ content: shareableContent });
