@@ -13,6 +13,70 @@ const logger = createLogger('useEnrichedRaces');
 
 const FALLBACK_WARNING_TIME = '10:00';
 
+// Cache for venue coordinates fetched from sailing_venues table
+const venueCoordinatesCache = new Map<string, { lat: number; lng: number } | null>();
+
+/**
+ * Fetch venue coordinates from sailing_venues table for races that have venue_id
+ * but don't have coordinates in metadata
+ */
+async function fetchVenueCoordinatesFromDB(venueIds: string[]): Promise<Map<string, { lat: number; lng: number }>> {
+  const result = new Map<string, { lat: number; lng: number }>();
+
+  // Filter out already cached venues
+  const uncachedIds = venueIds.filter(id => !venueCoordinatesCache.has(id));
+
+  if (uncachedIds.length === 0) {
+    // Return from cache
+    venueIds.forEach(id => {
+      const cached = venueCoordinatesCache.get(id);
+      if (cached) result.set(id, cached);
+    });
+    return result;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('sailing_venues')
+      .select('id, coordinates_lat, coordinates_lng')
+      .in('id', uncachedIds);
+
+    if (error) {
+      logger.warn('[useEnrichedRaces] Error fetching venue coordinates:', error);
+      return result;
+    }
+
+    if (data) {
+      data.forEach(venue => {
+        if (venue.coordinates_lat && venue.coordinates_lng) {
+          const coords = {
+            lat: parseFloat(venue.coordinates_lat),
+            lng: parseFloat(venue.coordinates_lng)
+          };
+          result.set(venue.id, coords);
+          venueCoordinatesCache.set(venue.id, coords);
+        } else {
+          venueCoordinatesCache.set(venue.id, null);
+        }
+      });
+    }
+
+    // Add cached results
+    venueIds.forEach(id => {
+      if (!result.has(id)) {
+        const cached = venueCoordinatesCache.get(id);
+        if (cached) result.set(id, cached);
+      }
+    });
+
+    logger.debug(`[useEnrichedRaces] Fetched ${result.size} venue coordinates from DB`);
+  } catch (error) {
+    logger.error('[useEnrichedRaces] Exception fetching venue coordinates:', error);
+  }
+
+  return result;
+}
+
 function extract24HourTime(isoDate: string | undefined | null): string {
   if (!isoDate) {
     return FALLBACK_WARNING_TIME;
@@ -75,8 +139,23 @@ interface Race {
  * Checks multiple possible locations where coordinates might be stored
  */
 function extractVenueCoordinates(regatta: RegattaRaw): { lat: number; lng: number } | null {
+  // 0. Check top-level latitude/longitude columns on race_events table
+  // Note: Supabase may return these as strings if the column type is numeric
+  const lat = regatta.latitude;
+  const lng = regatta.longitude;
+  if (lat !== null && lat !== undefined && lng !== null && lng !== undefined) {
+    const latNum = typeof lat === 'string' ? parseFloat(lat) : lat;
+    const lngNum = typeof lng === 'string' ? parseFloat(lng) : lng;
+    if (!isNaN(latNum) && !isNaN(lngNum)) {
+      return { lat: latNum, lng: lngNum };
+    }
+  }
+
   const metadata = regatta.metadata;
-  if (!metadata) return null;
+
+  if (!metadata) {
+    return null;
+  }
 
   // 1. Check explicit venue_lat/venue_lng
   if (typeof metadata.venue_lat === 'number' && typeof metadata.venue_lng === 'number') {
@@ -196,17 +275,36 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
     setLoading(true);
 
     try {
+      // Step 1: Collect venue_ids from races that might need coordinate lookup
+      const venueIdsNeedingLookup = races
+        .filter(r => r.metadata?.venue_id && !extractVenueCoordinates(r))
+        .map(r => r.metadata.venue_id as string);
+
+      // Step 2: Fetch venue coordinates from sailing_venues table
+      const venueCoordinatesFromDB = venueIdsNeedingLookup.length > 0
+        ? await fetchVenueCoordinatesFromDB([...new Set(venueIdsNeedingLookup)])
+        : new Map<string, { lat: number; lng: number }>();
+
+      if (venueCoordinatesFromDB.size > 0) {
+        logger.info(`[useEnrichedRaces] Fetched ${venueCoordinatesFromDB.size} venue coordinates from DB`);
+      }
+
       // Collect all cache updates to batch them
       const cacheUpdates = new Map<string, RaceWeatherMetadata | null>();
       // Collect weather data to persist to database
       const persistenceQueue: Array<{ regattaId: string; weather: RaceWeatherMetadata; metadata: any }> = [];
 
       const enrichedPromises = races.map(async (regatta) => {
-        const venueName = regatta.metadata?.venue_name || 'Venue TBD';
+        // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
+        const venueName = regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD';
         const raceDate = regatta.start_date;
 
         // Extract venue coordinates from metadata (used for weather fetching)
-        const venueCoordinates = extractVenueCoordinates(regatta);
+        // First try metadata, then fallback to sailing_venues lookup
+        let venueCoordinates = extractVenueCoordinates(regatta);
+        if (!venueCoordinates && regatta.metadata?.venue_id) {
+          venueCoordinates = venueCoordinatesFromDB.get(regatta.metadata.venue_id) || null;
+        }
 
         // Extract VHF channel from multiple possible locations
         // Check top-level column first (where ComprehensiveRaceEntry stores it)
@@ -345,6 +443,38 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
 
         if (hoursUntil < -24) {
           logger.debug(`[useEnrichedRaces] Race is in the past (${Math.round(hoursUntil)} hours ago)`);
+
+          // For past races, check if we have stored wind data in regatta columns
+          const r = regatta as any;
+          const hasStoredWind = r.expected_wind_speed_min || r.expected_wind_speed_max ||
+                                r.metadata?.wind || r.weather_conditions;
+
+          if (hasStoredWind) {
+            // Check multiple sources for stored weather data
+            const wc = r.weather_conditions || {};
+            const windDir = wc.wind_direction || r.expected_wind_direction || r.metadata?.wind?.direction || 'N';
+            const windMin = wc.wind_speed_min ?? r.expected_wind_speed_min ?? r.metadata?.wind?.speedMin ?? 0;
+            const windMax = wc.wind_speed_max ?? r.expected_wind_speed_max ?? r.metadata?.wind?.speedMax ?? windMin;
+
+            if (windMin > 0 || windMax > 0) {
+              logger.debug(`[useEnrichedRaces] Using stored weather for past race ${regatta.name}: ${windDir} ${windMin}-${windMax}kt`);
+              return {
+                ...baseRace,
+                wind: {
+                  direction: windDir,
+                  speedMin: windMin,
+                  speedMax: windMax,
+                },
+                tide: (wc.tide_height || r.tide_at_start) ? {
+                  state: wc.tide_state || r.tide_at_start || 'unknown',
+                  height: wc.tide_height || 0,
+                  direction: wc.tide_direction || r.current_direction,
+                } : null,
+                weatherStatus: 'past' as const,
+              };
+            }
+          }
+
           return {
             ...baseRace,
             wind: null,
@@ -554,7 +684,8 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         return {
           id: regatta.id,
           name: regatta.name,
-          venue: regatta.metadata?.venue_name || 'Venue TBD',
+          // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
+          venue: regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD',
           date: regatta.start_date,
           startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           boatClass: className || 'Class TBD',
