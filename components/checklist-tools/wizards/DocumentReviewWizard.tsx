@@ -1097,12 +1097,25 @@ export function DocumentReviewWizard({
   // Auto-trigger extraction when document exists but no extraction result
   // Wait for storedExtractionChecked to prevent re-extracting when stored data exists
   useEffect(() => {
+    // Skip if already extracting
+    if (isExtracting) {
+      return;
+    }
+
+    // Skip if we already have extraction data
+    if (extractionResult?.data) {
+      return;
+    }
+
+    // Wait until we've checked for stored extraction before deciding to trigger
+    if (!storedExtractionChecked) {
+      return;
+    }
+
+    // Only trigger for NOR and SI documents that we haven't attempted yet
     if (
       document &&
       document.url &&
-      !isExtracting &&
-      !extractionResult &&
-      storedExtractionChecked && // Wait until we've checked for stored extraction
       extractionAttempted !== document.id &&
       (config.type === 'nor' || config.type === 'sailing_instructions')
     ) {
