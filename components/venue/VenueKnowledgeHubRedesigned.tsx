@@ -23,7 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens, colors } from '@/constants/designSystem';
 import { VenueHeroMap } from './VenueHeroMap';
 import { RacingAreaCard, RacingAreaCardList } from './RacingAreaCard';
-import { ConditionsBar } from './ConditionsSparkline';
+import { TufteLiveConditions } from './TufteLiveConditions';
 import { UnifiedKnowledgeFeed } from './UnifiedKnowledgeFeed';
 import { UnknownAreaPrompt, UnknownAreaBanner } from './UnknownAreaPrompt';
 import { CommunityAreaBadge } from './CommunityAreaBadge';
@@ -258,16 +258,12 @@ export function VenueKnowledgeHubRedesigned({
           currentSpeed={liveWeather?.currentSpeed}
         />
 
-        {/* Conditions Bar */}
-        <ConditionsBar
-          wind={{
-            data: windData,
-            currentSpeed: liveWeather?.windSpeed,
-            currentDirection: liveWeather?.windDirection
-              ? `${Math.round(liveWeather.windDirection)}°`
-              : undefined,
-          }}
-          compact
+        {/* Tufte Live Conditions - Dense data display */}
+        <TufteLiveConditions
+          latitude={latitude}
+          longitude={longitude}
+          venueId={venueId}
+          venueName={venueName}
         />
 
         {/* Unknown Area Banner (inline) */}
@@ -452,8 +448,11 @@ const styles = StyleSheet.create({
     marginBottom: TufteTokens.spacing.standard,
   },
   sectionTitle: {
-    ...TufteTokens.typography.primary,
-    color: '#111827',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: '#8E8E93',
   },
   sectionCount: {
     ...TufteTokens.typography.micro,

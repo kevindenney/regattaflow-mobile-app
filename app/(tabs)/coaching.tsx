@@ -1,4 +1,5 @@
 import { CoachDashboard } from '@/components/coaching/CoachDashboard';
+import { TufteCoachRow } from '@/components/coaching/TufteCoachRow';
 import {
     useCoachMetrics,
     useCoachResources,
@@ -663,21 +664,34 @@ export default function CoachingHubScreen() {
           </ScrollView>
         </View>
 
+        {/* Coach Spotlights - Tufte Style */}
         <View className="mb-10">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-semibold text-gray-900">Coach spotlights</Text>
+          <View className="flex-row items-center justify-between px-4 pt-6 pb-2">
+            <Text style={{ fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', color: '#8E8E93' }}>
+              FEATURED COACHES
+            </Text>
             <TouchableOpacity onPress={() => router.push('/coach/discover')}>
-              <Text className="text-blue-600 font-medium">See all coaches</Text>
+              <Text className="text-blue-600 font-medium text-sm">See all</Text>
             </TouchableOpacity>
           </View>
-          {coachesToUse.slice(0, 3).map((coach) => (
-            <CoachSpotlightCard
-              key={coach.id}
-              coach={coach}
-              onView={() => router.push(`/coach/${coach.id}`)}
-              onBook={() => router.push(`/coach/${coach.id}?action=book`)}
-            />
-          ))}
+          <View style={{ backgroundColor: '#FFFFFF', borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: '#E5E7EB' }}>
+            {coachesToUse.slice(0, 4).map((coach, index) => (
+              <TufteCoachRow
+                key={coach.id}
+                name={coach.display_name || 'Coach'}
+                bio={coach.bio}
+                specialties={coach.specialties}
+                rating={coach.average_rating}
+                totalSessions={coach.total_sessions}
+                hourlyRate={coach.hourly_rate}
+                currency={coach.currency}
+                location={coach.based_at || coach.available_locations?.[0]}
+                onPress={() => router.push(`/coach/${coach.id}`)}
+                onContact={() => router.push(`/coach/${coach.id}?action=book`)}
+                isLast={index === Math.min(coachesToUse.length, 4) - 1}
+              />
+            ))}
+          </View>
         </View>
 
         <View className="mb-10">

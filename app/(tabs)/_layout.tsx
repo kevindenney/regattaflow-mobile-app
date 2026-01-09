@@ -71,14 +71,6 @@ function TabLayoutInner() {
   const [hasRedirected, setHasRedirected] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
 
-  // Debug: Log auth state
-  console.log('📱 [TabLayout] ====== RENDER ======');
-  console.log('📱 [TabLayout] userType:', userType, '(type:', typeof userType, ')');
-  console.log('📱 [TabLayout] userId:', user?.id);
-  console.log('📱 [TabLayout] personaLoading:', personaLoading);
-  console.log('📱 [TabLayout] tabsCount:', tabs.length);
-  console.log('📱 [TabLayout] tabs:', tabs.map(t => t.name).join(', ') || '(empty)');
-
   // Redirect coaches to /clients on initial load
   useEffect(() => {
     if (userType === 'coach' && !hasRedirected && !personaLoading) {
@@ -136,8 +128,7 @@ function TabLayoutInner() {
     // Coach menu items (simplified)
     if (userType === 'coach') {
       items.push(
-        { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
-        { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' }
+        { key: 'account', label: 'Account', icon: 'person-outline', route: '/(tabs)/account' }
       );
       return items;
     }
@@ -153,25 +144,24 @@ function TabLayoutInner() {
       });
     }
 
+    // Clubs + Fleets merged into Affiliations
     items.push(
-      { key: 'fleet', label: 'Fleets', icon: 'people-outline', route: '/(tabs)/fleet' },
-      { key: 'club', label: 'Clubs', icon: 'people-circle-outline', route: '/(tabs)/clubs' },
+      { key: 'affiliations', label: 'Affiliations', icon: 'people-circle-outline', route: '/(tabs)/affiliations' },
       { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' }
     );
 
     if (userType !== 'club') {
       items.push({
         key: 'coaching',
-        label: 'Coaching Marketplace',
+        label: 'Coaches',
         icon: 'school-outline',
         route: '/(tabs)/coaching',
       });
     }
 
+    // Tuning Guides merged into Boats tab - removed from menu
     items.push(
-      { key: 'tuning-guides', label: 'Tuning Guides', icon: 'book-outline', route: '/(tabs)/tuning-guides' },
-      { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/(tabs)/profile' },
-      { key: 'settings', label: 'Settings', icon: 'settings-outline', route: '/(tabs)/settings' }
+      { key: 'account', label: 'Account', icon: 'person-outline', route: '/(tabs)/account' }
     );
 
     return items;
@@ -344,12 +334,8 @@ function TabLayoutInner() {
             tabBarLabelPosition: 'below-icon',
             tabBarActiveTintColor: tabBarActiveColor,
             tabBarInactiveTintColor: tabBarInactiveColor,
-            tabBarStyle: tabs.length === 0
-              ? { display: 'none' }
-              : [
-                  styles.tabBarBase,
-                  isClubUser ? styles.tabBarClub : styles.tabBarDefault,
-                ],
+            // Tufte mode: Hide tab bar - navigation via drawer in header
+            tabBarStyle: { display: 'none' },
             tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
             tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
             tabBarItemStyle: visible
@@ -573,11 +559,18 @@ function TabLayoutInner() {
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('settings') 
-              ? () => null 
-              : isClubUser 
-                ? renderClubTabButton 
+            tabBarButton: !isTabVisible('settings')
+              ? () => null
+              : isClubUser
+                ? renderClubTabButton
                 : undefined,
+          }}
+        />
+        <Tabs.Screen
+          name="account"
+          options={{
+            title: 'Account',
+            href: null, // Hidden from tab bar, accessible via menu
           }}
         />
         <Tabs.Screen
@@ -664,6 +657,12 @@ function TabLayoutInner() {
         />
         <Tabs.Screen
           name="boats"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="affiliations"
           options={{
             href: null,
           }}

@@ -29,7 +29,7 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { VenueHeroCard } from '@/components/venue/VenueHeroCard';
 import { TravelResourceChips } from '@/components/venue/TravelResourceChips';
-import { LiveConditionsCard } from '@/components/venue/LiveConditionsCard';
+import { TufteLiveConditions } from '@/components/venue/TufteLiveConditions';
 import { UpcomingRacesSection } from '@/components/venue/UpcomingRacesSection';
 import { TideCurrentPanel } from '@/components/venue/TideCurrentPanel';
 import { WindPatternCard } from '@/components/venue/WindPatternCard';
@@ -510,8 +510,8 @@ export default function VenueIntelligenceScreen() {
               longitude={currentVenue.coordinates_lng}
             />
 
-            {/* Live Weather Conditions */}
-            <LiveConditionsCard
+            {/* Live Weather Conditions - Tufte Style */}
+            <TufteLiveConditions
               latitude={currentVenue.coordinates_lat}
               longitude={currentVenue.coordinates_lng}
               venueId={currentVenue.id}
