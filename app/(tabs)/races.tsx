@@ -102,9 +102,15 @@ import { useRaceDebriefData } from '@/hooks/useRaceDebriefData';
 import { useRaceClassSelection } from '@/hooks/useRaceClassSelection';
 import { useRaceCourse } from '@/hooks/useRaceCourse';
 import { useVenueCenter } from '@/hooks/useVenueCenter';
-import { useRaceListData } from '@/hooks/useRaceListData';
+import { useRaceListData, DEMO_RACE } from '@/hooks/useRaceListData';
+import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { useActiveRaceSummary } from '@/hooks/useActiveRaceSummary';
 import { useRaceBriefData } from '@/hooks/useRaceBriefData';
+import { useCurrentSeason, useUserSeasons } from '@/hooks/useSeason';
+import { usePracticeSessions } from '@/hooks/usePracticeSessions';
+import { SeasonHeader } from '@/components/seasons/SeasonHeader';
+import { SeasonArchive } from '@/components/seasons/SeasonArchive';
+import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceDocumentType, RaceDocumentWithDetails } from '@/services/RaceDocumentService';
@@ -162,6 +168,12 @@ export default function RacesScreen() {
   // State for dismissing the demo notice
   const [demoNoticeDismissed, setDemoNoticeDismissed] = useState(false);
 
+  // Season state and hooks
+  const [showSeasonArchive, setShowSeasonArchive] = useState(false);
+  const [showSeasonSettings, setShowSeasonSettings] = useState(false);
+  const { data: currentSeason, isLoading: loadingCurrentSeason, refetch: refetchCurrentSeason } = useCurrentSeason();
+  const { data: userSeasons = [], isLoading: loadingSeasons, refetch: refetchSeasons } = useUserSeasons();
+
   const fetchUserProfileRef = useRef(auth.fetchUserProfile);
   useEffect(() => {
     fetchUserProfileRef.current = auth.fetchUserProfile;
@@ -173,6 +185,8 @@ export default function RacesScreen() {
   const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
   const demoRaceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal demo race cards ScrollView
   const hasAutoCenteredNextRace = useRef(false);
+  const hasTriedSampleCreation = useRef(false);
+  const [creatingSampleData, setCreatingSampleData] = useState(false);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
   // Mobile detection - only actual native mobile platforms (not web at any size)
@@ -533,8 +547,51 @@ export default function RacesScreen() {
     recentRaces,
   });
 
+  // Track if we're showing the demo race (no real races)
+  const isShowingDemoRace = safeRecentRaces.length === 0;
+
+  // Auto-create sample data for existing users with no races
+  useEffect(() => {
+    const autoCreateSampleData = async () => {
+      // Only for sailors with no races who haven't tried yet
+      if (
+        isShowingDemoRace &&
+        user?.id &&
+        userType === 'sailor' &&
+        !creatingSampleData &&
+        !hasTriedSampleCreation.current &&
+        !liveRacesLoading // Wait for initial load to complete
+      ) {
+        hasTriedSampleCreation.current = true;
+        setCreatingSampleData(true);
+        logger.info('Auto-creating sample data for existing user with no races');
+        try {
+          await createSailorSampleData({
+            userId: user.id,
+            userName: userProfile?.full_name || 'Sailor',
+          });
+          // Refresh race list and season to show newly created data
+          await Promise.all([
+            refetchRaces(),
+            refetchCurrentSeason(),
+          ]);
+          logger.info('Sample data created successfully');
+        } catch (err: any) {
+          // Silent fail - user can add races manually
+          logger.warn('Auto sample data creation failed:', err?.message);
+        } finally {
+          setCreatingSampleData(false);
+        }
+      }
+    };
+    autoCreateSampleData();
+  }, [isShowingDemoRace, user?.id, userType, liveRacesLoading, userProfile?.full_name, refetchRaces, refetchCurrentSeason, creatingSampleData]);
+
   // Fetch user results for past races
   const { results: userRaceResults } = useUserRaceResults(user?.id, pastRaceIds);
+
+  // Fetch practice sessions for timeline
+  const { upcomingSessions: practiceSessions } = usePracticeSessions();
 
   // Real-time weather for next race
   const { weather: raceWeather, loading: weatherLoading, error: weatherError } = useRaceWeather(
@@ -564,7 +621,51 @@ export default function RacesScreen() {
 
   // Base race data for CardGrid (without detailed enrichment)
   // This is used initially; enrichment happens in cardGridRacesEnriched below
+  // When no races exist, show a demo race so users can explore the UI
   const baseCardGridRaces: CardRaceData[] = useMemo(() => {
+    // If no races, show demo race with sample data
+    if (safeRecentRaces.length === 0) {
+      return [{
+        id: DEMO_RACE.id || 'demo-race',
+        name: 'Sample Race',
+        venue: DEMO_RACE.venue || 'Your Local Yacht Club',
+        date: DEMO_RACE.date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        startTime: DEMO_RACE.startTime || '10:00',
+        boatClass: 'Your Boat Class',
+        race_type: 'fleet' as const,
+        isDemo: true,
+        vhf_channel: 'Ch 72',
+        // Sample weather data
+        wind: {
+          direction: 'NE',
+          speedMin: 12,
+          speedMax: 18,
+        },
+        tide: {
+          state: 'flooding' as const,
+          height: 1.8,
+          direction: 'NW',
+        },
+        // Sample regulatory documents
+        regulatory: {
+          documents: [
+            { id: 'demo-nor', name: 'Notice of Race', type: 'nor', uploadedAt: new Date().toISOString() },
+            { id: 'demo-si', name: 'Sailing Instructions', type: 'si', uploadedAt: new Date().toISOString() },
+            { id: 'demo-course', name: 'Course Layout', type: 'course', uploadedAt: new Date().toISOString() },
+          ],
+          vhfChannel: 'Ch 72',
+          protestDeadline: '30 min after finish',
+        },
+        // Sample fleet info
+        fleet: {
+          totalCompetitors: 24,
+          fleetName: 'Main Fleet',
+          isRegistered: false,
+        },
+        // No created_by so delete/edit menu won't appear
+      }];
+    }
+
     return safeRecentRaces.map((race: any) => ({
       id: race.id,
       name: race.name || race.race_name || 'Unnamed Race',
@@ -573,6 +674,7 @@ export default function RacesScreen() {
       startTime: race.start_time || race.startTime,
       boatClass: race.boat_class || race.boatClass,
       vhf_channel: race.vhf_channel || race.critical_details?.vhf_channel,
+      race_type: race.race_type, // Preserve race type (fleet, distance, match, team)
       wind: race.wind,
       tide: race.tide,
       waves: race.waves,
@@ -607,7 +709,8 @@ export default function RacesScreen() {
       onEdit?: () => void,
       onDelete?: () => void,
       onUploadDocument?: () => void,
-      onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void
+      onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void,
+      onOpenPostRaceInterview?: () => void
     ) => {
       const ContentComponent = getCardContentComponent(cardType);
       return (
@@ -623,10 +726,12 @@ export default function RacesScreen() {
           onDelete={onDelete}
           onUploadDocument={onUploadDocument}
           onRaceComplete={onRaceComplete}
+          onOpenPostRaceInterview={onOpenPostRaceInterview}
+          userId={user?.id}
         />
       );
     },
-    [cardGridDimensions]
+    [cardGridDimensions, user?.id]
   );
 
   // Handle race change from CardGrid
@@ -809,6 +914,18 @@ export default function RacesScreen() {
     handleEditRace(selectedRaceId);
   }, [handleEditRace, selectedRaceId]);
 
+  // Practice session handlers
+  const handleSelectPractice = useCallback((sessionId: string) => {
+    router.push({
+      pathname: '/practice/[id]',
+      params: { id: sessionId },
+    });
+  }, [router]);
+
+  const handleAddPractice = useCallback(() => {
+    router.push('/practice/create');
+  }, [router]);
+
   // Open boat class selector modal
   const handleSetBoatClass = useCallback(() => {
     if (!selectedRaceId) return;
@@ -887,35 +1004,50 @@ export default function RacesScreen() {
     const performDelete = async () => {
       setDeletingRaceId(raceId);
       try {
-        const { data: raceEvents, error: raceEventsError } = await supabase
+        // First, try to delete race_events linked to this regatta (if it's a regatta)
+        const { data: linkedRaceEvents, error: linkedEventsError } = await supabase
           .from('race_events')
           .select('id')
           .eq('regatta_id', raceId);
 
-        if (raceEventsError) {
-          throw raceEventsError;
+        if (linkedEventsError) {
+          logger.warn('Error fetching linked race_events:', linkedEventsError);
         }
 
-        const eventIds = (raceEvents || []).map((event: { id: string }) => event.id);
+        const linkedEventIds = (linkedRaceEvents || []).map((event: { id: string }) => event.id);
 
-        if (eventIds.length > 0) {
-          const { error: deleteEventsError } = await supabase
+        if (linkedEventIds.length > 0) {
+          const { error: deleteLinkedError } = await supabase
             .from('race_events')
             .delete()
-            .in('id', eventIds);
+            .in('id', linkedEventIds);
 
-          if (deleteEventsError) {
-            throw deleteEventsError;
+          if (deleteLinkedError) {
+            logger.warn('Error deleting linked race_events:', deleteLinkedError);
           }
         }
 
+        // Also try to delete the race_event directly by ID (for races created via Add Race flow)
+        // This handles the case where the raceId IS a race_event ID, not a regatta ID
+        const { error: deleteDirectEventError } = await supabase
+          .from('race_events')
+          .delete()
+          .eq('id', raceId);
+
+        // Log but don't throw - the race might be in regattas table instead
+        if (deleteDirectEventError) {
+          logger.debug('Direct race_event delete result:', deleteDirectEventError.message);
+        }
+
+        // Try to delete from regattas table
         const { error: deleteRegattaError } = await supabase
           .from('regattas')
           .delete()
           .eq('id', raceId);
 
+        // Log but don't throw - the race might be in race_events table instead
         if (deleteRegattaError) {
-          throw deleteRegattaError;
+          logger.debug('Regatta delete result:', deleteRegattaError.message);
         }
 
         if (selectedRaceId === raceId) {
@@ -1338,8 +1470,18 @@ export default function RacesScreen() {
         return;
       }
 
-      // First check if this race is in our local safeRecentRaces (might be fallback data)
+      // First check if this race is in our local safeRecentRaces (might be fallback data or race_event)
       const localRace = safeRecentRaces.find((r: any) => r.id === selectedRaceId);
+
+      // If it's a race_event (user-created race), use local data directly
+      if (localRace && localRace._source === 'race_events') {
+        logger.debug('[races.tsx] 📦 Using race_event local data:', localRace.name);
+        setLoadingRaceDetail(false);
+        setSelectedRaceData(localRace);
+        setSelectedRaceMarks([]);
+        return;
+      }
+
       if (localRace && !localRace.id?.includes('-')) {
         // If we have local race data and it's likely a fallback race (not a UUID)
         logger.debug('[races.tsx] 📦 Using local race data (fallback):', localRace.name);
@@ -1359,8 +1501,31 @@ export default function RacesScreen() {
           .single();
 
         if (error) {
-          logger.warn('[races.tsx] ⚠️ Database fetch failed, checking local data');
-          // If database fetch fails, try to use local race data as fallback
+          logger.warn('[races.tsx] ⚠️ Regatta fetch failed, trying race_events');
+          // If regatta query fails, try race_events table
+          const { data: raceEventData, error: raceEventError } = await supabase
+            .from('race_events')
+            .select('*')
+            .eq('id', selectedRaceId)
+            .single();
+
+          if (!raceEventError && raceEventData) {
+            logger.debug('[races.tsx] 📦 Found in race_events:', raceEventData.name);
+            // Normalize race_event data
+            const normalizedData = {
+              ...raceEventData,
+              start_date: raceEventData.start_time || raceEventData.event_date,
+              race_name: raceEventData.name,
+              created_by: raceEventData.user_id,
+              _source: 'race_events',
+            };
+            setSelectedRaceData(normalizedData);
+            setSelectedRaceMarks([]);
+            setLoadingRaceDetail(false);
+            return;
+          }
+
+          // If both fail, try local data as last fallback
           if (localRace) {
             logger.debug('[races.tsx] 📦 Using local race data as fallback:', localRace.name);
             setLoadingRaceDetail(false);
@@ -1527,6 +1692,11 @@ export default function RacesScreen() {
     setFamilyButtonExpanded,
   } = useAddRace({
     refetchRaces,
+    onRaceCreated: (raceId) => {
+      // Auto-select the newly created race to center on it
+      setSelectedRaceId(raceId);
+      setHasManuallySelected(true);
+    },
   });
 
   // Race documents hook (handles fetching, uploading, and deleting)
@@ -2251,9 +2421,6 @@ export default function RacesScreen() {
     );
   }
 
-  // User initial for avatar
-  const userInitial = (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
-
   return (
     <View style={{ flex: 1, backgroundColor: TUFTE_BACKGROUND }}>
       {/* Floating Header */}
@@ -2263,12 +2430,39 @@ export default function RacesScreen() {
         weatherLoading={weatherLoading}
         isOnline={isOnline}
         onAddRace={handleShowAddRaceSheet}
-        onOpenSettings={() => router.push('/(tabs)/settings')}
-        userInitial={userInitial}
+        onAddPractice={handleAddPractice}
       />
 
+      {/* Season Header - Shows current season context */}
+      {!showSeasonArchive && (
+        <SeasonHeader
+          season={currentSeason}
+          currentRaceIndex={safeRecentRaces.findIndex(r => r.id === selectedRaceId)}
+          totalRaces={safeRecentRaces.length}
+          onArchivePress={() => setShowSeasonArchive(true)}
+          onSeasonPress={() => setShowSeasonSettings(true)}
+          onStartSeasonPress={() => setShowSeasonSettings(true)}
+          onUpcomingPress={() => {
+            // Scroll to next upcoming race
+            if (safeNextRace?.id) {
+              setSelectedRaceId(safeNextRace.id);
+              setHasManuallySelected(true);
+            }
+          }}
+          compact
+        />
+      )}
+
       {/* Main Content - CardGrid or ScrollView based on feature flag */}
-      {FEATURE_FLAGS.USE_CARD_GRID_NAVIGATION && hasRealRaces ? (
+      {/* Show loading state when creating sample data for new users */}
+      {creatingSampleData ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: TUFTE_BACKGROUND }}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={{ marginTop: 16, fontSize: 16, color: '#64748B', textAlign: 'center' }}>
+            Setting up your first race...
+          </Text>
+        </View>
+      ) : FEATURE_FLAGS.USE_CARD_GRID_NAVIGATION ? (
         // New CardGrid 2D navigation system - CardGrid handles its own flex
         <CardGrid
           races={cardGridRaces}
@@ -2283,8 +2477,20 @@ export default function RacesScreen() {
           userId={user?.id}
           onEditRace={handleEditRace}
           onDeleteRace={handleDeleteRace}
+          deletingRaceId={deletingRaceId}
           onUploadDocument={handleCardGridUploadDocument}
           onRaceComplete={handleRaceComplete}
+          onOpenPostRaceInterview={(raceId, _raceName) => {
+            // Select the race if different, then open interview
+            if (raceId !== selectedRaceId) {
+              setSelectedRaceId(raceId);
+              setHasManuallySelected(true);
+            }
+            // Small delay to allow selection to update, then open interview
+            setTimeout(() => {
+              handleOpenPostRaceInterviewManually();
+            }, 100);
+          }}
         />
       ) : (
       <ScrollView
@@ -2311,6 +2517,8 @@ export default function RacesScreen() {
           <>
             <RealRacesCarousel
               races={safeRecentRaces}
+              practiceSessions={practiceSessions}
+              onSelectPractice={handleSelectPractice}
               nextRace={safeNextRace}
               selectedRaceId={selectedRaceId}
               onSelectRace={(id) => {
@@ -2327,6 +2535,7 @@ export default function RacesScreen() {
               getRaceStatus={getRaceStatus}
               onEditRace={handleEditRace}
               onDeleteRace={handleDeleteRace}
+              deletingRaceId={deletingRaceId}
               useTimelineLayout={true}
               useAppleStyle={FEATURE_FLAGS.USE_APPLE_STYLE_CARDS}
               useRefinedStyle={FEATURE_FLAGS.USE_REFINED_STYLE_CARDS}
@@ -2671,13 +2880,7 @@ export default function RacesScreen() {
         completedRaceName={completedRaceName}
         completedRaceId={completedRaceId}
         completedSessionGpsPoints={completedSessionGpsPoints}
-        onPostRaceInterviewClose={() => {
-          setShowPostRaceInterview(false);
-          setCompletedSessionId(null);
-          setCompletedRaceName('');
-          setCompletedRaceId(null);
-          setCompletedSessionGpsPoints(0);
-        }}
+        onPostRaceInterviewClose={handleClosePostRaceInterview}
         onPostRaceInterviewComplete={handlePostRaceInterviewComplete}
         // Strategy Sharing
         showCoachSelectionModal={showCoachSelectionModal}
@@ -2695,6 +2898,48 @@ export default function RacesScreen() {
         showAddRaceSheet={showAddRaceSheet}
         onAddRaceClose={handleCloseAddRaceSheet}
         onAddRaceSave={handleAddRaceDialogSave}
+      />
+
+      {/* Season Archive Modal */}
+      <Modal
+        visible={showSeasonArchive}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSeasonArchive(false)}
+      >
+        <SeasonArchive
+          seasons={userSeasons}
+          isLoading={loadingSeasons}
+          onRefresh={() => refetchSeasons()}
+          onSeasonPress={(seasonId) => {
+            // TODO: Navigate to season detail view
+            logger.info('[RacesScreen] Season selected', { seasonId });
+            setShowSeasonArchive(false);
+          }}
+          onBackPress={() => setShowSeasonArchive(false)}
+        />
+      </Modal>
+
+      {/* Season Settings Modal - Create/Edit/End Season */}
+      <SeasonSettingsModal
+        visible={showSeasonSettings}
+        season={currentSeason ?? null}
+        onClose={() => setShowSeasonSettings(false)}
+        onSeasonCreated={(seasonId) => {
+          logger.info('[RacesScreen] Season created', { seasonId });
+          refetchCurrentSeason();
+          refetchSeasons();
+        }}
+        onSeasonUpdated={(seasonId) => {
+          logger.info('[RacesScreen] Season updated', { seasonId });
+          refetchCurrentSeason();
+          refetchSeasons();
+        }}
+        onSeasonEnded={(seasonId) => {
+          logger.info('[RacesScreen] Season ended', { seasonId });
+          refetchCurrentSeason();
+          refetchSeasons();
+        }}
       />
 
       {/* </PlanModeLayout> - temporarily removed */}
