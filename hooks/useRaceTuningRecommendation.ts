@@ -165,7 +165,8 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
       } : 'No recommendation returned');
       setRecommendation(result ?? null);
     } catch (err) {
-      logger.error('❌ Failed to load tuning recommendation:', err);
+      // AI declining is expected when no tuning guides exist - not an error
+      logger.debug('Tuning recommendation not available:', (err as Error)?.message?.substring(0, 100));
       setError(err as Error);
       setRecommendation(null);
     } finally {

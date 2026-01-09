@@ -116,8 +116,8 @@ class RaceTuningEngine {
     if (isAIInFallbackMode()) {
       logger.info('Using fallback mode for rig tuning (credits exhausted)');
       const mockRec = generateMockRigTuning({
-        className: request.className || request.classId,
-        windSpeed: request.averageWindSpeed,
+        className: request.className || request.classId || undefined,
+        windSpeed: request.averageWindSpeed ?? undefined,
       });
       return [this.transformAIOnlyRecommendation(mockRec)];
     }
@@ -194,15 +194,9 @@ class RaceTuningEngine {
 
 Return JSON array with ONE recommendation. No guides uploaded - use physics-based reasoning.`;
 
-    logger.debug('Calling Anthropic API with skill system prompt', {
-      model: 'claude-3-5-haiku-latest',
-      systemPromptLength: BOAT_TUNING_SKILL_CONTENT.length,
-      userPromptLength: userPrompt.length,
-    });
-
     try {
       const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 2000,
         temperature: 0.5,
         // Use skill content as system prompt - reduces user prompt by ~60%
@@ -213,12 +207,6 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
         }]
       });
 
-      logger.debug('Anthropic API call successful', {
-        id: response.id,
-        model: response.model,
-        stopReason: response.stop_reason,
-      });
-
       const textBlocks = (response.content as Array<{ type: string; text?: string }>)
         .filter(block => block.type === 'text' && typeof block.text === 'string')
         .map(block => block.text!.trim())
@@ -226,35 +214,76 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
 
       const combinedText = textBlocks.join('\n').trim();
 
+      logger.debug('AI response text', {
+        textBlockCount: textBlocks.length,
+        combinedTextLength: combinedText.length,
+        combinedTextPreview: combinedText.substring(0, 500),
+        hasOpenBracket: combinedText.includes('['),
+        hasOpenBrace: combinedText.includes('{'),
+      });
+
       if (!combinedText) {
         throw new Error('AI rig tuning returned no content');
       }
 
-      // Try to extract JSON array from response
+      // Try to extract JSON from response (can be array or single object)
       // First, try to find JSON in markdown code blocks
       let jsonText = combinedText;
-      
+      let isWrappedObject = false;
+
       // Remove markdown code blocks if present
-      const codeBlockMatch = combinedText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+      const codeBlockMatch = combinedText.match(/```(?:json)?\s*([\[{][\s\S]*?[\]}])\s*```/);
+
       if (codeBlockMatch) {
         jsonText = codeBlockMatch[1];
+        isWrappedObject = jsonText.trim().startsWith('{');
       } else {
-        // Try to find JSON array in the text
-        const jsonMatch = combinedText.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) {
-          jsonText = jsonMatch[0];
+        // Find the first [ or { to determine JSON type
+        const firstBracket = combinedText.indexOf('[');
+        const firstBrace = combinedText.indexOf('{');
+
+        if (firstBracket === -1 && firstBrace === -1) {
+          // AI may decline to generate - this is expected when no tuning guides exist
+          logger.debug('No JSON found in AI response (AI may have declined)', {
+            responsePreview: combinedText.substring(0, 200),
+            responseLength: combinedText.length,
+          });
+          // Check if it's an error response or refusal (expanded patterns)
+          const lowerResponse = combinedText.toLowerCase();
+          if (lowerResponse.includes('sorry') ||
+              lowerResponse.includes('cannot') ||
+              lowerResponse.includes('unable') ||
+              lowerResponse.includes("can't") ||
+              lowerResponse.includes('not able') ||
+              lowerResponse.includes('don\'t have') ||
+              lowerResponse.includes('no data') ||
+              lowerResponse.includes('not available') ||
+              lowerResponse.includes('unfortunately')) {
+            throw new Error(`AI declined to generate tuning: ${combinedText.substring(0, 300)}`);
+          }
+          throw new Error('Unable to find JSON in AI rig tuning response');
+        }
+
+        // Use whichever comes first (or the one that exists)
+        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+          // Object comes first
+          isWrappedObject = true;
+          jsonText = combinedText.substring(firstBrace);
         } else {
-          throw new Error('Unable to find JSON array in AI rig tuning response');
+          // Array comes first
+          jsonText = combinedText.substring(firstBracket);
         }
       }
 
-      // Clean up the JSON text - remove any trailing non-JSON content
-      // Find the last valid closing bracket
+      // Clean up the JSON text - find the matching bracket
+      const openBracket = isWrappedObject ? '{' : '[';
+      const closeBracket = isWrappedObject ? '}' : ']';
       let bracketCount = 0;
       let lastValidIndex = -1;
+
       for (let i = 0; i < jsonText.length; i++) {
-        if (jsonText[i] === '[') bracketCount++;
-        if (jsonText[i] === ']') {
+        if (jsonText[i] === openBracket) bracketCount++;
+        if (jsonText[i] === closeBracket) {
           bracketCount--;
           if (bracketCount === 0) {
             lastValidIndex = i;
@@ -264,7 +293,7 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
       }
 
       if (lastValidIndex === -1) {
-        throw new Error('Unable to find valid JSON array structure in AI response');
+        throw new Error('Unable to find valid JSON structure in AI response');
       }
 
       const cleanedJson = jsonText.substring(0, lastValidIndex + 1);
@@ -282,12 +311,17 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
         throw new Error(`Failed to parse JSON: ${parseError.message}`);
       }
 
+      // Wrap single object in array for consistent processing
       if (!Array.isArray(parsed)) {
-        throw new Error('AI rig tuning response was not an array');
+        if (typeof parsed === 'object' && parsed !== null) {
+          parsed = [parsed];
+        } else {
+          throw new Error('AI rig tuning response was not a valid JSON object or array');
+        }
       }
 
       return parsed.map(item => this.transformAIOnlyRecommendation(item));
-    } catch (error) {
+    } catch (error: any) {
       // Handle credit exhaustion gracefully
       if (isCreditExhaustedError(error)) {
         activateFallbackMode('Anthropic API credit balance too low');
@@ -298,8 +332,9 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
         });
         return [this.transformAIOnlyRecommendation(mockRec)];
       }
-      
-      logger.error('AI rig tuning generation failed', error);
+
+      // AI declining is expected when no tuning guides exist - not an error
+      logger.debug('AI rig tuning generation did not produce results', { message: (error as Error)?.message?.substring(0, 100) });
       throw error;
     }
   }
@@ -363,7 +398,7 @@ ${JSON.stringify(payload, null, 2)}`;
 
     try {
       const response = await this.anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 2000,
         temperature: 0.5,
         betas: this.customSkillId
@@ -398,31 +433,48 @@ ${JSON.stringify(payload, null, 2)}`;
         throw new Error('Boat tuning skill returned no text content');
       }
 
-      // Try to extract JSON array from response
-      // First, try to find JSON in markdown code blocks
+      // Try to extract JSON from response (can be array or single object)
       let jsonText = combinedText;
-      
+      let isWrappedObject = false;
+
       // Remove markdown code blocks if present
-      const codeBlockMatch = combinedText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+      const codeBlockMatch = combinedText.match(/```(?:json)?\s*([\[{][\s\S]*?[\]}])\s*```/);
+
       if (codeBlockMatch) {
         jsonText = codeBlockMatch[1];
+        isWrappedObject = jsonText.trim().startsWith('{');
       } else {
-        // Try to find JSON array in the text
-        const jsonMatch = combinedText.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) {
-          jsonText = jsonMatch[0];
+        // Find the first [ or { to determine JSON type
+        const firstBracket = combinedText.indexOf('[');
+        const firstBrace = combinedText.indexOf('{');
+
+        if (firstBracket === -1 && firstBrace === -1) {
+          logger.error('No JSON found in boat tuning skill response', {
+            responsePreview: combinedText.substring(0, 500),
+          });
+          throw new Error('Unable to find JSON in boat tuning skill response');
+        }
+
+        // Use whichever comes first (or the one that exists)
+        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+          // Object comes first
+          isWrappedObject = true;
+          jsonText = combinedText.substring(firstBrace);
         } else {
-          throw new Error('Unable to find JSON array in boat tuning skill response');
+          // Array comes first
+          jsonText = combinedText.substring(firstBracket);
         }
       }
 
-      // Clean up the JSON text - remove any trailing non-JSON content
-      // Find the last valid closing bracket
+      // Clean up the JSON text - find the matching bracket
+      const openBracket = isWrappedObject ? '{' : '[';
+      const closeBracket = isWrappedObject ? '}' : ']';
       let bracketCount = 0;
       let lastValidIndex = -1;
+
       for (let i = 0; i < jsonText.length; i++) {
-        if (jsonText[i] === '[') bracketCount++;
-        if (jsonText[i] === ']') {
+        if (jsonText[i] === openBracket) bracketCount++;
+        if (jsonText[i] === closeBracket) {
           bracketCount--;
           if (bracketCount === 0) {
             lastValidIndex = i;
@@ -432,7 +484,7 @@ ${JSON.stringify(payload, null, 2)}`;
       }
 
       if (lastValidIndex === -1) {
-        throw new Error('Unable to find valid JSON array structure in boat tuning skill response');
+        throw new Error('Unable to find valid JSON structure in boat tuning skill response');
       }
 
       const cleanedJson = jsonText.substring(0, lastValidIndex + 1);
@@ -450,8 +502,13 @@ ${JSON.stringify(payload, null, 2)}`;
         throw new Error(`Failed to parse JSON from boat tuning skill: ${parseError.message}`);
       }
 
+      // Wrap single object in array for consistent processing
       if (!Array.isArray(parsed)) {
-        throw new Error('Boat tuning skill response was not an array');
+        if (typeof parsed === 'object' && parsed !== null) {
+          parsed = [parsed];
+        } else {
+          throw new Error('Boat tuning skill response was not a valid JSON object or array');
+        }
       }
 
       return parsed

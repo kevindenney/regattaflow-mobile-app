@@ -184,21 +184,6 @@ class RaceTuningService {
       limit = 1,
     } = request;
 
-    console.log('🔧 [RaceTuningService] getRecommendations called', {
-      classId,
-      className,
-      boatId,
-      averageWindSpeed,
-      windMin,
-      windMax,
-      windDirection,
-      gusts,
-      waveHeight,
-      currentSpeed,
-      currentDirection,
-      pointsOfSail,
-      limit,
-    });
 
     // NEW: Get equipment context if boatId is provided
     let equipmentContext: EquipmentContext | null = null;
@@ -215,53 +200,27 @@ class RaceTuningService {
     }
 
     if (!classId && !className) {
-      console.warn('⚠️ [RaceTuningService] No class reference provided, skipping tuning lookup');
       return [];
     }
 
-    console.log('✅ [RaceTuningService] Class reference resolved', { classId, className });
-
     try {
       const guides = await tuningGuideService.getGuidesByReference({ classId, className });
-      console.log('📚 [RaceTuningService] Retrieved tuning guides', {
-        count: guides.length,
-        guides: guides.map(g => ({
-          id: g.id,
-          title: g.title,
-          source: g.source,
-          hasExtractedSections: !!g.extractedSections,
-          sectionsCount: g.extractedSections?.length || 0
-        })),
-      });
 
       const candidateSections = this.collectCandidateSections(
         guides,
         averageWindSpeed ?? undefined,
         pointsOfSail
       );
-      console.log('🎯 [RaceTuningService] Candidate sections scored', {
-        count: candidateSections.length,
-        topScores: candidateSections.slice(0, 3).map(c => ({
-          title: c.section.title,
-          score: c.score,
-          settingsCount: Object.keys(c.section.settings || {}).length
-        })),
-      });
 
       // NEW: If NO guides/sections exist, try AI-only generation
       if (candidateSections.length === 0) {
-        console.warn('⚠️ [RaceTuningService] No extracted sections found; attempting AI-only tuning generation', {
-          aiAvailable: this.aiEngine.isAvailable(),
-          aiReady: this.aiEngine.isSkillReady(),
-        });
+        logger.debug('No extracted sections found; attempting AI-only tuning generation');
         const aiOnlyRecommendations = await this.tryGenerateAIOnlyRecommendations(request);
 
         if (aiOnlyRecommendations && aiOnlyRecommendations.length > 0) {
-          console.log('🤖 [RaceTuningService] Returning AI-only tuning recommendations', { count: aiOnlyRecommendations.length });
           return aiOnlyRecommendations;
         }
 
-        console.warn('⚠️ [RaceTuningService] AI-only generation returned no recommendations');
         return [];
       }
 
@@ -287,17 +246,6 @@ class RaceTuningService {
         .slice(0, limit)
         .map(({ guide, section }) => this.buildRecommendation(guide, section));
 
-      console.log('✅ [RaceTuningService] Built North Sails recommendations', {
-        count: recommendations.length,
-        withSettings: recommendations.filter(r => r.settings.length > 0).length,
-        firstRec: recommendations[0] ? {
-          guideTitle: recommendations[0].guideTitle,
-          guideSource: recommendations[0].guideSource,
-          sectionTitle: recommendations[0].sectionTitle,
-          settingsCount: recommendations[0].settings.length
-        } : null
-      });
-
       // Enhance recommendations with equipment context if available
       const filteredRecommendations = recommendations.filter(rec => rec.settings.length > 0);
       
@@ -320,6 +268,12 @@ class RaceTuningService {
    * NEW: Generate AI-only recommendations when NO tuning guides exist
    */
   private async tryGenerateAIOnlyRecommendations(request: RaceTuningRequest): Promise<RaceTuningRecommendation[] | null> {
+    // Skip AI generation if no boat class info - AI can't generate useful recommendations
+    if (!request.classId && !request.className) {
+      logger.debug('No boat class info; skipping AI-only recommendations');
+      return null;
+    }
+
     const isAvailable = this.aiEngine.isAvailable();
 
     if (!isAvailable) {
@@ -347,7 +301,8 @@ class RaceTuningService {
       logger.warn('AI engine returned empty array or null');
       return null;
     } catch (error) {
-      logger.error('AI-only tuning generation failed', error);
+      // AI declining is expected when no tuning guides exist - not an error
+      logger.debug('AI-only tuning generation did not produce results', { message: (error as Error)?.message?.substring(0, 100) });
       return null;
     }
   }

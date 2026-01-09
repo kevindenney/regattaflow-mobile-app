@@ -120,7 +120,8 @@ export function useTeamSharing({
    * Load share history for this race
    */
   const loadShareHistory = useCallback(async () => {
-    if (!sailorId || !raceId) return [];
+    // Skip queries for demo race (string ID) - DB expects UUIDs
+    if (!sailorId || !raceId || raceId === 'demo-race' || raceId.startsWith('demo-')) return [];
 
     try {
       const { data, error: fetchError } = await supabase

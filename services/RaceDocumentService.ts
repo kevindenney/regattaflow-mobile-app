@@ -136,6 +136,11 @@ class RaceDocumentService {
    * Returns either { regattaId } or { raceEventId } depending on what we find
    */
   private async resolveRaceReference(id: string): Promise<{ regattaId?: string; raceEventId?: string } | null> {
+    // Skip demo race IDs (string IDs) - DB expects UUIDs
+    if (!id || id === 'demo-race' || id.startsWith('demo-')) {
+      return null;
+    }
+
     // First, check if it's a valid regatta ID
     const { data: regatta } = await supabase
       .from('regattas')
