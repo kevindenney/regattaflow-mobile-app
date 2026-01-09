@@ -9,23 +9,41 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation } from 'react-native';
+import { StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation, ScrollView } from 'react-native';
 import {
   Navigation,
   Trophy,
   Users,
   Flag,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react-native';
 
-import { CardContentProps } from '../types';
+import {
+  CardContentProps,
+  RacePhase,
+  RACE_PHASES,
+  RACE_PHASE_SHORT_LABELS,
+  getCurrentPhaseForRace,
+} from '../types';
+import type { DetailCardType } from '@/constants/navigationAnimations';
+import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
 import { TinySparkline } from '@/components/shared/charts';
 import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { useRaceAnalysisState } from '@/hooks/useRaceAnalysisState';
+import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useRaceSeriesPosition } from '@/hooks/useRaceSeriesPosition';
+import { useRaceStartOrder } from '@/hooks/useRaceStartOrder';
+import { Marginalia } from '@/components/ui/Marginalia';
 import type { ArrivalTimeIntention } from '@/types/raceIntentions';
+import {
+  DaysBeforeContent,
+  RaceMorningContent,
+  OnWaterContent,
+  AfterRaceContent,
+} from './phases';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -71,6 +89,7 @@ function calculateCountdown(date: string, startTime?: string): {
   isPast: boolean;
   isToday: boolean;
   isTomorrow: boolean;
+  daysSince: number; // Days since race completed (for past races)
 } {
   const now = new Date();
   const raceDate = new Date(date);
@@ -89,6 +108,9 @@ function calculateCountdown(date: string, startTime?: string): {
   const hours = Math.floor((absDiffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((absDiffMs % (1000 * 60 * 60)) / (1000 * 60));
 
+  // Days since race (for past races)
+  const daysSince = isPast ? days : 0;
+
   // Check if today or tomorrow
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -100,7 +122,7 @@ function calculateCountdown(date: string, startTime?: string): {
   const isToday = raceDayStart.getTime() === today.getTime();
   const isTomorrow = raceDayStart.getTime() === tomorrow.getTime();
 
-  return { days, hours, minutes, isPast, isToday, isTomorrow };
+  return { days, hours, minutes, isPast, isToday, isTomorrow, daysSince };
 }
 
 /**
@@ -125,6 +147,76 @@ function formatTime(time?: string): string {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${h12}:${minutes} ${ampm}`;
+}
+
+/**
+ * Simplify rig setting label for compact display
+ */
+function simplifyLabel(label: string): string {
+  // Shorten common labels
+  const shortenings: Record<string, string> = {
+    'Upper Shrouds': 'Uppers',
+    'Lower Shrouds': 'Lowers',
+    'Forestay Length': 'Forestay',
+    'Forestay Tension': 'Forestay',
+    'Mast Rake': 'Rake',
+    'Spreader Sweep': 'Spreaders',
+    'Backstay Tension': 'Backstay',
+  };
+  return shortenings[label] || label;
+}
+
+/**
+ * Simplify rig setting value for compact display
+ * Tufte principle: show only the essential data, nothing more
+ */
+function simplifyValue(value: string): string {
+  if (!value) return '';
+
+  // Extract patterns in priority order
+  const extractions = [
+    // Loos gauge readings: "Loos PT-2M 14" or "Loos 12"
+    { pattern: /Loos(?:\s+PT-\d+\w*)?\s*(\d+)/i, format: (m: RegExpMatchArray) => `${m[1]}` },
+    // Tension words
+    { pattern: /^(Firm|Light|Moderate|Tight|Loose|Medium|Max|Min)/i, format: (m: RegExpMatchArray) => m[1] },
+    // Degrees: "1-2 degrees" or "5°"
+    { pattern: /(\d+(?:[.-]\d+)?)\s*(?:degrees?|°)/i, format: (m: RegExpMatchArray) => `${m[1]}°` },
+    // CM measurements: "1.86 cm" or "Fixed 1.86cm"
+    { pattern: /(\d+(?:\.\d+)?)\s*cm/i, format: (m: RegExpMatchArray) => `${m[1]}cm` },
+    // Turns: "minus 1 turn" or "2 turns"
+    { pattern: /(?:minus\s+)?(\d+)\s*turns?/i, format: (m: RegExpMatchArray) => `${m[1]}t` },
+    // Generic number at start
+    { pattern: /^(\d+(?:[.-]\d+)?)/i, format: (m: RegExpMatchArray) => m[1] },
+  ];
+
+  for (const { pattern, format } of extractions) {
+    const match = value.match(pattern);
+    if (match) {
+      return format(match);
+    }
+  }
+
+  // Fallback: very short excerpt
+  const cleaned = value
+    .replace(/\([^)]*\)/g, '')  // Remove parentheticals
+    .replace(/;.*$/, '')         // Remove after semicolon
+    .split(/\s+/)
+    .slice(0, 2)                 // First 2 words only
+    .join(' ');
+
+  return cleaned || '—';
+}
+
+/**
+ * Format minutes in a compact way
+ */
+function formatMinutesCompact(minutes: number): string {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  return `${minutes}m`;
 }
 
 /**
@@ -212,6 +304,89 @@ function formatTideState(state: string): string {
 }
 
 /**
+ * Format temporal context for past races (Tufte: subtle hint when memories fade)
+ */
+function formatTemporalContext(daysSince: number): string {
+  if (daysSince === 0) return 'Today';
+  if (daysSince === 1) return 'Yesterday';
+  if (daysSince >= 3) return `${daysSince} days ago · memories fade`;
+  return `${daysSince} days ago`;
+}
+
+/**
+ * Get ordinal suffix for a number (1st, 2nd, 3rd, etc.)
+ */
+function getOrdinalSuffix(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+/**
+ * Format multi-race results for display
+ * Single race: "2nd of 18"
+ * Multi-race: "R1: 2/18 · R2: 5/18"
+ */
+function formatMultiRaceResults(
+  raceResults?: Array<{raceNumber: number; position: number | null; fleetSize: number | null; keyMoment: string | null}>,
+  singlePosition?: number,
+  singleFleetSize?: number
+): string | null {
+  // Check for multi-race results first
+  if (raceResults && raceResults.length > 0) {
+    const resultsWithPosition = raceResults.filter(r => r.position != null);
+    if (resultsWithPosition.length === 0) return null;
+
+    if (raceResults.length === 1) {
+      // Single race - use full format
+      const r = resultsWithPosition[0];
+      return `${r.position}${getOrdinalSuffix(r.position!)} of ${r.fleetSize || '?'}`;
+    }
+
+    // Multi-race - compact format: "R1: 2/18 · R2: 5/18"
+    return resultsWithPosition
+      .map(r => `R${r.raceNumber}: ${r.position}/${r.fleetSize || '?'}`)
+      .join(' · ');
+  }
+
+  // Fall back to single result
+  if (singlePosition) {
+    return `${singlePosition}${getOrdinalSuffix(singlePosition)} of ${singleFleetSize || '?'}`;
+  }
+
+  return null;
+}
+
+/**
+ * Format multi-race key moments for display
+ * Single race: "Lost 3 places on downwind"
+ * Multi-race: "R1: Good start · R2: Lost downwind"
+ */
+function formatMultiRaceKeyMoments(
+  raceResults?: Array<{raceNumber: number; position: number | null; fleetSize: number | null; keyMoment: string | null}>,
+  singleKeyMoment?: string
+): string | null {
+  // Check for multi-race key moments
+  if (raceResults && raceResults.length > 0) {
+    const resultsWithKeyMoment = raceResults.filter(r => r.keyMoment?.trim());
+    if (resultsWithKeyMoment.length === 0) return singleKeyMoment || null;
+
+    if (raceResults.length === 1 && resultsWithKeyMoment[0].keyMoment) {
+      // Single race - use full format
+      return resultsWithKeyMoment[0].keyMoment;
+    }
+
+    // Multi-race - show first 2 with prefix
+    return resultsWithKeyMoment
+      .slice(0, 2)
+      .map(r => `R${r.raceNumber}: ${r.keyMoment}`)
+      .join(' · ');
+  }
+
+  return singleKeyMoment || null;
+}
+
+/**
  * Arrival time options in minutes before the start
  */
 const ARRIVAL_TIME_OPTIONS = [
@@ -267,7 +442,35 @@ export function RaceSummaryCard({
   onEdit,
   onDelete,
   onRaceComplete,
+  onOpenPostRaceInterview,
+  userId,
+  onDismiss,
 }: CardContentProps) {
+  // Temporal phase state
+  const currentPhase = useMemo(
+    () => getCurrentPhaseForRace(race.date, race.startTime),
+    [race.date, race.startTime]
+  );
+  const [selectedPhase, setSelectedPhase] = useState<RacePhase>(currentPhase);
+
+  // Detail bottom sheet state
+  const [activeDetailSheet, setActiveDetailSheet] = useState<DetailCardType | null>(null);
+
+  // Handler to open detail sheet
+  const handleOpenDetail = useCallback((type: DetailCardType) => {
+    setActiveDetailSheet(type);
+  }, []);
+
+  // Handler to close detail sheet
+  const handleCloseDetailSheet = useCallback(() => {
+    setActiveDetailSheet(null);
+  }, []);
+
+  // Update selected phase when current phase changes (e.g., race day arrives)
+  React.useEffect(() => {
+    setSelectedPhase(currentPhase);
+  }, [currentPhase]);
+
   // Arrival plan section state
   const [arrivalExpanded, setArrivalExpanded] = useState(false);
   const [arrivalNotes, setArrivalNotes] = useState('');
@@ -278,6 +481,12 @@ export function RaceSummaryCard({
     autoSave: true,
     debounceMs: 1000,
   });
+
+  // Hook for race analysis state (Tufte "absence as interface")
+  const { state: analysisState } = useRaceAnalysisState(race.id, race.date, userId);
+
+  // Hook for race analysis data (actual content for display)
+  const { analysisData } = useRaceAnalysisData(race.id, userId);
 
   // Get current arrival intention
   const arrivalIntention = intentions.arrivalTime;
@@ -357,13 +566,58 @@ export function RaceSummaryCard({
   const hasConditions = windData || tideData || vhfChannel;
 
   // Fetch weather forecast for sparklines
-  const venue = (race as any).venue_data || (race as any).venue_info;
+  // Check multiple possible venue data sources (full venue object or raw coordinates)
+  const venueObj = (race as any).venue_data || (race as any).venue_info;
+  const venueCoords = (race as any).venueCoordinates; // From useEnrichedRaces
+  // Construct synthetic venue if we have coordinates but no full venue object
+  // Use global region to trigger the global fallback weather model (GFS Global)
+  // which works for any location without requiring specific country matching
+  const venue = venueObj || (venueCoords ? {
+    id: `race-${race.id}`,
+    name: race.venue || 'Race Location',
+    coordinates: venueCoords, // { lat, lng } format works with resolveVenueLocation
+    region: 'global', // Use global fallback model - works anywhere
+  } : null);
+
   const { data: forecastData } = useRaceWeatherForecast(venue, race.date, !!venue);
 
   // Extract additional data for Tufte density
   const fleetSize = (race as any).fleet_size || (race as any).entry_count || (race as any).competitors?.length;
   const courseType = (race as any).course_type || (race as any).course?.type;
   const courseDistance = (race as any).course_distance_nm || (race as any).total_distance_nm;
+  const boatClassName = race.boatClass || (race as any).boat_class || (race as any).class_name;
+
+  // Get rig tuning recommendations (only for upcoming races)
+  // Only fetch rig tuning when we have wind data to base recommendations on
+  const hasWindData = !!(windData?.speedMin || windData?.speedMax);
+  const { settings: rigSettings } = useRaceTuningRecommendation({
+    className: boatClassName,
+    windMin: windData?.speedMin,
+    windMax: windData?.speedMax,
+    limit: 2,
+    enabled: !countdown.isPast && !!boatClassName && hasWindData,
+  });
+
+  // Get race series/day position
+  const seasonId = (race as any).season_id;
+  const { data: seriesPosition } = useRaceSeriesPosition({
+    raceId: race.id,
+    raceDate: race.date,
+    seasonId,
+    enabled: true,
+  });
+
+  // Get start order info (only for upcoming races)
+  const regattaId = (race as any).regatta_id;
+  const fleetName = (race as any).fleet_name || (race as any).fleet;
+  const { data: startOrderData } = useRaceStartOrder({
+    raceId: race.id,
+    fleetName,
+    boatClass: boatClassName,
+    raceDate: race.date,
+    regattaId,
+    enabled: !countdown.isPast,
+  });
 
   // Build menu items for card management
   const menuItems = useMemo((): CardMenuItem[] => {
@@ -374,297 +628,213 @@ export function RaceSummaryCard({
     if (onDelete) {
       items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
     }
+    // For demo races, show dismiss option instead of edit/delete
+    if (race.isDemo && onDismiss) {
+      items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
+    }
     return items;
-  }, [onEdit, onDelete]);
+  }, [onEdit, onDelete, race.isDemo, onDismiss]);
 
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
 
+  // Helper to render phase tabs
+  const renderPhaseTabs = (compact: boolean = false) => (
+    <View style={compact ? styles.phaseTabsCompact : styles.phaseTabs}>
+      {RACE_PHASES.map((phase) => {
+        const isSelected = selectedPhase === phase;
+        const isCurrent = currentPhase === phase;
+        return (
+          <Pressable
+            key={phase}
+            style={[
+              compact ? styles.phaseTabCompact : styles.phaseTab,
+              isSelected && (compact ? styles.phaseTabCompactSelected : styles.phaseTabSelected),
+            ]}
+            onPress={() => setSelectedPhase(phase)}
+          >
+            <Text
+              numberOfLines={1}
+              style={[
+                compact ? styles.phaseTabTextCompact : styles.phaseTabText,
+                isSelected && (compact ? styles.phaseTabTextCompactSelected : styles.phaseTabTextSelected),
+              ]}
+            >
+              {RACE_PHASE_SHORT_LABELS[phase]}
+            </Text>
+            {isCurrent && !isSelected && (
+              <View style={styles.phaseCurrentIndicator} />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  // Convert race data to CardRaceData format for phase content
+  const cardRaceData = useMemo(() => ({
+    id: race.id,
+    name: race.name,
+    date: race.date,
+    startTime: race.startTime,
+    venue: race.venue,
+    vhf_channel: vhfChannel,
+    race_type: detectedRaceType,
+    boatClass: boatClassName,
+    wind: windData,
+    tide: tideData,
+    isDemo: race.isDemo, // Preserve isDemo flag for demo race handling
+  }), [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData]);
+
+  // Helper to render phase-specific content
+  const renderPhaseContent = () => {
+    switch (selectedPhase) {
+      case 'days_before':
+        return (
+          <DaysBeforeContent
+            race={cardRaceData}
+          />
+        );
+      case 'race_morning':
+        return (
+          <RaceMorningContent
+            race={cardRaceData}
+            onOpenStrategyDetail={() => handleOpenDetail('strategy')}
+            onOpenDetail={handleOpenDetail}
+          />
+        );
+      case 'on_water':
+        return (
+          <OnWaterContent
+            race={cardRaceData}
+            onStartTimer={() => {
+              // TODO: Connect to race timer
+            }}
+          />
+        );
+      case 'after_race':
+        return (
+          <AfterRaceContent
+            race={cardRaceData}
+            userId={userId}
+            onOpenPostRaceInterview={onOpenPostRaceInterview}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Build race data for detail cards
+  const raceDataForDetailCards = useMemo(() => {
+    const data = {
+      id: race.id,
+      name: race.name,
+      wind: windData,
+      tide: tideData,
+      courseName: (race as any).course_name,
+      courseType: courseType,
+      vhfChannel: vhfChannel,
+      fleetName: fleetName,
+      race_type: detectedRaceType,
+      total_distance_nm: totalDistanceNm,
+      time_limit_hours: timeLimitHours,
+      route_waypoints: routeWaypoints,
+      venue: venue,
+      date: race.date,
+      // For Tufte race-window display - combines date + time into ISO string
+      // race.date may be ISO timestamp "2025-12-13T00:00:00+00:00" or date string "2025-12-13"
+      // race.startTime may be "08:25:00", "08:25", or "10:00 AM"
+      start_time: (() => {
+        if (!race.startTime || !race.date) return null;
+        // Extract just the date part (YYYY-MM-DD) from race.date
+        const dateStr = race.date.split('T')[0];
+        // Normalize time to HH:mm:ss format
+        let timeStr = race.startTime;
+        // Handle "10:00 AM" format
+        if (timeStr.includes('AM') || timeStr.includes('PM')) {
+          const [time, period] = timeStr.split(' ');
+          const [hours, mins] = time.split(':').map(Number);
+          const h24 = period === 'PM' && hours !== 12 ? hours + 12 : (period === 'AM' && hours === 12 ? 0 : hours);
+          timeStr = `${h24.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:00`;
+        } else if (timeStr.split(':').length === 2) {
+          timeStr = `${timeStr}:00`;
+        }
+        return `${dateStr}T${timeStr}`;
+      })(),
+    };
+
+    return data;
+  }, [
+    race.id, race.name, race.date, race.startTime, windData, tideData, courseType,
+    vhfChannel, fleetName, detectedRaceType, totalDistanceNm,
+    timeLimitHours, routeWaypoints, venue,
+  ]);
+
   // ==========================================================================
-  // COLLAPSED VIEW - Aggressive Tufte Design
-  // Typography hierarchy, no badges, maximum data density
+  // RENDER - Single full-height view with scrollable content
   // ==========================================================================
-  if (!isExpanded) {
-    return (
+  return (
+    <>
       <View style={styles.container}>
-        {/* Typographic Header - Race type + status as text, not badges */}
-        <Text style={styles.tufteTypeLabel}>
-          {raceTypeBadge.label} RACE
-          {!countdown.isPast && ` · ${urgency.label}`}
-        </Text>
+        {/* Typographic Header with Menu */}
+        <View style={styles.tufteHeader}>
+          <Text style={styles.tufteTypeLabel}>
+            {raceTypeBadge.label} RACE
+            {!countdown.isPast && ` · ${urgency.label}`}
+            {numberOfLegs > 0 && ` · ${numberOfLegs} legs`}
+          </Text>
+          {canManage && menuItems.length > 0 && (
+            <View pointerEvents="box-none">
+              <CardMenu items={menuItems} />
+            </View>
+          )}
+        </View>
+
+        {/* Demo Race Badge - shown when this is a sample race for empty state */}
+        {(race as any).isDemo && (
+          <View style={styles.demoBadge}>
+            <Text style={styles.demoBadgeText}>Sample Race</Text>
+            <Text style={styles.demoHint}>Tap + to add your first race</Text>
+          </View>
+        )}
 
         {/* Race Name - Primary visual element */}
         <Text style={styles.tufteRaceName} numberOfLines={2}>
           {race.name}
         </Text>
 
-        {/* Venue - No icon, just typography */}
-        {race.venue && (
-          <Text style={styles.tufteVenue} numberOfLines={1}>{race.venue}</Text>
-        )}
-
-        {/* Time Block - Countdown + Date/Time inline */}
-        <View style={styles.tufteTimeBlock}>
-          {countdown.isPast ? (
-            <Text style={styles.tufteCountdownPast}>Race Completed</Text>
-          ) : (
-            <Text style={styles.tufteCountdownInline}>
-              <Text style={styles.tufteCountdownValue}>
-                {countdown.days > 0
-                  ? `${countdown.days}d ${countdown.hours}h`
-                  : countdown.hours > 0
-                    ? `${countdown.hours}h ${countdown.minutes}m`
-                    : `${countdown.minutes}m`}
-              </Text>
-              {' to start · '}
-              {formatDate(race.date)} {formatTime(race.startTime)}
-            </Text>
-          )}
-        </View>
-
-        {/* Conditions Grid - Flat typography with sparklines */}
-        {hasConditions && (
-          <View style={styles.tufteConditionsGrid}>
-            {windData && (
-              <View style={styles.tufteConditionRow}>
-                <Text style={styles.tufteConditionLabel}>Wind</Text>
-                <Text style={styles.tufteConditionValue}>
-                  {windData.direction} {windData.speedMin}–{windData.speedMax}kt
-                </Text>
-                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
-                  <TinySparkline
-                    data={forecastData.windForecast}
-                    width={50}
-                    height={14}
-                    color={IOS_COLORS.secondaryLabel}
-                    nowIndex={forecastData.forecastNowIndex}
-                  />
-                )}
-              </View>
-            )}
-            {tideData && (
-              <View style={styles.tufteConditionRow}>
-                <Text style={styles.tufteConditionLabel}>Tide</Text>
-                <Text style={styles.tufteConditionValue}>
-                  {formatTideState(tideData.state)}
-                  {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
-                </Text>
-                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
-                  <TinySparkline
-                    data={forecastData.tideForecast}
-                    width={50}
-                    height={14}
-                    color={IOS_COLORS.secondaryLabel}
-                    nowIndex={forecastData.forecastNowIndex}
-                    variant="area"
-                  />
-                )}
-              </View>
-            )}
-            {vhfChannel && (
-              <View style={styles.tufteConditionRow}>
-                <Text style={styles.tufteConditionLabel}>VHF</Text>
-                <Text style={styles.tufteConditionValue}>Ch {vhfChannel}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Data Density Row - Fleet size, course info */}
-        {(fleetSize || courseType || courseDistance || numberOfLegs > 0) && (
-          <Text style={styles.tufteDataDensity}>
-            {[
-              fleetSize && `${fleetSize} boats`,
-              courseType && courseType,
-              courseDistance && `${courseDistance}nm`,
-              numberOfLegs > 0 && `${numberOfLegs} legs`,
-            ].filter(Boolean).join(' · ')}
+        {/* Venue + Racing Area */}
+        {(race.venue || (race as any).racing_area_name) && (
+          <Text style={styles.tufteVenue} numberOfLines={1}>
+            {[race.venue, (race as any).racing_area_name].filter(Boolean).join(' · ')}
           </Text>
         )}
 
-        {/* Swipe indicator */}
-        <View style={styles.swipeHintBottom}>
-          <View style={styles.swipeIndicator} />
-        </View>
-      </View>
-    );
-  }
+        {/* Temporal Phase Tabs */}
+        {renderPhaseTabs(false)}
 
-  // ==========================================================================
-  // EXPANDED VIEW - Tufte Design with Interactive Elements
-  // ==========================================================================
-  return (
-    <View style={styles.container}>
-      {/* Typographic Header with Menu */}
-      <View style={styles.tufteExpandedHeader}>
-        <Text style={styles.tufteTypeLabel}>
-          {raceTypeBadge.label} RACE
-          {numberOfLegs > 0 && ` · ${numberOfLegs} legs`}
-        </Text>
-        {canManage && menuItems.length > 0 && (
-          <CardMenu items={menuItems} />
-        )}
+        {/* Phase-Specific Content - Scrollable */}
+        <ScrollView
+          style={styles.phaseContentContainerExpanded}
+          contentContainerStyle={styles.phaseContentScrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+        >
+          {renderPhaseContent()}
+        </ScrollView>
+
       </View>
 
-      {/* Race Name */}
-      <Text style={styles.tufteRaceName}>
-        {race.name}
-      </Text>
-
-      {/* Venue */}
-      {race.venue && (
-        <Text style={styles.tufteVenue}>{race.venue}</Text>
-      )}
-
-      {/* Tufte Time Block - Inline countdown with date, start action below */}
-      <View style={styles.tufteTimeBlockExpanded}>
-        {countdown.isPast ? (
-          <Text style={styles.tufteCountdownPast}>Race Completed</Text>
-        ) : (
-          <>
-            <Text style={styles.tufteCountdownLineExpanded}>
-              <Text style={styles.tufteCountdownValueExpanded}>
-                {countdown.days > 0
-                  ? `${countdown.days}d ${countdown.hours}h ${countdown.minutes}m`
-                  : countdown.hours > 0
-                    ? `${countdown.hours}h ${countdown.minutes}m`
-                    : `${countdown.minutes}m`}
-              </Text>
-              {' to start · '}
-              {formatDate(race.date)} {formatTime(race.startTime)}
-            </Text>
-            {/* Distance race extras inline */}
-            {isDistanceRace && (timeLimitHours || totalDistanceNm) && (
-              <Text style={styles.tufteDistanceInfo}>
-                {[
-                  timeLimitHours && `${timeLimitHours}h time limit`,
-                  totalDistanceNm && `${totalDistanceNm}nm`,
-                ].filter(Boolean).join(' · ')}
-              </Text>
-            )}
-            {/* Start timer action - minimal */}
-            <Pressable
-              style={styles.tufteStartAction}
-              onPress={() => {
-                // This would trigger the race timer - keeping RaceCountdownTimer logic
-              }}
-            >
-              <Text style={styles.tufteStartActionText}>▶ Tap when ready to start</Text>
-            </Pressable>
-          </>
-        )}
-      </View>
-
-      {/* Conditions - Tufte flat grid, no label needed */}
-      {hasConditions && (
-        <View style={styles.tufteConditionsExpanded}>
-          <View style={styles.tufteConditionsGrid}>
-            {windData && (
-              <View style={styles.tufteConditionRowExpanded}>
-                <Text style={styles.tufteConditionLabelExpanded}>Wind</Text>
-                <Text style={styles.tufteConditionValueExpanded}>
-                  {windData.direction} {windData.speedMin}–{windData.speedMax}kt
-                </Text>
-                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
-                  <TinySparkline
-                    data={forecastData.windForecast}
-                    width={70}
-                    height={18}
-                    color={IOS_COLORS.secondaryLabel}
-                    nowIndex={forecastData.forecastNowIndex}
-                  />
-                )}
-                {forecastData?.windTrend && (
-                  <Text style={styles.tufteTrendText}>{forecastData.windTrend}</Text>
-                )}
-              </View>
-            )}
-            {tideData && (
-              <View style={styles.tufteConditionRowExpanded}>
-                <Text style={styles.tufteConditionLabelExpanded}>Tide</Text>
-                <Text style={styles.tufteConditionValueExpanded}>
-                  {formatTideState(tideData.state)}
-                  {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
-                </Text>
-                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
-                  <TinySparkline
-                    data={forecastData.tideForecast}
-                    width={70}
-                    height={18}
-                    color={IOS_COLORS.secondaryLabel}
-                    nowIndex={forecastData.forecastNowIndex}
-                    variant="area"
-                  />
-                )}
-                {forecastData?.tidePeakTime && (
-                  <Text style={styles.tufteTrendText}>peak {forecastData.tidePeakTime}</Text>
-                )}
-              </View>
-            )}
-            {vhfChannel && (
-              <View style={styles.tufteConditionRowExpanded}>
-                <Text style={styles.tufteConditionLabelExpanded}>VHF</Text>
-                <Text style={styles.tufteConditionValueExpanded}>Channel {vhfChannel}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Arrival Plan - Tufte flat row */}
-      {!countdown.isPast && (
-        <Pressable onPress={toggleArrivalSection} style={styles.tufteArrivalRow}>
-          <Text style={styles.tufteArrivalLabel}>Arrival</Text>
-          <Text style={styles.tufteArrivalValue}>
-            {arrivalIntention
-              ? formatArrivalTimeDisplay(arrivalIntention.plannedArrival, arrivalIntention.minutesBefore)
-              : 'Set arrival time →'}
-          </Text>
-        </Pressable>
-      )}
-
-      {/* Arrival Options - Only when expanded */}
-      {!countdown.isPast && arrivalExpanded && (
-        <View style={styles.tufteArrivalExpanded}>
-          <View style={styles.tufteArrivalOptions}>
-            {ARRIVAL_TIME_OPTIONS.map((option) => {
-              const isSelected = arrivalIntention?.minutesBefore === option.minutes;
-              return (
-                <Pressable
-                  key={option.minutes}
-                  style={[
-                    styles.tufteArrivalOption,
-                    isSelected && styles.tufteArrivalOptionSelected,
-                  ]}
-                  onPress={() => handleSelectArrivalTime(option.minutes)}
-                >
-                  <Text style={[
-                    styles.tufteArrivalOptionText,
-                    isSelected && styles.tufteArrivalOptionTextSelected,
-                  ]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <TextInput
-            style={styles.tufteArrivalNotes}
-            placeholder="Approach notes..."
-            placeholderTextColor={IOS_COLORS.gray3}
-            value={arrivalNotes}
-            onChangeText={setArrivalNotes}
-            onBlur={handleArrivalNotesBlur}
-            multiline
-          />
-        </View>
-      )}
-
-      {/* Swipe indicator */}
-      <View style={styles.swipeHintBottom}>
-        <View style={styles.swipeIndicator} />
-      </View>
-    </View>
+      {/* Detail Bottom Sheet for drill-down */}
+      <DetailBottomSheet
+        type={activeDetailSheet}
+        isOpen={activeDetailSheet !== null}
+        onClose={handleCloseDetailSheet}
+        raceId={race.id}
+        raceData={raceDataForDetailCards}
+      />
+    </>
   );
 }
 
@@ -676,7 +846,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    // Background controlled by CardShell (allows next race tinting)
   },
 
   // Badges Row (top of card)
@@ -1040,21 +1210,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // Swipe indicator (subtle, positioned at bottom)
-  swipeHintBottom: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  swipeIndicator: {
-    width: 36,
-    height: 4,
-    backgroundColor: IOS_COLORS.gray4,
-    borderRadius: 2,
-  },
-
   // ==========================================================================
   // TUFTE STYLES - Typography IS the interface
   // Maximum data-ink ratio, no decorative elements
@@ -1070,12 +1225,24 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  // Expanded header with menu
-  tufteExpandedHeader: {
+  // Tappable header area for expand/collapse
+  tappableHeader: {
+    marginBottom: 4,
+  },
+
+  // Right side of header (menu + chevron)
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  // Header row with type label and menu
+  tufteHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: 6,
   },
 
   // Race name - primary visual element, large and bold
@@ -1312,6 +1479,233 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     minHeight: 50,
+  },
+
+  // ==========================================================================
+  // TUFTE "ABSENCE AS INTERFACE" STYLES
+  // Empty fields communicate incompleteness through visual sparseness
+  // ==========================================================================
+
+  // Temporal context - subtle gray text showing days since race
+  tufteTemporalContext: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    marginBottom: 12,
+  },
+
+  // Absence fields container (collapsed)
+  tufteAbsenceFields: {
+    gap: 8,
+  },
+
+  // Absence row - label + placeholder
+  tufteAbsenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  // Absence label - fixed width for alignment
+  tufteAbsenceLabel: {
+    width: 80,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Absence placeholder - underscore line indicating missing data
+  tufteAbsencePlaceholder: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.gray3,
+    letterSpacing: 2,
+  },
+
+  // Absence value - actual data when available (increases visual density)
+  tufteAbsenceValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+
+  // Absence fields container (expanded) - more space for interaction
+  tufteAbsenceFieldsExpanded: {
+    gap: 12,
+    marginTop: 8,
+  },
+
+  // Absence row expanded - tappable to open post-race interview
+  tufteAbsenceRowExpanded: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.gray5,
+  },
+
+  // Absence label expanded
+  tufteAbsenceLabelExpanded: {
+    width: 90,
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Absence placeholder expanded
+  tufteAbsencePlaceholderExpanded: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.gray3,
+    letterSpacing: 2,
+  },
+
+  // Absence value expanded - actual data when available
+  tufteAbsenceValueExpanded: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+
+  // ==========================================================================
+  // TEMPORAL PHASE TAB STYLES
+  // ==========================================================================
+
+  // Phase tabs container (expanded)
+  phaseTabs: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.gray5,
+  },
+
+  // Phase tab button (expanded)
+  phaseTab: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    alignItems: 'center',
+    position: 'relative',
+    minWidth: 55,
+  },
+
+  // Phase tab selected state (expanded)
+  phaseTabSelected: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+
+  // Phase tab text (expanded)
+  phaseTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Phase tab text selected (expanded)
+  phaseTabTextSelected: {
+    color: '#FFFFFF',
+  },
+
+  // Phase tabs container (compact - for collapsed view)
+  phaseTabsCompact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 4,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+
+  // Phase tab button (compact)
+  phaseTabCompact: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.gray6,
+    alignItems: 'center',
+    position: 'relative',
+  },
+
+  // Phase tab selected state (compact)
+  phaseTabCompactSelected: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+
+  // Phase tab text (compact)
+  phaseTabTextCompact: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Phase tab text selected (compact)
+  phaseTabTextCompactSelected: {
+    color: '#FFFFFF',
+  },
+
+  // Current phase indicator dot (shows when not selected)
+  phaseCurrentIndicator: {
+    position: 'absolute',
+    bottom: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: IOS_COLORS.orange,
+  },
+
+  // ==========================================================================
+  // PHASE CONTENT CONTAINER STYLES
+  // ==========================================================================
+
+  // Phase content container (collapsed view)
+  phaseContentContainer: {
+    flex: 1,
+    marginBottom: 20,
+  },
+
+  // Phase content container (expanded view - ScrollView)
+  phaseContentContainerExpanded: {
+    flex: 1,
+    marginBottom: 24,
+  },
+
+  // Phase content scroll content (for ScrollView contentContainerStyle)
+  phaseContentScrollContent: {
+    paddingBottom: 20,
+  },
+
+  // Demo race badge (shown when user has no real races)
+  demoBadge: {
+    backgroundColor: '#FEF3C7', // Amber-100
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  demoBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400E', // Amber-800
+    letterSpacing: 0.3,
+  },
+  demoHint: {
+    fontSize: 11,
+    color: '#B45309', // Amber-700
+    marginTop: 2,
   },
 });
 
