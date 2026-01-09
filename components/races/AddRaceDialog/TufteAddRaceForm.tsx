@@ -19,11 +19,12 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  SafeAreaView,
+  
   KeyboardAvoidingView,
   Platform,
   Modal,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, MapPin, ChevronRight } from 'lucide-react-native';
 import { format, addDays } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,6 +40,7 @@ import { TufteDistanceFields } from './TufteDistanceFields';
 import { TufteMatchFields } from './TufteMatchFields';
 import { TufteTeamFields } from './TufteTeamFields';
 import { LocationMapPicker } from '../LocationMapPicker';
+import { ExtractedDetailsSummary } from './ExtractedDetailsSummary';
 
 import type { RaceType } from '../RaceTypeSelector';
 import type { RaceFormData } from './RaceDetailsStep';
@@ -116,13 +118,12 @@ const getSmartDefaults = (lastLocationData?: LastLocationData): FormState => {
 // =============================================================================
 
 export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormProps) {
-  console.log('[TufteAddRaceForm] render, visible:', visible);
-
   // State
   const [formState, setFormState] = useState<FormState>(getSmartDefaults());
   const [errors, setErrors] = useState<FormErrors>({});
   const [aiSectionExpanded, setAiSectionExpanded] = useState(false);
   const [aiExtractedFields, setAiExtractedFields] = useState<Set<string>>(new Set());
+  const [extractedDetailsData, setExtractedDetailsData] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastLocationData, setLastLocationData] = useState<LastLocationData | undefined>();
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -161,6 +162,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       setErrors({});
       setAiSectionExpanded(false);
       setAiExtractedFields(new Set());
+      setExtractedDetailsData(null);
       setShowLocationPicker(false);
     }
   }, [visible, lastLocationData]);
@@ -231,9 +233,15 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
     }
   }, [errors]);
 
-  const handleAIExtracted = useCallback((data: ExtractedRaceData) => {
+  const handleAIExtracted = useCallback((data: ExtractedRaceData, rawData?: any) => {
     const newAiFields = new Set<string>();
     const updates: Partial<FormState> = {};
+
+    // Set race type from extraction if available
+    if (rawData?.raceType && ['fleet', 'distance', 'match', 'team'].includes(rawData.raceType)) {
+      updates.raceType = rawData.raceType as RaceType;
+      newAiFields.add('raceType');
+    }
 
     // Extract basic fields
     data.basic?.forEach((field) => {
@@ -250,14 +258,88 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       } else if (lowerLabel.includes('location') && field.value) {
         updates.location = field.value;
         newAiFields.add('location');
-      } else if (lowerLabel.includes('vhf') && field.value) {
-        updates.vhfChannel = field.value;
-        newAiFields.add('vhfChannel');
       }
     });
 
+    // Extract VHF channel from raw data first (get just the channel number)
+    if (rawData?.vhfChannels && rawData.vhfChannels.length > 0) {
+      const channel = rawData.vhfChannels[0].channel;
+      if (channel) {
+        updates.vhfChannel = channel.toString();
+        newAiFields.add('vhfChannel');
+      }
+    }
+    // Fallback to conditions display data
+    if (!updates.vhfChannel) {
+      data.conditions?.forEach((field) => {
+        const lowerLabel = field.label.toLowerCase();
+        if (lowerLabel.includes('vhf') && field.value) {
+          // Extract just the number if formatted as "Ch 72 (purpose)"
+          const match = field.value.match(/\d+/);
+          updates.vhfChannel = match ? match[0] : field.value;
+          newAiFields.add('vhfChannel');
+        }
+      });
+    }
+
+    // Populate distance-specific fields from raw data
+    if (rawData?.raceType === 'distance') {
+      const distanceData: DistanceRaceData = {};
+
+      if (rawData.totalDistanceNm) {
+        distanceData.totalDistanceNm = rawData.totalDistanceNm.toString();
+        newAiFields.add('distance.totalDistanceNm');
+      }
+      if (rawData.timeLimitHours) {
+        distanceData.timeLimitHours = rawData.timeLimitHours.toString();
+        newAiFields.add('distance.timeLimitHours');
+      }
+
+      // Build route description from waypoints
+      if (rawData.routeWaypoints && rawData.routeWaypoints.length > 0) {
+        const waypointNames = rawData.routeWaypoints.map((wp: any) => wp.name).join(' → ');
+        distanceData.routeDescription = waypointNames;
+        newAiFields.add('distance.routeDescription');
+      } else if (rawData.courseDescription) {
+        distanceData.routeDescription = rawData.courseDescription;
+        newAiFields.add('distance.routeDescription');
+      }
+
+      // Start and finish at different locations for most distance races
+      if (rawData.startAreaName && rawData.finishAreaName) {
+        distanceData.startFinishSameLocation = rawData.startAreaName === rawData.finishAreaName;
+      }
+
+      updates.distance = distanceData;
+    }
+
+    // Populate fleet-specific fields from raw data
+    if (rawData?.raceType === 'fleet') {
+      const fleetData: FleetRaceData = {};
+
+      if (rawData.courseType) {
+        fleetData.courseType = rawData.courseType;
+        newAiFields.add('fleet.courseType');
+      }
+      if (rawData.numberOfLegs) {
+        fleetData.numberOfLegs = rawData.numberOfLegs.toString();
+        newAiFields.add('fleet.numberOfLegs');
+      }
+      if (rawData.eligibleClasses && rawData.eligibleClasses.length > 0) {
+        fleetData.boatClass = rawData.eligibleClasses[0];
+        newAiFields.add('fleet.boatClass');
+      }
+
+      updates.fleet = fleetData;
+    }
+
     setFormState((prev) => ({ ...prev, ...updates }));
     setAiExtractedFields(newAiFields);
+
+    // Store raw extraction data for details summary
+    if (rawData) {
+      setExtractedDetailsData(rawData);
+    }
   }, []);
 
   // Validation
@@ -416,6 +498,11 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
               onExtracted={handleAIExtracted}
               raceType={formState.raceType}
             />
+
+            {/* Extracted Details Summary (shows after extraction) */}
+            {extractedDetailsData && (
+              <ExtractedDetailsSummary data={extractedDetailsData} />
+            )}
 
             {/* Essentials Section */}
             <TufteSectionLabel first>ESSENTIALS</TufteSectionLabel>
