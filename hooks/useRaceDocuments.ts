@@ -98,6 +98,9 @@ export function useRaceDocuments(
   // Ref to track which document we've loaded stored extraction for
   const loadedStoredExtractionForDocRef = useRef<string | null>(null);
 
+  // Ref to track if we have valid extraction data (avoids stale closure issues)
+  const hasExtractedDataRef = useRef<boolean>(false);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -183,14 +186,17 @@ export function useRaceDocuments(
         loadedStoredExtractionForDocRef.current = docId;
 
         if (stored) {
+          // Update ref FIRST (sync) - this prevents race conditions with stale closures
+          hasExtractedDataRef.current = !!stored.data;
           setExtractionResult(stored);
+          setStoredExtractionChecked(true);
+        } else {
+          hasExtractedDataRef.current = false;
+          setStoredExtractionChecked(true);
         }
       } catch (err) {
         logger.warn('Error loading stored extraction', { error: err });
-      } finally {
-        if (isActive) {
-          setStoredExtractionChecked(true);
-        }
+        setStoredExtractionChecked(true);
       }
     };
 
@@ -344,6 +350,7 @@ export function useRaceDocuments(
           raceId,
           documentType,
         }).then((extractResult) => {
+          hasExtractedDataRef.current = !!extractResult.data;
           setExtractionResult(extractResult);
           setIsExtracting(false);
 
@@ -354,6 +361,7 @@ export function useRaceDocuments(
           }
         }).catch((err) => {
           logger.error('Upload extraction error', { error: err });
+          hasExtractedDataRef.current = false;
           setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
           setIsExtracting(false);
         });
@@ -434,6 +442,7 @@ export function useRaceDocuments(
             raceId,
             documentType,
           }).then((extractResult) => {
+            hasExtractedDataRef.current = !!extractResult.data;
             setExtractionResult(extractResult);
             setIsExtracting(false);
 
@@ -444,6 +453,7 @@ export function useRaceDocuments(
             }
           }).catch((err) => {
             logger.error('Extraction error', { error: err });
+            hasExtractedDataRef.current = false;
             setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
             setIsExtracting(false);
           });
@@ -529,6 +539,7 @@ export function useRaceDocuments(
             raceId,
             documentType,
           }).then((extractResult) => {
+            hasExtractedDataRef.current = !!extractResult.data;
             setExtractionResult(extractResult);
             setIsExtracting(false);
 
@@ -539,6 +550,7 @@ export function useRaceDocuments(
             }
           }).catch((err) => {
             logger.error('Text extraction error', { error: err });
+            hasExtractedDataRef.current = false;
             setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
             setIsExtracting(false);
           });
@@ -583,9 +595,14 @@ export function useRaceDocuments(
     (documentUrl: string, documentId: string, documentType: RaceDocumentType) => {
       if (!raceId || isExtracting) return;
 
+      // Check ref to prevent extraction when we already have stored data
+      // This avoids race conditions with stale closure values
+      if (hasExtractedDataRef.current) return;
+
       logger.debug('Triggering extraction for existing document', { documentUrl, documentId, documentType });
       setIsExtracting(true);
       setExtractionResult(null);
+      hasExtractedDataRef.current = false; // Clear ref since we're starting fresh extraction
 
       documentExtractionService.extractAndUpdateRace({
         documentUrl,
@@ -593,6 +610,7 @@ export function useRaceDocuments(
         raceId,
         documentType,
       }).then((extractResult) => {
+        hasExtractedDataRef.current = !!extractResult.data;
         setExtractionResult(extractResult);
         setIsExtracting(false);
 
@@ -603,6 +621,7 @@ export function useRaceDocuments(
         }
       }).catch((err) => {
         logger.error('Triggered extraction error', { error: err });
+        hasExtractedDataRef.current = false;
         setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
         setIsExtracting(false);
       });
@@ -612,6 +631,7 @@ export function useRaceDocuments(
 
   // Clear extraction result (for re-extraction)
   const clearExtractionResult = useCallback(() => {
+    hasExtractedDataRef.current = false; // Allow new extraction
     setExtractionResult(null);
     setStoredExtractionChecked(false);
     loadedStoredExtractionForDocRef.current = null; // Allow re-loading
