@@ -81,9 +81,13 @@ export function BuoyRoundingLesson({ videoSrc, onComplete }: BuoyRoundingLessonP
   // Animation values
   const overlayOpacity = useSharedValue(0);
 
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity.value,
-  }));
+  const overlayStyle = useAnimatedStyle(() => {
+    'worklet';
+    const opacityValue = overlayOpacity.value ?? 0;
+    return {
+      opacity: opacityValue,
+    };
+  });
 
   const handlePlayPause = useCallback(async () => {
     if (!videoRef.current) return;

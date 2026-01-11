@@ -84,7 +84,7 @@ export class RouteWaypointAdviceService {
       const prompt = this.buildAdvicePrompt(context);
 
       const message = await anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 1024,
         temperature: 0.3,
         betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],

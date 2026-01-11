@@ -216,7 +216,7 @@ export class RaceEventService {
 
       // Apply filters
       if (filters?.status) {
-        query = query.eq('race_status', filters.status);
+        query = query.eq('status', filters.status);
       }
       if (filters?.venue_id) {
         query = query.eq('venue_id', filters.venue_id);

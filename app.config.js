@@ -1,10 +1,8 @@
 /**
  * Expo App Configuration
- * Loads environment variables from .env and exposes them via Constants.expoConfig.extra
+ * Environment variables are loaded automatically by Expo from .env files
+ * and available via process.env.EXPO_PUBLIC_*
  */
-
-// Load environment variables
-require('dotenv').config();
 
 module.exports = {
   expo: {
@@ -29,8 +27,8 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.regattaflow.app',
-      config: {
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'YOUR_GOOGLE_MAPS_IOS_API_KEY',
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
@@ -67,6 +65,7 @@ module.exports = {
     plugins: [
       'expo-router',
       './plugins/withAndroidDependencyFix',
+      './plugins/withGoogleMaps',
     ],
     updates: {
       enabled: false,

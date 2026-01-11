@@ -1,32 +1,44 @@
 /**
  * CrewManagement Component
- * Manages crew members for a boat/class
+ *
+ * Tufte-style crew management with dense table layout.
+ * Typography hierarchy replaces decorative cards and badges.
+ *
+ * Design principles:
+ * - Maximum data-ink ratio
+ * - Inline status dots (not colored badges)
+ * - Dense, scannable layout
+ * - Whitespace separation (no background fills)
  */
 
 import {
-    AvailabilityStatus,
-    CrewCertification,
-    CrewInvite,
-    crewManagementService,
-    CrewMember,
-    CrewMemberWithAvailability,
-    CrewRole
+  AvailabilityStatus,
+  CrewInvite,
+  crewManagementService,
+  CrewMember,
+  CrewMemberWithAvailability,
+  CrewRole,
 } from '@/services/crewManagementService';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { CardMenu, CardMenuItem } from '../shared';
 import { createLogger } from '@/lib/utils/logger';
+import {
+  tufteCrewStyles as styles,
+  STATUS_COLORS,
+  ROLE_ABBREVIATIONS,
+} from './crewStyles';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 interface CrewManagementProps {
   sailorId: string;
@@ -39,25 +51,16 @@ interface CrewManagementProps {
 }
 
 const logger = createLogger('CrewManagement');
-const ROLE_ICONS: Record<CrewRole, string> = {
-  helmsman: 'navigate-circle',
-  tactician: 'compass',
-  trimmer: 'hand-left',
-  bowman: 'arrow-up-circle',
-  pit: 'construct',
-  grinder: 'fitness',
-  other: 'person',
-};
 
-const ROLE_COLORS: Record<CrewRole, string> = {
-  helmsman: '#3B82F6',
-  tactician: '#8B5CF6',
-  trimmer: '#10B981',
-  bowman: '#F59E0B',
-  pit: '#EF4444',
-  grinder: '#6366F1',
-  other: '#64748B',
-};
+const ROLES: CrewRole[] = [
+  'helmsman',
+  'tactician',
+  'trimmer',
+  'bowman',
+  'pit',
+  'grinder',
+  'other',
+];
 
 export function CrewManagement({
   sailorId,
@@ -95,9 +98,12 @@ export function CrewManagement({
   const loadCrew = async () => {
     try {
       setLoading(true);
-      // Get crew with availability for today
       const today = new Date().toISOString().split('T')[0];
-      const data = await crewManagementService.getCrewWithAvailability(sailorId, classId, today);
+      const data = await crewManagementService.getCrewWithAvailability(
+        sailorId,
+        classId,
+        today
+      );
       setCrew(data);
     } catch (err) {
       console.error('Error loading crew:', err);
@@ -113,8 +119,6 @@ export function CrewManagement({
     }
 
     try {
-      // If email is provided, send an invite (creates pending member)
-      // If no email, add directly (creates active member)
       if (inviteForm.email && inviteForm.email.trim()) {
         await crewManagementService.inviteCrewMember(sailorId, classId, inviteForm);
         Alert.alert('Success', `Invite sent to ${inviteForm.name}`);
@@ -133,43 +137,48 @@ export function CrewManagement({
       loadCrew();
     } catch (err: any) {
       if (err?.queuedForSync && err?.entity) {
-        setCrew(prev => [...prev, err.entity as CrewMember]);
+        setCrew((prev) => [...prev, err.entity as CrewMember]);
         const action = inviteForm.email ? 'invited' : 'added';
-        Alert.alert('Offline', `${inviteForm.name} will be ${action} once you're back online.`);
+        Alert.alert(
+          'Offline',
+          `${inviteForm.name} will be ${action} once you're back online.`
+        );
         setShowInviteModal(false);
         setInviteForm({ email: '', name: '', role: 'trimmer' });
       } else {
         console.error('Error adding/inviting crew:', err);
-        Alert.alert('Error', inviteForm.email ? 'Failed to send invite' : 'Failed to add crew member');
+        Alert.alert(
+          'Error',
+          inviteForm.email ? 'Failed to send invite' : 'Failed to add crew member'
+        );
       }
     }
   };
 
   const handleRemoveCrew = (member: CrewMember) => {
-    Alert.alert(
-      'Remove Crew Member',
-      `Remove ${member.name} from your crew?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await crewManagementService.removeCrewMember(member.id);
-              loadCrew();
-            } catch (err: any) {
-              if (err?.queuedForSync) {
-                setCrew(prev => prev.filter(c => c.id !== member.id));
-                Alert.alert('Offline', `${member.name} will be removed when you're back online.`);
-              } else {
-                Alert.alert('Error', 'Failed to remove crew member');
-              }
+    Alert.alert('Remove Crew Member', `Remove ${member.name} from your crew?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await crewManagementService.removeCrewMember(member.id);
+            loadCrew();
+          } catch (err: any) {
+            if (err?.queuedForSync) {
+              setCrew((prev) => prev.filter((c) => c.id !== member.id));
+              Alert.alert(
+                'Offline',
+                `${member.name} will be removed when you're back online.`
+              );
+            } else {
+              Alert.alert('Error', 'Failed to remove crew member');
             }
-          },
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleResendInvite = async (member: CrewMember) => {
@@ -207,10 +216,16 @@ export function CrewManagement({
     } catch (err: any) {
       if (err?.queuedForSync && err?.entity?.updates) {
         const updates = err.entity.updates as Partial<CrewMember>;
-        setCrew(prev => prev.map(crewMember => {
-          if (crewMember.id !== selectedMember.id) return crewMember;
-          return { ...crewMember, ...updates, queuedForSync: true } as CrewMember;
-        }));
+        setCrew((prev) =>
+          prev.map((crewMember) => {
+            if (crewMember.id !== selectedMember.id) return crewMember;
+            return {
+              ...crewMember,
+              ...updates,
+              queuedForSync: true,
+            } as CrewMember;
+          })
+        );
         Alert.alert('Offline', 'Changes saved locally and will sync when online.');
         setShowEditModal(false);
         setSelectedMember(null);
@@ -237,299 +252,311 @@ export function CrewManagement({
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return '#10B981';
-      case 'pending':
-        return '#F59E0B';
-      case 'inactive':
-        return '#94A3B8';
+  // ---------------------------------------------------------------------------
+  // STATUS HELPERS
+  // ---------------------------------------------------------------------------
+
+  const getAvailabilityLabel = (availability?: AvailabilityStatus): string => {
+    switch (availability) {
+      case 'available':
+        return 'available';
+      case 'unavailable':
+        return 'unavailable';
+      case 'tentative':
+        return 'tentative';
       default:
-        return '#64748B';
+        return 'available';
     }
   };
 
-  const getAvailabilityColor = (availability?: AvailabilityStatus) => {
+  const getAvailabilityColor = (availability?: AvailabilityStatus): string => {
     switch (availability) {
       case 'available':
-        return '#10B981';
+        return STATUS_COLORS.available;
       case 'unavailable':
-        return '#EF4444';
+        return STATUS_COLORS.unavailable;
       case 'tentative':
-        return '#F59E0B';
+        return STATUS_COLORS.tentative;
       default:
-        return '#10B981'; // Default to available
+        return STATUS_COLORS.available;
     }
   };
 
-  const getAvailabilityLabel = (availability?: AvailabilityStatus) => {
-    switch (availability) {
-      case 'available':
-        return 'Available';
-      case 'unavailable':
-        return 'Unavailable';
-      case 'tentative':
-        return 'Tentative';
-      default:
-        return 'Available';
+  // ---------------------------------------------------------------------------
+  // MENU ITEMS BUILDER
+  // ---------------------------------------------------------------------------
+
+  const buildMenuItems = (member: CrewMemberWithAvailability): CardMenuItem[] => {
+    const items: CardMenuItem[] = [
+      {
+        label: 'Edit',
+        icon: 'create-outline',
+        onPress: () => handleEditCrew(member),
+      },
+      {
+        label: 'Availability',
+        icon: 'calendar-outline',
+        onPress: () => {
+          if (onSelectMemberForAvailability) {
+            onSelectMemberForAvailability(member);
+          }
+        },
+      },
+      {
+        label: member.isPrimary ? 'Remove Primary' : 'Set Primary',
+        icon: 'star-outline',
+        onPress: () => handleTogglePrimary(member),
+      },
+    ];
+
+    if (member.status === 'pending') {
+      items.push({
+        label: 'Resend Invite',
+        icon: 'mail-outline',
+        onPress: () => handleResendInvite(member),
+      });
     }
+
+    items.push({
+      label: 'Remove',
+      icon: 'trash-outline',
+      onPress: () => handleRemoveCrew(member),
+      variant: 'destructive' as const,
+    });
+
+    return items;
   };
+
+  // ---------------------------------------------------------------------------
+  // RENDER: STATUS DOT
+  // ---------------------------------------------------------------------------
+
+  const renderStatusDot = (member: CrewMemberWithAvailability) => {
+    const isPending = member.status === 'pending';
+    const availabilityColor = getAvailabilityColor(member.currentAvailability);
+
+    if (isPending) {
+      // Outline dot for pending invites
+      return (
+        <View
+          style={[
+            styles.statusDotOutline,
+            { borderColor: STATUS_COLORS.pending },
+          ]}
+        />
+      );
+    }
+
+    return (
+      <View
+        style={[styles.statusDot, { backgroundColor: availabilityColor }]}
+      />
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // RENDER: CREW ROW
+  // ---------------------------------------------------------------------------
+
+  const renderCrewRow = (
+    member: CrewMemberWithAvailability,
+    index: number,
+    isLast: boolean
+  ) => {
+    const isPending = member.status === 'pending';
+    const statusLabel = isPending
+      ? 'pending'
+      : getAvailabilityLabel(member.currentAvailability);
+    const roleAbbrev = ROLE_ABBREVIATIONS[member.role] || member.role;
+
+    return (
+      <View
+        key={member.id}
+        style={[styles.crewRow, isLast && styles.crewRowLast]}
+      >
+        {/* Name & Email */}
+        <View style={styles.nameColumn}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.crewName} numberOfLines={1}>
+              {member.name}
+            </Text>
+            {member.isPrimary && (
+              <Ionicons
+                name="star"
+                size={12}
+                color={IOS_COLORS.orange}
+                style={styles.primaryStar}
+              />
+            )}
+          </View>
+          {member.email && (
+            <Text style={styles.crewEmail} numberOfLines={1}>
+              {member.email}
+            </Text>
+          )}
+        </View>
+
+        {/* Role */}
+        <View style={styles.roleColumn}>
+          <Text style={styles.crewRole}>{roleAbbrev}</Text>
+        </View>
+
+        {/* Status */}
+        <View style={styles.statusColumn}>
+          {renderStatusDot(member)}
+          <Text style={styles.statusLabel}>{statusLabel}</Text>
+        </View>
+
+        {/* Actions */}
+        <View style={styles.actionsColumn}>
+          <CardMenu items={buildMenuItems(member)} />
+        </View>
+      </View>
+    );
+  };
+
+  // ---------------------------------------------------------------------------
+  // RENDER: ROLE SELECTOR (for modals)
+  // ---------------------------------------------------------------------------
+
+  const renderRoleSelector = (
+    selectedRole: CrewRole,
+    onSelect: (role: CrewRole) => void
+  ) => (
+    <View style={styles.roleSelector}>
+      {ROLES.map((role) => {
+        const isSelected = selectedRole === role;
+        const label = role.charAt(0).toUpperCase() + role.slice(1);
+
+        return (
+          <TouchableOpacity
+            key={role}
+            style={[styles.roleOption, isSelected && styles.roleOptionSelected]}
+            onPress={() => onSelect(role)}
+          >
+            <Text
+              style={[
+                styles.roleOptionText,
+                isSelected && styles.roleOptionTextSelected,
+              ]}
+            >
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+  // ---------------------------------------------------------------------------
+  // LOADING STATE
+  // ---------------------------------------------------------------------------
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="small" color="#3B82F6" />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="small" color={IOS_COLORS.gray} />
       </View>
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // COMPACT VIEW (simplified list with manage link)
+  // ---------------------------------------------------------------------------
 
   if (compact) {
+    const displayCrew = crew.slice(0, 3);
+    const remaining = crew.length - 3;
+    const pendingCount = crew.filter((c) => c.status === 'pending').length;
+
     return (
       <View style={styles.container}>
-        <View style={styles.compactHeader}>
-          <View style={styles.headerLeft}>
-            <Ionicons name="people" size={18} color="#3B82F6" />
-            <Text style={styles.compactTitle}>
-              My Crew - {className}
-              {sailNumber && ` #${sailNumber}`}
-            </Text>
-          </View>
-          {onManagePress && (
-            <TouchableOpacity onPress={onManagePress}>
-              <Ionicons name="chevron-forward" size={20} color="#3B82F6" />
-            </TouchableOpacity>
+        {/* Section Header */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {className}
+            {sailNumber ? ` #${sailNumber}` : ''}
+          </Text>
+          <Text style={styles.sectionMeta}>
+            {crew.length} crew
+            {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+          </Text>
+        </View>
+
+        {/* Crew List */}
+        <View style={styles.crewList}>
+          {displayCrew.map((member, index) =>
+            renderCrewRow(member, index, index === displayCrew.length - 1 && remaining === 0)
           )}
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.crewScroll}
-        >
-          {crew.slice(0, 3).map((member) => (
-            <View key={member.id} style={styles.crewAvatarCard}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: ROLE_COLORS[member.role] + '20' },
-                ]}
-              >
-                <Ionicons
-                  name={ROLE_ICONS[member.role] as any}
-                  size={20}
-                  color={ROLE_COLORS[member.role]}
-                />
-              </View>
-              <Text style={styles.avatarName} numberOfLines={1}>
-                {member.name.split(' ')[0]}
-              </Text>
-              <Text style={styles.avatarRole}>{member.role}</Text>
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: getStatusColor(member.status) },
-                ]}
-              />
-            </View>
-          ))}
-
-          {crew.length > 3 && (
-            <TouchableOpacity style={styles.moreCard} onPress={onManagePress}>
-              <Text style={styles.moreText}>+{crew.length - 3}</Text>
-              <Text style={styles.moreLabel}>more</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.addCrewCard}
-            onPress={() => setShowInviteModal(true)}
-          >
-            <Ionicons name="add-circle-outline" size={24} color="#3B82F6" />
-            <Text style={styles.addCrewText}>Add Crew</Text>
+        {/* More link if needed */}
+        {remaining > 0 && onManagePress && (
+          <TouchableOpacity style={styles.addCrewLink} onPress={onManagePress}>
+            <Text style={styles.addCrewText}>
+              +{remaining} more · View all
+            </Text>
           </TouchableOpacity>
-        </ScrollView>
+        )}
       </View>
     );
   }
 
-  // Full view
+  // ---------------------------------------------------------------------------
+  // FULL VIEW
+  // ---------------------------------------------------------------------------
+
+  const pendingCount = crew.filter((c) => c.status === 'pending').length;
+  const activeCount = crew.filter((c) => c.status !== 'pending').length;
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerIconWrap}>
-            <Text style={styles.headerIcon}>👥</Text>
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>Crew</Text>
-            <Text style={styles.headerSubtitle}>
-              {className ? `Invite teammates for ${className}` : 'Invite your teammates'}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.inviteButton}
-          onPress={() => setShowInviteModal(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="person-add-outline" size={18} color="#047857" />
-          <Text style={styles.inviteButtonText}>Add Crew</Text>
-        </TouchableOpacity>
+      {/* Section Header with marginalia */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{className || 'Crew'}</Text>
+        <Text style={styles.sectionMeta}>
+          {activeCount} active
+          {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+        </Text>
       </View>
 
+      {/* Crew List or Empty State */}
       {crew.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="people-outline" size={48} color="#CBD5E1" />
-          <Text style={styles.emptyTitle}>No Crew Members Yet</Text>
           <Text style={styles.emptyText}>
-            Invite your crew to share strategies and collaborate
+            No crew members yet. Add teammates to share strategies and
+            collaborate.
           </Text>
           <TouchableOpacity
-            style={styles.emptyButton}
+            style={styles.addCrewLink}
             onPress={() => setShowInviteModal(true)}
           >
-            <Ionicons name="add-circle" size={20} color="#FFFFFF" />
-            <Text style={styles.emptyButtonText}>Add First Member</Text>
+            <Ionicons name="add" size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.addCrewText}>Add crew member</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.crewScroll}
-        >
-          {crew.map((member) => {
-            const crewMenuItems: CardMenuItem[] = [
-              {
-                label: 'View Profile',
-                icon: 'person-outline',
-                onPress: () => logger.debug('View profile:', member.id),
-              },
-              {
-                label: 'Edit Details',
-                icon: 'create-outline',
-                onPress: () => handleEditCrew(member),
-              },
-              {
-                label: 'Set Availability',
-                icon: 'calendar-outline',
-                onPress: () => {
-                  if (onSelectMemberForAvailability) {
-                    onSelectMemberForAvailability(member);
-                  }
-                },
-              },
-              {
-                label: member.isPrimary ? 'Remove from Primary' : 'Set as Primary',
-                icon: 'star',
-                onPress: () => handleTogglePrimary(member),
-              },
-            ];
+        <>
+          <View style={styles.crewList}>
+            {crew.map((member, index) =>
+              renderCrewRow(member, index, index === crew.length - 1)
+            )}
+          </View>
 
-            if (member.status === 'pending') {
-              crewMenuItems.push({
-                label: 'Resend Invite',
-                icon: 'mail-outline',
-                onPress: () => handleResendInvite(member),
-              });
-            }
-
-            crewMenuItems.push({
-              label: 'Remove',
-              icon: 'trash-outline',
-              onPress: () => handleRemoveCrew(member),
-              variant: 'destructive' as const,
-            });
-
-            return (
-              <View key={member.id} style={styles.crewCard}>
-                <View style={styles.cardHeader}>
-                  <View
-                    style={[
-                      styles.statusDot,
-                      { backgroundColor: getStatusColor(member.status) },
-                    ]}
-                  />
-                  <CardMenu items={crewMenuItems} />
-                </View>
-
-                <View
-                  style={[
-                    styles.crewIcon,
-                    { backgroundColor: ROLE_COLORS[member.role] + '20' },
-                  ]}
-                >
-                  <Ionicons
-                    name={ROLE_ICONS[member.role] as any}
-                    size={32}
-                    color={ROLE_COLORS[member.role]}
-                  />
-                </View>
-
-                <View style={styles.crewInfo}>
-                  <View style={styles.crewNameRow}>
-                    <Text style={styles.crewName} numberOfLines={1}>{member.name}</Text>
-                    {member.isPrimary && (
-                      <View style={styles.primaryBadge}>
-                        <Ionicons name="star" size={12} color="#F59E0B" />
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.crewEmail} numberOfLines={1}>{member.email}</Text>
-                  <View style={styles.badgeRow}>
-                    <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[member.role] + '15' }]}>
-                      <Text style={[styles.roleText, { color: ROLE_COLORS[member.role] }]}>
-                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                      </Text>
-                    </View>
-                    {member.currentAvailability && (
-                      <View style={[styles.availabilityBadge, { backgroundColor: getAvailabilityColor(member.currentAvailability) + '15' }]}>
-                        <View style={[styles.availabilityDot, { backgroundColor: getAvailabilityColor(member.currentAvailability) }]} />
-                        <Text style={[styles.availabilityText, { color: getAvailabilityColor(member.currentAvailability) }]}>
-                          {getAvailabilityLabel(member.currentAvailability)}
-                        </Text>
-                      </View>
-                    )}
-                    {member.certifications && member.certifications.length > 0 && (
-                      <View style={styles.certificationsBadge}>
-                        <Ionicons name="shield-checkmark" size={12} color="#10B981" />
-                        <Text style={styles.certificationsText}>{member.certifications.length}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {member.status === 'pending' && (
-                  <View style={styles.pendingBadge}>
-                    <Text style={styles.pendingText}>Pending</Text>
-                  </View>
-                )}
-
-                {member.nextUnavailable && (
-                  <View style={styles.nextUnavailableBadge}>
-                    <Ionicons name="calendar-outline" size={12} color="#F59E0B" />
-                    <Text style={styles.nextUnavailableText}>
-                      Next unavailable: {new Date(member.nextUnavailable.startDate).toLocaleDateString()}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-
-          {/* Add Crew Card */}
+          {/* Add Crew Link */}
           <TouchableOpacity
-            style={styles.addCrewCardFull}
+            style={styles.addCrewLink}
             onPress={() => setShowInviteModal(true)}
           >
-            <Ionicons name="add-circle-outline" size={32} color="#3B82F6" />
-            <Text style={styles.addCrewTextFull}>Add Crew</Text>
+            <Ionicons name="add" size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.addCrewText}>Add crew member</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </>
       )}
 
-      {/* Invite Modal */}
+      {/* ===================================================================== */}
+      {/* INVITE MODAL */}
+      {/* ===================================================================== */}
       <Modal
         visible={showInviteModal}
         animationType="slide"
@@ -538,93 +565,69 @@ export function CrewManagement({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Crew Member</Text>
-              <TouchableOpacity onPress={() => setShowInviteModal(false)}>
-                <Ionicons name="close" size={24} color="#64748B" />
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowInviteModal(false)}
+              >
+                <Ionicons name="close" size={24} color={IOS_COLORS.gray} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.form}>
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={inviteForm.name}
-                  onChangeText={(name) => setInviteForm({ ...inviteForm, name })}
-                  placeholder="Enter name"
-                  placeholderTextColor="#94A3B8"
-                />
-              </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.form}>
+                {/* Name */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>NAME</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={inviteForm.name}
+                    onChangeText={(name) =>
+                      setInviteForm({ ...inviteForm, name })
+                    }
+                    placeholder="Enter name"
+                    placeholderTextColor={IOS_COLORS.gray2}
+                  />
+                </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Email (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={inviteForm.email}
-                  onChangeText={(email) =>
-                    setInviteForm({ ...inviteForm, email: email.toLowerCase() })
-                  }
-                  placeholder="Enter email to send invite"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-                <Text style={styles.helperText}>
-                  {inviteForm.email 
-                    ? 'An invite will be sent to this email address'
-                    : 'Leave blank to add crew member without sending invite'}
-                </Text>
-              </View>
+                {/* Email */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>EMAIL (OPTIONAL)</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={inviteForm.email}
+                    onChangeText={(email) =>
+                      setInviteForm({ ...inviteForm, email: email.toLowerCase() })
+                    }
+                    placeholder="Enter email to send invite"
+                    placeholderTextColor={IOS_COLORS.gray2}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.formHelperText}>
+                    {inviteForm.email
+                      ? 'An invite will be sent to this email'
+                      : 'Leave blank to add without invite'}
+                  </Text>
+                </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Role</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.roleSelector}
-                >
-                  {(['helmsman', 'tactician', 'trimmer', 'bowman', 'pit', 'grinder', 'other'] as CrewRole[]).map(
-                    (role) => (
-                      <TouchableOpacity
-                        key={role}
-                        style={[
-                          styles.roleChip,
-                          inviteForm.role === role && styles.roleChipActive,
-                          inviteForm.role === role && {
-                            backgroundColor: ROLE_COLORS[role],
-                          },
-                        ]}
-                        onPress={() => setInviteForm({ ...inviteForm, role })}
-                      >
-                        <Ionicons
-                          name={ROLE_ICONS[role] as any}
-                          size={16}
-                          color={
-                            inviteForm.role === role ? '#FFFFFF' : ROLE_COLORS[role]
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.roleChipText,
-                            inviteForm.role === role && styles.roleChipTextActive,
-                          ]}
-                        >
-                          {role.charAt(0).toUpperCase() + role.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    )
+                {/* Role */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>ROLE</Text>
+                  {renderRoleSelector(inviteForm.role, (role) =>
+                    setInviteForm({ ...inviteForm, role })
                   )}
-                </ScrollView>
+                </View>
               </View>
-            </View>
+            </ScrollView>
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleInviteCrew}>
-              <Ionicons 
-                name={inviteForm.email ? "send" : "add-circle"} 
-                size={18} 
-                color="#FFFFFF" 
-              />
+            {/* Submit */}
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleInviteCrew}
+            >
               <Text style={styles.submitButtonText}>
                 {inviteForm.email ? 'Send Invite' : 'Add Crew Member'}
               </Text>
@@ -633,7 +636,9 @@ export function CrewManagement({
         </View>
       </Modal>
 
-      {/* Edit Modal */}
+      {/* ===================================================================== */}
+      {/* EDIT MODAL */}
+      {/* ===================================================================== */}
       <Modal
         visible={showEditModal}
         animationType="slide"
@@ -642,83 +647,62 @@ export function CrewManagement({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Crew Member</Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <Ionicons name="close" size={24} color="#64748B" />
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Ionicons name="close" size={24} color={IOS_COLORS.gray} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.form}>
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editForm.name}
-                  onChangeText={(name) => setEditForm({ ...editForm, name })}
-                  placeholder="Enter name"
-                  placeholderTextColor="#94A3B8"
-                />
-              </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.form}>
+                {/* Name */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>NAME</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editForm.name}
+                    onChangeText={(name) => setEditForm({ ...editForm, name })}
+                    placeholder="Enter name"
+                    placeholderTextColor={IOS_COLORS.gray2}
+                  />
+                </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Role</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.roleSelector}
-                >
-                  {(['helmsman', 'tactician', 'trimmer', 'bowman', 'pit', 'grinder', 'other'] as CrewRole[]).map(
-                    (role) => (
-                      <TouchableOpacity
-                        key={role}
-                        style={[
-                          styles.roleChip,
-                          editForm.role === role && styles.roleChipActive,
-                          editForm.role === role && {
-                            backgroundColor: ROLE_COLORS[role],
-                          },
-                        ]}
-                        onPress={() => setEditForm({ ...editForm, role })}
-                      >
-                        <Ionicons
-                          name={ROLE_ICONS[role] as any}
-                          size={16}
-                          color={
-                            editForm.role === role ? '#FFFFFF' : ROLE_COLORS[role]
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.roleChipText,
-                            editForm.role === role && styles.roleChipTextActive,
-                          ]}
-                        >
-                          {role.charAt(0).toUpperCase() + role.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    )
+                {/* Role */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>ROLE</Text>
+                  {renderRoleSelector(editForm.role, (role) =>
+                    setEditForm({ ...editForm, role })
                   )}
-                </ScrollView>
-              </View>
+                </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Notes</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={editForm.notes}
-                  onChangeText={(notes) => setEditForm({ ...editForm, notes })}
-                  placeholder="Add notes about this crew member..."
-                  placeholderTextColor="#94A3B8"
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
+                {/* Notes */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>NOTES</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.formTextArea]}
+                    value={editForm.notes}
+                    onChangeText={(notes) =>
+                      setEditForm({ ...editForm, notes })
+                    }
+                    placeholder="Add notes..."
+                    placeholderTextColor={IOS_COLORS.gray2}
+                    multiline
+                    numberOfLines={4}
+                  />
+                </View>
               </View>
-            </View>
+            </ScrollView>
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleSaveEdit}>
-              <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+            {/* Submit */}
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleSaveEdit}
+            >
               <Text style={styles.submitButtonText}>Save Changes</Text>
             </TouchableOpacity>
           </View>
@@ -727,418 +711,3 @@ export function CrewManagement({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 20,
-    padding: 20,
-    marginVertical: 12,
-    marginHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    boxShadow: '0px 4px',
-    elevation: 4,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#DCFCE7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerIcon: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#047857',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#064E3B',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#047857',
-    marginTop: 2,
-  },
-  inviteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-  },
-  inviteButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#047857',
-  },
-  compactHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  compactTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  crewScroll: {
-    gap: 12,
-  },
-  crewAvatarCard: {
-    alignItems: 'center',
-    width: 80,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  avatarName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  avatarRole: {
-    fontSize: 10,
-    color: '#64748B',
-    textTransform: 'capitalize',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  moreCard: {
-    width: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    paddingVertical: 12,
-  },
-  moreText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#3B82F6',
-  },
-  moreLabel: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  addCrewCard: {
-    width: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingVertical: 12,
-    gap: 4,
-  },
-  addCrewText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#3B82F6',
-  },
-  addCrewCardFull: {
-    width: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-  },
-  addCrewTextFull: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#3B82F6',
-  },
-  crewScroll: {
-    gap: 12,
-    paddingVertical: 4,
-  },
-  crewCard: {
-    width: 200,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    boxShadow: '0px 6px',
-    elevation: 5,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  crewIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    alignSelf: 'center',
-  },
-  crewInfo: {
-    gap: 4,
-  },
-  crewNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  crewName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  primaryBadge: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 4,
-  },
-  crewEmail: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  roleText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  availabilityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  availabilityDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  availabilityText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  certificationsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#D1FAE5',
-    alignSelf: 'flex-start',
-  },
-  certificationsText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#10B981',
-  },
-  nextUnavailableBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 6,
-  },
-  nextUnavailableText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#D97706',
-  },
-  pendingBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-  },
-  pendingText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#D97706',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-    marginTop: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#94A3B8',
-    marginTop: 4,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  emptyButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  form: {
-    gap: 16,
-    marginBottom: 24,
-  },
-  formGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-    color: '#1E293B',
-    backgroundColor: '#F8FAFC',
-  },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 12,
-  },
-  roleSelector: {
-    gap: 8,
-  },
-  roleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-  },
-  roleChipActive: {
-    borderColor: 'transparent',
-  },
-  roleChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  roleChipTextActive: {
-    color: '#FFFFFF',
-  },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#3B82F6',
-    paddingVertical: 16,
-    borderRadius: 12,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-});

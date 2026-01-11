@@ -12,14 +12,15 @@ import { createLogger } from '@/lib/utils/logger';
 import {
   ActivityIndicator,
   Platform,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 export default function BoatsScreen() {
   const { user } = useAuth();
   const [boats, setBoats] = useState<SailorBoat[]>([]);

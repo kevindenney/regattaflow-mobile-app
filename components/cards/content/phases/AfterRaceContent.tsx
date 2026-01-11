@@ -12,28 +12,16 @@
 
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, Animated } from 'react-native';
-import { Trophy, Wrench, Brain, MessageSquare, RefreshCw, Check, ChevronRight } from 'lucide-react-native';
+import { Trophy, Wrench, Brain, MessageSquare, RefreshCw, Check, ChevronRight, ClipboardList } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
 import { useRaceAnalysisState } from '@/hooks/useRaceAnalysisState';
 import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
 import { useEquipmentFlow } from '@/hooks/useEquipmentFlow';
-import { usePhaseRatings, PHASE_KEYS, type PhaseKey } from '@/hooks/usePhaseRatings';
+import { useDebriefInterview } from '@/hooks/useDebriefInterview';
 import { Marginalia } from '@/components/ui/Marginalia';
 import { RaceAnalysisService } from '@/services/RaceAnalysisService';
-import { PhaseRatingItem, type RacePhaseKey } from '@/components/races/review/PhaseRatingItem';
-import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
-import type { PersonalizedNudge, LearnableEventType } from '@/types/adaptiveLearning';
-
-// Phase-to-nudge category mapping for structured debrief
-const PHASE_NUDGE_MAPPING: Record<RacePhaseKey, LearnableEventType[]> = {
-  prestart: ['successful_strategy', 'venue_learning'],
-  start: ['successful_strategy', 'performance_issue'],
-  upwind: ['venue_learning', 'weather_adaptation', 'performance_issue'],
-  windwardMark: ['venue_learning'],
-  downwind: ['venue_learning', 'successful_strategy', 'weather_adaptation'],
-  leewardMark: ['venue_learning'],
-};
+import { StructuredDebriefInterview } from '@/components/races/review/StructuredDebriefInterview';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -127,41 +115,17 @@ export function AfterRaceContent({
   const { state: analysisState, refetch: refetchState } = useRaceAnalysisState(race.id, race.date, userId);
   const { analysisData, refetch: refetchData } = useRaceAnalysisData(race.id, userId);
 
-  // Phase ratings for structured debrief
+  // Structured debrief interview
   const {
-    ratings: phaseRatings,
-    setRating: setPhaseRating,
-    setNote: setPhaseNote,
-    isComplete: allPhasesRated,
-    completedCount: phasesCompletedCount,
-    isSaving: isSavingPhaseRatings,
-  } = usePhaseRatings({
+    progress: debriefProgress,
+    isComplete: debriefComplete,
+  } = useDebriefInterview({
     raceId: race.id,
     userId,
   });
 
-  // Personalized nudges for phase-specific learning
-  const {
-    nudgeSet,
-    recordDelivery: recordNudgeDelivery,
-  } = usePersonalizedNudges(race.id);
-
-  // Filter nudges by phase category
-  const getNudgesForPhase = useCallback((phase: RacePhaseKey): PersonalizedNudge[] => {
-    if (!nudgeSet) return [];
-    const relevantCategories = PHASE_NUDGE_MAPPING[phase] || [];
-    const allNudges = [
-      ...nudgeSet.venueInsights,
-      ...nudgeSet.conditionsInsights,
-      ...nudgeSet.reminders,
-    ];
-    return allNudges.filter(n => relevantCategories.includes(n.category));
-  }, [nudgeSet]);
-
-  // Handle recording nudge delivery
-  const handleRecordNudgeDelivery = useCallback((nudgeId: string, channel: string) => {
-    recordNudgeDelivery({ learnableEventId: nudgeId, channel: channel as any });
-  }, [recordNudgeDelivery]);
+  // Modal state for interview
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
 
   // Equipment flow for cross-race issue tracking
   // Note: Don't pass boatId so storage key matches useRaceChecklist
@@ -270,13 +234,13 @@ export function AfterRaceContent({
   // RENDER
   // ==========================================================================
 
-  // Calculate progress (8 items: 1 result + 6 phases + 1 equipment)
+  // Calculate progress (3 main items: 1 result + 1 debrief + 1 equipment)
   const hasEquipmentNote = equipmentNotes.trim().length > 0;
-  // Count: 1 (result) + phasesCompletedCount (0-6) + 1 (equipment if set)
-  const completedCount = (hasResult ? 1 : 0) + phasesCompletedCount + (hasEquipmentNote ? 1 : 0);
-  const totalItems = 8;
-  // AI enabled when result + all 6 phases rated
-  const canGenerateAI = hasResult && allPhasesRated;
+  // Count: 1 (result) + 1 (debrief complete) + 1 (equipment if set)
+  const completedCount = (hasResult ? 1 : 0) + (debriefComplete ? 1 : 0) + (hasEquipmentNote ? 1 : 0);
+  const totalItems = 3;
+  // AI enabled when result + debrief complete
+  const canGenerateAI = hasResult && debriefComplete;
 
   return (
     <View style={styles.container}>
@@ -303,34 +267,49 @@ export function AfterRaceContent({
         )}
       </ReviewChecklistItem>
 
-      {/* Phase Ratings Section - Structured Debrief */}
-      {isExpanded && (
-        <View style={styles.phaseRatingsSection}>
-          <Text style={styles.phaseSectionLabel}>RATE EACH PHASE</Text>
-          {PHASE_KEYS.map((phase) => (
-            <PhaseRatingItem
-              key={phase}
-              phase={phase as RacePhaseKey}
-              rating={phaseRatings[phase]?.rating}
-              note={phaseRatings[phase]?.note}
-              onRatingChange={(rating) => setPhaseRating(phase, rating)}
-              onNoteChange={(note) => setPhaseNote(phase, note)}
-              nudges={getNudgesForPhase(phase as RacePhaseKey)}
-              onRecordNudgeDelivery={handleRecordNudgeDelivery}
-              disabled={isSavingPhaseRatings}
-            />
-          ))}
-        </View>
-      )}
-
-      {/* Collapsed Phase Progress (when not expanded) */}
-      {!isExpanded && (
-        <View style={styles.collapsedPhaseProgress}>
-          <Text style={styles.collapsedPhaseLabel}>
-            Phase ratings: {phasesCompletedCount}/6 {allPhasesRated ? '✓' : ''}
-          </Text>
-        </View>
-      )}
+      {/* Structured Debrief Section */}
+      <ReviewChecklistItem
+        icon={ClipboardList}
+        label="Structured debrief"
+        isCompleted={debriefComplete}
+        onPress={() => setShowInterviewModal(true)}
+        iconColor={IOS_COLORS.orange}
+      >
+        {debriefComplete ? (
+          <View style={styles.debriefCompleteContainer}>
+            <Text style={styles.debriefCompleteText}>
+              {debriefProgress.answeredCount} questions answered
+            </Text>
+            <Pressable
+              style={styles.debriefEditButton}
+              onPress={() => setShowInterviewModal(true)}
+            >
+              <Text style={styles.debriefEditText}>Review / Edit</Text>
+            </Pressable>
+          </View>
+        ) : debriefProgress.answeredCount > 0 ? (
+          <View style={styles.debriefProgressContainer}>
+            <Text style={styles.debriefProgressText}>
+              {debriefProgress.answeredCount} of {debriefProgress.total} answered
+            </Text>
+            <Pressable
+              style={styles.debriefContinueButton}
+              onPress={() => setShowInterviewModal(true)}
+            >
+              <Text style={styles.debriefContinueText}>Continue</Text>
+              <ChevronRight size={16} color={IOS_COLORS.blue} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={styles.debriefStartButton}
+            onPress={() => setShowInterviewModal(true)}
+          >
+            <Text style={styles.debriefStartText}>Start debrief</Text>
+            <ChevronRight size={16} color="#FFFFFF" />
+          </Pressable>
+        )}
+      </ReviewChecklistItem>
 
       {/* Equipment Notes Section (expanded only) */}
       {isExpanded && (
@@ -449,10 +428,10 @@ export function AfterRaceContent({
       )}
 
       {/* Detailed Review Entry Point */}
-      {hasResult && allPhasesRated && onOpenDetailedReview && isExpanded && (
+      {hasResult && debriefComplete && onOpenDetailedReview && isExpanded && (
         <Pressable style={styles.detailedReviewButton} onPress={onOpenDetailedReview}>
           <View style={styles.detailedReviewContent}>
-            <Text style={styles.detailedReviewTitle}>Structured debrief complete</Text>
+            <Text style={styles.detailedReviewTitle}>Debrief complete</Text>
             <Text style={styles.detailedReviewSubtitle}>
               Want to go deeper? Add tactical details, tack counts, and more.
             </Text>
@@ -468,6 +447,22 @@ export function AfterRaceContent({
           <View style={[styles.progressFill, { width: `${(completedCount / totalItems) * 100}%` }]} />
         </View>
       </View>
+
+      {/* Structured Debrief Interview Modal */}
+      {userId && (
+        <StructuredDebriefInterview
+          visible={showInterviewModal}
+          raceId={race.id}
+          userId={userId}
+          raceName={race.name}
+          onClose={() => setShowInterviewModal(false)}
+          onComplete={() => {
+            setShowInterviewModal(false);
+            // Refetch state to update UI
+            refetchState();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -556,27 +551,66 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
 
-  // Phase Ratings Section
-  phaseRatingsSection: {
-    gap: 4,
-    backgroundColor: IOS_COLORS.gray6,
-    borderRadius: 12,
-    padding: 12,
+  // Structured Debrief Section
+  debriefCompleteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  phaseSectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: IOS_COLORS.gray,
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  collapsedPhaseProgress: {
-    paddingVertical: 8,
-  },
-  collapsedPhaseLabel: {
+  debriefCompleteText: {
     fontSize: 14,
     fontWeight: '500',
+    color: IOS_COLORS.green,
+  },
+  debriefEditButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 8,
+  },
+  debriefEditText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  debriefProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  debriefProgressText: {
+    fontSize: 13,
+    fontWeight: '500',
     color: IOS_COLORS.secondaryLabel,
+  },
+  debriefContinueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 8,
+    gap: 2,
+  },
+  debriefContinueText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  debriefStartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: IOS_COLORS.orange,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 4,
+  },
+  debriefStartText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   // Absence (Tufte style)

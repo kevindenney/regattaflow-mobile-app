@@ -127,9 +127,10 @@ export const GESTURE_UNLOCK_DELAY = 300;
 
 /**
  * Card width as ratio of screen width
- * 85% width with peek cards on sides
+ * 86% width gives ~27px margins on each side (on 390px screen)
+ * Combined with 8px gap, this allows ~19px horizontal peek of adjacent cards
  */
-export const CARD_WIDTH_RATIO = 0.85;
+export const CARD_WIDTH_RATIO = 0.86;
 
 /**
  * Peek width as ratio of screen width
@@ -154,10 +155,12 @@ export const DECELERATION_RATE = 0.99;
 
 /**
  * Scale values for card states
+ * Note: Inactive scale kept close to 1.0 to avoid pushing adjacent
+ * cards off-screen due to center-based transform origin
  */
 export const CARD_SCALE = {
   active: 1.0,
-  inactive: 0.92,
+  inactive: 0.98, // Minimal scale to keep peek visible
   pressed: 0.98,
   expanded: 0.95, // Main card when detail stack is expanded
 } as const;
@@ -167,7 +170,7 @@ export const CARD_SCALE = {
  */
 export const CARD_OPACITY = {
   active: 1.0,
-  inactive: 0.7,
+  inactive: 0.85, // Higher opacity to make peek more visible
 } as const;
 
 /**
@@ -251,9 +254,9 @@ export const INDICATOR = {
 // =============================================================================
 
 /**
- * Detail card types in order of appearance (for upcoming races)
+ * Detail card types for upcoming races (pre-race preparation)
  */
-export const DETAIL_CARD_TYPES = [
+export const UPCOMING_DETAIL_CARD_TYPES = [
   'conditions',
   'strategy',
   'rig',
@@ -262,7 +265,28 @@ export const DETAIL_CARD_TYPES = [
   'regulatory',
 ] as const;
 
-export type DetailCardType = (typeof DETAIL_CARD_TYPES)[number];
+/**
+ * Detail card types for completed races (post-race reflection)
+ */
+export const COMPLETED_DETAIL_CARD_TYPES = [
+  'results',
+  'analysis',
+  'fleet_insights',
+  'learning',
+] as const;
+
+/**
+ * All detail card types (union of upcoming and completed)
+ * @deprecated Use UPCOMING_DETAIL_CARD_TYPES or COMPLETED_DETAIL_CARD_TYPES directly
+ */
+export const DETAIL_CARD_TYPES = [
+  ...UPCOMING_DETAIL_CARD_TYPES,
+  ...COMPLETED_DETAIL_CARD_TYPES,
+] as const;
+
+export type UpcomingDetailCardType = (typeof UPCOMING_DETAIL_CARD_TYPES)[number];
+export type CompletedDetailCardType = (typeof COMPLETED_DETAIL_CARD_TYPES)[number];
+export type DetailCardType = UpcomingDetailCardType | CompletedDetailCardType;
 
 /**
  * Detail card height as ratio of detail zone height
@@ -295,3 +319,28 @@ export const RACE_STATUS_THRESHOLDS = {
 } as const;
 
 export type RaceStatus = 'urgent' | 'soon' | 'upcoming' | 'inProgress' | 'completed';
+
+// =============================================================================
+// EXPANDABLE CARD ANIMATIONS
+// =============================================================================
+
+/**
+ * Spring config for card expand/collapse animations
+ * Smooth but snappy for responsive feel
+ */
+export const CARD_EXPAND_SPRING_CONFIG = {
+  damping: 22,
+  stiffness: 100,
+  mass: 0.5,
+} as const;
+
+/**
+ * Duration for card expand/collapse transitions
+ */
+export const CARD_EXPAND_DURATION = 300; // ms
+export const CARD_COLLAPSE_DURATION = 250; // ms
+
+/**
+ * Collapsed card height (header + key metrics)
+ */
+export const COLLAPSED_CARD_HEIGHT = 100; // px

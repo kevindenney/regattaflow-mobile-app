@@ -28,6 +28,7 @@ import { sailorBoatService } from '@/services/SailorBoatService';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { useUserSettings } from '@/hooks/useUserSettings';
 
 import {
   TufteProfileHeader,
@@ -52,6 +53,9 @@ interface UserBoat {
 export default function AccountScreen() {
   const { user, userProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
   const { t } = useTranslation(['settings', 'common']);
+
+  // User settings (tips, learning links)
+  const { settings: userSettings, updateSetting } = useUserSettings();
 
   // State
   const [darkMode, setDarkMode] = useState(false);
@@ -99,8 +103,9 @@ export default function AccountScreen() {
     setBoatsLoading(true);
     try {
       const userBoats = await sailorBoatService.listBoatsForSailor(user.id);
+      // Show all boats (boat management moved here from dedicated tab)
       setBoats(
-        userBoats.slice(0, 3).map((b) => ({
+        userBoats.map((b) => ({
           id: b.id,
           boat_name: b.name || b.boat_class?.name || 'Unnamed Boat',
           boat_class_name: b.boat_class?.name || 'Unknown Class',
@@ -246,8 +251,8 @@ export default function AccountScreen() {
         {/* Boats */}
         <TufteAccountSection
           title="Boats"
-          action="View All"
-          onActionPress={() => router.push('/(tabs)/boat')}
+          action="Add Boat"
+          onActionPress={() => router.push('/(tabs)/boat/add')}
         >
           {boatsLoading ? (
             <View style={{ padding: 16, alignItems: 'center' }}>
@@ -296,6 +301,11 @@ export default function AccountScreen() {
             onPress={() => setLanguageVisible(true)}
           />
           <TufteToggleRow label="Dark Mode" value={darkMode} onValueChange={setDarkMode} />
+          <TufteToggleRow
+            label="Show Quick Tips"
+            value={userSettings.showQuickTips}
+            onValueChange={(value) => updateSetting('showQuickTips', value)}
+          />
           <TufteSettingRow
             label="Notifications"
             onPress={() => router.push('/settings/notifications')}

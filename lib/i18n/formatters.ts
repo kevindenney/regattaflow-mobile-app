@@ -4,8 +4,8 @@
  * Provides date, time, and number formatting that respects the current locale.
  */
 
-import { format, parseISO, formatDistance, formatRelative } from 'date-fns';
-import { de, fr, it, es, enGB } from 'date-fns/locale';
+import { format, parseISO, formatDistance as dateFnsFormatDistance, formatRelative, type Locale } from 'date-fns';
+import { de, fr, it, es, enGB, nl, pt, sv, da, pl, el, fi } from 'date-fns/locale';
 import i18n from './index';
 import { getCurrentLocale, getCurrentLocaleConfig, SupportedLocale } from './index';
 
@@ -19,6 +19,13 @@ const dateFnsLocales: Record<SupportedLocale, Locale> = {
   fr: fr,
   it: it,
   es: es,
+  nl: nl,
+  pt: pt,
+  sv: sv,
+  da: da,
+  pl: pl,
+  el: el,
+  fi: fi,
 };
 
 /**
@@ -90,7 +97,7 @@ export function formatRelativeTime(date: Date | string, baseDate: Date = new Dat
   try {
     const d = typeof date === 'string' ? parseISO(date) : date;
     if (isNaN(d.getTime())) return '';
-    return formatDistance(d, baseDate, {
+    return dateFnsFormatDistance(d, baseDate, {
       locale: getDateFnsLocale(),
       addSuffix: true,
     });

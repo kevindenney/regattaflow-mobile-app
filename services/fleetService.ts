@@ -501,13 +501,29 @@ class FleetService {
       }
 
       const nowIso = new Date().toISOString();
+
+      // Build query with columns that actually exist in race_events table
       let query = supabase
         .from('race_events')
-        .select('id, name, start_time, event_date, boat_classes, race_series, venue_id, racing_area_name')
+        .select('id, name, start_time, boat_class, boat_classes, race_series, venue_id')
         .gte('start_time', nowIso)
         .order('start_time', { ascending: true });
 
-      query = query.contains('boat_classes', [params.classId]);
+      // Build OR filter for multiple matching strategies (handles both schema formats)
+      const filterConditions: string[] = [];
+
+      // Match JSONB array containing the classId (format: [{id: "...", name: "..."}])
+      filterConditions.push(`boat_classes.cs.[{"id":"${params.classId}"}]`);
+
+      // Match TEXT field with classId directly
+      filterConditions.push(`boat_class.eq.${params.classId}`);
+
+      // Match TEXT field with class name (case-insensitive)
+      if (resolvedClassName) {
+        filterConditions.push(`boat_class.ilike.%${resolvedClassName}%`);
+      }
+
+      query = query.or(filterConditions.join(','));
 
       if (params.limit) {
         query = query.limit(params.limit);
@@ -541,17 +557,45 @@ class FleetService {
       return (data || []).map(event => ({
         id: event.id,
         raceName: event.name || 'Untitled Race',
-        startTime: event.start_time || event.event_date,
-        boatClass: event.boat_classes?.[0] || resolvedClassName || null,
+        startTime: event.start_time,
+        boatClass: this.extractBoatClassName(event, resolvedClassName),
         raceSeries: event.race_series,
         venueId: event.venue_id,
-        racingAreaName: event.racing_area_name,
+        racingAreaName: null,
         venueName: event.venue_id ? venuesById[event.venue_id] ?? null : null,
       }));
     } catch (error) {
       logger.warn('Unable to load upcoming fleet races - returning empty list', error);
       return [];
     }
+  }
+
+  /**
+   * Extract boat class name from race event data, handling both schema formats
+   */
+  private extractBoatClassName(
+    event: { boat_class?: string | null; boat_classes?: unknown },
+    resolvedClassName: string | null
+  ): string | null {
+    // Priority 1: boat_classes JSONB array (newer format)
+    if (
+      event.boat_classes &&
+      Array.isArray(event.boat_classes) &&
+      event.boat_classes.length > 0
+    ) {
+      const firstClass = event.boat_classes[0];
+      return typeof firstClass === 'object' && firstClass !== null
+        ? (firstClass as { name?: string }).name || null
+        : String(firstClass);
+    }
+
+    // Priority 2: boat_class TEXT field
+    if (event.boat_class) {
+      return event.boat_class;
+    }
+
+    // Priority 3: Resolved class name from classId
+    return resolvedClassName;
   }
 
   private async countMembers(fleetId: string): Promise<number> {

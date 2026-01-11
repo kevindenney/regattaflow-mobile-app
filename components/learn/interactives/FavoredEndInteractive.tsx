@@ -645,7 +645,7 @@ export function FavoredEndInteractive({
         <View style={[styles.mainContentArea, responsiveStyles.mainContentArea]}>
           {/* SVG Visualization */}
           <View style={[styles.svgContainer, responsiveStyles.svgContainer]}>
-            <Svg width="100%" height="100%" viewBox="0 0 800 500">
+            <Svg width="100%" height="100%" viewBox="0 0 900 500" preserveAspectRatio="xMidYMid meet">
               <Defs>
                 <Marker id="arrowhead-favored" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
                   <Polygon points="0,0 10,3.5 0,7" fill="#000" />
@@ -657,8 +657,8 @@ export function FavoredEndInteractive({
               </Defs>
 
               {/* Water background */}
-              <Rect width="800" height="500" fill="#aaccff" />
-              <Rect width="800" height="500" fill="url(#water-texture-fe)" />
+              <Rect width="900" height="500" fill="#aaccff" />
+              <Rect width="900" height="500" fill="url(#water-texture-fe)" />
 
               {/* Step indicator */}
               <G transform="translate(40, 30)">

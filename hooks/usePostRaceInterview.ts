@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('usePostRaceInterview');
@@ -240,6 +240,10 @@ export function usePostRaceInterview({
   // Handler to close the interview modal
   const handleClosePostRaceInterview = useCallback(() => {
     setShowPostRaceInterview(false);
+    setCompletedSessionId(null);
+    setCompletedRaceName('');
+    setCompletedRaceId(null);
+    setCompletedSessionGpsPoints(0);
   }, []);
 
   return {

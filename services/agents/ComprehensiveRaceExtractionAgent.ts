@@ -129,6 +129,14 @@ export interface ComprehensiveRaceData {
   checkInTime?: string;
   skipperBriefingTime?: string;
 
+  // Event Logistics
+  eventWebsite?: string;  // e.g., "www.4peaksrace.com"
+  raceControlLocation?: string;  // e.g., "ABC Main Club Aberdeen"
+  raceControlPhone?: string[];  // Emergency contact numbers
+  fuelLocations?: string;  // e.g., "FUEGY fuel barge at western entrance of Aberdeen Harbour"
+  parkingInfo?: string;  // e.g., "Car parking not available at ABC. Public car parks opposite main clubhouse"
+  berthingInfo?: string;  // e.g., "Limited mooring available, allocated in order of entries"
+
   // NOR Document Fields
   supplementarySIUrl?: string;
   norAmendments?: Array<{ url?: string; date: string; description: string }>;
@@ -145,6 +153,11 @@ export interface ComprehensiveRaceData {
   entryDeadline?: string;
   lateEntryPolicy?: string;
 
+  // Crew Requirements (especially for distance/adventure races)
+  minimumCrew?: number;  // Minimum number of crew required (e.g., 5)
+  crewRequirements?: string;  // Special requirements (e.g., "All crew except 3 must complete at least one peak ascent")
+  minorSailorRules?: string;  // Rules for under-18 crew (e.g., "Parental consent required, must be accompanied by adult on hill runs")
+
   // Schedule Details
   eventSeriesName?: string;
   eventType?: string;
@@ -153,6 +166,15 @@ export interface ComprehensiveRaceData {
   firstWarningSignal?: string;
   reserveDays?: string[];
 
+  // Multi-day Event Schedule (for events spanning multiple days)
+  schedule?: Array<{
+    date: string;  // YYYY-MM-DD format
+    time: string;  // HH:MM or HHMMhrs format
+    event: string;  // e.g., "Skippers Briefing", "Race Start", "Race Finish Deadline", "Prize Giving"
+    location?: string;  // e.g., "ABC Main Clubhouse Harbour Room"
+    mandatory?: boolean;  // true if attendance is compulsory (e.g., skippers briefing)
+  }>;
+
   // Enhanced Course Information
   courseAttachmentReference?: string;
   courseAreaDesignation?: string;
@@ -160,6 +182,16 @@ export interface ComprehensiveRaceData {
   // Enhanced Scoring
   seriesRacesRequired?: number;
   discardsPolicy?: string;
+  scoringFormulaDescription?: string;  // Human-readable explanation of how results are calculated
+  scoringCheckpoints?: Array<{
+    location: string;
+    checkType: string;  // "gate", "timing", "reporting"
+  }>;
+
+  // Motoring Division (for distance races allowing engine use)
+  motoringDivisionAvailable?: boolean;  // true if boats can elect to enter motoring division
+  motoringDivisionRules?: string;  // Rules for motoring (e.g., "Call Race Control before switching on engines, 30 min after start")
+  motoringPenaltyFormula?: string;  // How motoring time is penalized
 
   // Safety
   safetyRequirements?: string;
@@ -203,14 +235,16 @@ export interface ComprehensiveRaceData {
   // ============================================
   
   // Route waypoints for distance/offshore races
+  // Note: For adventure races like "Four Peaks", peaks may not have GPS coordinates
   routeWaypoints?: Array<{
     name: string;
-    latitude: number;
-    longitude: number;
-    type: 'start' | 'waypoint' | 'gate' | 'finish';
+    latitude?: number;  // Optional - may not be available for peaks/landmarks
+    longitude?: number;  // Optional - may not be available for peaks/landmarks
+    type: 'start' | 'waypoint' | 'gate' | 'finish' | 'peak';  // Added 'peak' for adventure races
     required: boolean;
     passingSide?: 'port' | 'starboard' | 'either';
-    notes?: string;  // e.g., "Leave to port", "Rounding mark"
+    notes?: string;  // e.g., "Leave to port", "Rounding mark", "Shore party ascent required"
+    order?: number;  // Sequence order (1, 2, 3, 4 for Four Peaks)
   }>;
   
   // Total race distance in nautical miles
@@ -339,8 +373,16 @@ export class ComprehensiveRaceExtractionAgent {
             };
           }
 
-          // No partial data, throw error
-          throw new Error(`Edge function returned ${response.status}: ${result.error || 'Unknown error'}`);
+          // No partial data, throw error with full details
+          const errorDetails = [
+            result.error,
+            result.details && `Details: ${result.details.substring(0, 200)}`,
+            result.errorHint && `Hint: ${result.errorHint}`,
+            result.stop_reason && `Stop reason: ${result.stop_reason}`,
+            result.parseAttempts && `Parse attempts: ${JSON.stringify(result.parseAttempts)}`
+          ].filter(Boolean).join('. ');
+          console.error('[ComprehensiveRaceExtractionAgent] Full error details:', result);
+          throw new Error(`Edge function returned ${response.status}: ${errorDetails || 'Unknown error'}`);
         }
 
         if (!result.success) {

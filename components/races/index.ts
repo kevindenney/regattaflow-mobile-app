@@ -36,6 +36,10 @@ export { DocumentViewer } from './DocumentViewer';
 export { ExtractionStatusBadge } from './ExtractionStatusBadge';
 
 // New redesigned components
+export { AppleRaceCard } from './AppleRaceCard';
+export type { AppleRaceCardProps } from './AppleRaceCard';
+export { AppleStyleRaceCard } from './AppleStyleRaceCard';
+export type { AppleStyleRaceCardProps } from './AppleStyleRaceCard';
 export { EnhancedRaceCard } from './EnhancedRaceCard';
 export { CountdownTimer } from './CountdownTimer';
 export { StartSequenceTimer } from './StartSequenceTimer';
@@ -152,6 +156,8 @@ export { DemoNotice } from './DemoNotice';
 export type { DemoNoticeProps } from './DemoNotice';
 export { RaceDetailZone } from './RaceDetailZone';
 export type { RaceDetailZoneProps, RaceDocument as RaceDetailDocument, RaceMark } from './RaceDetailZone';
+export { RaceDetailHeader } from './RaceDetailHeader';
+export type { RaceDetailHeaderProps } from './RaceDetailHeader';
 export { TimelineIndicators } from './TimelineIndicators';
 export type { TimelineIndicatorsProps, TimelineRace } from './TimelineIndicators';
 export { CarouselNavArrows } from './CarouselNavArrows';
@@ -180,6 +186,15 @@ export { DocumentTypePickerModal } from './DocumentTypePickerModal';
 export type { DocumentTypePickerModalProps } from './DocumentTypePickerModal';
 export { AIVenueInsightsCard } from './AIVenueInsightsCard';
 export type { AIVenueInsightsCardProps, VenueInsights } from './AIVenueInsightsCard';
+
+// Sail Inspection Components
+export { SailAlertBanner } from './SailAlertBanner';
+export type { SailAlert as SailAlertBannerAlert } from './SailAlertBanner';
+export { PreRaceSailCheck } from './PreRaceSailCheck';
+
+// Expanded Race Card Components
+export { ExpandedContentZone } from './ExpandedContentZone';
+export { ContentConfigModal } from './ContentConfigModal';
 
 // Re-export types
 export type { Document } from './DocumentList';

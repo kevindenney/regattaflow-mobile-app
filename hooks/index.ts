@@ -88,6 +88,32 @@ export type { UseContentModulesReturn, UseContentPreferencesReturn } from '@/typ
 export { useTeamSharing } from './useTeamSharing';
 export type { UseTeamSharingResult, UseTeamSharingParams, RaceShare } from './useTeamSharing';
 
-// Structured Debrief Phase Ratings
+// Structured Debrief Phase Ratings (legacy)
 export { usePhaseRatings, PHASE_KEYS } from './usePhaseRatings';
 export type { PhaseRatings, PhaseRating, PhaseKey, UsePhaseRatingsReturn } from './usePhaseRatings';
+
+// Structured Debrief Interview (new guided interview)
+export { useDebriefInterview } from './useDebriefInterview';
+export type {
+  DebriefResponses,
+  DebriefResponseValue,
+  UseDebriefInterviewParams,
+  UseDebriefInterviewReturn,
+} from './useDebriefInterview';
+
+// Debrief Sail Context (sail options for debrief questions)
+export { useDebriefSailContext, groupSailsByCategory } from './useDebriefSailContext';
+export type { SailOption, DebriefSailContext } from './useDebriefSailContext';
+
+// User Settings (Quick Tips, Learning Links toggle)
+export { useUserSettings } from './useUserSettings';
+export type { UserSettings, UseUserSettingsReturn } from './useUserSettings';
+
+// Sail Products Catalog (for Add Sail modal)
+export {
+  useSailProducts,
+  formatWindRange,
+  getWeightCategoryLabel,
+  COMMON_SAILMAKERS,
+} from './useSailProducts';
+export type { SailProduct, SailmakerGroup, UseSailProductsReturn } from './useSailProducts';

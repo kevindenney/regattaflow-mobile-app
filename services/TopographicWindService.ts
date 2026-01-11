@@ -859,7 +859,7 @@ Format your response as JSON:
 
     try {
       const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         messages: [{
           role: 'user',

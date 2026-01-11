@@ -9,7 +9,7 @@
  */
 
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { createLogger } from '@/lib/utils/logger';
 
 // PDF.js will be loaded from CDN on web
@@ -26,10 +26,9 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-    logger.debug('[PDFExtractionService] PDF.js loaded from CDN');
   };
   script.onerror = () => {
-    console.error('[PDFExtractionService] Failed to load PDF.js from CDN');
+    logger.error('Failed to load PDF.js from CDN');
   };
   document.head.appendChild(script);
 }
@@ -63,7 +62,6 @@ export class PDFExtractionService {
         return await this.extractTextNative(fileUri, options);
       }
     } catch (error: any) {
-      console.error('PDF extraction error:', error);
       return {
         success: false,
         error: error.message || 'Failed to extract PDF text',
@@ -92,7 +90,6 @@ export class PDFExtractionService {
     try {
       // Wait for PDF.js to load if not already loaded
       if (!pdfjsLib) {
-        logger.debug('[PDFExtractionService] Waiting for PDF.js to load from CDN...');
         const loaded = await this.waitForPdfJs();
         if (!loaded) {
           return {
@@ -102,13 +99,9 @@ export class PDFExtractionService {
         }
       }
 
-      logger.debug('[PDFExtractionService] Loading PDF document from:', fileUri);
-
       // Load PDF document
       const loadingTask = pdfjsLib.getDocument(fileUri);
       const pdf = await loadingTask.promise;
-
-      logger.debug('[PDFExtractionService] PDF loaded successfully, pages:', pdf.numPages);
 
       const totalPages = Math.min(
         pdf.numPages,
@@ -142,7 +135,6 @@ export class PDFExtractionService {
         pages: totalPages,
       };
     } catch (error: any) {
-      console.error('Web PDF extraction error:', error);
       return {
         success: false,
         error: `Web PDF extraction failed: ${error.message}`,
@@ -193,7 +185,6 @@ export class PDFExtractionService {
         error: 'Native PDF text extraction requires additional setup. Please use the web version or upload a text file.',
       };
     } catch (error: any) {
-      console.error('Native PDF extraction error:', error);
       return {
         success: false,
         error: `Native PDF extraction failed: ${error.message}`,
@@ -219,8 +210,7 @@ export class PDFExtractionService {
         // For native, check file extension
         return fileUri.toLowerCase().endsWith('.pdf');
       }
-    } catch (error) {
-      console.error('PDF validation error:', error);
+    } catch {
       return false;
     }
   }

@@ -47,6 +47,8 @@ export interface SubscriptionStatus {
   productId: string | null;
   tier: 'free' | 'pro' | 'championship';
   expiresAt: Date | null;
+  isTrialing?: boolean;
+  trialEndsAt?: Date | null;
   willRenew: boolean;
   platform: 'ios' | 'android' | 'web';
 }

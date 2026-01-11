@@ -10,12 +10,10 @@
  * - Claude 3.5 Sonnet:  $3.00 input / $15.00 output (12x more)
  */
 
-export type AIModelId = 
-  | 'claude-3-haiku-20240307'      // Cheapest - simple tasks
-  | 'claude-3-5-haiku-latest'      // Good balance - most tasks
-  | 'claude-3-5-haiku-20241022'    // Pinned version of 3.5 Haiku
+export type AIModelId =
+  | 'claude-3-haiku-20240307'      // Budget model - all tasks
   | 'claude-3-5-sonnet-latest'     // Premium - complex reasoning only
-  | 'claude-3-5-sonnet-20240620';  // Pinned version of Sonnet
+  | 'claude-3-5-sonnet-20241022';  // Pinned version of Sonnet
 
 export type TaskComplexity = 'simple' | 'standard' | 'complex';
 
@@ -43,7 +41,7 @@ export const AI_MODELS: Record<string, ModelConfig> = {
     recommended: ['simple'],
   },
   'claude-3.5-haiku': {
-    id: 'claude-3-5-haiku-latest',
+    id: 'claude-3-haiku-20240307',
     name: 'Claude 3.5 Haiku',
     inputCostPer1M: 0.80,
     outputCostPer1M: 4.00,
@@ -103,7 +101,7 @@ export function getModelForTask(taskType: string): AIModelId {
     case 'standard':
     case 'complex':
     default:
-      return 'claude-3-5-haiku-latest';
+      return 'claude-3-haiku-20240307';
   }
 }
 
@@ -134,7 +132,7 @@ export function estimateCost(
 /**
  * Default model for most tasks - balances cost and quality
  */
-export const DEFAULT_MODEL: AIModelId = 'claude-3-5-haiku-latest';
+export const DEFAULT_MODEL: AIModelId = 'claude-3-haiku-20240307';
 
 /**
  * Budget model for high-volume, simple tasks

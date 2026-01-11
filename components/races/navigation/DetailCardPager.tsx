@@ -25,6 +25,14 @@ export interface DetailCardData {
 }
 
 /**
+ * Options passed to renderCard for expansion state
+ */
+export interface RenderCardOptions {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+/**
  * Props for DetailCardPager component
  */
 export interface DetailCardPagerProps {
@@ -35,7 +43,12 @@ export interface DetailCardPagerProps {
   /** Currently selected card index */
   selectedIndex?: number;
   /** Render function for each detail card */
-  renderCard: (card: DetailCardData, index: number, isActive: boolean) => ReactElement;
+  renderCard: (
+    card: DetailCardData,
+    index: number,
+    isActive: boolean,
+    options?: RenderCardOptions
+  ) => ReactElement;
   /** Callback when active card changes */
   onCardChange?: (index: number, cardType: DetailCardType) => void;
   /** Callback when a card is pressed */
@@ -62,4 +75,4 @@ export interface DetailCardPagerProps {
 // - DetailCardPager.web.tsx for web
 
 export { DetailCardPager } from './DetailCardPager.native';
-export type { DetailCardPagerProps, DetailCardData };
+export type { DetailCardPagerProps, DetailCardData, RenderCardOptions };

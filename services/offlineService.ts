@@ -75,6 +75,16 @@ class OfflineService {
   private syncListeners: ((status: OfflineStatus) => void)[] = [];
   private unsubscribeNetInfo?: () => void;
 
+  /**
+   * Debug logging - disabled by default, enable for debugging offline issues
+   */
+  private static DEBUG_ENABLED = false;
+  private logDebug(message: string, _data?: any) {
+    if (__DEV__ && OfflineService.DEBUG_ENABLED) {
+      // Uncomment for debugging: console.log(`[OfflineService] ${message}`, _data ?? '');
+    }
+  }
+
   constructor() {
     // Only initialize on client side (browser), not during SSR
     if (typeof window !== 'undefined') {

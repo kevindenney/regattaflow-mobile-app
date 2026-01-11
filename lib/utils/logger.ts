@@ -35,7 +35,8 @@ const parseLogLevel = (value?: string | null): LogLevel | null => {
 };
 
 const envLogLevel = parseLogLevel(process.env.EXPO_PUBLIC_LOG_LEVEL as string | undefined);
-const DEFAULT_MIN_LEVEL: LogLevel = envLogLevel ?? 'warn';
+// Default to 'error' for clean logs; set EXPO_PUBLIC_LOG_LEVEL=warn for more verbose logging
+const DEFAULT_MIN_LEVEL: LogLevel = envLogLevel ?? 'error';
 
 class Logger {
   private context: string;
@@ -111,3 +112,29 @@ export const createLogger = (context: string): Logger => {
  * Default logger for global use
  */
 export const logger = createLogger('App');
+
+/**
+ * Serialize an error for logging
+ * Error objects have non-enumerable properties, so JSON.stringify returns {}
+ * This helper extracts the useful information for logging
+ */
+export function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    const result: Record<string, unknown> = {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+    };
+    // Include any custom properties
+    for (const key of Object.getOwnPropertyNames(error)) {
+      if (key !== 'message' && key !== 'name' && key !== 'stack') {
+        result[key] = (error as unknown as Record<string, unknown>)[key];
+      }
+    }
+    return result;
+  }
+  if (typeof error === 'object' && error !== null) {
+    return error as Record<string, unknown>;
+  }
+  return { value: String(error) };
+}

@@ -18,8 +18,11 @@ import {
   Dimensions,
   TextInput,
   KeyboardAvoidingView,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import {
   X,
   ChevronRight,
@@ -41,12 +44,20 @@ import {
   Upload,
   Eye,
   Link2,
+  Camera,
+  Image as ImageIcon,
+  Sparkles,
+  Edit3,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { useAuth } from '@/providers/AuthProvider';
 import type { CourseMark } from '@/types/raceEvents';
+import { courseImageExtractor, type ExtractedCourse } from '@/services/ai/CourseImageExtractor';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CourseMapWizard');
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -113,7 +124,7 @@ const COURSE_CHECK_ITEMS = [
   },
 ];
 
-type WizardStep = 'overview' | 'map' | 'marks' | 'review';
+type WizardStep = 'overview' | 'map' | 'marks' | 'review' | 'documents';
 
 interface CourseMapWizardProps extends ChecklistToolProps {
   /** Race course data if available */
@@ -147,6 +158,12 @@ export function CourseMapWizard({
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlValue, setUrlValue] = useState('');
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
+
+  // Image extraction state
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedCourse, setExtractedCourse] = useState<ExtractedCourse | null>(null);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
 
   // Load documents to check for course diagrams
   const {
@@ -189,19 +206,18 @@ export function CourseMapWizard({
     });
   }, []);
 
-  // Handle learn more
+  // Handle learn more - navigate to Tactical Planning module (includes course content)
   const handleLearnMore = useCallback(() => {
-    if (item.learningModuleSlug) {
+    onCancel(); // Close modal first
+    setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn',
+        pathname: '/(tabs)/learn/race-preparation-mastery',
         params: {
-          courseSlug: item.learningModuleSlug,
-          lessonId: item.learningModuleId,
+          moduleId: 'module-13-2', // Tactical Planning module
         },
       });
-      onCancel();
-    }
-  }, [item.learningModuleSlug, item.learningModuleId, router, onCancel]);
+    }, 150);
+  }, [router, onCancel]);
 
   // Handle upload - default to course_diagram type
   const handleUpload = useCallback(async () => {
@@ -222,6 +238,124 @@ export function CourseMapWizard({
       setIsSubmittingUrl(false);
     }
   }, [urlValue, addFromUrl]);
+
+  // Request camera permission
+  const requestCameraPermission = async (): Promise<boolean> => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please grant camera access to take course photos.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Request library permission
+  const requestLibraryPermission = async (): Promise<boolean> => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Photo Library Permission Required',
+        'Please grant photo library access to select course diagrams.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Extract course from image
+  const extractCourseFromImage = useCallback(async (uri: string) => {
+    setIsExtracting(true);
+    setExtractionError(null);
+
+    try {
+      logger.debug('Extracting course from image', { uri });
+      const result = await courseImageExtractor.extractCourseFromImage(uri);
+
+      if (result.success && result.data) {
+        logger.debug('Course extraction successful', {
+          markCount: result.data.marks.length,
+          sequenceLength: result.data.sequence.length,
+          confidence: result.data.confidence,
+        });
+        setExtractedCourse(result.data);
+      } else {
+        logger.warn('Course extraction failed', { error: result.error });
+        setExtractionError(result.error || 'Could not extract course information');
+      }
+    } catch (error: any) {
+      logger.error('Course extraction error', { error });
+      setExtractionError(error.message || 'Failed to analyze course image');
+    } finally {
+      setIsExtracting(false);
+    }
+  }, []);
+
+  // Handle camera capture
+  const handleCameraCapture = useCallback(async () => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        const uri = result.assets[0].uri;
+        setImageUri(uri);
+        extractCourseFromImage(uri);
+      }
+    } catch (error) {
+      logger.error('Camera error:', { error });
+      Alert.alert('Error', 'Failed to capture photo. Please try again.');
+    }
+  }, [extractCourseFromImage]);
+
+  // Handle library selection
+  const handleLibrarySelect = useCallback(async () => {
+    const hasPermission = await requestLibraryPermission();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        const uri = result.assets[0].uri;
+        setImageUri(uri);
+        extractCourseFromImage(uri);
+      }
+    } catch (error) {
+      logger.error('Library error:', { error });
+      Alert.alert('Error', 'Failed to select photo. Please try again.');
+    }
+  }, [extractCourseFromImage]);
+
+  // Handle retry extraction
+  const handleRetryExtraction = useCallback(() => {
+    if (imageUri) {
+      extractCourseFromImage(imageUri);
+    }
+  }, [imageUri, extractCourseFromImage]);
+
+  // Clear extracted course
+  const handleClearExtraction = useCallback(() => {
+    setImageUri(null);
+    setExtractedCourse(null);
+    setExtractionError(null);
+  }, []);
 
   // Get mark color
   const getMarkColor = (type?: string | null): string => {
@@ -265,6 +399,8 @@ export function CourseMapWizard({
         return renderMarks();
       case 'review':
         return renderReview();
+      case 'documents':
+        return renderDocuments();
       default:
         return null;
     }
@@ -300,33 +436,36 @@ export function CourseMapWizard({
             </View>
           </View>
         ) : (
-          <View style={styles.statusCard}>
+          <Pressable style={styles.statusCard} onPress={() => setStep('documents')}>
             <View style={[styles.statusIcon, styles.statusIconWarning]}>
               <AlertTriangle size={20} color={IOS_COLORS.orange} />
             </View>
             <View style={styles.statusContent}>
               <Text style={styles.statusTitle}>No Course Data</Text>
               <Text style={styles.statusDescription}>
-                Upload Sailing Instructions or Course Diagram to extract course info
+                Tap to upload Sailing Instructions or Course Diagram
               </Text>
             </View>
-          </View>
+            <ChevronRight size={18} color={IOS_COLORS.gray} />
+          </Pressable>
         )}
 
-        {/* Document status */}
+        {/* Document status - tappable indicators */}
         <View style={styles.documentsRow}>
-          <View style={styles.docStatus}>
+          <Pressable style={styles.docStatus} onPress={() => setStep('documents')}>
             <FileText size={16} color={sailingInstructions ? IOS_COLORS.green : IOS_COLORS.gray} />
             <Text style={[styles.docStatusText, sailingInstructions && styles.docStatusTextActive]}>
               SI {sailingInstructions ? '✓' : 'missing'}
             </Text>
-          </View>
-          <View style={styles.docStatus}>
+            {!sailingInstructions && <ChevronRight size={14} color={IOS_COLORS.gray} />}
+          </Pressable>
+          <Pressable style={styles.docStatus} onPress={() => setStep('marks')}>
             <Map size={16} color={courseDiagram ? IOS_COLORS.green : IOS_COLORS.gray} />
             <Text style={[styles.docStatusText, courseDiagram && styles.docStatusTextActive]}>
               Diagram {courseDiagram ? '✓' : 'missing'}
             </Text>
-          </View>
+            {!courseDiagram && <ChevronRight size={14} color={IOS_COLORS.gray} />}
+          </Pressable>
         </View>
       </View>
 
@@ -459,72 +598,201 @@ export function CourseMapWizard({
         </>
       ) : (
         <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Anchor size={40} color={IOS_COLORS.gray} />
-          </View>
-          <Text style={styles.emptyTitle}>No Course Data</Text>
-          <Text style={styles.emptyDescription}>
-            Upload Sailing Instructions or a Course Diagram to see the marks.
-          </Text>
-
-          {showUrlInput ? (
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.urlInputContainer}
-            >
-              <View style={styles.urlInputWrapper}>
-                <TextInput
-                  style={styles.urlInput}
-                  placeholder="Paste URL to course diagram..."
-                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
-                  value={urlValue}
-                  onChangeText={setUrlValue}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  returnKeyType="go"
-                  onSubmitEditing={handleUrlSubmit}
-                  editable={!isSubmittingUrl}
-                />
-                <Pressable
-                  style={[
-                    styles.urlLinkButton,
-                    (!urlValue.trim() || isSubmittingUrl) && styles.uploadButtonDisabled,
-                  ]}
-                  onPress={handleUrlSubmit}
-                  disabled={!urlValue.trim() || isSubmittingUrl}
-                >
-                  {isSubmittingUrl ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Link2 size={18} color="#FFFFFF" />
-                  )}
+          {/* Show extracted course from image if available */}
+          {extractedCourse ? (
+            <>
+              {/* Image preview */}
+              {imageUri && (
+                <Pressable style={styles.imagePreviewCard} onPress={handleLibrarySelect}>
+                  <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                  <View style={styles.imageOverlay}>
+                    <Edit3 size={16} color="#FFFFFF" />
+                    <Text style={styles.imageOverlayText}>Change Image</Text>
+                  </View>
                 </Pressable>
+              )}
+
+              {/* Confidence indicator */}
+              <View style={styles.confidenceCard}>
+                <Sparkles size={18} color={IOS_COLORS.purple} />
+                <Text style={styles.confidenceText}>
+                  {extractedCourse.confidence >= 80 ? 'High' : extractedCourse.confidence >= 50 ? 'Moderate' : 'Low'} confidence ({extractedCourse.confidence}%)
+                </Text>
               </View>
-              <Pressable
-                style={styles.cancelUrlButton}
-                onPress={() => {
-                  setShowUrlInput(false);
-                  setUrlValue('');
-                }}
-              >
-                <Text style={styles.cancelUrlText}>Cancel</Text>
+
+              {/* Extracted marks */}
+              <View style={styles.extractedMarksContainer}>
+                <Text style={styles.extractedSectionTitle}>Extracted Marks</Text>
+                {extractedCourse.marks.map((mark, index) => (
+                  <View key={index} style={styles.extractedMarkRow}>
+                    <View style={[styles.markTypeBadge, { backgroundColor: `${getMarkColor(mark.type)}20` }]}>
+                      <Text style={[styles.markTypeBadgeText, { color: getMarkColor(mark.type) }]}>
+                        {mark.type}
+                      </Text>
+                    </View>
+                    <Text style={styles.extractedMarkName}>{mark.name}</Text>
+                    {mark.rounding && (
+                      <Text style={styles.extractedMarkRounding}>
+                        {mark.rounding === 'port' ? '↺' : '↻'} {mark.rounding}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+
+              {/* Extracted sequence */}
+              {extractedCourse.sequence.length > 0 && (
+                <View style={styles.extractedSequenceContainer}>
+                  <Text style={styles.extractedSectionTitle}>Course Sequence</Text>
+                  <View style={styles.sequenceFlow}>
+                    {extractedCourse.sequence.map((markName, index) => (
+                      <View key={index} style={styles.sequenceFlowItem}>
+                        <View style={styles.sequenceFlowNumber}>
+                          <Text style={styles.sequenceFlowNumberText}>{index + 1}</Text>
+                        </View>
+                        <Text style={styles.sequenceFlowName}>{markName}</Text>
+                        {index < extractedCourse.sequence.length - 1 && (
+                          <ChevronRight size={14} color={IOS_COLORS.gray} style={{ marginHorizontal: 4 }} />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Wind direction */}
+              {extractedCourse.windDirection && (
+                <View style={styles.windDirectionRow}>
+                  <Wind size={16} color={IOS_COLORS.green} />
+                  <Text style={styles.windDirectionText}>Wind: {extractedCourse.windDirection}</Text>
+                </View>
+              )}
+
+              {/* Clear button */}
+              <Pressable style={styles.clearButton} onPress={handleClearExtraction}>
+                <Text style={styles.clearButtonText}>Clear & Try Again</Text>
               </Pressable>
-            </KeyboardAvoidingView>
+            </>
+          ) : isExtracting ? (
+            // Extracting state
+            <>
+              {imageUri && (
+                <Image source={{ uri: imageUri }} style={styles.extractingImage} />
+              )}
+              <View style={styles.extractingContainer}>
+                <ActivityIndicator size="large" color={IOS_COLORS.purple} />
+                <Text style={styles.extractingTitle}>Analyzing Course Diagram</Text>
+                <Text style={styles.extractingDescription}>
+                  AI is identifying marks, sequence, and rounding directions...
+                </Text>
+              </View>
+            </>
           ) : (
-            <View style={styles.uploadActionsRow}>
-              <Pressable style={styles.uploadButton} onPress={handleUpload}>
-                <Upload size={18} color="#FFFFFF" />
-                <Text style={styles.uploadButtonText}>Upload</Text>
-              </Pressable>
-              <Pressable
-                style={styles.urlButton}
-                onPress={() => setShowUrlInput(true)}
-              >
-                <Link2 size={18} color={IOS_COLORS.blue} />
-                <Text style={styles.urlButtonText}>Add URL</Text>
-              </Pressable>
-            </View>
+            // Empty state - show upload options
+            <>
+              <View style={styles.emptyIcon}>
+                <Anchor size={40} color={IOS_COLORS.gray} />
+              </View>
+              <Text style={styles.emptyTitle}>No Course Data</Text>
+              <Text style={styles.emptyDescription}>
+                Upload a course diagram image or documents to extract course information.
+              </Text>
+
+              {/* Extraction error */}
+              {extractionError && (
+                <View style={styles.extractionErrorCard}>
+                  <AlertTriangle size={16} color={IOS_COLORS.red} />
+                  <Text style={styles.extractionErrorText}>{extractionError}</Text>
+                  {imageUri && (
+                    <Pressable style={styles.retryButton} onPress={handleRetryExtraction}>
+                      <RotateCw size={14} color={IOS_COLORS.blue} />
+                      <Text style={styles.retryButtonText}>Retry</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+
+              {/* Image picker buttons */}
+              <View style={styles.imagePickerSection}>
+                <Text style={styles.imagePickerLabel}>Extract from Image</Text>
+                <View style={styles.imagePickerButtons}>
+                  <Pressable style={styles.imagePickerButton} onPress={handleLibrarySelect}>
+                    <ImageIcon size={20} color={IOS_COLORS.purple} />
+                    <Text style={styles.imagePickerButtonText}>Photo Library</Text>
+                  </Pressable>
+                  <Pressable style={styles.imagePickerButton} onPress={handleCameraCapture}>
+                    <Camera size={20} color={IOS_COLORS.purple} />
+                    <Text style={styles.imagePickerButtonText}>Take Photo</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.orDivider}>
+                <View style={styles.orDividerLine} />
+                <Text style={styles.orDividerText}>or</Text>
+                <View style={styles.orDividerLine} />
+              </View>
+
+              {showUrlInput ? (
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  style={styles.urlInputContainer}
+                >
+                  <View style={styles.urlInputWrapper}>
+                    <TextInput
+                      style={styles.urlInput}
+                      placeholder="Paste URL to course diagram..."
+                      placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                      value={urlValue}
+                      onChangeText={setUrlValue}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      returnKeyType="go"
+                      onSubmitEditing={handleUrlSubmit}
+                      editable={!isSubmittingUrl}
+                    />
+                    <Pressable
+                      style={[
+                        styles.urlLinkButton,
+                        (!urlValue.trim() || isSubmittingUrl) && styles.uploadButtonDisabled,
+                      ]}
+                      onPress={handleUrlSubmit}
+                      disabled={!urlValue.trim() || isSubmittingUrl}
+                    >
+                      {isSubmittingUrl ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Link2 size={18} color="#FFFFFF" />
+                      )}
+                    </Pressable>
+                  </View>
+                  <Pressable
+                    style={styles.cancelUrlButton}
+                    onPress={() => {
+                      setShowUrlInput(false);
+                      setUrlValue('');
+                    }}
+                  >
+                    <Text style={styles.cancelUrlText}>Cancel</Text>
+                  </Pressable>
+                </KeyboardAvoidingView>
+              ) : (
+                <View style={styles.uploadActionsRow}>
+                  <Pressable style={styles.uploadButton} onPress={handleUpload}>
+                    <Upload size={18} color="#FFFFFF" />
+                    <Text style={styles.uploadButtonText}>Upload File</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.urlButton}
+                    onPress={() => setShowUrlInput(true)}
+                  >
+                    <Link2 size={18} color={IOS_COLORS.blue} />
+                    <Text style={styles.urlButtonText}>Add URL</Text>
+                  </Pressable>
+                </View>
+              )}
+            </>
           )}
         </View>
       )}
@@ -595,6 +863,102 @@ export function CourseMapWizard({
     </ScrollView>
   );
 
+  const renderDocuments = () => (
+    <ScrollView
+      style={styles.scrollContent}
+      contentContainerStyle={styles.scrollContentInner}
+    >
+      <Text style={styles.sectionTitle}>Upload Documents</Text>
+      <Text style={styles.sectionDescription}>
+        Add documents to extract course information automatically.
+      </Text>
+
+      {/* Sailing Instructions Section */}
+      <View style={styles.documentSection}>
+        <View style={styles.documentSectionHeader}>
+          <FileText size={20} color={IOS_COLORS.blue} />
+          <Text style={styles.documentSectionTitle}>Sailing Instructions</Text>
+          {sailingInstructions && (
+            <View style={styles.documentCheckBadge}>
+              <CheckCircle2 size={16} color={IOS_COLORS.green} />
+            </View>
+          )}
+        </View>
+        <Text style={styles.documentSectionDescription}>
+          Upload NOR or SI documents (PDF link or paste text)
+        </Text>
+        <Pressable
+          style={styles.documentUploadButton}
+          onPress={handleUpload}
+        >
+          <Upload size={18} color={IOS_COLORS.blue} />
+          <Text style={styles.documentUploadButtonText}>
+            {sailingInstructions ? 'Update SI Document' : 'Add SI Document'}
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Course Diagram Section */}
+      <View style={styles.documentSection}>
+        <View style={styles.documentSectionHeader}>
+          <Map size={20} color={IOS_COLORS.purple} />
+          <Text style={styles.documentSectionTitle}>Course Diagram</Text>
+          {courseDiagram && (
+            <View style={styles.documentCheckBadge}>
+              <CheckCircle2 size={16} color={IOS_COLORS.green} />
+            </View>
+          )}
+        </View>
+        <Text style={styles.documentSectionDescription}>
+          Upload a course map image to extract marks automatically using AI
+        </Text>
+        <View style={styles.diagramButtonsRow}>
+          <Pressable
+            style={styles.diagramButton}
+            onPress={handleLibrarySelect}
+          >
+            <ImageIcon size={18} color={IOS_COLORS.purple} />
+            <Text style={styles.diagramButtonText}>Photo Library</Text>
+          </Pressable>
+          <Pressable
+            style={styles.diagramButton}
+            onPress={handleCameraCapture}
+          >
+            <Camera size={18} color={IOS_COLORS.purple} />
+            <Text style={styles.diagramButtonText}>Take Photo</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Extraction status */}
+      {isExtracting && (
+        <View style={styles.extractingBanner}>
+          <ActivityIndicator size="small" color={IOS_COLORS.purple} />
+          <Text style={styles.extractingBannerText}>Analyzing course diagram...</Text>
+        </View>
+      )}
+
+      {extractionError && (
+        <View style={styles.extractionErrorBanner}>
+          <AlertTriangle size={16} color={IOS_COLORS.red} />
+          <Text style={styles.extractionErrorBannerText}>{extractionError}</Text>
+        </View>
+      )}
+
+      {extractedCourse && (
+        <View style={styles.extractionSuccessBanner}>
+          <CheckCircle2 size={16} color={IOS_COLORS.green} />
+          <Text style={styles.extractionSuccessBannerText}>
+            Extracted {extractedCourse.marks.length} marks from diagram
+          </Text>
+          <Pressable onPress={() => setStep('marks')}>
+            <Text style={styles.viewMarksLink}>View Marks →</Text>
+          </Pressable>
+        </View>
+      )}
+    </ScrollView>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -611,14 +975,12 @@ export function CourseMapWizard({
           )}
         </Pressable>
         <Text style={styles.headerTitle}>
-          {step === 'marks' ? 'Course Marks' : step === 'review' ? 'Checklist' : 'Course Study'}
+          {step === 'marks' ? 'Course Marks' : step === 'review' ? 'Checklist' : step === 'documents' ? 'Documents' : 'Course Study'}
         </Text>
         <View style={styles.headerRight}>
-          {item.learningModuleSlug && (
-            <Pressable style={styles.learnIconButton} onPress={handleLearnMore}>
-              <BookOpen size={20} color={IOS_COLORS.purple} />
-            </Pressable>
-          )}
+          <Pressable style={styles.learnIconButton} onPress={handleLearnMore}>
+            <BookOpen size={20} color={IOS_COLORS.purple} />
+          </Pressable>
         </View>
       </View>
 
@@ -1181,6 +1543,369 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  // Image extraction styles
+  imagePreviewCard: {
+    width: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    backgroundColor: IOS_COLORS.separator,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  imageOverlayText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  confidenceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: `${IOS_COLORS.purple}15`,
+    borderRadius: 10,
+    marginBottom: 16,
+    width: '100%',
+  },
+  confidenceText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.purple,
+  },
+  extractedMarksContainer: {
+    width: '100%',
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  extractedSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.tertiaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  extractedMarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  markTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  markTypeBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  extractedMarkName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  extractedMarkRounding: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  extractedSequenceContainer: {
+    width: '100%',
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  sequenceFlow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sequenceFlowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sequenceFlowNumber: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  sequenceFlowNumberText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  sequenceFlowName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  windDirectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: `${IOS_COLORS.green}15`,
+    borderRadius: 10,
+    marginBottom: 16,
+    width: '100%',
+  },
+  windDirectionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
+  },
+  clearButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginTop: 8,
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: IOS_COLORS.blue,
+    fontWeight: '500',
+  },
+  extractingImage: {
+    width: 180,
+    height: 135,
+    borderRadius: 10,
+    marginBottom: 20,
+    backgroundColor: IOS_COLORS.separator,
+  },
+  extractingContainer: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  extractingTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginTop: 12,
+  },
+  extractingDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  extractionErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    backgroundColor: `${IOS_COLORS.red}10`,
+    borderRadius: 10,
+    marginBottom: 16,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.red}30`,
+  },
+  extractionErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.red,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 6,
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  imagePickerSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  imagePickerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  imagePickerButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  imagePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: `${IOS_COLORS.purple}15`,
+    borderRadius: 10,
+    gap: 8,
+  },
+  imagePickerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.purple,
+  },
+  orDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginVertical: 16,
+    paddingHorizontal: 20,
+  },
+  orDividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+  },
+  orDividerText: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+    paddingHorizontal: 12,
+  },
+  // Document section styles
+  documentSection: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  documentSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  documentSectionTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  documentCheckBadge: {
+    padding: 2,
+  },
+  documentSectionDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 14,
+    lineHeight: 20,
+  },
+  documentUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 10,
+    gap: 8,
+  },
+  documentUploadButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  diagramButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  diagramButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: `${IOS_COLORS.purple}15`,
+    borderRadius: 10,
+    gap: 8,
+  },
+  diagramButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.purple,
+  },
+  extractingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.purple}10`,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  extractingBannerText: {
+    fontSize: 14,
+    color: IOS_COLORS.purple,
+    fontWeight: '500',
+  },
+  extractionErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.red}10`,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  extractionErrorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.red,
+  },
+  extractionSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.green}10`,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  extractionSuccessBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.green,
+    fontWeight: '500',
+  },
+  viewMarksLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
   },
 });
 

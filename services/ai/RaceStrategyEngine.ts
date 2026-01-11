@@ -647,7 +647,7 @@ CRITICAL OUTPUT RULES:
 
     try {
       const response = await this.anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-latest', // Claude Haiku - cost-effective for strategy generation
+        model: 'claude-3-haiku-20240307', // Claude Haiku - cost-effective for strategy generation
         max_tokens: 4000,
         temperature: 0.7,
         betas: selectedSkillId
@@ -878,7 +878,7 @@ CRITICAL OUTPUT RULES:
       // Using Claude 3.5 Haiku for cost optimization (12x cheaper than Sonnet)
       // Excellent for structured strategy generation tasks
       const message = await this.anthropic.beta.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 2048,
         temperature: 0.3, // Creative but consistent strategy generation
         betas: selectedSkillId
@@ -1323,7 +1323,7 @@ Respond in JSON format:
 }`;
 
       const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 1500,
         temperature: 0.3,
         messages: [{ role: 'user', content: contingencyPrompt }]

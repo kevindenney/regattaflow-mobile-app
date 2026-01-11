@@ -6,21 +6,31 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TurboModuleRegistry } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/constants/designSystem';
 import type { CourseMark, MarkType } from '@/types/raceEvents';
 
 // Conditional imports for native only
-let Polyline: any;
-let Marker: any;
-let Callout: any;
+let Polyline: any = null;
+let Marker: any = null;
+let Callout: any = null;
+let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
 if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  Polyline = maps.Polyline;
-  Marker = maps.Marker;
-  Callout = maps.Callout;
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      Polyline = maps.Polyline;
+      Marker = maps.Marker;
+      Callout = maps.Callout;
+      mapsAvailable = true;
+    }
+  } catch (e) {
+    console.warn('[CourseOverlay] react-native-maps not available:', e);
+  }
 }
 
 // Mark colors matching web TacticalRaceMap

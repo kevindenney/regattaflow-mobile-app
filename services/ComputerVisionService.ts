@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface SailTrimAnalysis {
   overall_score: number; // 0-100
@@ -181,7 +181,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -279,7 +279,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -383,7 +383,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{

@@ -12,12 +12,16 @@
  * - High data density in minimal space
  */
 
+import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { TufteTokens, createTufteCardStyle, getRaceStatus, getRaceStatusColors, type RaceStatusType } from '@/constants/designSystem';
 import { calculateCountdown } from '@/constants/mockData';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState, useEffect } from 'react';
 import { Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sparkline, WindArrow } from '@/components/shared/charts';
+import { RaceTypeBadge, type RaceType } from './RaceTypeSelector';
+import { TruncatedText } from '@/components/ui/TruncatedText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -55,10 +59,21 @@ export interface RaceCardEnhancedProps {
   isSelected?: boolean;
   onSelect?: () => void;
   cardWidth?: number;
+  cardHeight?: number;
   /** Conditions timeline data from useEnrichedRaces */
   conditionsTimeline?: RaceConditionsTimeline[];
   /** Fleet name */
   fleetName?: string;
+  /** Callback when edit is requested */
+  onEdit?: () => void;
+  /** Callback when delete is requested */
+  onDelete?: () => void;
+  /** Callback when duplicate is requested */
+  onDuplicate?: () => void;
+  /** Whether to show management actions (only for race owner) */
+  canManage?: boolean;
+  /** Race type: fleet, distance, match, or team */
+  raceType?: RaceType;
 }
 
 /**
@@ -336,7 +351,7 @@ function SummarySection({
             data={windData}
             width={80}
             height={20}
-            color="#3B82F6"
+            color={IOS_COLORS.blue}
             strokeWidth={1.5}
             highlightMax
           />
@@ -363,7 +378,7 @@ function SummarySection({
             data={currentData}
             width={80}
             height={20}
-            color="#10B981"
+            color={IOS_COLORS.green}
             strokeWidth={1.5}
             highlightMax
           />
@@ -393,7 +408,7 @@ function SummarySection({
             data={waveData}
             width={80}
             height={20}
-            color="#0EA5E9"
+            color={IOS_COLORS.cyan}
             strokeWidth={1.5}
             highlightMax
           />
@@ -424,8 +439,14 @@ export function RaceCardEnhanced({
   isSelected = false,
   onSelect,
   cardWidth: propCardWidth,
+  cardHeight: propCardHeight,
   conditionsTimeline,
   fleetName,
+  onEdit,
+  onDelete,
+  onDuplicate,
+  canManage = false,
+  raceType = 'fleet',
 }: RaceCardEnhancedProps) {
   const router = useRouter();
 
@@ -515,10 +536,26 @@ export function RaceCardEnhanced({
     });
   }, [date]);
 
+  // Build menu items for card management
+  const menuItems = useMemo((): CardMenuItem[] => {
+    const items: CardMenuItem[] = [];
+    if (onEdit) {
+      items.push({ label: 'Edit Race', icon: 'create-outline', onPress: onEdit });
+    }
+    if (onDuplicate) {
+      items.push({ label: 'Duplicate', icon: 'copy-outline', onPress: onDuplicate });
+    }
+    if (onDelete) {
+      items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
+    }
+    return items;
+  }, [onEdit, onDuplicate, onDelete]);
+
   return (
     <View
       style={{
         width: cardWidth,
+        ...(propCardHeight ? { height: propCardHeight } : {}),
         flexShrink: 0,
         flexGrow: 0,
       }}
@@ -527,7 +564,7 @@ export function RaceCardEnhanced({
         style={({ pressed }) => [
           styles.card,
           styles.cardApple,
-          { width: '100%' },
+          { width: '100%', ...(propCardHeight ? { height: '100%' } : {}) },
           isSelected && styles.cardSelected,
           pressed && styles.cardPressed,
         ]}
@@ -542,25 +579,39 @@ export function RaceCardEnhanced({
         {/* Header Zone */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          {/* Fleet badge */}
-          {fleetName && (
-            <View style={styles.fleetBadge}>
-              <Text style={styles.fleetBadgeText}>{fleetName}</Text>
-            </View>
-          )}
-          <Text style={styles.title} numberOfLines={1}>
-            {name}
-          </Text>
+          {/* Race Type and Fleet badges */}
+          <View style={styles.badgesRow}>
+            <RaceTypeBadge type={raceType} size="small" />
+            {fleetName && (
+              <View style={styles.fleetBadge}>
+                <Text style={styles.fleetBadgeText}>{fleetName}</Text>
+              </View>
+            )}
+          </View>
+          <TruncatedText
+            text={name}
+            numberOfLines={1}
+            style={styles.title}
+          />
           {/* Consolidated info line: venue · date · time */}
           <Text style={styles.infoLine} numberOfLines={1}>
             {venue} · {formattedDate} · {startTime}
           </Text>
         </View>
 
-        {/* Countdown - simplified, no box */}
-        <Text style={[styles.countdownValue, { color: countdownStyle.text }]}>
-          {countdownDisplay}
-        </Text>
+        <View style={styles.headerRight}>
+          {/* Countdown - simplified, no box */}
+          <Text style={[styles.countdownValue, { color: countdownStyle.text }]}>
+            {countdownDisplay}
+          </Text>
+
+          {/* Management Menu - pointerEvents="box-none" prevents click from bubbling to card */}
+          {canManage && menuItems.length > 0 && (
+            <View pointerEvents="box-none">
+              <CardMenu items={menuItems} iconSize={18} iconColor={IOS_COLORS.gray} />
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Summary Section with Sparklines */}
@@ -575,7 +626,7 @@ export function RaceCardEnhanced({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IOS_COLORS.systemBackground,
     borderRadius: 20,
     padding: 16,
     marginVertical: 8,
@@ -590,7 +641,7 @@ const styles = StyleSheet.create({
         // Apple-style card lift: border + shadow work together
         // Border provides crisp edge definition
         borderWidth: 1,
-        borderColor: '#E5E7EB', // gray-200 - subtle but visible
+        borderColor: IOS_COLORS.gray5,
         // Shadow provides depth perception (stronger than before to match web)
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -612,15 +663,15 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   cardSelected: {
-    backgroundColor: '#F0F7FF',
+    backgroundColor: `${IOS_COLORS.blue}10`,
     ...Platform.select({
       web: {
-        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.1), 0 8px 20px rgba(37, 99, 235, 0.15), 0 16px 40px rgba(0, 0, 0, 0.08)',
+        boxShadow: `0 2px 4px ${IOS_COLORS.blue}1A, 0 8px 20px ${IOS_COLORS.blue}26, 0 16px 40px rgba(0, 0, 0, 0.08)`,
       },
       default: {
         borderWidth: 1.5,
-        borderColor: '#93C5FD', // blue-300 - visible selection indicator
-        shadowColor: '#2563EB',
+        borderColor: `${IOS_COLORS.blue}40`,
+        shadowColor: IOS_COLORS.blue,
         shadowOpacity: 0.15,
         shadowRadius: 8,
         elevation: 6,
@@ -641,8 +692,19 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: TufteTokens.spacing.standard,
   },
+  badgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   fleetBadge: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: `${IOS_COLORS.blue}15`,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 2,
@@ -652,7 +714,7 @@ const styles = StyleSheet.create({
   fleetBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#0369A1',
+    color: IOS_COLORS.blue,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
@@ -671,7 +733,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
-    color: '#374151',
+    color: IOS_COLORS.secondaryLabel,
   },
 });
 
@@ -692,7 +754,7 @@ const summaryStyles = StyleSheet.create({
   },
   labelText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.gray,
     fontWeight: '500',
   },
   sparklineContainer: {
@@ -708,12 +770,12 @@ const summaryStyles = StyleSheet.create({
   valueMain: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
     fontVariant: ['tabular-nums'],
   },
   valueUnit: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: IOS_COLORS.gray2,
   },
   directionContainer: {
     flexDirection: 'row',
@@ -723,21 +785,21 @@ const summaryStyles = StyleSheet.create({
   },
   directionText: {
     fontSize: 12,
-    color: '#64748B',
+    color: IOS_COLORS.gray,
     fontWeight: '500',
   },
   directionArrow: {
     fontSize: 10,
-    color: '#CBD5E1',
+    color: IOS_COLORS.gray3,
   },
   phaseText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.gray,
     textTransform: 'capitalize',
   },
   periodText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.gray,
   },
 });
 
@@ -749,16 +811,16 @@ const tableStyles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: IOS_COLORS.gray6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: IOS_COLORS.gray5,
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
   headerCell: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#64748B',
+    color: IOS_COLORS.gray,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -778,27 +840,27 @@ const tableStyles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   dataRowHighlight: {
-    backgroundColor: '#FFFBEB',
+    backgroundColor: `${IOS_COLORS.yellow}15`,
   },
   dataRowLast: {
     borderBottomWidth: 0,
   },
   dataCell: {
     fontSize: 12,
-    color: '#334155',
+    color: IOS_COLORS.secondaryLabel,
   },
   timeText: {
     fontVariant: ['tabular-nums'],
     fontWeight: '500',
-    color: '#64748B',
+    color: IOS_COLORS.gray,
   },
   eventText: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.gray,
   },
   eventTextBold: {
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
   },
   dataCellRow: {
     flexDirection: 'row',
@@ -808,16 +870,16 @@ const tableStyles = StyleSheet.create({
   dataValue: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0F172A',
+    color: IOS_COLORS.label,
     fontVariant: ['tabular-nums'],
     minWidth: 22,
   },
   dataValueStrong: {
-    color: '#F59E0B', // Amber for high current
+    color: IOS_COLORS.orange,
   },
   dataLabel: {
     fontSize: 10,
-    color: '#94A3B8',
+    color: IOS_COLORS.gray2,
   },
 });
 

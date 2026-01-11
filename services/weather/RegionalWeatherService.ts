@@ -302,6 +302,11 @@ export class RegionalWeatherService {
       return weatherData;
 
     } catch (error: any) {
+      this.logger.error('[getVenueWeather] Failed to fetch weather:', {
+        venueId: venue.id,
+        venueName: venue.name,
+        error: error?.message || error,
+      });
       return null;
     }
   }
@@ -401,44 +406,43 @@ export class RegionalWeatherService {
     timestamp: Date,
     model: RegionalWeatherModel
   ): Promise<WeatherForecast> {
-    // Try to use Storm Glass first
+    // Try to use Storm Glass first if we have valid coordinates
     if (this.stormGlassService) {
-      try {
-        const location = this.resolveVenueLocation(venue);
+      const location = this.resolveVenueLocation(venue);
 
-        if (!location) {
-          console.warn(`[RegionalWeatherService] Invalid coordinates for ${venue.name}, falling back to simulated data`);
-          throw new Error('Invalid coordinates');
+      if (location) {
+        try {
+          const weatherData = await this.stormGlassService.getWeatherAtTime(location, timestamp);
+
+          if (weatherData) {
+            return {
+              timestamp,
+              windSpeed: Math.round(weatherData.wind.speed),
+              windDirection: Math.round(weatherData.wind.direction),
+              windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
+              waveHeight: weatherData.waves?.height || 0.5,
+              wavePeriod: weatherData.waves?.period || 5,
+              waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
+              currentSpeed: weatherData.tide?.speed || 0,
+              currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
+              airTemperature: weatherData.temperature || 20,
+              waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
+              visibility: (weatherData.visibility.horizontal ?? 10000) / 1000,
+              barometricPressure: weatherData.pressure.sealevel,
+              humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
+              precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
+              cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
+              weatherCondition: this.mapWeatherCondition(weatherData),
+              confidence: weatherData.forecast?.confidence || model.reliability
+            };
+          }
+        } catch (error) {
+          // Log as warning, not error, since we have a fallback
+          console.warn('[RegionalWeatherService] Storm Glass API call failed, using simulated data:', error);
+          // Fall through to simulated data
         }
-
-        const weatherData = await this.stormGlassService.getWeatherAtTime(location, timestamp);
-
-        if (weatherData) {
-          return {
-            timestamp,
-            windSpeed: Math.round(weatherData.wind.speed),
-            windDirection: Math.round(weatherData.wind.direction),
-            windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
-            waveHeight: weatherData.waves?.height || 0.5,
-            wavePeriod: weatherData.waves?.period || 5,
-            waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
-            currentSpeed: weatherData.tide?.speed || 0,
-            currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
-            airTemperature: weatherData.temperature || 20,
-            waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
-            visibility: (weatherData.visibility.horizontal ?? 10000) / 1000,
-            barometricPressure: weatherData.pressure.sealevel,
-            humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
-            precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
-            cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
-            weatherCondition: this.mapWeatherCondition(weatherData),
-            confidence: weatherData.forecast?.confidence || model.reliability
-          };
-        }
-      } catch (error) {
-        console.error('[RegionalWeatherService] Storm Glass API error, falling back to simulated data:', error);
-        // Fall through to simulated data
       }
+      // No valid coordinates - silently fall through to simulated data
     }
 
     // Fallback: Use simulated data based on venue's typical conditions
@@ -560,26 +564,42 @@ export class RegionalWeatherService {
 
   private resolveVenueLocation(venue: SailingVenue): { latitude: number; longitude: number } | null {
     const coordinates = venue.coordinates as any;
+
+    this.logger.debug('🔍 [resolveVenueLocation] Input:', {
+      venueId: venue.id,
+      venueName: venue.name,
+      coordinates,
+      coordinatesType: coordinates ? (Array.isArray(coordinates) ? 'array' : typeof coordinates) : 'undefined',
+    });
+
     if (!coordinates) {
+      this.logger.warn('🔴 [resolveVenueLocation] No coordinates on venue');
       return null;
     }
 
     if (Array.isArray(coordinates)) {
       const [lng, lat] = coordinates;
+      this.logger.debug('🔍 [resolveVenueLocation] Array format detected:', { lng, lat });
       if (typeof lat === 'number' && typeof lng === 'number') {
+        this.logger.debug('🟢 [resolveVenueLocation] Valid array coords:', { latitude: lat, longitude: lng });
         return { latitude: lat, longitude: lng };
       }
+      this.logger.warn('🔴 [resolveVenueLocation] Invalid array values');
       return null;
     }
 
     if (typeof coordinates === 'object') {
       const lat = coordinates.lat ?? coordinates.latitude;
       const lng = coordinates.lng ?? coordinates.longitude ?? coordinates.lon;
+      this.logger.debug('🔍 [resolveVenueLocation] Object format detected:', { lat, lng });
       if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+        this.logger.debug('🟢 [resolveVenueLocation] Valid object coords:', { latitude: lat, longitude: lng });
         return { latitude: lat, longitude: lng };
       }
+      this.logger.warn('🔴 [resolveVenueLocation] Invalid object values');
     }
 
+    this.logger.warn('🔴 [resolveVenueLocation] Failed to resolve coordinates');
     return null;
   }
 
@@ -607,10 +627,9 @@ export class RegionalWeatherService {
   private transformToWeatherForecast(weather: AdvancedWeatherConditions): WeatherForecast {
     const visibilityMeters = weather.visibility?.horizontal ?? 10000;
 
-    // Get current speed from weather.current (ocean currents) or tide data
-    // weather.current contains the tidal/ocean current data from StormGlass
-    const currentSpeedKnots = weather.current?.speed ?? weather.current?.knots ?? weather.tide?.speed ?? 0;
-    const currentDirection = weather.current?.direction ?? weather.tide?.direction ?? weather.waves?.direction ?? 0;
+    // Get current speed from tide data (ocean currents)
+    const currentSpeedKnots = weather.tide?.speed ?? 0;
+    const currentDirection = weather.tide?.direction ?? weather.waves?.direction ?? 0;
 
     return {
       timestamp: weather.timestamp ?? new Date(),

@@ -234,6 +234,10 @@ export default function SailorOnboardingEnhanced() {
           sail_number: state.sailNumber || null,
           is_primary: true,
           status: 'active',
+        }, {
+          // Handle conflicts on the unique constraint (sailor_id, class_id, sail_number)
+          onConflict: 'sailor_id,class_id,sail_number',
+          ignoreDuplicates: false,
         });
       }
     } catch (error) {

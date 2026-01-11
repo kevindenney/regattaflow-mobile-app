@@ -30,6 +30,7 @@ export {
   DOCUMENT_TYPE_OPTIONS,
   normalizeDocumentType,
   ADD_RACE_CARD_DISMISSED_KEY,
+  SAMPLE_RACE_DISMISSED_KEY,
   MOCK_GPS_TRACK,
   MOCK_SPLIT_TIMES,
 } from './constants';

@@ -9,6 +9,7 @@
 
 import { TufteTokens } from '@/constants/designSystem';
 import { ChevronDown } from 'lucide-react-native';
+import { IOS_COLORS } from '@/components/cards/constants';
 import React, { useCallback, useState } from 'react';
 import {
   Animated,
@@ -130,7 +131,7 @@ export function AccordionSection({
           >
             <ChevronDown
               size={18}
-              color={disabled ? '#CBD5E1' : '#64748B'}
+              color={disabled ? IOS_COLORS.gray4 : IOS_COLORS.secondaryLabel}
             />
           </Animated.View>
         </View>
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: IOS_COLORS.gray6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -237,14 +238,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   titleDisabled: {
-    color: '#94A3B8',
+    color: IOS_COLORS.gray,
   },
   subtitle: {
     ...TufteTokens.typography.tertiary,
     marginTop: 1,
   },
   countBadge: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: `${IOS_COLORS.blue}15`,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -254,7 +255,7 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#0369A1',
+    color: IOS_COLORS.blue,
     fontVariant: ['tabular-nums'],
   },
   contentWrapper: {

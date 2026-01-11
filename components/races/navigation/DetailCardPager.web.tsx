@@ -17,6 +17,7 @@ import {
   DETAIL_CARD_TYPES,
   type DetailCardType,
 } from '@/constants/navigationAnimations';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 // =============================================================================
 // TYPES
@@ -29,6 +30,14 @@ export interface DetailCardData {
   [key: string]: unknown;
 }
 
+/**
+ * Options passed to renderCard for expansion state
+ */
+export interface RenderCardOptions {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
 export interface DetailCardPagerProps {
   /** Array of detail cards to display */
   cards?: DetailCardData[];
@@ -37,7 +46,7 @@ export interface DetailCardPagerProps {
   /** Currently selected card index */
   selectedIndex?: number;
   /** Render function for each detail card */
-  renderCard: (card: DetailCardData, index: number, isActive: boolean) => ReactElement;
+  renderCard: (card: DetailCardData, index: number, isActive: boolean, options?: RenderCardOptions) => ReactElement;
   /** Callback when active card changes */
   onCardChange?: (index: number, cardType: DetailCardType) => void;
   /** Callback when a card is pressed */
@@ -55,17 +64,11 @@ export interface DetailCardPagerProps {
 }
 
 // =============================================================================
-// DEFAULT CARDS
+// DEFAULT CARDS (REMOVED - cards should always be provided by parent)
 // =============================================================================
-
-const createDefaultDetailCards = (): DetailCardData[] => [
-  { type: 'conditions', id: 'detail-conditions', title: 'Conditions' },
-  { type: 'strategy', id: 'detail-strategy', title: 'Strategy' },
-  { type: 'rig', id: 'detail-rig', title: 'Rig Setup' },
-  { type: 'course', id: 'detail-course', title: 'Course' },
-  { type: 'fleet', id: 'detail-fleet', title: 'Fleet' },
-  { type: 'regulatory', id: 'detail-regulatory', title: 'Regulatory' },
-];
+// NOTE: Default cards were removed because they would show pre-race cards
+// even for completed races. The parent component (RealRacesCarousel) should
+// always provide the appropriate cards based on race status.
 
 // =============================================================================
 // COMPONENT
@@ -86,10 +89,12 @@ export function DetailCardPager({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const activeIndexShared = useSharedValue(selectedIndex);
+  // Track expanded card state (only one card can be expanded at a time)
+  const [expandedCardIndex, setExpandedCardIndex] = useState<number | null>(null);
 
-  // Use provided cards or default
+  // Use provided cards (no fallback - parent must provide cards)
   const detailCards = useMemo(() => {
-    return cards || createDefaultDetailCards();
+    return cards || [];
   }, [cards]);
 
   // Calculate dimensions
@@ -195,6 +200,15 @@ export function DetailCardPager({
       >
         {detailCards.map((card, index) => {
           const isActive = index === activeIndex;
+          const isExpanded = expandedCardIndex === index;
+
+          // Create expansion options for this card
+          const expansionOptions: RenderCardOptions = {
+            isExpanded,
+            onToggle: () => {
+              setExpandedCardIndex(isExpanded ? null : index);
+            },
+          };
 
           return (
             <Pressable
@@ -203,7 +217,8 @@ export function DetailCardPager({
               style={[
                 styles.cardContainer,
                 {
-                  height: cardHeight,
+                  height: isExpanded ? 'auto' : cardHeight, // Allow expansion
+                  minHeight: cardHeight,
                   scrollSnapAlign: 'center',
                   flexShrink: 0,
                   opacity: isActive ? DETAIL_CARD_OPACITY.active : DETAIL_CARD_OPACITY.inactive,
@@ -211,7 +226,7 @@ export function DetailCardPager({
                     { scale: isActive ? DETAIL_CARD_SCALE.active : DETAIL_CARD_SCALE.inactive },
                   ],
                   // @ts-ignore - Web transition property
-                  transition: 'opacity 0.3s ease, transform 0.3s ease',
+                  transition: 'opacity 0.3s ease, transform 0.3s ease, height 0.3s ease',
                 },
                 cardStyle,
               ]}
@@ -220,7 +235,7 @@ export function DetailCardPager({
               accessibilityLabel={`${card.title} - Card ${index + 1} of ${detailCards.length}`}
               accessibilityState={{ selected: isActive }}
             >
-              {renderCard(card, index, isActive)}
+              {renderCard(card, index, isActive, expansionOptions)}
             </Pressable>
           );
         })}
@@ -236,7 +251,7 @@ export function DetailCardPager({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // gray-50
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
     overflow: 'hidden',
   },
   emptyContainer: {
@@ -246,8 +261,8 @@ const styles = StyleSheet.create({
   cardContainer: {
     width: '100%',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
+    backgroundColor: IOS_COLORS.systemBackground,
+    shadowColor: IOS_COLORS.label,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,

@@ -107,7 +107,7 @@ export class AICoachMatchingService {
     }
 
     const message = await this.genAI.messages.create({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       max_tokens: maxTokens,
       temperature,
       messages: [{

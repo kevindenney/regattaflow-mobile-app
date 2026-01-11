@@ -5,30 +5,15 @@
  * Expanded: Full document list with download actions
  */
 
-import React, { useCallback } from 'react';
+import React from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, {
-  useAnimatedStyle,
-  withTiming,
-  useSharedValue,
-  interpolate,
-} from 'react-native-reanimated';
-import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/navigationAnimations';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/components/cards/constants';
-
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 interface Document {
   id: string;
@@ -49,70 +34,12 @@ interface RegulatoryDetailCardProps {
 }
 
 export function RegulatoryDetailCard({
-  raceId,
   documents = [],
   vhfChannel,
   protestDeadline,
-  isExpanded = false,
-  onToggle,
-  onPress,
   onDocumentPress,
 }: RegulatoryDetailCardProps) {
   const hasDocuments = documents.length > 0;
-  const rotation = useSharedValue(isExpanded ? 1 : 0);
-
-  // Update rotation when isExpanded changes
-  React.useEffect(() => {
-    rotation.value = withTiming(isExpanded ? 1 : 0, {
-      duration: isExpanded ? CARD_EXPAND_DURATION : CARD_COLLAPSE_DURATION,
-    });
-  }, [isExpanded, rotation]);
-
-  // Animated chevron rotation
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 90])}deg` }],
-  }));
-
-  const handlePress = useCallback(() => {
-    LayoutAnimation.configureNext({
-      duration: isExpanded ? CARD_COLLAPSE_DURATION : CARD_EXPAND_DURATION,
-      update: { type: LayoutAnimation.Types.easeInEaseOut },
-    });
-
-    if (onToggle) {
-      onToggle();
-    } else if (onPress) {
-      onPress();
-    }
-  }, [isExpanded, onToggle, onPress]);
-
-  const getDocumentIcon = (type: Document['type']) => {
-    switch (type) {
-      case 'sailing_instructions': return 'document-text';
-      case 'nor': return 'newspaper';
-      case 'amendment': return 'alert-circle';
-      case 'notam': return 'warning';
-      default: return 'document';
-    }
-  };
-
-  const getDocumentLabel = (type: Document['type']) => {
-    switch (type) {
-      case 'sailing_instructions': return 'SI';
-      case 'nor': return 'NOR';
-      case 'amendment': return 'AMD';
-      case 'notam': return 'NOTAM';
-      default: return 'DOC';
-    }
-  };
-
-  const getDocumentColor = (type: Document['type']) => {
-    switch (type) {
-      case 'amendment': return IOS_COLORS.red;
-      case 'notam': return IOS_COLORS.orange;
-      default: return IOS_COLORS.indigo;
-    }
-  };
 
   // Sort documents: amendments first, then SI, then NOR
   const sortedDocs = [...documents].sort((a, b) => {
@@ -120,92 +47,54 @@ export function RegulatoryDetailCard({
     return (priority[a.type] ?? 4) - (priority[b.type] ?? 4);
   });
 
+  // No expansion needed - all data shown directly (Tufte principle: no hidden data)
   return (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={handlePress}
-      activeOpacity={0.7}
-    >
+    <View style={styles.card}>
       {/* Header - Tufte typography-only */}
       <View style={styles.tufteHeader}>
         <Text style={styles.tufteHeaderTitle}>DOCUMENTS</Text>
         <Text style={styles.tufteHeaderSubtitle}>
           {documents.length > 0 ? `${documents.length} files` : 'Race documents'}
         </Text>
-        <Animated.View style={chevronStyle}>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={IOS_COLORS.gray} />
-        </Animated.View>
       </View>
 
-      {/* Content */}
-      <>
-        {/* Collapsed: Tufte flat typography */}
-        {!isExpanded && (
-          <View style={styles.tufteCollapsedContent}>
-            <Text style={styles.tufteCollapsedData}>
-              {[
-                vhfChannel && `VHF Ch ${vhfChannel}`,
-                protestDeadline && `Protest by ${protestDeadline}`,
-                hasDocuments && `${documents.length} document${documents.length !== 1 ? 's' : ''}`,
-              ].filter(Boolean).join(' · ') || 'No documents available'}
-            </Text>
-          </View>
-        )}
+      {/* Content - ALL data shown (no expansion needed) */}
+      <View style={styles.tufteCollapsedContent}>
+        {/* Key info summary */}
+        <Text style={styles.tufteCollapsedData}>
+          {[
+            vhfChannel && `VHF Ch ${vhfChannel}`,
+            protestDeadline && `Protest by ${protestDeadline}`,
+          ].filter(Boolean).join(' · ') || ''}
+        </Text>
 
-        {/* Expanded: Tufte flat content */}
-        {isExpanded && (
-          <View style={styles.expandedContent}>
-            {/* Key Info - Tufte flat rows */}
-            {(vhfChannel || protestDeadline) && (
-              <View style={styles.tufteKeyInfoGrid}>
-                {vhfChannel && (
-                  <View style={styles.tufteKeyInfoRow}>
-                    <Text style={styles.tufteKeyInfoLabel}>VHF</Text>
-                    <Text style={styles.tufteKeyInfoValue}>Channel {vhfChannel}</Text>
-                  </View>
+        {/* Documents List - directly accessible */}
+        {hasDocuments ? (
+          <View style={styles.tufteDocumentsList}>
+            {sortedDocs.map((doc) => (
+              <TouchableOpacity
+                key={doc.id}
+                style={styles.tufteDocumentRow}
+                onPress={() => onDocumentPress?.(doc)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.tufteDocumentName} numberOfLines={1}>
+                  {doc.name}
+                </Text>
+                {(doc.type === 'amendment' || doc.type === 'notam') && (
+                  <Text style={styles.tufteDocumentAlert}>!</Text>
                 )}
-                {protestDeadline && (
-                  <View style={styles.tufteKeyInfoRow}>
-                    <Text style={styles.tufteKeyInfoLabel}>Protest</Text>
-                    <Text style={styles.tufteKeyInfoValue}>by {protestDeadline}</Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Documents List - Tufte style: full names, minimal icons */}
-            {hasDocuments ? (
-              <View style={styles.documentsSection}>
-                <View style={styles.tufteDocumentsList}>
-                  {sortedDocs.map((doc) => (
-                    <TouchableOpacity
-                      key={doc.id}
-                      style={styles.tufteDocumentRow}
-                      onPress={() => onDocumentPress?.(doc)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.tufteDocumentName} numberOfLines={1}>
-                        {doc.name}
-                      </Text>
-                      {(doc.type === 'amendment' || doc.type === 'notam') && (
-                        <Text style={styles.tufteDocumentAlert}>!</Text>
-                      )}
-                      <MaterialCommunityIcons name="download" size={16} color={IOS_COLORS.gray} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.noDocsContainer}>
-                <Ionicons name="folder-open-outline" size={28} color={IOS_COLORS.gray3} />
-                <Text style={styles.noDocsTitle}>No Documents</Text>
-                <Text style={styles.noDocsSubtext}>Race documents will appear here when available</Text>
-              </View>
-            )}
+                <MaterialCommunityIcons name="download" size={16} color={IOS_COLORS.blue} />
+              </TouchableOpacity>
+            ))}
           </View>
+        ) : (
+          <Text style={styles.tufteNoDocsText}>
+            No documents available
+          </Text>
         )}
-      </>
-    </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -416,5 +305,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: IOS_COLORS.label,
+  },
+  tufteNoDocsText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
 });

@@ -17,14 +17,15 @@ import {
   TextInput,
   TouchableOpacity,
   Modal,
-  SafeAreaView,
+  
   ActivityIndicator,
   FlatList,
   Keyboard,
   Platform,
   Pressable,
   TurboModuleRegistry,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, MapPin, Search, Navigation, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/services/supabase';
@@ -49,11 +50,9 @@ try {
     Marker = maps.Marker;
     PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
     mapsAvailable = true;
-  } else {
-    console.warn('[LocationMapPicker] RNMapsAirModule not registered - using fallback UI');
   }
-} catch (e) {
-  console.warn('[LocationMapPicker] react-native-maps not available:', e);
+} catch (_e) {
+  // react-native-maps not available - will use fallback UI
 }
 
 const logger = createLogger('LocationMapPicker');

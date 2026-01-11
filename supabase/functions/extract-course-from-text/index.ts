@@ -154,7 +154,7 @@ serve(async (req: Request) => {
     console.log('[extract-course-text] Calling Claude API...');
     
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 4096,
       messages: [
         {

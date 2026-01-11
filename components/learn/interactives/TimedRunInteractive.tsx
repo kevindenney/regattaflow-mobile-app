@@ -95,7 +95,7 @@ export function TimedRunInteractive({
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <View style={styles.container}>
         <View style={styles.svgContainer}>
-        <Svg width="100%" height="100%" viewBox="0 0 800 450">
+        <Svg width="100%" height="100%" viewBox="0 0 900 450" preserveAspectRatio="xMidYMid meet">
           <Defs>
             <Marker id="arrowhead-timedrun" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
               <Polygon points="0,0 10,3.5 0,7" fill="#000" />
@@ -108,8 +108,8 @@ export function TimedRunInteractive({
           </Defs>
 
           {/* Water background with texture */}
-          <Rect width="800" height="450" fill="#aaccff" />
-          <Rect width="800" height="450" fill="url(#water-texture-tr)" />
+          <Rect width="900" height="450" fill="#aaccff" />
+          <Rect width="900" height="450" fill="url(#water-texture-tr)" />
 
           {/* Compass and Wind */}
           <G transform="translate(400, 70)">

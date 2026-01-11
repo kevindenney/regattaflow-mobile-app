@@ -6,7 +6,7 @@
  */
 
 import { Platform, Alert } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import ResultsService from '../ResultsService';
 import { SeriesStanding } from '../scoring/ScoringEngine';
 

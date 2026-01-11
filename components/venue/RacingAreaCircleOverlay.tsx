@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform, TurboModuleRegistry } from 'react-native';
 import type { VenueRacingArea } from '@/services/venue/CommunityVenueCreationService';
 import { TufteTokens } from '@/constants/designSystem';
 
@@ -17,14 +17,23 @@ let Marker: any = null;
 let Callout: any = null;
 let mapsAvailable = false;
 
-try {
-  const maps = require('react-native-maps');
-  Circle = maps.Circle;
-  Marker = maps.Marker;
-  Callout = maps.Callout;
-  mapsAvailable = true;
-} catch (e) {
-  // Maps not available (Expo Go)
+// Check if native module is registered BEFORE requiring react-native-maps
+// This prevents TurboModuleRegistry.getEnforcing from throwing
+if (Platform.OS !== 'web') {
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      Circle = maps.Circle;
+      Marker = maps.Marker;
+      Callout = maps.Callout;
+      mapsAvailable = true;
+    } else {
+      console.warn('[RacingAreaCircleOverlay] RNMapsAirModule not registered');
+    }
+  } catch (e) {
+    console.warn('[RacingAreaCircleOverlay] react-native-maps not available:', e);
+  }
 }
 
 interface RacingAreaCircleOverlayProps {

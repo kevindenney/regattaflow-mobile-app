@@ -295,6 +295,7 @@ export class ExcellenceMetricsService {
 
   /**
    * Get phase ratings stats from race_timer_sessions
+   * Supports both legacy phase_ratings and new debrief_responses formats
    */
   private static async getPhaseRatingsStats(
     sailorId: string
@@ -304,9 +305,8 @@ export class ExcellenceMetricsService {
     try {
       const { data: sessions, error } = await supabase
         .from('race_timer_sessions')
-        .select('phase_ratings')
+        .select('phase_ratings, debrief_responses')
         .eq('sailor_id', sailorId)
-        .not('phase_ratings', 'is', null)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -317,11 +317,60 @@ export class ExcellenceMetricsService {
         start: { sum: 0, count: 0 },
         upwind: { sum: 0, count: 0 },
         downwind: { sum: 0, count: 0 },
-        marks: { sum: 0, count: 0 }, // windwardMark + leewardMark
+        marks: { sum: 0, count: 0 },
+        prep: { sum: 0, count: 0 },
+        finish: { sum: 0, count: 0 },
       };
 
-      // Process each session's phase ratings
+      // Process each session
       for (const session of sessions || []) {
+        // Try new debrief_responses format first
+        const debrief = session.debrief_responses as Record<string, unknown> | null;
+        if (debrief && Object.keys(debrief).length > 0) {
+          // Prep phase
+          if (typeof debrief.prep_equipment_rating === 'number') {
+            phaseData.prep.sum += debrief.prep_equipment_rating as number;
+            phaseData.prep.count += 1;
+          }
+
+          // Pre-start/Start phase
+          if (typeof debrief.prestart_routine_rating === 'number') {
+            phaseData.start.sum += debrief.prestart_routine_rating as number;
+            phaseData.start.count += 1;
+          }
+
+          // Upwind phase
+          if (typeof debrief.upwind_rating === 'number') {
+            phaseData.upwind.sum += debrief.upwind_rating as number;
+            phaseData.upwind.count += 1;
+          }
+          if (typeof debrief.upwind_shift_awareness === 'number') {
+            phaseData.upwind.sum += debrief.upwind_shift_awareness as number;
+            phaseData.upwind.count += 1;
+          }
+
+          // Downwind phase
+          if (typeof debrief.downwind_rating === 'number') {
+            phaseData.downwind.sum += debrief.downwind_rating as number;
+            phaseData.downwind.count += 1;
+          }
+
+          // Marks phase
+          if (typeof debrief.marks_layline_timing === 'number') {
+            phaseData.marks.sum += debrief.marks_layline_timing as number;
+            phaseData.marks.count += 1;
+          }
+
+          // Finish/overall phase
+          if (typeof debrief.finish_overall_rating === 'number') {
+            phaseData.finish.sum += debrief.finish_overall_rating as number;
+            phaseData.finish.count += 1;
+          }
+
+          continue; // Skip legacy format if new format has data
+        }
+
+        // Fall back to legacy phase_ratings format
         const ratings = session.phase_ratings as Record<string, { rating?: number; note?: string }> | null;
         if (!ratings) continue;
 

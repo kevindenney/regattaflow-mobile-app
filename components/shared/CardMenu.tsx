@@ -33,7 +33,7 @@ interface CardMenuProps {
 export function CardMenu({ items, iconSize = 20, iconColor = '#64748B' }: CardMenuProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const buttonRef = useRef<TouchableOpacity | null>(null);
+  const buttonRef = useRef<React.ElementRef<typeof TouchableOpacity> | null>(null);
   const { width: screenWidth } = Dimensions.get('window');
   const menuWidth = 220;
   const horizontalPadding = 16;
@@ -64,7 +64,7 @@ export function CardMenu({ items, iconSize = 20, iconColor = '#64748B' }: CardMe
     event.stopPropagation();
 
     if (buttonRef.current?.measureInWindow) {
-      buttonRef.current.measureInWindow((x, y, width, height) => {
+      buttonRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
         setMenuPosition({ x, y, width, height });
         setShowMenu(true);
       });

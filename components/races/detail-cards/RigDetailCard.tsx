@@ -400,9 +400,13 @@ export function RigDetailCard({
   }, [isExpanded, rotation]);
 
   // Animated chevron rotation (0 -> 180 for Apple style)
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 180])}deg` }],
-  }));
+  const chevronStyle = useAnimatedStyle(() => {
+    'worklet';
+    const rotationValue = rotation.value ?? 0;
+    return {
+      transform: [{ rotate: `${interpolate(rotationValue, [0, 1], [0, 180])}deg` }],
+    };
+  });
 
   const handlePress = useCallback(() => {
     LayoutAnimation.configureNext({
@@ -448,104 +452,140 @@ export function RigDetailCard({
       {/* Content */}
       {hasSettings ? (
         <>
-          {/* Collapsed: Tufte flat typography */}
+          {/* Collapsed: Show ALL data (Tufte principle) - flat settings list */}
           {!isExpanded && (
             <View style={styles.tufteCollapsedContent}>
-              <Text style={styles.tufteCollapsedData}>
-                {heroSettings?.map((setting) =>
-                  `${getSettingLabel(setting.key, setting.label)} ${simplifyValue(setting.value)}`
-                ).join(' · ')}
-              </Text>
-              {settings && settings.length > 2 && (
-                <Text style={styles.tufteMoreSettings}>
-                  +{settings.length - 2} more settings
+              {/* All settings in flat grid */}
+              <View style={styles.tufteSettingsGrid}>
+                {settings?.map((setting) => (
+                  <View key={setting.key} style={styles.tufteSettingRow}>
+                    <Text style={styles.tufteSettingLabel}>
+                      {getSettingLabel(setting.key, setting.label)}
+                    </Text>
+                    <Text style={styles.tufteSettingValue}>
+                      {simplifyValue(setting.value)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Source attribution */}
+              {guideName && (
+                <Text style={styles.tufteSource}>
+                  {isAIGenerated ? 'AI' : 'Guide'}: {guideName}
+                  {confidence && ` · ${Math.round(confidence * 100)}%`}
                 </Text>
+              )}
+
+              {/* CTA if intentions available */}
+              {onRigIntentionsChange && (
+                <Text style={styles.tufteAdjustCTA}>Tap to adjust settings →</Text>
               )}
             </View>
           )}
 
-          {/* Expanded: Full sectioned content */}
+          {/* Expanded: INTERACTION ONLY (intention selectors) */}
           {isExpanded && (
             <View style={styles.expandedContent}>
-              {/* Primary Settings Section */}
-              {categorized.primary.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Primary Settings</Text>
-                  <View style={styles.settingsGrid}>
-                    {categorized.primary.map((setting) => (
-                      <ExpandableSetting
-                        key={setting.key}
-                        setting={setting}
-                        showTensionBar={false}
-                        intention={rigIntentions?.[setting.key]}
-                        onIntentionChange={
-                          onRigIntentionsChange
-                            ? (intention) => handleSettingIntentionChange(setting.key, intention)
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </View>
-                </View>
-              )}
+              {onRigIntentionsChange ? (
+                /* Intention adjustment mode */
+                <>
+                  <Text style={styles.tufteSectionLabel}>ADJUST SETTINGS</Text>
 
-              {/* Tension Settings Section */}
-              {categorized.tension.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Tension Settings</Text>
+                  {/* Settings with intention selectors */}
                   <View style={styles.settingsGrid}>
-                    {categorized.tension.map((setting) => (
+                    {settings?.map((setting) => (
                       <ExpandableSetting
                         key={setting.key}
                         setting={setting}
                         showTensionBar={isTensionSetting(setting.key)}
                         intention={rigIntentions?.[setting.key]}
-                        onIntentionChange={
-                          onRigIntentionsChange
-                            ? (intention) => handleSettingIntentionChange(setting.key, intention)
-                            : undefined
-                        }
+                        onIntentionChange={(intention) => handleSettingIntentionChange(setting.key, intention)}
                       />
                     ))}
                   </View>
-                </View>
-              )}
 
-              {/* Fine Tuning Section */}
-              {categorized.fineTuning.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Fine Tuning</Text>
-                  <View style={styles.settingsGrid}>
-                    {categorized.fineTuning.map((setting) => (
-                      <ExpandableSetting
-                        key={setting.key}
-                        setting={setting}
-                        showTensionBar={isTensionSetting(setting.key)}
-                        intention={rigIntentions?.[setting.key]}
-                        onIntentionChange={
-                          onRigIntentionsChange
-                            ? (intention) => handleSettingIntentionChange(setting.key, intention)
-                            : undefined
-                        }
+                  {/* Source Attribution */}
+                  {guideName && (
+                    <View style={styles.sourceRow}>
+                      <MaterialCommunityIcons
+                        name={isAIGenerated ? 'robot-outline' : 'file-document-outline'}
+                        size={14}
+                        color={isAIGenerated ? IOS_COLORS.purple : IOS_COLORS.secondaryLabel}
                       />
-                    ))}
-                  </View>
-                </View>
-              )}
+                      <Text style={styles.sourceText}>
+                        {guideName}
+                        {confidence && ` · ${Math.round(confidence * 100)}%`}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                /* Read-only detailed view (no intentions) */
+                <>
+                  {/* Primary Settings Section */}
+                  {categorized.primary.length > 0 && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Primary Settings</Text>
+                      <View style={styles.settingsGrid}>
+                        {categorized.primary.map((setting) => (
+                          <ExpandableSetting
+                            key={setting.key}
+                            setting={setting}
+                            showTensionBar={false}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
 
-              {/* Source Attribution */}
-              {guideName && (
-                <View style={styles.sourceRow}>
-                  <MaterialCommunityIcons
-                    name={isAIGenerated ? 'robot-outline' : 'file-document-outline'}
-                    size={14}
-                    color={isAIGenerated ? IOS_COLORS.purple : IOS_COLORS.secondaryLabel}
-                  />
-                  <Text style={styles.sourceText}>
-                    {guideName}
-                    {confidence && ` · ${Math.round(confidence * 100)}%`}
-                  </Text>
-                </View>
+                  {/* Tension Settings Section */}
+                  {categorized.tension.length > 0 && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Tension Settings</Text>
+                      <View style={styles.settingsGrid}>
+                        {categorized.tension.map((setting) => (
+                          <ExpandableSetting
+                            key={setting.key}
+                            setting={setting}
+                            showTensionBar={isTensionSetting(setting.key)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Fine Tuning Section */}
+                  {categorized.fineTuning.length > 0 && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Fine Tuning</Text>
+                      <View style={styles.settingsGrid}>
+                        {categorized.fineTuning.map((setting) => (
+                          <ExpandableSetting
+                            key={setting.key}
+                            setting={setting}
+                            showTensionBar={isTensionSetting(setting.key)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Source Attribution */}
+                  {guideName && (
+                    <View style={styles.sourceRow}>
+                      <MaterialCommunityIcons
+                        name={isAIGenerated ? 'robot-outline' : 'file-document-outline'}
+                        size={14}
+                        color={isAIGenerated ? IOS_COLORS.purple : IOS_COLORS.secondaryLabel}
+                      />
+                      <Text style={styles.sourceText}>
+                        {guideName}
+                        {confidence && ` · ${Math.round(confidence * 100)}%`}
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
             </View>
           )}
@@ -884,6 +924,48 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: IOS_COLORS.label,
+  },
+  tufteSettingsGrid: {
+    gap: 4,
+  },
+  tufteSettingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 3,
+  },
+  tufteSettingLabel: {
+    width: 80,
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteSettingValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+  tufteSource: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 8,
+  },
+  tufteAdjustCTA: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    marginTop: 4,
+  },
+  tufteSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
   tufteMoreSettings: {
     fontSize: 13,

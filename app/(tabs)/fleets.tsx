@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, Pressable, Modal } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, StyleSheet, Pressable, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FleetCard } from '@/components/fleets/FleetCard';
@@ -7,6 +7,8 @@ import { FleetFeed } from '@/components/fleets/FleetFeed';
 import { MembersList } from '@/components/fleets/MembersList';
 import { TuningLibrary } from '@/components/fleets/TuningLibrary';
 import { Leaderboard } from '@/components/fleets/Leaderboard';
+import { FleetDiscoveryService, Fleet as DiscoveredFleet } from '@/services/FleetDiscoveryService';
+import { useAuth } from '@/providers/AuthProvider';
 
 type TabType = 'feed' | 'members' | 'tuning' | 'events' | 'leaderboard';
 
@@ -24,9 +26,24 @@ interface Fleet {
 }
 
 export default function FleetsScreen() {
+  const { user } = useAuth();
   const [selectedFleet, setSelectedFleet] = useState<Fleet | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
-  const [fleets] = useState<Fleet[]>([
+
+  // Join Fleet Modal state
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<DiscoveredFleet[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isJoining, setIsJoining] = useState<string | null>(null);
+
+  // Create Fleet Modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newFleetName, setNewFleetName] = useState('');
+  const [newFleetDescription, setNewFleetDescription] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const [fleets, setFleets] = useState<Fleet[]>([
     {
       id: '1',
       name: 'Dragon Hong Kong Fleet',
@@ -61,6 +78,108 @@ export default function FleetsScreen() {
     { id: 'leaderboard', label: 'Standings', icon: 'trophy' },
   ];
 
+  // Search for fleets
+  const handleSearch = useCallback(async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const results = await FleetDiscoveryService.searchFleets(query);
+      // Filter out fleets user is already a member of
+      const existingIds = new Set(fleets.map(f => f.id));
+      setSearchResults(results.filter(f => !existingIds.has(f.id)));
+    } catch (error) {
+      console.error('Error searching fleets:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [fleets]);
+
+  // Join a fleet
+  const handleJoinFleet = useCallback(async (fleetToJoin: DiscoveredFleet) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'Please sign in to join a fleet');
+      return;
+    }
+
+    setIsJoining(fleetToJoin.id);
+    try {
+      const membership = await FleetDiscoveryService.joinFleet(user.id, fleetToJoin.id);
+      if (membership) {
+        // Add to local fleets list
+        const newFleet: Fleet = {
+          id: fleetToJoin.id,
+          name: fleetToJoin.name,
+          boat_class: fleetToJoin.boat_classes?.name || 'Unknown',
+          member_count: (fleetToJoin.member_count || 0) + 1,
+          recent_activity: 'Just joined',
+        };
+        setFleets(prev => [...prev, newFleet]);
+        setShowJoinModal(false);
+        setSearchQuery('');
+        setSearchResults([]);
+        Alert.alert('Success', `You've joined ${fleetToJoin.name}!`);
+      }
+    } catch (error) {
+      console.error('Error joining fleet:', error);
+      Alert.alert('Error', 'Failed to join fleet. Please try again.');
+    } finally {
+      setIsJoining(null);
+    }
+  }, [user]);
+
+  // Create a new fleet
+  const handleCreateFleet = useCallback(async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'Please sign in to create a fleet');
+      return;
+    }
+
+    if (!newFleetName.trim()) {
+      Alert.alert('Error', 'Please enter a fleet name');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const newFleet = await FleetDiscoveryService.createFleet(user.id, {
+        name: newFleetName.trim(),
+        description: newFleetDescription.trim() || undefined,
+        visibility: 'public',
+      });
+
+      if (newFleet) {
+        // Add to local fleets list
+        const fleetForList: Fleet = {
+          id: newFleet.id,
+          name: newFleet.name,
+          boat_class: newFleet.boat_classes?.name || 'General',
+          member_count: 1,
+          recent_activity: 'Just created',
+          user_stats: {
+            rank: 1,
+            points: 0,
+            events_participated: 0,
+          },
+        };
+        setFleets(prev => [...prev, fleetForList]);
+        setShowCreateModal(false);
+        setNewFleetName('');
+        setNewFleetDescription('');
+        Alert.alert('Success', `Fleet "${newFleet.name}" created!`);
+      }
+    } catch (error) {
+      console.error('Error creating fleet:', error);
+      Alert.alert('Error', 'Failed to create fleet. Please try again.');
+    } finally {
+      setIsCreating(false);
+    }
+  }, [user, newFleetName, newFleetDescription]);
+
   const renderFleetList = () => (
     <View style={styles.listContainer}>
       <View style={styles.header}>
@@ -85,11 +204,11 @@ export default function FleetsScreen() {
         showsVerticalScrollIndicator={false}
         ListFooterComponent={
           <View style={styles.actionButtons}>
-            <Pressable style={styles.primaryButton}>
+            <Pressable style={styles.primaryButton} onPress={() => setShowCreateModal(true)}>
               <Ionicons name="add-circle" size={20} color="#FFFFFF" />
               <Text style={styles.primaryButtonText}>Create Fleet</Text>
             </Pressable>
-            <Pressable style={styles.secondaryButton}>
+            <Pressable style={styles.secondaryButton} onPress={() => setShowJoinModal(true)}>
               <Ionicons name="enter" size={20} color="#3B82F6" />
               <Text style={styles.secondaryButtonText}>Join Fleet</Text>
             </Pressable>
@@ -106,7 +225,6 @@ export default function FleetsScreen() {
       <Modal
         visible={!!selectedFleet}
         animationType="slide"
-        presentationStyle="pageSheet"
         onRequestClose={() => setSelectedFleet(null)}
       >
         <SafeAreaView style={styles.modalContainer} edges={['top']}>
@@ -165,10 +283,163 @@ export default function FleetsScreen() {
     );
   };
 
+  // Join Fleet Modal
+  const renderJoinModal = () => (
+    <Modal
+      visible={showJoinModal}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowJoinModal(false)}
+    >
+      <SafeAreaView style={styles.modalContainer} edges={['top']}>
+        <View style={styles.modalHeader}>
+          <Pressable style={styles.backButton} onPress={() => setShowJoinModal(false)}>
+            <Ionicons name="close" size={24} color="#111827" />
+          </Pressable>
+          <View style={styles.modalTitleContainer}>
+            <Text style={styles.modalTitle}>Join a Fleet</Text>
+          </View>
+          <View style={styles.iconButton} />
+        </View>
+
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search fleets by name..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={handleSearch}
+            autoFocus
+          />
+          {isSearching && <ActivityIndicator size="small" color="#3B82F6" />}
+        </View>
+
+        <FlatList
+          data={searchResults}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.searchResults}
+          ListEmptyComponent={
+            <View style={styles.emptySearch}>
+              {searchQuery.length < 2 ? (
+                <>
+                  <Ionicons name="boat-outline" size={48} color="#D1D5DB" />
+                  <Text style={styles.emptyText}>Search for fleets to join</Text>
+                  <Text style={styles.emptySubtext}>Enter at least 2 characters</Text>
+                </>
+              ) : !isSearching ? (
+                <>
+                  <Ionicons name="search-outline" size={48} color="#D1D5DB" />
+                  <Text style={styles.emptyText}>No fleets found</Text>
+                  <Text style={styles.emptySubtext}>Try a different search term</Text>
+                </>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View style={styles.searchResultItem}>
+              <View style={styles.searchResultInfo}>
+                <Text style={styles.searchResultName}>{item.name}</Text>
+                <Text style={styles.searchResultMeta}>
+                  {item.boat_classes?.name || 'General'} • {item.member_count || 0} members
+                </Text>
+                {item.description && (
+                  <Text style={styles.searchResultDescription} numberOfLines={2}>
+                    {item.description}
+                  </Text>
+                )}
+              </View>
+              <Pressable
+                style={[styles.joinButton, isJoining === item.id && styles.joinButtonDisabled]}
+                onPress={() => handleJoinFleet(item)}
+                disabled={isJoining === item.id}
+              >
+                {isJoining === item.id ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.joinButtonText}>Join</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+
+  // Create Fleet Modal
+  const renderCreateModal = () => (
+    <Modal
+      visible={showCreateModal}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowCreateModal(false)}
+    >
+      <SafeAreaView style={styles.modalContainer} edges={['top']}>
+        <View style={styles.modalHeader}>
+          <Pressable style={styles.backButton} onPress={() => setShowCreateModal(false)}>
+            <Ionicons name="close" size={24} color="#111827" />
+          </Pressable>
+          <View style={styles.modalTitleContainer}>
+            <Text style={styles.modalTitle}>Create Fleet</Text>
+          </View>
+          <Pressable
+            style={[styles.createButton, (!newFleetName.trim() || isCreating) && styles.createButtonDisabled]}
+            onPress={handleCreateFleet}
+            disabled={!newFleetName.trim() || isCreating}
+          >
+            {isCreating ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.createButtonText}>Create</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.formContainer}>
+          <View style={styles.formField}>
+            <Text style={styles.formLabel}>Fleet Name *</Text>
+            <TextInput
+              style={styles.formInput}
+              placeholder="e.g., Dragon Hong Kong Fleet"
+              placeholderTextColor="#9CA3AF"
+              value={newFleetName}
+              onChangeText={setNewFleetName}
+              autoFocus
+            />
+          </View>
+
+          <View style={styles.formField}>
+            <Text style={styles.formLabel}>Description</Text>
+            <TextInput
+              style={[styles.formInput, styles.formTextArea]}
+              placeholder="Tell others about your fleet..."
+              placeholderTextColor="#9CA3AF"
+              value={newFleetDescription}
+              onChangeText={setNewFleetDescription}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+
+          <View style={styles.formNote}>
+            <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
+            <Text style={styles.formNoteText}>
+              You'll be the owner of this fleet and can invite others to join.
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {renderFleetList()}
       {renderDetailView()}
+      {renderJoinModal()}
+      {renderCreateModal()}
     </SafeAreaView>
   );
 }
@@ -314,5 +585,138 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#9CA3AF',
     marginTop: 16,
+  },
+  // Join Fleet Modal styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    margin: 16,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#111827',
+  },
+  searchResults: {
+    paddingHorizontal: 16,
+  },
+  emptySearch: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 4,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  searchResultInfo: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  searchResultMeta: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  searchResultDescription: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 4,
+  },
+  joinButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  joinButtonDisabled: {
+    backgroundColor: '#93C5FD',
+  },
+  joinButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Create Fleet Modal styles
+  createButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  createButtonDisabled: {
+    backgroundColor: '#93C5FD',
+  },
+  createButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  formContainer: {
+    padding: 16,
+  },
+  formField: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  formInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#111827',
+  },
+  formTextArea: {
+    minHeight: 100,
+    paddingTop: 12,
+  },
+  formNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  formNoteText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
   },
 });

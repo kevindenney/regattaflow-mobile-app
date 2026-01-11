@@ -27,13 +27,13 @@ const getTabsForUserType = (userType: string | null): TabConfig[] => {
   switch (userType) {
     case 'sailor':
       // Tufte-style: text-only tabs, no icons, singular forms
+      // Boat management moved to Account screen
       return [
         { name: 'races', title: 'Races', icon: '', iconFocused: '' },
         { name: 'learn', title: 'Learn', icon: '', iconFocused: '' },
         { name: 'courses', title: 'Courses', icon: '', iconFocused: '' },
-        { name: 'boat/index', title: 'Boat', icon: '', iconFocused: '' },  // singular
-        { name: 'venue', title: 'Venue', icon: '', iconFocused: '' },      // singular
-        { name: 'more', title: '•••', icon: '', isMenuTrigger: true },     // ellipsis
+        { name: 'venue', title: 'Venue', icon: '', iconFocused: '' },
+        { name: 'more', title: '•••', icon: '', isMenuTrigger: true },
       ];
 
     case 'coach':
@@ -144,10 +144,14 @@ function TabLayoutInner() {
       });
     }
 
+    // Progress - Excellence Framework Dashboard (top priority for sailors)
+    items.push(
+      { key: 'progress', label: 'Progress', icon: 'trending-up-outline', route: '/(tabs)/progress' }
+    );
+
     // Clubs + Fleets merged into Affiliations
     items.push(
-      { key: 'affiliations', label: 'Affiliations', icon: 'people-circle-outline', route: '/(tabs)/affiliations' },
-      { key: 'crew', label: 'Crew', icon: 'people-outline', route: '/(tabs)/crew' }
+      { key: 'affiliations', label: 'Affiliations', icon: 'people-circle-outline', route: '/(tabs)/affiliations' }
     );
 
     if (userType !== 'club') {
@@ -595,9 +599,9 @@ function TabLayoutInner() {
           }}
         />
         <Tabs.Screen
-          name="crew"
+          name="progress"
           options={{
-            title: 'Crew',
+            title: 'Progress',
             href: null,
           }}
         />
@@ -608,7 +612,7 @@ function TabLayoutInner() {
           }}
         />
         <Tabs.Screen
-          name="race/add"
+          name="race/add-tufte"
           options={{
             href: null,
           }}
@@ -693,24 +697,6 @@ function TabLayoutInner() {
         />
         <Tabs.Screen
           name="race/scrollable/[id]"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="add-next-race"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="add-race-redesign"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="race/comprehensive-add"
           options={{
             href: null,
           }}

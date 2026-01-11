@@ -13,7 +13,6 @@ import { CalendarImportFlow } from '@/components/races/CalendarImportFlow';
 import { PostRaceInterview } from '@/components/races/PostRaceInterview';
 import { StrategySharingModal } from '@/components/coaching/StrategySharingModal';
 import { BoatClassSelectorModal } from '@/components/races/BoatClassSelectorModal';
-import { AddRaceDialog, type RaceFormData } from '@/components/races';
 import { createLogger } from '@/lib/utils/logger';
 import { detectRaceType } from '@/lib/races';
 
@@ -53,11 +52,6 @@ export interface RaceModalsSectionProps {
   selectedRaceId: string | null;
   onBoatClassSelectorClose: () => void;
   onBoatClassSelected: (classId: string, className: string) => void;
-
-  // Add Race Dialog
-  showAddRaceSheet: boolean;
-  onAddRaceClose: () => void;
-  onAddRaceSave: (data: RaceFormData) => void;
 }
 
 /**
@@ -93,10 +87,6 @@ export function RaceModalsSection({
   selectedRaceId,
   onBoatClassSelectorClose,
   onBoatClassSelected,
-  // Add Race Dialog
-  showAddRaceSheet,
-  onAddRaceClose,
-  onAddRaceSave,
 }: RaceModalsSectionProps) {
   return (
     <>
@@ -199,13 +189,6 @@ export function RaceModalsSection({
           onClassSelected={onBoatClassSelected}
         />
       )}
-
-      {/* Add Race Dialog - Multi-step wizard with race type support */}
-      <AddRaceDialog
-        visible={showAddRaceSheet}
-        onClose={onAddRaceClose}
-        onSave={onAddRaceSave}
-      />
     </>
   );
 }

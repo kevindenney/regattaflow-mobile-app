@@ -9,14 +9,15 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
+  
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
   Platform,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';

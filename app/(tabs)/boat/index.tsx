@@ -1,22 +1,15 @@
 /**
- * Boat List Screen - Overview of individual boats (vessels)
+ * Boats Screen
  *
- * KEY DISTINCTION:
- * - This screen shows INDIVIDUAL BOATS (e.g., "Dragonfly" - a specific Dragon)
- * - NOT boat classes (e.g., Dragon, Etchells)
- * - NOT fleets (e.g., "Hong Kong Dragon Fleet")
+ * Unified Tufte-style boats and tuning guides screen.
+ * Segmented control switches between My Boats and Tuning Guides tabs.
  */
 
-import { useAuth } from '@/providers/AuthProvider';
-import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService';
-import { MOCK_BOATS } from '@/constants/mockData';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
-import { createLogger } from '@/lib/utils/logger';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  SafeAreaView,
+  Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,642 +17,549 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-const STATUS_THEMES: Record<SailorBoat['status'], { background: string; border: string; color: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  active: {
-    background: '#DCFCE7',
-    border: '#86EFAC',
-    color: '#15803D',
-    label: 'Active racing',
-    icon: 'boat-outline',
-  },
-  stored: {
-    background: '#E0F2FE',
-    border: '#BAE6FD',
-    color: '#0275D8',
-    label: 'Stored / layup',
-    icon: 'archive-outline',
-  },
-  sold: {
-    background: '#FEE2E2',
-    border: '#FECACA',
-    color: '#B91C1C',
-    label: 'Sold',
-    icon: 'cash-outline',
-  },
-  retired: {
-    background: '#E2E8F0',
-    border: '#CBD5F5',
-    color: '#475569',
-    label: 'Retired',
-    icon: 'flag-outline',
-  },
+import { useAuth } from '@/providers/AuthProvider';
+import { useSailorDashboardData } from '@/hooks';
+import { SailorBoatService, UserBoatWithDetails } from '@/services/SailorBoatService';
+import {
+  TuningGuide,
+  FleetTuningGuide,
+  tuningGuideService,
+} from '@/services/tuningGuideService';
+import { tuningGuideExtractionService } from '@/services/TuningGuideExtractionService';
+import { createLogger } from '@/lib/utils/logger';
+import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
+
+import { TufteBoatTabs } from '@/components/boats/TufteBoatTabs';
+import { TufteTuningSection } from '@/components/boats/TufteTuningSection';
+import { TufteTuningGuideRow } from '@/components/boats/TufteTuningGuideRow';
+
+// Types
+type TabValue = 'boats' | 'tuning';
+type StatusFilter = 'all' | 'active' | 'stored' | 'sold' | 'retired';
+type GuideFilter = 'all' | 'personal' | 'fleet';
+
+const STATUS_THEMES: Record<StatusFilter, { bg: string; border: string; text: string; dot: string }> = {
+  all: { bg: '#F1F5F9', border: '#E2E8F0', text: '#475569', dot: '#64748B' },
+  active: { bg: '#DCFCE7', border: '#BBF7D0', text: '#166534', dot: IOS_COLORS.green },
+  stored: { bg: '#FEF3C7', border: '#FDE68A', text: '#92400E', dot: IOS_COLORS.orange },
+  sold: { bg: '#FEE2E2', border: '#FECACA', text: '#991B1B', dot: IOS_COLORS.red },
+  retired: { bg: '#F3F4F6', border: '#E5E7EB', text: '#6B7280', dot: IOS_COLORS.gray },
 };
 
-const getStatusTheme = (status?: SailorBoat['status']) => {
-  if (!status) {
-    return STATUS_THEMES.active;
-  }
-  return STATUS_THEMES[status] || STATUS_THEMES.active;
-};
-
-export default function BoatListScreen() {
+export default function BoatsScreen() {
   const { user } = useAuth();
-  const [boats, setBoats] = useState<SailorBoat[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filterBy, setFilterBy] = useState<'all' | 'primary'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [selectedClassId, setSelectedClassId] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const sailorData = useSailorDashboardData();
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabValue>('boats');
+
+  // Boats state
+  const [boats, setBoats] = useState<UserBoatWithDetails[]>([]);
+  const [boatsLoading, setBoatsLoading] = useState(true);
+  const [boatSearch, setBoatSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  // Tuning guides state
+  const [personalGuides, setPersonalGuides] = useState<TuningGuide[]>([]);
+  const [fleetGuides, setFleetGuides] = useState<FleetTuningGuide[]>([]);
+  const [classGuides, setClassGuides] = useState<TuningGuide[]>([]);
+  const [guidesLoading, setGuidesLoading] = useState(true);
+  const [guideSearch, setGuideSearch] = useState('');
+  const [guideFilter, setGuideFilter] = useState<GuideFilter>('all');
+  const [extracting, setExtracting] = useState<Record<string, boolean>>({});
+
+  // Load boats
   useEffect(() => {
+    if (user?.id) {
+      loadBoats();
+    }
+  }, [user?.id]);
 
-    // Set a timeout to stop loading if it takes too long
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 5000);
-
+  // Load tuning guides
+  useEffect(() => {
     if (user) {
-      loadBoats().finally(() => clearTimeout(timeout));
-    } else {
-
-      // If no user after 2 seconds, stop loading
-      setTimeout(() => setLoading(false), 2000);
+      loadGuides();
     }
+  }, [user, sailorData.classes]);
 
-    return () => clearTimeout(timeout);
-  }, [user]);
-
-  const loadBoats = async () => {
-    if (!user) {
-
-      return;
-    }
-
+  const loadBoats = useCallback(async () => {
+    if (!user?.id) return;
+    setBoatsLoading(true);
     try {
-      setLoading(true);
-      const boatList = await sailorBoatService.listBoatsForSailor(user.id);
-      setBoats(boatList);
+      const userBoats = await SailorBoatService.listBoatsForSailor(user.id);
+      setBoats(userBoats);
     } catch (error) {
-
+      logger.error('Failed to load boats:', error);
     } finally {
-      setLoading(false);
-
+      setBoatsLoading(false);
     }
-  };
+  }, [user?.id]);
 
-  const handleBoatPress = (boatId: string) => {
-    router.push(`/(tabs)/boat/${boatId}`);
-  };
-
-  const handleAddBoat = () => {
-    router.push('/(tabs)/boat/add');
-  };
-
-  const handleSetDefault = async (boatId: string) => {
-    logger.debug('[BoatListScreen] handleSetDefault clicked', { boatId });
+  const loadGuides = useCallback(async () => {
+    if (!user) return;
+    setGuidesLoading(true);
     try {
-      logger.debug('[BoatListScreen] Calling setPrimaryBoat service...');
-      await sailorBoatService.setPrimaryBoat(boatId);
-      logger.debug('[BoatListScreen] setPrimaryBoat successful, reloading boats...');
-      // Reload boats to show updated default
-      await loadBoats();
-      logger.debug('[BoatListScreen] handleSetDefault complete');
+      const { personal, fleet } = await tuningGuideService.getAllSailorGuides(user.id);
+      setPersonalGuides(personal);
+      setFleetGuides(fleet);
+
+      // Load guides for user's boat classes
+      const classGuidesPromises = sailorData.classes.map((cls) =>
+        tuningGuideService.getGuidesForClass(cls.id)
+      );
+      const classGuidesArrays = await Promise.all(classGuidesPromises);
+      const allClassGuides = classGuidesArrays.flat();
+
+      // Filter out duplicates
+      const personalGuideIds = new Set(personal.map((g) => g.id));
+      const uniqueClassGuides = allClassGuides.filter((g) => !personalGuideIds.has(g.id));
+      setClassGuides(uniqueClassGuides);
     } catch (error) {
-      console.error('[BoatListScreen] Error setting default boat:', error);
-      alert('Failed to set default boat');
+      logger.error('Failed to load guides:', error);
+    } finally {
+      setGuidesLoading(false);
     }
-  };
+  }, [user, sailorData.classes]);
 
-  const getBoatDisplayName = (boat: SailorBoat) => {
-    if (!boat) {
-      return 'Unnamed Boat';
-    }
-    const trimmedName = boat.name?.trim();
-    if (trimmedName) {
-      return trimmedName;
-    }
-    if (boat.sail_number) {
-      return `${boat.boat_class?.name || 'Boat'} #${boat.sail_number}`;
-    }
-    return boat.boat_class?.name || 'Unnamed Boat';
-  };
-
-  const classFilters = useMemo(() => {
-    const map = new Map<string, string>();
-    boats.forEach((boat) => {
-      if (boat.boat_class?.id) {
-        map.set(
-          boat.boat_class.id,
-          boat.boat_class.name ||
-            boat.boat_class.class_association ||
-            'Class'
-        );
-      }
-    });
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [boats]);
-
-  const totalBoats = boats.length;
-  const primaryBoat = boats.find((boat) => boat.is_primary);
-  const activeBoats = useMemo(
-    () => boats.filter((boat) => boat.status === 'active').length,
-    [boats]
-  );
-  const inactiveBoats = useMemo(
-    () => boats.filter((boat) => boat.status !== 'active').length,
-    [boats]
-  );
-  const lastUpdatedLabel = useMemo(() => {
-    if (!boats.length) return null;
-    const latest = boats.reduce((latestDate, boat) => {
-      const timestamp = new Date(boat.updated_at).getTime();
-      return Math.max(latestDate, timestamp);
-    }, 0);
-    if (!latest) return null;
-    return new Date(latest).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    });
+  // Derived data
+  const boatClasses = useMemo(() => {
+    const classes = new Set(boats.map((b) => b.boat_class_name));
+    return ['All', ...Array.from(classes)];
   }, [boats]);
 
   const filteredBoats = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return boats.filter((boat) => {
-      if (filterBy === 'primary' && !boat.is_primary) {
-        return false;
+    let result = boats;
+    if (statusFilter !== 'all') {
+      result = result.filter((b) => b.status === statusFilter);
+    }
+    if (boatSearch.trim()) {
+      const q = boatSearch.toLowerCase();
+      result = result.filter(
+        (b) =>
+          b.boat_name?.toLowerCase().includes(q) ||
+          b.boat_class_name.toLowerCase().includes(q) ||
+          b.sail_number?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [boats, statusFilter, boatSearch]);
+
+  const totalGuideCount = personalGuides.length + fleetGuides.length + classGuides.length;
+
+  const filteredGuides = useMemo(() => {
+    let guides: (TuningGuide | FleetTuningGuide)[] = [];
+    if (guideFilter === 'personal') {
+      guides = personalGuides;
+    } else if (guideFilter === 'fleet') {
+      guides = fleetGuides;
+    } else {
+      guides = [...personalGuides, ...fleetGuides, ...classGuides];
+    }
+
+    if (guideSearch.trim()) {
+      const q = guideSearch.toLowerCase();
+      guides = guides.filter(
+        (g) =>
+          g.title.toLowerCase().includes(q) ||
+          g.source.toLowerCase().includes(q) ||
+          g.description?.toLowerCase().includes(q) ||
+          g.extractedContent?.toLowerCase().includes(q) ||
+          g.tags.some((tag) => tag.toLowerCase().includes(q))
+      );
+    }
+
+    return guides;
+  }, [personalGuides, fleetGuides, classGuides, guideFilter, guideSearch]);
+
+  // Group guides by boat class
+  const guidesByClass = useMemo(() => {
+    const grouped: Record<string, (TuningGuide | FleetTuningGuide)[]> = {};
+    filteredGuides.forEach((guide) => {
+      const className = guide.boatClassName || 'General';
+      if (!grouped[className]) {
+        grouped[className] = [];
       }
-      if (statusFilter === 'active' && boat.status !== 'active') {
-        return false;
+      grouped[className].push(guide);
+    });
+    return grouped;
+  }, [filteredGuides]);
+
+  // Handlers
+  const handleAddBoat = useCallback(() => {
+    router.push('/(tabs)/boat/add');
+  }, []);
+
+  const handleBoatPress = useCallback((boatId: string) => {
+    router.push(`/(tabs)/boat/${boatId}`);
+  }, []);
+
+  const handleExtractContent = useCallback(
+    async (guide: TuningGuide) => {
+      if (!guide.fileUrl || guide.extractionStatus === 'completed') return;
+
+      try {
+        setExtracting((prev) => ({ ...prev, [guide.id]: true }));
+        await tuningGuideExtractionService.extractContent(guide.id, guide.fileUrl, guide.fileType);
+        Alert.alert('Success', 'Content extracted successfully!');
+        await loadGuides();
+      } catch (error) {
+        logger.error('Error extracting content:', error);
+        Alert.alert('Error', 'Failed to extract content from guide');
+      } finally {
+        setExtracting((prev) => ({ ...prev, [guide.id]: false }));
       }
-      if (statusFilter === 'inactive' && boat.status === 'active') {
-        return false;
+    },
+    [loadGuides]
+  );
+
+  const handleGuidePress = useCallback(
+    async (guide: TuningGuide) => {
+      if (user) {
+        await tuningGuideService.recordView(guide.id, user.id);
       }
-      if (selectedClassId !== 'all' && boat.boat_class?.id !== selectedClassId) {
-        return false;
-      }
-      if (query) {
-        const haystack = [
-          boat.name,
-          boat.sail_number,
-          boat.hull_number,
-          boat.boat_class?.name,
-          boat.boat_class?.class_association,
-          boat.status,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        if (!haystack.includes(query)) {
-          return false;
+      const urlToOpen = guide.fileUrl || guide.sourceUrl;
+      if (urlToOpen) {
+        const canOpen = await Linking.canOpenURL(urlToOpen);
+        if (canOpen) {
+          await Linking.openURL(urlToOpen);
         }
       }
-      return true;
-    });
-  }, [boats, filterBy, searchQuery, selectedClassId, statusFilter]);
+    },
+    [user]
+  );
 
-  if (loading) {
+  const handleAutoFetchGuides = useCallback(
+    async (className: string, classId: string) => {
+      Alert.alert(
+        `Fetch ${className} Guides`,
+        `Search for tuning guides from North Sails, Quantum, and other sailmakers?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Fetch',
+            onPress: async () => {
+              await tuningGuideService.triggerAutoScrape(classId);
+              Alert.alert('Searching...', `Looking for ${className} tuning guides...`);
+              setTimeout(() => loadGuides(), 2000);
+            },
+          },
+        ]
+      );
+    },
+    [loadGuides]
+  );
+
+  // Loading state
+  if (!user) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading boats...</Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Sign in to manage your boats</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const isLoading = activeTab === 'boats' ? boatsLoading : guidesLoading;
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>My Boats</Text>
-          <Text style={styles.headerSubtitle}>{boats.length} {boats.length === 1 ? 'boat' : 'boats'}</Text>
-        </View>
-        <TouchableOpacity onPress={handleAddBoat} style={styles.addButton}>
-          <Ionicons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>Add boat</Text>
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Boats</Text>
+        {activeTab === 'boats' && boats.length > 0 && (
+          <TouchableOpacity style={styles.addButton} onPress={handleAddBoat}>
+            <Ionicons name="add" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {totalBoats > 0 ? (
-          <>
-            <View style={styles.summaryContainer}>
-              <View style={styles.summaryCard}>
-                <View style={styles.summaryIcon}>
-                  <Ionicons name="boat-outline" size={20} color="#2563EB" />
-                </View>
-                <View>
-                  <Text style={styles.summaryValue}>{totalBoats}</Text>
-                  <Text style={styles.summaryLabel}>Boats tracked</Text>
-                </View>
-              </View>
-              <View style={styles.summaryCard}>
-                <View style={[styles.summaryIcon, styles.summaryIconSuccess]}>
-                  <Ionicons name="speedometer-outline" size={20} color="#047857" />
-                </View>
-                <View>
-                  <Text style={styles.summaryValue}>{activeBoats}</Text>
-                  <Text style={styles.summaryLabel}>
-                    Active • {inactiveBoats} offline
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.summaryCard}>
-                <View style={[styles.summaryIcon, styles.summaryIconAccent]}>
-                  <Ionicons name="star" size={20} color="#F59E0B" />
-                </View>
-                <View>
-                  <Text style={styles.summaryValue}>
-                    {primaryBoat ? getBoatDisplayName(primaryBoat) : 'No default'}
-                  </Text>
-                  <Text style={styles.summaryLabel}>
-                    {lastUpdatedLabel ? `Updated ${lastUpdatedLabel}` : 'Awaiting updates'}
-                  </Text>
-                </View>
-              </View>
-            </View>
+      {/* Segmented Control */}
+      <TufteBoatTabs
+        value={activeTab}
+        onChange={setActiveTab}
+        boatCount={boats.length}
+        guideCount={totalGuideCount}
+      />
 
-            <View style={styles.controlsContainer}>
-              <View style={styles.searchBar}>
-                <Ionicons name="search" size={18} color="#94A3B8" />
+      {isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={IOS_COLORS.blue} />
+          <Text style={styles.loadingText}>
+            {activeTab === 'boats' ? 'Loading boats...' : 'Loading tuning guides...'}
+          </Text>
+        </View>
+      ) : activeTab === 'boats' ? (
+        /* ===== MY BOATS TAB ===== */
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {boats.length > 0 ? (
+            <>
+              {/* Search */}
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={18} color={IOS_COLORS.gray} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search boats, sail numbers, or classes"
-                  placeholderTextColor="#94A3B8"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
+                  placeholder="Search boats..."
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                  value={boatSearch}
+                  onChangeText={setBoatSearch}
                 />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
-                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                {boatSearch !== '' && (
+                  <TouchableOpacity onPress={() => setBoatSearch('')}>
+                    <Ionicons name="close-circle" size={18} color={IOS_COLORS.gray} />
                   </TouchableOpacity>
                 )}
               </View>
 
-              {boats.length > 1 && (
-                <View style={styles.filterSection}>
-                  <Text style={styles.filterSectionLabel}>Show</Text>
-                  <View style={styles.filterChipRow}>
-                    <TouchableOpacity
-                      style={[styles.filterChip, filterBy === 'all' && styles.filterChipActive]}
-                      onPress={() => setFilterBy('all')}
-                    >
-                      <Text style={[styles.filterChipText, filterBy === 'all' && styles.filterChipTextActive]}>
-                        All boats
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.filterChip, filterBy === 'primary' && styles.filterChipActive]}
-                      onPress={() => setFilterBy('primary')}
-                    >
-                      <Text style={[styles.filterChipText, filterBy === 'primary' && styles.filterChipTextActive]}>
-                        Primary
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.filterSection}>
-                <Text style={styles.filterSectionLabel}>Status</Text>
-                <View style={styles.filterChipRow}>
-                  <TouchableOpacity
-                    style={[styles.filterChip, statusFilter === 'all' && styles.filterChipActive]}
-                    onPress={() => setStatusFilter('all')}
-                  >
-                    <Text style={[styles.filterChipText, statusFilter === 'all' && styles.filterChipTextActive]}>
-                      All statuses
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.filterChip, statusFilter === 'active' && styles.filterChipActive]}
-                    onPress={() => setStatusFilter('active')}
-                  >
-                    <Text style={[styles.filterChipText, statusFilter === 'active' && styles.filterChipTextActive]}>
-                      Active
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.filterChip, statusFilter === 'inactive' && styles.filterChipActive]}
-                    onPress={() => setStatusFilter('inactive')}
-                  >
-                    <Text style={[styles.filterChipText, statusFilter === 'inactive' && styles.filterChipTextActive]}>
-                      Offline
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {classFilters.length > 0 && (
-                <View style={styles.filterSection}>
-                  <Text style={styles.filterSectionLabel}>Class</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.filterChipScroll}
-                    contentContainerStyle={styles.filterChipScrollContent}
-                  >
-                    <TouchableOpacity
-                      style={[styles.filterChip, selectedClassId === 'all' && styles.filterChipActive]}
-                      onPress={() => setSelectedClassId('all')}
-                    >
-                      <Text style={[styles.filterChipText, selectedClassId === 'all' && styles.filterChipTextActive]}>
-                        All classes
-                      </Text>
-                    </TouchableOpacity>
-                    {classFilters.map((boatClass) => (
-                      <TouchableOpacity
-                        key={boatClass.id}
-                        style={[styles.filterChip, selectedClassId === boatClass.id && styles.filterChipActive]}
-                        onPress={() => setSelectedClassId(boatClass.id)}
-                      >
-                        <Text
-                          style={[
-                            styles.filterChipText,
-                            selectedClassId === boatClass.id && styles.filterChipTextActive,
-                          ]}
-                        >
-                          {boatClass.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.boatList}>
-              {filteredBoats.length === 0 ? (
-                <View style={styles.noResultsCard}>
-                  <Ionicons name="search-outline" size={28} color="#94A3B8" />
-                  <Text style={styles.noResultsTitle}>No boats match your filters</Text>
-                  <Text style={styles.noResultsText}>
-                    Try clearing the search or switching filters to see the rest of your fleet.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.clearFiltersButton}
-                    onPress={() => {
-                      setSearchQuery('');
-                      setStatusFilter('all');
-                      setFilterBy('all');
-                      setSelectedClassId('all');
-                    }}
-                  >
-                    <Ionicons name="refresh" size={16} color="#1E40AF" />
-                    <Text style={styles.clearFiltersText}>Reset filters</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                filteredBoats.map((boat) => {
-                  const displayName = getBoatDisplayName(boat);
-                  const statusTheme = getStatusTheme(boat.status);
+              {/* Status Filter */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.filterScroll}
+                contentContainerStyle={styles.filterContent}
+              >
+                {(['all', 'active', 'stored', 'sold', 'retired'] as StatusFilter[]).map((status) => {
+                  const theme = STATUS_THEMES[status];
+                  const isActive = statusFilter === status;
+                  const count =
+                    status === 'all' ? boats.length : boats.filter((b) => b.status === status).length;
+                  if (status !== 'all' && count === 0) return null;
 
                   return (
                     <TouchableOpacity
-                      key={boat.id}
-                      style={styles.boatCard}
-                      onPress={() => handleBoatPress(boat.id)}
-                      activeOpacity={0.85}
+                      key={status}
+                      style={[
+                        styles.filterChip,
+                        isActive && { backgroundColor: theme.bg, borderColor: theme.border },
+                      ]}
+                      onPress={() => setStatusFilter(status)}
                     >
-                      <View style={styles.boatCardTopRow}>
-                        <View style={[styles.statusBadge, { backgroundColor: statusTheme.background, borderColor: statusTheme.border }]}>
-                          <Ionicons name={statusTheme.icon} size={14} color={statusTheme.color} />
-                          <Text style={[styles.statusBadgeText, { color: statusTheme.color }]}>
-                            {statusTheme.label}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.starButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            logger.debug('[BoatListScreen] Star button pressed!', { boatId: boat.id });
-                            handleSetDefault(boat.id);
-                          }}
-                        >
-                          <Ionicons
-                            name={boat.is_primary ? 'star' : 'star-outline'}
-                            size={22}
-                            color={boat.is_primary ? '#F59E0B' : '#CBD5F5'}
-                          />
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.boatCardHeader}>
-                        <View style={[styles.boatIcon, boat.is_primary && styles.boatIconPrimary]}>
-                          <Ionicons
-                            name={boat.is_primary ? 'boat' : 'boat-outline'}
-                            size={28}
-                            color={boat.is_primary ? '#2563EB' : '#64748B'}
-                          />
-                        </View>
-                        <View style={styles.boatInfo}>
-                          <View style={styles.boatTitleRow}>
-                            <Text style={styles.boatName}>{displayName}</Text>
-                            {boat.is_primary && (
-                              <View style={styles.primaryBadge}>
-                                <Ionicons name="ribbon" size={12} color="#1D4ED8" />
-                                <Text style={styles.primaryBadgeText}>Default</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.boatClass}>
-                            {boat.boat_class?.class_association || boat.boat_class?.name || 'Unclassified'}
-                          </Text>
-                          <View style={styles.metaRow}>
-                            {boat.sail_number && (
-                              <View style={styles.metaItem}>
-                                <Ionicons name="flag-outline" size={14} color="#475569" />
-                                <Text style={styles.metaText}>Sail #{boat.sail_number}</Text>
-                              </View>
-                            )}
-                            {boat.hull_number && (
-                              <View style={styles.metaItem}>
-                                <Ionicons name="cube-outline" size={14} color="#475569" />
-                                <Text style={styles.metaText}>Hull #{boat.hull_number}</Text>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                        <Ionicons name="chevron-forward" size={22} color="#CBD5E1" />
-                      </View>
-
-                      {(boat.manufacturer || boat.year_built || boat.hull_material || boat.storage_location) && (
-                        <View style={styles.detailsRow}>
-                          {boat.manufacturer && (
-                            <View style={styles.detailChip}>
-                              <Ionicons name="business-outline" size={14} color="#64748B" />
-                              <Text style={styles.detailChipText}>{boat.manufacturer}</Text>
-                            </View>
-                          )}
-                          {boat.year_built && (
-                            <View style={styles.detailChip}>
-                              <Ionicons name="calendar-outline" size={14} color="#64748B" />
-                              <Text style={styles.detailChipText}>{boat.year_built}</Text>
-                            </View>
-                          )}
-                          {boat.hull_material && (
-                            <View style={styles.detailChip}>
-                              <Ionicons name="layers-outline" size={14} color="#64748B" />
-                              <Text style={styles.detailChipText}>{boat.hull_material}</Text>
-                            </View>
-                          )}
-                          {boat.storage_location && (
-                            <View style={styles.detailChip}>
-                              <Ionicons name="location-outline" size={14} color="#64748B" />
-                              <Text style={styles.detailChipText}>{boat.storage_location}</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-
-                      <View style={styles.quickActions}>
-                        <TouchableOpacity
-                          style={styles.quickActionButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/(tabs)/boat/${boat.id}?tab=crew`);
-                          }}
-                        >
-                          <Ionicons name="people-outline" size={18} color="#1D4ED8" />
-                          <Text style={styles.quickActionText}>Crew</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.quickActionButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/(tabs)/boat/${boat.id}?tab=sails`);
-                          }}
-                        >
-                          <Ionicons name="flag" size={18} color="#1D4ED8" />
-                          <Text style={styles.quickActionText}>Sails</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.quickActionButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/(tabs)/boat/${boat.id}?tab=tuning3d`);
-                          }}
-                        >
-                          <Ionicons name="settings-outline" size={18} color="#1D4ED8" />
-                          <Text style={styles.quickActionText}>Tuning</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.quickActionButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/(tabs)/boat/${boat.id}?tab=maintenance`);
-                          }}
-                        >
-                          <Ionicons name="construct-outline" size={18} color="#1D4ED8" />
-                          <Text style={styles.quickActionText}>Service</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.quickActionButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/(tabs)/boat/${boat.id}?tab=performance`);
-                          }}
-                        >
-                          <Ionicons name="stats-chart-outline" size={18} color="#1D4ED8" />
-                          <Text style={styles.quickActionText}>Performance</Text>
-                        </TouchableOpacity>
-                      </View>
+                      <View style={[styles.statusDot, { backgroundColor: theme.dot }]} />
+                      <Text
+                        style={[styles.filterChipText, isActive && { color: theme.text }]}
+                      >
+                        {status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
+                        {' '}({count})
+                      </Text>
                     </TouchableOpacity>
                   );
-                })
-              )}
-            </View>
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIllustration}>
-              <Ionicons name="boat-outline" size={48} color="#38BDF8" />
-            </View>
-            <Text style={styles.emptyTitle}>Build your fleet</Text>
-            <Text style={styles.emptyText}>
-              Add the boats you sail so we can track sails, maintenance, and race tuning for each campaign.
-            </Text>
+                })}
+              </ScrollView>
 
-            <View style={styles.emptyChecklist}>
-              <View style={styles.emptyChecklistItem}>
-                <Ionicons name="add-circle-outline" size={18} color="#1D4ED8" />
-                <Text style={styles.emptyChecklistText}>Create a profile with class, sail, and ownership details</Text>
-              </View>
-              <View style={styles.emptyChecklistItem}>
-                <Ionicons name="people-outline" size={18} color="#1D4ED8" />
-                <Text style={styles.emptyChecklistText}>Invite co-owners or shore team to collaborate</Text>
-              </View>
-              <View style={styles.emptyChecklistItem}>
-                <Ionicons name="construct-outline" size={18} color="#1D4ED8" />
-                <Text style={styles.emptyChecklistText}>Log maintenance, sails, and rig tuning presets</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.emptyButton} onPress={handleAddBoat}>
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.emptyButtonText}>Add your first boat</Text>
-            </TouchableOpacity>
-
-            <View style={styles.demoSection}>
-              <Text style={styles.demoHeading}>Preview fleet layout</Text>
-              <Text style={styles.demoSubheading}>Here’s how boats look once added.</Text>
+              {/* Boat List */}
               <View style={styles.boatList}>
-                {MOCK_BOATS.map((boat) => (
-                  <View
-                    key={boat.id}
-                    style={[styles.boatCard, styles.mockBoatCard]}
-                  >
-                    <View style={styles.boatCardHeader}>
-                      <View style={styles.boatIcon}>
-                        <Ionicons name="boat" size={24} color="#94A3B8" />
-                      </View>
+                {filteredBoats.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyTitle}>No boats match your filters</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setBoatSearch('');
+                        setStatusFilter('all');
+                      }}
+                    >
+                      <Text style={styles.clearButton}>Clear filters</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  filteredBoats.map((boat, index) => (
+                    <TouchableOpacity
+                      key={boat.id}
+                      style={[styles.boatRow, index === filteredBoats.length - 1 && styles.boatRowLast]}
+                      onPress={() => handleBoatPress(boat.id)}
+                    >
                       <View style={styles.boatInfo}>
                         <View style={styles.boatTitleRow}>
-                          <Text style={styles.boatName}>{boat.name}</Text>
-                          {boat.isPrimary && (
-                            <View style={styles.primaryBadge}>
-                              <Text style={styles.primaryBadgeText}>Primary</Text>
-                            </View>
+                          <Text style={styles.boatName}>
+                            {boat.boat_name || boat.boat_class_name}
+                          </Text>
+                          {boat.is_primary && (
+                            <Text style={styles.primaryBadge}>Primary</Text>
                           )}
                         </View>
                         <Text style={styles.boatClass}>
-                          {boat.class}
-                          {boat.sailNumber && ` • Sail #${boat.sailNumber}`}
+                          {boat.boat_class_name}
+                          {boat.sail_number && ` · ${boat.sail_number}`}
                         </Text>
                       </View>
-                    </View>
-                    <View style={styles.mockBadge}>
-                      <Text style={styles.mockBadgeText}>Demo</Text>
-                    </View>
-                  </View>
-                ))}
+                      <View style={styles.boatStatus}>
+                        <View
+                          style={[
+                            styles.statusDot,
+                            { backgroundColor: STATUS_THEMES[boat.status || 'active'].dot },
+                          ]}
+                        />
+                        <Text style={styles.boatStatusText}>{boat.status || 'active'}</Text>
+                        <Text style={styles.chevron}>›</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
               </View>
+            </>
+          ) : (
+            /* Empty state for boats */
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="boat-outline" size={40} color={IOS_COLORS.blue} />
+              </View>
+              <Text style={styles.emptyTitle}>Build your fleet</Text>
+              <Text style={styles.emptyText}>
+                Add the boats you sail to track sails, maintenance, and race tuning.
+              </Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleAddBoat}>
+                <Ionicons name="add" size={20} color="#FFFFFF" />
+                <Text style={styles.primaryButtonText}>Add your first boat</Text>
+              </TouchableOpacity>
             </View>
+          )}
+        </ScrollView>
+      ) : (
+        /* ===== TUNING GUIDES TAB ===== */
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Search */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={18} color={IOS_COLORS.gray} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search guides, settings, conditions..."
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              value={guideSearch}
+              onChangeText={setGuideSearch}
+            />
+            {guideSearch !== '' && (
+              <TouchableOpacity onPress={() => setGuideSearch('')}>
+                <Ionicons name="close-circle" size={18} color={IOS_COLORS.gray} />
+              </TouchableOpacity>
+            )}
           </View>
-        )}
-      </ScrollView>
 
-      {/* FAB for adding boats */}
-      {boats.length > 0 && (
-        <TouchableOpacity style={styles.fab} onPress={handleAddBoat}>
-          <Ionicons name="add" size={28} color="#FFFFFF" />
-        </TouchableOpacity>
+          {/* Guide Filter */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterContent}
+          >
+            {(['all', 'personal', 'fleet'] as GuideFilter[]).map((filter) => {
+              const isActive = guideFilter === filter;
+              const count =
+                filter === 'all'
+                  ? totalGuideCount
+                  : filter === 'personal'
+                  ? personalGuides.length
+                  : fleetGuides.length;
+
+              return (
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  onPress={() => setGuideFilter(filter)}
+                >
+                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {filter === 'all' ? 'All' : filter === 'personal' ? 'My Guides' : 'Fleet'}
+                    {' '}({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {filteredGuides.length === 0 ? (
+            /* Empty state for guides */
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="book-outline" size={40} color={IOS_COLORS.blue} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {guideSearch ? 'No guides found' : 'No tuning guides yet'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {guideSearch
+                  ? 'Try a different search term'
+                  : sailorData.classes.length > 0
+                  ? 'Fetch tuning guides for your boat classes'
+                  : 'Add a boat to get tuning guides'}
+              </Text>
+
+              {/* Boat class quick-fetch */}
+              {!guideSearch && sailorData.classes.length > 0 && (
+                <View style={styles.classCards}>
+                  {sailorData.classes.map((cls) => (
+                    <TouchableOpacity
+                      key={cls.id}
+                      style={styles.classCard}
+                      onPress={() => handleAutoFetchGuides(cls.name, cls.id)}
+                    >
+                      <View style={styles.classCardInfo}>
+                        <Text style={styles.classCardName}>{cls.name}</Text>
+                        {cls.sailNumber && (
+                          <Text style={styles.classCardSail}>Sail #{cls.sailNumber}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.fetchLink}>Fetch Guides →</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            /* Guides grouped by class */
+            Object.entries(guidesByClass).map(([className, guides]) => (
+              <TufteTuningSection
+                key={className}
+                title={className}
+                action="Fetch Guides"
+                onActionPress={() => {
+                  const cls = sailorData.classes.find((c) => c.name === className);
+                  if (cls) handleAutoFetchGuides(cls.name, cls.id);
+                }}
+              >
+                {guides.map((guide, index) => {
+                  const isFleet = fleetGuides.some((fg) => fg.id === guide.id);
+                  const fleetGuide = isFleet ? (guide as FleetTuningGuide) : null;
+
+                  return (
+                    <TufteTuningGuideRow
+                      key={guide.id}
+                      title={guide.title}
+                      source={guide.source}
+                      year={guide.year}
+                      extractionStatus={guide.extractionStatus}
+                      tags={guide.tags}
+                      isFleet={isFleet}
+                      sharedBy={fleetGuide?.sharedByName}
+                      isExtracting={extracting[guide.id]}
+                      onPress={() => handleGuidePress(guide)}
+                      onExtract={
+                        guide.fileUrl && guide.fileType === 'pdf' && guide.extractionStatus !== 'completed'
+                          ? () => handleExtractContent(guide)
+                          : undefined
+                      }
+                      isLast={index === guides.length - 1}
+                    />
+                  );
+                })}
+              </TufteTuningSection>
+            ))
+          )}
+        </ScrollView>
       )}
     </SafeAreaView>
   );
 }
 
-const logger = createLogger('index');
+const logger = createLogger('BoatsScreen');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: TUFTE_BACKGROUND,
   },
-  loadingContainer: {
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -667,250 +567,111 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E7EB',
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-    marginTop: 2,
+    color: IOS_COLORS.label,
+    letterSpacing: -0.5,
   },
   addButton: {
-    flexDirection: 'row',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.blue,
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
   },
-  summaryContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  summaryCard: {
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    flex: 1,
-    minWidth: 160,
-    boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.06)',
-  },
-  summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  summaryIconSuccess: {
-    backgroundColor: '#DCFCE7',
-  },
-  summaryIconAccent: {
-    backgroundColor: '#FEF3C7',
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  controlsContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 16,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: '#E5E7EB',
     gap: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: '#0F172A',
+    fontSize: 15,
+    color: IOS_COLORS.label,
   },
-  searchClear: {
-    padding: 4,
+  filterScroll: {
+    marginBottom: 8,
   },
-  filterSection: {
+  filterContent: {
+    paddingHorizontal: 20,
     gap: 8,
-  },
-  filterSectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  filterChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  filterChipScroll: {
-    marginHorizontal: -4,
-  },
-  filterChipScrollContent: {
-    gap: 8,
-    paddingHorizontal: 4,
   },
   filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    gap: 6,
   },
   filterChipActive: {
-    backgroundColor: '#1E40AF',
-    borderColor: '#1E3A8A',
+    backgroundColor: IOS_COLORS.blue,
+    borderColor: IOS_COLORS.blue,
   },
   filterChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
   },
   filterChipTextActive: {
     color: '#FFFFFF',
   },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
   boatList: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 16,
-  },
-  noResultsCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-    gap: 12,
+    marginHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 0.5,
+    borderColor: '#E5E7EB',
+    marginBottom: 24,
   },
-  noResultsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  noResultsText: {
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  clearFiltersButton: {
+  boatRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#E0E7FF',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E7EB',
   },
-  clearFiltersText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1E40AF',
-  },
-  boatCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    boxShadow: '0px 4px 16px rgba(15, 23, 42, 0.05)',
-    gap: 16,
-  },
-  boatCardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  starButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
-  boatCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  boatIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  boatIconPrimary: {
-    backgroundColor: '#DBEAFE',
+  boatRowLast: {
+    borderBottomWidth: 0,
   },
   boatInfo: {
     flex: 1,
+    gap: 2,
   },
   boatTitleRow: {
     flexDirection: 'row',
@@ -918,203 +679,120 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   boatName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0F172A',
-    letterSpacing: -0.2,
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
   },
   primaryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#DBEAFE',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  primaryBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#1D4ED8',
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   boatClass: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#475569',
-    marginTop: 6,
+    color: IOS_COLORS.secondaryLabel,
   },
-  metaRow: {
+  boatStatus: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  detailChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  detailChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#EEF2FF',
-    paddingTop: 16,
-  },
-  quickActionButton: {
-    flexGrow: 1,
-    minWidth: '30%',
-    borderRadius: 12,
-    backgroundColor: '#EEF2FF',
-    borderWidth: 1,
-    borderColor: '#E0E7FF',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
     alignItems: 'center',
     gap: 6,
   },
-  quickActionText: {
+  boatStatusText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#1D4ED8',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  chevron: {
+    fontSize: 20,
+    color: IOS_COLORS.tertiaryLabel,
+    marginLeft: 4,
+  },
+  emptyCard: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  clearButton: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
   },
   emptyState: {
-    paddingHorizontal: 32,
-    paddingVertical: 40,
     alignItems: 'center',
-    gap: 20,
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+    gap: 12,
   },
-  emptyIllustration: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: '#E0F2FE',
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
   },
   emptyText: {
     fontSize: 14,
-    color: '#64748B',
+    color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
-    lineHeight: 22,
-  },
-  emptyChecklist: {
-    width: '100%',
-    gap: 12,
-  },
-  emptyChecklistItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E0E7FF',
-    backgroundColor: '#F8FAFF',
-  },
-  emptyChecklistText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#475569',
     lineHeight: 20,
   },
-  emptyButton: {
+  primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    backgroundColor: IOS_COLORS.blue,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 999,
+    marginTop: 8,
   },
-  emptyButtonText: {
+  primaryButtonText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
   },
-  demoSection: {
+  classCards: {
     width: '100%',
-    marginTop: 32,
-    gap: 8,
+    gap: 10,
+    marginTop: 16,
   },
-  demoHeading: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  demoSubheading: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  mockBoatCard: {
-    opacity: 0.88,
-    borderColor: '#E2E8F0',
-    position: 'relative',
-  },
-  mockBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  mockBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  fab: {
-    position: 'absolute',
-    right: 24,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#2563EB',
+  classCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0px 6px 18px rgba(37, 99, 235, 0.35)',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 0.5,
+    borderColor: '#E5E7EB',
+  },
+  classCardInfo: {
+    gap: 2,
+  },
+  classCardName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  classCardSail: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  fetchLink: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
   },
 });

@@ -163,7 +163,7 @@ export class DocumentProcessingService {
 
       // Using Claude 3.5 Haiku for cost optimization
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 2048,
         temperature: 0.3, // Creative but consistent analysis
         messages: [{
@@ -261,7 +261,7 @@ CRITICAL: Respond with ONLY the JSON object above. No explanations, no apologies
     try {
       // Using Claude 3.5 Haiku for cost optimization (12x cheaper than Sonnet)
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 2048,
         temperature: 0.2, // Low temperature for structured analysis
         messages: [{
@@ -439,7 +439,7 @@ Format as valid JSON array.
     try {
       // Using Claude 3.5 Haiku for cost optimization
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 2048,
         temperature: 0.3,
         messages: [{

@@ -142,15 +142,15 @@ const styles = StyleSheet.create({
   },
   // AI Card styles
   aiCard: {
-    backgroundColor: colors.ai[600],
+    backgroundColor: colors.ai[800],  // Darker purple for better contrast
     borderWidth: 2,
-    borderColor: colors.ai[500],
+    borderColor: colors.ai[700],
   },
   aiIconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.md,
@@ -158,11 +158,12 @@ const styles = StyleSheet.create({
   aiTitle: {
     ...Typography.h3,
     color: '#FFFFFF',
+    fontWeight: '700',
     marginBottom: Spacing.xs,
   },
   aiSubtitle: {
     ...Typography.body,
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: '#FFFFFF',  // Solid white for better contrast
     textAlign: 'center',
     marginBottom: Spacing.md,
   },
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
     borderRadius: BorderRadius.small,
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
   recommendedText: {
     ...Typography.caption,
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 11,
   },
   // Manual Card styles

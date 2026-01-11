@@ -168,7 +168,7 @@ ${JSON.stringify(payload, null, 2)}`;
     const startTime = Date.now();
 
     const response = await anthropic.beta.messages.create({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 2000,
       temperature: 0.5,
       betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],

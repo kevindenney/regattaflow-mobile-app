@@ -6,6 +6,12 @@
  */
 
 import type { WatchSchedule } from './watchSchedule';
+import type { ChecklistCompletion } from './checklists';
+import type {
+  HourlyDataPoint,
+  TideTimeData,
+  RaceWindowData,
+} from '@/hooks/useRaceWeatherForecast';
 
 /**
  * Arrival time intention for the Race Card
@@ -95,6 +101,73 @@ export interface CourseSelectionIntention {
 export type StrategyNotes = Record<string, string>;
 
 /**
+ * Snapshot of weather forecast data at a point in time
+ * Used to track forecast changes as race day approaches
+ */
+export interface ForecastSnapshot {
+  /** Unique identifier for this snapshot */
+  id: string;
+  /** ISO timestamp when snapshot was captured */
+  capturedAt: string;
+  /** Race event this snapshot is for */
+  raceEventId: string;
+  /** Venue ID for reference */
+  venueId?: string;
+  /** Hourly wind forecast data */
+  windForecast: HourlyDataPoint[];
+  /** Hourly tide forecast data */
+  tideForecast: HourlyDataPoint[];
+  /** Race-window specific values */
+  raceWindow: RaceWindowData;
+  /** Overall wind trend */
+  windTrend: 'building' | 'steady' | 'easing';
+  /** High tide time and height */
+  highTide?: TideTimeData;
+  /** Low tide time and height */
+  lowTide?: TideTimeData;
+  /** Data source */
+  source?: 'stormglass' | 'regional' | 'mock';
+  /** Confidence level 0-1 */
+  confidence?: number;
+}
+
+/**
+ * AI-generated analysis comparing forecast snapshots
+ */
+export interface ForecastAnalysis {
+  /** When the analysis was generated */
+  analyzedAt: string;
+  /** ID of previous snapshot compared */
+  previousSnapshotId: string;
+  /** ID of current snapshot compared */
+  currentSnapshotId: string;
+  /** One-sentence summary of key changes */
+  summary: string;
+  /** Tactical implications for race day */
+  implications: string[];
+  /** Overall change severity */
+  alertLevel: 'stable' | 'minor_change' | 'significant_change';
+  /** Specific changes detected */
+  changes: {
+    wind: { from: string; to: string; impact: string } | null;
+    tide: { from: string; to: string; impact: string } | null;
+    conditions: { from: string; to: string; impact: string } | null;
+  };
+}
+
+/**
+ * Forecast check intention - tracks weather snapshots over time
+ */
+export interface ForecastIntention {
+  /** Saved forecast snapshots (max 3, FIFO) */
+  snapshots: ForecastSnapshot[];
+  /** Most recent AI analysis comparing snapshots */
+  latestAnalysis?: ForecastAnalysis;
+  /** When the user last checked the forecast */
+  lastCheckedAt?: string;
+}
+
+/**
  * Complete race intentions structure
  * Stored in sailor_race_preparation.user_intentions JSONB column
  */
@@ -116,6 +189,12 @@ export interface RaceIntentions {
 
   /** Watch Schedule - crew watch rotation for distance races */
   watchSchedule?: WatchSchedule;
+
+  /** Checklist Completions - keyed by checklist item ID */
+  checklistCompletions?: Record<string, ChecklistCompletion>;
+
+  /** Forecast Check - weather snapshots and AI analysis */
+  forecastCheck?: ForecastIntention;
 
   /** Last update timestamp */
   updatedAt: string;

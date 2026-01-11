@@ -18,7 +18,7 @@ const DEFAULT_PERSONA: PersonaRole = 'sailor';
 bindAuthDiagnostics(supabase)
 
 const logger = createLogger('AuthProvider');
-const AUTH_DEBUG_ENABLED = true
+const AUTH_DEBUG_ENABLED = false // Set to true for debugging auth issues
 const authDebugLog = (...args: Parameters<typeof logger.debug>) => {
   if (!AUTH_DEBUG_ENABLED) {
     return
@@ -186,20 +186,14 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
   const fetchUserProfile = async (userId?: string) => {
     const uid = userId || user?.id
-    console.log('🔍 [PROFILE FETCH] ====== START ======')
-    console.log('🔍 [PROFILE FETCH] userId param:', userId)
-    console.log('🔍 [PROFILE FETCH] user?.id fallback:', user?.id)
-    console.log('🔍 [PROFILE FETCH] Using uid:', uid)
     authDebugLog('[fetchUserProfile] Called with userId:', uid)
     if (!uid) {
-      console.log('🔍 [PROFILE FETCH] ❌ No uid - returning null')
       authDebugLog('[fetchUserProfile] ❌ No userId provided')
       return null
     }
 
     // Prevent duplicate fetches during race conditions (e.g., initializeAuth + onAuthStateChange)
     if (profileFetchInProgress.current === uid) {
-      console.log('🔍 [PROFILE FETCH] ⏭️ Skipping - fetch already in progress for:', uid)
       authDebugLog('[fetchUserProfile] Skipping duplicate fetch for:', uid)
       return null
     }
@@ -243,7 +237,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     };
 
     try {
-      console.log('🔍 [PROFILE FETCH] Querying Supabase users table...')
       authDebugLog('[fetchUserProfile] Querying database for user:', uid)
 
       // Add timeout to prevent hanging forever on network issues
@@ -259,9 +252,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any
 
-      console.log('🔍 [PROFILE FETCH] Query complete!')
-      console.log('🔍 [PROFILE FETCH] data:', JSON.stringify(data, null, 2))
-      console.log('🔍 [PROFILE FETCH] error:', error)
       authDebugLog('[fetchUserProfile] Database response:', {
         hasData: !!data,
         hasError: !!error,
@@ -271,25 +261,19 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       })
 
       if (error) {
-        console.error('🔍 [PROFILE FETCH] ❌ Database error:', error)
         return null
       }
 
       if (!data) {
-        console.warn('🔍 [PROFILE FETCH] ⚠️ No profile found for user:', uid)
         return null
       }
 
       let resolvedProfile = data
       const userTypeWasMissing = !data?.user_type
-      console.log('🔍 [PROFILE FETCH] user_type from DB:', data?.user_type)
-      console.log('🔍 [PROFILE FETCH] userTypeWasMissing:', userTypeWasMissing)
 
       let resolvedUserType: PersonaRole = userTypeWasMissing
         ? await inferUserType()
         : (data.user_type as PersonaRole)
-
-      console.log('🔍 [PROFILE FETCH] resolvedUserType:', resolvedUserType)
 
       if (userTypeWasMissing) {
         authDebugLog('[fetchUserProfile] No user_type found, defaulting to', resolvedUserType)
@@ -312,27 +296,21 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         }
       }
 
-      console.log('🔍 [PROFILE FETCH] ✅ Setting userProfile and userType to:', resolvedUserType)
       authDebugLog('[fetchUserProfile] Setting userProfile and userType')
       setUserProfile(resolvedProfile)
       setUserType(resolvedUserType as UserType)
-      console.log('🔍 [PROFILE FETCH] ====== END SUCCESS ======')
       profileFetchInProgress.current = null
       return resolvedProfile
     } catch (error) {
       // On timeout or error, default to 'sailor' so user can still use the app
       const isTimeout = error instanceof Error && error.message.includes('timeout')
       if (isTimeout) {
-        // Use warn instead of error for handled timeouts - this is expected behavior
-        console.warn('🔍 [PROFILE FETCH] ⚠️ Timeout - defaulting to sailor persona')
         setUserType('sailor' as UserType)
         setUserProfile({ id: uid, user_type: 'sailor' })
-        console.log('🔍 [PROFILE FETCH] ====== END (TIMEOUT FALLBACK) ======')
         profileFetchInProgress.current = null
         return { id: uid, user_type: 'sailor' }
       }
 
-      console.log('🔍 [PROFILE FETCH] ====== END ERROR ======')
       profileFetchInProgress.current = null
       return null
     }
@@ -560,24 +538,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
   // Initial auth state setup with proper session restoration
   useEffect(() => {
-    console.log('🚀 [AUTH INIT] ====== useEffect FIRING ======')
     authDebugLog('🔥 [AUTH] useEffect initialization starting...')
     let alive = true
 
     const initializeAuth = async () => {
       try {
-        console.log('🚀 [AUTH INIT] Starting initializeAuth()...')
         authDebugLog('[AUTH] Starting initialization...')
 
-        console.log('🚀 [AUTH INIT] Calling supabase.auth.getSession()...')
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-        console.log('🚀 [AUTH INIT] getSession returned!')
-        console.log('🚀 [AUTH INIT] sessionData:', sessionData ? 'exists' : 'null')
-        console.log('🚀 [AUTH INIT] session.user.id:', sessionData?.session?.user?.id)
-        console.log('🚀 [AUTH INIT] sessionError:', sessionError)
 
         if (sessionError) {
-          console.warn('[AUTH] getSession error:', sessionError)
+          authDebugLog('[AUTH] getSession error:', sessionError)
           if (isInvalidRefreshTokenError(sessionError)) {
             console.error('[AUTH] Invalid refresh token detected - clearing session and redirecting to login')
             await clearInvalidSession('getSession', sessionError)
@@ -586,7 +557,6 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
             try {
               router.replace('/(auth)/login')
             } catch (navError) {
-              console.warn('[AUTH] Navigation to login failed:', navError)
               // Fallback: reload to clear bad state
               if (typeof window !== 'undefined') {
                 window.location.href = '/'
@@ -597,17 +567,11 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         }
 
         if (!alive) {
-          console.log('🚀 [AUTH INIT] alive=false, returning early')
           return
         }
 
         const session = sessionData?.session
         const authUser = session?.user
-
-        console.log('🚀 [AUTH INIT] session exists:', !!session)
-        console.log('🚀 [AUTH INIT] authUser exists:', !!authUser)
-        console.log('🚀 [AUTH INIT] authUser.id:', authUser?.id)
-        console.log('🚀 [AUTH INIT] authUser.email:', authUser?.email)
 
         authDebugLog('[AUTH] Session check result:', {
           hasSession: !!session,
@@ -619,13 +583,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setUser(authUser || null)
 
         if (authUser?.id) {
-          console.log('🚀 [AUTH INIT] Has authUser.id, calling fetchUserProfile...')
           authDebugLog('[AUTH] Fetching user profile for:', authUser.id)
-          console.log('[AUTH DEBUG] Starting profile fetch for userId:', authUser.id)
           try {
             const profile = await fetchUserProfile(authUser.id)
-            console.log('🚀 [AUTH INIT] fetchUserProfile returned:', profile ? 'profile object' : 'null')
-            console.log('[AUTH DEBUG] Profile fetch complete:', JSON.stringify(profile, null, 2))
             authDebugLog('[AUTH] Profile fetch result:', {
               hasProfile: !!profile,
               user_type: profile?.user_type,
@@ -633,26 +593,17 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
               email: profile?.email
             })
             if (profile?.user_type) {
-              console.log('🚀 [AUTH INIT] ✅ Setting userType to:', profile.user_type)
               setUserType(profile.user_type as UserType)
-              console.log('[AUTH DEBUG] ✅ setUserType called with:', profile.user_type)
               authDebugLog('[AUTH] userType set to:', profile.user_type)
             } else {
-              console.log('🚀 [AUTH INIT] ⚠️ No user_type on profile, setting to null')
               setUserType(null)
-              console.warn('[AUTH DEBUG] ⚠️ No user_type on profile! Profile keys:', profile ? Object.keys(profile) : 'null')
-              console.warn('[AUTH] No user_type on profile; consider forcing onboarding for user', authUser.email)
             }
           } catch (e) {
-            console.error('🚀 [AUTH INIT] ❌ Profile fetch exception:', e)
-            console.error('[AUTH DEBUG] ❌ Profile fetch failed:', e)
             console.error('[AUTH] User profile fetch failed:', e)
             setUserType(null)
           }
         } else {
-          console.log('🚀 [AUTH INIT] ⚠️ No authUser.id, setting userType to null')
           setUserType(null)
-          console.log('[AUTH DEBUG] No authUser.id available')
           authDebugLog('[AUTH] No authUser.id')
         }
 
@@ -733,15 +684,16 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         loading: false
       })
 
-      if (evt === 'SIGNED_OUT' || evt === 'TOKEN_REFRESH_FAILED') {
+      // Note: TOKEN_REFRESH_FAILED may not be in Supabase's type union but we handle it defensively
+      if (evt === 'SIGNED_OUT' || (evt as string) === 'TOKEN_REFRESH_FAILED') {
         const reason =
-          evt === 'TOKEN_REFRESH_FAILED'
+          (evt as string) === 'TOKEN_REFRESH_FAILED'
             ? 'TOKEN_REFRESH_FAILED (invalid/expired session)'
             : 'SIGNED_OUT';
         authDebugLog(`🚪 [AUTH] ===== ${reason} EVENT RECEIVED =====`)
         authDebugLog('🚪 [AUTH] Starting state cleanup...')
 
-        if (evt === 'TOKEN_REFRESH_FAILED') {
+        if ((evt as string) === 'TOKEN_REFRESH_FAILED') {
           console.error('[AUTH] Token refresh failed. Clearing session and forcing re-authentication.')
           await clearInvalidSession('auth_state_change:refresh_failed')
         }

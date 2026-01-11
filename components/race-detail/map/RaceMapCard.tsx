@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform, TurboModuleRegistry } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/race-ui/Card';
 import { Typography, Spacing, BorderRadius, colors } from '@/constants/designSystem';
@@ -14,16 +14,29 @@ import { MapControlButton } from './MapControlButton';
 import { LayerToggle } from './LayerToggle';
 
 // Conditional imports for native only
-let MapView: any;
-let CourseOverlay: any;
-let WindOverlay: any;
-let CurrentOverlay: any;
+let MapView: any = null;
+let CourseOverlay: any = null;
+let WindOverlay: any = null;
+let CurrentOverlay: any = null;
+let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
+// This prevents TurboModuleRegistry.getEnforcing from throwing
 if (Platform.OS !== 'web') {
-  MapView = require('react-native-maps').default;
-  CourseOverlay = require('./CourseOverlay').CourseOverlay;
-  WindOverlay = require('./WindOverlay').WindOverlay;
-  CurrentOverlay = require('./CurrentOverlay').CurrentOverlay;
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      MapView = require('react-native-maps').default;
+      CourseOverlay = require('./CourseOverlay').CourseOverlay;
+      WindOverlay = require('./WindOverlay').WindOverlay;
+      CurrentOverlay = require('./CurrentOverlay').CurrentOverlay;
+      mapsAvailable = true;
+    } else {
+      console.warn('[RaceMapCard] RNMapsAirModule not registered - using fallback UI');
+    }
+  } catch (e) {
+    console.warn('[RaceMapCard] react-native-maps not available:', e);
+  }
 }
 
 // Type definition compatible with both web and native

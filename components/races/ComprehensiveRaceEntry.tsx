@@ -19,7 +19,7 @@ import { supabase } from '@/services/supabase';
 import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import {
     AlertCircle,
@@ -113,7 +113,6 @@ export function ComprehensiveRaceEntry({
   );
 
   // Race Suggestions
-  console.log('🏁 [ComprehensiveRaceEntry] Component rendering, user:', user?.id);
   const {
     suggestions,
     loading: suggestionsLoading,
@@ -121,7 +120,6 @@ export function ComprehensiveRaceEntry({
     acceptSuggestion,
     dismissSuggestion,
   } = useRaceSuggestions();
-  console.log('🏁 [ComprehensiveRaceEntry] Suggestions state:', { suggestions, suggestionsLoading });
 
   // AI Freeform Input
   const [freeformText, setFreeformText] = useState('');
@@ -1052,7 +1050,6 @@ export function ComprehensiveRaceEntry({
       for (const proxy of proxies) {
         try {
           logger.warn('[fetchPdfBlobWithFallback] Using proxy due to direct fetch failure:', proxy.name);
-          console.log(`🔄 Trying proxy: ${proxy.name}`);
           const proxiedUrl = proxy.buildUrl(url);
           return await attemptFetch(proxiedUrl, proxy.name);
         } catch (proxyError: any) {
@@ -1896,28 +1893,21 @@ export function ComprehensiveRaceEntry({
    * Used by batch multi-race creation
    */
   const createRaceFromExtractedData = async (raceData: ExtractedData): Promise<string | null> => {
-    console.log('📋 [CREATE] createRaceFromExtractedData STARTED for:', raceData.raceName);
-    
     if (!user?.id) {
-      console.log('❌ [CREATE] No user found - aborting');
       logger.error('[createRaceFromExtractedData] No user found');
       return null;
     }
-    console.log('✅ [CREATE] User found:', user.id);
 
     // Validate minimum required fields
     if (!raceData.raceName?.trim()) {
-      console.log('❌ [CREATE] Race has no name - skipping');
       logger.warn('[createRaceFromExtractedData] Skipping race with no name');
       return null;
     }
-    console.log('✅ [CREATE] Race name validated:', raceData.raceName);
 
     try {
       // Skip weather fetch for batch creation - it can be fetched later when viewing race
       // This significantly speeds up batch race creation
       const venueName = raceData.venue || raceData.venueVariant || 'Unknown Venue';
-      console.log('📍 [CREATE] Venue:', venueName);
 
       const insertData = {
         created_by: user.id,
@@ -1943,29 +1933,16 @@ export function ComprehensiveRaceEntry({
         updated_at: new Date().toISOString(),
       };
 
-      console.log('💾 [CREATE] About to insert into Supabase...');
-      console.log('💾 [CREATE] Insert data keys:', Object.keys(insertData));
-      
-      // Try a simpler approach - just do the insert directly
-      console.log('💾 [CREATE] Calling supabase.from("regattas").insert()...');
-      
       const { data, error } = await supabase
         .from('regattas')
         .insert(insertData)
         .select('id')
         .single();
 
-      console.log('💾 [CREATE] Supabase insert completed!');
-      console.log('💾 [CREATE] Error:', error);
-      console.log('💾 [CREATE] Data:', data);
-
       if (error) {
-        console.log('❌ [CREATE] Supabase insert FAILED:', error.message);
         logger.error('[createRaceFromExtractedData] Insert error:', error);
         return null;
       }
-      
-      console.log('✅ [CREATE] Race inserted successfully with ID:', data?.id);
 
       logger.debug('[createRaceFromExtractedData] Created race:', data.id, raceData.raceName);
       return data.id;
@@ -1979,9 +1956,8 @@ export function ComprehensiveRaceEntry({
    * Batch create multiple races from selection
    */
   const handleBatchCreateRaces = async (selectedRaces: ExtractedData[]) => {
-    console.log('🚀 [BATCH] handleBatchCreateRaces STARTED with', selectedRaces.length, 'races');
     logger.debug('[handleBatchCreateRaces] Creating', selectedRaces.length, 'races');
-    
+
     setIsCreatingMultipleRaces(true);
     const createdRaceIds: string[] = [];
     const failedRaces: string[] = [];
@@ -1989,24 +1965,19 @@ export function ComprehensiveRaceEntry({
     try {
       for (let i = 0; i < selectedRaces.length; i++) {
         const race = selectedRaces[i];
-        console.log(`🏁 [BATCH] Processing race ${i + 1}/${selectedRaces.length}:`, race.raceName);
-        
+
         setMultiRaceProgress({
           current: i + 1,
           total: selectedRaces.length,
           raceName: race.raceName || `Race ${i + 1}`,
         });
 
-        console.log(`📝 [BATCH] Calling createRaceFromExtractedData for:`, race.raceName);
         const raceId = await createRaceFromExtractedData(race);
-        console.log(`✅ [BATCH] createRaceFromExtractedData returned:`, raceId);
-        
+
         if (raceId) {
           createdRaceIds.push(raceId);
-          console.log(`✅ [BATCH] Race created successfully:`, raceId);
         } else {
           failedRaces.push(race.raceName || `Race ${i + 1}`);
-          console.log(`❌ [BATCH] Race creation failed for:`, race.raceName);
         }
       }
 
@@ -2087,7 +2058,6 @@ export function ComprehensiveRaceEntry({
    * Handle race suggestion selection
    */
   const handleSelectSuggestion = async (suggestion: RaceSuggestion) => {
-    console.log('✨ [ComprehensiveRaceEntry] Suggestion selected:', suggestion);
     logger.debug('[handleSelectSuggestion] canAddDirectly:', suggestion.canAddDirectly);
 
     // Set processing state
@@ -2150,7 +2120,6 @@ export function ComprehensiveRaceEntry({
    * Directly create a race from a suggestion
    */
   const handleDirectRaceCreation = async (suggestion: RaceSuggestion) => {
-    console.log('🚀 [ComprehensiveRaceEntry] Creating race directly from suggestion:', suggestion);
     logger.debug('[handleDirectRaceCreation] Starting direct race creation');
 
     // Validate required fields
@@ -2328,7 +2297,6 @@ export function ComprehensiveRaceEntry({
    * Handle dismissing a suggestion
    */
   const handleDismissSuggestion = async (suggestionId: string) => {
-    console.log('❌ [ComprehensiveRaceEntry] Suggestion dismissed:', suggestionId);
     await dismissSuggestion(suggestionId);
   };
 

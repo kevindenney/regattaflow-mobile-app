@@ -27,7 +27,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/navigationAnimations';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { colors } from '@/constants/Colors';
 import { CourseSelector } from '@/components/races/intentions';
 import type { CourseSelectionIntention } from '@/types/raceIntentions';
 
@@ -104,9 +103,13 @@ export function CourseDetailCard({
   }, [isExpanded, rotation]);
 
   // Animated chevron rotation
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 90])}deg` }],
-  }));
+  const chevronStyle = useAnimatedStyle(() => {
+    'worklet';
+    const rotationValue = rotation.value ?? 0;
+    return {
+      transform: [{ rotate: `${interpolate(rotationValue, [0, 1], [0, 90])}deg` }],
+    };
+  });
 
   const handlePress = useCallback(() => {
     LayoutAnimation.configureNext({
@@ -174,9 +177,10 @@ export function CourseDetailCard({
       {/* Content */}
       {hasData ? (
         <>
-          {/* Collapsed: Tufte flat typography */}
+          {/* Collapsed: Show ALL data (Tufte principle) */}
           {!isExpanded && (
             <View style={styles.tufteCollapsedContent}>
+              {/* Stats summary */}
               <Text style={styles.tufteCollapsedData}>
                 {[
                   courseType && getCourseTypeLabel(courseType),
@@ -186,41 +190,49 @@ export function CourseDetailCard({
                   totalDistanceNm && `${totalDistanceNm}nm`,
                 ].filter(Boolean).join(' · ')}
               </Text>
-              {hasCourseSelected && (
-                <Text style={styles.tufteSelectedCourse}>
-                  Selected: {courseSelection?.selectedCourseName}
-                </Text>
-              )}
-            </View>
-          )}
 
-          {/* Expanded: Full content - Tufte style */}
-          {isExpanded && (
-            <View style={styles.expandedContent}>
-              {/* Tufte summary line: stats inline */}
-              <Text style={styles.tufteSummary}>
-                {numberOfLegs !== undefined && `${numberOfLegs} legs`}
-                {numberOfLegs !== undefined && marks && marks.length > 0 && ' · '}
-                {marks && marks.length > 0 && `${marks.length} marks`}
-                {approximateDistance && ` · ${approximateDistance}`}
-              </Text>
-
-              {/* Tufte leg sequence - numbered steps */}
-              {marks && marks.length > 0 && (
-                <View style={styles.tufteLegsSection}>
+              {/* Leg sequence - show full course in collapsed */}
+              {marks && marks.length > 0 && marks.length <= 8 && (
+                <View style={styles.tufteLegsPreview}>
                   {marks.map((mark, index) => (
-                    <View key={mark.id} style={styles.tufteLegRow}>
+                    <View key={mark.id} style={styles.tufteCollapsedLegRow}>
                       <Text style={styles.tufteLegNumber}>{index + 1}.</Text>
-                      <Text style={styles.tufteLegName}>{mark.name}</Text>
-                      <Text style={styles.tufteLegType}>{mark.type}</Text>
+                      <Text style={styles.tufteCollapsedLegName}>{mark.name}</Text>
                     </View>
                   ))}
                 </View>
               )}
 
-              {/* Course Selection Section */}
-              {onCourseSelectionChange && (
+              {/* For longer courses, show summary */}
+              {marks && marks.length > 8 && (
+                <Text style={styles.tufteLegsSummary}>
+                  {marks.slice(0, 3).map(m => m.name).join(' → ')} ... → {marks[marks.length - 1]?.name}
+                </Text>
+              )}
+
+              {/* Course selection status */}
+              {hasCourseSelected && (
+                <Text style={styles.tufteSelectedCourse}>
+                  Selected: {courseSelection?.selectedCourseName} ✓
+                </Text>
+              )}
+
+              {/* CTA if course selection needed */}
+              {onCourseSelectionChange && !hasCourseSelected && (
+                <Text style={styles.tufteCourseSelectCTA}>
+                  Tap to select course →
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Expanded: INTERACTION ONLY (course selection) */}
+          {isExpanded && (
+            <View style={styles.expandedContent}>
+              {/* Course Selection - the interaction */}
+              {onCourseSelectionChange ? (
                 <View style={styles.courseSelectionSection}>
+                  <Text style={styles.tufteSectionLabel}>SELECT COURSE</Text>
                   <CourseSelector
                     courses={availableCourses}
                     selection={courseSelection}
@@ -228,6 +240,28 @@ export function CourseDetailCard({
                     allowManualEntry={true}
                   />
                 </View>
+              ) : (
+                /* If no course selection, show detailed mark list */
+                <>
+                  <Text style={styles.tufteSummary}>
+                    {numberOfLegs !== undefined && `${numberOfLegs} legs`}
+                    {numberOfLegs !== undefined && marks && marks.length > 0 && ' · '}
+                    {marks && marks.length > 0 && `${marks.length} marks`}
+                    {approximateDistance && ` · ${approximateDistance}`}
+                  </Text>
+
+                  {marks && marks.length > 0 && (
+                    <View style={styles.tufteLegsSection}>
+                      {marks.map((mark, index) => (
+                        <View key={mark.id} style={styles.tufteLegRow}>
+                          <Text style={styles.tufteLegNumber}>{index + 1}.</Text>
+                          <Text style={styles.tufteLegName}>{mark.name}</Text>
+                          <Text style={styles.tufteLegType}>{mark.type}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
             </View>
           )}
@@ -332,7 +366,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.success.light,
+    backgroundColor: `${IOS_COLORS.green}15`,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -340,7 +374,7 @@ const styles = StyleSheet.create({
   courseSelectedText: {
     fontSize: 12,
     fontWeight: '500',
-    color: colors.success.default,
+    color: IOS_COLORS.green,
   },
 
   // Expanded content
@@ -483,5 +517,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: IOS_COLORS.green,
+    marginTop: 4,
+  },
+  tufteLegsPreview: {
+    gap: 2,
+    marginTop: 8,
+  },
+  tufteCollapsedLegRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  tufteCollapsedLegName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  tufteLegsSummary: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 8,
+  },
+  tufteCourseSelectCTA: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    marginTop: 8,
+  },
+  tufteSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
 });

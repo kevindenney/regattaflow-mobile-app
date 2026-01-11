@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useSailorProfile');

@@ -675,7 +675,7 @@ Format your response as JSON:
 
       // Build the message creation params
       const messageParams: any = {
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         messages: [{
           role: 'user',

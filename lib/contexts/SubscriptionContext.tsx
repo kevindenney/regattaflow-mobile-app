@@ -48,11 +48,21 @@ interface SubscriptionProviderProps {
 /**
  * Feature access mapping for subscription tiers
  */
-const TIER_FEATURES = {
+const TIER_FEATURES: Record<string, string[]> = {
   free: [
     'basic_race_tracking',
     'limited_documents', // 3 documents max
     'basic_weather',
+  ],
+  pro: [
+    'unlimited_race_tracking',
+    'unlimited_documents',
+    'global_venue_intelligence',
+    'ai_race_analysis',
+    'offline_capabilities',
+    'equipment_optimization',
+    'performance_analytics',
+    'cloud_backup',
   ],
   sailor_pro: [
     'unlimited_race_tracking',

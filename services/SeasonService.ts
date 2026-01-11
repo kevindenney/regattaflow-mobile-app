@@ -397,36 +397,25 @@ class SeasonServiceClass {
     raceCount: number;
     completedCount: number;
   }> {
-    // Count regattas
-    const { count: regattaCount } = await supabase
+    // Get all regattas in this season with their status
+    const { data: seasonRegattas } = await supabase
       .from('season_regattas')
-      .select('*', { count: 'exact', head: true })
+      .select('regatta_id, regattas!inner(id, status)')
       .eq('season_id', seasonId);
 
-    // Count races from regattas using race_results grouped by regatta
-    // Since regatta_races table doesn't exist, we count distinct race_numbers per regatta
-    const { data: regattaIds } = await supabase
-      .from('season_regattas')
-      .select('regatta_id')
-      .eq('season_id', seasonId);
+    const regattaCount = seasonRegattas?.length || 0;
 
-    let raceCount = 0;
-    let completedCount = 0;
+    // Count regattas by status (each regatta counts as 1 race for now)
+    let regattaRaceCount = 0;
+    let regattaCompletedCount = 0;
 
-    if (regattaIds && regattaIds.length > 0) {
-      // Get distinct race counts from race_results for these regattas
-      const ids = regattaIds.map(r => r.regatta_id);
-      const { data: raceCounts } = await supabase
-        .from('race_results')
-        .select('regatta_id, race_number')
-        .in('regatta_id', ids);
-
-      if (raceCounts) {
-        // Count unique regatta_id + race_number combinations
-        const uniqueRaces = new Set(raceCounts.map(r => `${r.regatta_id}_${r.race_number}`));
-        raceCount = uniqueRaces.size;
-        // For now, assume all recorded races are completed
-        completedCount = raceCount;
+    if (seasonRegattas && seasonRegattas.length > 0) {
+      for (const sr of seasonRegattas) {
+        const regatta = sr.regattas as any;
+        regattaRaceCount++;
+        if (regatta?.status === 'completed') {
+          regattaCompletedCount++;
+        }
       }
     }
 
@@ -443,9 +432,9 @@ class SeasonServiceClass {
       .eq('status', 'completed');
 
     return {
-      regattaCount: regattaCount || 0,
-      raceCount: raceCount + (personalRaceCount || 0),
-      completedCount: completedCount + (personalCompletedCount || 0),
+      regattaCount: regattaCount,
+      raceCount: regattaRaceCount + (personalRaceCount || 0),
+      completedCount: regattaCompletedCount + (personalCompletedCount || 0),
     };
   }
 

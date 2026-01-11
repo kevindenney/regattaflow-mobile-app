@@ -7,7 +7,7 @@
  */
 
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import Anthropic from '@anthropic-ai/sdk';
 import { Platform } from 'react-native';
 import type { RaceStrategy, RaceConditions } from './RaceStrategyEngine';
@@ -312,9 +312,13 @@ Return as JSON with this structure:
         }]
       });
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : '';
+      let text = message.content[0].type === 'text' ? message.content[0].text : '';
 
       try {
+        // Strip markdown code blocks if present
+        if (text.trim().startsWith('```')) {
+          text = text.trim().replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+        }
         const analysis = JSON.parse(text);
 
         // Add timestamps to insights

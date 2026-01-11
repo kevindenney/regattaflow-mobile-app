@@ -6,8 +6,6 @@
 export { ClassSelector } from './ClassSelector';
 export { ClubsAssociationsSection } from './ClubsAssociationsSection';
 export { CrewManagement } from './CrewManagement';
-export { CrewAvailabilityCalendar } from './CrewAvailabilityCalendar';
-export { CrewPerformanceCard } from './CrewPerformanceCard';
 export { TuningGuidesSection } from './TuningGuidesSection';
 export { BoatEquipmentInventory } from './BoatEquipmentInventory';
 export { MaintenanceTimeline } from './MaintenanceTimeline';

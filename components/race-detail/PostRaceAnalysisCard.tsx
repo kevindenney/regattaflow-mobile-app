@@ -29,6 +29,7 @@ import { coachingService } from '@/services/CoachingService';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceAnalysis, CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
 import { createLogger } from '@/lib/utils/logger';
+import { UnifiedSharingSheet, CoachSharePrompt, type ShareableContent, type ShareResult } from '@/components/sharing';
 
 interface PostRaceAnalysisCardProps {
   raceId: string;
@@ -55,6 +56,8 @@ export function PostRaceAnalysisCard({
     overall_assessment: string;
     next_race_priorities: string[];
   } | null>(null);
+  const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showCoachPrompt, setShowCoachPrompt] = useState(false);
 
   // Check if race is completed (start time in past)
   const isRaceCompleted = raceStartTime ? new Date(raceStartTime) < new Date() : false;
@@ -226,6 +229,9 @@ export function PostRaceAnalysisCard({
       // Update local state
       setExistingAnalysis(savedAnalysis as RaceAnalysis);
       setCoachingData(coaching);
+
+      // Show coach share prompt after analysis is complete
+      setShowCoachPrompt(true);
 
       const highlightNotes = Array.isArray(coaching.coaching_feedback)
         ? (coaching.coaching_feedback as CoachingFeedback[])
@@ -558,6 +564,14 @@ export function PostRaceAnalysisCard({
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => setShowShareSheet(true)}
+          >
+            <MaterialCommunityIcons name="share-variant" size={18} color="#10B981" />
+            <Text style={styles.shareButtonText}>Share Analysis</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.editButton}
             onPress={handleEditAnalysis}
           >
@@ -629,6 +643,56 @@ export function PostRaceAnalysisCard({
           )}
         </View>
       </Modal>
+
+      {/* Coach Share Prompt - One-tap sharing after analysis */}
+      <CoachSharePrompt
+        visible={showCoachPrompt}
+        onDismiss={() => setShowCoachPrompt(false)}
+        sailorId={sailorId || ''}
+        raceId={raceId}
+        raceName={raceName}
+        shareType="post_race"
+        onShareComplete={(result) => {
+          logger.info('Coach share completed:', result);
+        }}
+      />
+
+      {/* Sharing Sheet */}
+      {existingAnalysis && (
+        <UnifiedSharingSheet
+          visible={showShareSheet}
+          onClose={() => setShowShareSheet(false)}
+          context="post-race"
+          content={{
+            context: 'post-race',
+            raceId,
+            raceName,
+            raceDate: raceStartTime || new Date().toISOString(),
+            postRace: {
+              raceInfo: {
+                id: raceId,
+                name: raceName,
+                date: raceStartTime || new Date().toISOString(),
+              },
+              result: existingAnalysis.position ? {
+                position: existingAnalysis.position,
+                fleetSize: existingAnalysis.fleet_size || 0,
+              } : undefined,
+              analysis: existingAnalysis,
+              coachingFeedback: coachingData?.coaching_feedback,
+              frameworkScores: coachingData?.framework_scores || existingAnalysis.framework_scores,
+              keyLearning: existingAnalysis.key_learnings?.[0],
+            },
+          }}
+          sailorId={sailorId || ''}
+          onShareComplete={(result) => {
+            logger.info('Share completed:', result);
+            if (result.success) {
+              setShowShareSheet(false);
+            }
+          }}
+        />
+      )}
     </>
   );
 }
@@ -731,6 +795,21 @@ const styles = StyleSheet.create({
   viewCoachingButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+    marginBottom: 8,
+  },
+  shareButtonText: {
+    color: '#10B981',
+    fontSize: 14,
     fontWeight: '600',
   },
   editButton: {

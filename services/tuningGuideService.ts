@@ -394,13 +394,11 @@ class TuningGuideService {
   // Helper methods
   async getGuidesByReference(params: { classId?: string | null; className?: string | null }): Promise<TuningGuide[]> {
     const { classId, className } = params;
-    console.log('🔍 [tuningGuideService] getGuidesByReference called', { classId, className });
 
     let resolvedClassName = className ?? null;
     let databaseGuides: TuningGuide[] = [];
 
     if (classId) {
-      console.log('🗄️ [tuningGuideService] Querying database for class reference', { classId });
       const { data, error } = await supabase
         .from('tuning_guides')
         .select('*')
@@ -408,15 +406,11 @@ class TuningGuideService {
         .order('year', { ascending: false });
 
       if (error) {
-        console.error('❌ [tuningGuideService] Error fetching tuning guides', error);
+        logger.error('Error fetching tuning guides', { error });
         throw error;
       }
 
       databaseGuides = this.mapGuides(data || []);
-      console.log('📊 [tuningGuideService] Database guides found', {
-        count: databaseGuides.length,
-        guides: databaseGuides.map(g => ({ id: g.id, title: g.title, source: g.source }))
-      });
 
       if (!resolvedClassName) {
         const { data: classData } = await supabase
@@ -426,7 +420,6 @@ class TuningGuideService {
           .maybeSingle();
 
         resolvedClassName = classData?.name ?? null;
-        console.log('🏷️ [tuningGuideService] Resolved class name for lookup', { resolvedClassName });
       }
     }
 
@@ -436,23 +429,7 @@ class TuningGuideService {
     );
 
     if (guidesWithSections.length > 0) {
-      console.log('✅ [tuningGuideService] Returning database guides with extracted sections', {
-        count: guidesWithSections.length,
-        totalDbGuides: databaseGuides.length
-      });
       return guidesWithSections;
-    }
-
-    if (databaseGuides.length > 0) {
-      console.log('⚠️ [tuningGuideService] Database guides found but lack extracted_sections, falling back to DEFAULT_GUIDES', {
-        dbGuidesCount: databaseGuides.length,
-        guides: databaseGuides.map(g => ({ title: g.title, source: g.source, hasExtracted: !!g.extractedSections }))
-      });
-    } else {
-      console.log('📚 [tuningGuideService] No database guides found, trying fallback', {
-        classId,
-        className: resolvedClassName,
-      });
     }
 
     const fallbackGuides = await this.buildFallbackGuides({
@@ -461,15 +438,9 @@ class TuningGuideService {
     });
 
     if (fallbackGuides.length > 0) {
-      console.log('✅ [tuningGuideService] Using built-in North Sails tuning guides', {
-        count: fallbackGuides.length,
-        classRef: classId || resolvedClassName || 'unknown',
-        guides: fallbackGuides.map(g => ({ title: g.title, source: g.source, sections: g.extractedSections?.length }))
-      });
       return fallbackGuides;
     }
 
-    console.warn('⚠️ [tuningGuideService] No guides found for provided class reference');
     return [];
   }
 

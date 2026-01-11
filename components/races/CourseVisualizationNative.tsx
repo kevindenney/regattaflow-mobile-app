@@ -6,23 +6,31 @@
  */
 
 import React, { useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Text, TurboModuleRegistry } from 'react-native';
 import { CourseOverlay } from '@/components/race-detail/map/CourseOverlay';
 import type { CourseGeoJSON, CourseFeature, PointGeometry } from '@/types/raceEvents';
+import { MapPin } from 'lucide-react-native';
 
 // Conditional imports for native only (requires development build)
 let MapView: any = null;
 let PROVIDER_GOOGLE: any = null;
 let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
+// This prevents TurboModuleRegistry.getEnforcing from throwing
 if (Platform.OS !== 'web') {
   try {
-    const maps = require('react-native-maps');
-    MapView = maps.default;
-    PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
-    mapsAvailable = true;
-  } catch (e) {
-    console.warn('[CourseVisualizationNative] react-native-maps not available:', e);
+    // Use 'get' instead of 'getEnforcing' to check without throwing
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      // Only require react-native-maps if native module exists
+      const maps = require('react-native-maps');
+      MapView = maps.default;
+      PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+      mapsAvailable = true;
+    }
+  } catch (_e) {
+    // react-native-maps not available - will use fallback UI
   }
 }
 
@@ -164,9 +172,17 @@ export default function CourseVisualizationNative({
     }
   };
 
-  // Platform check
-  if (Platform.OS === 'web' || !MapView) {
-    return null;
+  // Platform check - show placeholder if maps not available
+  if (Platform.OS === 'web' || !MapView || !mapsAvailable) {
+    return (
+      <View style={styles.placeholder}>
+        <MapPin size={32} color="#94a3b8" />
+        <Text style={styles.placeholderTitle}>Course Map</Text>
+        <Text style={styles.placeholderText}>
+          {course.marks.length} marks configured
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -205,5 +221,26 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 8,
+  },
+  placeholder: {
+    flex: 1,
+    width: '100%',
+    minHeight: 200,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  placeholderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
+    marginTop: 8,
+  },
+  placeholderText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    marginTop: 4,
   },
 });

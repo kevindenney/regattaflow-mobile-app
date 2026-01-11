@@ -1,0 +1,251 @@
+/**
+ * Tool Registry
+ *
+ * Maps checklist item toolIds to their implementations.
+ * Provides a centralized way to look up tool components for checklist items.
+ */
+
+import { ComponentType } from 'react';
+import { ChecklistItem, ChecklistToolType } from '@/types/checklists';
+
+/**
+ * Props common to all checklist tools
+ */
+export interface ChecklistToolProps {
+  item: ChecklistItem;
+  raceEventId: string;
+  boatId?: string;
+  onComplete: () => void;
+  onCancel: () => void;
+}
+
+/**
+ * Tool registration entry
+ */
+export interface ToolRegistration {
+  id: string;
+  type: ChecklistToolType;
+  component: ComponentType<ChecklistToolProps>;
+  displayName: string;
+  icon: string; // Lucide icon name
+}
+
+/**
+ * Tool registry - maps tool IDs to their implementations
+ * Components are lazy-loaded to avoid circular dependencies
+ */
+export const TOOL_REGISTRY: Record<string, Omit<ToolRegistration, 'component'> & {
+  componentPath: string;
+}> = {
+  // Full Wizards
+  sail_inspection: {
+    id: 'sail_inspection',
+    type: 'full_wizard',
+    componentPath: '@/components/sail-inspection/SailInspectionWizard',
+    displayName: 'Sail Inspection',
+    icon: 'Sailboat',
+  },
+  safety_gear: {
+    id: 'safety_gear',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/SafetyGearWizard',
+    displayName: 'Safety Gear Check',
+    icon: 'Shield',
+  },
+  rigging_inspection: {
+    id: 'rigging_inspection',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/RiggingInspectionWizard',
+    displayName: 'Rigging Inspection',
+    icon: 'Link2',
+  },
+  offshore_safety: {
+    id: 'offshore_safety',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/OffshoreSafetyWizard',
+    displayName: 'Offshore Safety',
+    icon: 'LifeBuoy',
+  },
+  nav_prep: {
+    id: 'nav_prep',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/NavigationPrepWizard',
+    displayName: 'Navigation Prep',
+    icon: 'Compass',
+  },
+  watch_schedule: {
+    id: 'watch_schedule',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/WatchScheduleWizard',
+    displayName: 'Watch Schedule',
+    icon: 'Clock',
+  },
+  forecast_check: {
+    id: 'forecast_check',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/ForecastCheckWizard',
+    displayName: 'Forecast Check',
+    icon: 'CloudSun',
+  },
+  rig_tuning_wizard: {
+    id: 'rig_tuning_wizard',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/RigTuningWizard',
+    displayName: 'Rig Tuning',
+    icon: 'Wrench',
+  },
+  sail_selection_wizard: {
+    id: 'sail_selection_wizard',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/SailSelectionWizard',
+    displayName: 'Sail Selection',
+    icon: 'Sailboat',
+  },
+  tactics_review_wizard: {
+    id: 'tactics_review_wizard',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/TacticsReviewWizard',
+    displayName: 'Tactics Review',
+    icon: 'Target',
+  },
+  nor_review: {
+    id: 'nor_review',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/DocumentReviewWizard',
+    displayName: 'Notice of Race Review',
+    icon: 'FileText',
+  },
+  si_review: {
+    id: 'si_review',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/DocumentReviewWizard',
+    displayName: 'Sailing Instructions Review',
+    icon: 'Sailboat',
+  },
+  course_map: {
+    id: 'course_map',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/CourseMapWizard',
+    displayName: 'Course Study',
+    icon: 'Map',
+  },
+
+  // Interactive Checklists
+  electronics_checklist: {
+    id: 'electronics_checklist',
+    type: 'interactive',
+    componentPath: '@/components/checklist-tools/checklists/ElectronicsChecklist',
+    displayName: 'Electronics Checklist',
+    icon: 'Battery',
+  },
+  opponent_review: {
+    id: 'opponent_review',
+    type: 'interactive',
+    componentPath: '@/components/checklist-tools/checklists/OpponentReviewPanel',
+    displayName: 'Opponent Review',
+    icon: 'UserSearch',
+  },
+  team_assignments: {
+    id: 'team_assignments',
+    type: 'interactive',
+    componentPath: '@/components/checklist-tools/checklists/TeamAssignmentsPanel',
+    displayName: 'Team Assignments',
+    icon: 'Users',
+  },
+  position_assignment: {
+    id: 'position_assignment',
+    type: 'interactive',
+    componentPath: '@/components/checklist-tools/crew/PositionAssignmentPanel',
+    displayName: 'Assign Positions',
+    icon: 'Users',
+  },
+  meeting_point: {
+    id: 'meeting_point',
+    type: 'interactive',
+    componentPath: '@/components/checklist-tools/crew/MeetingPointPicker',
+    displayName: 'Meeting Point',
+    icon: 'MapPin',
+  },
+
+  // Quick Tips Panels
+  crew_confirmation: {
+    id: 'crew_confirmation',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Crew Confirmation',
+    icon: 'Users',
+  },
+  course_reading: {
+    id: 'course_reading',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Course Reading',
+    icon: 'Map',
+  },
+  line_sight: {
+    id: 'line_sight',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Line Sights',
+    icon: 'Eye',
+  },
+  rig_tuning: {
+    id: 'rig_tuning',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Rig Tuning',
+    icon: 'Wrench',
+  },
+  sail_selection: {
+    id: 'sail_selection',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Sail Selection',
+    icon: 'Wind',
+  },
+  forecast_review: {
+    id: 'forecast_review',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Forecast Review',
+    icon: 'CloudSun',
+  },
+  rules_review: {
+    id: 'rules_review',
+    type: 'quick_tips',
+    componentPath: '@/components/checklist-tools/QuickTipsPanel',
+    displayName: 'Rules Review',
+    icon: 'BookOpen',
+  },
+};
+
+/**
+ * Get tool metadata for a checklist item
+ */
+export function getToolMetadata(item: ChecklistItem) {
+  if (!item.toolId) return null;
+  return TOOL_REGISTRY[item.toolId] || null;
+}
+
+/**
+ * Check if an item has a tool
+ */
+export function hasTool(item: ChecklistItem): boolean {
+  return !!item.toolId && item.toolType !== 'none';
+}
+
+/**
+ * Get the icon name for a tool type
+ */
+export function getToolTypeIcon(toolType: ChecklistToolType): string {
+  switch (toolType) {
+    case 'full_wizard':
+      return 'Camera';
+    case 'interactive':
+      return 'ListChecks';
+    case 'quick_tips':
+      return 'Info';
+    default:
+      return 'Circle';
+  }
+}

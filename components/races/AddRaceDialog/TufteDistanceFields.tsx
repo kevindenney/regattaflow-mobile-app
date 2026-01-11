@@ -5,7 +5,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Switch, StyleSheet, Platform, Pressable, Modal, SafeAreaView } from 'react-native';
+import { View, Text, Switch, StyleSheet, Platform, Pressable, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, X, Route, Check } from 'lucide-react-native';
 import { TufteFieldRow } from './TufteFieldRow';
 import { TufteSectionLabel } from './TufteSectionLabel';

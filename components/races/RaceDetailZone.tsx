@@ -3,12 +3,15 @@
  *
  * Accordion-based detail sections for the selected race.
  * Displays Course & Strategy, Boat Setup, Fleet, and Regulatory sections.
+ * Includes RaceDetailHeader with edit/delete actions for race owners.
  */
 
 import React from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Compass, Settings, Users, FileText } from 'lucide-react-native';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { AccordionSection } from '@/components/races/AccordionSection';
+import { RaceDetailHeader } from '@/components/races/RaceDetailHeader';
 import {
   CourseDetailCard,
   StrategyDetailCard,
@@ -35,7 +38,12 @@ export interface RaceDetailZoneProps {
   /** The selected race data */
   raceData: {
     id: string;
+    name?: string;
     race_type?: string;
+    venue?: string;
+    date?: string;
+    startTime?: string;
+    created_by?: string;
     metadata?: {
       course_name?: string;
       number_of_legs?: number;
@@ -51,12 +59,21 @@ export interface RaceDetailZoneProps {
     };
     fleet?: {
       name?: string;
+      club?: {
+        name?: string;
+      };
     };
   };
   /** Marks for the selected race */
   marks?: RaceMark[];
   /** Documents for the selected race */
   documents?: RaceDocument[];
+  /** Current user ID for edit/delete permissions */
+  userId?: string;
+  /** Callback when edit is requested */
+  onEditRace?: (raceId: string) => void;
+  /** Callback when delete is requested */
+  onDeleteRace?: (raceId: string, raceName: string) => void;
 }
 
 /**
@@ -67,9 +84,27 @@ export function RaceDetailZone({
   raceData,
   marks,
   documents,
+  userId,
+  onEditRace,
+  onDeleteRace,
 }: RaceDetailZoneProps) {
+  // Check if user can manage this race
+  const canManage = userId && raceData.created_by === userId;
+
   return (
     <View style={[styles.container, { height }]}>
+      {/* Header with race info and management actions */}
+      <RaceDetailHeader
+        name={raceData.name || 'Race Details'}
+        venue={raceData.venue}
+        clubName={raceData.fleet?.club?.name}
+        date={raceData.date}
+        startTime={raceData.startTime}
+        canManage={!!canManage}
+        onEdit={canManage && onEditRace ? () => onEditRace(raceData.id) : undefined}
+        onDelete={canManage && onDeleteRace ? () => onDeleteRace(raceData.id, raceData.name || 'this race') : undefined}
+      />
+
       <ScrollView
         horizontal={false}
         showsVerticalScrollIndicator={false}
@@ -78,7 +113,7 @@ export function RaceDetailZone({
         {/* Course & Strategy - expanded by default */}
         <AccordionSection
           title="Course & Strategy"
-          icon={<Compass size={16} color="#0369A1" />}
+          icon={<Compass size={16} color={IOS_COLORS.blue} />}
           defaultExpanded={true}
           subtitle={raceData.metadata?.course_name || raceData.course?.name}
         >
@@ -102,7 +137,7 @@ export function RaceDetailZone({
         {/* Boat Setup */}
         <AccordionSection
           title="Boat Setup"
-          icon={<Settings size={16} color="#0369A1" />}
+          icon={<Settings size={16} color={IOS_COLORS.blue} />}
           subtitle={raceData.boat_class?.name}
         >
           <RigDetailCard
@@ -115,7 +150,7 @@ export function RaceDetailZone({
         {/* Fleet */}
         <AccordionSection
           title="Fleet"
-          icon={<Users size={16} color="#0369A1" />}
+          icon={<Users size={16} color={IOS_COLORS.blue} />}
           subtitle={raceData.fleet?.name}
         >
           <FleetDetailCard
@@ -129,7 +164,7 @@ export function RaceDetailZone({
         {/* Regulatory & Documents */}
         <AccordionSection
           title="Regulatory"
-          icon={<FileText size={16} color="#0369A1" />}
+          icon={<FileText size={16} color={IOS_COLORS.blue} />}
           count={documents?.length}
         >
           <RegulatoryDetailCard

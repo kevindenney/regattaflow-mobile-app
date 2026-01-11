@@ -399,14 +399,14 @@ export function parseSplitTimes(rawSplits: unknown): DebriefSplitTime[] | null {
 
 /**
  * Detect race type based on name patterns, explicit type, or distance
- * Distance races have different strategic considerations than fleet races
+ * Supports fleet, distance, match, and team racing types
  */
 export function detectRaceType(
   raceName: string | undefined,
-  explicitType: 'fleet' | 'distance' | undefined,
+  explicitType: 'fleet' | 'distance' | 'match' | 'team' | undefined,
   totalDistanceNm: number | undefined
-): 'fleet' | 'distance' {
-  // 1. Explicit type takes priority
+): 'fleet' | 'distance' | 'match' | 'team' {
+  // 1. Explicit type takes priority (including match and team)
   if (explicitType) {
     return explicitType;
   }
@@ -439,6 +439,11 @@ export function detectRaceType(
       'bermuda',
       'nm race',
       'mile race',
+      // Hong Kong specific distance races
+      'four peaks',
+      'around the island',
+      'port shelter',
+      'passage race',
     ];
 
     // Check for distance keywords

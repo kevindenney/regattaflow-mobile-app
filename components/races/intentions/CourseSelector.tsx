@@ -13,9 +13,11 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
-  SafeAreaView,
+  
   TextInput,
-} from 'react-native';
+  Platform,
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/Colors';
 import type { CourseSelectionIntention } from '@/types/raceIntentions';

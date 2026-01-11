@@ -26,8 +26,9 @@ import {
     WindWeatherCard
 } from '@/components/race-detail';
 import { CompetitorInsightsCard } from '@/components/race-detail/CompetitorInsightsCard';
-import { PreRaceBriefingCard } from '@/components/races';
+import { PreRaceBriefingCard, PreRaceSailCheck } from '@/components/races';
 import { TrackImportModal, TracksCard } from '@/components/tracking';
+import { sailorBoatService } from '@/services/SailorBoatService';
 import { Track } from '@/services/tracking/types';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -35,13 +36,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     Animated,
     Platform,
-    SafeAreaView,
+    
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
     ViewStyle
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 // import { StrategyPlanningCard } from '@/components/race-detail/StrategyPlanningCard'; // No longer used - strategy planning is integrated into individual strategy cards
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
@@ -109,7 +111,7 @@ interface CourseMark {
 }
 
 export default function RaceDetailScrollable() {
-  const { id, courseId } = useLocalSearchParams<{ id: string; courseId?: string }>();
+  const { id, courseId, section } = useLocalSearchParams<{ id: string; courseId?: string; section?: string }>();
   const { user } = useAuth();
 
   const [race, setRace] = useState<RaceEvent | null>(null);
@@ -119,6 +121,7 @@ export default function RaceDetailScrollable() {
   const [drawingPolygon, setDrawingPolygon] = useState<Array<{lat: number, lng: number}>>([]);
   const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
   const [sailorId, setSailorId] = useState<string | null>(null);
+  const [userBoatId, setUserBoatId] = useState<string | null>(null);
   const [showTrackImport, setShowTrackImport] = useState(false);
   const [importedTracks, setImportedTracks] = useState<Track[]>([]);
   const [isRegistered, setIsRegistered] = useState(false);
@@ -171,6 +174,9 @@ export default function RaceDetailScrollable() {
 
   // Scroll animation for map resize
   const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<Animated.ScrollView>(null);
+  const analysisRef = useRef<View>(null);
+  const [analysisMeasured, setAnalysisMeasured] = useState(false);
   const [mapCompact, setMapCompact] = useState(false);
 
   useEffect(() => {
@@ -214,6 +220,36 @@ export default function RaceDetailScrollable() {
     fetchSailorId();
   }, [user]);
 
+  // Fetch user's primary boat for sail checks
+  // Note: sailor_boats.sailor_id = auth.uid() (user.id), not sailor_profiles.id
+  useEffect(() => {
+    const fetchUserBoat = async () => {
+      if (!user?.id) return;
+
+      try {
+        // Try to get boat for race's class first
+        const classId = race?.boat_class?.id || race?.class_id;
+        if (classId) {
+          const primaryBoat = await sailorBoatService.getPrimaryBoat(user.id, classId);
+          if (primaryBoat) {
+            setUserBoatId(primaryBoat.id);
+            return;
+          }
+        }
+
+        // Fallback: get any boat for this user (first one is primary)
+        const boats = await sailorBoatService.listBoatsForSailor(user.id);
+        if (boats.length > 0) {
+          setUserBoatId(boats[0].id);
+        }
+      } catch (error) {
+        console.error('[RaceDetailScrollable] Failed to fetch user boat:', error);
+      }
+    };
+
+    fetchUserBoat();
+  }, [user?.id, race?.boat_class?.id, race?.class_id]);
+
   // Check if user is registered for this race
   useEffect(() => {
     const checkRegistration = async () => {
@@ -248,6 +284,25 @@ export default function RaceDetailScrollable() {
       scrollY.removeListener(listener);
     };
   }, []);
+
+  // Scroll to analysis section when section=analysis param is present
+  useEffect(() => {
+    if (section === 'analysis' && !loading && race && analysisMeasured && analysisRef.current) {
+      // Delay to ensure layout is complete
+      const timer = setTimeout(() => {
+        // Use measureInWindow to get absolute screen position, then scroll
+        analysisRef.current?.measureInWindow((x, y, width, height) => {
+          // y is the current screen position of the element
+          // Since we start at scroll 0, y represents the scroll target
+          // Subtract some offset for the header (~ 60px)
+          const targetY = Math.max(0, y - 60);
+          logger.debug('[RaceDetail] Scrolling to analysis section at y:', targetY);
+          scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+        });
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [section, loading, race, analysisMeasured]);
 
   const loadRaceData = async () => {
     if (!id) return;
@@ -328,15 +383,18 @@ export default function RaceDetailScrollable() {
         .eq('regatta_id', id)
         .maybeSingle();
 
+      // Track if marks were found from any source
+      let marksFound = false;
+
       if (raceEvent) {
-        // Load race marks
+        // Load race marks from race_marks table
         const { data: marksData, error: marksError} = await supabase
           .from('race_marks')
           .select('*')
           .eq('race_id', raceEvent.id)
           .order('name', { ascending: true });
 
-        if (!marksError && marksData) {
+        if (!marksError && marksData && marksData.length > 0) {
           // Convert race_marks format to CourseMark format
           const convertedMarks: CourseMark[] = marksData.map((mark: any) => ({
             id: mark.id,
@@ -347,8 +405,40 @@ export default function RaceDetailScrollable() {
             sequence_order: 0, // Will be set by order in array
           }));
           setMarks(convertedMarks);
-          logger.debug('[RaceDetailScrollable] Marks loaded:', convertedMarks.length);
+          marksFound = true;
+          logger.debug('[RaceDetailScrollable] Marks loaded from race_marks:', convertedMarks.length);
         }
+      }
+
+      // Fallback: Use mark_designations from regatta if no race_marks found
+      if (!marksFound && raceData.mark_designations && Array.isArray(raceData.mark_designations) && raceData.mark_designations.length > 0) {
+        const convertedMarks: CourseMark[] = raceData.mark_designations.map((mark: any, index: number) => ({
+          id: mark.id || `mark-${index}`,
+          mark_name: mark.name || `Mark ${index + 1}`,
+          mark_type: mark.type || null,
+          latitude: mark.latitude,
+          longitude: mark.longitude,
+          sequence_order: index,
+        }));
+        setMarks(convertedMarks);
+        marksFound = true;
+        logger.debug('[RaceDetailScrollable] Marks loaded from mark_designations:', convertedMarks.length);
+      }
+
+      // Also check route_waypoints for distance races
+      if (!marksFound && raceData.route_waypoints && Array.isArray(raceData.route_waypoints) && raceData.route_waypoints.length > 0) {
+        const convertedMarks: CourseMark[] = raceData.route_waypoints
+          .filter((wp: any) => wp.latitude && wp.longitude)
+          .map((wp: any, index: number) => ({
+            id: wp.id || `waypoint-${index}`,
+            mark_name: wp.name || `Waypoint ${index + 1}`,
+            mark_type: wp.type || 'waypoint',
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+            sequence_order: wp.order ?? index,
+          }));
+        setMarks(convertedMarks);
+        logger.debug('[RaceDetailScrollable] Marks loaded from route_waypoints:', convertedMarks.length);
       }
     } catch (error) {
       console.error('[RaceDetailScrollable] Error:', error);
@@ -772,6 +862,7 @@ export default function RaceDetailScrollable() {
 
       {/* Scrollable Content */}
       <Animated.ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
@@ -1030,7 +1121,15 @@ export default function RaceDetailScrollable() {
           {/*  POST-RACE ANALYSIS SECTION                 */}
           {/* ============================================ */}
           {getRaceStatus() === 'completed' && (
-            <>
+            <View
+              ref={analysisRef}
+              onLayout={() => {
+                // Signal that the analysis section is rendered and measured
+                if (!analysisMeasured) {
+                  setAnalysisMeasured(true);
+                }
+              }}
+            >
               <RacePhaseHeader
                 icon="trophy"
                 title="Post-Race Analysis"
@@ -1043,7 +1142,7 @@ export default function RaceDetailScrollable() {
                 raceName={race.race_name}
                 raceStartTime={race.start_time}
               />
-            </>
+            </View>
           )}
 
           {/* ============================================ */}
@@ -1062,6 +1161,17 @@ export default function RaceDetailScrollable() {
             raceDate={race.start_time}
             onManageCrew={handleManageCrewNavigation}
           />
+
+          {/* Pre-Race Sail Check - only show if user has a boat */}
+          {userBoatId && (
+            <PreRaceSailCheck
+              boatId={userBoatId}
+              raceId={race.id}
+              onComplete={() => {
+                logger.debug('[RaceDetail] Sail inspection completed');
+              }}
+            />
+          )}
 
           <FleetRacersCard
             raceId={race.id}

@@ -7,7 +7,7 @@
 
 import { supabase } from '@/services/supabase';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -15,9 +15,11 @@ export interface StoredDocument {
   id: string;
   user_id: string;
   filename: string;
+  name?: string;  // Alias for filename (for display)
   file_type: string;
   file_size: number;
   storage_path: string;
+  url?: string;  // URL to access the document
   public_url?: string;
   metadata?: Record<string, any>;
   created_at: string;
@@ -145,9 +147,9 @@ export class DocumentStorageService {
         fileData = base64;
       }
 
-      // Check if we should use local storage fallback
+      // Check if we should use local storage fallback (only when Supabase is not configured)
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-      const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web';
+      const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co';
 
       if (useLocalFallback) {
 
@@ -250,9 +252,14 @@ export class DocumentStorageService {
           throw dbError;
         }
 
+        // Return document with public URL included
         return {
           success: true,
-          document: docData,
+          document: {
+            ...docData,
+            url: urlData?.publicUrl,
+            public_url: urlData?.publicUrl,
+          },
         };
       }
 
@@ -269,10 +276,10 @@ export class DocumentStorageService {
 
     try {
 
-      // Check if Supabase is properly configured
+      // Check if Supabase is properly configured (only fall back when not configured)
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 
-      if (supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web') {
+      if (supabaseUrl === 'https://placeholder.supabase.co') {
         console.warn('📄 DocumentStorageService: Using local storage fallback for documents');
 
         // Get documents from localStorage
@@ -350,9 +357,9 @@ export class DocumentStorageService {
    */
   async deleteDocument(documentId: string, userId: string): Promise<boolean> {
     try {
-      // Check if we're using local storage
+      // Check if we're using local storage (only when Supabase is not configured)
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-      if (supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web') {
+      if (supabaseUrl === 'https://placeholder.supabase.co') {
 
         const storedDocs = localStorage.getItem('regattaflow_documents');
         if (storedDocs) {
@@ -433,9 +440,9 @@ export class DocumentStorageService {
       // Determine file type from URL
       const fileType = this.guessFileTypeFromUrl(url);
 
-      // Check if using local storage fallback
+      // Check if using local storage fallback (only when Supabase is not configured)
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-      const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co' || Platform.OS === 'web';
+      const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co';
 
       if (useLocalFallback) {
         // Create a mock document object for local storage
@@ -495,6 +502,95 @@ export class DocumentStorageService {
       }
     } catch (error: any) {
       logger.error('Error saving document from URL', { error, url });
+      return { success: false, error: error.message || 'Failed to save document' };
+    }
+  }
+
+  /**
+   * Save a document from pasted text content
+   * This stores the text content in metadata for extraction
+   */
+  async saveDocumentFromText(
+    userId: string,
+    textContent: string,
+    name?: string
+  ): Promise<UploadResult> {
+    try {
+      if (!textContent || textContent.trim().length === 0) {
+        return { success: false, error: 'No text content provided' };
+      }
+
+      const filename = name || 'Pasted Document';
+      const trimmedContent = textContent.trim();
+
+      // Check if using local storage fallback
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+      const useLocalFallback = supabaseUrl === 'https://placeholder.supabase.co';
+
+      if (useLocalFallback) {
+        // Create a mock document object for local storage
+        const mockDocument: StoredDocument = {
+          id: `text_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          user_id: userId,
+          filename: filename,
+          file_type: 'text/plain',
+          file_size: trimmedContent.length,
+          storage_path: '',
+          public_url: '',
+          metadata: {
+            source: 'text',
+            text_content: trimmedContent.substring(0, 50000), // Store up to 50k chars
+            text_preview: trimmedContent.substring(0, 200),
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        // Store in localStorage for persistence
+        try {
+          const existingDocs = localStorage.getItem('regattaflow_documents');
+          const documents = existingDocs ? JSON.parse(existingDocs) : [];
+          documents.push(mockDocument);
+          localStorage.setItem('regattaflow_documents', JSON.stringify(documents));
+
+          return {
+            success: true,
+            document: mockDocument,
+          };
+        } catch (localError) {
+          throw new Error('Failed to store document locally');
+        }
+      } else {
+        // Store in Supabase database with text content in metadata
+        const { data: docData, error: dbError } = await supabase
+          .from('documents')
+          .insert({
+            user_id: userId,
+            filename: filename,
+            mime_type: 'text/plain',
+            file_size: trimmedContent.length,
+            file_path: null, // No file uploaded
+            description: `Pasted text (${trimmedContent.length} chars)`,
+            metadata: {
+              source: 'text',
+              text_content: trimmedContent.substring(0, 50000), // Store up to 50k chars
+              text_preview: trimmedContent.substring(0, 200),
+            },
+          })
+          .select()
+          .single();
+
+        if (dbError) {
+          throw dbError;
+        }
+
+        return {
+          success: true,
+          document: docData,
+        };
+      }
+    } catch (error: any) {
+      logger.error('Error saving document from text', { error });
       return { success: false, error: error.message || 'Failed to save document' };
     }
   }

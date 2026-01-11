@@ -4,21 +4,34 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, SafeAreaView, Platform, type ViewStyle } from 'react-native';
+import { View, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { HeroPhones } from '@/components/landing/HeroPhones';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { ScrollFix } from '@/components/landing/ScrollFix';
+import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/services/supabase';
+import { DashboardSkeleton } from '@/components/ui/loading';
 
 export default function LandingPage() {
   const { signedIn, ready, userProfile, loading } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(() => hasPersistedSessionHint());
   const searchParams = useLocalSearchParams<{ view?: string }>();
-  
+
   // Allow authenticated users to view landing page if they explicitly request it
   const bypassRedirect = searchParams.view === 'landing';
+
+  // Check storage on mount (for native async check)
+  useEffect(() => {
+    if (bypassRedirect || showSkeleton) return;
+
+    hasPersistedSessionHintAsync().then((hasSession) => {
+      if (hasSession) setShowSkeleton(true);
+    });
+  }, [bypassRedirect, showSkeleton]);
 
   useEffect(() => {
     // Wait for auth to be ready AND not loading profile
@@ -37,11 +50,18 @@ export default function LandingPage() {
 
         router.replace(destination);
       }
+    } else if (ready && !signedIn && showSkeleton) {
+      // Session hint was wrong (expired/invalid token) - show landing page
+      setShowSkeleton(false);
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect]);
+  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton]);
 
-  // Show landing page immediately - don't wait for auth
-  // (Auth redirect will happen in useEffect once ready)
+  // Show skeleton for returning users while auth loads
+  if ((showSkeleton || signedIn) && !bypassRedirect) {
+    return <DashboardSkeleton />;
+  }
+
+  // Show landing page for visitors
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
   const containerStyle = Platform.OS === 'web'
     ? [styles.container, styles.webContainer]

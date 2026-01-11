@@ -503,12 +503,12 @@ class VenueCommunityTipsServiceClass {
     let score = this.calculateScore(tip);
 
     // Wind direction match
-    if (conditions.wind_direction !== undefined && 
-        tip.wind_direction_min !== null && 
-        tip.wind_direction_max !== null) {
+    if (conditions.wind_direction !== undefined &&
+        tip.wind_direction_min != null &&
+        tip.wind_direction_max != null) {
       const inRange = this.isAngleInRange(
-        conditions.wind_direction, 
-        tip.wind_direction_min, 
+        conditions.wind_direction,
+        tip.wind_direction_min,
         tip.wind_direction_max
       );
       score += inRange ? 15 : -5;
@@ -516,9 +516,9 @@ class VenueCommunityTipsServiceClass {
 
     // Wind speed match
     if (conditions.wind_speed !== undefined &&
-        tip.wind_speed_min !== null && 
-        tip.wind_speed_max !== null) {
-      const inRange = conditions.wind_speed >= tip.wind_speed_min && 
+        tip.wind_speed_min != null &&
+        tip.wind_speed_max != null) {
+      const inRange = conditions.wind_speed >= tip.wind_speed_min &&
                       conditions.wind_speed <= tip.wind_speed_max;
       score += inRange ? 15 : -5;
     }

@@ -592,9 +592,13 @@ export default function RaceCommitteeConsole() {
   };
 
   // Animated styles
-  const timerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: timerPulse.value }],
-  }));
+  const timerAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const pulseValue = timerPulse.value ?? 1;
+    return {
+      transform: [{ scale: pulseValue }],
+    };
+  });
 
   // Filter entries for finish recording
   const filteredEntries = entries.filter(entry => {

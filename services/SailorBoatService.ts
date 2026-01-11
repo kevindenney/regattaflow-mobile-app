@@ -259,12 +259,18 @@ export class SailorBoatService {
   }
 
   async createBoatDirect(input: CreateBoatInput): Promise<SailorBoat> {
-
+    // Use upsert with conflict handling on (sailor_id, class_id, sail_number)
+    // This prevents duplicate key errors when offline mutations are replayed
     const { data, error } = await supabase
       .from('sailor_boats')
-      .insert({
+      .upsert({
         ...input,
         status: 'active',
+      }, {
+        // Handle conflicts on the unique constraint
+        onConflict: 'sailor_id,class_id,sail_number',
+        // Don't ignore - we want to update if there's a conflict
+        ignoreDuplicates: false,
       })
       .select(`
         *,
@@ -273,7 +279,11 @@ export class SailorBoatService {
       .single();
 
     if (error) {
-
+      logger.error('[SailorBoatService.createBoatDirect] Error creating boat:', {
+        error,
+        errorCode: error.code,
+        input: { ...input, sailor_id: input.sailor_id?.slice(0, 8) + '...' },
+      });
       throw error;
     }
 

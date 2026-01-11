@@ -4,53 +4,120 @@
  * Uses JSON catalog as single source of truth for consistency with landing page
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ChevronRight } from 'lucide-react-native';
 import CourseCatalogService, { type Course, type Level } from '@/services/CourseCatalogService';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { CourseCard } from '@/components/learn/CourseCard';
+import { CourseRow } from '@/components/learn/CourseRow';
+import { InProgressCard } from '@/components/learn/InProgressCard';
 import { PricingCard } from '@/components/learn/PricingCard';
+import { PricingTable } from '@/components/learn/PricingTable';
 import { InstitutionalCard } from '@/components/learn/InstitutionalCard';
 import { LevelTabs } from '@/components/learn/LevelTabs';
 import { useAuth } from '@/providers/AuthProvider';
+
+// Mock progress data - in production this would come from LessonProgressService
+// This demonstrates the Tufte-inspired progress tracking
+interface CourseProgress {
+  courseId: string;
+  progress: number;
+  currentModuleIndex: number;
+  lastAccessedTitle?: string;
+}
+
+const MOCK_PROGRESS: Record<string, CourseProgress> = {
+  'winning-starts-first-beats': {
+    courseId: 'winning-starts-first-beats',
+    progress: 65,
+    currentModuleIndex: 1,
+    lastAccessedTitle: 'Fleet Positioning Strategy',
+  },
+  'racing-rules-fundamentals': {
+    courseId: 'racing-rules-fundamentals',
+    progress: 100,
+    currentModuleIndex: 2,
+  },
+};
 
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
-  const [selectedLevel, setSelectedLevel] = useState<string>('level-2'); // Start with Intermediate (flagship course)
+  const [selectedLevel, setSelectedLevel] = useState<string>('level-1'); // Start with Fundamentals (natural progression)
   const [showAllCourses, setShowAllCourses] = useState(false);
+  const [activePricingIndex, setActivePricingIndex] = useState(0);
+  const [activeInstitutionalIndex, setActiveInstitutionalIndex] = useState(0);
+  const pricingScrollRef = useRef<ScrollView>(null);
+  const institutionalScrollRef = useRef<ScrollView>(null);
 
   const isDesktop = mounted && width > 768;
+  // Card width for carousel: 85% of screen width to show peek of next card
+  const CARD_WIDTH = width * 0.85;
+  const CARD_SPACING = 12;
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Get data from catalog service
+  // Get data from catalog service (must be before useEffect that uses pricingTiers)
   const levels = CourseCatalogService.getLevels();
   const pricingTiers = CourseCatalogService.getPricingTiers();
   const institutionalPackages = CourseCatalogService.getInstitutionalPackages();
   const freeCourse = CourseCatalogService.getFreeCourses()[0];
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Pre-scroll to featured tier (Championship = index 3) on mount for mobile
+  useEffect(() => {
+    if (mounted && !isDesktop && pricingScrollRef.current) {
+      // Find the index of the featured tier
+      const featuredIndex = pricingTiers.findIndex(t => t.id === 'championship');
+      if (featuredIndex > 0) {
+        // Small delay to ensure layout is complete
+        setTimeout(() => {
+          pricingScrollRef.current?.scrollTo({
+            x: featuredIndex * (CARD_WIDTH + CARD_SPACING),
+            animated: false,
+          });
+          setActivePricingIndex(featuredIndex);
+        }, 100);
+      }
+    }
+  }, [mounted, isDesktop, pricingTiers, CARD_WIDTH, CARD_SPACING]);
+
   const currentLevel = levels.find((l) => l.id === selectedLevel);
   const coursesToShow = currentLevel
     ? showAllCourses
       ? currentLevel.courses
-      : currentLevel.courses.slice(0, 3)
+      : currentLevel.courses.slice(0, 6) // Show more courses with compact rows
     : [];
+
+  // Find the in-progress course to feature (Tufte: featured card earns its space)
+  const allCourses = useMemo(() => CourseCatalogService.getAllCourses(), []);
+  const inProgressCourse = useMemo(() => {
+    // Find a course that is in progress (has progress but not complete)
+    const inProgressSlug = Object.entries(MOCK_PROGRESS).find(
+      ([slug, progress]) => progress.progress > 0 && progress.progress < 100
+    )?.[0];
+    return inProgressSlug ? allCourses.find(c => c.slug === inProgressSlug) : undefined;
+  }, [allCourses]);
+  const inProgressCourseProgress = inProgressCourse
+    ? MOCK_PROGRESS[inProgressCourse.slug]
+    : undefined;
 
   // Navigation handlers
   const handleCoursePress = (course: Course) => {
@@ -107,180 +174,236 @@ export default function LearnScreen() {
     }
   };
 
+  // Handle pricing carousel scroll to update page indicators
+  const handlePricingScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / (CARD_WIDTH + CARD_SPACING));
+    if (index !== activePricingIndex && index >= 0 && index < pricingTiers.length) {
+      setActivePricingIndex(index);
+    }
+  };
+
+  // Handle institutional carousel scroll to update page indicators
+  const handleInstitutionalScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / (CARD_WIDTH + CARD_SPACING));
+    if (index !== activeInstitutionalIndex && index >= 0 && index < institutionalPackages.length) {
+      setActiveInstitutionalIndex(index);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        <LinearGradient
-          colors={['#F8FAFC', '#EFF6FF', '#F0F9FF']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradient}
-        >
-          <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-            {/* Hero Header */}
-            <View style={styles.heroHeader}>
-              <View style={styles.iconBadge}>
-                <Ionicons name="school-outline" size={40} color="#8B5CF6" />
-              </View>
-              <Text style={[styles.mainTitle, isDesktop && styles.mainTitleDesktop]}>
-                Racing Academy
-              </Text>
-              <Text style={[styles.heroSubtitle, isDesktop && styles.heroSubtitleDesktop]}>
-                Master sailing tactics through interactive, AI-powered lessons
-              </Text>
-              <Text style={[styles.heroDescription, isDesktop && styles.heroDescriptionDesktop]}>
-                From your first race to championship-level strategy — learn with step-by-step
-                interactive animations, real-time feedback, and AI-powered analysis
-              </Text>
-            </View>
+        <View style={[styles.content, isDesktop && styles.contentDesktop]}>
+          {/* In-Progress Course Card (Tufte: earns space with real content) */}
+          {inProgressCourse && inProgressCourseProgress && (
+            <InProgressCard
+              course={inProgressCourse}
+              progress={inProgressCourseProgress.progress}
+              currentModuleIndex={inProgressCourseProgress.currentModuleIndex}
+              lastAccessedTitle={inProgressCourseProgress.lastAccessedTitle}
+              onContinue={() => handleCoursePress(inProgressCourse)}
+              onPress={() => handleCoursePress(inProgressCourse)}
+            />
+          )}
 
-            {/* Free Course CTA - Prominent */}
-            {freeCourse && (
-              <View style={styles.freeCourseBanner}>
-                <LinearGradient
-                  colors={['#8B5CF6', '#6D28D9']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.freeCourseGradient, isDesktop && { flexDirection: 'row' }, !isDesktop && { flexDirection: 'column' }]}
-                >
-                  <View style={styles.freeCourseContent}>
-                    <View style={styles.freeBadge}>
-                      <Text style={styles.freeBadgeText}>FREE</Text>
-                    </View>
-                    <View style={styles.freeCourseText}>
-                      <Text style={styles.freeCourseTitle}>Start Learning Today</Text>
-                      <Text style={styles.freeCourseSubtitle}>
-                        Begin with "{freeCourse.title}" — a complete introduction to sailboat racing
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.startFreeButton}
-                    onPress={handleStartFree}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.startFreeButtonText}>Start Free Course</Text>
-                    <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </LinearGradient>
-              </View>
+          {/* Learning Path Navigation (Tufte: removed redundant heading) */}
+          <View style={styles.learningPathSection}>
+            <LevelTabs
+              levels={levels}
+              selectedLevelId={selectedLevel}
+              onLevelSelect={(levelId) => {
+                setSelectedLevel(levelId);
+                setShowAllCourses(false);
+              }}
+            />
+
+            {/* Level Description - tightened to single line subtitle */}
+            {currentLevel && (
+              <Text style={styles.levelDescriptionInline}>
+                {currentLevel.description}
+              </Text>
             )}
+          </View>
 
-            {/* Learning Path Navigation */}
-            <View style={styles.learningPathSection}>
-              <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-                Choose Your Learning Path
+          {/* Course List (Tufte: compact rows, higher information density) */}
+          <View style={styles.coursesList}>
+            {coursesToShow
+              .filter(course => course.slug !== inProgressCourse?.slug) // Don't duplicate in-progress
+              .map((course) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  progress={MOCK_PROGRESS[course.slug]?.progress}
+                  isInProgress={MOCK_PROGRESS[course.slug]?.progress !== undefined && MOCK_PROGRESS[course.slug]?.progress < 100}
+                  onPress={() => handleCoursePress(course)}
+                />
+              ))}
+          </View>
+
+          {/* Show More Button */}
+          {currentLevel && currentLevel.courses.length > 3 && !showAllCourses && (
+            <TouchableOpacity
+              style={styles.showMoreButton}
+              onPress={() => setShowAllCourses(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.showMoreButtonText}>
+                Show {currentLevel.courses.length - 3} More
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={IOS_COLORS.blue} />
+            </TouchableOpacity>
+          )}
+
+            {/* Individual Pricing (Tufte: comparison table for desktop) */}
+            <View style={styles.pricingSection}>
+              <Text style={[styles.pricingSectionTitle, isDesktop && styles.pricingSectionTitleDesktop]}>
+                Pricing
               </Text>
 
-              <LevelTabs
-                levels={levels}
-                selectedLevelId={selectedLevel}
-                onLevelSelect={(levelId) => {
-                  setSelectedLevel(levelId);
-                  setShowAllCourses(false);
-                }}
-              />
-
-              {/* Level Description */}
-              {currentLevel && (
-                <View style={styles.levelInfo}>
-                  <Text style={styles.levelDescription}>{currentLevel.description}</Text>
-                  <View style={styles.targetAudienceBadge}>
-                    <Ionicons name="people-outline" size={16} color="#6B7280" />
-                    <Text style={styles.targetAudienceText}>For: {currentLevel.targetAudience}</Text>
+              {/* Desktop: Tufte comparison table */}
+              {isDesktop ? (
+                <PricingTable
+                  tiers={pricingTiers}
+                  featuredTierId="championship"
+                  onSelectTier={(tier) => {
+                    if (tier.price.cents === 0) {
+                      handleStartFree();
+                    } else {
+                      // Handle paid tier selection
+                      console.log('Selected tier:', tier.id);
+                    }
+                  }}
+                />
+              ) : (
+                /* Mobile: Horizontal snap carousel */
+                <>
+                  <ScrollView
+                    ref={pricingScrollRef}
+                    horizontal
+                    pagingEnabled={false}
+                    snapToInterval={CARD_WIDTH + CARD_SPACING}
+                    snapToAlignment="start"
+                    decelerationRate="fast"
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={handlePricingScroll}
+                    scrollEventThrottle={16}
+                    contentContainerStyle={styles.pricingCarouselContent}
+                    style={styles.pricingCarousel}
+                  >
+                    {pricingTiers.map((tier, index) => (
+                      <View
+                        key={tier.id}
+                        style={[
+                          styles.pricingCardWrapper,
+                          { width: CARD_WIDTH, marginRight: index < pricingTiers.length - 1 ? CARD_SPACING : 0 },
+                        ]}
+                      >
+                        <PricingCard
+                          tier={tier}
+                          isDesktop={false}
+                          isFeatured={tier.id === 'championship'}
+                          compact
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {/* Page indicator dots */}
+                  <View style={styles.pageIndicators}>
+                    {pricingTiers.map((tier, index) => (
+                      <View
+                        key={tier.id}
+                        style={[
+                          styles.pageIndicatorDot,
+                          index === activePricingIndex && styles.pageIndicatorDotActive,
+                          tier.id === 'championship' && styles.pageIndicatorDotFeatured,
+                        ]}
+                      />
+                    ))}
                   </View>
-                </View>
+                </>
               )}
             </View>
 
-            {/* Course Cards Grid */}
-            <View style={[styles.coursesGrid, isDesktop && styles.coursesGridDesktop]}>
-              {coursesToShow.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  isDesktop={isDesktop}
-                  onPress={() => handleCoursePress(course)}
-                  onEnroll={() => handleEnroll(course)}
-                />
-              ))}
-            </View>
-
-            {/* Show More Button */}
-            {currentLevel && currentLevel.courses.length > 3 && !showAllCourses && (
-              <TouchableOpacity
-                style={styles.showMoreButton}
-                onPress={() => setShowAllCourses(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.showMoreButtonText}>
-                  Show {currentLevel.courses.length - 3} More{' '}
-                  {currentLevel.courses.length - 3 === 1 ? 'Course' : 'Courses'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color="#8B5CF6" />
-              </TouchableOpacity>
-            )}
-
-            {/* Individual Pricing */}
-            <View style={styles.pricingSection}>
-              <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-                Individual Pricing
-              </Text>
-              <Text style={[styles.sectionSubtitle, isDesktop && styles.sectionSubtitleDesktop]}>
-                Choose the plan that fits your sailing goals
-              </Text>
-
-              <View style={[styles.pricingGrid, isDesktop && styles.pricingGridDesktop]}>
-                {pricingTiers.map((tier) => (
-                  <PricingCard
-                    key={tier.id}
-                    tier={tier}
-                    isDesktop={isDesktop}
-                    isFeatured={tier.id === 'championship'}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* Institutional Packages */}
+            {/* Institutional Packages (Tufte: tightened header) */}
             <View style={styles.institutionalSection}>
-              <View style={styles.institutionalHeader}>
-                <Ionicons name="business-outline" size={32} color="#2196F3" />
-                <Text style={[styles.institutionalTitle, isDesktop && styles.institutionalTitleDesktop]}>
-                  For Yacht Clubs, Teams & Programs
-                </Text>
-                <Text style={[styles.institutionalSubtitle, isDesktop && styles.institutionalSubtitleDesktop]}>
-                  Bring RegattaFlow Academy to your organization with custom packages
-                </Text>
-              </View>
+              <Text style={[styles.institutionalSectionTitle, isDesktop && styles.institutionalSectionTitleDesktop]}>
+                Teams & Organizations
+              </Text>
 
-              <View style={[styles.institutionalGrid, isDesktop && styles.institutionalGridDesktop]}>
-                {institutionalPackages.map((pkg) => (
-                  <InstitutionalCard
-                    key={pkg.id}
-                    package={pkg}
-                    isDesktop={isDesktop}
-                    onContactSales={() => handleContactSales(pkg.id)}
-                  />
-                ))}
-              </View>
+              {/* Desktop: Grid layout */}
+              {isDesktop ? (
+                <View style={[styles.institutionalGrid, styles.institutionalGridDesktop]}>
+                  {institutionalPackages.map((pkg) => (
+                    <InstitutionalCard
+                      key={pkg.id}
+                      package={pkg}
+                      isDesktop={isDesktop}
+                      onContactSales={() => handleContactSales(pkg.id)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                /* Mobile: Horizontal snap carousel */
+                <>
+                  <ScrollView
+                    ref={institutionalScrollRef}
+                    horizontal
+                    pagingEnabled={false}
+                    snapToInterval={CARD_WIDTH + CARD_SPACING}
+                    snapToAlignment="start"
+                    decelerationRate="fast"
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={handleInstitutionalScroll}
+                    scrollEventThrottle={16}
+                    contentContainerStyle={styles.institutionalCarouselContent}
+                    style={styles.institutionalCarousel}
+                  >
+                    {institutionalPackages.map((pkg, index) => (
+                      <View
+                        key={pkg.id}
+                        style={[
+                          styles.institutionalCardWrapper,
+                          { width: CARD_WIDTH, marginRight: index < institutionalPackages.length - 1 ? CARD_SPACING : 0 },
+                        ]}
+                      >
+                        <InstitutionalCard
+                          package={pkg}
+                          isDesktop={false}
+                          compact
+                          onContactSales={() => handleContactSales(pkg.id)}
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {/* Page indicator dots */}
+                  <View style={styles.institutionalPageIndicators}>
+                    {institutionalPackages.map((pkg, index) => (
+                      <View
+                        key={pkg.id}
+                        style={[
+                          styles.institutionalPageDot,
+                          index === activeInstitutionalIndex && styles.institutionalPageDotActive,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
-              <View style={styles.institutionalCTA}>
-                <Text style={styles.institutionalCTAText}>
-                  Custom packages available for sailing schools, federations, and corporate programs
+              {/* Tufte: Simplified CTA */}
+              <TouchableOpacity
+                style={styles.scheduleCTA}
+                activeOpacity={0.8}
+                onPress={handleScheduleCall}
+              >
+                <Text style={styles.scheduleCTAText}>
+                  Need a custom package? Schedule a call →
                 </Text>
-                <TouchableOpacity
-                  style={styles.scheduleCallButton}
-                  activeOpacity={0.8}
-                  onPress={handleScheduleCall}
-                >
-                  <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.scheduleCallButtonText}>Schedule a Call</Text>
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             </View>
-          </View>
-        </LinearGradient>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -289,191 +412,145 @@ export default function LearnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
   },
   scrollView: {
     flex: 1,
-  },
-  gradient: {
-    paddingVertical: 40,
-    paddingHorizontal: 24,
-    ...Platform.select({
-      web: {
-        minHeight: 'auto',
-      },
-    }),
   },
   content: {
     maxWidth: 1200,
     alignSelf: 'center',
     width: '100%',
+    paddingTop: 12,
+    paddingHorizontal: 16,
   },
   contentDesktop: {
-    // Additional desktop styles if needed
-  },
-  heroHeader: {
-    alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 48,
-    maxWidth: 800,
-    alignSelf: 'center',
   },
-  iconBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F3E8FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
+  // Hero Header - iOS Large Title style
+  heroHeader: {
+    paddingHorizontal: 0,
+    marginBottom: 16,
   },
   mainTitle: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#1F2937',
-    marginBottom: 16,
-    textAlign: 'center',
+    fontSize: 34,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
   },
   mainTitleDesktop: {
-    fontSize: 48,
+    fontSize: 40,
   },
   heroSubtitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 12,
-    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.tertiaryLabel,
+    marginTop: 4,
   },
-  heroSubtitleDesktop: {
-    fontSize: 24,
-  },
-  heroDescription: {
-    fontSize: 16,
-    color: '#6B7280',
-    lineHeight: 24,
-    textAlign: 'center',
-  },
-  heroDescriptionDesktop: {
-    fontSize: 18,
-  },
-  freeCourseBanner: {
-    marginHorizontal: 24,
-    marginBottom: 64,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 10px 40px rgba(139, 92, 246, 0.3)',
-      },
-      default: {
-        elevation: 8,
-      },
-    }),
-  },
-  freeCourseGradient: {
-    padding: 32,
+  // Free Course CTA - iOS List Row
+  freeCourseRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 20,
+    backgroundColor: IOS_COLORS.systemBackground,
+    marginBottom: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  freeCourseIcon: {
+    marginRight: 12,
   },
   freeCourseContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  freeBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  freeBadgeText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  freeCourseText: {
-    flex: 1,
   },
   freeCourseTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
   },
   freeCourseSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
   },
-  startFreeButton: {
+  // Section Header - iOS Grouped Table style
+  sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    marginBottom: 8,
   },
-  startFreeButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#8B5CF6',
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  addButtonText: {
+    fontSize: 17,
+    color: IOS_COLORS.blue,
   },
   learningPathSection: {
-    paddingHorizontal: 24,
-    marginBottom: 48,
+    paddingHorizontal: 0,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#1F2937',
+    color: IOS_COLORS.label,
     marginBottom: 12,
-    textAlign: 'center',
   },
   sectionTitleDesktop: {
-    fontSize: 32,
+    fontSize: 28,
   },
   sectionSubtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 32,
-    textAlign: 'center',
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 16,
   },
   sectionSubtitleDesktop: {
-    fontSize: 18,
+    fontSize: 17,
   },
+  // Tufte: tightened level description to single line
+  levelDescriptionInline: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  // Legacy styles kept for reference
   levelInfo: {
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 24,
+    backgroundColor: IOS_COLORS.systemBackground,
+    padding: 16,
+    borderRadius: 10,
+    marginTop: 16,
   },
   levelDescription: {
-    fontSize: 16,
-    color: '#4B5563',
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
     marginBottom: 12,
-    textAlign: 'center',
   },
   targetAudienceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    gap: 6,
   },
   targetAudienceText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    fontSize: 13,
+    color: IOS_COLORS.tertiaryLabel,
   },
+  // Tufte: compact course list with higher information density
+  coursesList: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    borderRadius: 10,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  // Legacy grid styles kept for desktop fallback
   coursesGrid: {
-    gap: 24,
-    paddingHorizontal: 24,
-    marginBottom: 32,
+    gap: 16,
+    paddingHorizontal: 0,
+    marginBottom: 24,
   },
   coursesGridDesktop: {
     flexDirection: 'row',
@@ -484,24 +561,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    marginHorizontal: 24,
-    marginBottom: 48,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    gap: 6,
+    paddingVertical: 10,
+    marginBottom: 24,
   },
   showMoreButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8B5CF6',
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
   },
   pricingSection: {
-    paddingHorizontal: 24,
-    paddingVertical: 64,
+    paddingVertical: 32,
     backgroundColor: '#F9FAFB',
+    marginHorizontal: -16, // Extend to screen edges
+    paddingHorizontal: 16,
+  },
+  // Tufte: tightened section title
+  pricingSectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 16,
+  },
+  pricingSectionTitleDesktop: {
+    fontSize: 24,
+    marginBottom: 24,
   },
   pricingGrid: {
     gap: 24,
@@ -510,14 +594,66 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  // Mobile carousel styles
+  pricingCarousel: {
+    marginHorizontal: -16, // Extend to screen edges
+    paddingTop: 16, // Space for "MOST POPULAR" badge
+  },
+  pricingCarouselContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  pricingCardWrapper: {
+    // Height set to auto to allow card to determine its height
+  },
+  // Page indicator dots
+  pageIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  pageIndicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  pageIndicatorDotActive: {
+    backgroundColor: '#8B5CF6',
+    width: 24,
+    borderRadius: 4,
+  },
+  pageIndicatorDotFeatured: {
+    // Featured tier gets a slightly different inactive color
   },
   institutionalSection: {
-    paddingHorizontal: 24,
-    paddingVertical: 64,
+    paddingVertical: 24,
+    marginHorizontal: -16, // Extend to screen edges on mobile
+    paddingHorizontal: 16,
   },
+  // Tufte: tightened section title
+  institutionalSectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 16,
+  },
+  institutionalSectionTitleDesktop: {
+    fontSize: 24,
+    marginBottom: 20,
+  },
+  // Legacy styles kept for reference
   institutionalHeader: {
     alignItems: 'center',
     marginBottom: 48,
+  },
+  institutionalHeaderCompact: {
+    marginBottom: 24,
   },
   institutionalTitle: {
     fontSize: 28,
@@ -540,13 +676,45 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   institutionalGrid: {
-    gap: 24,
-    marginBottom: 48,
+    gap: 12,
+    marginBottom: 16,
   },
   institutionalGridDesktop: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  // Mobile institutional carousel styles
+  institutionalCarousel: {
+    marginHorizontal: -16, // Extend to screen edges
+  },
+  institutionalCarouselContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  institutionalCardWrapper: {
+    // Height set to auto
+  },
+  // Page indicator dots for institutional
+  institutionalPageIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  institutionalPageDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  institutionalPageDotActive: {
+    backgroundColor: '#2196F3',
+    width: 24,
+    borderRadius: 4,
   },
   institutionalCTA: {
     backgroundColor: '#F9FAFB',
@@ -574,5 +742,147 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  // Tufte: Simplified schedule CTA
+  scheduleCTA: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  scheduleCTAText: {
+    fontSize: 15,
+    color: '#2196F3',
+    fontWeight: '500',
+  },
+  // Practice Section Styles - iOS Grouped Table style
+  practiceSection: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    marginBottom: 24,
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  practiceLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 32,
+  },
+  practiceLoadingText: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  practiceCarouselContainer: {
+    marginBottom: 16,
+  },
+  practiceCarouselLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  practiceCarouselContent: {
+    paddingRight: 16,
+  },
+  practiceCardWrapper: {
+    width: 280,
+    marginRight: 12,
+  },
+  practiceEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  practiceEmptyIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: IOS_COLORS.gray6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  practiceEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  practiceEmptySubtitle: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    maxWidth: 260,
+  },
+  practiceEmptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  practiceEmptyButtonText: {
+    fontSize: 17,
+    color: IOS_COLORS.blue,
+  },
+  recentPracticeContainer: {
+    marginTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+    paddingTop: 16,
+  },
+  recentPracticeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  viewAllButtonText: {
+    fontSize: 15,
+    color: IOS_COLORS.blue,
+  },
+  recentPracticeList: {
+    gap: 1,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  recentPracticeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.systemBackground,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  recentPracticeInfo: {
+    flex: 1,
+  },
+  recentPracticeName: {
+    fontSize: 17,
+    fontWeight: '400',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  recentPracticeDate: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  recentPracticeRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  recentPracticeRatingText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.orange,
   },
 });

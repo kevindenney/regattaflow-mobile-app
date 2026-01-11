@@ -21,15 +21,16 @@ import {
     KeyboardAvoidingView,
     Platform,
     Pressable,
-    SafeAreaView,
+    
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
-} from 'react-native';
+} from "react-native";
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 interface BoatClass {
   id: string;
   name: string;
@@ -217,12 +218,12 @@ export default function EditBoatScreen() {
               if (!id) return;
               await sailorBoatService.deleteBoat(id);
               Alert.alert('Success', 'Boat deleted successfully', [
-                { text: 'OK', onPress: () => router.replace('/(tabs)/boat') },
+                { text: 'OK', onPress: () => router.replace('/(tabs)/account') },
               ]);
             } catch (error: any) {
               if (error?.queuedForSync) {
                 Alert.alert('Offline', 'Boat deletion will complete once you are back online.', [
-                  { text: 'OK', onPress: () => router.replace('/(tabs)/boat') },
+                  { text: 'OK', onPress: () => router.replace('/(tabs)/account') },
                 ]);
               } else {
                 console.error('Error deleting boat:', error);

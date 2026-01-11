@@ -19,6 +19,12 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useRacePreparation');
 
+/**
+ * Validates if a string is a valid UUID format
+ */
+const isValidUUID = (id: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 const DEFAULT_INTENTIONS: RaceIntentions = {
   updatedAt: new Date().toISOString(),
 };
@@ -95,6 +101,12 @@ export function useRacePreparation({
       return;
     }
 
+    // Skip database queries for non-UUID race IDs (e.g., demo races)
+    if (!isValidUUID(raceEventId)) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const data = await sailorRacePreparationService.getPreparation(raceEventId, user.id);
@@ -127,6 +139,12 @@ export function useRacePreparation({
    */
   const saveChanges = useCallback(async () => {
     if (!raceEventId || !user?.id || Object.keys(pendingChangesRef.current).length === 0) {
+      return;
+    }
+
+    // Skip saving for non-UUID race IDs (e.g., demo races)
+    if (!isValidUUID(raceEventId)) {
+      pendingChangesRef.current = {};
       return;
     }
 

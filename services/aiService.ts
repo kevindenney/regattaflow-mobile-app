@@ -6,7 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/services/supabase';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import { createLogger } from '@/lib/utils/logger';
@@ -241,7 +241,7 @@ Return ONLY valid JSON matching this structure:
 
       const mimeType = this.getMimeType(documentUri);
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -404,7 +404,7 @@ Return ONLY valid JSON matching this structure:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -576,7 +576,7 @@ Return JSON:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{

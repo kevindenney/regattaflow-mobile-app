@@ -145,3 +145,162 @@ export function determineWinner(
   if (opponentScore < yourScore) return 'opponent';
   return 'tie';
 }
+
+// =============================================================================
+// TEAM RACE ENTRY TYPES (Shared Race Collaboration)
+// =============================================================================
+
+/**
+ * A shared team race entry that links a race to multiple users
+ * Enables team members to collaborate on race preparation
+ */
+export interface TeamRaceEntry {
+  id: string;
+  raceEventId: string;
+  teamName: string;
+  createdBy: string;
+  inviteCode?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Members loaded via join */
+  members?: TeamRaceEntryMember[];
+}
+
+/**
+ * Database row type for team_race_entries
+ */
+export interface TeamRaceEntryRow {
+  id: string;
+  race_event_id: string;
+  team_name: string;
+  created_by: string;
+  invite_code: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * An individual member of a team race entry
+ */
+export interface TeamRaceEntryMember {
+  id: string;
+  teamEntryId: string;
+  userId: string;
+  displayName?: string;
+  sailNumber?: string;
+  role?: 'skipper' | 'crew';
+  joinedAt: string;
+  /** User profile data loaded via join */
+  profile?: {
+    fullName?: string;
+    avatarUrl?: string;
+    email?: string;
+  };
+}
+
+/**
+ * Database row type for team_race_entry_members
+ */
+export interface TeamRaceEntryMemberRow {
+  id: string;
+  team_entry_id: string;
+  user_id: string;
+  display_name: string | null;
+  sail_number: string | null;
+  role: string | null;
+  joined_at: string;
+}
+
+/**
+ * Shared checklist state for a team race entry
+ * Uses real-time sync via Supabase Realtime
+ */
+export interface TeamRaceChecklistState {
+  id: string;
+  teamEntryId: string;
+  /** Map of itemId to completion info */
+  checklistState: Record<string, TeamChecklistCompletion>;
+  updatedAt: string;
+}
+
+/**
+ * Database row type for team_race_checklists
+ */
+export interface TeamRaceChecklistRow {
+  id: string;
+  team_entry_id: string;
+  checklist_state: Record<string, TeamChecklistCompletion>;
+  updated_at: string;
+}
+
+/**
+ * Completion info for a single checklist item
+ * Includes who completed it for team visibility
+ */
+export interface TeamChecklistCompletion {
+  itemId: string;
+  completedAt: string;
+  completedBy: string; // user_id
+  completedByName?: string; // Display name
+  notes?: string;
+}
+
+/**
+ * Input for creating a team race entry
+ */
+export interface CreateTeamEntryInput {
+  raceEventId: string;
+  teamName: string;
+}
+
+/**
+ * Input for joining a team via invite code
+ */
+export interface JoinTeamInput {
+  inviteCode: string;
+  displayName?: string;
+  sailNumber?: string;
+  role?: 'skipper' | 'crew';
+}
+
+/**
+ * Transform database row to TeamRaceEntry
+ */
+export function rowToTeamRaceEntry(row: TeamRaceEntryRow): TeamRaceEntry {
+  return {
+    id: row.id,
+    raceEventId: row.race_event_id,
+    teamName: row.team_name,
+    createdBy: row.created_by,
+    inviteCode: row.invite_code || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Transform database row to TeamRaceEntryMember
+ */
+export function rowToTeamRaceEntryMember(row: TeamRaceEntryMemberRow): TeamRaceEntryMember {
+  return {
+    id: row.id,
+    teamEntryId: row.team_entry_id,
+    userId: row.user_id,
+    displayName: row.display_name || undefined,
+    sailNumber: row.sail_number || undefined,
+    role: row.role as 'skipper' | 'crew' | undefined,
+    joinedAt: row.joined_at,
+  };
+}
+
+/**
+ * Transform database row to TeamRaceChecklistState
+ */
+export function rowToTeamRaceChecklistState(row: TeamRaceChecklistRow): TeamRaceChecklistState {
+  return {
+    id: row.id,
+    teamEntryId: row.team_entry_id,
+    checklistState: row.checklist_state || {},
+    updatedAt: row.updated_at,
+  };
+}

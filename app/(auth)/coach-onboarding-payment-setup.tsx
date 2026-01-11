@@ -135,6 +135,10 @@ const CoachOnboardingPaymentSetup = () => {
         setCoachProfileId(profileId);
       }
 
+      if (!profileId) {
+        throw new Error('Failed to get or create coach profile');
+      }
+
       // Start Stripe Connect onboarding
       const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://regattaflow.com';
       const result = await StripeConnectService.startOnboarding(

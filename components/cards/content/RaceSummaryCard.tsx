@@ -44,6 +44,7 @@ import {
   OnWaterContent,
   AfterRaceContent,
 } from './phases';
+import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -456,6 +457,9 @@ export function RaceSummaryCard({
   // Detail bottom sheet state
   const [activeDetailSheet, setActiveDetailSheet] = useState<DetailCardType | null>(null);
 
+  // Detailed Review modal state
+  const [showDetailedReview, setShowDetailedReview] = useState(false);
+
   // Handler to open detail sheet
   const handleOpenDetail = useCallback((type: DetailCardType) => {
     setActiveDetailSheet(type);
@@ -464,6 +468,22 @@ export function RaceSummaryCard({
   // Handler to close detail sheet
   const handleCloseDetailSheet = useCallback(() => {
     setActiveDetailSheet(null);
+  }, []);
+
+  // Handler to open detailed review modal
+  const handleOpenDetailedReview = useCallback(() => {
+    setShowDetailedReview(true);
+  }, []);
+
+  // Handler to close detailed review modal
+  const handleCloseDetailedReview = useCallback(() => {
+    setShowDetailedReview(false);
+  }, []);
+
+  // Handler for detailed review completion
+  const handleDetailedReviewComplete = useCallback(() => {
+    setShowDetailedReview(false);
+    // The modal handles saving internally, just close it
   }, []);
 
   // Update selected phase when current phase changes (e.g., race day arrives)
@@ -629,11 +649,11 @@ export function RaceSummaryCard({
       items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
     }
     // For demo races, show dismiss option instead of edit/delete
-    if (race.isDemo && onDismiss) {
+    if ((race as any).isDemo && onDismiss) {
       items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
     }
     return items;
-  }, [onEdit, onDelete, race.isDemo, onDismiss]);
+  }, [onEdit, onDelete, race, onDismiss]);
 
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
@@ -672,19 +692,37 @@ export function RaceSummaryCard({
   );
 
   // Convert race data to CardRaceData format for phase content
-  const cardRaceData = useMemo(() => ({
-    id: race.id,
-    name: race.name,
-    date: race.date,
-    startTime: race.startTime,
-    venue: race.venue,
-    vhf_channel: vhfChannel,
-    race_type: detectedRaceType,
-    boatClass: boatClassName,
-    wind: windData,
-    tide: tideData,
-    isDemo: race.isDemo, // Preserve isDemo flag for demo race handling
-  }), [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData]);
+  const cardRaceData = useMemo(() => {
+    const data = {
+      id: race.id,
+      name: race.name,
+      date: race.date,
+      startTime: race.startTime,
+      venue: race.venue,
+      vhf_channel: vhfChannel,
+      race_type: detectedRaceType,
+      boatClass: boatClassName,
+      wind: windData,
+      tide: tideData,
+      isDemo: race.isDemo, // Preserve isDemo flag for demo race handling
+      metadata: (race as any).metadata, // Preserve metadata for coordinates/venue info
+      venueCoordinates: (race as any).venueCoordinates, // Preserve coordinates for weather fetching
+      created_by: race.created_by, // Preserve for edit/delete permissions
+    };
+
+    // DEBUG: Log cardRaceData construction for troubleshooting
+    if (race.name === 'T3') {
+      console.log('🔍 [RaceSummaryCard] cardRaceData for T3:', JSON.stringify({
+        hasMetadata: !!(race as any).metadata,
+        metadataKeys: Object.keys((race as any).metadata || {}),
+        hasVenueCoordinates: !!(race as any).venueCoordinates,
+        venueCoordinates: (race as any).venueCoordinates,
+        raceObjectKeys: Object.keys(race),
+      }, null, 2));
+    }
+
+    return data;
+  }, [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData]);
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {
@@ -699,7 +737,6 @@ export function RaceSummaryCard({
         return (
           <RaceMorningContent
             race={cardRaceData}
-            onOpenStrategyDetail={() => handleOpenDetail('strategy')}
             onOpenDetail={handleOpenDetail}
           />
         );
@@ -718,6 +755,8 @@ export function RaceSummaryCard({
             race={cardRaceData}
             userId={userId}
             onOpenPostRaceInterview={onOpenPostRaceInterview}
+            onOpenDetailedReview={handleOpenDetailedReview}
+            isExpanded={true}
           />
         );
       default:
@@ -791,11 +830,18 @@ export function RaceSummaryCard({
           )}
         </View>
 
-        {/* Demo Race Badge - shown when this is a sample race for empty state */}
+        {/* Demo Race Badge - shown when this is a placeholder race for empty state */}
         {(race as any).isDemo && (
           <View style={styles.demoBadge}>
             <Text style={styles.demoBadgeText}>Sample Race</Text>
             <Text style={styles.demoHint}>Tap + to add your first race</Text>
+          </View>
+        )}
+
+        {/* Sample Data Badge - shown for seeded sample races from onboarding */}
+        {!!(race as any).metadata?.is_sample && !(race as any).isDemo && (
+          <View style={styles.sampleBadge}>
+            <Text style={styles.sampleBadgeText}>SAMPLE</Text>
           </View>
         )}
 
@@ -833,6 +879,20 @@ export function RaceSummaryCard({
         onClose={handleCloseDetailSheet}
         raceId={race.id}
         raceData={raceDataForDetailCards}
+      />
+
+      {/* Detailed Review Modal for full post-race analysis */}
+      <DetailedReviewModal
+        visible={showDetailedReview}
+        raceId={race.id}
+        raceName={race.name}
+        venueId={venue?.id}
+        conditions={windData ? {
+          windSpeed: windData.speedMin || windData.speedMax,
+          windDirection: windData.direction,
+        } : undefined}
+        onClose={handleCloseDetailedReview}
+        onComplete={handleDetailedReviewComplete}
       />
     </>
   );
@@ -1706,6 +1766,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#B45309', // Amber-700
     marginTop: 2,
+  },
+
+  // Sample data badge (shown for seeded races from onboarding)
+  sampleBadge: {
+    backgroundColor: '#E0E7FF', // Indigo-100
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  sampleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4338CA', // Indigo-700
+    letterSpacing: 1,
   },
 });
 

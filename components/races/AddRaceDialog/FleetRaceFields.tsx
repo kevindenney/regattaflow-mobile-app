@@ -14,6 +14,8 @@ export interface FleetRaceData {
   numberOfLaps?: string;
   expectedFleetSize?: string;
   boatClass?: string;
+  /** Selected boat ID from user's boats */
+  boatId?: string;
 }
 
 interface FleetRaceFieldsProps {

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '../../providers/AuthProvider';
+import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 
 // Helper to get user-friendly error messages for signup
 const getSignupErrorMessage = (error: any): string => {
@@ -15,9 +16,6 @@ const getSignupErrorMessage = (error: any): string => {
   }
   if (message.includes('invalid email') || message.includes('email')) {
     return 'Please enter a valid email address.';
-  }
-  if (message.includes('weak password') || message.includes('password')) {
-    return 'Password must be at least 6 characters long.';
   }
   if (message.includes('network') || message.includes('fetch')) {
     return 'Network error. Please check your internet connection.';
@@ -94,11 +92,24 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      await signUp(trimmedEmail, trimmedUsername, password, persona);
-      
+      const result = await signUp(trimmedEmail, trimmedUsername, password, persona);
+
       // Route to appropriate onboarding based on persona
       // Sailors skip onboarding and go directly to the main app
       if (persona === 'sailor') {
+        // Create sample data for sailors and wait for it to complete
+        // so the data is visible when they reach the races page
+        if (result?.user?.id) {
+          try {
+            await createSailorSampleData({
+              userId: result.user.id,
+              userName: trimmedUsername,
+            });
+          } catch (err: any) {
+            // Log but don't fail signup - sample data is not critical
+            console.warn('[Signup] Sample data creation failed:', err?.message);
+          }
+        }
         router.replace('/(tabs)/races');
       } else if (persona === 'coach') {
         router.replace('/(auth)/coach-onboarding-welcome');

@@ -621,6 +621,117 @@ class RaceTuningService {
   private slugify(value: string): string {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
   }
+
+  /**
+   * Get all wind range sections for Tufte "small multiples" display
+   * Returns Light, Medium, Heavy air settings for side-by-side comparison
+   */
+  async getAllWindRangeSections(request: {
+    classId?: string | null;
+    className?: string | null;
+    boatId?: string | null;
+  }): Promise<{
+    light: RaceTuningRecommendation | null;
+    medium: RaceTuningRecommendation | null;
+    heavy: RaceTuningRecommendation | null;
+    currentRange: 'light' | 'medium' | 'heavy' | null;
+    equipmentContext: EquipmentContext | null;
+  }> {
+    const { classId, className, boatId } = request;
+
+    // Get equipment context if available
+    let equipmentContext: EquipmentContext | null = null;
+    if (boatId) {
+      equipmentContext = await this.getEquipmentContext(boatId);
+    }
+
+    if (!classId && !className) {
+      return { light: null, medium: null, heavy: null, currentRange: null, equipmentContext };
+    }
+
+    try {
+      const guides = await tuningGuideService.getGuidesByReference({ classId, className });
+
+      if (guides.length === 0) {
+        return { light: null, medium: null, heavy: null, currentRange: null, equipmentContext };
+      }
+
+      // Collect all sections from all guides
+      const allSections: Array<{ guide: typeof guides[0]; section: ExtractedSection }> = [];
+      guides.forEach(guide => {
+        const sections = this.normalizeSections(guide.extractedSections);
+        sections.forEach(section => {
+          if (section?.settings && Object.keys(section.settings).length > 0) {
+            allSections.push({ guide, section });
+          }
+        });
+      });
+
+      // Categorize sections by wind range
+      const categorize = (section: ExtractedSection): 'light' | 'medium' | 'heavy' | null => {
+        const title = (section.title || '').toLowerCase();
+        const windSpeed = (section.conditions?.windSpeed || '').toLowerCase();
+
+        if (title.includes('light') || windSpeed.includes('0-5') || windSpeed.includes('4-7')) {
+          return 'light';
+        }
+        if (title.includes('heavy') || title.includes('strong') || windSpeed.includes('17+') || windSpeed.includes('15-18')) {
+          return 'heavy';
+        }
+        if (title.includes('medium') || title.includes('base') || windSpeed.includes('6-16') || windSpeed.includes('8-12')) {
+          return 'medium';
+        }
+        return null;
+      };
+
+      let light: RaceTuningRecommendation | null = null;
+      let medium: RaceTuningRecommendation | null = null;
+      let heavy: RaceTuningRecommendation | null = null;
+
+      allSections.forEach(({ guide, section }) => {
+        const category = categorize(section);
+        const rec = this.buildRecommendation(guide, section);
+
+        if (category === 'light' && !light) {
+          light = rec;
+        } else if (category === 'medium' && !medium) {
+          medium = rec;
+        } else if (category === 'heavy' && !heavy) {
+          heavy = rec;
+        }
+      });
+
+      // Add equipment context to all recommendations
+      if (equipmentContext) {
+        const addEquipment = (rec: RaceTuningRecommendation | null) => {
+          if (!rec) return null;
+          return {
+            ...rec,
+            equipmentContext,
+            equipmentSpecificNotes: this.generateEquipmentSpecificNotes(equipmentContext, rec.settings),
+          };
+        };
+        light = addEquipment(light);
+        medium = addEquipment(medium);
+        heavy = addEquipment(heavy);
+      }
+
+      return { light, medium, heavy, currentRange: null, equipmentContext };
+    } catch (error) {
+      logger.error('Failed to load all wind range sections', error);
+      return { light: null, medium: null, heavy: null, currentRange: null, equipmentContext };
+    }
+  }
+
+  /**
+   * Determine which wind range matches given conditions
+   */
+  determineWindRange(windSpeed: number | null | undefined): 'light' | 'medium' | 'heavy' | null {
+    if (windSpeed === null || windSpeed === undefined) return null;
+    if (windSpeed <= 5) return 'light';
+    if (windSpeed <= 16) return 'medium';
+    return 'heavy';
+  }
 }
 
 export const raceTuningService = new RaceTuningService();

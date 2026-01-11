@@ -13,13 +13,14 @@ import {
   Alert,
   Modal,
   Platform,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { RaceCourseExtractor } from '@/services/ai/RaceCourseExtractor';
 import { raceStrategyEngine, RaceStrategy, RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import type { RaceCourseExtraction, TacticalRecommendation } from '@/lib/types/ai-knowledge';

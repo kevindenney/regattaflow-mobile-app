@@ -34,14 +34,15 @@ interface NavItem {
 }
 
 // Navigation items by persona
+// Boat management moved to Account screen
 const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Races', route: '/(tabs)/races', icon: 'flag-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
-  { key: 'boat', label: 'Boat', route: '/(tabs)/boat/index', icon: 'boat-outline' },
   { key: 'venue', label: 'Venue', route: '/(tabs)/venue', icon: 'location-outline' },
 ];
 
 const SAILOR_SECONDARY_ITEMS: NavItem[] = [
+  { key: 'progress', label: 'Progress', route: '/(tabs)/progress', icon: 'trending-up-outline' },
   { key: 'courses', label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
   { key: 'affiliations', label: 'Affiliations', route: '/(tabs)/affiliations', icon: 'people-circle-outline' },
   { key: 'crew', label: 'Crew', route: '/(tabs)/crew', icon: 'people-outline' },

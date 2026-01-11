@@ -24,7 +24,7 @@ export class ClubOnboardingAgent extends BaseAgentService {
 
   constructor() {
     super({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       maxTokens: 4096,
       temperature: 0.7,
       systemPrompt: `You are an expert sailing club administrator and business consultant helping yacht clubs, class associations, and regatta organizers set up their operations on RegattaFlow.

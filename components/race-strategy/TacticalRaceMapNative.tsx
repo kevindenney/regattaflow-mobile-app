@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, TurboModuleRegistry } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type {
   CourseMark,
@@ -24,14 +24,20 @@ let MapView: any = null;
 let PROVIDER_GOOGLE: any = null;
 let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
+// This prevents TurboModuleRegistry.getEnforcing from throwing
 if (Platform.OS !== 'web') {
   try {
-    const maps = require('react-native-maps');
-    MapView = maps.default;
-    PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
-    mapsAvailable = true;
-  } catch (e) {
-    console.warn('[TacticalRaceMapNative] react-native-maps not available (requires development build):', e);
+    // Use 'get' instead of 'getEnforcing' to check without throwing
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      MapView = maps.default;
+      PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+      mapsAvailable = true;
+    }
+  } catch (_e) {
+    // react-native-maps not available - will use fallback UI
   }
 }
 

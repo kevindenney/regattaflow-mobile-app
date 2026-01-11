@@ -334,22 +334,6 @@ export function EmbeddedRacesDemo({
     return 240;
   }, [windowWidth, effectiveMode]);
 
-  // DEBUG: Log scroll state changes
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      console.log('[EmbeddedRacesDemo] Scroll State:', {
-        scrollX,
-        scrollContentWidth,
-        canScrollLeft,
-        canScrollRight,
-        screenWidth: SCREEN_WIDTH,
-        shouldShowLeft: canScrollLeft,
-        shouldShowRight: canScrollRight,
-        contentFits: scrollContentWidth <= (SCREEN_WIDTH || 0),
-      });
-    }
-  }, [scrollX, scrollContentWidth, canScrollLeft, canScrollRight, SCREEN_WIDTH]);
-  
   // Inject global responsive CSS for web
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -578,28 +562,6 @@ export function EmbeddedRacesDemo({
   // Determine if selected race is past or future
   const isSelectedRacePast = selectedRace ? selectedRace.raceStatus === 'past' : false;
   
-  // Debug logging for GPS track visibility
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const gpsSection = document.getElementById('gps-tracking-section');
-      console.log('[EmbeddedRacesDemo] Race selection state:', {
-        selectedRaceId,
-        selectedRaceName: selectedRace?.name,
-        selectedRaceStatus: selectedRace?.raceStatus,
-        isSelectedRacePast,
-        willShowGPSTrack: isSelectedRacePast,
-        gpsSectionExists: gpsSection ? 'YES' : 'NO',
-        highlightedFeature,
-        sortedRacesCount: sortedRaces.length,
-        pastRacesCount: sortedRaces.filter(r => r.raceStatus === 'past').length,
-      });
-      
-      // GPS section is conditionally rendered by React when isSelectedRacePast is true
-      // The section may not be in the DOM yet when this effect runs, which is expected behavior
-      // No warning needed - React will render it when the component updates
-    }
-  }, [highlightedFeature, selectedRaceId, selectedRace, isSelectedRacePast, sortedRaces]);
-  
   // Race card dimensions (match RaceCard component)
   // RACE_CARD_WIDTH is now defined above as a responsive useMemo value
   const RACE_CARD_HEIGHT = 400; // Original height
@@ -796,26 +758,12 @@ export function EmbeddedRacesDemo({
       case 'gps-tracking':
         // Find a past race (to the left of NOW bar) to highlight
         const pastRaces = sortedRaces.filter(race => race.raceStatus === 'past');
-        if (Platform.OS === 'web') {
-          console.log('[EmbeddedRacesDemo] GPS Tracking clicked:', {
-            pastRacesCount: pastRaces.length,
-            pastRaces: pastRaces.map(r => ({ id: r.id, name: r.name, status: r.raceStatus })),
-            sortedRacesCount: sortedRaces.length,
-          });
-        }
         if (pastRaces.length > 0) {
           // Use the most recent past race (closest to NOW bar)
           const mostRecentPastRace = pastRaces[pastRaces.length - 1];
-          if (Platform.OS === 'web') {
-            console.log('[EmbeddedRacesDemo] Selecting past race:', {
-              id: mostRecentPastRace.id,
-              name: mostRecentPastRace.name,
-              status: mostRecentPastRace.raceStatus,
-            });
-          }
           setHighlightedRaceCard(mostRecentPastRace.id);
           setSelectedRaceId(mostRecentPastRace.id);
-          
+
           // Scroll to race cards to ensure visibility
           if (raceCardsScrollViewRef.current) {
             const raceIndex = sortedRaces.findIndex(race => race.id === mostRecentPastRace.id);
@@ -828,16 +776,16 @@ export function EmbeddedRacesDemo({
               });
             }
           }
-          
+
           // Scroll race cards section into view, then scroll to GPS section
           if (Platform.OS === 'web' && raceCardHighlightRef.current) {
             setTimeout(() => {
               // @ts-ignore - web only
               if (raceCardHighlightRef.current?.scrollIntoView) {
                 // @ts-ignore
-                raceCardHighlightRef.current.scrollIntoView({ 
-                  behavior: 'smooth', 
-                  block: 'center' 
+                raceCardHighlightRef.current.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'center'
                 });
               }
               // Then scroll to GPS section - wait for element to appear
@@ -845,14 +793,11 @@ export function EmbeddedRacesDemo({
                 if (Platform.OS === 'web') {
                   const gpsSection = document.getElementById('gps-tracking-section');
                   if (gpsSection) {
-                    console.log('[EmbeddedRacesDemo] GPS section found, scrolling...');
                     gpsSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   } else if (attempts < 10) {
                     // Element not ready yet, try again after a short delay
-                    console.log(`[EmbeddedRacesDemo] GPS section not found yet, retrying... (attempt ${attempts + 1})`);
                     setTimeout(() => waitForGPSSection(attempts + 1), 100);
                   } else {
-                    console.warn('[EmbeddedRacesDemo] GPS section not found after 10 attempts');
                     scrollToSection('gps-tracking-section');
                   }
                 } else {
@@ -866,10 +811,6 @@ export function EmbeddedRacesDemo({
             setTimeout(() => {
               scrollToSection('gps-tracking-section');
             }, 500);
-          }
-        } else {
-          if (Platform.OS === 'web') {
-            console.warn('[EmbeddedRacesDemo] No past races found for GPS tracking');
           }
         }
         break;
@@ -1410,33 +1351,12 @@ export function EmbeddedRacesDemo({
                   setScrollX(offsetX);
                   setCanScrollLeft(newCanScrollLeft);
                   setCanScrollRight(newCanScrollRight);
-                  
-                  if (Platform.OS === 'web') {
-                    console.log('[EmbeddedRacesDemo] onScroll:', {
-                      offsetX,
-                      contentWidth,
-                      layoutWidth,
-                      canScrollLeft: newCanScrollLeft,
-                      canScrollRight: newCanScrollRight,
-                      threshold: 10,
-                      maxScroll: contentWidth - layoutWidth,
-                    });
-                  }
                 }}
                 onContentSizeChange={(contentWidth) => {
                   setScrollContentWidth(contentWidth);
                   // Update scroll state based on content vs viewport
                   const shouldScrollRight = contentWidth > (SCREEN_WIDTH || 0);
                   setCanScrollRight(shouldScrollRight);
-                  if (Platform.OS === 'web') {
-                    console.log('[EmbeddedRacesDemo] onContentSizeChange:', {
-                      contentWidth,
-                      screenWidth: SCREEN_WIDTH,
-                      shouldScrollRight,
-                      canScrollRight: shouldScrollRight,
-                      scrollX,
-                    });
-                  }
                 }}
                 onScrollBeginDrag={() => {
                   // Ensure scroll buttons update when user starts scrolling

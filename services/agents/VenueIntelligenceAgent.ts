@@ -20,7 +20,7 @@ export class VenueIntelligenceAgent extends BaseAgentService {
     const useSkills = process.env.USE_CLAUDE_SKILLS === 'true';
 
     super({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       maxTokens: 2048, // Optimized for cost
       temperature: 0.3, // Lower temperature for more consistent venue detection
       systemPrompt: useSkills

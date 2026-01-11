@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { nominatimService } from './location/NominatimService';
 
 interface CourseExtraction {

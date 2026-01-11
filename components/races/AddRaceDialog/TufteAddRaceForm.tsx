@@ -49,6 +49,7 @@ import type { DistanceRaceData } from './DistanceRaceFields';
 import type { MatchRaceData } from './MatchRaceFields';
 import type { TeamRaceData } from './TeamRaceFields';
 import type { ExtractedRaceData } from '../ExtractionResults';
+import type { CourseMark, RouteWaypoint } from '@/hooks/useAddRace';
 
 // =============================================================================
 // TYPES
@@ -71,6 +72,10 @@ interface FormState {
   longitude: number | null;
   vhfChannel: string;
   notes: string;
+  // Course/Map data from AI extraction or manual entry
+  marks: CourseMark[];
+  routeWaypoints: RouteWaypoint[];
+  racingAreaPolygon: Array<{ lat: number; lng: number }>;
   // Type-specific
   fleet: FleetRaceData;
   distance: DistanceRaceData;
@@ -106,6 +111,10 @@ const getSmartDefaults = (lastLocationData?: LastLocationData): FormState => {
     longitude: lastLocationData?.lng || null,
     vhfChannel: '',
     notes: '',
+    // Course/Map data - empty until AI extraction or manual entry
+    marks: [],
+    routeWaypoints: [],
+    racingAreaPolygon: [],
     fleet: {},
     distance: {},
     match: {},
@@ -118,6 +127,9 @@ const getSmartDefaults = (lastLocationData?: LastLocationData): FormState => {
 // =============================================================================
 
 export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormProps) {
+  // Debug logging for iOS issue
+  console.log('[TufteAddRaceForm] render with visible:', visible);
+
   // State
   const [formState, setFormState] = useState<FormState>(getSmartDefaults());
   const [errors, setErrors] = useState<FormErrors>({});
@@ -127,6 +139,8 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
   const [isSaving, setIsSaving] = useState(false);
   const [lastLocationData, setLastLocationData] = useState<LastLocationData | undefined>();
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  // Key to force remount of AI extraction section when modal opens
+  const [aiSectionKey, setAiSectionKey] = useState(0);
 
   // Load last used location (now with coordinates)
   useEffect(() => {
@@ -164,6 +178,8 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       setAiExtractedFields(new Set());
       setExtractedDetailsData(null);
       setShowLocationPicker(false);
+      // Increment key to force remount of AI extraction section, clearing its internal state
+      setAiSectionKey((prev) => prev + 1);
     }
   }, [visible, lastLocationData]);
 
@@ -333,6 +349,46 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       updates.fleet = fleetData;
     }
 
+    // Extract course marks with GPS coordinates (for tactical map)
+    if (rawData?.marks && Array.isArray(rawData.marks) && rawData.marks.length > 0) {
+      updates.marks = rawData.marks.map((mark: any) => ({
+        name: mark.name || 'Unknown Mark',
+        latitude: mark.latitude,
+        longitude: mark.longitude,
+        type: mark.type || 'waypoint',
+        color: mark.color,
+        shape: mark.shape,
+      }));
+      newAiFields.add('marks');
+      console.log('[TufteAddRaceForm] Extracted marks from AI:', updates.marks?.length);
+    }
+
+    // Extract route waypoints for distance races (for tactical map)
+    if (rawData?.routeWaypoints && Array.isArray(rawData.routeWaypoints) && rawData.routeWaypoints.length > 0) {
+      updates.routeWaypoints = rawData.routeWaypoints.map((wp: any) => ({
+        name: wp.name || 'Waypoint',
+        latitude: wp.latitude,
+        longitude: wp.longitude,
+        type: wp.type || 'waypoint',
+        required: wp.required ?? true,
+        passingSide: wp.passingSide,
+        notes: wp.notes,
+        order: wp.order,
+      }));
+      newAiFields.add('routeWaypoints');
+      console.log('[TufteAddRaceForm] Extracted route waypoints from AI:', updates.routeWaypoints?.length);
+    }
+
+    // Extract racing area polygon if available
+    if (rawData?.racingAreaCoordinates && Array.isArray(rawData.racingAreaCoordinates) && rawData.racingAreaCoordinates.length > 0) {
+      updates.racingAreaPolygon = rawData.racingAreaCoordinates.map((coord: any) => ({
+        lat: coord.latitude || coord.lat,
+        lng: coord.longitude || coord.lng,
+      }));
+      newAiFields.add('racingAreaPolygon');
+      console.log('[TufteAddRaceForm] Extracted racing area polygon from AI:', updates.racingAreaPolygon?.length, 'points');
+    }
+
     setFormState((prev) => ({ ...prev, ...updates }));
     setAiExtractedFields(newAiFields);
 
@@ -432,6 +488,20 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
         raceData.team = formState.team;
       }
 
+      // Add course/map data from AI extraction or manual entry
+      if (formState.marks.length > 0) {
+        (raceData as any).marks = formState.marks;
+        console.log('[TufteAddRaceForm] Saving marks:', formState.marks.length);
+      }
+      if (formState.routeWaypoints.length > 0) {
+        (raceData as any).routeWaypoints = formState.routeWaypoints;
+        console.log('[TufteAddRaceForm] Saving route waypoints:', formState.routeWaypoints.length);
+      }
+      if (formState.racingAreaPolygon.length > 0) {
+        (raceData as any).racingAreaPolygon = formState.racingAreaPolygon;
+        console.log('[TufteAddRaceForm] Saving racing area polygon:', formState.racingAreaPolygon.length, 'points');
+      }
+
       await onSave(raceData);
       onClose();
     } catch (error) {
@@ -493,6 +563,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
 
             {/* AI Extraction Section */}
             <TufteAIExtractionSection
+              key={aiSectionKey}
               expanded={aiSectionExpanded}
               onToggle={() => setAiSectionExpanded(!aiSectionExpanded)}
               onExtracted={handleAIExtracted}

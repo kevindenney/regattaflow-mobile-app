@@ -16,14 +16,15 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { createLogger } from '@/lib/utils/logger';
 
 interface BoatClass {
@@ -55,6 +56,7 @@ export default function AddBoatScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [showManufacturerPicker, setShowManufacturerPicker] = useState(false);
+  const [usingFallbackClasses, setUsingFallbackClasses] = useState(false);
 
   useEffect(() => {
     loadBoatClasses();
@@ -103,12 +105,19 @@ export default function AddBoatScreen() {
       }
 
       logger.debug('Loaded boat classes from Supabase:', data?.length ?? 0);
-      setBoatClasses(data || FALLBACK_BOAT_CLASSES);
+      if (data && data.length > 0) {
+        setBoatClasses(data);
+        setUsingFallbackClasses(false);
+      } else {
+        setBoatClasses(FALLBACK_BOAT_CLASSES);
+        setUsingFallbackClasses(true);
+      }
     } catch (error) {
       console.error('[AddBoatScreen] Error loading boat classes, using fallback data:', error);
 
       // Use fallback data instead of blocking the UI
       setBoatClasses(FALLBACK_BOAT_CLASSES);
+      setUsingFallbackClasses(true);
 
       // Show a non-blocking alert on native, or a simple message on web
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -179,6 +188,23 @@ export default function AddBoatScreen() {
         window.alert('Please select a boat class');
       } else {
         Alert.alert('Required Field', 'Please select a boat class');
+      }
+      return;
+    }
+
+    // Check if using fallback/mock classes (they won't work with the database)
+    if (usingFallbackClasses || selectedClassId.startsWith('mock-')) {
+      if (Platform.OS === 'web') {
+        window.alert('Cannot save boat: Unable to connect to server to load boat classes. Please check your internet connection and try again.');
+      } else {
+        Alert.alert(
+          'Connection Required',
+          'Unable to connect to server to load boat classes. Please check your internet connection and try again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: loadBoatClasses },
+          ]
+        );
       }
       return;
     }
@@ -334,8 +360,19 @@ export default function AddBoatScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Boat Class *</Text>
+              {usingFallbackClasses && (
+                <View style={styles.offlineWarning}>
+                  <Ionicons name="cloud-offline" size={16} color="#F59E0B" />
+                  <Text style={styles.offlineWarningText}>
+                    Offline mode - connect to internet to save
+                  </Text>
+                  <TouchableOpacity onPress={loadBoatClasses} style={styles.retryButton}>
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               <TouchableOpacity
-                style={styles.picker}
+                style={[styles.picker, usingFallbackClasses && styles.pickerDisabled]}
                 onPress={() => setShowClassPicker(!showClassPicker)}
               >
                 <Text style={selectedClass ? styles.pickerText : styles.pickerPlaceholder}>
@@ -670,6 +707,36 @@ const styles = StyleSheet.create({
   pickerPlaceholder: {
     fontSize: 16,
     color: '#94A3B8',
+  },
+  pickerDisabled: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
+  },
+  offlineWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  offlineWarningText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+  },
+  retryButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#F59E0B',
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   pickerOptions: {
     marginTop: 8,

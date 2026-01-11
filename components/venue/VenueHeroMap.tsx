@@ -7,7 +7,7 @@
  */
 
 import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, Pressable, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, Pressable, Platform, Alert, TurboModuleRegistry } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
 import { RacingAreaCircleOverlay } from './RacingAreaCircleOverlay';
@@ -21,14 +21,23 @@ let Marker: any = null;
 let PROVIDER_GOOGLE: any = null;
 let mapsAvailable = false;
 
-try {
-  const maps = require('react-native-maps');
-  MapView = maps.default;
-  Marker = maps.Marker;
-  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
-  mapsAvailable = true;
-} catch (e) {
-  // Maps not available
+// Check if native module is registered BEFORE requiring react-native-maps
+// This prevents TurboModuleRegistry.getEnforcing from throwing
+if (Platform.OS !== 'web') {
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      MapView = maps.default;
+      Marker = maps.Marker;
+      PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+      mapsAvailable = true;
+    } else {
+      console.warn('[VenueHeroMap] RNMapsAirModule not registered - using fallback UI');
+    }
+  } catch (e) {
+    console.warn('[VenueHeroMap] react-native-maps not available:', e);
+  }
 }
 
 export interface VenueHeroMapProps {

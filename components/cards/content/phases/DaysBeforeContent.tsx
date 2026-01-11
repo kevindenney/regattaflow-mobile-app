@@ -48,6 +48,8 @@ import { PositionAssignmentPanel, MeetingPointPicker } from '@/components/checkl
 import { hasTool } from '@/lib/checklists/toolRegistry';
 import { CATEGORY_CONFIG, ChecklistCategory } from '@/types/checklists';
 import type { RaceType } from '@/types/raceEvents';
+import { getLearningLinks, getLearningBrief, getItemCategory, getLessonId, getLearningForItem } from '@/data/learningLinks';
+import { useUserSettings } from '@/hooks/useUserSettings';
 
 // Team collaboration components
 import {
@@ -129,16 +131,25 @@ function ChecklistItem({
   onToggle,
   onAction,
   onLearnPress,
+  onShowTooltip,
   hasAction,
+  showLearning = true,
 }: {
   item: ChecklistItemWithState;
   onToggle: () => void;
   onAction?: () => void;
   onLearnPress?: () => void;
+  onShowTooltip?: () => void;
   hasAction?: boolean;
+  showLearning?: boolean;
 }) {
-  // Determine if item has a learning link
-  const hasLearningLink = !!item.learningModuleSlug;
+  // Get learning brief for tooltip - try registry first, then fall back to old method
+  const learningBrief = getLearningBrief(item.id);
+  // Check if item has learning content (via registry or legacy field) AND learning is enabled
+  const hasLearningLink = showLearning && (!!learningBrief || !!item.learningModuleSlug);
+
+  // Get tooltip text - use brief from registry or default message
+  const tooltipText = learningBrief || 'Tap to learn more about this topic';
 
   return (
     <View style={styles.checklistItem}>
@@ -169,12 +180,17 @@ function ChecklistItem({
 
       {/* Action icons area */}
       <View style={styles.actionIconsRow}>
-        {/* Learning link badge - tappable */}
+        {/* Learning link badge - tap to navigate, long-press for tooltip */}
         {hasLearningLink && (
           <Pressable
             style={styles.learnBadge}
             onPress={onLearnPress}
+            onLongPress={onShowTooltip}
+            delayLongPress={300}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={tooltipText}
+            accessibilityHint="Tap to open lesson, long-press for quick tip"
+            accessibilityRole="button"
           >
             <BookOpen size={14} color={IOS_COLORS.purple} />
           </Pressable>
@@ -207,16 +223,20 @@ function CategorySection({
   onToggle,
   onItemAction,
   onLearnPress,
+  onShowTooltip,
   actionItems,
   showCarryoverHeader,
+  showLearning = true,
 }: {
   category: ChecklistCategory;
   items: ChecklistItemWithState[];
   onToggle: (itemId: string) => void;
   onItemAction?: (itemId: string) => void;
   onLearnPress?: (item: ChecklistItemWithState) => void;
+  onShowTooltip?: (item: ChecklistItemWithState) => void;
   actionItems?: string[];
   showCarryoverHeader?: boolean;
+  showLearning?: boolean;
 }) {
   const config = CATEGORY_CONFIG[category];
   const IconComponent = CATEGORY_ICONS[category] || Wrench;
@@ -248,7 +268,9 @@ function CategorySection({
               onToggle={() => onToggle(item.id)}
               onAction={() => onItemAction?.(item.id)}
               onLearnPress={() => onLearnPress?.(item)}
+              onShowTooltip={() => onShowTooltip?.(item)}
               hasAction={hasAction(item.id)}
+              showLearning={showLearning}
             />
           ))}
         </View>
@@ -263,7 +285,9 @@ function CategorySection({
             onToggle={() => onToggle(item.id)}
             onAction={() => onItemAction?.(item.id)}
             onLearnPress={() => onLearnPress?.(item)}
+            onShowTooltip={() => onShowTooltip?.(item)}
             hasAction={hasAction(item.id)}
+            showLearning={showLearning}
           />
         ))}
       </View>
@@ -280,6 +304,9 @@ export function DaysBeforeContent({
   const raceType = getRaceType(race);
   const isTeamRace = raceType === 'team';
 
+  // User settings for quick tips/learning visibility
+  const { settings: userSettings } = useUserSettings();
+
   // State for team invite modal
   const [showInviteModal, setShowInviteModal] = useState(false);
 
@@ -289,6 +316,50 @@ export function DaysBeforeContent({
 
   // State for generic tool launcher
   const [activeTool, setActiveTool] = useState<ChecklistItemWithState | null>(null);
+
+  // State for learning tooltip
+  const [tooltipItem, setTooltipItem] = useState<ChecklistItemWithState | null>(null);
+
+  // Build venue object from race data for weather fetching (same as RaceMorningContent)
+  // The race may have venueCoordinates (from useEnrichedRaces) or coordinates in metadata
+  const venueCoordinates = (race as any).venueCoordinates;
+  const venueName = race.venue || 'Racing Area';
+  const venueId = (race as any).venue_id || race.id;
+
+  // Also check metadata for coordinates (start_coordinates, venue_coordinates, etc.)
+  const metadata = (race as any).metadata || {};
+  const metadataCoords = metadata.start_coordinates || metadata.venue_coordinates || metadata.racing_area_coordinates;
+
+  // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
+  const coords = venueCoordinates || metadataCoords;
+
+  // DEBUG: Log venue data extraction for troubleshooting
+  if (race.name === 'T3') {
+    console.log('🔍 [DaysBeforeContent] Venue extraction for T3:', JSON.stringify({
+      raceId: race.id,
+      hasRaceVenueCoords: !!venueCoordinates,
+      venueCoordinates,
+      hasMetadata: !!metadata && Object.keys(metadata).length > 0,
+      metadataKeys: Object.keys(metadata),
+      metadataStartCoords: metadata.start_coordinates,
+      metadataVenueCoords: metadata.venue_coordinates,
+      metadataCoords,
+      finalCoords: coords,
+      willCreateVenueForForecast: !!coords,
+    }, null, 2));
+  }
+
+  // Create a minimal venue object that the weather services can use
+  const venueForForecast = coords ? {
+    id: venueId,
+    name: venueName,
+    coordinates: {
+      lat: coords.lat,
+      lng: coords.lng,
+    },
+    coordinates_lat: String(coords.lat),
+    coordinates_lng: String(coords.lng),
+  } : null;
 
   // Fetch user's primary boat for sail inspection
   // Use useFocusEffect to refresh when returning from adding a boat
@@ -340,8 +411,26 @@ export function DaysBeforeContent({
   // Get items that have tools (computed from the actual items)
   const actionItems = useMemo(() => {
     const allItems = Object.values(itemsByCategory).flat();
-    return allItems.filter(item => hasTool(item)).map(item => item.id);
-  }, [itemsByCategory]);
+    const itemsWithTools = allItems.filter(item => hasTool(item));
+
+    // DEBUG: Log action items for troubleshooting
+    if (race.name === 'T3') {
+      const weatherItem = allItems.find(i => i.id === 'check_weather_forecast');
+      console.log('🔍 [DaysBeforeContent] Action items for T3:', JSON.stringify({
+        totalItems: allItems.length,
+        itemsWithToolsCount: itemsWithTools.length,
+        itemsWithToolsIds: itemsWithTools.map(i => i.id),
+        weatherItem: weatherItem ? {
+          id: weatherItem.id,
+          toolId: weatherItem.toolId,
+          toolType: weatherItem.toolType,
+          hasTool: hasTool(weatherItem),
+        } : 'NOT FOUND',
+      }, null, 2));
+    }
+
+    return itemsWithTools.map(item => item.id);
+  }, [itemsByCategory, race.name]);
 
   // Handle checklist item actions (launch tools)
   const handleItemAction = useCallback((itemId: string) => {
@@ -386,11 +475,45 @@ export function DaysBeforeContent({
     setActiveTool(null);
   }, []);
 
-  // Handle learning module press - navigate to learn tab with specific module
+  // Handle learning module press - navigate to Race Preparation Mastery course with specific lesson
   const handleLearnPress = useCallback((item: ChecklistItemWithState) => {
-    if (item.learningModuleSlug) {
-      router.push(`/(tabs)/learn?module=${item.learningModuleSlug}`);
+    // Get lesson ID from registry for deep-linking to specific lesson
+    const lessonId = getLessonId(item.id);
+    const academyLinks = getLearningLinks(item.id);
+    const category = getItemCategory(item.id) || item.category;
+
+    // Map category to module ID in Race Preparation Mastery course
+    const categoryToModule: Record<string, string> = {
+      weather: 'module-13-1',      // Weather & Conditions
+      tactics: 'module-13-2',      // Tactical Planning
+      equipment: 'module-13-3',    // Equipment & Rigging
+      rules: 'module-13-4',        // Rules & Documents
+      documents: 'module-13-4',    // Rules & Documents (documents fall under rules)
+      safety: 'module-13-3',       // Safety is part of Equipment & Rigging
+      crew: 'module-13-2',         // Crew coordination is part of Tactical Planning
+      rig: 'module-13-3',          // Rig tuning is Equipment & Rigging
+    };
+
+    const moduleId = categoryToModule[category || ''] || 'module-13-1';
+    const courseId = academyLinks?.courseId || 'race-preparation-mastery';
+
+    // Navigate directly to lesson player if we have a lessonId, otherwise go to course overview
+    if (lessonId) {
+      router.push({
+        pathname: '/(tabs)/learn/[courseId]/player',
+        params: { courseId, lessonId },
+      });
+    } else {
+      router.push({
+        pathname: `/(tabs)/learn/${courseId}`,
+        params: { moduleId },
+      });
     }
+  }, []);
+
+  // Handle long-press tooltip (show quick learning brief)
+  const handleShowTooltip = useCallback((item: ChecklistItemWithState) => {
+    setTooltipItem(item);
   }, []);
 
   // Handle sail inspection completion
@@ -650,7 +773,9 @@ export function DaysBeforeContent({
             onToggle={toggleItem}
             onItemAction={handleItemAction}
             onLearnPress={handleLearnPress}
+            onShowTooltip={handleShowTooltip}
             actionItems={actionItems}
+            showLearning={userSettings.showQuickTips}
           />
         );
       })}
@@ -751,12 +876,23 @@ export function DaysBeforeContent({
           presentationStyle="pageSheet"
           onRequestClose={handleToolCancel}
         >
+          {/* DEBUG: Log at exact moment ForecastCheckWizard renders */}
+          {console.log('🚨 [DaysBeforeContent] MODAL RENDER - venueForForecast:', JSON.stringify({
+            raceName: race.name,
+            raceId: race.id,
+            venueForForecast,
+            coords,
+            metadataCoords,
+            hasMetadata: !!metadata && Object.keys(metadata).length > 0,
+          }, null, 2))}
           <ForecastCheckWizard
             item={activeTool}
             raceEventId={race.id}
             boatId={userBoat?.id}
-            venue={race.venue}
+            venue={venueForForecast}
             raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -775,7 +911,7 @@ export function DaysBeforeContent({
             item={activeTool}
             raceEventId={race.id}
             boatId={userBoat?.id}
-            venue={race.venue}
+            venue={venueForForecast}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -794,7 +930,7 @@ export function DaysBeforeContent({
             item={activeTool}
             raceEventId={race.id}
             boatId={userBoat?.id}
-            venue={race.venue}
+            venue={venueForForecast}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -814,7 +950,7 @@ export function DaysBeforeContent({
             raceEventId={race.id}
             boatId={userBoat?.id}
             course={race.course}
-            venue={race.venue}
+            venue={venueForForecast}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -903,6 +1039,65 @@ export function DaysBeforeContent({
         onComplete={handleToolComplete}
         onCancel={handleToolCancel}
       />
+
+      {/* Learning Tooltip Modal */}
+      <Modal
+        visible={!!tooltipItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTooltipItem(null)}
+      >
+        <Pressable
+          style={styles.tooltipOverlay}
+          onPress={() => setTooltipItem(null)}
+        >
+          <Pressable style={styles.tooltipContainer} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.tooltipHeader}>
+              <BookOpen size={18} color={IOS_COLORS.purple} />
+              <Text style={styles.tooltipTitle}>{tooltipItem?.label}</Text>
+            </View>
+            <Text style={styles.tooltipBrief}>
+              {tooltipItem ? getLearningBrief(tooltipItem.id) || 'Learn more about this topic in the Academy.' : ''}
+            </Text>
+            {tooltipItem && getLearningForItem(tooltipItem.id)?.detailed && (() => {
+              const detailed = getLearningForItem(tooltipItem.id)?.detailed;
+              // Handle different field names across learning data files
+              const keyPoints = (detailed as any)?.keyConsiderations
+                || (detailed as any)?.keyIndicators
+                || (detailed as any)?.tacticalImplications
+                || [];
+              if (keyPoints.length === 0) return null;
+              return (
+                <View style={styles.tooltipDetailSection}>
+                  <Text style={styles.tooltipDetailLabel}>Key Points:</Text>
+                  {keyPoints.slice(0, 2).map((point: string, idx: number) => (
+                    <Text key={idx} style={styles.tooltipDetailPoint}>• {point}</Text>
+                  ))}
+                </View>
+              );
+            })()}
+            <View style={styles.tooltipActions}>
+              <TouchableOpacity
+                style={styles.tooltipDismiss}
+                onPress={() => setTooltipItem(null)}
+              >
+                <Text style={styles.tooltipDismissText}>Got it</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.tooltipLearnMore}
+                onPress={() => {
+                  if (tooltipItem) {
+                    setTooltipItem(null);
+                    handleLearnPress(tooltipItem);
+                  }
+                }}
+              >
+                <Text style={styles.tooltipLearnMoreText}>Open Lesson</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1178,6 +1373,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: IOS_COLORS.teal,
+  },
+
+  // Learning Tooltip
+  tooltipOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  tooltipContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    maxWidth: 340,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  tooltipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  tooltipTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    flex: 1,
+  },
+  tooltipBrief: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  tooltipDetailSection: {
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  tooltipDetailLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  tooltipDetailPoint: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  tooltipActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  tooltipDismiss: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    alignItems: 'center',
+  },
+  tooltipDismissText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tooltipLearnMore: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.purple,
+    alignItems: 'center',
+  },
+  tooltipLearnMoreText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

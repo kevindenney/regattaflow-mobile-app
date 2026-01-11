@@ -8,12 +8,13 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  SafeAreaView,
+  
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LearningService, type LearningCourse, type LearningLesson } from '@/services/LearningService';
@@ -70,13 +71,13 @@ export default function LessonPlayerScreen() {
         }
         
         let courseData: LearningCourse | null = null;
-        
+        let courseExistsInDb = false; // Track if course exists in database (for access control)
+
         // If found in catalog, convert to LearningCourse format for compatibility
         if (catalogCourse) {
           // Try to get the database UUID by looking up the course by slug
           // This ensures we have the real UUID for enrollment operations
           let dbCourseId: string | null = null;
-          let courseExistsInDb = false;
           try {
             const dbCourse = await Promise.race([
               LearningService.getCourseBySlug(catalogCourse.slug),
@@ -247,9 +248,30 @@ export default function LessonPlayerScreen() {
           LearningService.isEnrolled(user.id, enrollmentCourseId),
           new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
         ]);
-        const isEnrolled = await enrollmentPromise;
-        setEnrolled(isEnrolled);
+        let isEnrolled = await enrollmentPromise;
         console.log('[LessonPlayer] Enrolled:', isEnrolled);
+
+        // Auto-enroll for Race Preparation Mastery course (accessed from checklist learning links)
+        const isRacePrep = courseData.slug === 'race-preparation-mastery' ||
+                           courseId === 'race-preparation-mastery' ||
+                           catalogCourse?.slug === 'race-preparation-mastery';
+
+        if (!isEnrolled && isRacePrep && enrollmentCourseId) {
+          const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(enrollmentCourseId);
+          if (isValidUUID) {
+            console.log('[LessonPlayer] Auto-enrolling user in Race Preparation Mastery course...');
+            try {
+              await LearningService.enrollInCourse(user.id, enrollmentCourseId);
+              isEnrolled = true;
+              console.log('[LessonPlayer] Auto-enrollment successful!');
+            } catch (enrollErr) {
+              console.warn('[LessonPlayer] Auto-enrollment failed:', enrollErr);
+              // Continue anyway - maybe they have Pro access
+            }
+          }
+        }
+
+        setEnrolled(isEnrolled);
 
         // Check subscription access
         console.log('[LessonPlayer] Checking subscription...');
@@ -262,9 +284,17 @@ export default function LessonPlayerScreen() {
         const { hasProAccess } = await subscriptionPromise;
         console.log('[LessonPlayer] Pro access:', hasProAccess);
 
-        // Check if user can access (enrolled, has Pro subscription, or free preview)
-        const hasAccess = isEnrolled || hasProAccess || foundLesson.is_free_preview;
-        console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'hasProAccess:', hasProAccess, 'is_free_preview:', foundLesson.is_free_preview, 'hasAccess:', hasAccess);
+        // Check if this is a catalog-only course (not in database)
+        // Race Preparation Mastery and similar courses from JSON catalog should be freely accessible
+        const isCatalogOnlyCourse = !courseExistsInDb && catalogCourse !== undefined;
+        const isRacePrepCourse = courseData.slug === 'race-preparation-mastery' ||
+                                  courseId === 'race-preparation-mastery' ||
+                                  catalogCourse?.slug === 'race-preparation-mastery';
+
+        // Check if user can access (enrolled, has Pro subscription, free preview, or catalog-only course)
+        // Catalog-only courses (like Race Preparation Mastery) are freely accessible since content comes from JSON
+        const hasAccess = isEnrolled || hasProAccess || foundLesson.is_free_preview || isCatalogOnlyCourse || isRacePrepCourse;
+        console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'hasProAccess:', hasProAccess, 'is_free_preview:', foundLesson.is_free_preview, 'isCatalogOnlyCourse:', isCatalogOnlyCourse, 'isRacePrepCourse:', isRacePrepCourse, 'hasAccess:', hasAccess);
         setCanAccess(hasAccess);
 
         if (!hasAccess) {
@@ -336,71 +366,88 @@ export default function LessonPlayerScreen() {
 
     try {
       setMarking(true);
-      const success = await LessonProgressService.markLessonCompleted(user.id, lessonId);
-      
-      if (success) {
-        setIsCompleted(true);
-        
-        const nextLesson = getNextLesson();
-        
-        // On web, navigate directly to next lesson (Alert doesn't work well on web)
-        if (Platform.OS === 'web') {
-          if (nextLesson) {
-            router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
-          } else {
-            router.push(`/(tabs)/learn/${courseId}`);
-          }
-          return;
-        }
-        
-        // On native, show alert with options
-        const alertButtons: any[] = [];
-        
-        if (nextLesson) {
-          alertButtons.push({
-            text: 'Next Lesson →',
-            onPress: () => {
-              router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
-            },
-          });
-        }
-        
-        alertButtons.push({
-          text: 'Back to Course',
-          onPress: () => {
-            if (courseId) {
-              router.push(`/(tabs)/learn/${courseId}`);
-            } else {
-              router.back();
-            }
-          },
-          style: nextLesson ? 'cancel' : 'default',
-        });
-        
-        Alert.alert(
-          '🎉 Lesson Complete!',
-          nextLesson 
-            ? `Great job! Ready for "${nextLesson.title}"?` 
-            : 'Great job! You\'ve completed all lessons in this course!',
-          alertButtons
-        );
-      } else {
-        Alert.alert('Error', 'Failed to save progress. Please try again.');
+
+      // Try to save progress (may fail for catalog-only courses without DB records)
+      let success = false;
+      try {
+        success = await LessonProgressService.markLessonCompleted(user.id, lessonId);
+      } catch (err) {
+        // For catalog-only courses, the lesson may not exist in DB - continue anyway
+        console.warn('[LessonPlayer] Failed to mark complete (catalog-only?):', err);
+        success = true; // Treat as success for UX
       }
+
+      // Always show success for completed interactive lessons
+      setIsCompleted(true);
+
+      const nextLesson = getNextLesson();
+
+      // On web, navigate directly to next lesson (Alert doesn't work well on web)
+      if (Platform.OS === 'web') {
+        if (nextLesson) {
+          router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
+        } else {
+          router.push(`/(tabs)/learn/${courseId}`);
+        }
+        return;
+      }
+
+      // On native, show alert with options
+      const alertButtons: any[] = [];
+
+      if (nextLesson) {
+        alertButtons.push({
+          text: 'Next Lesson →',
+          onPress: () => {
+            router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
+          },
+        });
+      }
+
+      alertButtons.push({
+        text: 'Back to Course',
+        onPress: () => {
+          if (courseId) {
+            router.push(`/(tabs)/learn/${courseId}`);
+          } else {
+            router.back();
+          }
+        },
+        style: nextLesson ? 'cancel' : 'default',
+      });
+
+      Alert.alert(
+        '🎉 Lesson Complete!',
+        nextLesson
+          ? `Great job! Ready for "${nextLesson.title}"?`
+          : 'Great job! You\'ve completed all lessons in this course!',
+        alertButtons
+      );
     } catch (err) {
       console.error('[LessonPlayer] Failed to mark complete:', err);
-      Alert.alert('Error', 'Failed to save progress. Please try again.');
+      // Still show success - the user completed the lesson even if we couldn't save
+      setIsCompleted(true);
+      Alert.alert(
+        '🎉 Lesson Complete!',
+        'Great job! (Progress may not be saved for this course)',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
     } finally {
       setMarking(false);
     }
   }, [lessonId, user?.id, courseId, marking, getNextLesson]);
 
   const handleProgress = useCallback(async (percent: number) => {
-    // For interactive lessons, record interactions
+    // For interactive lessons, record interactions (fail silently for catalog-only courses)
     if (lesson?.lesson_type === 'interactive' && user?.id && lessonId) {
-      await LessonProgressService.recordInteraction(user.id, lessonId, {
-        progress_percent: percent,
-      });
+      try {
+        await LessonProgressService.recordInteraction(user.id, lessonId, {
+          progress_percent: percent,
+        });
+      } catch (err) {
+        // Silently ignore - lesson may not exist in database (catalog-only course)
+        console.warn('[LessonPlayer] Failed to record interaction:', err);
+      }
     }
   }, [lesson?.lesson_type, user?.id, lessonId]);
 

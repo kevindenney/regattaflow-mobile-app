@@ -276,10 +276,10 @@ const RaceCommitteeDashboard = () => {
               <Text className="text-gray-600 ml-2">{nextRegatta.location}</Text>
             </View>
             
-            {/* Countdown Timer */}
+            {/* Countdown Timer - Tufte compact format */}
             <View className="bg-blue-50 p-3 rounded-lg mb-4">
               <Text className="text-blue-800 font-bold text-center">
-                {countdown.days} days, {countdown.hours} hours until start
+                {countdown.days > 0 ? `${countdown.days}d ${countdown.hours}h` : `${countdown.hours}h ${countdown.minutes}m`} until start
               </Text>
             </View>
             

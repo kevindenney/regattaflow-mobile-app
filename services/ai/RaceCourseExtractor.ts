@@ -53,7 +53,7 @@ export class RaceCourseExtractor {
       // Excellent for structured extraction tasks
       // Upgrade to 'claude-3-5-sonnet-latest' if quality issues emerge
       const message = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.1, // Low temperature for factual extraction
         messages: [{

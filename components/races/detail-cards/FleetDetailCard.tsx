@@ -76,9 +76,13 @@ export function FleetDetailCard({
   }, [isExpanded, rotation]);
 
   // Animated chevron rotation
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 90])}deg` }],
-  }));
+  const chevronStyle = useAnimatedStyle(() => {
+    'worklet';
+    const rotationValue = rotation.value ?? 0;
+    return {
+      transform: [{ rotate: `${interpolate(rotationValue, [0, 1], [0, 90])}deg` }],
+    };
+  });
 
   const handlePress = useCallback(() => {
     LayoutAnimation.configureNext({
@@ -133,24 +137,54 @@ export function FleetDetailCard({
 
       {/* Content */}
       <>
-        {/* Collapsed: Tufte flat typography */}
+        {/* Collapsed: Show ALL data (Tufte principle) - competitor preview */}
         {!isExpanded && (
           <View style={styles.tufteCollapsedContent}>
+            {/* Registration + stats summary */}
             <Text style={styles.tufteCollapsedData}>
               {[
-                totalCompetitors > 0 && `${totalCompetitors} entries`,
-                confirmedCount > 0 && `${confirmedCount} confirmed`,
                 isRegistered === true && 'You: ✓',
                 isRegistered === false && 'Not registered',
+                totalCompetitors > 0 && `${totalCompetitors} entries`,
+                confirmedCount > 0 && `${confirmedCount} confirmed`,
               ].filter(Boolean).join(' · ')}
             </Text>
+
+            {/* Competitor preview - first 4 entries */}
+            {competitors && competitors.length > 0 && (
+              <View style={styles.tufteCollapsedCompetitors}>
+                {competitors.slice(0, 4).map((competitor) => (
+                  <View key={competitor.id} style={styles.tufteCollapsedCompetitorRow}>
+                    <Text style={styles.tufteCollapsedSailNumber}>
+                      {competitor.sailNumber || '—'}
+                    </Text>
+                    <Text style={styles.tufteCollapsedCompetitorName} numberOfLines={1}>
+                      {competitor.name}
+                    </Text>
+                    <Text style={styles.tufteCollapsedStatus}>
+                      {competitor.status === 'confirmed' ? '✓' : '·'}
+                    </Text>
+                  </View>
+                ))}
+                {totalCompetitors > 4 && (
+                  <Text style={styles.tufteMorePreview}>
+                    +{totalCompetitors - 4} more →
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* CTA if not registered */}
+            {!isRegistered && onRegister && (
+              <Text style={styles.tufteJoinCTA}>Tap to join fleet →</Text>
+            )}
           </View>
         )}
 
-        {/* Expanded: Tufte flat content */}
+        {/* Expanded: INTERACTION ONLY (full list + Join) */}
         {isExpanded && (
           <View style={styles.expandedContent}>
-            {/* Registration Status - Tufte flat row */}
+            {/* Registration action - the interaction */}
             {isRegistered !== undefined && (
               <View style={styles.tufteRegistrationRow}>
                 <Text style={styles.tufteRegistrationLabel}>You</Text>
@@ -159,20 +193,16 @@ export function FleetDetailCard({
                 </Text>
                 {!isRegistered && onRegister && (
                   <TouchableOpacity style={styles.tufteRegisterButton} onPress={onRegister}>
-                    <Text style={styles.tufteRegisterButtonText}>Join →</Text>
+                    <Text style={styles.tufteRegisterButtonText}>Join Fleet</Text>
                   </TouchableOpacity>
                 )}
               </View>
             )}
 
-            {/* Stats - Tufte summary line */}
-            <Text style={styles.tufteSummary}>
-              {totalCompetitors} entries · {confirmedCount} confirmed
-            </Text>
-
-            {/* Competitors List - Tufte style: sail number first, minimal status */}
+            {/* Full Competitors List */}
             {competitors && competitors.length > 0 && (
               <View style={styles.competitorsSection}>
+                <Text style={styles.tufteSectionLabel}>ENTRIES ({competitors.length})</Text>
                 <View style={styles.tufteCompetitorsList}>
                   {competitors.map((competitor) => (
                     <View key={competitor.id} style={styles.tufteCompetitorRow}>
@@ -198,7 +228,6 @@ export function FleetDetailCard({
 
             {totalCompetitors === 0 && (
               <View style={styles.noCompetitors}>
-                <MaterialCommunityIcons name="account-group-outline" size={24} color={IOS_COLORS.gray3} />
                 <Text style={styles.noCompetitorsText}>No competitors registered yet</Text>
               </View>
             )}
@@ -454,6 +483,56 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: IOS_COLORS.label,
+  },
+  tufteCollapsedCompetitors: {
+    marginTop: 8,
+    gap: 2,
+  },
+  tufteCollapsedCompetitorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  tufteCollapsedSailNumber: {
+    width: 50,
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    fontVariant: ['tabular-nums'],
+  },
+  tufteCollapsedCompetitorName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  tufteCollapsedStatus: {
+    width: 16,
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.green,
+    textAlign: 'center',
+  },
+  tufteMorePreview: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    marginTop: 4,
+  },
+  tufteJoinCTA: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    marginTop: 8,
+  },
+  tufteSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
   tufteRegistrationRow: {
     flexDirection: 'row',

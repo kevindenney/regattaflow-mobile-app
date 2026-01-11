@@ -7,7 +7,9 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/services/supabase';
-import { useLogger } from '@/hooks/useLogger';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useRaceSelection');
 
 export interface RaceMarkData {
   id: string;
@@ -57,7 +59,6 @@ export function useRaceSelection(
   options: UseRaceSelectionOptions = {}
 ): UseRaceSelectionReturn {
   const { initialRaceId = null, races = [], reloadKey = 0 } = options;
-  const logger = useLogger('useRaceSelection');
 
   // Selection state
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(initialRaceId);
@@ -185,7 +186,7 @@ export function useRaceSelection(
     };
 
     fetchRaceDetail();
-  }, [selectedRaceId, raceDetailReloadKey, reloadKey, races, logger]);
+  }, [selectedRaceId, raceDetailReloadKey, reloadKey, races]);
 
   return {
     selectedRaceId,

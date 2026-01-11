@@ -161,7 +161,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -244,7 +244,7 @@ Respond with this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -320,7 +320,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{
@@ -406,7 +406,7 @@ Respond in this JSON format:
 `;
 
       const message = await this.genAI.messages.create({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [{

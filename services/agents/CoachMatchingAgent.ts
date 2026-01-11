@@ -12,7 +12,7 @@ import type { CoachSearchResult, SailorProfile } from '@/types/coach';
 export class CoachMatchingAgent extends BaseAgentService {
   constructor() {
     super({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       maxTokens: 2500,
       temperature: 0.5, // Balanced for personalized recommendations
       systemPrompt: `You are a sailing coach matching specialist for RegattaFlow's marketplace.

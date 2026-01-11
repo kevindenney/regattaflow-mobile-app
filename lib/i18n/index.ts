@@ -393,13 +393,13 @@ const resources = {
  */
 function getDeviceLocale(): SupportedLocale {
   try {
-    // Handle SSR/web environments where Localization.locale may be undefined
-    const locale = Localization.locale;
-    if (!locale) {
+    // Use getLocales() API (expo-localization 14+)
+    const locales = Localization.getLocales();
+    if (!locales || locales.length === 0) {
       return 'en';
     }
-    const deviceLocale = locale.split('-')[0].toLowerCase();
-    if (supportedLocales.includes(deviceLocale as SupportedLocale)) {
+    const deviceLocale = locales[0].languageCode?.toLowerCase();
+    if (deviceLocale && supportedLocales.includes(deviceLocale as SupportedLocale)) {
       return deviceLocale as SupportedLocale;
     }
   } catch (error) {

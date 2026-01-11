@@ -336,7 +336,7 @@ ${formattedLearnings}
 }
 
 /**
- * Format phase ratings for inclusion in prompt
+ * Format phase ratings for inclusion in prompt (legacy format)
  */
 function formatPhaseRatings(phaseRatings: any): string {
   if (!phaseRatings || Object.keys(phaseRatings).length === 0) {
@@ -379,6 +379,115 @@ ${formattedPhases}
 }
 
 /**
+ * Format debrief interview responses for inclusion in prompt
+ */
+function formatDebriefResponses(debriefResponses: any): string {
+  if (!debriefResponses || Object.keys(debriefResponses).length === 0) {
+    return '';
+  }
+
+  // Question ID to human-readable label mapping
+  const questionLabels: Record<string, string> = {
+    // Prep
+    prep_equipment_rating: 'Equipment setup rating',
+    prep_sail_choice: 'Right sail choice',
+    prep_notes: 'Prep notes',
+    // Pre-start
+    prestart_routine_rating: 'Pre-start routine rating',
+    prestart_line_sight: 'Got good line sight',
+    prestart_clear_air: 'Clear air location',
+    prestart_favored_end: 'Favored end',
+    // Start
+    start_position: 'Start position',
+    start_speed: 'Speed at line',
+    start_timing: 'Start timing',
+    start_notes: 'Start notes',
+    // Upwind
+    upwind_rating: 'Upwind rating',
+    upwind_tack_count: 'Tack count',
+    upwind_in_phase: 'Sailed in phase',
+    upwind_shift_awareness: 'Shift awareness',
+    upwind_lane: 'Lane position',
+    upwind_notes: 'Upwind notes',
+    // Marks
+    marks_windward_approach: 'Windward mark approach',
+    marks_layline_timing: 'Layline judgment',
+    marks_leeward_rounding: 'Leeward mark rounding',
+    marks_notes: 'Mark notes',
+    // Downwind
+    downwind_rating: 'Downwind rating',
+    downwind_jibe_count: 'Jibe count',
+    downwind_angle: 'Angles sailed',
+    downwind_pressure: 'Connected pressure',
+    downwind_notes: 'Downwind notes',
+    // Rules
+    rules_situations: 'Had rule situations',
+    rules_penalty_taken: 'Took penalty',
+    rules_protest_filed: 'Filed protest',
+    rules_description: 'Incident description',
+    // Finish
+    finish_approach: 'Finish approach',
+    finish_overall_rating: 'Overall race rating',
+    finish_key_learning: 'Key learning',
+    finish_work_on: 'Focus for next race',
+  };
+
+  // Phase groupings
+  const phases = [
+    { id: 'prep', title: 'Preparation', keys: ['prep_equipment_rating', 'prep_sail_choice', 'prep_notes'] },
+    { id: 'prestart', title: 'Pre-Start', keys: ['prestart_routine_rating', 'prestart_line_sight', 'prestart_clear_air', 'prestart_favored_end'] },
+    { id: 'start', title: 'Start', keys: ['start_position', 'start_speed', 'start_timing', 'start_notes'] },
+    { id: 'upwind', title: 'Upwind', keys: ['upwind_rating', 'upwind_tack_count', 'upwind_in_phase', 'upwind_shift_awareness', 'upwind_lane', 'upwind_notes'] },
+    { id: 'marks', title: 'Marks', keys: ['marks_windward_approach', 'marks_layline_timing', 'marks_leeward_rounding', 'marks_notes'] },
+    { id: 'downwind', title: 'Downwind', keys: ['downwind_rating', 'downwind_jibe_count', 'downwind_angle', 'downwind_pressure', 'downwind_notes'] },
+    { id: 'rules', title: 'Rules', keys: ['rules_situations', 'rules_penalty_taken', 'rules_protest_filed', 'rules_description'] },
+    { id: 'finish', title: 'Finish & Overall', keys: ['finish_approach', 'finish_overall_rating', 'finish_key_learning', 'finish_work_on'] },
+  ];
+
+  const formattedSections: string[] = [];
+
+  for (const phase of phases) {
+    const phaseResponses = phase.keys
+      .filter(key => debriefResponses[key] !== null && debriefResponses[key] !== undefined && debriefResponses[key] !== '')
+      .map(key => {
+        const value = debriefResponses[key];
+        const label = questionLabels[key] || key;
+        // Format value based on type
+        if (typeof value === 'boolean') {
+          return `  - ${label}: ${value ? 'Yes' : 'No'}`;
+        } else if (typeof value === 'number') {
+          // Rating (1-5) shown as stars
+          if (key.includes('rating') || key === 'upwind_shift_awareness' || key === 'marks_layline_timing') {
+            const stars = '★'.repeat(value) + '☆'.repeat(5 - value);
+            return `  - ${label}: ${stars} (${value}/5)`;
+          }
+          return `  - ${label}: ${value}`;
+        } else if (Array.isArray(value)) {
+          return `  - ${label}: ${value.join(', ')}`;
+        }
+        return `  - ${label}: ${value}`;
+      });
+
+    if (phaseResponses.length > 0) {
+      formattedSections.push(`${phase.title}:\n${phaseResponses.join('\n')}`);
+    }
+  }
+
+  if (formattedSections.length === 0) {
+    return '';
+  }
+
+  return `
+Sailor's Structured Debrief:
+The sailor completed a guided post-race interview covering all phases of the race.
+Use this detailed self-assessment to inform your analysis.
+
+${formattedSections.join('\n\n')}
+
+`;
+}
+
+/**
  * Build a comprehensive prompt for race analysis
  */
 function buildRaceAnalysisPrompt(raceData: any, pastLearnings: any[] = []): string {
@@ -388,7 +497,9 @@ function buildRaceAnalysisPrompt(raceData: any, pastLearnings: any[] = []): stri
     : 0;
 
   const learningsContext = formatPastLearnings(pastLearnings);
-  const phaseRatingsContext = formatPhaseRatings(raceData.phase_ratings);
+  // Use new debrief responses if available, fall back to legacy phase ratings
+  const debriefContext = formatDebriefResponses(raceData.debrief_responses);
+  const phaseRatingsContext = debriefContext || formatPhaseRatings(raceData.phase_ratings);
 
   return `You are an expert sailing coach analyzing a completed race. Provide detailed performance analysis.
 
@@ -400,9 +511,10 @@ Race Details:
 ${phaseRatingsContext}${learningsContext}
 Analyze this race and provide feedback. Pay special attention to the sailor's self-assessments above - your analysis should:
 1. Validate their perceptions where appropriate
-2. Offer specific insights on phases they rated lower
-3. Suggest ways to build on phases they rated higher
-4. Reference past learnings when relevant, noting improvement or recurring issues
+2. Offer specific insights on phases they rated lower or mentioned issues
+3. Suggest ways to build on phases they rated higher or mentioned success
+4. Reference their key learnings and focus areas for next race
+5. Reference past learnings when relevant, noting improvement or recurring issues
 
 Format your response as a JSON object with these exact fields:
 {

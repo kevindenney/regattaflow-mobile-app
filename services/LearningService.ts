@@ -718,6 +718,13 @@ export class LearningService {
    */
   static async isEnrolled(userId: string, courseId: string): Promise<boolean> {
     try {
+      // Validate that courseId is a valid UUID before querying
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+      if (!isUUID) {
+        logger.warn('isEnrolled called with non-UUID courseId:', courseId, '- skipping database query');
+        return false;
+      }
+
       const { data, error } = await supabase
         .from('learning_enrollments')
         .select('id')

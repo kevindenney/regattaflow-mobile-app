@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
     const {
       messages,
       skillId,
-      model = "claude-3-5-haiku-latest",
+      model = "claude-3-haiku-20240307",
       max_tokens = 2048,
       temperature = 0.4,
     }: ClubOnboardingRequest = body;

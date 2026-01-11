@@ -771,13 +771,21 @@ class DocumentExtractionService {
    */
   async getStoredExtraction(documentId: string): Promise<ExtractionResult | null> {
     try {
+      logger.debug('[getStoredExtraction] Querying for document', { documentId });
+
       const { data: doc, error } = await supabase
         .from('documents')
         .select('ai_analysis')
         .eq('id', documentId)
         .single();
 
-      if (error || !doc?.ai_analysis) {
+      if (error) {
+        logger.debug('[getStoredExtraction] Query error', { documentId, error: error.message });
+        return null;
+      }
+
+      if (!doc?.ai_analysis) {
+        logger.debug('[getStoredExtraction] No ai_analysis found', { documentId, hasDoc: !!doc });
         return null;
       }
 
@@ -788,16 +796,25 @@ class DocumentExtractionService {
       };
 
       if (!aiAnalysis.raceData) {
+        logger.debug('[getStoredExtraction] ai_analysis exists but no raceData', { documentId });
         return null;
       }
+
+      const extractedFields = Object.keys(aiAnalysis.raceData).filter(
+        (key) => aiAnalysis.raceData?.[key as keyof ComprehensiveRaceData] != null
+      );
+
+      logger.debug('[getStoredExtraction] Found stored extraction', {
+        documentId,
+        extractedAt: aiAnalysis.extractedAt,
+        fieldsCount: extractedFields.length,
+      });
 
       return {
         success: true,
         data: aiAnalysis.raceData,
         confidence: aiAnalysis.confidence,
-        extractedFields: Object.keys(aiAnalysis.raceData).filter(
-          (key) => aiAnalysis.raceData?.[key as keyof ComprehensiveRaceData] != null
-        ),
+        extractedFields,
       };
     } catch (error) {
       logger.warn('Error getting stored extraction', { error, documentId });

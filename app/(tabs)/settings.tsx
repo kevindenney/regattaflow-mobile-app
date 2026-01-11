@@ -1,7 +1,9 @@
 import { ClubAiAssistant } from '@/components/ai/ClubAiAssistant';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
+import { useUserSettings } from '@/hooks/useUserSettings';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { useAuth } from '@/providers/AuthProvider';
+import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -11,7 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   Switch,
@@ -19,17 +21,20 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 export default function SettingsScreen() {
   const { user, userProfile, clubProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
   const { t } = useTranslation(['settings', 'common']);
+  const { settings: userSettings, updateSetting } = useUserSettings();
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
   const [claimLoading, setClaimLoading] = useState(false);
   const [languageVisible, setLanguageVisible] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [resetSampleLoading, setResetSampleLoading] = useState(false);
 
   // Get current language display name
   const currentLocale = getCurrentLocale();
@@ -124,6 +129,39 @@ export default function SettingsScreen() {
       setClaimPassword('');
       setClaimPasswordConfirm('');
     }
+  };
+
+  const handleResetSampleData = async () => {
+    Alert.alert(
+      'Reset Sample Data',
+      'This will create sample races to help you explore the app. Any existing sample races will remain.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create',
+          onPress: async () => {
+            setResetSampleLoading(true);
+            try {
+              const result = await createSailorSampleData({
+                userId: user!.id,
+                userName: userProfile?.full_name || 'Sailor',
+                force: true,
+              });
+              if (result.success) {
+                Alert.alert('Success', 'Sample races have been created! Check your races list.');
+              } else {
+                Alert.alert('Error', result.error || 'Failed to create sample data.');
+              }
+            } catch (error: any) {
+              console.error('[Settings] Reset sample data error:', error);
+              Alert.alert('Error', 'Failed to create sample data. Please try again.');
+            } finally {
+              setResetSampleLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const SettingItem = ({
@@ -221,6 +259,14 @@ export default function SettingsScreen() {
               subtitle={`Current plan: ${userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}`}
               onPress={() => router.push('/subscription')}
             />
+            {userProfile?.user_type === 'sailor' && (
+              <SettingItem
+                icon="refresh-outline"
+                title="Reset Sample Data"
+                subtitle="Recreate sample races for exploring the app"
+                onPress={handleResetSampleData}
+              />
+            )}
           </View>
         </View>
 
@@ -268,6 +314,32 @@ export default function SettingsScreen() {
               <Switch
                 value={darkMode}
                 onValueChange={setDarkMode}
+                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Learning & Tips */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Learning & Tips</Text>
+          <View style={styles.settingsGroup}>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <View style={styles.settingIcon}>
+                  <Ionicons name="bulb-outline" size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>Show Quick Tips</Text>
+                  <Text style={styles.settingSubtitle}>
+                    Display learning tips and links on checklist items
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={userSettings.showQuickTips}
+                onValueChange={(value) => updateSetting('showQuickTips', value)}
                 trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
                 thumbColor="#FFFFFF"
               />

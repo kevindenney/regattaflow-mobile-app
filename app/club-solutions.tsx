@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from '@/components/ui';
 import { Trophy, Users, Flag, Timer, ChartBar, Smartphone, Award } from 'lucide-react-native';
 

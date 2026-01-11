@@ -16,6 +16,7 @@ import { Platform } from 'react-native';
 
 import { BOAT_TUNING_SKILL_CONTENT } from '@/skills/tuning-guides/boatTuningSkill';
 import { RACE_LEARNING_SKILL_CONTENT } from '@/skills/race-learning-analyst/skillContent';
+import { LEARNING_EVENT_EXTRACTOR_SKILL_CONTENT } from '@/skills/learning-event-extractor/skillContent';
 import { createLogger } from '@/lib/utils/logger';
 
 // Race Phase Types
@@ -101,6 +102,11 @@ Return JSON with the following structure:
     description: 'Detects recurring post-race patterns and personalizes coaching feedback for each sailor',
     aliases: ['learning-analyst', 'post-race-learning', 'ai-learning-coach'],
     content: RACE_LEARNING_SKILL_CONTENT
+  },
+  'learning-event-extractor': {
+    description: 'Extracts structured learnable events from unstructured sailor feedback for adaptive learning nudges',
+    aliases: ['event-extractor', 'learning-extractor', 'adaptive-learning'],
+    content: LEARNING_EVENT_EXTRACTOR_SKILL_CONTENT
   },
   'tidal-opportunism-analyst': {
     description: 'Identifies current-driven opportunities, eddies, and anchoring decisions using bathymetry and WorldTides intel',
@@ -464,6 +470,9 @@ export const SKILL_REGISTRY = {
   // Post-race learning skill
   'race-learning-analyst': 'skill_01NsZX8FL8JfeNhqQ7qFQLLW',
 
+  // Adaptive learning event extraction skill
+  'learning-event-extractor': 'skill_builtin_learning_event_extractor',
+
   // RegattaFlow Coach finishing tactics (built-in fallback until API upload succeeds)
   'finishing-line-tactics': 'skill_builtin_finishing_line_tactics',
 
@@ -591,7 +600,7 @@ function resolveBuiltInSkill(skillName: string): { key: BuiltInSkillKey; definit
 }
 
 function getPreconfiguredSkillId(skillKey: BuiltInSkillKey): string | null {
-  const candidate = SKILL_REGISTRY[skillKey];
+  const candidate = (SKILL_REGISTRY as Record<string, string>)[skillKey];
   if (!candidate) {
     return null;
   }
@@ -973,6 +982,13 @@ export class SkillManagementService {
    */
   async initializeBoatTuningSkill(): Promise<string | null> {
     return this.initializeSkillInternal('boat-tuning-analyst');
+  }
+
+  /**
+   * Initialize learning-event-extractor skill
+   */
+  async initializeLearningEventExtractorSkill(): Promise<string | null> {
+    return this.initializeSkillInternal('learning-event-extractor');
   }
 
   /**

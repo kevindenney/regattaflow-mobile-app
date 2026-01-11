@@ -6,11 +6,12 @@
  * - Snap-to-card with spring physics
  * - Scale and opacity animations
  * - Haptic feedback at snap points
+ * - Accordion-style card expansion (only one expanded at a time)
  *
  * Uses FlatList with Reanimated for smooth 60fps scrolling.
  */
 
-import React, { useCallback, ReactElement, useMemo } from 'react';
+import React, { useCallback, ReactElement, useMemo, useState } from 'react';
 import { Platform, StyleSheet, View, ViewStyle, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -32,6 +33,7 @@ import {
   type DetailCardType,
 } from '@/constants/navigationAnimations';
 import { useDetailCardNavigation, DetailCard } from '@/hooks/useDetailCardNavigation';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 // =============================================================================
 // TYPES
@@ -44,6 +46,14 @@ export interface DetailCardData {
   [key: string]: unknown;
 }
 
+/**
+ * Options passed to renderCard for expansion state
+ */
+export interface RenderCardOptions {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
 export interface DetailCardPagerProps {
   /** Array of detail cards to display */
   cards?: DetailCardData[];
@@ -52,7 +62,12 @@ export interface DetailCardPagerProps {
   /** Currently selected card index */
   selectedIndex?: number;
   /** Render function for each detail card */
-  renderCard: (card: DetailCardData, index: number, isActive: boolean) => ReactElement;
+  renderCard: (
+    card: DetailCardData,
+    index: number,
+    isActive: boolean,
+    options?: RenderCardOptions
+  ) => ReactElement;
   /** Callback when active card changes */
   onCardChange?: (index: number, cardType: DetailCardType) => void;
   /** Callback when a card is pressed */
@@ -125,7 +140,7 @@ function AnimatedDetailCard({
     <Animated.View
       style={[
         styles.cardContainer,
-        { height: cardHeight },
+        { minHeight: cardHeight },
         animatedStyle,
         style,
       ]}
@@ -152,6 +167,9 @@ export function DetailCardPager({
   enableHaptics = true,
   testID,
 }: DetailCardPagerProps) {
+  // Expansion state - only one card can be expanded at a time (accordion)
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
   // Use the navigation hook
   const {
     flatListRef,
@@ -181,6 +199,18 @@ export function DetailCardPager({
   }, [cards, defaultDetailCards]);
 
   /**
+   * Handle card expansion toggle (accordion behavior)
+   * If the same card is tapped, collapse it
+   * If a different card is tapped, collapse current and expand new
+   */
+  const handleToggleExpand = useCallback((cardId: string) => {
+    if (enableHaptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setExpandedCardId((current) => (current === cardId ? null : cardId));
+  }, [enableHaptics]);
+
+  /**
    * Handle momentum scroll end to update active index
    */
   const onMomentumScrollEnd = useCallback(
@@ -197,6 +227,7 @@ export function DetailCardPager({
   const renderItem = useCallback(
     ({ item, index }: { item: DetailCardData; index: number }) => {
       const isActive = Math.round(activeIndex.value) === index;
+      const isExpanded = expandedCardId === item.id;
 
       return (
         <AnimatedDetailCard
@@ -207,7 +238,10 @@ export function DetailCardPager({
           style={cardStyle}
           onPress={onCardPress ? () => onCardPress(index, item) : undefined}
         >
-          {renderCard(item, index, isActive)}
+          {renderCard(item, index, isActive, {
+            isExpanded,
+            onToggle: () => handleToggleExpand(item.id),
+          })}
         </AnimatedDetailCard>
       );
     },
@@ -219,6 +253,8 @@ export function DetailCardPager({
       renderCard,
       onCardPress,
       cardStyle,
+      expandedCardId,
+      handleToggleExpand,
     ]
   );
 
@@ -246,9 +282,12 @@ export function DetailCardPager({
         data={detailCards}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        extraData={expandedCardId}
         // Vertical scroll
         horizontal={false}
         showsVerticalScrollIndicator={false}
+        // Allow immediate touch response on iOS (prevents FlatList from swallowing taps)
+        delaysContentTouches={false}
         // Snap behavior
         snapToInterval={snapInterval}
         snapToAlignment="start"
@@ -296,7 +335,7 @@ export function DetailCardPager({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // gray-50
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
     overflow: 'hidden',
   },
   emptyContainer: {
@@ -310,8 +349,8 @@ const styles = StyleSheet.create({
   cardContainer: {
     width: '100%',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
+    backgroundColor: IOS_COLORS.systemBackground,
+    shadowColor: IOS_COLORS.label,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,

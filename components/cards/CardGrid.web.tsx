@@ -1,14 +1,11 @@
 /**
- * CardGrid (Web) - 2D Card Navigation Component
+ * CardGrid (Web) - Horizontal Race Timeline Navigation
  *
- * Apple Human Interface Guidelines (HIG) compliant design:
- * - iOS system colors
+ * Simplified architecture:
+ * - Horizontal scrolling for race timeline navigation
+ * - Single RaceSummaryCard per race (full height, scrolls internally)
  * - CSS scroll-snap for smooth snapping
- * - Arrow key navigation
- * - Touch events for mobile web
- * - No heavy JS animations (better performance)
- *
- * This mirrors the native functionality but uses web-native features.
+ * - Arrow key navigation (left/right only)
  */
 
 import React, {
@@ -25,17 +22,12 @@ import {
   CardGridProps,
   CardRaceData,
   CardType,
-  CARD_TYPES,
-  CARD_COUNT,
-  CardPosition,
   CardDimensions,
 } from './types';
 import {
   calculateCardDimensions,
   HORIZONTAL_CARD_GAP,
-  VERTICAL_CARD_GAP,
   CARD_BORDER_RADIUS,
-  CARD_SHADOW,
   IOS_COLORS,
 } from './constants';
 
@@ -55,7 +47,9 @@ interface CardGridWebProps extends CardGridProps {
     onEdit?: () => void,
     onDelete?: () => void,
     onUploadDocument?: () => void,
-    onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void
+    onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void,
+    onOpenPostRaceInterview?: () => void,
+    userId?: string
   ) => React.ReactNode;
 }
 
@@ -66,9 +60,7 @@ interface CardGridWebProps extends CardGridProps {
 function CardGridComponent({
   races,
   initialRaceIndex = 0,
-  initialCardIndex = 0,
   onRaceChange,
-  onCardChange,
   renderCardContent,
   style,
   testID,
@@ -77,10 +69,10 @@ function CardGridComponent({
   onDeleteRace,
   onUploadDocument,
   onRaceComplete,
+  onOpenPostRaceInterview,
 }: CardGridWebProps) {
-  // Refs for scroll containers
+  // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
-  const verticalScrollRefs = useRef<Record<number, ScrollView | null>>({});
 
   // State
   const [dimensions, setDimensions] = useState<CardDimensions>(() =>
@@ -90,10 +82,6 @@ function CardGridComponent({
     )
   );
   const [currentRaceIndex, setCurrentRaceIndex] = useState(initialRaceIndex);
-  const [currentCardIndex, setCurrentCardIndex] = useState(initialCardIndex);
-  // Expansion state - tracks which card is currently expanded (null = none)
-  // Format: "raceId-cardType" or null
-  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
   // Update dimensions on resize
   useEffect(() => {
@@ -106,6 +94,11 @@ function CardGridComponent({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Calculate full height card dimensions
+  const cardHeight = useMemo(() => {
+    return dimensions.screenHeight - dimensions.contentPaddingTop * 2;
+  }, [dimensions]);
 
   // ==========================================================================
   // NAVIGATION
@@ -130,27 +123,6 @@ function CardGridComponent({
     [races, dimensions.cardWidth, onRaceChange]
   );
 
-  const goToCard = useCallback(
-    (index: number, animated = true) => {
-      const clampedIndex = Math.max(0, Math.min(index, CARD_COUNT - 1));
-      const offset = clampedIndex * (dimensions.cardHeight + VERTICAL_CARD_GAP);
-
-      // Scroll the vertical container for current race
-      verticalScrollRefs.current[currentRaceIndex]?.scrollTo({
-        y: offset,
-        animated,
-      });
-
-      setCurrentCardIndex(clampedIndex);
-
-      if (onCardChange) {
-        const cardType = CARD_TYPES[clampedIndex];
-        onCardChange(cardType, clampedIndex);
-      }
-    },
-    [dimensions.cardHeight, currentRaceIndex, onCardChange]
-  );
-
   // ==========================================================================
   // KEYBOARD NAVIGATION
   // ==========================================================================
@@ -166,20 +138,19 @@ function CardGridComponent({
           event.preventDefault();
           goToRace(currentRaceIndex + 1);
           break;
-        case 'ArrowUp':
-          event.preventDefault();
-          goToCard(currentCardIndex - 1);
-          break;
-        case 'ArrowDown':
-          event.preventDefault();
-          goToCard(currentCardIndex + 1);
-          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentRaceIndex, currentCardIndex, goToRace, goToCard]);
+  }, [currentRaceIndex, goToRace]);
+
+  // Respond to initialRaceIndex changes from parent (e.g., "upcoming" button)
+  useEffect(() => {
+    if (initialRaceIndex !== currentRaceIndex && initialRaceIndex >= 0 && initialRaceIndex < races.length) {
+      goToRace(initialRaceIndex);
+    }
+  }, [initialRaceIndex]);
 
   // ==========================================================================
   // SCROLL HANDLERS
@@ -202,148 +173,78 @@ function CardGridComponent({
     [dimensions.cardWidth, currentRaceIndex, races, onRaceChange]
   );
 
-  const handleVerticalScroll = useCallback(
-    (raceIndex: number) => (event: any) => {
-      if (raceIndex !== currentRaceIndex) return;
-
-      const offsetY = event.nativeEvent.contentOffset.y;
-      const snapInterval = dimensions.cardHeight + VERTICAL_CARD_GAP;
-      const newIndex = Math.round(offsetY / snapInterval);
-
-      if (newIndex !== currentCardIndex && newIndex >= 0 && newIndex < CARD_COUNT) {
-        setCurrentCardIndex(newIndex);
-
-        if (onCardChange) {
-          const cardType = CARD_TYPES[newIndex];
-          onCardChange(cardType, newIndex);
-        }
-      }
-    },
-    [dimensions.cardHeight, currentRaceIndex, currentCardIndex, onCardChange]
-  );
-
   // ==========================================================================
   // RENDER CARD
   // ==========================================================================
 
   const renderCard = useCallback(
-    (race: CardRaceData, raceIndex: number, cardType: CardType, cardIndex: number) => {
-      const isActive = raceIndex === currentRaceIndex && cardIndex === currentCardIndex;
+    (race: CardRaceData, raceIndex: number) => {
+      const isActive = raceIndex === currentRaceIndex;
 
-      // Check if this specific card is expanded
-      const cardKey = `${race.id}-${cardType}`;
-      const isExpanded = expandedCard === cardKey;
-
-      // Create toggle callback for this specific card
-      const onToggleExpand = () => {
-        setExpandedCard((current) => (current === cardKey ? null : cardKey));
-      };
-
-      // Determine if user can manage this race (only show on race_summary card)
-      const canManage = cardType === 'race_summary' && !!userId && race.created_by === userId;
+      // Determine if user can manage this race
+      const canManage = !!userId && race.created_by === userId;
       const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
       const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
-      // Upload document callback (for regulatory card)
-      const handleUploadDocument = cardType === 'regulatory' && onUploadDocument
-        ? () => onUploadDocument(race.id)
-        : undefined;
-      // Race complete callback (for race_summary card timer)
-      const handleRaceComplete = cardType === 'race_summary' && onRaceComplete
+      const handleUploadDocument = onUploadDocument ? () => onUploadDocument(race.id) : undefined;
+      const handleRaceComplete = onRaceComplete
         ? (sessionId: string, raceName: string, raceId: string) => onRaceComplete(sessionId, raceName, raceId)
         : undefined;
+      const handleOpenPostRaceInterview = onOpenPostRaceInterview
+        ? () => onOpenPostRaceInterview(race.id, race.name)
+        : undefined;
+
+      // Handler for card navigation
+      const handleCardPress = () => {
+        if (raceIndex !== currentRaceIndex) {
+          goToRace(raceIndex);
+        }
+      };
 
       return (
         <Pressable
-          key={`${race.id}-${cardType}`}
+          key={race.id}
           style={[
             styles.card,
             {
               width: dimensions.cardWidth,
-              height: dimensions.cardHeight,
+              height: cardHeight,
               borderRadius: CARD_BORDER_RADIUS,
               opacity: isActive ? 1 : 0.7,
               transform: [{ scale: isActive ? 1 : 0.95 }],
             },
           ]}
-          onPress={() => {
-            if (raceIndex !== currentRaceIndex) {
-              goToRace(raceIndex);
-            } else if (cardIndex !== currentCardIndex) {
-              goToCard(cardIndex);
-            } else {
-              // Already active card - toggle expansion
-              onToggleExpand();
-            }
-          }}
+          onPress={handleCardPress}
         >
           {renderCardContent(
             race,
-            cardType,
+            'race_summary',
             isActive,
-            isExpanded,
-            onToggleExpand,
+            false, // isExpanded - web grid doesn't support expand/collapse
+            () => {}, // onToggleExpand - no-op for web grid
             canManage,
             handleEdit,
             handleDelete,
             handleUploadDocument,
-            handleRaceComplete
+            handleRaceComplete,
+            handleOpenPostRaceInterview,
+            userId
           )}
         </Pressable>
       );
     },
     [
       currentRaceIndex,
-      currentCardIndex,
       dimensions,
+      cardHeight,
       renderCardContent,
       goToRace,
-      goToCard,
       userId,
       onEditRace,
       onDeleteRace,
       onUploadDocument,
       onRaceComplete,
-      expandedCard,
+      onOpenPostRaceInterview,
     ]
-  );
-
-  // ==========================================================================
-  // RENDER VERTICAL STACK FOR ONE RACE
-  // ==========================================================================
-
-  const renderRaceVerticalStack = useCallback(
-    (race: CardRaceData, raceIndex: number) => {
-      return (
-        <View
-          key={race.id}
-          style={[
-            styles.raceColumn,
-            { width: dimensions.cardWidth + HORIZONTAL_CARD_GAP },
-          ]}
-        >
-          <ScrollView
-            ref={(ref) => {
-              verticalScrollRefs.current[raceIndex] = ref;
-            }}
-            style={styles.verticalScroll}
-            contentContainerStyle={[
-              styles.verticalContent,
-              { paddingTop: dimensions.contentPaddingTop },
-            ]}
-            showsVerticalScrollIndicator={false}
-            snapToInterval={dimensions.cardHeight + VERTICAL_CARD_GAP}
-            decelerationRate="fast"
-            onScroll={handleVerticalScroll(raceIndex)}
-            scrollEventThrottle={16}
-          >
-            {CARD_TYPES.map((cardType, cardIndex) =>
-              renderCard(race, raceIndex, cardType, cardIndex)
-            )}
-          </ScrollView>
-        </View>
-      );
-    },
-    [dimensions, renderCard, handleVerticalScroll]
   );
 
   // ==========================================================================
@@ -374,7 +275,7 @@ function CardGridComponent({
         onScroll={handleHorizontalScroll}
         scrollEventThrottle={16}
       >
-        {races.map((race, raceIndex) => renderRaceVerticalStack(race, raceIndex))}
+        {races.map((race, raceIndex) => renderCard(race, raceIndex))}
       </ScrollView>
 
       {/* Navigation hints */}
@@ -394,7 +295,7 @@ function CardGridComponent({
 export const CardGrid = memo(CardGridComponent);
 
 // =============================================================================
-// STYLES (Apple HIG Compliant)
+// STYLES
 // =============================================================================
 
 const styles = StyleSheet.create({
@@ -412,24 +313,16 @@ const styles = StyleSheet.create({
   },
   horizontalContent: {
     flexDirection: 'row',
-  },
-  raceColumn: {
-    height: '100%',
-  },
-  verticalScroll: {
-    flex: 1,
-  },
-  verticalContent: {
-    gap: VERTICAL_CARD_GAP,
-    paddingBottom: 100,
+    gap: HORIZONTAL_CARD_GAP,
+    alignItems: 'flex-start',
+    paddingTop: 40,
   },
   card: {
     backgroundColor: IOS_COLORS.systemBackground,
     overflow: 'hidden',
-    // @ts-ignore - Web-only property (iOS-style subtle shadow)
+    // @ts-ignore - Web-only property
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
     transition: 'transform 0.2s ease, opacity 0.2s ease',
-    marginBottom: VERTICAL_CARD_GAP,
   },
   navigationHint: {
     position: 'absolute',

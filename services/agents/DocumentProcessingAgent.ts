@@ -17,7 +17,7 @@ export class DocumentProcessingAgent extends BaseAgentService {
 
   constructor() {
     super({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       maxTokens: 3000,
       temperature: 0.4, // Balanced for extraction accuracy
       systemPrompt: `You are a sailing document processing specialist for RegattaFlow.
@@ -278,7 +278,7 @@ Provide tactical analysis in JSON format:
 
           // Using Claude 3.5 Haiku for cost optimization
           const message = await this.anthropic.messages.create({
-            model: 'claude-3-5-haiku-latest',
+            model: 'claude-3-haiku-20240307',
             max_tokens: 1024,
             temperature: 0.3,
             messages: [{

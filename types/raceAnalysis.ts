@@ -291,6 +291,15 @@ export interface PostRaceAnalysisFormProps {
   existingAnalysis?: RaceAnalysis;
   onComplete: (analysis: RaceAnalysis) => void;
   onCancel?: () => void;
+  /** For contextual nudges - race event ID */
+  raceEventId?: string;
+  /** For contextual nudges - venue ID */
+  venueId?: string;
+  /** For contextual nudges - current conditions */
+  conditions?: {
+    windSpeed?: number;
+    windDirection?: number;
+  };
 }
 
 export interface TacticalCoachingProps {
@@ -312,4 +321,65 @@ export interface FrameworkTrendsProps {
   sailorId: string;
   trends: FrameworkTrend[];
   correlations: PerformanceCorrelation[];
+}
+
+// =============================================================================
+// TUFTE "ABSENCE AS INTERFACE" TYPES
+// Coach annotations as marginalia on race data
+// =============================================================================
+
+/**
+ * Coach annotation/marginalia for a specific field on a race
+ * Used for Tufte-style inline coach feedback
+ */
+export interface CoachAnnotation {
+  id: string;
+  raceId: string;
+  coachId: string;
+  coachName: string;
+  /** Which field this annotation references */
+  field: CoachAnnotationField;
+  /** The annotation content */
+  comment: string;
+  /** When the annotation was created */
+  createdAt: Date;
+  /** Whether the sailor has seen this annotation */
+  isRead: boolean;
+}
+
+export type CoachAnnotationField =
+  | 'result'
+  | 'keyMoment'
+  | 'whatWorked'
+  | 'toImprove'
+  | 'start'
+  | 'upwind'
+  | 'downwind'
+  | 'finish'
+  | 'general';
+
+/**
+ * Race analysis completeness state for "absence as interface" display
+ */
+export interface RaceAnalysisState {
+  raceId: string;
+  /** Has the race occurred (past) */
+  isCompleted: boolean;
+  /** Days since race completion */
+  daysSinceRace: number;
+  /** Memory fading threshold reached (3+ days) */
+  memoryFading: boolean;
+
+  /** Data completeness indicators */
+  hasResult: boolean;
+  hasKeyMoment: boolean;
+  hasWhatWorked?: boolean;
+  hasToImprove?: boolean;
+  hasFullAnalysis: boolean;
+  /** AI Coach Analysis exists in ai_coach_analysis table */
+  hasAIAnalysis: boolean;
+
+  /** Coach feedback state */
+  coachAnnotations: CoachAnnotation[];
+  hasUnreadCoachFeedback: boolean;
 }

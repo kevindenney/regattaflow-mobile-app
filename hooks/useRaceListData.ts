@@ -28,6 +28,7 @@ export interface LiveRace {
   weatherError?: string;
   strategy?: unknown;
   critical_details?: unknown;
+  isDemo?: boolean;
   metadata?: {
     venue_name?: string;
     wind?: unknown;
@@ -38,6 +39,28 @@ export interface LiveRace {
     critical_details?: unknown;
   };
 }
+
+// =============================================================================
+// DEMO RACE (shown when user has no races)
+// =============================================================================
+
+/**
+ * Demo race shown in CardGrid when user has no real races.
+ * Allows users to explore the UI before adding their first race.
+ *
+ * Note: No `created_by` field, so delete/edit menu won't appear.
+ */
+export const DEMO_RACE: LiveRace = {
+  id: 'demo-race',
+  start_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week from now
+  date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  startTime: '10:00',
+  venue: 'Your Local Yacht Club',
+  isDemo: true,
+  metadata: {
+    venue_name: 'Your Local Yacht Club',
+  },
+};
 
 export interface UseRaceListDataParams {
   /** Live races from real-time subscription */

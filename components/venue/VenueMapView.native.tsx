@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { StyleSheet, View, ActivityIndicator, Platform, Text } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Platform, Text, TurboModuleRegistry } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,14 +18,23 @@ let PROVIDER_DEFAULT: any = null;
 let ClusteredMapView: any = null;
 let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
+// This prevents TurboModuleRegistry.getEnforcing from throwing
 try {
-  const maps = require('react-native-maps');
-  MapView = maps.default;
-  Marker = maps.Marker;
-  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
-  PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
-  ClusteredMapView = require('react-native-maps-super-cluster').default;
-  mapsAvailable = true;
+  // Use 'get' instead of 'getEnforcing' to check without throwing
+  const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+  if (nativeModule) {
+    // Only require react-native-maps if native module exists
+    const maps = require('react-native-maps');
+    MapView = maps.default;
+    Marker = maps.Marker;
+    PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+    PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
+    ClusteredMapView = require('react-native-maps-super-cluster').default;
+    mapsAvailable = true;
+  } else {
+    console.warn('[VenueMapView] RNMapsAirModule not registered - using fallback UI');
+  }
 } catch (e) {
   console.warn('[VenueMapView] react-native-maps not available (requires development build):', e);
 }

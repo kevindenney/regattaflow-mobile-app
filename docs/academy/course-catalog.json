@@ -160,6 +160,24 @@
                   "description": "Introduction to downwind sailing"
                 }
               ]
+            },
+            {
+              "id": "module-1-5",
+              "title": "Race Documents",
+              "orderIndex": 5,
+              "durationMinutes": 20,
+              "lessons": [
+                {
+                  "id": "lesson-1-5-1",
+                  "title": "Understanding Race Documents",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "RaceDocumentsBasicsInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 1200,
+                  "isFreePreview": true,
+                  "description": "Learn to read NOR, Sailing Instructions, and Course Diagrams - the essential documents for every race"
+                }
+              ]
             }
           ],
           "instructor": {
@@ -562,13 +580,33 @@
           },
           "description": "Learn to manage your race from start to finish: positioning, fleet management, and strategic decision-making.",
           "whatYouLearn": [
+            "Mastering all 6 race document types",
             "Fleet positioning",
             "Covering strategies",
             "When to split from the fleet",
             "Risk management",
             "Race-long strategy"
           ],
-          "modules": [],
+          "modules": [
+            {
+              "id": "module-6-1",
+              "title": "Mastering Race Documents",
+              "orderIndex": 1,
+              "durationMinutes": 45,
+              "lessons": [
+                {
+                  "id": "lesson-6-1-1",
+                  "title": "Advanced Race Documents",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "RaceDocumentsAdvancedInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 2700,
+                  "isFreePreview": false,
+                  "description": "Master all 6 document types: NOR, SI, Course Diagram, Amendments, NOTAM, and supplementary documents with scenario-based learning"
+                }
+              ]
+            }
+          ],
           "instructor": {
             "name": "Kevin Denney",
             "bio": "NorthU Certified Instructor",
@@ -591,6 +629,220 @@
           "certificate": {
             "enabled": true,
             "name": "Race Management Certificate"
+          }
+        },
+        {
+          "id": "course-13",
+          "title": "Race Preparation Mastery",
+          "slug": "race-preparation-mastery",
+          "level": "level-2",
+          "status": "available",
+          "releaseDate": "2025-01-15",
+          "duration": {
+            "totalMinutes": 240,
+            "lessons": 16,
+            "estimatedHours": 4
+          },
+          "price": {
+            "cents": 7500,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Complete pre-race preparation from forecast to start line. Master weather analysis, tactical planning, equipment setup, and race document interpretation.",
+          "longDescription": "This comprehensive course covers everything you need to know to prepare thoroughly for race day. From analyzing weather forecasts and currents to understanding race documents and optimizing your equipment setup, you'll learn the systematic approach used by top sailors to arrive at the start line fully prepared.",
+          "whatYouLearn": [
+            "Weather and forecast analysis",
+            "Current and tidal strategy",
+            "Wind shift prediction",
+            "Course strategy and layline calculations",
+            "Fleet positioning tactics",
+            "Equipment inspection and sail selection",
+            "Safety gear requirements",
+            "NOR and SI interpretation",
+            "Course signal recognition"
+          ],
+          "modules": [
+            {
+              "id": "module-13-1",
+              "title": "Weather & Conditions",
+              "orderIndex": 1,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-13-1-1",
+                  "title": "Forecast Analysis",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "WeatherAnalysisInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Learn to interpret weather forecasts and identify optimal racing windows"
+                },
+                {
+                  "id": "lesson-13-1-2",
+                  "title": "Reading Current & Tide",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "CurrentReadingInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Understand tidal currents and how they affect your race strategy"
+                },
+                {
+                  "id": "lesson-13-1-3",
+                  "title": "Predicting Wind Shifts",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "WindShiftPredictionInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Identify geographic and thermal wind shifts before they happen"
+                }
+              ]
+            },
+            {
+              "id": "module-13-2",
+              "title": "Tactical Planning",
+              "orderIndex": 2,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-13-2-1",
+                  "title": "Layline Calculator",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "LaylineCalculatorInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Calculate laylines accounting for wind, current, and boat performance"
+                },
+                {
+                  "id": "lesson-13-2-2",
+                  "title": "Fleet Positioning",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "FleetPositioningInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Visualize fleet dynamics and find clear air lanes"
+                },
+                {
+                  "id": "lesson-13-2-3",
+                  "title": "Mark Rounding Tactics",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "MarkRoundingTacticsInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Master inside/outside scenarios and approach strategies"
+                }
+              ]
+            },
+            {
+              "id": "module-13-3",
+              "title": "Equipment & Rigging",
+              "orderIndex": 3,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-13-3-1",
+                  "title": "Sail Selection",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "SailSelectionInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Match your sail inventory to the forecasted conditions"
+                },
+                {
+                  "id": "lesson-13-3-2",
+                  "title": "Safety Gear Check",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "SafetyGearCheckInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Scenario-based safety equipment decisions"
+                },
+                {
+                  "id": "lesson-13-3-3",
+                  "title": "Rig Tuning Basics",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "ShroudTensionSimulator",
+                  "orderIndex": 3,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Set up your rig for the expected conditions"
+                }
+              ]
+            },
+            {
+              "id": "module-13-4",
+              "title": "Rules & Documents",
+              "orderIndex": 4,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-13-4-1",
+                  "title": "NOR Essentials",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "NORQuizInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Master the critical elements of the Notice of Race"
+                },
+                {
+                  "id": "lesson-13-4-2",
+                  "title": "SI Interpretation",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "SIInterpreterInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Parse Sailing Instructions for race-critical information"
+                },
+                {
+                  "id": "lesson-13-4-3",
+                  "title": "Course Signals",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "CourseSignalsInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Recognize and respond to course signals and flags"
+                }
+              ]
+            }
+          ],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor with 20+ years of racing experience across multiple classes",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/race-preparation.jpg",
+          "skillsUsed": [
+            "race-strategy-analyst",
+            "weather-analyst",
+            "rules-advisor"
+          ],
+          "targetMarkets": [
+            "individual",
+            "club-racing",
+            "junior-program",
+            "university-team"
+          ],
+          "tags": [
+            "intermediate",
+            "preparation",
+            "weather",
+            "tactics",
+            "equipment",
+            "rules"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Race Preparation Mastery Certificate"
           }
         }
       ]
@@ -728,7 +980,80 @@
             "Speed testing techniques",
             "Tuning for different boat classes"
           ],
-          "modules": [],
+          "modules": [
+            {
+              "id": "module-9-1",
+              "title": "Rig Tuning Fundamentals",
+              "orderIndex": 1,
+              "durationMinutes": 45,
+              "lessons": [
+                {
+                  "id": "lesson-9-1-1",
+                  "title": "Understanding Shroud Tension",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "ShroudTensionSimulator",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Learn how upper and lower shroud tension affects forestay sag, mast bend, and sail shape"
+                },
+                {
+                  "id": "lesson-9-1-2",
+                  "title": "Mast Rake & Helm Balance",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "HelmBalanceInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Understand how mast rake affects center of effort and helm balance"
+                }
+              ]
+            },
+            {
+              "id": "module-9-2",
+              "title": "Sail Controls",
+              "orderIndex": 2,
+              "durationMinutes": 40,
+              "lessons": [
+                {
+                  "id": "lesson-9-2-1",
+                  "title": "Mainsail Controls",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "MainsailControlsInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Master vang, cunningham, and outhaul to control mainsail shape in all conditions"
+                }
+              ]
+            },
+            {
+              "id": "module-9-3",
+              "title": "Condition-Specific Tuning",
+              "orderIndex": 3,
+              "durationMinutes": 55,
+              "lessons": [
+                {
+                  "id": "lesson-9-3-1",
+                  "title": "Light Air Setup",
+                  "lessonType": "text",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Tuning your rig for maximum power in light conditions"
+                },
+                {
+                  "id": "lesson-9-3-2",
+                  "title": "Heavy Air Setup",
+                  "lessonType": "text",
+                  "orderIndex": 2,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Depowering techniques and rig setup for strong winds"
+                }
+              ]
+            }
+          ],
           "instructor": {
             "name": "Kevin Denney",
             "bio": "NorthU Certified Instructor",
@@ -880,7 +1205,70 @@
             "Night racing",
             "Offshore preparation"
           ],
-          "modules": [],
+          "modules": [
+            {
+              "id": "module-12-1",
+              "title": "Pre-Race Planning",
+              "orderIndex": 1,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-12-1-1",
+                  "title": "Route Planning & Crew Briefing",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "RouteBriefingInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": true,
+                  "description": "Create effective route briefings that align your crew on waypoints, hazards, and decision points"
+                },
+                {
+                  "id": "lesson-12-1-2",
+                  "title": "Weather Routing Fundamentals",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "WeatherRoutingInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 1200,
+                  "isFreePreview": false,
+                  "description": "Master weather routing software, GRIB files, and optimizing your route for forecasted conditions"
+                }
+              ]
+            },
+            {
+              "id": "module-12-2",
+              "title": "Navigation & Tactics",
+              "orderIndex": 2,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-12-2-1",
+                  "title": "Offshore Navigation",
+                  "lessonType": "text",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Navigate safely offshore: chart work, electronic aids, and backup systems"
+                }
+              ]
+            },
+            {
+              "id": "module-12-3",
+              "title": "Endurance & Crew Management",
+              "orderIndex": 3,
+              "durationMinutes": 60,
+              "lessons": [
+                {
+                  "id": "lesson-12-3-1",
+                  "title": "Watch Systems",
+                  "lessonType": "text",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Set up effective watch rotations for multi-day passages"
+                }
+              ]
+            }
+          ],
           "instructor": {
             "name": "Kevin Denney",
             "bio": "NorthU Certified Instructor",

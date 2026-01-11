@@ -1,32 +1,36 @@
 /**
  * RaceTypeSelector Component
- * Toggle selector for choosing between different racing formats
- * Used in Add Race flow and potentially for filtering
+ *
+ * Apple Human Interface Guidelines (HIG) compliant design:
+ * - iOS system colors from shared constants
+ * - Toggle selector for choosing between different racing formats
+ * - Used in Add Race flow and potentially for filtering
  */
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Sailboat, Navigation, Target, Users } from 'lucide-react-native';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 export type RaceType = 'fleet' | 'distance' | 'match' | 'team';
 
-// Race type theme colors
+// Race type theme colors (iOS semantic colors)
 export const RACE_TYPE_COLORS = {
   fleet: {
-    primary: '#0369A1',
-    badge: '#E0F2FE',
+    primary: IOS_COLORS.blue,
+    badge: `${IOS_COLORS.blue}15`,
   },
   distance: {
-    primary: '#7C3AED',
-    badge: '#EDE9FE',
+    primary: IOS_COLORS.purple,
+    badge: `${IOS_COLORS.purple}15`,
   },
   match: {
-    primary: '#EA580C',
-    badge: '#FFF7ED',
+    primary: IOS_COLORS.orange,
+    badge: `${IOS_COLORS.orange}15`,
   },
   team: {
-    primary: '#0D9488',
-    badge: '#F0FDFA',
+    primary: IOS_COLORS.teal,
+    badge: `${IOS_COLORS.teal}15`,
   },
 } as const;
 
@@ -35,87 +39,79 @@ interface RaceTypeSelectorProps {
   onChange: (type: RaceType) => void;
   disabled?: boolean;
   size?: 'normal' | 'compact';
+  /** Show all 4 race types (default: false shows only fleet/distance) */
+  showAllTypes?: boolean;
 }
 
-export function RaceTypeSelector({ 
-  value, 
-  onChange, 
+const RACE_TYPE_OPTIONS: Array<{
+  type: RaceType;
+  icon: typeof Sailboat;
+  label: string;
+  subtitle: string;
+}> = [
+  { type: 'fleet', icon: Sailboat, label: 'Fleet Racing', subtitle: 'Buoy courses' },
+  { type: 'distance', icon: Navigation, label: 'Distance Racing', subtitle: 'Offshore / passage' },
+  { type: 'match', icon: Target, label: 'Match Racing', subtitle: '1v1 competition' },
+  { type: 'team', icon: Users, label: 'Team Racing', subtitle: 'Multi-boat teams' },
+];
+
+export function RaceTypeSelector({
+  value,
+  onChange,
   disabled = false,
-  size = 'normal' 
+  size = 'normal',
+  showAllTypes = false,
 }: RaceTypeSelectorProps) {
   const isCompact = size === 'compact';
-  
+  const typesToShow = showAllTypes
+    ? RACE_TYPE_OPTIONS
+    : RACE_TYPE_OPTIONS.filter(opt => opt.type === 'fleet' || opt.type === 'distance');
+
   return (
     <View style={styles.container}>
       <Text style={[styles.label, isCompact && styles.labelCompact]}>Race Type</Text>
-      <View style={[styles.toggleContainer, isCompact && styles.toggleContainerCompact]}>
-        {/* Fleet Racing Option */}
-        <Pressable
-          style={[
-            styles.option,
-            isCompact && styles.optionCompact,
-            value === 'fleet' && styles.optionSelected,
-            disabled && styles.optionDisabled,
-          ]}
-          onPress={() => !disabled && onChange('fleet')}
-          disabled={disabled}
-        >
-          <View style={styles.optionContent}>
-            <Sailboat 
-              size={isCompact ? 18 : 24} 
-              color={value === 'fleet' ? '#FFFFFF' : '#64748B'} 
-            />
-            <Text style={[
-              styles.optionText,
-              isCompact && styles.optionTextCompact,
-              value === 'fleet' && styles.optionTextSelected,
-            ]}>
-              Fleet Racing
-            </Text>
-            {!isCompact && (
+      <View style={[
+        styles.toggleContainer,
+        isCompact && styles.toggleContainerCompact,
+        showAllTypes && styles.toggleContainerGrid,
+      ]}>
+        {typesToShow.map(({ type, icon: Icon, label, subtitle }) => (
+          <Pressable
+            key={type}
+            style={[
+              styles.option,
+              isCompact && styles.optionCompact,
+              showAllTypes && styles.optionGrid,
+              value === type && styles.optionSelected,
+              value === type && { backgroundColor: RACE_TYPE_COLORS[type].primary },
+              disabled && styles.optionDisabled,
+            ]}
+            onPress={() => !disabled && onChange(type)}
+            disabled={disabled}
+          >
+            <View style={styles.optionContent}>
+              <Icon
+                size={isCompact ? 18 : 24}
+                color={value === type ? IOS_COLORS.systemBackground : IOS_COLORS.gray}
+              />
               <Text style={[
-                styles.optionSubtext,
-                value === 'fleet' && styles.optionSubtextSelected,
+                styles.optionText,
+                isCompact && styles.optionTextCompact,
+                value === type && styles.optionTextSelected,
               ]}>
-                Buoy courses
+                {isCompact ? label.replace(' Racing', '') : label}
               </Text>
-            )}
-          </View>
-        </Pressable>
-
-        {/* Distance Racing Option */}
-        <Pressable
-          style={[
-            styles.option,
-            isCompact && styles.optionCompact,
-            value === 'distance' && styles.optionSelected,
-            disabled && styles.optionDisabled,
-          ]}
-          onPress={() => !disabled && onChange('distance')}
-          disabled={disabled}
-        >
-          <View style={styles.optionContent}>
-            <Navigation 
-              size={isCompact ? 18 : 24} 
-              color={value === 'distance' ? '#FFFFFF' : '#64748B'} 
-            />
-            <Text style={[
-              styles.optionText,
-              isCompact && styles.optionTextCompact,
-              value === 'distance' && styles.optionTextSelected,
-            ]}>
-              Distance Racing
-            </Text>
-            {!isCompact && (
-              <Text style={[
-                styles.optionSubtext,
-                value === 'distance' && styles.optionSubtextSelected,
-              ]}>
-                Offshore / passage
-              </Text>
-            )}
-          </View>
-        </Pressable>
+              {!isCompact && (
+                <Text style={[
+                  styles.optionSubtext,
+                  value === type && styles.optionSubtextSelected,
+                ]}>
+                  {subtitle}
+                </Text>
+              )}
+            </View>
+          </Pressable>
+        ))}
       </View>
     </View>
   );
@@ -179,7 +175,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: IOS_COLORS.secondaryLabel,
     marginBottom: 8,
   },
   labelCompact: {
@@ -193,12 +189,15 @@ const styles = StyleSheet.create({
   toggleContainerCompact: {
     gap: 8,
   },
+  toggleContainerGrid: {
+    flexWrap: 'wrap',
+  },
   option: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: IOS_COLORS.gray6,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#E2E8F0',
+    borderColor: IOS_COLORS.gray5,
     padding: 16,
     alignItems: 'center',
   },
@@ -206,9 +205,13 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
   },
+  optionGrid: {
+    flexBasis: '48%',
+    flexGrow: 0,
+  },
   optionSelected: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
+    backgroundColor: IOS_COLORS.blue,
+    borderColor: IOS_COLORS.blue,
   },
   optionDisabled: {
     opacity: 0.5,
@@ -220,7 +223,7 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: IOS_COLORS.secondaryLabel,
     marginTop: 4,
   },
   optionTextCompact: {
@@ -228,15 +231,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   optionTextSelected: {
-    color: '#FFFFFF',
+    color: IOS_COLORS.systemBackground,
   },
   optionSubtext: {
     fontSize: 11,
-    color: '#64748B',
+    color: IOS_COLORS.gray,
     marginTop: 2,
   },
   optionSubtextSelected: {
-    color: 'rgba(255,255,255,0.8)',
+    color: `${IOS_COLORS.systemBackground}CC`,
   },
   // Badge styles
   badge: {

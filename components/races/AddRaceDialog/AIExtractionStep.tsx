@@ -54,23 +54,113 @@ export function AIExtractionStep({
         setExtractionStep('parsing');
         setExtractionProgress(10);
 
+        // For File uploads, we need to create a blob URL for PDF.js
+        // content here is actually a URI string from DocumentPicker, not a File object
+        const fileUri = typeof content === 'string' ? content : URL.createObjectURL(content);
+
         // Extract text from PDF
-        const pdfResult = await PDFExtractionService.extractTextFromPDF(
-          content,
-          (progress) => setExtractionProgress(Math.min(30, 10 + progress * 0.2))
+        const pdfResult = await PDFExtractionService.extractText(
+          fileUri,
+          {
+            maxPages: 50,
+            onProgress: (progress) => setExtractionProgress(Math.min(30, 10 + progress * 0.2)),
+          }
         );
+
+        // Clean up blob URL if we created one
+        if (typeof content !== 'string') {
+          URL.revokeObjectURL(fileUri);
+        }
+
+        if (!pdfResult.success || !pdfResult.text) {
+          throw new Error(pdfResult.error || 'Failed to extract text from PDF');
+        }
         textContent = pdfResult.text;
       } else if (method === 'url' && typeof content === 'string') {
         setExtractionStep('parsing');
-        setExtractionProgress(15);
+        setExtractionProgress(10);
 
-        // Fetch URL content (simplified - in production use a proper fetcher)
-        try {
-          const response = await fetch(content);
-          textContent = await response.text();
-        } catch {
-          // If direct fetch fails, pass URL to extraction agent
-          textContent = `URL: ${content}`;
+        // Check if URL is a PDF
+        const isPdfUrl = content.toLowerCase().includes('.pdf') ||
+                         content.toLowerCase().includes('pdf=') ||
+                         content.includes('_files/ugd/'); // Wix PDF pattern
+
+        if (isPdfUrl) {
+          // Use pdf-proxy edge function to fetch PDF (avoids CORS issues)
+          console.log('[AIExtractionStep] Detected PDF URL, using pdf-proxy...');
+          try {
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+            const proxyUrl = `${supabaseUrl}/functions/v1/pdf-proxy?url=${encodeURIComponent(content)}`;
+
+            setExtractionProgress(15);
+            const proxyResponse = await fetch(proxyUrl, {
+              headers: {
+                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+              },
+            });
+
+            if (!proxyResponse.ok) {
+              const errorData = await proxyResponse.json().catch(() => ({}));
+              throw new Error(errorData.error || `Failed to fetch PDF: ${proxyResponse.status}`);
+            }
+
+            // Get PDF as blob
+            const pdfBlob = await proxyResponse.blob();
+            const blobUrl = URL.createObjectURL(pdfBlob);
+
+            setExtractionProgress(20);
+            console.log('[AIExtractionStep] PDF fetched, extracting text...');
+
+            // Extract text from PDF using PDFExtractionService
+            const pdfResult = await PDFExtractionService.extractText(blobUrl, {
+              maxPages: 50,
+              onProgress: (progress) => setExtractionProgress(Math.min(30, 20 + progress * 0.1)),
+            });
+
+            // Clean up blob URL
+            URL.revokeObjectURL(blobUrl);
+
+            if (!pdfResult.success || !pdfResult.text) {
+              throw new Error(pdfResult.error || 'Failed to extract text from PDF');
+            }
+
+            textContent = pdfResult.text;
+            console.log('[AIExtractionStep] PDF text extracted, length:', textContent.length);
+          } catch (pdfError: any) {
+            console.error('[AIExtractionStep] PDF extraction failed:', pdfError);
+            // Provide helpful error message
+            throw new Error(
+              `Could not extract text from this PDF URL. ${pdfError.message}\n\n` +
+              'Tip: Try downloading the PDF and using the "Upload PDF" option instead.'
+            );
+          }
+        } else {
+          // Non-PDF URL - try direct fetch (may fail due to CORS)
+          try {
+            const response = await fetch(content);
+            const contentType = response.headers.get('content-type') || '';
+
+            if (contentType.includes('pdf')) {
+              // Content-type indicates PDF but URL didn't - use pdf-proxy
+              throw new Error('PDF_DETECTED');
+            }
+
+            textContent = await response.text();
+          } catch (fetchError: any) {
+            if (fetchError.message === 'PDF_DETECTED') {
+              throw new Error(
+                'This URL returns a PDF file. Please use the "Upload PDF" option or enter a direct link to a webpage instead.'
+              );
+            }
+            // If direct fetch fails due to CORS, provide helpful message
+            console.error('[AIExtractionStep] URL fetch failed:', fetchError);
+            throw new Error(
+              `Could not fetch content from this URL (likely blocked by CORS).\n\n` +
+              'Try one of these options:\n' +
+              '• Copy the text from the webpage and use "Paste Text"\n' +
+              '• If it\'s a PDF, download it and use "Upload PDF"'
+            );
+          }
         }
       } else if (typeof content === 'string') {
         textContent = content;

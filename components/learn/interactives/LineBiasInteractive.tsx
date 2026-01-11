@@ -552,7 +552,7 @@ export function LineBiasInteractive({
         <View style={[styles.mainContentArea, responsiveStyles.mainContentArea]}>
           {/* SVG Visualization - Left/Main */}
           <View style={[styles.svgContainer, responsiveStyles.svgContainer]}>
-            <Svg width="100%" height="100%" viewBox="0 0 800 550">
+            <Svg width="100%" height="100%" viewBox="0 0 900 550" preserveAspectRatio="xMidYMid meet">
           <Defs>
             <Marker id="arrowhead-bias" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
               <Polygon points="0,0 10,3.5 0,7" fill="#000" />
@@ -564,8 +564,8 @@ export function LineBiasInteractive({
           </Defs>
 
             {/* Water background */}
-            <Rect width="800" height="550" fill="#aaccff" />
-            <Rect width="800" height="550" fill="url(#water-texture-lb)" />
+            <Rect width="900" height="550" fill="#aaccff" />
+            <Rect width="900" height="550" fill="url(#water-texture-lb)" />
             
             {/* Laylines - both extend southeast (parallel close-hauled courses) */}
           <G opacity={0.35}>

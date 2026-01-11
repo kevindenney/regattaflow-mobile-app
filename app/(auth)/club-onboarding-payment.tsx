@@ -18,6 +18,7 @@ const ClubOnboardingPayment = () => {
   const [zipCode, setZipCode] = useState('');
   const [country, setCountry] = useState('US');
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'professional' | 'enterprise'>('professional');
+  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
   const [isProcessing, setIsProcessing] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
@@ -81,6 +82,7 @@ const ClubOnboardingPayment = () => {
       const result = await ClubSubscriptionService.createSubscription({
         userId,
         planId: selectedPlan,
+        billingPeriod,
         paymentMethodId: mockPaymentMethodId,
         billingDetails: {
           name: cardName,
@@ -184,8 +186,8 @@ const ClubOnboardingPayment = () => {
                   </View>
                 )}
                 <Text className="font-bold text-gray-800">{plan.name}</Text>
-                <Text className="text-blue-600 font-bold">{plan.price}</Text>
-                <Text className="text-gray-500 text-xs">{plan.period}</Text>
+                <Text className="text-blue-600 font-bold">{billingPeriod === 'monthly' ? plan.monthlyPriceFormatted : plan.annualPriceFormatted}</Text>
+                <Text className="text-gray-500 text-xs">{billingPeriod === 'monthly' ? '/month' : '/year'}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -332,7 +334,7 @@ const ClubOnboardingPayment = () => {
           <Text className="text-white font-bold text-lg">
             {isProcessing
               ? 'Processing...'
-              : `Pay ${plans.find(p => p.id === selectedPlan)?.priceFormatted} and Continue`}
+              : `Pay ${billingPeriod === 'monthly' ? plans.find(p => p.id === selectedPlan)?.monthlyPriceFormatted : plans.find(p => p.id === selectedPlan)?.annualPriceFormatted} and Continue`}
           </Text>
         </TouchableOpacity>
 

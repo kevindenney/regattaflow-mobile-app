@@ -39,23 +39,19 @@ const calculateTimeLeft = (targetDate: Date): TimeLeft => {
   };
 };
 
-const TimeBlock: React.FC<{ value: number; label: string; compact?: boolean }> = ({
-  value,
-  label,
-  compact = false,
-}) => {
-  // Pluralize label based on value (e.g., "1 day" vs "2 days")
-  const singularLabel = label.replace(/S$/, '');
-  const displayLabel = value === 1 ? singularLabel : label;
+/**
+ * Tufte compact format: "2d 4h 30m" instead of verbose blocks
+ */
+const formatCompactCountdown = (timeLeft: TimeLeft, compact: boolean): string => {
+  const { days, hours, minutes } = timeLeft;
 
-  return (
-    <View style={styles.timeBlock}>
-      <Text style={compact ? styles.timeValueCompact : styles.timeValue}>
-        {String(value).padStart(2, '0')}
-      </Text>
-      <Text style={compact ? styles.timeLabelCompact : styles.timeLabel}>{displayLabel}</Text>
-    </View>
-  );
+  if (days > 0) {
+    return compact ? `${days}d ${hours}h` : `${days}d ${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 };
 
 export const CountdownTimer: React.FC<CountdownTimerProps> = ({
@@ -81,23 +77,12 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     );
   }
 
+  // Tufte compact format: single line, no verbose labels
   return (
     <View style={[styles.timerRow, compact && styles.timerRowCompact]}>
-      {timeLeft.days > 0 && (
-        <>
-          <TimeBlock value={timeLeft.days} label="DAYS" compact={compact} />
-          <Text style={compact ? styles.separatorCompact : styles.separator}> </Text>
-        </>
-      )}
-      <TimeBlock value={timeLeft.hours} label="HRS" compact={compact} />
-      <Text style={compact ? styles.separatorCompact : styles.separator}> </Text>
-      <TimeBlock value={timeLeft.minutes} label="MINS" compact={compact} />
-      {!compact && (
-        <>
-          <Text style={styles.separator}> </Text>
-          <TimeBlock value={timeLeft.seconds} label="SECS" compact={compact} />
-        </>
-      )}
+      <Text style={compact ? styles.countdownCompact : styles.countdownFull}>
+        {formatCompactCountdown(timeLeft, compact)}
+      </Text>
     </View>
   );
 };
@@ -107,58 +92,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.xs,
   },
   timerRowCompact: {
-    gap: 3,
+    // Same as timerRow for compact format
   },
-  timeBlock: {
-    alignItems: 'center',
-    minWidth: 28,
-  },
-  timeValue: {
+  // Tufte compact countdown styles
+  countdownFull: {
     fontSize: 28,
-    fontWeight: '800',
-    color: colors.text.primary,
-    lineHeight: 32,
-    fontVariant: ['tabular-nums'],
-  },
-  timeValueCompact: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.text.primary,
-    lineHeight: 24,
-    fontVariant: ['tabular-nums'],
-  },
-  timeLabel: {
-    fontSize: 8,
     fontWeight: '700',
-    color: colors.text.tertiary,
-    letterSpacing: 0.5,
-    marginTop: 2,
-    textTransform: 'uppercase',
+    color: colors.text.primary,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
   },
-  timeLabelCompact: {
-    fontSize: 7,
-    fontWeight: '700',
-    color: colors.text.tertiary,
-    letterSpacing: 0.3,
-    marginTop: 1,
-    textTransform: 'uppercase',
-  },
-  separator: {
+  countdownCompact: {
     fontSize: 20,
-    fontWeight: '300',
-    color: colors.text.tertiary,
-    opacity: 0.3,
-    marginHorizontal: 2,
-  },
-  separatorCompact: {
-    fontSize: 16,
-    fontWeight: '300',
-    color: colors.text.tertiary,
-    opacity: 0.3,
-    marginHorizontal: 1,
+    fontWeight: '700',
+    color: colors.text.primary,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.3,
   },
   startedContainer: {
     paddingVertical: Spacing.xs,

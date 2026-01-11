@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal, Platform } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { View, Text, TouchableOpacity, ScrollView, Modal, Platform, TurboModuleRegistry } from 'react-native';
 import {
   Layers,
   Wind,
@@ -21,6 +20,32 @@ import {
   MapPin,
   Info
 } from 'lucide-react-native';
+
+// Conditional imports for react-native-maps
+let MapView: any = null;
+let Marker: any = null;
+let Polyline: any = null;
+let PROVIDER_DEFAULT: any = null;
+let mapsAvailable = false;
+
+// Check if native module is registered BEFORE requiring react-native-maps
+if (Platform.OS !== 'web') {
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      MapView = maps.default;
+      Marker = maps.Marker;
+      Polyline = maps.Polyline;
+      PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
+      mapsAvailable = true;
+    } else {
+      console.warn('[CourseMapView.native] RNMapsAirModule not registered - using fallback UI');
+    }
+  } catch (e) {
+    console.warn('[CourseMapView.native] react-native-maps not available:', e);
+  }
+}
 
 interface CourseMark {
   id: string;
@@ -83,7 +108,7 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
   prediction = null,
   selectedMarkId,
 }) => {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [selectedMark, setSelectedMark] = useState<CourseMark | null>(null);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('satellite');
@@ -283,6 +308,34 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
       </Modal>
     );
   };
+
+  // Fallback UI when maps aren't available
+  if (!mapsAvailable || !MapView) {
+    return (
+      <View className="flex-1 items-center justify-center bg-gray-100 p-4">
+        <MapPin size={48} color="#6B7280" />
+        <Text className="text-lg font-semibold text-gray-700 mt-4">Course Map</Text>
+        <Text className="text-sm text-gray-500 text-center mt-2">
+          Native maps require a development build.{'\n'}
+          {courseMarks.length} marks loaded.
+        </Text>
+        {courseMarks.length > 0 && (
+          <View className="mt-4 bg-white rounded-lg p-3 w-full">
+            {courseMarks.slice(0, 5).map((mark) => (
+              <Text key={mark.id} className="text-sm text-gray-600 py-1">
+                • {mark.name} ({mark.type})
+              </Text>
+            ))}
+            {courseMarks.length > 5 && (
+              <Text className="text-xs text-gray-400 mt-1">
+                +{courseMarks.length - 5} more marks
+              </Text>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1">

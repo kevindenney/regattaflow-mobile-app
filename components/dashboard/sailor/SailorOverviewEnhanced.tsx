@@ -610,7 +610,7 @@ export function SailorOverviewEnhanced({
             {/* Add Race Card */}
             <TouchableOpacity
               style={styles.addRaceCard}
-              onPress={() => router.push('/(tabs)/race/add')}
+              onPress={() => router.push('/(tabs)/race/add-tufte')}
             >
               <MaterialCommunityIcons name="plus-circle-outline" size={32} color="#3B82F6" />
               <Text style={styles.addRaceText}>Add Race</Text>

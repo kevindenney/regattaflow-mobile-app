@@ -39,7 +39,6 @@ export type StaticRoute =
   | '/(tabs)/clients'
   | '/(tabs)/coaching'
   | '/(tabs)/race-detail-demo'
-  | '/(tabs)/add-race-redesign'
   | '/(tabs)/boat/add'
   | '/(tabs)/coach/discover'
   | '/(tabs)/coach/bookings'

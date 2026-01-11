@@ -6,6 +6,9 @@
  * Step 2: Choose input method (AI extraction or Manual)
  * Step 3a: AI extraction flow (AIQuickEntry → Progress → Results)
  * Step 3b: Manual entry form
+ *
+ * NOTE: When USE_TUFTE_ADD_RACE_FORM feature flag is enabled,
+ * this renders TufteAddRaceForm instead (single-page form).
  */
 
 import React, { useState, useCallback } from 'react';
@@ -15,10 +18,11 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  SafeAreaView,
+  
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, X, Sparkles } from 'lucide-react-native';
 import { Typography, Spacing, BorderRadius, colors, Shadows } from '@/constants/designSystem';
 import { RaceType, RACE_TYPE_COLORS } from '../RaceTypeSelector';
@@ -27,6 +31,8 @@ import { RaceTypeStep } from './RaceTypeStep';
 import { InputMethodStep, InputMethod } from './InputMethodStep';
 import { AIExtractionStep } from './AIExtractionStep';
 import { RaceDetailsStep, RaceFormData } from './RaceDetailsStep';
+import { TufteAddRaceForm } from './TufteAddRaceForm';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import type { ExtractedRaceData } from '../ExtractionResults';
 
 interface AddRaceDialogProps {
@@ -38,6 +44,20 @@ interface AddRaceDialogProps {
 type Step = 'type' | 'input-method' | 'ai-extraction' | 'details';
 
 export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) {
+  // Use Tufte-style single-page form when feature flag is enabled
+  if (FEATURE_FLAGS.USE_TUFTE_ADD_RACE_FORM) {
+    return <TufteAddRaceForm visible={visible} onClose={onClose} onSave={onSave} />;
+  }
+
+  // Legacy multi-step wizard (below)
+  return <LegacyAddRaceDialog visible={visible} onClose={onClose} onSave={onSave} />;
+}
+
+/**
+ * Legacy Multi-Step Add Race Dialog
+ * Kept for fallback when feature flag is disabled
+ */
+function LegacyAddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) {
   const [step, setStep] = useState<Step>('type');
   const [selectedType, setSelectedType] = useState<RaceType | null>(null);
   const [isSaving, setIsSaving] = useState(false);

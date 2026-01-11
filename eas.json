@@ -26,7 +26,8 @@
       },
       "ios": {
         "simulator": false,
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "buildConfiguration": "Release"
       },
       "android": {
         "buildType": "apk",

@@ -21,10 +21,11 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
-  SafeAreaView,
+  
   Modal,
   TextInput,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -61,6 +62,7 @@ import { EditFormRow } from './EditFormRow';
 import { AccordionSection } from '../AccordionSection';
 import { RaceTypeSelector, type RaceType } from '../RaceTypeSelector';
 import { LocationMapPicker } from '../LocationMapPicker';
+import { BoatSelector } from '../AddRaceDialog/BoatSelector';
 import { CourseBuilder, type CourseDraft } from '@/components/courses/CourseBuilder';
 import { TufteTokens, colors } from '@/constants/designSystem';
 import { IOS_COLORS } from '@/components/cards/constants';
@@ -96,6 +98,10 @@ interface RaceFormData {
 
   // Type
   raceType: RaceType;
+
+  // Boat Selection
+  boatId: string | null;
+  classId: string | null;
 
   // Fleet Details
   boatClass: string;
@@ -157,6 +163,8 @@ const DEFAULT_FORM_DATA: RaceFormData = {
   venueCoordinates: null,
   description: '',
   raceType: 'fleet',
+  boatId: null,
+  classId: null,
   boatClass: '',
   expectedFleetSize: '',
   courseType: '',
@@ -337,7 +345,10 @@ export function EditRaceForm({
           : metadata.venue_coordinates || null,
         description: race.description || '',
         raceType: race.race_type || 'fleet',
-        boatClass: metadata.boat_class || '',
+        // Boat Selection
+        boatId: race.boat_id || null,
+        classId: race.class_id || null,
+        boatClass: metadata.boat_class || metadata.class_name || '',
         expectedFleetSize: race.expected_fleet_size?.toString() || '',
         courseType: metadata.course_type || race.course_area_designation || '',
         totalDistanceNm: race.total_distance_nm?.toString() || '',
@@ -423,6 +434,14 @@ export function EditRaceForm({
     updateField('venue', location.name);
     updateField('venueCoordinates', { lat: location.lat, lng: location.lng });
     setShowLocationPicker(false);
+  }, [updateField]);
+
+  const handleBoatSelect = useCallback((boatId: string | null, classId: string | null, className: string | null) => {
+    updateField('boatId', boatId);
+    updateField('classId', classId);
+    if (className) {
+      updateField('boatClass', className);
+    }
   }, [updateField]);
 
   const handleCourseDesigned = useCallback((course: CourseDraft) => {
@@ -593,6 +612,9 @@ export function EditRaceForm({
         start_area_name: formData.venue || null,
         description: formData.description || null,
         race_type: formData.raceType,
+        // Boat selection
+        boat_id: formData.boatId || null,
+        class_id: formData.classId || null,
         // Fleet Racing fields (columns that exist)
         expected_fleet_size: formData.expectedFleetSize ? parseInt(formData.expectedFleetSize, 10) : null,
         course_area_designation: formData.courseType || null,
@@ -865,6 +887,23 @@ export function EditRaceForm({
               showSeparator={false}
             />
           </EditFormSection>
+
+          {/* Boat Selection (for fleet and distance races) */}
+          {(formData.raceType === 'fleet' || formData.raceType === 'distance') && (
+            <EditFormSection
+              title="Your Boat"
+              icon={<Sailboat size={16} color={colors.neutral[500]} />}
+            >
+              <View style={styles.boatSelectorContainer}>
+                <BoatSelector
+                  selectedBoatId={formData.boatId}
+                  onSelect={handleBoatSelect}
+                  label="Boat"
+                  placeholder="Select your boat (optional)"
+                />
+              </View>
+            </EditFormSection>
+          )}
 
           {/* Fleet Details (conditional) */}
           {formData.raceType === 'fleet' && (
@@ -1401,6 +1440,12 @@ const styles = StyleSheet.create({
   raceTypeSection: {
     paddingHorizontal: TufteTokens.spacing.section,
     marginBottom: TufteTokens.spacing.section,
+  },
+
+  // Boat Selector
+  boatSelectorContainer: {
+    paddingHorizontal: TufteTokens.spacing.section,
+    paddingVertical: TufteTokens.spacing.compact,
   },
 
   // Advanced Section

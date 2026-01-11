@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { SequenceStep, FlagState } from '../data/startSequenceData';
 
 // Flag definitions with colors and patterns
-const FLAG_DEFINITIONS = {
+const FLAG_DEFINITIONS: Record<string, { color: string; pattern?: string; name: string; description: string }> = {
   orange: { color: '#FF6B00', name: 'Orange', description: 'RC on Station' },
   class: { color: '#CC0000', pattern: 'diagonal', name: 'Class Flag', description: 'Warning Signal' },
   p: { color: '#0066CC', pattern: 'whiteCenter', name: 'P Flag', description: 'Standard preparatory. Return behind line if OCS.' },
@@ -33,7 +33,7 @@ interface FlagGraphicProps {
 }
 
 function FlagGraphic({ flagId, isUp, size = 24 }: FlagGraphicProps) {
-  const flag = FLAG_DEFINITIONS[flagId as keyof typeof FLAG_DEFINITIONS];
+  const flag = FLAG_DEFINITIONS[flagId];
   if (!flag || !isUp) return null;
 
   const width = size;
@@ -75,7 +75,7 @@ function MastGraphic({ visualState }: MastGraphicProps) {
         
         {/* Flags on mast */}
         {flagsToShow.map(([flagId], index) => {
-          const flag = FLAG_DEFINITIONS[flagId as keyof typeof FLAG_DEFINITIONS];
+          const flag = FLAG_DEFINITIONS[flagId];
           if (!flag) return null;
           
           const yPos = 25 + (index * 15);

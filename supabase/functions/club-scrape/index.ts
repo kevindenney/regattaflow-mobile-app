@@ -117,7 +117,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { url, skillId, model = "claude-3-5-haiku-latest" }: ScrapeRequest = await req.json();
+    const { url, skillId, model = "claude-3-haiku-20240307" }: ScrapeRequest = await req.json();
 
     if (!url || typeof url !== "string") {
       return new Response(

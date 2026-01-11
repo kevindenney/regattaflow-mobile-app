@@ -126,8 +126,7 @@ export class RaceWeatherService {
       
       return weatherMetadata;
 
-    } catch (error: any) {
-      console.error('[RaceWeatherService] Error fetching weather by coordinates:', error.message);
+    } catch (_error: any) {
       return null;
     }
   }
@@ -201,7 +200,6 @@ export class RaceWeatherService {
       // Add timeout to weather fetch
       const timeoutPromise = new Promise<null>((resolve) =>
         setTimeout(() => {
-          console.warn('[RaceWeatherService] Weather fetch timeout - using defaults');
           resolve(null);
         }, 15000)
       );
@@ -215,7 +213,6 @@ export class RaceWeatherService {
       const weatherData = await Promise.race([weatherPromise, timeoutPromise]);
 
       if (!weatherData) {
-        console.warn(`[RaceWeatherService] No weather data available for ${venue.name}`);
         return null;
       }
 
@@ -324,8 +321,7 @@ export class RaceWeatherService {
 
       return weatherMetadata;
 
-    } catch (error: any) {
-      console.error('[RaceWeatherService] Error fetching weather:', error);
+    } catch (_error: any) {
       return null;
     }
   }
@@ -376,12 +372,10 @@ export class RaceWeatherService {
       logger.debug(`[RaceWeatherService] Venue query completed`, { venues: venues?.length, error });
 
       if (error) {
-        console.warn(`[RaceWeatherService] Venue lookup error:`, error);
         return null;
       }
 
       if (!venues || venues.length === 0) {
-        console.warn(`[RaceWeatherService] Venue not found in database: ${cleanVenueName}`);
         return null;
       }
 
@@ -415,8 +409,7 @@ export class RaceWeatherService {
 
       return this.fetchWeatherForRace(sailingVenue, targetDate.toISOString());
 
-    } catch (error: any) {
-      console.error('[RaceWeatherService] Error in fetchWeatherByVenueName:', error.message);
+    } catch (_error: any) {
       return null;
     }
   }
@@ -494,8 +487,7 @@ export class RaceWeatherService {
 
       const offset = zonedUTC - utcDate.getTime();
       return new Date(utcDate.getTime() - offset);
-    } catch (error) {
-      console.warn('[RaceWeatherService] Failed to combine date/time with timezone, using base date', error);
+    } catch (_error) {
       return new Date(dateString);
     }
   }

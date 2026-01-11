@@ -174,6 +174,12 @@ function extractVenueCoordinates(regatta: RegattaRaw): { lat: number; lng: numbe
     return { lat: venueCoords.lat, lng: venueCoords.lng };
   }
 
+  // 3b. Check start_coordinates (from add-tufte form)
+  const startCoords = metadata.start_coordinates;
+  if (startCoords?.lat && startCoords?.lng) {
+    return { lat: startCoords.lat, lng: startCoords.lng };
+  }
+
   // 4. Check route_waypoints (distance racing) - calculate centroid
   const waypoints = regatta.route_waypoints;
   if (Array.isArray(waypoints) && waypoints.length > 0) {
@@ -377,6 +383,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           critical_details,
           created_by: regatta.created_by, // Preserve for edit/delete permission checks
           venueCoordinates, // Include coordinates for weather fetching
+          metadata: regatta.metadata, // Preserve full metadata for sample detection
           // Distance racing fields
           race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
           total_distance_nm: regatta.total_distance_nm,
@@ -545,7 +552,13 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           if (!coords && venueCoords?.lat && venueCoords?.lng) {
             coords = { lat: venueCoords.lat, lng: venueCoords.lng };
           }
-          
+
+          // 3b. Check start_coordinates (from add-tufte form)
+          const startCoords = regatta.metadata?.start_coordinates;
+          if (!coords && startCoords?.lat && startCoords?.lng) {
+            coords = { lat: startCoords.lat, lng: startCoords.lng };
+          }
+
           // 4. Check route_waypoints (distance racing) - calculate centroid
           const waypoints = regatta.route_waypoints;
           if (!coords && Array.isArray(waypoints) && waypoints.length > 0) {
@@ -681,6 +694,9 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           }
         }
 
+        // Extract venue coordinates even in error path
+        const venueCoordinates = extractVenueCoordinates(regatta);
+
         return {
           id: regatta.id,
           name: regatta.name,
@@ -702,6 +718,16 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
             vhf_channel: vhfChannel,
           },
           created_by: regatta.created_by, // Preserve for edit/delete permission checks
+          venueCoordinates, // Include coordinates for weather fetching
+          metadata: regatta.metadata, // Preserve full metadata for sample detection & coordinates
+          // Distance racing fields
+          race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
+          total_distance_nm: regatta.total_distance_nm,
+          time_limit_hours: regatta.time_limit_hours,
+          time_limit_minutes: regatta.time_limit_minutes,
+          route_waypoints: regatta.route_waypoints,
+          start_finish_same_location: regatta.start_finish_same_location,
+          finish_venue: regatta.finish_venue,
         };
       }));
     } finally {

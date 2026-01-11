@@ -7,16 +7,15 @@
  * - Timeline: RaceTimelineLayout with vertical detail card pager
  */
 
-// Debug version marker - helps verify bundle updates
-console.log('[RealRacesCarousel] MODULE LOADED - v2 with status detection');
-
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, Platform } from 'react-native';
+import { View, ScrollView, Platform, Dimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AppleRaceCard } from '@/components/races/AppleRaceCard';
 import { AppleStyleRaceCard } from '@/components/races/AppleStyleRaceCard';
 import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
 import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
+import { PracticeTimelineCard } from '@/components/races/PracticeTimelineCard';
+import type { PracticeSession } from '@/types/practice';
 import { TimelineIndicators } from '@/components/races/TimelineIndicators';
 import { CarouselNavArrows } from '@/components/races/CarouselNavArrows';
 import { RaceDetailZone } from '@/components/races/RaceDetailZone';
@@ -33,12 +32,17 @@ import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
 import { IOS_COLORS } from '@/components/cards/constants';
 
 // Layout constants
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 140 : 120; // Including safe area, nav header, and venue display
+const TAB_BAR_HEIGHT = 80; // Bottom tab bar
+const AVAILABLE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TAB_BAR_HEIGHT;
+
 const HERO_ZONE_HEIGHT = 280;
 const MOBILE_CENTERING_PADDING = 16;
 const MOBILE_CARD_GAP = 12;
-const MOBILE_CARD_WIDTH = 320;
+const MOBILE_CARD_WIDTH = Platform.OS === 'web' ? 390 : 320;
 const MOBILE_SNAP_INTERVAL = MOBILE_CARD_WIDTH + MOBILE_CARD_GAP;
-const RACE_CARD_HEIGHT = 240;
+const RACE_CARD_HEIGHT = Math.floor(AVAILABLE_HEIGHT * 0.97); // ~97% of available screen space
 const DETAIL_ZONE_HEIGHT = 400;
 
 type RaceStatus = 'next' | 'future' | 'today' | 'past';
@@ -52,9 +56,20 @@ export interface UserRaceResult {
   totalRaces?: number;
 }
 
+// Timeline item type for combined races and practice sessions
+export interface TimelineItem {
+  type: 'race' | 'practice';
+  data: any;
+  date: Date;
+}
+
 export interface RealRacesCarouselProps {
   /** Array of race data */
   races: any[];
+  /** Array of practice sessions to display in timeline */
+  practiceSessions?: PracticeSession[];
+  /** Callback when a practice session is selected */
+  onSelectPractice?: (id: string) => void;
   /** The next upcoming race */
   nextRace: any | null;
   /** Currently selected race ID */
@@ -81,6 +96,8 @@ export interface RealRacesCarouselProps {
   onEditRace?: (raceId: string) => void;
   /** Callback when delete is requested */
   onDeleteRace?: (raceId: string, raceName: string) => void;
+  /** Race ID currently being deleted (for loading overlay) */
+  deletingRaceId?: string | null;
   /** Use new timeline layout with vertical card pager (default: false) */
   useTimelineLayout?: boolean;
   /** Callback when detail card changes (timeline layout mode) */
@@ -100,6 +117,8 @@ export interface RealRacesCarouselProps {
  */
 export function RealRacesCarousel({
   races,
+  practiceSessions,
+  onSelectPractice,
   nextRace,
   selectedRaceId,
   onSelectRace,
@@ -113,6 +132,7 @@ export function RealRacesCarousel({
   getRaceStatus,
   onEditRace,
   onDeleteRace,
+  deletingRaceId,
   useTimelineLayout = false,
   onDetailCardChange,
   useAppleStyle = false,
@@ -120,105 +140,86 @@ export function RealRacesCarousel({
   onAddDebrief,
   pastRaceIds,
 }: RealRacesCarouselProps) {
-  // Debug: Component props (unconditional for debugging)
-  console.log('[RealRacesCarousel] RENDER - props:', {
-    useTimelineLayout,
-    selectedRaceId,
-    hasSelectedRaceData: !!selectedRaceData,
-    selectedRaceDataName: selectedRaceData?.name,
-    racesCount: races?.length,
-  });
   const scrollViewRef = useRef<ScrollView>(null);
   const [scrollX, setScrollX] = useState(0);
   const [scrollContentWidth, setScrollContentWidth] = useState(0);
 
-  // Find selected race index for timeline layout
-  const selectedRaceIndex = useMemo(() => {
-    if (!selectedRaceId) return 0;
-    const index = races.findIndex((r) => r.id === selectedRaceId);
-    return index >= 0 ? index : 0;
-  }, [races, selectedRaceId]);
+  // Combine races and practice sessions into a single timeline sorted by date
+  const timelineItems: TimelineItem[] = useMemo(() => {
+    const items: TimelineItem[] = [];
 
-  // Debug: Log race data to identify duplicates
-  if (__DEV__ && races.length > 0) {
-    const raceIds = races.map(r => r.id);
-    const uniqueIds = new Set(raceIds);
-    console.log(`[RealRacesCarousel] Races: ${races.length} total, ${uniqueIds.size} unique`);
-    if (uniqueIds.size !== races.length) {
-      console.warn('[RealRacesCarousel] DUPLICATE RACES DETECTED:', {
-        total: races.length,
-        unique: uniqueIds.size,
-        ids: raceIds,
+    // Add races
+    races.forEach((race) => {
+      const raceDate = race.date || race.start_date || new Date().toISOString();
+      items.push({
+        type: 'race',
+        data: race,
+        date: new Date(raceDate),
+      });
+    });
+
+    // Add practice sessions
+    if (practiceSessions) {
+      practiceSessions.forEach((session) => {
+        items.push({
+          type: 'practice',
+          data: session,
+          date: new Date(session.scheduled_date),
+        });
       });
     }
-  }
 
-  // Find next race index for "jump to next" navigation
+    // Sort by date
+    return items.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [races, practiceSessions]);
+
+  // Find selected race index for timeline layout (searches in combined timeline)
+  const selectedRaceIndex = useMemo(() => {
+    if (!selectedRaceId) return 0;
+    const index = timelineItems.findIndex(
+      (item) => item.type === 'race' && item.data.id === selectedRaceId
+    );
+    return index >= 0 ? index : 0;
+  }, [timelineItems, selectedRaceId]);
+
+
+  // Find next race index for "jump to next" navigation (in combined timeline)
   const nextRaceIndex = useMemo(() => {
     if (!nextRace?.id) return undefined;
-    const index = races.findIndex((r) => r.id === nextRace.id);
+    const index = timelineItems.findIndex(
+      (item) => item.type === 'race' && item.data.id === nextRace.id
+    );
     return index >= 0 ? index : undefined;
-  }, [races, nextRace?.id]);
+  }, [timelineItems, nextRace?.id]);
 
   // Determine if selected race is completed (past)
   const selectedRaceStatus = useMemo(() => {
     if (!selectedRaceData) return 'upcoming';
     const isNextRace = !!(nextRace?.id && selectedRaceData.id === nextRace.id);
-    const status = getRaceStatus(selectedRaceData.date || new Date().toISOString(), isNextRace);
-    if (__DEV__) {
-      console.log('[RealRacesCarousel] Status detection:', {
-        raceId: selectedRaceData.id,
-        raceName: selectedRaceData.name,
-        raceDate: selectedRaceData.date,
-        isNextRace,
-        computedStatus: status,
-      });
-    }
-    return status;
+    return getRaceStatus(selectedRaceData.date || new Date().toISOString(), isNextRace);
   }, [selectedRaceData, nextRace?.id, getRaceStatus]);
 
   // Use pastRaceIds if available (most reliable), otherwise check race from array or selectedRaceStatus
   const isSelectedRaceCompleted = useMemo(() => {
-    // Debug logging - unconditional
-    const selectedRace = races[selectedRaceIndex];
-    const raceDate = selectedRace?.date || selectedRace?.start_date;
-    const isNextRace = !!(nextRace?.id && selectedRace?.id === nextRace.id);
-    const statusFromArray = selectedRace ? getRaceStatus(raceDate || new Date().toISOString(), isNextRace) : 'unknown';
-
-    console.log('[isSelectedRaceCompleted] DEBUG:', {
-      pastRaceIdsLength: pastRaceIds?.length,
-      selectedRaceId,
-      selectedRaceIndex,
-      selectedRaceName: selectedRace?.name,
-      selectedRaceDate: raceDate,
-      inPastRaceIds: pastRaceIds?.includes(selectedRaceId || ''),
-      statusFromArray,
-      selectedRaceStatus,
-    });
-
     // Primary: Use pastRaceIds (computed from liveRaces, always available)
     if (pastRaceIds && selectedRaceId && pastRaceIds.includes(selectedRaceId)) {
-      console.log('[isSelectedRaceCompleted] Returning TRUE via pastRaceIds');
       return true;
     }
 
     // Secondary: Check the race directly from the races array (works even if selectedRaceData not loaded)
+    const selectedRace = races[selectedRaceIndex];
     if (selectedRace) {
+      const raceDate = selectedRace?.date || selectedRace?.start_date;
+      const isNextRace = !!(nextRace?.id && selectedRace?.id === nextRace.id);
       const status = getRaceStatus(raceDate || new Date().toISOString(), isNextRace);
       if (status === 'past') {
-        console.log('[isSelectedRaceCompleted] Returning TRUE via races array check');
         return true;
       }
     }
 
     // Final fallback: Use selectedRaceStatus (depends on selectedRaceData being loaded)
-    console.log('[isSelectedRaceCompleted] Returning', selectedRaceStatus === 'past', 'via selectedRaceStatus fallback');
     return selectedRaceStatus === 'past';
   }, [pastRaceIds, selectedRaceId, races, selectedRaceIndex, nextRace?.id, getRaceStatus, selectedRaceStatus]);
-
-  if (__DEV__ && selectedRaceData) {
-    console.log('[RealRacesCarousel] isSelectedRaceCompleted:', isSelectedRaceCompleted, 'status:', selectedRaceStatus, 'pastRaceIds:', pastRaceIds?.length, 'selectedRaceId:', selectedRaceId, 'inPastRaceIds:', pastRaceIds?.includes(selectedRaceId || ''));
-  }
 
   // Get user result for selected race (if completed)
   const selectedRaceResult = useMemo(() => {
@@ -243,14 +244,18 @@ export function RealRacesCarousel({
 
   // Create detail cards for the selected race (timeline mode)
   const detailCards = useMemo(() => {
-    if (!useTimelineLayout) return undefined;
+    if (!useTimelineLayout) {
+      return undefined;
+    }
 
     // Use selectedRaceData if available, otherwise fall back to race from races array
     const selectedRace = races[selectedRaceIndex];
     const raceData = selectedRaceData || selectedRace;
 
     // Need at least basic race data to create cards
-    if (!raceData?.id) return undefined;
+    if (!raceData?.id) {
+      return undefined;
+    }
 
     const cardInput = {
       id: raceData.id,
@@ -275,25 +280,25 @@ export function RealRacesCarousel({
       // Learning data for completed races
       keyLearning: analysisData?.keyLearning,
       focusNextRace: analysisData?.focusNextRace,
+      // Venue and date for forecast fetching (Tufte sparklines in ConditionsDetailCard)
+      // Check both enriched format (venueCoordinates) and raw Supabase format (metadata.venue_coordinates)
+      venue: (() => {
+        const coords = raceData.venueCoordinates || raceData.metadata?.venue_coordinates;
+        if (!coords?.lat || !coords?.lng) {
+          return undefined;
+        }
+        return {
+          id: raceData.id,
+          name: raceData.venue || raceData.metadata?.venue || 'Race Venue',
+          coordinates: [coords.lng, coords.lat],
+          region: 'unknown',
+          country: 'unknown',
+        };
+      })(),
+      date: raceData.date || raceData.start_date,
     };
 
-    if (__DEV__) {
-      console.log('[RealRacesCarousel] createDetailCardsForRace input:', {
-        id: cardInput.id,
-        status: cardInput.status,
-        isSelectedRaceCompleted,
-        hasResult: !!cardInput.result,
-        hasDebrief: cardInput.hasDebrief,
-      });
-    }
-
-    const cards = createDetailCardsForRace(cardInput);
-
-    if (__DEV__) {
-      console.log('[RealRacesCarousel] createDetailCardsForRace output:', cards.map(c => c.type));
-    }
-
-    return cards;
+    return createDetailCardsForRace(cardInput);
   }, [
     useTimelineLayout,
     races,
@@ -305,15 +310,23 @@ export function RealRacesCarousel({
     analysisData,
   ]);
 
-  // Handle race change in timeline layout
-  const handleRaceChange = useCallback(
+  // Handle timeline item change (race or practice)
+  const handleTimelineItemChange = useCallback(
     (index: number) => {
-      const race = races[index];
-      if (race?.id && race.id !== selectedRaceId) {
-        onSelectRace(race.id);
+      const item = timelineItems[index];
+      if (!item) return;
+
+      if (item.type === 'race') {
+        const race = item.data;
+        if (race?.id && race.id !== selectedRaceId) {
+          onSelectRace(race.id);
+        }
+      } else if (item.type === 'practice') {
+        const session = item.data as PracticeSession;
+        onSelectPractice?.(session.id);
       }
     },
-    [races, selectedRaceId, onSelectRace]
+    [timelineItems, selectedRaceId, onSelectRace, onSelectPractice]
   );
 
   // Handle detail card change in timeline layout
@@ -369,7 +382,24 @@ export function RealRacesCarousel({
     );
   };
 
-  const renderRaceCard = (race: any, index: number) => {
+  // Render function for timeline items (handles both races and practice sessions)
+  const renderTimelineItem = (item: TimelineItem, index: number) => {
+    // Handle practice sessions
+    if (item.type === 'practice') {
+      const session = item.data as PracticeSession;
+      return (
+        <PracticeTimelineCard
+          key={`practice-${session.id}`}
+          session={session}
+          isSelected={false} // Practice sessions don't have detail cards yet
+          onPress={() => onSelectPractice?.(session.id)}
+          cardWidth={MOBILE_CARD_WIDTH}
+        />
+      );
+    }
+
+    // Handle races
+    const race = item.data;
     const isNextRace = !!(nextRace?.id && race.id === nextRace.id);
     const raceStatus = getRaceStatus(race.date || new Date().toISOString(), isNextRace);
 
@@ -406,6 +436,7 @@ export function RealRacesCarousel({
           cardHeight={RACE_CARD_HEIGHT}
           onEdit={canManage && onEditRace ? () => onEditRace(race.id) : undefined}
           onDelete={canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined}
+          isDeleting={deletingRaceId === race.id}
         />
       );
     }
@@ -439,6 +470,7 @@ export function RealRacesCarousel({
           } : undefined}
           onPress={() => onSelectRace(race.id)}
           cardWidth={MOBILE_CARD_WIDTH}
+          cardHeight={RACE_CARD_HEIGHT}
           canManage={canManage}
           onEdit={canManage && onEditRace ? () => onEditRace(race.id) : undefined}
           onDelete={canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined}
@@ -492,6 +524,7 @@ export function RealRacesCarousel({
         isSelected={selectedRaceId === race.id}
         onSelect={() => onSelectRace(race.id)}
         cardWidth={MOBILE_CARD_WIDTH}
+        cardHeight={RACE_CARD_HEIGHT}
         fleetName={race.fleet?.name}
         canManage={canManage}
         onEdit={canManage && onEditRace ? () => onEditRace(race.id) : undefined}
@@ -500,14 +533,20 @@ export function RealRacesCarousel({
     );
   };
 
+  // Legacy render function for race-only rendering (used in ScrollView mode)
+  const renderRaceCard = (race: any, index: number) => {
+    return renderTimelineItem({ type: 'race', data: race, date: new Date(race.date || race.start_date || new Date()) }, index);
+  };
+
   // Timeline Layout Mode - uses RaceTimelineLayout with DetailCardPager
+  // Now supports both races and practice sessions in a combined timeline
   if (useTimelineLayout) {
     return (
       <RaceTimelineLayout
-        races={races}
+        races={timelineItems}
         selectedRaceIndex={selectedRaceIndex}
-        onRaceChange={handleRaceChange}
-        renderRaceCard={(race, index) => renderRaceCard(race, index)}
+        onRaceChange={handleTimelineItemChange}
+        renderRaceCard={(item, index) => renderTimelineItem(item as TimelineItem, index)}
         renderDetailCard={renderDetailCard}
         detailCards={detailCards as any}
         onDetailCardChange={handleDetailCardChange}

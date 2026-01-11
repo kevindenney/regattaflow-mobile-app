@@ -10,8 +10,9 @@
  * - Vertical swipe: Navigate between detail cards (with card pager mode)
  */
 
-import React, { useCallback, useRef, useState, ReactElement } from 'react';
+import React, { useCallback, useRef, useState, useEffect, ReactElement } from 'react';
 import {
+  Animated,
   Dimensions,
   FlatList,
   NativeScrollEvent,
@@ -20,12 +21,16 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { ChevronUp } from 'lucide-react-native';
 
 import { ZONE_HEIGHTS, type DetailCardType } from '@/constants/navigationAnimations';
-import { DetailCardPager, DetailCardData } from './navigation/DetailCardPager';
+import { IOS_COLORS } from '@/components/cards/constants';
+import { DetailCardPager, DetailCardData, RenderCardOptions } from './navigation/DetailCardPager';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -47,7 +52,7 @@ interface RaceTimelineLayoutProps {
   /** Legacy: Render all detail content as scrollable content */
   renderDetailContent?: () => React.ReactNode;
   /** New: Render individual detail cards for card pager mode */
-  renderDetailCard?: (card: DetailCardData, index: number, isActive: boolean) => ReactElement;
+  renderDetailCard?: (card: DetailCardData, index: number, isActive: boolean, options?: RenderCardOptions) => ReactElement;
 
   // Detail cards data (for card pager mode)
   detailCards?: DetailCardData[];
@@ -63,6 +68,8 @@ interface RaceTimelineLayoutProps {
   useCardPagerMode?: boolean;
   /** Enable haptics (default: true) */
   enableHaptics?: boolean;
+  /** Index of the next upcoming race (for jump-to-next FAB) */
+  nextRaceIndex?: number;
 }
 
 export function RaceTimelineLayout({
@@ -80,11 +87,86 @@ export function RaceTimelineLayout({
   cardWidth: propCardWidth,
   useCardPagerMode = false,
   enableHaptics = true,
+  nextRaceIndex,
 }: RaceTimelineLayoutProps) {
+  // Debug props - CRITICAL LOG
+  console.log('🔷🔷🔷 [RaceTimelineLayout] RENDER 🔷🔷🔷', {
+    useCardPagerMode,
+    hasRenderDetailCard: !!renderDetailCard,
+    detailCardsLength: detailCards?.length ?? 'undefined',
+    racesLength: races.length,
+    selectedRaceIndex,
+    nextRaceIndex,
+  });
+
   const flatListRef = useRef<FlatList>(null);
   const detailScrollRef = useRef<ScrollView>(null);
   const [isScrolling, setIsScrolling] = useState(false);
   const [activeDetailIndex, setActiveDetailIndex] = useState(0);
+
+  // Track if this is initial mount to avoid redundant scroll
+  const hasMountedRef = useRef(false);
+  const prevSelectedIndexRef = useRef(selectedRaceIndex);
+
+  // Scroll to selected race when it changes (handles async data loading)
+  useEffect(() => {
+    // Skip if races not yet loaded
+    if (races.length === 0) return;
+
+    // On first mount, FlatList's initialScrollIndex handles it
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      prevSelectedIndexRef.current = selectedRaceIndex;
+      return;
+    }
+
+    // Only scroll if index actually changed (not from our own scroll events)
+    if (prevSelectedIndexRef.current !== selectedRaceIndex) {
+      prevSelectedIndexRef.current = selectedRaceIndex;
+
+      // Small delay to ensure FlatList is ready
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToIndex({
+          index: selectedRaceIndex,
+          animated: true,
+        });
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [selectedRaceIndex, races.length]);
+
+  // FAB visibility animation
+  const fabOpacity = useRef(new Animated.Value(0)).current;
+
+  // Determine if FAB should be visible (2+ cards away from next race)
+  const showJumpFab = nextRaceIndex !== undefined &&
+    Math.abs(selectedRaceIndex - nextRaceIndex) >= 2;
+
+  // Animate FAB visibility
+  useEffect(() => {
+    Animated.spring(fabOpacity, {
+      toValue: showJumpFab ? 1 : 0,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 10,
+    }).start();
+  }, [showJumpFab, fabOpacity]);
+
+  // Handle jump to next race
+  const handleJumpToNext = useCallback(() => {
+    if (nextRaceIndex === undefined) return;
+
+    if (enableHaptics && Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    flatListRef.current?.scrollToIndex({
+      index: nextRaceIndex,
+      animated: true,
+    });
+    onRaceChange(nextRaceIndex);
+  }, [nextRaceIndex, enableHaptics, onRaceChange]);
 
   // Calculate available height (screen minus header)
   const availableHeight = SCREEN_HEIGHT - HEADER_HEIGHT;
@@ -131,12 +213,23 @@ export function RaceTimelineLayout({
 
   // Render individual race card
   const renderItem = useCallback(({ item, index }: { item: any; index: number }) => {
+    const isNextRace = index === nextRaceIndex;
+
+    // Debug: Always log to see what's happening
+    console.log('⭐⭐⭐ [RaceTimelineLayout] renderItem ⭐⭐⭐', {
+      index,
+      nextRaceIndex,
+      isNextRace,
+      itemName: item?.data?.name || item?.name || 'unknown',
+    });
+
     return (
       <View style={[styles.cardContainer, { width: cardWidth }]}>
+        {/* Tufte: Trust the timeline metaphor - position indicates next race */}
         {renderRaceCard(item, index)}
       </View>
     );
-  }, [cardWidth, renderRaceCard]);
+  }, [cardWidth, renderRaceCard, nextRaceIndex]);
 
   // Key extractor
   const keyExtractor = useCallback((item: any, index: number) => {
@@ -180,19 +273,34 @@ export function RaceTimelineLayout({
           initialNumToRender={3}
         />
 
-        {/* Timeline Indicators (dots) */}
-        {races.length > 1 && (
-          <View style={styles.timelineIndicators}>
-            {races.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.indicator,
-                  index === selectedRaceIndex && styles.indicatorActive,
-                ]}
-              />
-            ))}
-          </View>
+        {/* Timeline Indicators removed - season header provides temporal context */}
+
+        {/* Jump to Next Race FAB */}
+        {nextRaceIndex !== undefined && (
+          <Animated.View
+            style={[
+              styles.jumpFab,
+              {
+                opacity: fabOpacity,
+                transform: [{
+                  scale: fabOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1],
+                  }),
+                }],
+              },
+            ]}
+            pointerEvents={showJumpFab ? 'auto' : 'none'}
+          >
+            <TouchableOpacity
+              onPress={handleJumpToNext}
+              style={styles.jumpFabButton}
+              activeOpacity={0.8}
+            >
+              <ChevronUp size={16} color={IOS_COLORS.systemBackground} strokeWidth={2.5} />
+              <Text style={styles.jumpFabText}>Next</Text>
+            </TouchableOpacity>
+          </Animated.View>
         )}
       </View>
 
@@ -221,7 +329,7 @@ export function RaceTimelineLayout({
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#2563EB"
+                  tintColor={IOS_COLORS.blue}
                 />
               ) : undefined
             }
@@ -237,15 +345,15 @@ export function RaceTimelineLayout({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // gray-50
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
 
   // Hero Zone
   heroZone: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IOS_COLORS.systemBackground,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB', // gray-200
-    shadowColor: '#000',
+    borderBottomColor: IOS_COLORS.separator,
+    shadowColor: IOS_COLORS.label,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -258,31 +366,13 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     justifyContent: 'center',
-  },
-
-  // Timeline Indicators
-  timelineIndicators: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 6,
-  },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#D1D5DB', // gray-300
-  },
-  indicatorActive: {
-    backgroundColor: '#2563EB', // blue-600
-    width: 24,
+    overflow: 'visible',
   },
 
   // Detail Zone
   detailZone: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // gray-50
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   detailScroll: {
     flex: 1,
@@ -290,6 +380,32 @@ const styles = StyleSheet.create({
   detailContent: {
     padding: 16,
     paddingBottom: 32,
+  },
+
+  // Jump to Next FAB
+  jumpFab: {
+    position: 'absolute',
+    bottom: 48, // Above timeline indicators
+    right: 16,
+  },
+  jumpFabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 4,
+    shadowColor: IOS_COLORS.label,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  jumpFabText: {
+    color: IOS_COLORS.systemBackground,
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

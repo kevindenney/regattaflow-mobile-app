@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import { View, SafeAreaView, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { EnhancedClubOnboarding } from '@/components/onboarding/EnhancedClubOnboarding';
 

@@ -42,6 +42,7 @@ import {
 } from '@/components/races';
 import {
   ADD_RACE_CARD_DISMISSED_KEY,
+  SAMPLE_RACE_DISMISSED_KEY,
   MOCK_GPS_TRACK,
   MOCK_SPLIT_TIMES,
   normalizeDocumentType as normalizeDocumentTypeUtil,
@@ -256,6 +257,7 @@ export default function RacesScreen() {
   // showCoachSelectionModal, sharingStrategy, sharingRaceEventId are now provided by useStrategySharing hook below
   const [showBoatClassSelector, setShowBoatClassSelector] = useState(false);
   const [addRaceCardDismissed, setAddRaceCardDismissed] = useState(false);
+  const [sampleRaceDismissed, setSampleRaceDismissed] = useState(false);
   const updateRacePosition = useRaceConditions(state => state.updatePosition);
   const updateEnvironment = useRaceConditions(state => state.updateEnvironment);
   const updateCourse = useRaceConditions(state => state.updateCourse);
@@ -282,6 +284,21 @@ export default function RacesScreen() {
   const handleDismissAddRaceCard = useCallback(async () => {
     setAddRaceCardDismissed(true);
     await AsyncStorage.setItem(ADD_RACE_CARD_DISMISSED_KEY, 'true');
+  }, []);
+
+  // Load Sample Race dismissal state from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem(SAMPLE_RACE_DISMISSED_KEY).then((value) => {
+      if (value === 'true') {
+        setSampleRaceDismissed(true);
+      }
+    });
+  }, []);
+
+  // Handler to dismiss the Sample Race card
+  const handleDismissSampleRace = useCallback(async () => {
+    setSampleRaceDismissed(true);
+    await AsyncStorage.setItem(SAMPLE_RACE_DISMISSED_KEY, 'true');
   }, []);
 
   // Clear any stuck loading states on mount
@@ -504,11 +521,12 @@ export default function RacesScreen() {
       }
       logger.debug('Screen focused - refetching races');
       refetch?.();
+      refetchRaces?.(); // Also refresh live races list
       if (selectedRaceId) {
         logger.debug('Screen focused - refreshing selected race detail');
         triggerRaceDetailReload();
       }
-    }, [refetch, selectedRaceId, triggerRaceDetailReload])
+    }, [refetch, refetchRaces, selectedRaceId, triggerRaceDetailReload])
   );
 
   // GPS Venue Detection
@@ -623,8 +641,8 @@ export default function RacesScreen() {
   // This is used initially; enrichment happens in cardGridRacesEnriched below
   // When no races exist, show a demo race so users can explore the UI
   const baseCardGridRaces: CardRaceData[] = useMemo(() => {
-    // If no races, show demo race with sample data
-    if (safeRecentRaces.length === 0) {
+    // If no races and sample race not dismissed, show demo race with sample data
+    if (safeRecentRaces.length === 0 && !sampleRaceDismissed) {
       return [{
         id: DEMO_RACE.id || 'demo-race',
         name: 'Sample Race',
@@ -682,6 +700,7 @@ export default function RacesScreen() {
       critical_details: race.critical_details,
       venueCoordinates: race.venueCoordinates,
       created_by: race.created_by,
+      metadata: race.metadata, // Preserve metadata for sample detection
       // Basic defaults for new cards (will be enriched for selected race later)
       rigSettings: race.rigSettings || race.tuningRecommendation,
       fleet: race.fleet || {
@@ -695,7 +714,7 @@ export default function RacesScreen() {
         protestDeadline: race.protest_deadline || race.critical_details?.protest_deadline,
       },
     }));
-  }, [safeRecentRaces]);
+  }, [safeRecentRaces, sampleRaceDismissed]);
 
   // Render card content for CardGrid
   const renderCardGridContent = useCallback(
@@ -710,7 +729,9 @@ export default function RacesScreen() {
       onDelete?: () => void,
       onUploadDocument?: () => void,
       onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void,
-      onOpenPostRaceInterview?: () => void
+      onOpenPostRaceInterview?: () => void,
+      userId?: string,
+      onDismiss?: () => void
     ) => {
       const ContentComponent = getCardContentComponent(cardType);
       return (
@@ -727,11 +748,12 @@ export default function RacesScreen() {
           onUploadDocument={onUploadDocument}
           onRaceComplete={onRaceComplete}
           onOpenPostRaceInterview={onOpenPostRaceInterview}
-          userId={user?.id}
+          userId={userId}
+          onDismiss={onDismiss}
         />
       );
     },
-    [cardGridDimensions, user?.id]
+    [cardGridDimensions]
   );
 
   // Handle race change from CardGrid
@@ -2491,6 +2513,7 @@ export default function RacesScreen() {
               handleOpenPostRaceInterviewManually();
             }, 100);
           }}
+          onDismissSample={handleDismissSampleRace}
         />
       ) : (
       <ScrollView
@@ -2894,10 +2917,6 @@ export default function RacesScreen() {
         selectedRaceId={selectedRaceId}
         onBoatClassSelectorClose={() => setShowBoatClassSelector(false)}
         onBoatClassSelected={handleBoatClassSelected}
-        // Add Race Dialog
-        showAddRaceSheet={showAddRaceSheet}
-        onAddRaceClose={handleCloseAddRaceSheet}
-        onAddRaceSave={handleAddRaceDialogSave}
       />
 
       {/* Season Archive Modal */}

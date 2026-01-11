@@ -279,7 +279,11 @@ This is the main data persistence tool.`,
 
           const { error: boatsError } = await supabase
             .from('sailor_boats')
-            .upsert(boatsToInsert);
+            .upsert(boatsToInsert, {
+              // Handle conflicts on the unique constraint (sailor_id, class_id, sail_number)
+              onConflict: 'sailor_id,class_id,sail_number',
+              ignoreDuplicates: false,
+            });
 
           if (boatsError) {
 

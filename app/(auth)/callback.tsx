@@ -3,8 +3,10 @@ import {router} from 'expo-router'
 import {supabase} from '@/services/supabase'
 import {logSession, dumpSbStorage} from '@/utils/authDebug'
 import {getDashboardRoute} from '@/lib/utils/userTypeRouting'
-import {ActivityIndicator, View, Text} from 'react-native'
+import {ActivityIndicator, View, Text,
+} from "react-native"
 import {createLogger} from '@/lib/utils/logger'
+import {createSailorSampleData} from '@/services/onboarding/SailorSampleDataService'
 
 const logger = createLogger('OAuthCallback')
 
@@ -179,6 +181,19 @@ export default function Callback(){
           } else {
             logger.info('Successfully saved persona to profile:', pendingPersona)
             effectiveUserType = pendingPersona
+
+            // For new sailors, create sample data and wait for completion
+            // so it's visible when they reach the races page
+            if (pendingPersona === 'sailor') {
+              try {
+                await createSailorSampleData({
+                  userId: session.user.id,
+                  userName: profilePayload.full_name || 'Sailor',
+                })
+              } catch (err: any) {
+                logger.warn('Sample data creation failed:', err?.message)
+              }
+            }
           }
         }
 
@@ -205,7 +220,7 @@ export default function Callback(){
           } else if (personaForOnboarding === 'club') {
             onboardingRoute = '/(auth)/club-onboarding-chat'
           } else {
-            onboardingRoute = getDashboardRoute(personaForOnboarding)
+            onboardingRoute = getDashboardRoute(personaForOnboarding) as string
           }
 
           setTimeout(() => {

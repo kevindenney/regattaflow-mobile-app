@@ -50,12 +50,24 @@ export interface SailorRacePreparation {
 
 class SailorRacePreparationService {
   /**
+   * Validates if a string is a valid UUID format
+   */
+  private isValidUUID(id: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  }
+
+  /**
    * Get race preparation data for a specific sailor and race
    */
   async getPreparation(
     raceEventId: string,
     sailorId: string
   ): Promise<SailorRacePreparation | null> {
+    // Skip queries for non-UUID race IDs (e.g., demo races)
+    if (!this.isValidUUID(raceEventId)) {
+      return null;
+    }
+
     try {
       const { data, error } = await supabase
         .from('sailor_race_preparation')

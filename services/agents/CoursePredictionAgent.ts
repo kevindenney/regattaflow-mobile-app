@@ -11,7 +11,7 @@ import { supabase } from '../supabase';
 export class CoursePredictionAgent extends BaseAgentService {
   constructor() {
     super({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       maxTokens: 4096,
       temperature: 0.7,
       systemPrompt: `You are an expert race course predictor for sailing regattas. Your goal is to predict which race course the race committee will use based on weather conditions, typical patterns, and course characteristics.

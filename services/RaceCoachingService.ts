@@ -662,7 +662,7 @@ Provide a 2-3 paragraph overall assessment in The teaching style:
 Use The voice: quantified, tactical, encouraging, with his signature phrases when appropriate.`;
 
     const response = await this.anthropic.messages.create({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 512,
       temperature: 0.7,
       messages: [{ role: 'user', content: prompt }],

@@ -18,7 +18,7 @@ export class RaceAnalysisAgent extends BaseAgentService {
 
   constructor(options: RaceAnalysisAgentOptions = {}) {
     super({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-3-haiku-20240307',
       maxTokens: 8192, // More tokens for detailed analysis
       temperature: 0.7,
       systemPrompt: `You are an expert sailing coach analyzing race performance. Your goal is to provide constructive, actionable feedback that helps sailors improve.

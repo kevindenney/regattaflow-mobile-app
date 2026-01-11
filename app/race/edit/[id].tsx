@@ -1,11 +1,17 @@
 /**
- * Edit Race Screen - Uses ComprehensiveRaceEntry in edit mode
+ * Edit Race Screen - Apple HIG-compliant race editor
+ *
+ * Uses the redesigned EditRaceForm with:
+ * - Progressive disclosure
+ * - Clean section-based layout
+ * - Manual editing only (no AI Quick Entry)
+ * - Danger zone for delete
  */
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
-import { ComprehensiveRaceEntry } from '@/components/races';
+import { EditRaceForm } from '@/components/races/edit';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('EditRaceScreen');
@@ -22,7 +28,7 @@ export default function EditRaceScreen() {
     isArray: Array.isArray(id)
   });
 
-  const handleSubmit = (raceId: string) => {
+  const handleSave = (raceId: string) => {
     logger.debug('[EditRaceScreen] Race updated:', raceId);
     if (router.canGoBack()) {
       router.back();
@@ -37,6 +43,12 @@ export default function EditRaceScreen() {
     } else {
       router.replace('/(tabs)/races');
     }
+  };
+
+  const handleDelete = (raceId: string) => {
+    logger.debug('[EditRaceScreen] Race deleted:', raceId);
+    // Navigate back to races list after deletion
+    router.replace('/(tabs)/races');
   };
 
   if (!id) {
@@ -63,10 +75,11 @@ export default function EditRaceScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ComprehensiveRaceEntry
-        existingRaceId={actualId}
-        onSubmit={handleSubmit}
+      <EditRaceForm
+        raceId={actualId}
+        onSave={handleSave}
         onCancel={handleCancel}
+        onDelete={handleDelete}
       />
     </View>
   );

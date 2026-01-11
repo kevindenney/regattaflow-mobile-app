@@ -14,7 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Calendar, Upload, CheckCircle, XCircle, AlertTriangle } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { CalendarImportService, CalendarRace } from '@/services/CalendarImportService';

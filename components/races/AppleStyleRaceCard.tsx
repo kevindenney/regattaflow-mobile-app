@@ -14,7 +14,7 @@ import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { calculateCountdown } from '@/constants/mockData';
 import { Calendar, Clock, MapPin, Play, Trophy, Wind, Waves, Radio } from 'lucide-react-native';
 import React, { useMemo, useState, useEffect } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, Dimensions } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, Dimensions } from 'react-native';
 import { RaceTypeBadge, type RaceType } from './RaceTypeSelector';
 import { IOS_COLORS } from '@/components/cards/constants';
 
@@ -57,6 +57,8 @@ export interface AppleStyleRaceCardProps {
   onHide?: () => void;
   cardWidth?: number;
   cardHeight?: number;
+  /** Show loading overlay when race is being deleted */
+  isDeleting?: boolean;
 }
 
 // =============================================================================
@@ -120,6 +122,7 @@ export function AppleStyleRaceCard({
   onHide,
   cardWidth: propCardWidth,
   cardHeight: propCardHeight,
+  isDeleting = false,
 }: AppleStyleRaceCardProps) {
   const cardWidth = propCardWidth ?? Math.min(SCREEN_WIDTH - 32, 375);
   const cardHeight = propCardHeight ?? 520;
@@ -382,11 +385,15 @@ export function AppleStyleRaceCard({
       )}
 
       {/* ─────────────────────────────────────────────────────────────────────
-          SWIPE INDICATOR
+          DELETING OVERLAY
       ───────────────────────────────────────────────────────────────────── */}
-      <View style={styles.swipeIndicator}>
-        <View style={styles.swipeHandle} />
-      </View>
+      {isDeleting && (
+        <View style={styles.deletingOverlay} pointerEvents="box-only">
+          <ActivityIndicator size="large" color={IOS_COLORS.blue} />
+          <Text style={styles.deletingText}>Deleting...</Text>
+        </View>
+      )}
+
     </Pressable>
   );
 }
@@ -640,18 +647,27 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
-  // Swipe Indicator
-  swipeIndicator: {
+  // Deleting Overlay
+  deletingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 16,
-    marginTop: 'auto',
+    zIndex: 50,
   },
-  swipeHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: IOS_COLORS.gray4,
+  deletingText: {
+    marginTop: 12,
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    letterSpacing: -0.2,
   },
+
 });
 
 export default AppleStyleRaceCard;

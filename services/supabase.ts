@@ -693,3 +693,48 @@ export const testSupabaseConnectivity = async (): Promise<{ success: boolean; du
     };
   }
 }
+
+/**
+ * Check if a session likely exists in storage (for instant skeleton display).
+ * Synchronous on web, returns false on native (use async version for native).
+ * This is a heuristic - the token may be expired or invalid.
+ */
+export function hasPersistedSessionHint(): boolean {
+  if (!supabaseUrl) return false;
+
+  const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
+  const key = `sb-${projectRef}-auth-token`;
+
+  const hasWindow = typeof window !== 'undefined';
+  const isWeb = hasWindow && typeof document !== 'undefined';
+
+  if (isWeb) {
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored !== null && stored.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  // For native, cannot check synchronously - return false
+  return false;
+}
+
+/**
+ * Async version for native platforms.
+ * Returns true if session data exists in secure storage.
+ */
+export async function hasPersistedSessionHintAsync(): Promise<boolean> {
+  if (!supabaseUrl) return false;
+
+  const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
+  const key = `sb-${projectRef}-auth-token`;
+
+  try {
+    const stored = await ExpoSecureStorage.getItem(key);
+    return stored !== null && stored.length > 0;
+  } catch {
+    return false;
+  }
+}

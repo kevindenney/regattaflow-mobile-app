@@ -9,13 +9,14 @@ import {
   Alert,
   Modal,
   Platform,
-  SafeAreaView,
+  
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { CourseBuilder, type CourseDraft } from '@/components/courses';
@@ -24,6 +25,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import type { CourseType, Mark, MarkType, RaceCourse } from '@/types/courses';
 import { getRacesForCourse, MOCK_COURSES, type MockCourse } from '@/constants/mockData';
 import { Clock3, Flag, MapPin, Navigation, Plus, Ruler } from 'lucide-react-native';
+import { TUFTE_BACKGROUND } from '@/components/cards/constants';
 
 const COURSE_TYPE_LABELS: Record<string, string> = {
   windward_leeward: 'Windward / Leeward',
@@ -497,7 +499,7 @@ function AssignmentModal({ visible, course, onClose }: AssignmentModalProps) {
               onPress={() => {
                 onClose();
                 router.push({
-                  pathname: '/(tabs)/race/add',
+                  pathname: '/(tabs)/race/add-tufte',
                   params: { courseId: course.id, courseName: course.name },
                 });
               }}
@@ -725,7 +727,7 @@ function formatWindRange(min?: number | null, max?: number | null) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: TUFTE_BACKGROUND,
   },
   header: {
     flexDirection: 'row',

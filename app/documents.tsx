@@ -9,9 +9,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+  
   Platform
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { DocumentUploadCard } from '@/components/documents/DocumentUploadCard';
 import { DocumentViewer } from '@/components/documents/DocumentViewer';
 import { SubscriptionManager } from '@/components/subscription/SubscriptionManager';

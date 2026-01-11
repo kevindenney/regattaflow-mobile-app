@@ -13,6 +13,7 @@ import { Audio } from 'expo-av';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
+    Easing,
     runOnJS,
     useDerivedValue,
     useSharedValue,
@@ -322,12 +323,12 @@ export function StartingSequenceInteractive({
   useEffect(() => {
     if (isPlaying) {
       waterOffset.value = withRepeat(
-        withTiming(100, { duration: 4, easing: (t) => t }),
+        withTiming(100, { duration: 4000, easing: Easing.linear }),
         -1,
         false
       );
       windOffset.value = withRepeat(
-        withTiming(2, { duration: 3, easing: (t) => t * (2 - t) }),
+        withTiming(2, { duration: 3000, easing: Easing.inOut(Easing.quad) }),
         -1,
         true
       );
@@ -485,7 +486,7 @@ export function StartingSequenceInteractive({
             {/* SVG Animation */}
             <View style={styles.svgWrapper}>
               <View style={styles.svgContainer}>
-                <Svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox="0 0 800 450">
+                <Svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox="0 0 900 450" preserveAspectRatio="xMidYMid meet">
                   <Defs>
                     <Pattern id="water-texture" patternUnits="userSpaceOnUse" width="40" height="20">
                       <Path d="M 0 10 C 10 0, 30 0, 40 10 T 80 10" stroke="#99ccee" fill="none" strokeWidth="1" />
@@ -494,10 +495,10 @@ export function StartingSequenceInteractive({
                       <Polygon points="0,0 10,3.5 0,7" fill="#000" />
                     </Marker>
                   </Defs>
-                  
+
                   {/* Water background - matches container */}
-                  <Rect width="800" height="450" fill="#aaccff" />
-                  <Rect width="800" height="450" fill="url(#water-texture)" />
+                  <Rect width="900" height="450" fill="#aaccff" />
+                  <Rect width="900" height="450" fill="url(#water-texture)" />
                   
                   {/* Animated clouds (decorative) */}
                   <G opacity={0.7}>
@@ -1195,7 +1196,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     marginBottom: 16,
   },
-  deepDiveSection: {
+  deepDiveSectionItem: {
     marginBottom: 20,
   },
   sectionHeader: {

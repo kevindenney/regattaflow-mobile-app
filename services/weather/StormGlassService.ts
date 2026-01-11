@@ -37,9 +37,7 @@ const extraMockSetting =
 const USE_MOCK_DATA =
   process.env.EXPO_PUBLIC_USE_MOCK_WEATHER === 'true' ||
   process.env.EXPO_PUBLIC_USE_MOCK_WEATHER === '1' ||
-  extraMockSetting === true ||
-  extraMockSetting === 'true' ||
-  extraMockSetting === 1;
+  extraMockSetting;
 
 export class StormGlassService {
   private config: Required<StormGlassConfig>;
@@ -86,7 +84,6 @@ export class StormGlassService {
 
     // Use mock data if enabled or quota exceeded
     if (this.useMockData || this.quotaExceeded) {
-      console.info('[StormGlassService] Using mock weather data');
       return this.getMockMarineWeather(location, hours);
     }
 
@@ -137,13 +134,10 @@ export class StormGlassService {
     } catch (error: any) {
       // If it's a quota error, enable mock mode and return mock data
       if (error.message?.includes('quota exceeded') || this.quotaExceeded) {
-        console.warn('[StormGlassService] API quota exceeded, switching to mock data');
         this.enableMockMode('quota exceeded');
         return this.getMockMarineWeather(location, hours);
       }
-      console.error('[StormGlassService] Marine weather error:', error);
       // Return mock data instead of throwing to prevent infinite loops
-      console.warn('[StormGlassService] Falling back to mock data due to API error');
       return this.getMockMarineWeather(location, hours);
     }
   }
@@ -230,7 +224,6 @@ export class StormGlassService {
         this.enableMockMode('quota exceeded');
         return this.getMockWeatherAtTime(location, targetTime);
       }
-      console.error('[StormGlassService] Weather at time error:', error);
       // Return mock data instead of null to prevent cascading errors
       return this.getMockWeatherAtTime(location, targetTime);
     }
@@ -263,12 +256,10 @@ export class StormGlassService {
     const cached = this.getCached<Array<any>>(cacheKey);
 
     if (cached) {
-      console.info(`[StormGlassService] Tide extremes cache HIT - saved API call!`);
       return cached;
     }
 
     try {
-      console.info(`[StormGlassService] Fetching tide extremes (quota: ${this.rateLimit.requestCount}/${this.rateLimit.dailyQuota})`);
       
       // Fetch extremes starting 1 day before the reference time to ensure we have data
       // for interpolation (need previous extreme to calculate current state)
@@ -298,7 +289,6 @@ export class StormGlassService {
 
       return extremes;
     } catch (error) {
-      console.error('[StormGlassService] Tide extremes error:', error);
       throw new Error(`Failed to fetch tide extremes: ${error}`);
     }
   }
@@ -320,12 +310,10 @@ export class StormGlassService {
     const cached = this.getCached<number>(cacheKey);
 
     if (cached !== null && cached !== undefined) {
-      console.info(`[StormGlassService] Tide height cache HIT - saved API call!`);
       return cached;
     }
 
     try {
-      console.info(`[StormGlassService] Fetching tide height (quota: ${this.rateLimit.requestCount}/${this.rateLimit.dailyQuota})`);
       
       // Request 1 hour window
       const start = new Date(targetTime.getTime() - 30 * 60 * 1000);
@@ -360,8 +348,7 @@ export class StormGlassService {
       this.setCache(cacheKey, closestHeight, TIDE_CACHE_DURATION);
 
       return closestHeight;
-    } catch (error) {
-      console.error('[StormGlassService] Tide height error:', error);
+    } catch (_error) {
       return 0;
     }
   }
@@ -405,8 +392,7 @@ export class StormGlassService {
       this.setCache(cacheKey, currents, DEFAULT_CACHE_DURATION);
 
       return currents;
-    } catch (error) {
-      console.error('[StormGlassService] Currents error:', error);
+    } catch (_error) {
       return [];
     }
   }
@@ -540,8 +526,6 @@ export class StormGlassService {
     } catch (error: any) {
       // Handle quota exceeded errors (402 Payment Required)
       if (error.response?.status === 402) {
-        const quotaInfo = error.response?.data?.errors?.key || 'API quota exceeded';
-        console.log(`[StormGlassService] ${quotaInfo}. Request count: ${error.response?.data?.meta?.requestCount}/${error.response?.data?.meta?.dailyQuota} - using mock data`);
         this.enableMockMode('quota exceeded');
 
         // Don't retry on quota exceeded - it won't help
@@ -797,55 +781,55 @@ export class StormGlassService {
       wind: {
         speed: windSpeed,
         direction: windDirection,
-        gust,
+        gusts: gust,
         beaufortScale: this.calculateBeaufortScale(windSpeed),
         variability: this.estimateWindVariability(windSpeed),
       },
       waves: {
-        significant: waveHeight,
-        maximum: waveHeight * 1.5,
+        height: waveHeight,
         period: hour.wavePeriod?.noaa || 5,
         direction: hour.waveDirection?.noaa || windDirection,
-        swell: {
-          height: hour.swellHeight?.noaa || waveHeight * 0.6,
-          period: hour.swellPeriod?.noaa || 8,
-          direction: hour.swellDirection?.noaa || windDirection,
-        },
-        secondary: hour.secondarySwellHeight ? {
-          height: hour.secondarySwellHeight.noaa,
-          period: hour.secondarySwellPeriod?.noaa || 6,
-          direction: hour.secondarySwellDirection?.noaa || windDirection,
-        } : undefined,
+        swellHeight: hour.swellHeight?.noaa || waveHeight * 0.6,
+        swellPeriod: hour.swellPeriod?.noaa || 8,
+        swellDirection: hour.swellDirection?.noaa || windDirection,
       },
-      current: {
+      tide: {
+        height: 0,
+        direction: 'unknown' as const,
         speed: currentSpeed,
-        direction: hour.currentDirection?.noaa || 0,
-        knots: currentSpeed,
+        nextHigh: undefined,
+        nextLow: undefined,
       },
-      temperature: {
+      pressure: {
+        sealevel: 1013,
+        trend: 'steady' as const,
+        gradient: 0,
+      },
+      temperatureProfile: {
         air: airTemp,
         water: waterTemp,
-        dewPoint: this.calculateDewPoint(airTemp, 70),
-        feelsLike: airTemp - (windSpeed * 0.1),
+        dewpoint: this.calculateDewPoint(airTemp, 70),
+        feelslike: airTemp - (windSpeed * 0.1),
       },
-      atmosphere: {
-        pressure: 1013,
-        humidity: 70,
-        cloudCover,
-        visibility: visibility / 1000,
-        precipitation: {
-          probability: cloudCover > 80 ? 0.3 : 0.1,
-          rate: 0,
-        },
+      temperature: airTemp,
+      humidity: 70,
+      cloudCover,
+      visibility: {
+        horizontal: visibility,
+        conditions: 'clear' as const,
+      },
+      seaState: {
+        waveHeight,
+        wavePeriod: hour.wavePeriod?.noaa || 5,
+        swellHeight: hour.swellHeight?.noaa || waveHeight * 0.6,
+        swellPeriod: hour.swellPeriod?.noaa || 8,
+        swellDirection: hour.swellDirection?.noaa || windDirection,
+        seaTemperature: waterTemp,
       },
       forecast: {
-        confidence: 85,
-        trend: 'stable' as const,
-        changeExpected: false,
-      },
-      metadata: {
+        confidence: 0.85,
         source: 'mock',
-        quality: 'medium',
+        modelRun: new Date(),
         validTime: timestamp,
         resolution: 'mock-data',
         lastUpdated: new Date(),
@@ -862,11 +846,7 @@ export class StormGlassService {
   /**
    * Enable mock mode to avoid outbound API calls
    */
-  enableMockMode(reason?: string): void {
-    if (!this.useMockData) {
-      const context = reason ? ` (${reason})` : '';
-      console.info(`[StormGlassService] Mock weather mode enabled${context}`);
-    }
+  enableMockMode(_reason?: string): void {
     this.useMockData = true;
     this.quotaExceeded = true;
   }

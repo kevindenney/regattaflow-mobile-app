@@ -79,6 +79,11 @@ export function normalizeDocumentType(
  */
 export const ADD_RACE_CARD_DISMISSED_KEY = '@regattaflow/add_race_card_dismissed';
 
+/**
+ * AsyncStorage key for dismissing the Sample Race card
+ */
+export const SAMPLE_RACE_DISMISSED_KEY = '@regattaflow/sample_race_dismissed';
+
 // =============================================================================
 // UI INTERFACES
 // =============================================================================

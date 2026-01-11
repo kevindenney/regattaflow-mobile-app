@@ -1,5 +1,6 @@
 /**
  * Pricing Card Component
+ * Tufte-inspired: tightened with inline metadata
  * Displays individual pricing tier information
  */
 
@@ -12,82 +13,100 @@ interface PricingCardProps {
   tier: PricingTier;
   isDesktop?: boolean;
   isFeatured?: boolean;
+  compact?: boolean;
   onSelect?: () => void;
 }
 
-export function PricingCard({ tier, isDesktop = false, isFeatured = false, onSelect }: PricingCardProps) {
+export function PricingCard({ tier, isDesktop = false, isFeatured = false, compact = false, onSelect }: PricingCardProps) {
   const getPriceDisplay = () => {
     if (tier.price.cents === 0) {
-      return { amount: 'FREE', period: '' };
+      return { amount: 'FREE', period: '', monthly: '' };
     }
-    if (tier.price.monthly && tier.price.yearly) {
+    if (tier.price.yearly) {
+      const yearlyAmount = tier.price.yearly.cents / 100;
+      const monthlyEquiv = (yearlyAmount / 12).toFixed(0);
       return {
-        amount: `$${(tier.price.yearly.cents / 100).toFixed(0)}`,
-        period: '/year',
-        monthly: `$${(tier.price.monthly.cents / 100).toFixed(0)}/month`,
+        amount: `$${yearlyAmount.toFixed(0)}`,
+        period: '/yr',
+        monthly: `~$${monthlyEquiv}/mo`,
       };
     }
+    const amount = (tier.price.cents || 0) / 100;
     return {
-      amount: `$${((tier.price.cents || 0) / 100).toFixed(0)}`,
-      period: tier.price.period === 'year' ? '/year' : '/month',
+      amount: `$${amount.toFixed(0)}`,
+      period: tier.price.period === 'year' ? '/yr' : '/mo',
+      monthly: '',
     };
   };
 
   const priceDisplay = getPriceDisplay();
+  const isFree = tier.price.cents === 0;
 
   return (
-    <View style={[styles.pricingCard, isFeatured && styles.pricingCardFeatured]}>
-      {isFeatured && (
-        <View style={styles.popularBadge}>
-          <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
+    <View style={[
+      styles.card,
+      compact && styles.cardCompact,
+      isFeatured && styles.cardFeatured,
+    ]}>
+      {/* Header: Name + Price inline */}
+      <View style={styles.cardHeader}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.tierName, compact && styles.tierNameCompact]}>
+            {tier.name}
+          </Text>
+          {isFeatured && (
+            <Text style={styles.featuredLabel}>Recommended</Text>
+          )}
         </View>
+        <View style={styles.headerRight}>
+          <Text style={[
+            styles.price,
+            compact && styles.priceCompact,
+            isFree && styles.priceFree,
+          ]}>
+            {priceDisplay.amount}
+          </Text>
+          {priceDisplay.period && (
+            <Text style={styles.pricePeriod}>{priceDisplay.period}</Text>
+          )}
+        </View>
+      </View>
+
+      {/* Monthly equivalent */}
+      {priceDisplay.monthly && (
+        <Text style={styles.monthlyEquiv}>{priceDisplay.monthly}</Text>
       )}
 
-      <Text style={styles.tierName}>{tier.name}</Text>
-
-      <View style={styles.tierPriceContainer}>
-        {tier.price.cents === 0 ? (
-          <Text style={styles.tierPriceFree}>FREE</Text>
-        ) : (
-          <>
-            <Text style={styles.tierPrice}>{priceDisplay.amount}</Text>
-            <Text style={styles.tierPriceLabel}>{priceDisplay.period}</Text>
-            {priceDisplay.monthly && (
-              <Text style={styles.tierPriceMonthly}>{priceDisplay.monthly}</Text>
-            )}
-          </>
+      {/* Features: Compact list */}
+      <View style={styles.featuresList}>
+        {tier.includes.slice(0, compact ? 4 : 6).map((feature, idx) => (
+          <View key={idx} style={styles.featureItem}>
+            <Ionicons name="checkmark" size={14} color="#10B981" />
+            <Text style={styles.featureText} numberOfLines={1}>{feature}</Text>
+          </View>
+        ))}
+        {tier.includes.length > (compact ? 4 : 6) && (
+          <Text style={styles.moreFeatures}>
+            +{tier.includes.length - (compact ? 4 : 6)} more
+          </Text>
         )}
       </View>
 
-      <View style={styles.tierFeaturesList}>
-        {tier.includes.map((item, idx) => (
-          <View key={idx} style={styles.tierFeatureItem}>
-            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-            <Text style={styles.tierFeatureText}>{item}</Text>
-          </View>
-        ))}
-      </View>
-
+      {/* Excludes hint (if any) */}
       {tier.excludes && tier.excludes.length > 0 && (
-        <View style={styles.tierExcludesList}>
-          {tier.excludes.map((item, idx) => (
-            <View key={idx} style={styles.tierExcludeItem}>
-              <Ionicons name="close-circle" size={16} color="#9CA3AF" />
-              <Text style={styles.tierExcludeText}>{item}</Text>
-            </View>
-          ))}
-        </View>
+        <Text style={styles.excludesHint}>
+          {tier.excludes.length} limitation{tier.excludes.length > 1 ? 's' : ''}
+        </Text>
       )}
 
+      {/* CTA - Always outline style for Tufte consistency */}
       <TouchableOpacity
-        style={[styles.tierButton, isFeatured && styles.tierButtonFeatured]}
+        style={styles.ctaButton}
         activeOpacity={0.8}
         onPress={onSelect}
       >
-        <Text
-          style={[styles.tierButtonText, isFeatured && styles.tierButtonTextFeatured]}
-        >
-          {tier.price.cents === 0 ? 'Start Free' : 'Get Started'}
+        <Text style={styles.ctaText}>
+          {isFree ? 'Start Free' : 'Get Started'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -95,132 +114,120 @@ export function PricingCard({ tier, isDesktop = false, isFeatured = false, onSel
 }
 
 const styles = StyleSheet.create({
-  pricingCard: {
+  card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    position: 'relative',
-    marginBottom: 24,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-      },
-      default: {
-        elevation: 2,
-      },
-    }),
-  },
-  pricingCardDesktop: {
-    width: '22%',
-    minWidth: 280,
-  },
-  pricingCardFeatured: {
-    borderColor: '#8B5CF6',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 10px 40px rgba(139, 92, 246, 0.2)',
-      },
-      default: {
-        elevation: 8,
-      },
-    }),
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -12,
-    left: '50%',
-    marginLeft: -60,
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
     borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 12,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
+      } as unknown,
+      default: {
+        elevation: 1,
+      },
+    }),
   },
-  popularBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  cardCompact: {
+    padding: 14,
+    marginBottom: 0,
   },
-  tierName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 16,
+  cardFeatured: {
+    borderColor: '#8B5CF6',
+    borderWidth: 2,
   },
-  tierPriceContainer: {
+  // Header with name and price inline
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 12,
-    flexWrap: 'wrap',
   },
-  tierPrice: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#1F2937',
-  },
-  tierPriceLabel: {
+  tierName: {
     fontSize: 18,
-    color: '#6B7280',
-    marginLeft: 6,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
   },
-  tierPriceFree: {
-    fontSize: 48,
-    fontWeight: '800',
+  tierNameCompact: {
+    fontSize: 16,
+  },
+  featuredLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8B5CF6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  price: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  priceCompact: {
+    fontSize: 20,
+  },
+  priceFree: {
     color: '#10B981',
   },
-  tierPriceMonthly: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 8,
+  pricePeriod: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginLeft: 2,
   },
-  tierFeaturesList: {
-    gap: 12,
-    marginBottom: 24,
+  monthlyEquiv: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 10,
   },
-  tierFeatureItem: {
+  // Feature list
+  featuresList: {
+    gap: 6,
+    marginBottom: 12,
+  },
+  featureItem: {
     flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
   },
-  tierFeatureText: {
+  featureText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 13,
     color: '#4B5563',
   },
-  tierExcludesList: {
-    gap: 8,
-    marginBottom: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  tierExcludeItem: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  tierExcludeText: {
-    flex: 1,
-    fontSize: 14,
+  moreFeatures: {
+    fontSize: 12,
     color: '#9CA3AF',
+    fontStyle: 'italic',
+    marginLeft: 20,
   },
-  tierButton: {
-    paddingVertical: 14,
-    backgroundColor: '#F3E8FF',
-    borderRadius: 8,
+  excludesHint: {
+    fontSize: 11,
+    color: '#D1D5DB',
+    marginBottom: 12,
+  },
+  // CTA button - always outline for Tufte consistency
+  ctaButton: {
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: 'transparent',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
   },
-  tierButtonFeatured: {
-    backgroundColor: '#8B5CF6',
-  },
-  tierButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+  ctaText: {
+    fontSize: 14,
+    fontWeight: '600',
     color: '#8B5CF6',
   },
-  tierButtonTextFeatured: {
-    color: '#FFFFFF',
-  },
 });
-

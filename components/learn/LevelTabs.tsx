@@ -1,11 +1,12 @@
 /**
  * Level Tabs Component
- * Navigation tabs for learning paths (Fundamentals, Intermediate, Advanced, etc.)
+ * iOS-style underline tabs for learning paths (Fundamentals, Intermediate, Advanced, etc.)
  */
 
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { Level } from '@/services/CourseCatalogService';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 interface LevelTabsProps {
   levels: Level[];
@@ -18,78 +19,71 @@ export function LevelTabs({ levels, selectedLevelId, onLevelSelect }: LevelTabsP
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={styles.levelTabsContainer}
-      contentContainerStyle={styles.levelTabsContent}
+      style={styles.container}
+      contentContainerStyle={styles.content}
     >
-      {levels.map((level) => (
-        <TouchableOpacity
-          key={level.id}
-          style={[
-            styles.levelTab,
-            selectedLevelId === level.id && styles.levelTabActive,
-          ]}
-          onPress={() => onLevelSelect(level.id)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.levelTabText,
-              selectedLevelId === level.id && styles.levelTabTextActive,
-            ]}
+      {levels.map((level) => {
+        const isSelected = selectedLevelId === level.id;
+        const courseCount = level.courses?.length ?? 0;
+        return (
+          <TouchableOpacity
+            key={level.id}
+            style={styles.tab}
+            onPress={() => onLevelSelect(level.id)}
+            activeOpacity={0.7}
           >
-            {level.name}
-          </Text>
-          <Text
-            style={[
-              styles.levelTabSubtext,
-              selectedLevelId === level.id && styles.levelTabSubtextActive,
-            ]}
-          >
-            {level.courses.length} {level.courses.length === 1 ? 'course' : 'courses'}
-          </Text>
-        </TouchableOpacity>
-      ))}
+            <Text
+              style={[
+                styles.tabText,
+                isSelected && styles.tabTextActive,
+              ]}
+            >
+              {level.name}
+              <Text style={styles.courseCount}> ({courseCount})</Text>
+            </Text>
+            <View style={[styles.indicator, isSelected && styles.indicatorActive]} />
+          </TouchableOpacity>
+        );
+      })}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  levelTabsContainer: {
-    marginBottom: 24,
+  container: {
+    marginBottom: 12,
   },
-  levelTabsContent: {
-    paddingHorizontal: 24,
-    gap: 12,
+  content: {
+    paddingHorizontal: 0,
+    gap: 16,
   },
-  levelTab: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    minWidth: 120,
+  tab: {
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     alignItems: 'center',
   },
-  levelTabActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
+  tabText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
   },
-  levelTabText: {
-    fontSize: 16,
+  tabTextActive: {
+    color: IOS_COLORS.label,
     fontWeight: '600',
-    color: '#4B5563',
   },
-  levelTabTextActive: {
-    color: '#FFFFFF',
+  courseCount: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: IOS_COLORS.tertiaryLabel,
   },
-  levelTabSubtext: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginTop: 2,
+  indicator: {
+    height: 2,
+    width: '100%',
+    marginTop: 8,
+    borderRadius: 1,
+    backgroundColor: 'transparent',
   },
-  levelTabSubtextActive: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  indicatorActive: {
+    backgroundColor: IOS_COLORS.blue,
   },
 });
-

@@ -5,16 +5,26 @@
  */
 
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '@/constants/designSystem';
 
 // Conditional imports for native only
-let Marker: any;
+let Marker: any = null;
+let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
 if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  Marker = maps.Marker;
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      Marker = maps.Marker;
+      mapsAvailable = true;
+    }
+  } catch (e) {
+    console.warn('[CurrentOverlay] react-native-maps not available:', e);
+  }
 }
 
 // Type definition compatible with both web and native

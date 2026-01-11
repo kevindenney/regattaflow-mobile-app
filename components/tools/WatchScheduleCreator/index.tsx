@@ -14,10 +14,11 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  SafeAreaView,
+  
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
+} from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, X, Clock } from 'lucide-react-native';
 
 import type {

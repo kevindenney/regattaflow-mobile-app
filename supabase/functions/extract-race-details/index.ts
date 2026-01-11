@@ -17,11 +17,76 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { text } = await req.json();
+    const { text, url } = await req.json();
 
-    if (!text || text.trim().length === 0) {
+    // Determine the document text - either provided directly or fetched from URL
+    let documentText = text;
+
+    if (!documentText && url) {
+      console.log('[extract-race-details] Fetching document from URL:', url);
+      try {
+        const urlResponse = await fetch(url, {
+          headers: {
+            'User-Agent': 'RegattaFlow/1.0 (Document Extraction)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+          },
+        });
+
+        if (!urlResponse.ok) {
+          console.error('[extract-race-details] Failed to fetch URL:', urlResponse.status, urlResponse.statusText);
+          return new Response(
+            JSON.stringify({ error: `Failed to fetch URL: ${urlResponse.status} ${urlResponse.statusText}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const contentType = urlResponse.headers.get('content-type') || '';
+        console.log('[extract-race-details] URL content-type:', contentType);
+
+        if (contentType.includes('application/pdf')) {
+          // PDF handling - for now, return an error suggesting text extraction
+          // TODO: Add PDF parsing library (like pdf-parse) in the future
+          return new Response(
+            JSON.stringify({
+              error: 'PDF documents are not yet supported for URL extraction. Please copy and paste the text content instead.',
+              contentType: contentType
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        documentText = await urlResponse.text();
+        console.log('[extract-race-details] Fetched document length:', documentText.length);
+
+        // Clean up HTML if the content appears to be HTML
+        if (contentType.includes('text/html') || documentText.trim().startsWith('<!DOCTYPE') || documentText.trim().startsWith('<html')) {
+          // Basic HTML to text conversion - strip tags and decode entities
+          documentText = documentText
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')   // Remove styles
+            .replace(/<[^>]+>/g, ' ')                          // Remove HTML tags
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num)))
+            .replace(/\s+/g, ' ')                              // Normalize whitespace
+            .trim();
+          console.log('[extract-race-details] Cleaned HTML, new length:', documentText.length);
+        }
+      } catch (fetchError) {
+        console.error('[extract-race-details] Error fetching URL:', fetchError);
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch URL: ${fetchError.message}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    if (!documentText || documentText.trim().length === 0) {
       return new Response(
-        JSON.stringify({ error: 'No text provided' }),
+        JSON.stringify({ error: 'No text or URL provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -33,7 +98,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[extract-race-details] Processing text, length:', text.length);
+    console.log('[extract-race-details] Processing text, length:', documentText.length);
 
     // Call Claude API with enhanced multi-race detection prompt
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -62,7 +127,7 @@ If multiple races/series are detected, extract ALL of them. Do not limit to one 
 Extract ALL available information from the following document. Be thorough and extract every field you can find.
 
 Document:
-${text}
+${documentText}
 
 Return a JSON object with this EXACT structure:
 
@@ -92,6 +157,17 @@ Return a JSON object with this EXACT structure:
       "raceNumber": number | null,  // Race number within series
       "totalRacesInSeries": number | null,
 
+      // === MULTI-DAY EVENT SCHEDULE (for events spanning multiple days) ===
+      "schedule": [  // Array of ALL scheduled events in chronological order
+        {
+          "date": string,  // YYYY-MM-DD format
+          "time": string,  // HH:MM or HHMMhrs format
+          "event": string,  // e.g., "Skippers Briefing", "Race Start", "Race Finish Deadline", "Prize Giving"
+          "location": string | null,  // e.g., "ABC Main Clubhouse Harbour Room"
+          "mandatory": boolean  // true if attendance is compulsory (e.g., skippers briefing)
+        }
+      ] | null,
+
       // === GOVERNING RULES ===
       "racingRulesSystem": string | null,  // e.g., "Racing Rules of Sailing (RRS)"
       "prescriptions": string | null,  // e.g., "HKSF Prescriptions"
@@ -109,7 +185,12 @@ Return a JSON object with this EXACT structure:
       "crewListDeadline": string | null,  // e.g., "1700hrs Friday 12 December"
       "safetyBriefingRequired": boolean | null,
       "safetyBriefingDetails": string | null,  // e.g., "Tuesday 9 or Thursday 11 December at 1900hrs"
-      
+
+      // === CREW REQUIREMENTS (especially for distance/adventure races) ===
+      "minimumCrew": number | null,  // Minimum number of crew required (e.g., 5)
+      "crewRequirements": string | null,  // Special requirements (e.g., "All crew except 3 must complete at least one peak ascent")
+      "minorSailorRules": string | null,  // Rules for under-18 crew (e.g., "Parental consent required, must be accompanied by adult on hill runs")
+
       // === TIME LIMITS ===
       "absoluteTimeLimit": string | null,  // e.g., "1700hrs"
       "cutOffPoints": Array<{location: string, time: string}> | null,  // e.g., [{location: "Lei Yue Mun Gap", time: "1230hrs"}]
@@ -118,6 +199,10 @@ Return a JSON object with this EXACT structure:
       "raceOfficeLocation": string | null,  // e.g., "RHKYC Kellett Island Gun Room"
       "raceOfficePhone": Array<string> | null,  // e.g., ["2239 0376", "5402 7089"]
       "contactEmail": string | null,
+      "eventWebsite": string | null,  // e.g., "www.4peaksrace.com"
+      "fuelLocations": string | null,  // e.g., "FUEGY fuel barge at western entrance of Aberdeen Harbour"
+      "parkingInfo": string | null,  // e.g., "Car parking not available at ABC. Public car parks opposite main clubhouse"
+      "berthingInfo": string | null,  // e.g., "Limited mooring available, allocated in order of entries"
       
       // === PRIZEGIVING ===
       "prizegivingDate": string | null,  // e.g., "Wednesday 17 December 2025"
@@ -134,6 +219,13 @@ Return a JSON object with this EXACT structure:
       "handicapSystem": string | null,  // e.g., "RHKATI", "IRC", "PHS", "ORC", "ORCi"
       "seriesRacesRequired": number | null,  // Minimum races to constitute a series
       "discardsPolicy": string | null,
+      "scoringFormulaDescription": string | null,  // Human-readable explanation of how results are calculated (e.g., "Corrected time = (elapsed - hill times) adjusted by handicap + hill times")
+      "scoringCheckpoints": Array<{location: string, checkType: string}> | null,  // Timing checkpoints (e.g., [{location: "Lantau Peak", checkType: "gate"}])
+
+      // === MOTORING DIVISION (for distance races allowing engine use) ===
+      "motoringDivisionAvailable": boolean | null,  // true if boats can elect to enter motoring division
+      "motoringDivisionRules": string | null,  // Rules for motoring (e.g., "Call Race Control before switching on engines, 30 min after start")
+      "motoringPenaltyFormula": string | null,  // How motoring time is penalized
 
       // === PENALTY SYSTEM ===
       "penaltySystem": string | null,  // e.g., "One-Turn Penalty", "Two-Turns Penalty", "Scoring Penalty"
@@ -464,6 +556,60 @@ IMPORTANT INSTRUCTIONS:
     - prizegivingDate, prizegivingTime, prizegivingLocation
     - Extract from "PRIZES" or "PRIZEGIVING" section
 
+23. **MULTI-DAY EVENT SCHEDULE** (CRITICAL for distance races & multi-day events):
+    - Extract ALL scheduled events into the "schedule" array
+    - Look for "SCHEDULE", "PROGRAMME", "TIMETABLE", or numbered date entries
+    - For each event extract: date (YYYY-MM-DD), time (HH:MM), event name, location, and whether it's mandatory
+    - Common events to capture:
+      * Skippers Briefing (often COMPULSORY - mark mandatory: true)
+      * Race Start / Warning Signal
+      * Race Finish / Time Limit
+      * Prize Giving / Awards Ceremony
+      * Safety Briefing
+      * Registration / Check-in
+    - Example: If document says "Thursday 15th January - Skippers Briefing at 1900hrs in ABC Main Clubhouse (compulsory)" → create schedule entry with mandatory: true
+
+24. **CREW REQUIREMENTS** (CRITICAL for adventure/distance races):
+    - **minimumCrew**: Extract minimum crew number (e.g., "minimum number of crew is five")
+    - **crewRequirements**: Extract special crew rules for unique races
+      - For "Four Peaks Race" type events: "All crew members except three must complete the ascent of at least one peak"
+      - For offshore: "Watch system required with minimum 3 crew on deck at all times"
+    - **minorSailorRules**: Extract rules for under-18 sailors
+      - Look for "under the age of eighteen", "parental consent", "guardian", "minor"
+      - Example: "Crew under 18 not sailing with parent/guardian must submit signed Parental Consent form. Any person under 18 must be accompanied by adult on hill runs"
+
+25. **MOTORING DIVISION** (for distance races):
+    - Extract if boats can elect to enter a "motoring division" or use engines
+    - **motoringDivisionAvailable**: true if mentioned
+    - **motoringDivisionRules**: When/how to use engines (e.g., "call Race Control before switching on engines, no earlier than 30 minutes after scheduled start")
+    - **motoringPenaltyFormula**: How motoring time is penalized (e.g., "time penalty for accumulated periods of motoring")
+    - Look for "MOTORING", "MOTORING DIVISION", "ENGINE", "MOTOR"
+
+26. **UNIQUE SCORING FORMULAS** (CRITICAL for adventure races like Four Peaks):
+    - **scoringFormulaDescription**: Extract the full scoring formula in human-readable form
+      - For Four Peaks: "Corrected time = (total elapsed time - hill times) adjusted by PHS/IRC rating, then add back cumulative hill times"
+      - For standard races: "Corrected time using IRC" or "PHS handicap applied"
+    - **scoringCheckpoints**: Extract any timing gates/checkpoints mentioned
+      - Example: "Lantau Peak running times will be checked at a gate" → {location: "Lantau Peak", checkType: "timing gate"}
+    - Look for "SCORING", "RESULTS", "CALCULATION", "FORMULA", unique scoring methods
+
+27. **EVENT LOGISTICS** (helpful for competitors):
+    - **eventWebsite**: Main event URL (often in "FURTHER INFORMATION" section)
+    - **fuelLocations**: Where to get fuel (look for "FUEL", "SHIPS STORES")
+    - **parkingInfo**: Car parking availability (look for "CAR PARKING", "PARKING")
+    - **berthingInfo**: Mooring/berthing availability (look for "BERTHING", "MOORINGS", "MOORING")
+
+28. **ROUTE WAYPOINTS FOR DISTANCE RACES** (CRITICAL - extract ALL waypoints/peaks):
+    - For races like "Four Peaks Race", extract each peak/waypoint in order:
+      - Example: Lantau Peak → Mount Stenhouse → Violet Hill → Ma On Shan
+      - Create routeWaypoints array entries even without GPS coordinates
+      - Set type: "waypoint" for intermediate points, "start"/"finish" for start/end
+      - Include notes about drop-off points or ascent requirements if mentioned
+    - For offshore races with geographic waypoints:
+      - Extract each gate, mark, or geographical feature in order
+      - Include passing side requirements (port/starboard)
+    - The ORDER matters - extract waypoints in the sequence they must be visited!
+
 Return ONLY the JSON object, no additional text.`,
           },
         ],
@@ -488,11 +634,44 @@ Return ONLY the JSON object, no additional text.`,
 
     const result = await response.json();
     console.log('[extract-race-details] Claude response received');
+    console.log('[extract-race-details] Claude stop_reason:', result.stop_reason);
+    console.log('[extract-race-details] Claude usage:', JSON.stringify(result.usage));
+
+    // Validate Claude response structure
+    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
+      console.error('[extract-race-details] Invalid Claude response structure:', JSON.stringify(result).substring(0, 500));
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid Claude response structure',
+          details: JSON.stringify(result).substring(0, 500),
+          stop_reason: result.stop_reason
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!result.content[0].text) {
+      console.error('[extract-race-details] Claude response has no text:', JSON.stringify(result.content[0]).substring(0, 500));
+      return new Response(
+        JSON.stringify({
+          error: 'Claude response has no text content',
+          details: JSON.stringify(result.content[0]).substring(0, 500),
+          stop_reason: result.stop_reason
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if response was truncated due to max_tokens
+    if (result.stop_reason === 'max_tokens') {
+      console.warn('[extract-race-details] Claude response was truncated due to max_tokens');
+    }
 
     // Extract the JSON from Claude's response
     let content = result.content[0].text;
     console.log('[extract-race-details] Raw content length:', content.length);
     console.log('[extract-race-details] Content preview:', content.substring(0, 200));
+    console.log('[extract-race-details] Content end preview:', content.substring(Math.max(0, content.length - 200)));
 
     // Claude sometimes wraps JSON in markdown code blocks, so clean it up
     // Remove markdown code fences if present
@@ -506,18 +685,77 @@ Return ONLY the JSON object, no additional text.`,
 
     console.log('[extract-race-details] Cleaned content preview:', content.substring(0, 200));
 
-    // Parse the JSON
+    // Parse the JSON - try multiple strategies
     let extractedData;
+    let parseAttempts = [];
+
+    // Attempt 1: Direct parse
     try {
       extractedData = JSON.parse(content);
-    } catch (parseError) {
-      console.error('[extract-race-details] Failed to parse Claude response as JSON:', parseError);
-      console.error('[extract-race-details] Content preview:', content.substring(0, 500));
+      console.log('[extract-race-details] JSON parsed successfully on first attempt');
+    } catch (parseError1) {
+      parseAttempts.push({ attempt: 1, error: parseError1.message });
+
+      // Attempt 2: Find JSON object in content (Claude may prefix with text)
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          extractedData = JSON.parse(jsonMatch[0]);
+          console.log('[extract-race-details] JSON parsed after extracting object from text');
+        } catch (parseError2) {
+          parseAttempts.push({ attempt: 2, error: parseError2.message });
+        }
+      } else {
+        parseAttempts.push({ attempt: 2, error: 'No JSON object found in content' });
+      }
+
+      // Attempt 3: Check if JSON is truncated (ends without closing brace)
+      if (!extractedData) {
+        const lastBrace = content.lastIndexOf('}');
+        const lastBracket = content.lastIndexOf(']');
+        if (lastBrace > -1 || lastBracket > -1) {
+          // Try to find where the JSON starts
+          const jsonStart = content.indexOf('{');
+          if (jsonStart > -1) {
+            let truncated = content.substring(jsonStart);
+            // Count braces to see if JSON is incomplete
+            const openBraces = (truncated.match(/\{/g) || []).length;
+            const closeBraces = (truncated.match(/\}/g) || []).length;
+            if (openBraces > closeBraces) {
+              console.log('[extract-race-details] JSON appears truncated - missing', openBraces - closeBraces, 'closing braces');
+              parseAttempts.push({ attempt: 3, error: `JSON truncated: ${openBraces} open braces, ${closeBraces} close braces` });
+            }
+          }
+        }
+      }
+    }
+
+    if (!extractedData) {
+      console.error('[extract-race-details] Failed to parse Claude response as JSON');
+      console.error('[extract-race-details] Parse attempts:', JSON.stringify(parseAttempts));
+      console.error('[extract-race-details] Content first 500 chars:', content.substring(0, 500));
+      console.error('[extract-race-details] Content last 500 chars:', content.substring(Math.max(0, content.length - 500)));
+      console.error('[extract-race-details] Total content length:', content.length);
+
+      // Check for common error patterns
+      let errorHint = '';
+      if (content.toLowerCase().includes('i cannot') || content.toLowerCase().includes('i\'m unable')) {
+        errorHint = 'Claude may have refused the request';
+      } else if (content.toLowerCase().includes('error') || content.toLowerCase().includes('invalid')) {
+        errorHint = 'Claude may have returned an error message';
+      } else if (content.length < 100) {
+        errorHint = 'Response unusually short - may be an error or refusal';
+      } else if (!content.includes('{')) {
+        errorHint = 'No JSON object found in response';
+      }
+
       return new Response(
         JSON.stringify({
           error: 'Failed to parse AI response',
-          details: content.substring(0, 300),
-          parseError: parseError.message
+          details: content.substring(0, 500),
+          parseAttempts,
+          contentLength: content.length,
+          errorHint
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

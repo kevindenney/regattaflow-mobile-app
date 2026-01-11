@@ -1,5 +1,6 @@
 import { createLogger } from '@/lib/utils/logger';
 import { supabase } from './supabase';
+import type { StrategySectionId, RaceStrategyNotes, StrategySectionNote } from '@/types/raceStrategy';
 
 const logger = createLogger('StrategicPlanningService');
 
@@ -292,6 +293,170 @@ class StrategicPlanningService {
     } catch (error) {
       logger.error('Failed to get AI suggestions:', error);
       return null;
+    }
+  }
+
+  // ==========================================
+  // SECTION-SPECIFIC NOTES METHODS
+  // ==========================================
+
+  /**
+   * Save a user's strategy note for a specific section
+   * Notes are stored in the ai_strategy_suggestions JSONB under userSectionNotes
+   */
+  async saveSectionNote(
+    raceEventId: string,
+    sailorId: string,
+    sectionId: StrategySectionId,
+    note: string
+  ): Promise<boolean> {
+    try {
+      // First get existing suggestions to merge with
+      const { data: existing, error: fetchError } = await supabase
+        .from('sailor_race_preparation')
+        .select('ai_strategy_suggestions')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        logger.error('Error fetching existing suggestions:', fetchError);
+        throw fetchError;
+      }
+
+      // Merge the new note into existing suggestions
+      const currentSuggestions = existing?.ai_strategy_suggestions || {};
+      const currentUserNotes = currentSuggestions.userSectionNotes || {};
+
+      const updatedSuggestions = {
+        ...currentSuggestions,
+        userSectionNotes: {
+          ...currentUserNotes,
+          [sectionId]: {
+            userPlan: note,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+
+      const { error } = await supabase
+        .from('sailor_race_preparation')
+        .upsert(
+          {
+            race_event_id: raceEventId,
+            sailor_id: sailorId,
+            ai_strategy_suggestions: updatedSuggestions,
+          },
+          {
+            onConflict: 'race_event_id,sailor_id',
+          }
+        );
+
+      if (error) {
+        logger.error(`Error saving section note for ${sectionId}:`, error);
+        throw error;
+      }
+
+      logger.info(`Saved section note for ${sectionId}`);
+      return true;
+    } catch (error) {
+      logger.error(`Failed to save section note for ${sectionId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Get all user section notes for a race
+   */
+  async getSectionNotes(
+    raceEventId: string,
+    sailorId: string
+  ): Promise<Partial<Record<StrategySectionId, StrategySectionNote>> | null> {
+    try {
+      const { data, error } = await supabase
+        .from('sailor_race_preparation')
+        .select('ai_strategy_suggestions')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      if (error) {
+        logger.error('Error fetching section notes:', error);
+        throw error;
+      }
+
+      return data?.ai_strategy_suggestions?.userSectionNotes || null;
+    } catch (error) {
+      logger.error('Failed to get section notes:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Save multiple section notes at once
+   */
+  async saveBulkSectionNotes(
+    raceEventId: string,
+    sailorId: string,
+    notes: Partial<Record<StrategySectionId, string>>
+  ): Promise<boolean> {
+    try {
+      // First get existing suggestions to merge with
+      const { data: existing, error: fetchError } = await supabase
+        .from('sailor_race_preparation')
+        .select('ai_strategy_suggestions')
+        .eq('race_event_id', raceEventId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        logger.error('Error fetching existing suggestions:', fetchError);
+        throw fetchError;
+      }
+
+      const now = new Date().toISOString();
+      const currentSuggestions = existing?.ai_strategy_suggestions || {};
+      const currentUserNotes = currentSuggestions.userSectionNotes || {};
+
+      // Build updated notes object
+      const updatedUserNotes = { ...currentUserNotes };
+      for (const [sectionId, note] of Object.entries(notes)) {
+        if (note !== undefined) {
+          updatedUserNotes[sectionId] = {
+            userPlan: note,
+            updatedAt: now,
+          };
+        }
+      }
+
+      const updatedSuggestions = {
+        ...currentSuggestions,
+        userSectionNotes: updatedUserNotes,
+      };
+
+      const { error } = await supabase
+        .from('sailor_race_preparation')
+        .upsert(
+          {
+            race_event_id: raceEventId,
+            sailor_id: sailorId,
+            ai_strategy_suggestions: updatedSuggestions,
+          },
+          {
+            onConflict: 'race_event_id,sailor_id',
+          }
+        );
+
+      if (error) {
+        logger.error('Error saving bulk section notes:', error);
+        throw error;
+      }
+
+      logger.info(`Saved ${Object.keys(notes).length} section notes`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to save bulk section notes:', error);
+      return false;
     }
   }
 

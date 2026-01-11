@@ -28,6 +28,29 @@ import { MarkRoomInteractive } from './interactives/MarkRoomInteractive';
 import { StartingBasicsInteractive } from './interactives/StartingBasicsInteractive';
 import { UpwindTacticsInteractive } from './interactives/UpwindTacticsInteractive';
 import { DownwindBasicsInteractive } from './interactives/DownwindBasicsInteractive';
+import { RaceDocumentsBasicsInteractive } from './interactives/RaceDocumentsBasicsInteractive';
+import { RaceDocumentsAdvancedInteractive } from './interactives/RaceDocumentsAdvancedInteractive';
+import { ShroudTensionSimulator } from './interactives/ShroudTensionSimulator';
+import { HelmBalanceInteractive } from './interactives/HelmBalanceInteractive';
+import { MainsailControlsInteractive } from './interactives/MainsailControlsInteractive';
+// Weather interactives
+import { WeatherAnalysisInteractive } from './interactives/WeatherAnalysisInteractive';
+import { CurrentReadingInteractive } from './interactives/CurrentReadingInteractive';
+import { WindShiftPredictionInteractive } from './interactives/WindShiftPredictionInteractive';
+// Tactics interactives
+import { LaylineCalculatorInteractive } from './interactives/LaylineCalculatorInteractive';
+import { FleetPositioningInteractive } from './interactives/FleetPositioningInteractive';
+import { MarkRoundingTacticsInteractive } from './interactives/MarkRoundingTacticsInteractive';
+// Equipment interactives
+import { SailSelectionInteractive } from './interactives/SailSelectionInteractive';
+import { SafetyGearCheckInteractive } from './interactives/SafetyGearCheckInteractive';
+// Rules interactives
+import { NORQuizInteractive } from './interactives/NORQuizInteractive';
+import { SIInterpreterInteractive } from './interactives/SIInterpreterInteractive';
+import { CourseSignalsInteractive } from './interactives/CourseSignalsInteractive';
+// Distance racing interactives
+import { RouteBriefingInteractive } from './interactives/RouteBriefingInteractive';
+import { WeatherRoutingInteractive } from './interactives/WeatherRoutingInteractive';
 
 // Component registry
 const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -45,6 +68,29 @@ const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
   'StartingBasicsInteractive': StartingBasicsInteractive,
   'UpwindTacticsInteractive': UpwindTacticsInteractive,
   'DownwindBasicsInteractive': DownwindBasicsInteractive,
+  'RaceDocumentsBasicsInteractive': RaceDocumentsBasicsInteractive,
+  'RaceDocumentsAdvancedInteractive': RaceDocumentsAdvancedInteractive,
+  'ShroudTensionSimulator': ShroudTensionSimulator,
+  'HelmBalanceInteractive': HelmBalanceInteractive,
+  'MainsailControlsInteractive': MainsailControlsInteractive,
+  // Weather interactives
+  'WeatherAnalysisInteractive': WeatherAnalysisInteractive,
+  'CurrentReadingInteractive': CurrentReadingInteractive,
+  'WindShiftPredictionInteractive': WindShiftPredictionInteractive,
+  // Tactics interactives
+  'LaylineCalculatorInteractive': LaylineCalculatorInteractive,
+  'FleetPositioningInteractive': FleetPositioningInteractive,
+  'MarkRoundingTacticsInteractive': MarkRoundingTacticsInteractive,
+  // Equipment interactives
+  'SailSelectionInteractive': SailSelectionInteractive,
+  'SafetyGearCheckInteractive': SafetyGearCheckInteractive,
+  // Rules interactives
+  'NORQuizInteractive': NORQuizInteractive,
+  'SIInterpreterInteractive': SIInterpreterInteractive,
+  'CourseSignalsInteractive': CourseSignalsInteractive,
+  // Distance racing interactives
+  'RouteBriefingInteractive': RouteBriefingInteractive,
+  'WeatherRoutingInteractive': WeatherRoutingInteractive,
 };
 
 export function InteractivePlayer({ componentName, onComplete }: InteractivePlayerProps) {

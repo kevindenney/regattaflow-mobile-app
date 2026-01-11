@@ -314,14 +314,14 @@ export function RaceConditionsCard({
         const timeMs = time.getTime();
         let before = forecasts[0], after = forecasts[forecasts.length - 1];
         for (let i = 0; i < forecasts.length - 1; i++) {
-          const ft = forecasts[i].timestamp || new Date(forecasts[i].time);
-          const nt = forecasts[i + 1].timestamp || new Date(forecasts[i + 1].time);
+          const ft = forecasts[i].timestamp;
+          const nt = forecasts[i + 1].timestamp;
           if (ft.getTime() <= timeMs && nt.getTime() >= timeMs) {
             before = forecasts[i]; after = forecasts[i + 1]; break;
           }
         }
-        const bt = (before.timestamp || new Date(before.time)).getTime();
-        const at = (after.timestamp || new Date(after.time)).getTime();
+        const bt = before.timestamp.getTime();
+        const at = after.timestamp.getTime();
         const p = at !== bt ? (timeMs - bt) / (at - bt) : 0;
         return {
           speed: Math.round(before.windSpeed + (after.windSpeed - before.windSpeed) * p),
@@ -338,17 +338,19 @@ export function RaceConditionsCard({
     };
     
     const interpolateTideHeight = (time: Date): number | undefined => {
-      if (!highTideTime || !lowTideTime || !Number.isFinite(highTideHeight) || !Number.isFinite(lowTideHeight)) return tidalIntel?.current?.height;
+      if (!highTideTime || !lowTideTime || highTideHeight === undefined || lowTideHeight === undefined) return tidalIntel?.current?.height;
+      const high = highTideHeight;
+      const low = lowTideHeight;
       const timeMs = time.getTime(), highMs = highTideTime.getTime(), lowMs = lowTideTime.getTime();
       const halfPeriod = 372.5 * 60 * 1000;
       if (highMs < lowMs) {
-        if (timeMs <= highMs) { const p = (timeMs - (highMs - halfPeriod)) / halfPeriod; return lowTideHeight + (highTideHeight - lowTideHeight) * (1 - Math.cos(p * Math.PI)) / 2; }
-        if (timeMs <= lowMs) { const p = (timeMs - highMs) / (lowMs - highMs); return highTideHeight - (highTideHeight - lowTideHeight) * (1 - Math.cos(p * Math.PI)) / 2; }
-        const p = (timeMs - lowMs) / halfPeriod; return lowTideHeight + (highTideHeight - lowTideHeight) * (1 - Math.cos(p * Math.PI)) / 2;
+        if (timeMs <= highMs) { const p = (timeMs - (highMs - halfPeriod)) / halfPeriod; return low + (high - low) * (1 - Math.cos(p * Math.PI)) / 2; }
+        if (timeMs <= lowMs) { const p = (timeMs - highMs) / (lowMs - highMs); return high - (high - low) * (1 - Math.cos(p * Math.PI)) / 2; }
+        const p = (timeMs - lowMs) / halfPeriod; return low + (high - low) * (1 - Math.cos(p * Math.PI)) / 2;
       } else {
-        if (timeMs <= lowMs) { const p = (timeMs - (lowMs - halfPeriod)) / halfPeriod; return highTideHeight - (highTideHeight - lowTideHeight) * (1 - Math.cos(p * Math.PI)) / 2; }
-        if (timeMs <= highMs) { const p = (timeMs - lowMs) / (highMs - lowMs); return lowTideHeight + (highTideHeight - lowTideHeight) * (1 - Math.cos(p * Math.PI)) / 2; }
-        const p = (timeMs - highMs) / halfPeriod; return highTideHeight - (highTideHeight - lowTideHeight) * (1 - Math.cos(p * Math.PI)) / 2;
+        if (timeMs <= lowMs) { const p = (timeMs - (lowMs - halfPeriod)) / halfPeriod; return high - (high - low) * (1 - Math.cos(p * Math.PI)) / 2; }
+        if (timeMs <= highMs) { const p = (timeMs - lowMs) / (highMs - lowMs); return low + (high - low) * (1 - Math.cos(p * Math.PI)) / 2; }
+        const p = (timeMs - highMs) / halfPeriod; return high - (high - low) * (1 - Math.cos(p * Math.PI)) / 2;
       }
     };
     
@@ -442,12 +444,12 @@ export function RaceConditionsCard({
         const timeMs = time.getTime();
         let before = forecasts[0], after = forecasts[forecasts.length - 1];
         for (let i = 0; i < forecasts.length - 1; i++) {
-          const ft = forecasts[i].timestamp || new Date(forecasts[i].time);
-          const nt = forecasts[i + 1].timestamp || new Date(forecasts[i + 1].time);
+          const ft = forecasts[i].timestamp;
+          const nt = forecasts[i + 1].timestamp;
           if (ft.getTime() <= timeMs && nt.getTime() >= timeMs) { before = forecasts[i]; after = forecasts[i + 1]; break; }
         }
-        const bt = (before.timestamp || new Date(before.time)).getTime();
-        const at = (after.timestamp || new Date(after.time)).getTime();
+        const bt = before.timestamp.getTime();
+        const at = after.timestamp.getTime();
         const p = at !== bt ? (timeMs - bt) / (at - bt) : 0;
         return { height: Math.round(((before.waveHeight ?? 0.5) + ((after.waveHeight ?? 0.5) - (before.waveHeight ?? 0.5)) * p) * 10) / 10, period: before.wavePeriod || after.wavePeriod };
       }
@@ -820,7 +822,7 @@ export function RaceConditionsCard({
                 <Text style={styles.dataLabel}>{getWindDir(point.windDirection)}</Text>
               </View>
               <View style={[styles.dataCol, styles.dataCell]}>
-                <Text style={[styles.dataValue, point.currentSpeed && point.currentSpeed > 0.3 && styles.dataValueStrong]}>
+                <Text style={[styles.dataValue, point.currentSpeed !== undefined && point.currentSpeed > 0.3 && styles.dataValueStrong]}>
                   {point.currentSpeed?.toFixed(1) ?? '–'}
                 </Text>
                 <Text style={styles.dataLabel}>{point.tidePhase.slice(0, 3)}</Text>

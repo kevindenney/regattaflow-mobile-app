@@ -30,20 +30,27 @@ export const DashboardSkeleton = () => {
         <View style={styles.headerContent}>
           {/* Venue indicator */}
           <View style={styles.venueRow}>
-            <Skeleton style={styles.venueIcon} speed={1.5} />
-            <Skeleton style={styles.venueText} speed={1.5} />
+            <Skeleton style={styles.venueIcon} speed={2} />
+            <Skeleton style={styles.venueText} speed={2} />
           </View>
           {/* Utility icons */}
           <View style={styles.utilityRow}>
-            <Skeleton style={styles.utilityIcon} speed={1.5} />
+            <Skeleton style={styles.utilityIcon} speed={2} />
           </View>
         </View>
       </View>
 
       {/* Race count hint */}
       <View style={styles.countRow}>
-        <Skeleton style={styles.countText} speed={1.5} />
-        <Skeleton style={styles.addButton} speed={1.5} />
+        <Skeleton style={styles.countText} speed={2} />
+        <Skeleton style={styles.addButton} speed={2} />
+      </View>
+
+      {/* Season header - compact */}
+      <View style={styles.seasonHeader}>
+        <Skeleton style={styles.seasonName} speed={2} />
+        <View style={styles.seasonDot} />
+        <Skeleton style={styles.seasonPosition} speed={2} />
       </View>
 
       {/* Hero zone - skeleton race cards */}
@@ -54,16 +61,16 @@ export const DashboardSkeleton = () => {
         </View>
       </View>
 
-      {/* Timeline dots skeleton */}
-      <View style={styles.timelineDots}>
-        <Skeleton style={styles.timelineDotActive} speed={1.5} />
-        <Skeleton style={styles.timelineDot} speed={1.5} />
-        <Skeleton style={styles.timelineDot} speed={1.5} />
-      </View>
-
-      {/* Detail zone hint */}
+      {/* Detail zone - collapsible sections */}
       <View style={styles.detailZone}>
-        <Skeleton style={styles.detailCard} speed={1.5} />
+        <View style={styles.sectionHeader}>
+          <Skeleton style={styles.sectionChevron} speed={2} />
+          <Skeleton style={styles.sectionTitle} speed={2} />
+        </View>
+        <View style={styles.sectionHeader}>
+          <Skeleton style={styles.sectionChevron} speed={2} />
+          <Skeleton style={styles.sectionTitle} speed={2} />
+        </View>
       </View>
     </View>
   );
@@ -80,40 +87,40 @@ const RaceCardSkeleton = () => {
 
       {/* Top badges - fleet, course, count */}
       <View style={styles.topBadges}>
-        <Skeleton style={styles.badge} speed={1.5} />
-        <Skeleton style={styles.badge} speed={1.5} />
+        <Skeleton style={styles.badge} speed={2} />
+        <Skeleton style={styles.badge} speed={2} />
       </View>
 
       {/* Header zone - countdown + details */}
       <View style={styles.headerZone}>
         {/* Countdown box */}
-        <Skeleton style={styles.countdownBox} speed={1.5} />
+        <Skeleton style={styles.countdownBox} speed={2} />
 
         {/* Race details */}
         <View style={styles.headerDetails}>
-          <Skeleton style={styles.raceName} speed={1.5} />
-          <Skeleton style={styles.raceName2} speed={1.5} />
+          <Skeleton style={styles.raceName} speed={2} />
+          <Skeleton style={styles.raceName2} speed={2} />
           <View style={styles.metaRow}>
-            <Skeleton style={styles.metaIcon} speed={1.5} />
-            <Skeleton style={styles.metaText} speed={1.5} />
+            <Skeleton style={styles.metaIcon} speed={2} />
+            <Skeleton style={styles.metaText} speed={2} />
           </View>
           <View style={styles.startTimeRow}>
-            <Skeleton style={styles.startLabel} speed={1.5} />
-            <Skeleton style={styles.startValue} speed={1.5} />
+            <Skeleton style={styles.startLabel} speed={2} />
+            <Skeleton style={styles.startValue} speed={2} />
           </View>
         </View>
       </View>
 
       {/* Conditions row - wind, tide, VHF chips */}
       <View style={styles.conditionsRow}>
-        <Skeleton style={styles.conditionChip} speed={1.5} />
-        <Skeleton style={styles.conditionChip} speed={1.5} />
-        <Skeleton style={styles.conditionChipSmall} speed={1.5} />
+        <Skeleton style={styles.conditionChip} speed={2} />
+        <Skeleton style={styles.conditionChip} speed={2} />
+        <Skeleton style={styles.conditionChipSmall} speed={2} />
       </View>
 
       {/* Timer section */}
       <View style={styles.timerSection}>
-        <Skeleton style={styles.timerButton} speed={1.5} />
+        <Skeleton style={styles.timerButton} speed={2} />
       </View>
     </View>
   );
@@ -345,46 +352,58 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
 
-  // Timeline dots
-  timelineDots: {
+  // Season header (compact)
+  seasonHeader: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    gap: 6,
   },
-  timelineDot: {
-    width: 8,
-    height: 8,
+  seasonName: {
+    width: 90,
+    height: 13,
     borderRadius: 4,
     backgroundColor: '#D1D5DB',
   },
-  timelineDotActive: {
-    width: 24,
-    height: 8,
-    borderRadius: 4,
+  seasonDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: '#9CA3AF',
   },
+  seasonPosition: {
+    width: 80,
+    height: 13,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
 
-  // Detail zone
+  // Detail zone - collapsible sections
   detailZone: {
     paddingHorizontal: 16,
     paddingTop: 8,
   },
-  detailCard: {
-    height: 80,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 4,
-        elevation: 2,
-      },
-    }),
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    marginBottom: 8,
+    gap: 10,
+  },
+  sectionChevron: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  sectionTitle: {
+    width: 140,
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
   },
 });

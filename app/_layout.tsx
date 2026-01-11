@@ -15,6 +15,14 @@ import * as Font from 'expo-font';
 import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
+// Configure Reanimated logger to suppress strict mode warnings
+import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
+
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false, // Disable strict mode warnings about shared value access during render
+});
+
 // Initialize i18n (must be imported before any components that use translations)
 import '@/lib/i18n';
 

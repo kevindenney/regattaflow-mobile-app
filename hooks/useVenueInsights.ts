@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
-import { venueIntelligenceService } from '@/services/venue/venueIntelligenceService';
+import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useVenueInsights');

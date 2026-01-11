@@ -7,7 +7,8 @@ const logger = createLogger('RaceResults');
 
 export interface RaceResult {
   id: string;
-  race_id: string;
+  regatta_id: string;
+  race_number?: number;
   sailor_id: string;
   position: number;
   points: number;
@@ -49,9 +50,9 @@ export function useRaceResults(raceId?: string) {
     setError(null);
 
     try {
-      // Load race details
+      // Load race/regatta details
       const { data: raceData, error: raceError } = await supabase
-        .from('regatta_races')
+        .from('regattas')
         .select('*')
         .eq('id', raceId)
         .single();
@@ -63,7 +64,7 @@ export function useRaceResults(raceId?: string) {
       const { data: resultsData, error: resultsError } = await supabase
         .from('race_results')
         .select('*')
-        .eq('race_id', raceId)
+        .eq('regatta_id', raceId)
         .order('position', { ascending: true });
 
       if (resultsError) throw resultsError;
@@ -89,7 +90,7 @@ export function useRaceResults(raceId?: string) {
       channelName,
       {
         table: 'race_results',
-        filter: `race_id=eq.${raceId}`,
+        filter: `regatta_id=eq.${raceId}`,
       },
       (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -110,7 +111,7 @@ export function useRaceResults(raceId?: string) {
     realtimeService.subscribe(
       raceChannelName,
       {
-        table: 'regatta_races',
+        table: 'regattas',
         filter: `id=eq.${raceId}`,
       },
       (payload) => {
@@ -241,6 +242,35 @@ export function useLiveRaces(userId?: string) {
         }
       }
 
+      // Race events created by the user (user-created races via add race flow)
+      const { data: userRaceEvents, error: raceEventsError } = await supabase
+        .from('race_events')
+        .select('*')
+        .eq('user_id', userId)
+        .order('start_time', { ascending: true })
+        .limit(100);
+
+      if (raceEventsError) {
+        logger.warn('Unable to load user race_events:', raceEventsError);
+      } else {
+        // Normalize race_events to match regatta structure for consistent handling
+        const normalizedRaceEvents = (userRaceEvents || []).map((event: any) => ({
+          ...event,
+          // Map race_events fields to regatta-like structure
+          start_date: event.start_time || event.event_date,
+          race_name: event.name,
+          created_by: event.user_id,
+          // Map location to metadata.venue_name so useEnrichedRaces can find it
+          metadata: {
+            ...(event.metadata || {}),
+            venue_name: event.location || event.metadata?.venue_name || null,
+            venue: event.location || event.metadata?.venue || null,
+          },
+          _source: 'race_events', // Track source for debugging
+        }));
+        addRaces(normalizedRaceEvents);
+      }
+
       const merged = Array.from(racesById.values()).sort((a: any, b: any) => {
         const aTime = a?.start_date ? new Date(a.start_date).getTime() : Number.MAX_SAFE_INTEGER;
         const bTime = b?.start_date ? new Date(b.start_date).getTime() : Number.MAX_SAFE_INTEGER;
@@ -315,9 +345,69 @@ export function useLiveRaces(userId?: string) {
       logger.error('Error setting up realtime subscription:', err);
     }
 
+    // Also subscribe to race_events for user-created races
+    const raceEventsChannelName = createChannelName('user-race-events', userId);
+    try {
+      realtimeService.subscribe(
+        raceEventsChannelName,
+        {
+          table: 'race_events',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          try {
+            if (payload.eventType === 'INSERT') {
+              const newEvent = payload.new as any;
+              // Normalize to match regatta structure
+              const normalizedEvent = {
+                ...newEvent,
+                start_date: newEvent.start_time || newEvent.event_date,
+                race_name: newEvent.name,
+                created_by: newEvent.user_id,
+                _source: 'race_events',
+              };
+              setLiveRaces((prev) => {
+                if (prev.some((r) => r.id === normalizedEvent.id)) {
+                  return prev;
+                }
+                return [...prev, normalizedEvent].sort((a: any, b: any) =>
+                  new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+                );
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedEvent = payload.new as any;
+              const normalizedEvent = {
+                ...updatedEvent,
+                start_date: updatedEvent.start_time || updatedEvent.event_date,
+                race_name: updatedEvent.name,
+                created_by: updatedEvent.user_id,
+                _source: 'race_events',
+              };
+              setLiveRaces((prev) => {
+                const index = prev.findIndex((r) => r.id === normalizedEvent.id);
+                if (index >= 0) {
+                  const updated = [...prev];
+                  updated[index] = normalizedEvent;
+                  return updated;
+                }
+                return prev;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
+            }
+          } catch (err) {
+            logger.error('Error handling race_events realtime event:', err);
+          }
+        }
+      );
+    } catch (err) {
+      logger.error('Error setting up race_events realtime subscription:', err);
+    }
+
     return () => {
       try {
         realtimeService.unsubscribe(channelName);
+        realtimeService.unsubscribe(raceEventsChannelName);
       } catch (err) {
         logger.error('Error unsubscribing from realtime:', err);
       }
@@ -414,18 +504,15 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
         net_points,
         races_sailed,
         race_scores,
-        entry:entry_id (
-          sailor_id
-        )
+        sailor_id
       `)
       .in('regatta_id', regattaIds);
 
     if (!standingsError && standings) {
       // Filter standings for this user and map to results
       for (const standing of standings) {
-        // Check if this entry belongs to the user
-        const entry = standing.entry as any;
-        if (entry?.sailor_id === userId) {
+        // Check if this standing belongs to the user
+        if (standing.sailor_id === userId) {
           // Get fleet size from counting all standings in same regatta
           const fleetSize = standings.filter(s => s.regatta_id === standing.regatta_id).length;
           
@@ -447,28 +534,26 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
       .from('race_results')
       .select(`
         id,
-        race_id,
+        regatta_id,
+        race_number,
         sailor_id,
         position,
         points,
-        status_code,
-        regatta_races (
-          regatta_id
-        )
+        status_code
       `)
       .eq('sailor_id', userId);
 
     if (!raceResultsError && raceResults) {
       for (const result of raceResults) {
-        const regattaRace = result.regatta_races as any;
-        const regattaId = regattaRace?.regatta_id;
-        
+        const regattaId = result.regatta_id;
+
         if (regattaId && regattaIds.includes(regattaId) && !resultsMap.has(regattaId)) {
-          // Count fleet size for this race
+          // Count fleet size for this regatta + race_number
           const { count } = await supabase
             .from('race_results')
             .select('*', { count: 'exact', head: true })
-            .eq('race_id', result.race_id);
+            .eq('regatta_id', regattaId)
+            .eq('race_number', result.race_number);
 
           resultsMap.set(regattaId, {
             regattaId,

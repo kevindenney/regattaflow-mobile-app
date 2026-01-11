@@ -6,15 +6,25 @@
  */
 
 import React, { useMemo } from 'react';
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 import type { CourseMark } from '@/types/raceEvents';
 
 // Conditional imports for native only
-let Polyline: any;
+let Polyline: any = null;
+let mapsAvailable = false;
 
+// Check if native module is registered BEFORE requiring react-native-maps
 if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  Polyline = maps.Polyline;
+  try {
+    const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
+    if (nativeModule) {
+      const maps = require('react-native-maps');
+      Polyline = maps.Polyline;
+      mapsAvailable = true;
+    }
+  } catch (e) {
+    console.warn('[LaylinesOverlay] react-native-maps not available:', e);
+  }
 }
 
 // Colors matching web TacticalRaceMap

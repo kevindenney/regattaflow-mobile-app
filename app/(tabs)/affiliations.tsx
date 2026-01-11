@@ -68,7 +68,9 @@ export default function AffiliationsScreen() {
   };
 
   const handleFleetPress = (fleetId: string) => {
-    router.push(`/fleet/${fleetId}`);
+    // Navigate to the fleet overview screen
+    // The fleet/index.tsx manages fleet selection internally
+    router.push('/(tabs)/fleet');
   };
 
   const handleAddClub = () => {

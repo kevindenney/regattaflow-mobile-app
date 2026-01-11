@@ -5,7 +5,7 @@
  * Works on iOS, Android, and Web (React Native Universal).
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,21 @@ import type {
   AnalysisQuestion,
   PostRaceAnalysisFormProps,
 } from '@/types/raceAnalysis';
+import type { LearnableEventType, PersonalizedNudge } from '@/types/adaptiveLearning';
+import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
+import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
+
+// Step to nudge category mapping
+// Maps wizard steps to relevant learnable event types
+const STEP_NUDGE_MAPPING: Record<string, LearnableEventType[]> = {
+  'equipment_planning': ['equipment_issue', 'forgotten_item'],
+  'start': ['successful_strategy', 'performance_issue'],
+  'upwind': ['venue_learning', 'weather_adaptation', 'performance_issue'],
+  'windward_mark': ['venue_learning'],
+  'downwind': ['venue_learning', 'successful_strategy', 'weather_adaptation'],
+  'rules_protests': [],
+  'finish_overall': ['decision_outcome', 'successful_strategy'],
+};
 
 // Step definitions with playbook framework hints
 const ANALYSIS_STEPS: AnalysisStep[] = [
@@ -380,6 +395,9 @@ export function PostRaceAnalysisForm({
   existingAnalysis,
   onComplete,
   onCancel,
+  raceEventId,
+  venueId,
+  conditions,
 }: PostRaceAnalysisFormProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<Partial<RaceAnalysis>>(
@@ -387,9 +405,30 @@ export function PostRaceAnalysisForm({
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Fetch personalized nudges for contextual display
+  const { allNudges, isLoading: nudgesLoading, recordDelivery } = usePersonalizedNudges(
+    raceEventId || raceId,
+    {
+      venueId,
+      forecast: conditions?.windSpeed && conditions?.windDirection
+        ? { windSpeed: conditions.windSpeed, windDirection: conditions.windDirection }
+        : undefined,
+    }
+  );
+
   const currentStepData = ANALYSIS_STEPS[currentStep];
   const isLastStep = currentStep === ANALYSIS_STEPS.length - 1;
   const progress = ((currentStep + 1) / ANALYSIS_STEPS.length) * 100;
+
+  // Get nudges relevant to current step
+  const currentStepNudges = useMemo(() => {
+    const relevantCategories = STEP_NUDGE_MAPPING[currentStepData.id] || [];
+    if (relevantCategories.length === 0) return [];
+
+    return allNudges
+      .filter((n: PersonalizedNudge) => relevantCategories.includes(n.category as LearnableEventType))
+      .slice(0, 2); // Max 2 nudges per step to avoid overwhelming
+  }, [allNudges, currentStepData.id]);
 
   /**
    * Validate current step
@@ -540,6 +579,21 @@ export function PostRaceAnalysisForm({
 
       {/* Questions */}
       <ScrollView style={styles.questionsContainer}>
+        {/* Contextual nudges from past races */}
+        {currentStepNudges.length > 0 && (
+          <View style={styles.nudgeContainer}>
+            <NudgeList
+              nudges={currentStepNudges}
+              title="From Your Past Races"
+              channel="checklist"
+              onRecordDelivery={recordDelivery}
+              maxVisible={2}
+              compact={false}
+              showMatchReasons
+            />
+          </View>
+        )}
+
         {currentStepData.questions.map((question) => (
           <QuestionField
             key={question.id}
@@ -978,6 +1032,12 @@ const styles = StyleSheet.create({
   questionsContainer: {
     flex: 1,
     padding: 20,
+  },
+  nudgeContainer: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   questionContainer: {
     marginBottom: 24,

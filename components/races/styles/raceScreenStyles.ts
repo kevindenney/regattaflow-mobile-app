@@ -368,6 +368,8 @@ export const floatingHeaderStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     backgroundColor: 'transparent',
+    zIndex: 10,
+    elevation: 10, // Android requires elevation for z-index to work
   },
   left: {
     flex: 1,
@@ -396,19 +398,6 @@ export const floatingHeaderStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '400',
     color: '#6B7280',
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
   },
 });
 

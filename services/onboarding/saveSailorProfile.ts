@@ -175,6 +175,10 @@ export async function saveSailorProfile(data: SaveSailorProfileData) {
             boat_name: boat_name || null,
             is_owner: role === 'owner' || role === 'both',
             is_primary: true,
+          }, {
+            // Handle conflicts on the unique constraint (sailor_id, class_id, sail_number)
+            onConflict: 'sailor_id,class_id,sail_number',
+            ignoreDuplicates: false,
           });
 
         if (boatError) {

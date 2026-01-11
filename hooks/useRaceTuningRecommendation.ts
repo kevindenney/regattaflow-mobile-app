@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from '@/lib/utils/logger';
-import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSetting } from '@/services/RaceTuningService';
+import { raceTuningService, type RaceTuningRecommendation, type RaceTuningSetting, type EquipmentContext } from '@/services/RaceTuningService';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface UseRaceTuningOptions {
@@ -209,5 +209,120 @@ export function useRaceTuningRecommendation(options: UseRaceTuningOptions): UseR
     loading,
     error,
     refresh: fetchRecommendation,
+  };
+}
+
+/**
+ * Hook for Tufte "small multiples" display - fetches all wind range sections
+ */
+export interface UseAllWindRangesOptions {
+  classId?: string | null;
+  className?: string | null;
+  boatId?: string | null;
+  averageWindSpeed?: number | null;
+  enabled?: boolean;
+}
+
+export interface WindRangeData {
+  light: RaceTuningRecommendation | null;
+  medium: RaceTuningRecommendation | null;
+  heavy: RaceTuningRecommendation | null;
+  currentRange: 'light' | 'medium' | 'heavy' | null;
+  equipmentContext: EquipmentContext | null;
+}
+
+interface UseAllWindRangesResult {
+  data: WindRangeData;
+  loading: boolean;
+  error: Error | null;
+  refresh: () => Promise<void>;
+}
+
+export function useAllWindRangeSections(options: UseAllWindRangesOptions): UseAllWindRangesResult {
+  const {
+    classId,
+    className,
+    boatId,
+    averageWindSpeed,
+    enabled = true,
+  } = options;
+
+  const [data, setData] = useState<WindRangeData>({
+    light: null,
+    medium: null,
+    heavy: null,
+    currentRange: null,
+    equipmentContext: null,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const hasFetchedRef = useRef(false);
+  const lastFetchKeyRef = useRef<string>('');
+  const fetchKey = `${enabled}-${classId}-${className}-${boatId || 'no-boat'}`;
+
+  const fetchData = useCallback(async () => {
+    if (!enabled || (!classId && !className)) {
+      setData({
+        light: null,
+        medium: null,
+        heavy: null,
+        currentRange: null,
+        equipmentContext: null,
+      });
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await raceTuningService.getAllWindRangeSections({
+        classId,
+        className,
+        boatId,
+      });
+
+      // Determine current wind range based on conditions
+      const currentRange = raceTuningService.determineWindRange(averageWindSpeed);
+
+      setData({
+        ...result,
+        currentRange,
+      });
+    } catch (err) {
+      logger.debug('Failed to fetch all wind ranges:', (err as Error)?.message);
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled, classId, className, boatId, averageWindSpeed]);
+
+  useEffect(() => {
+    if (lastFetchKeyRef.current === fetchKey && hasFetchedRef.current) {
+      return;
+    }
+
+    lastFetchKeyRef.current = fetchKey;
+    hasFetchedRef.current = true;
+
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) {
+        await fetchData();
+      }
+    };
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchKey, fetchData]);
+
+  return {
+    data,
+    loading,
+    error,
+    refresh: fetchData,
   };
 }

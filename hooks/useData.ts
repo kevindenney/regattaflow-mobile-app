@@ -127,7 +127,8 @@ export function useRaces() {
           return {
             id: regatta.id,
             name: regatta.name,
-            venue: regatta.metadata?.venue_name || 'Venue TBD',
+            // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
+            venue: regatta.metadata?.venue_name || regatta.metadata?.venue || 'Venue TBD',
             date: regatta.start_date,
             startTime: regatta.warning_signal_time || extractTimeFrom24Hour(regatta.start_date),
             boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
@@ -549,7 +550,8 @@ export function useDashboardData() {
   const mappedRaces = (liveRaces || []).map((regatta: any) => ({
     id: regatta.id,
     name: regatta.name,
-    venue: regatta.metadata?.venue_name || 'Venue TBD',
+    // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
+    venue: regatta.metadata?.venue_name || regatta.metadata?.venue || 'Venue TBD',
     date: regatta.start_date,
     startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',

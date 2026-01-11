@@ -262,7 +262,7 @@ export class EnhancedClaudeClient extends ClaudeClient {
     }
 
     return this.createEnhancedMessage({
-      model: 'claude-3-5-haiku-latest', // Switched from Sonnet (75% cost savings)
+      model: 'claude-3-haiku-20240307', // Switched from Sonnet (75% cost savings)
       system: systemPrompt,
       messages: [{ role: 'user', content: message }],
       skills,

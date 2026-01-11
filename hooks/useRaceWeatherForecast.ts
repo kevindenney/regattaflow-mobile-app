@@ -77,6 +77,14 @@ export interface RaceWindowData {
   beaufortAtStart: number;
   /** Beaufort scale at end */
   beaufortAtEnd: number;
+  /** Wave height at race start (meters) */
+  waveHeightAtStart?: number;
+  /** Wave height at race end (meters) */
+  waveHeightAtEnd?: number;
+  /** Wave period at race start (seconds) */
+  wavePeriodAtStart?: number;
+  /** Wave direction at race start (cardinal) */
+  waveDirectionAtStart?: string;
 }
 
 export interface RaceWeatherForecastData {
@@ -116,6 +124,17 @@ export interface RaceWeatherForecastData {
 
   /** Race-window specific values: start, end, peak, turn */
   raceWindow?: RaceWindowData;
+
+  // === Wave data ===
+
+  /** Formatted hourly wave data for HourlyForecastTable */
+  hourlyWaves?: HourlyDataPoint[];
+  /** Average wave height during race window (meters) */
+  waveHeight?: number;
+  /** Average wave period during race window (seconds) */
+  wavePeriod?: number;
+  /** Wave/swell direction (cardinal) */
+  swellDirection?: string;
 }
 
 export interface UseRaceWeatherForecastResult {
@@ -300,6 +319,20 @@ function extractRaceWindowData(
     }
   }
 
+  // Extract wave data
+  const waveHeightAtStart = startForecast.waveHeight !== undefined
+    ? Math.round(startForecast.waveHeight * 10) / 10
+    : undefined;
+  const waveHeightAtEnd = endForecast.waveHeight !== undefined
+    ? Math.round(endForecast.waveHeight * 10) / 10
+    : undefined;
+  const wavePeriodAtStart = startForecast.wavePeriod !== undefined
+    ? Math.round(startForecast.wavePeriod)
+    : undefined;
+  const waveDirectionAtStart = startForecast.waveDirection !== undefined
+    ? degreesToCardinal(startForecast.waveDirection)
+    : undefined;
+
   return {
     windAtStart,
     windAtEnd,
@@ -313,6 +346,10 @@ function extractRaceWindowData(
     raceEndTime: formatTime(endForecast.timestamp),
     beaufortAtStart: knotsToBeaufort(windAtStart),
     beaufortAtEnd: knotsToBeaufort(windAtEnd),
+    waveHeightAtStart,
+    waveHeightAtEnd,
+    wavePeriodAtStart,
+    waveDirectionAtStart,
   };
 }
 
@@ -334,6 +371,17 @@ function extractHourlyTide(forecasts: WeatherForecast[], tideValues: number[]): 
   return forecasts.map((f, i) => ({
     time: formatTime(f.timestamp),
     value: tideValues[i] ?? 0,
+  }));
+}
+
+/**
+ * Extract hourly wave data with direction
+ */
+function extractHourlyWaves(forecasts: WeatherForecast[]): HourlyDataPoint[] {
+  return forecasts.map(f => ({
+    time: formatTime(f.timestamp),
+    value: Math.round((f.waveHeight ?? 0) * 10) / 10,
+    direction: f.waveDirection !== undefined ? degreesToCardinal(f.waveDirection) : undefined,
   }));
 }
 
@@ -528,6 +576,7 @@ export function useRaceWeatherForecast(
       // Extract detailed time-series data
       const hourlyWind = extractHourlyWind(relevantForecasts);
       const hourlyTide = extractHourlyTide(relevantForecasts, tideForecast);
+      const hourlyWaves = extractHourlyWaves(relevantForecasts);
       const { highTide, lowTide, tideRange, turnTime } = extractTideTimes(relevantForecasts, tideForecast);
 
       // Extract race-window specific data for Tufte display
@@ -540,6 +589,28 @@ export function useRaceWeatherForecast(
         highTide
       );
 
+      // Calculate average wave data for race window
+      const raceWindowForecasts = relevantForecasts.slice(raceStartIndex, raceEndIndex + 1);
+      const waveHeights = raceWindowForecasts
+        .map(f => f.waveHeight)
+        .filter((h): h is number => h !== undefined);
+      const wavePeriods = raceWindowForecasts
+        .map(f => f.wavePeriod)
+        .filter((p): p is number => p !== undefined);
+
+      const avgWaveHeight = waveHeights.length > 0
+        ? Math.round((waveHeights.reduce((a, b) => a + b, 0) / waveHeights.length) * 10) / 10
+        : undefined;
+      const avgWavePeriod = wavePeriods.length > 0
+        ? Math.round(wavePeriods.reduce((a, b) => a + b, 0) / wavePeriods.length)
+        : undefined;
+
+      // Get predominant swell direction from race start
+      const startWaveDirection = relevantForecasts[raceStartIndex]?.waveDirection;
+      const swellDirection = startWaveDirection !== undefined
+        ? degreesToCardinal(startWaveDirection)
+        : undefined;
+
       logger.debug('[useRaceWeatherForecast] Extracted forecast data:', {
         hours: relevantForecasts.length,
         windRange: `${Math.min(...windForecast)}-${Math.max(...windForecast)}`,
@@ -550,6 +621,8 @@ export function useRaceWeatherForecast(
         highTide: highTide?.time,
         lowTide: lowTide?.time,
         raceWindow: raceWindow ? `${raceWindow.windAtStart}→${raceWindow.windAtEnd}kt` : 'N/A',
+        waveHeight: avgWaveHeight,
+        swellDirection,
       });
 
       setData({
@@ -570,6 +643,11 @@ export function useRaceWeatherForecast(
         turnTime,
         // Race-window specific data
         raceWindow,
+        // Wave data
+        hourlyWaves,
+        waveHeight: avgWaveHeight,
+        wavePeriod: avgWavePeriod,
+        swellDirection,
       });
 
     } catch (err: any) {
@@ -688,6 +766,7 @@ export function extractForecastForSparklines(
   // Extract detailed time-series data
   const hourlyWind = extractHourlyWind(relevantForecasts);
   const hourlyTide = extractHourlyTide(relevantForecasts, tideForecast);
+  const hourlyWaves = extractHourlyWaves(relevantForecasts);
   const { highTide, lowTide, tideRange, turnTime } = extractTideTimes(relevantForecasts, tideForecast);
 
   // Extract race-window specific data
@@ -699,6 +778,28 @@ export function extractForecastForSparklines(
     turnTime,
     highTide
   );
+
+  // Calculate average wave data for race window
+  const raceWindowForecasts = relevantForecasts.slice(raceStartIndex, raceEndIndex + 1);
+  const waveHeights = raceWindowForecasts
+    .map(f => f.waveHeight)
+    .filter((h): h is number => h !== undefined);
+  const wavePeriods = raceWindowForecasts
+    .map(f => f.wavePeriod)
+    .filter((p): p is number => p !== undefined);
+
+  const avgWaveHeight = waveHeights.length > 0
+    ? Math.round((waveHeights.reduce((a, b) => a + b, 0) / waveHeights.length) * 10) / 10
+    : undefined;
+  const avgWavePeriod = wavePeriods.length > 0
+    ? Math.round(wavePeriods.reduce((a, b) => a + b, 0) / wavePeriods.length)
+    : undefined;
+
+  // Get predominant swell direction from race start
+  const startWaveDirection = relevantForecasts[raceStartIndex]?.waveDirection;
+  const swellDirection = startWaveDirection !== undefined
+    ? degreesToCardinal(startWaveDirection)
+    : undefined;
 
   return {
     windForecast,
@@ -718,5 +819,10 @@ export function extractForecastForSparklines(
     turnTime,
     // Race-window specific data
     raceWindow,
+    // Wave data
+    hourlyWaves,
+    waveHeight: avgWaveHeight,
+    wavePeriod: avgWavePeriod,
+    swellDirection,
   };
 }

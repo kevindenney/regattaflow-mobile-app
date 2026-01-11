@@ -26,7 +26,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/navigationAnimations';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { colors } from '@/constants/Colors';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStrategyRecommendations } from '@/hooks/useStrategyRecommendations';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
@@ -131,9 +130,13 @@ export function StrategyDetailCard({
   }, [isExpanded, rotation]);
 
   // Animated chevron rotation
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(rotation.value, [0, 1], [0, 90])}deg` }],
-  }));
+  const chevronStyle = useAnimatedStyle(() => {
+    'worklet';
+    const rotationValue = rotation.value ?? 0;
+    return {
+      transform: [{ rotate: `${interpolate(rotationValue, [0, 1], [0, 90])}deg` }],
+    };
+  });
 
   const handlePress = useCallback(() => {
     LayoutAnimation.configureNext({
@@ -214,54 +217,96 @@ export function StrategyDetailCard({
       </View>
 
       {/* Content */}
-      {isExpanded ? (
+      {/* Collapsed: Show ALL data (Tufte principle) */}
+      {!isExpanded && (
+        <View style={styles.tufteCollapsedContent}>
+          {/* Venue context if available */}
+          {venueInsights && venueInsights.raceCount > 0 && (
+            <Text style={styles.tufteVenueContext}>
+              {venueInsights.raceCount} races at {venueName || 'this venue'}
+            </Text>
+          )}
+
+          {/* Phase scores table - flat, scannable */}
+          {Object.keys(phasePatterns).length > 0 ? (
+            <View style={styles.tuftePhaseTable}>
+              {PHASE_ORDER.map((phase) => {
+                const phasePattern = phasePatterns[phase];
+                if (!phasePattern) return null;
+                return (
+                  <View key={phase} style={styles.tuftePhaseTableRow}>
+                    <Text style={styles.tuftePhaseTableLabel}>
+                      {phase === 'start' ? 'Start' :
+                       phase === 'upwind' ? 'Upwind' :
+                       phase === 'downwind' ? 'Downwind' :
+                       phase === 'markRounding' ? 'Rounding' : 'Finish'}
+                    </Text>
+                    <Text style={[
+                      styles.tuftePhaseTableScore,
+                      phasePattern.average >= 7 && styles.tuftePhaseScoreHigh
+                    ]}>
+                      {phasePattern.average.toFixed(1)}
+                    </Text>
+                    <Text style={styles.tuftePhaseTableInsight} numberOfLines={1}>
+                      {phasePattern.trend === 'improving' ? 'improving' :
+                       phasePattern.trend === 'declining' ? 'needs work' : '—'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            /* Legacy content or empty */
+            hasLegacyContent ? (
+              <>
+                {primaryStrategy && (
+                  <Text style={styles.tufteCollapsedStrategy} numberOfLines={2}>
+                    {primaryStrategy}
+                  </Text>
+                )}
+                <Text style={styles.tufteCollapsedMeta}>
+                  {[
+                    startPreference && (startPreference === 'pin' ? 'Pin end' : startPreference === 'boat' ? 'Boat end' : 'Middle start'),
+                    laylineApproach && `${laylineApproach} layline`,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.tufteEmptyText}>
+                Tap to add your race plan
+              </Text>
+            )
+          )}
+        </View>
+      )}
+
+      {/* Expanded: INTERACTION ONLY (notes input) */}
+      {isExpanded && (
         <View style={styles.expandedContent}>
           {/* Loading State */}
           {isLoading && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={colors.primary.default} />
-              <Text style={styles.loadingText}>Loading insights from past races...</Text>
+              <ActivityIndicator size="small" color={IOS_COLORS.blue} />
+              <Text style={styles.loadingText}>Loading insights...</Text>
             </View>
           )}
 
           {/* Error State */}
           {error && (
-            <View style={styles.errorContainer}>
-              <Ionicons name="warning-outline" size={16} color={colors.error.default} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
+            <Text style={styles.tufteErrorText}>{error}</Text>
           )}
 
-          {/* Venue/Conditions Context Banner */}
-          {(venueInsights || conditionsInsights) && (
-            <View style={styles.contextBanner}>
-              {venueInsights && venueInsights.raceCount > 0 && (
-                <View style={styles.contextItem}>
-                  <Ionicons name="location-outline" size={14} color={colors.primary.default} />
-                  <Text style={styles.contextText}>
-                    {venueInsights.raceCount} races at this venue
-                  </Text>
-                </View>
-              )}
-              {conditionsInsights && conditionsInsights.raceCount > 0 && (
-                <View style={styles.contextItem}>
-                  <Ionicons name="partly-sunny-outline" size={14} color={colors.primary.default} />
-                  <Text style={styles.contextText}>
-                    {conditionsInsights.raceCount} races in {conditionsInsights.conditionLabel}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+          {/* Section header */}
+          <Text style={styles.tufteSectionLabel}>YOUR RACE PLAN</Text>
 
-          {/* Strategy Sections by Phase - Tufte flat grid */}
+          {/* Strategy Sections - notes input focused */}
           {!isLoading && PHASE_ORDER.map((phase) => {
             const sections = getSectionsForPhase(phase);
             const phasePattern = phasePatterns[phase];
 
             return (
               <View key={phase} style={styles.phaseSection}>
-                {/* Phase Header - Tufte style: label, score, trend text */}
+                {/* Phase Header Row */}
                 <View style={styles.tuftePhaseRow}>
                   <Text style={styles.tuftePhaseLabel}>
                     {phase === 'start' ? 'Start' :
@@ -270,25 +315,16 @@ export function StrategyDetailCard({
                      phase === 'markRounding' ? 'Rounding' : 'Finish'}
                   </Text>
                   {phasePattern && (
-                    <>
-                      <Text style={[
-                        styles.tuftePhaseScore,
-                        phasePattern.average >= 7 && styles.tuftePhaseScoreHigh
-                      ]}>
-                        {phasePattern.average.toFixed(1)}
-                      </Text>
-                      <Text style={styles.tuftePhaseTrend}>
-                        {phasePattern.trend === 'improving' ? 'improving' :
-                         phasePattern.trend === 'declining' ? 'needs work' : '—'}
-                      </Text>
-                    </>
-                  )}
-                  {!phasePattern && (
-                    <Text style={styles.tuftePhaseEmpty}>—</Text>
+                    <Text style={[
+                      styles.tuftePhaseScore,
+                      phasePattern.average >= 7 && styles.tuftePhaseScoreHigh
+                    ]}>
+                      {phasePattern.average.toFixed(1)}
+                    </Text>
                   )}
                 </View>
 
-                {/* Section Items */}
+                {/* Section Items - for note input */}
                 {sections.map((section) => (
                   <StrategySectionItem
                     key={section.id}
@@ -306,35 +342,10 @@ export function StrategyDetailCard({
           {/* Legacy AI Insight (if provided via props) */}
           {aiInsight && !isLoading && (
             <View style={styles.legacyAiInsight}>
-              <MaterialCommunityIcons name="robot-outline" size={16} color={IOS_COLORS.purple} />
               <Text style={styles.legacyAiInsightText}>{aiInsight}</Text>
             </View>
           )}
         </View>
-      ) : (
-        /* Collapsed Preview - Tufte flat typography */
-        hasLegacyContent ? (
-          <View style={styles.tufteCollapsedContent}>
-            {primaryStrategy && (
-              <Text style={styles.tufteCollapsedStrategy} numberOfLines={2}>
-                {primaryStrategy}
-              </Text>
-            )}
-            <Text style={styles.tufteCollapsedMeta}>
-              {[
-                startPreference && (startPreference === 'pin' ? 'Pin end' : startPreference === 'boat' ? 'Boat end' : 'Middle start'),
-                laylineApproach && `${laylineApproach} layline`,
-              ].filter(Boolean).join(' · ')}
-            </Text>
-          </View>
-        ) : (
-          /* Empty state - minimal */
-          <View style={styles.tufteEmptyContent}>
-            <Text style={styles.tufteEmptyText}>
-              Tap to plan race tactics
-            </Text>
-          </View>
-        )
       )}
     </TouchableOpacity>
   );
@@ -376,7 +387,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   dataBadge: {
-    backgroundColor: colors.accent.light,
+    backgroundColor: `${IOS_COLORS.blue}15`,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -384,7 +395,7 @@ const styles = StyleSheet.create({
   dataBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.accent.dark,
+    color: IOS_COLORS.blue,
   },
 
   // Collapsed content
@@ -437,26 +448,26 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 13,
-    color: colors.text.secondary,
+    color: IOS_COLORS.secondaryLabel,
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     padding: 12,
-    backgroundColor: colors.error.light,
+    backgroundColor: `${IOS_COLORS.red}15`,
     borderRadius: 8,
   },
   errorText: {
     fontSize: 13,
-    color: colors.error.default,
+    color: IOS_COLORS.red,
   },
   contextBanner: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     padding: 10,
-    backgroundColor: colors.primary.light,
+    backgroundColor: `${IOS_COLORS.blue}15`,
     borderRadius: 8,
   },
   contextItem: {
@@ -467,7 +478,7 @@ const styles = StyleSheet.create({
   contextText: {
     fontSize: 12,
     fontWeight: '500',
-    color: colors.primary.default,
+    color: IOS_COLORS.blue,
   },
 
   // Phase sections
@@ -591,6 +602,40 @@ const styles = StyleSheet.create({
     borderTopColor: IOS_COLORS.gray5,
     gap: 6,
   },
+  tufteVenueContext: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 4,
+  },
+  tuftePhaseTable: {
+    gap: 4,
+  },
+  tuftePhaseTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  tuftePhaseTableLabel: {
+    width: 64,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tuftePhaseTableScore: {
+    width: 32,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+  tuftePhaseTableInsight: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
   tufteCollapsedStrategy: {
     fontSize: 15,
     fontWeight: '600',
@@ -602,16 +647,23 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: IOS_COLORS.gray,
   },
-  tufteEmptyContent: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: IOS_COLORS.gray5,
-  },
   tufteEmptyText: {
     fontSize: 14,
     fontWeight: '400',
     color: IOS_COLORS.gray,
     fontStyle: 'italic',
+  },
+  tufteSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  tufteErrorText: {
+    fontSize: 13,
+    color: IOS_COLORS.red,
+    marginBottom: 8,
   },
 });

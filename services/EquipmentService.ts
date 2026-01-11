@@ -268,11 +268,7 @@ class EquipmentService {
 
     const { data, error } = await supabase
       .from('boat_equipment')
-      .select(`
-        *,
-        boat:sailor_boats(id, name, sail_number),
-        boat_class:boat_classes(id, name)
-      `)
+      .select('*')
       .eq('boat_id', boatId)
       .order('category')
       .order('custom_name');
@@ -628,7 +624,7 @@ class EquipmentService {
       };
     }
 
-    return data;
+    return data as EquipmentHealthScore;
   }
 
   /**

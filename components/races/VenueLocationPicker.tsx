@@ -21,6 +21,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapPin } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
@@ -172,7 +173,7 @@ function VenueMapWeb({
   // The ref will work correctly on web
   return (
     <View
-      ref={mapContainerRef}
+      ref={mapContainerRef as any}
       style={{ width: '100%', height: '100%', minHeight: 400 }}
     />
   );
@@ -185,6 +186,7 @@ export function VenueLocationPicker({
   onCoordinatesChange,
   placeholder = 'Enter venue name...',
 }: VenueLocationPickerProps) {
+  const insets = useSafeAreaInsets();
   const [showMap, setShowMap] = useState(false);
   const [venueSuggestions, setVenueSuggestions] = useState<VenueLocation[]>([]);
   const [loadingVenues, setLoadingVenues] = useState(false);
@@ -461,7 +463,7 @@ export function VenueLocationPicker({
               lng: lng || 0,
             };
           })
-          .filter(v => v.name); // Filter out any invalid entries
+          .filter((v: { name: string; lat: number; lng: number }) => v.name); // Filter out any invalid entries
 
         logger.debug(`[VenueLocationPicker] Found ${suggestions.length} venues matching "${trimmed}"`);
 
@@ -668,8 +670,8 @@ export function VenueLocationPicker({
         onRequestClose={handleMapClose}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Location on Map</Text>
+          <View style={[styles.modalHeader, { paddingTop: insets.top + 16 }]}>
+            <Text style={styles.modalTitle}>Select Location</Text>
             <Pressable onPress={handleMapClose} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>✕</Text>
             </Pressable>
@@ -696,9 +698,9 @@ export function VenueLocationPicker({
             )}
           </View>
 
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { paddingBottom: insets.bottom + 16 }]}>
             <Text style={styles.modalFooterText}>
-              {coordinates 
+              {coordinates
                 ? `Selected: ${coordinates.lat.toFixed(4)}°N, ${coordinates.lng.toFixed(4)}°E - Click on the map to change location`
                 : 'Click on the map to select a location'}
             </Text>

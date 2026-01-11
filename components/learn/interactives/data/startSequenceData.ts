@@ -10,6 +10,7 @@ export interface FlagState {
   i?: 'UP' | 'DOWN';
   z?: 'UP' | 'DOWN';
   black?: 'UP' | 'DOWN';
+  u?: 'UP' | 'DOWN'; // U flag (Rule 30.3)
   x?: 'UP' | 'DOWN'; // Individual recall
 }
 

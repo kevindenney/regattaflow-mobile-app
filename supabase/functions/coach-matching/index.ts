@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
     const hasSkill = typeof skillId === 'string' && skillId.length > 0;
 
     const response = await anthropic.beta.messages.create({
-      model: model || 'claude-3-5-haiku-latest',
+      model: model || 'claude-3-haiku-20240307',
       max_tokens: max_tokens ?? 2048,
       temperature: temperature ?? 0.3,
       betas: hasSkill ? ['skills-2025-10-02'] : undefined,

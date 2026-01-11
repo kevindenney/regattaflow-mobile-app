@@ -213,8 +213,8 @@ export class HKTidalCurrentService {
   /**
    * Find the closest predefined sailing area to coordinates
    */
-  private static findClosestSailingArea(lat: number, lng: number) {
-    let closestArea = HK_SAILING_AREAS.PORT_SHELTER;
+  private static findClosestSailingArea(lat: number, lng: number): typeof HK_SAILING_AREAS[HKSailingAreaKey] {
+    let closestArea: typeof HK_SAILING_AREAS[HKSailingAreaKey] = HK_SAILING_AREAS.PORT_SHELTER;
     let minDistance = Infinity;
     
     for (const area of Object.values(HK_SAILING_AREAS)) {

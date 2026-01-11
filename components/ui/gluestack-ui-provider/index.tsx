@@ -23,14 +23,8 @@ export function GluestackUIProvider({
     if (mode === 'system') return;
     try {
       setColorScheme(mode);
-    } catch (error) {
-      if (__DEV__) {
-        console.warn(
-          '[GluestackUIProvider]',
-          'Falling back to system color scheme because Tailwind darkMode is not class-based.',
-          error
-        );
-      }
+    } catch (_error) {
+      // Silently fall back to system color scheme if Tailwind darkMode is not class-based
     }
   }, [mode, setColorScheme]);
 
