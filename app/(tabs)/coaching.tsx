@@ -315,12 +315,18 @@ const MOCK_METRICS: DashboardMetric[] = [
 ];
 
 export default function CoachingHubScreen() {
+  // === ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS ===
+
+  // 1. Router and auth
   const router = useRouter();
   const { user } = useAuth();
+
+  // 2. All useState hooks
   const [isCoach, setIsCoach] = useState(false);
   const [checkingCoachStatus, setCheckingCoachStatus] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Check if the logged-in user is a coach
+  // 3. All useEffect hooks
   useEffect(() => {
     async function checkCoachStatus() {
       if (!user?.id) {
@@ -336,20 +342,7 @@ export default function CoachingHubScreen() {
     checkCoachStatus();
   }, [user?.id]);
 
-  // If user is a coach, show coach dashboard instead
-  if (checkingCoachStatus) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-      </View>
-    );
-  }
-
-  if (isCoach) {
-    return <CoachDashboard />;
-  }
-
-  // Use React Query hooks for data fetching
+  // 4. All data-fetching hooks (React Query) - must be called unconditionally
   const {
     data: upcomingSessionsData = [],
     isLoading: loadingUpcomingSessions,
@@ -383,23 +376,10 @@ export default function CoachingHubScreen() {
     data: resources = [],
   } = useCoachResources();
 
-  // Combine loading states
+  // 5. Derived values (not hooks, just computations)
   const loading = loadingUpcomingSessions || loadingRecentSessions || loadingCoaches || loadingMetrics;
   const error = upcomingSessionsError || recentSessionsError || coachesError;
 
-  // Handle refresh
-  const [refreshing, setRefreshing] = React.useState(false);
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([
-      refetchUpcomingSessions(),
-      refetchRecentSessions(),
-      refetchCoaches(),
-    ]);
-    setRefreshing(false);
-  };
-
-  // Fallback to mocks if no data
   const upcomingSource =
     upcomingSessionsData.length > 0 ? upcomingSessionsData : MOCK_SESSIONS;
   const recentSource =
@@ -412,6 +392,10 @@ export default function CoachingHubScreen() {
       }))
     : MOCK_COACHES;
 
+  // Combine sessions for metrics computation
+  const allSessionsData = [...upcomingSessionsData, ...recentSessionsData];
+
+  // 6. All useMemo hooks - must be called unconditionally
   const upcomingSessions = useMemo(() => {
     return (upcomingSource || [])
       .filter((session) =>
@@ -479,19 +463,19 @@ export default function CoachingHubScreen() {
     }
 
     // Fallback to computed metrics from sessions
-    if (!sessionsToUse || sessionsToUse.length === 0) {
+    if (!allSessionsData || allSessionsData.length === 0) {
       return MOCK_METRICS;
     }
 
     const scheduled = upcomingSessions.length;
     const uniqueCoaches = new Set(
-      sessionsToUse.map((session) => session.coach?.id || session.coach_id).filter(Boolean)
+      allSessionsData.map((session) => session.coach?.id || session.coach_id).filter(Boolean)
     ).size;
-    const totalMinutes = sessionsToUse.reduce(
+    const totalMinutes = allSessionsData.reduce(
       (sum, session) => sum + (session.duration_minutes || 0),
       0
     );
-    const averageRating = sessionsToUse
+    const averageRating = allSessionsData
       .filter((session) => session.feedback?.rating)
       .map((session) => session.feedback?.rating || 0);
     const rating =
@@ -525,7 +509,18 @@ export default function CoachingHubScreen() {
         icon: 'time-outline',
       },
     ];
-  }, [metricsData, sessionsToUse, upcomingSessions]);
+  }, [metricsData, allSessionsData, upcomingSessions]);
+
+  // 7. Callbacks
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      refetchUpcomingSessions(),
+      refetchRecentSessions(),
+      refetchCoaches(),
+    ]);
+    setRefreshing(false);
+  };
 
   const quickActions: QuickAction[] = [
     {
@@ -549,6 +544,20 @@ export default function CoachingHubScreen() {
       onPress: () => router.push('/coach/confirmation'),
     },
   ];
+
+  // === EARLY RETURNS - NOW SAFE BECAUSE ALL HOOKS HAVE BEEN CALLED ===
+
+  if (checkingCoachStatus) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
+
+  if (isCoach) {
+    return <CoachDashboard />;
+  }
 
   if (loading && !refreshing) {
     return (
