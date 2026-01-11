@@ -1703,7 +1703,7 @@ class CoachingService {
     }
 
     if (filters?.minRating) {
-      query = query.gte('average_rating', filters.minRating);
+      query = query.gte('rating', filters.minRating);
     }
 
     if (filters?.maxHourlyRate) {
