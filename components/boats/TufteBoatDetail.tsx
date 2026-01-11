@@ -32,9 +32,10 @@ import { ChevronLeft, Plus, ChevronRight, X } from 'lucide-react-native';
 
 import { supabase } from '@/services/supabase';
 import { equipmentService } from '@/services/EquipmentService';
-import { SailInspectionService, type SailWithHealth } from '@/services/SailInspectionService';
+import { SailInspectionService, type SailWithHealth, type SailInspection } from '@/services/SailInspectionService';
 import { createLogger } from '@/lib/utils/logger';
 import { CrewManagement } from '@/components/sailor';
+import { SailInspectionWizard } from '@/components/sail-inspection';
 import {
   useSailProducts,
   formatWindRange,
@@ -830,6 +831,8 @@ export function TufteBoatDetail() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddSailModal, setShowAddSailModal] = useState(false);
+  const [showInspectionWizard, setShowInspectionWizard] = useState(false);
+  const [inspectingSail, setInspectingSail] = useState<SailWithHealth | null>(null);
 
   // ==========================================================================
   // DATA LOADING
@@ -1048,6 +1051,13 @@ export function TufteBoatDetail() {
                         [
                           { text: 'Cancel', style: 'cancel' },
                           {
+                            text: 'Inspect',
+                            onPress: () => {
+                              setInspectingSail(sail);
+                              setShowInspectionWizard(true);
+                            },
+                          },
+                          {
                             text: 'Delete',
                             style: 'destructive',
                             onPress: async () => {
@@ -1140,6 +1150,32 @@ export function TufteBoatDetail() {
           onClose={() => setShowAddSailModal(false)}
           onSailAdded={loadData}
         />
+      )}
+
+      {/* Sail Inspection Wizard */}
+      {showInspectionWizard && inspectingSail && (
+        <Modal
+          visible={showInspectionWizard}
+          animationType="slide"
+          presentationStyle="fullScreen"
+        >
+          <SailInspectionWizard
+            equipmentId={inspectingSail.equipment_id}
+            boatId={boat?.id}
+            sailName={inspectingSail.name || inspectingSail.sail_type || 'Sail'}
+            sailType={inspectingSail.sail_type as 'mainsail' | 'jib' | 'genoa' | 'spinnaker' | 'code_zero' | undefined}
+            onComplete={(inspection: SailInspection) => {
+              logger.info('Inspection complete:', inspection);
+              setShowInspectionWizard(false);
+              setInspectingSail(null);
+              loadData(); // Refresh to show updated condition
+            }}
+            onCancel={() => {
+              setShowInspectionWizard(false);
+              setInspectingSail(null);
+            }}
+          />
+        </Modal>
       )}
     </SafeAreaView>
   );
