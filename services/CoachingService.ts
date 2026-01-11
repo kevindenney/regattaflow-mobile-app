@@ -1694,8 +1694,8 @@ class CoachingService {
     let query = supabase
       .from('coach_profiles')
       .select('*')
-      .eq('verification_status', 'verified')
-      .eq('available_for_sessions', true)
+      .eq('is_verified', true)
+      .eq('is_active', true)
       .order('rating', { ascending: false });
 
     if (filters?.location) {
@@ -1768,7 +1768,7 @@ class CoachingService {
         .from('coach_profiles')
         .select('*')
         .eq('id', coachId)
-        .eq('verification_status', 'verified')
+        .eq('is_verified', true)
         .single(),
 
       supabase
