@@ -173,10 +173,13 @@ class CoachStrategyService {
         .from('coach_profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        logger.error('Error fetching coach profile:', error);
+        // Only log if it's not a "no rows found" error
+        if (error.code !== 'PGRST116') {
+          logger.error('Error fetching coach profile:', error);
+        }
         return null;
       }
 
