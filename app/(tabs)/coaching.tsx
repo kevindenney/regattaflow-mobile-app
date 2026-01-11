@@ -1,29 +1,40 @@
+/**
+ * Coaching Hub Screen - Tufte Edition
+ *
+ * Design principles:
+ * 1. Maximum data-ink ratio - remove decorative elements
+ * 2. Typography hierarchy - use weight/size instead of boxes
+ * 3. Hairline borders (0.5px) or none
+ * 4. Whitespace replaces boxes for separation
+ * 5. Dense row layout - all data visible, scannable
+ */
+
 import { CoachDashboard } from '@/components/coaching/CoachDashboard';
 import { TufteCoachRow } from '@/components/coaching/TufteCoachRow';
+import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { TufteTokens } from '@/constants/designSystem';
 import {
-    useCoachMetrics,
-    useCoachResources,
-    useCoachSpotlights,
-    useRecentCoachSessions,
-    useUpcomingCoachSessions,
+  useCoachMetrics,
+  useCoachResources,
+  useCoachSpotlights,
+  useRecentCoachSessions,
+  useUpcomingCoachSessions,
 } from '@/hooks/useCoachData';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachProfile, CoachingSession } from '@/services/CoachingService';
 import { coachStrategyService } from '@/services/CoachStrategyService';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 type DiscoverCoach = CoachProfile & {
@@ -35,22 +46,6 @@ type DashboardMetric = {
   label: string;
   value: string;
   helper: string;
-  icon: keyof typeof Ionicons.glyphMap;
-};
-
-type QuickAction = {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-};
-
-type SpotlightProgram = {
-  id: string;
-  title: string;
-  subtitle: string;
-  duration: string;
-  focus: string[];
-  color: string;
 };
 
 type FeedbackItem = {
@@ -59,7 +54,6 @@ type FeedbackItem = {
   sailor: string;
   sessionType: string;
   summary: string;
-  highlight: string;
   rating: number;
   date: string;
 };
@@ -80,7 +74,7 @@ const MOCK_SESSIONS: CoachingSession[] = [
     duration_minutes: 75,
     scheduled_at: new Date(Date.now() + 1000 * 60 * 60 * 26).toISOString(),
     status: 'confirmed',
-    location_notes: 'Royal HKYC • Dock C briefing room',
+    location_notes: 'Royal HKYC • Dock C',
     focus_areas: ['start_line', 'wind_shifts', 'mark_rounding'],
     goals: 'Build pre-start routine for oscillating breeze',
     currency: 'USD',
@@ -91,8 +85,7 @@ const MOCK_SESSIONS: CoachingSession[] = [
     coach: {
       id: 'coach_emily',
       display_name: 'Emily Carter',
-      profile_photo_url:
-        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=320&q=60',
+      profile_photo_url: null,
     },
   },
   {
@@ -103,9 +96,9 @@ const MOCK_SESSIONS: CoachingSession[] = [
     duration_minutes: 60,
     scheduled_at: new Date(Date.now() + 1000 * 60 * 60 * 54).toISOString(),
     status: 'scheduled',
-    location_notes: 'Zoom • Screen share enabled',
+    location_notes: 'Zoom',
     focus_areas: ['downwind_modes', 'overtaking'],
-    homework: 'Pull mark rounding clips from last regatta',
+    homework: 'Pull mark rounding clips',
     currency: 'USD',
     paid: false,
     created_at: new Date().toISOString(),
@@ -113,8 +106,7 @@ const MOCK_SESSIONS: CoachingSession[] = [
     coach: {
       id: 'coach_luke',
       display_name: 'Luke Anders',
-      profile_photo_url:
-        'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=320&q=60',
+      profile_photo_url: null,
     },
   },
   {
@@ -125,9 +117,9 @@ const MOCK_SESSIONS: CoachingSession[] = [
     duration_minutes: 90,
     scheduled_at: new Date(Date.now() + 1000 * 60 * 60 * 5).toISOString(),
     status: 'pending',
-    location_notes: 'Dockside tuning • Etchells HK-112',
+    location_notes: 'Dockside tuning',
     focus_areas: ['rig_tension', 'mast_rake'],
-    goals: 'Baseline rig tune for 18-22kt NE breeze',
+    goals: 'Baseline rig tune for 18-22kt',
     currency: 'USD',
     paid: true,
     created_at: new Date().toISOString(),
@@ -135,8 +127,7 @@ const MOCK_SESSIONS: CoachingSession[] = [
     coach: {
       id: 'coach_sophia',
       display_name: 'Sophia Lin',
-      profile_photo_url:
-        'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=320&q=60',
+      profile_photo_url: null,
     },
   },
 ] as CoachingSession[];
@@ -146,17 +137,16 @@ const MOCK_COACHES: DiscoverCoach[] = [
     id: 'coach_emily',
     user_id: 'user_emily',
     display_name: 'Emily Carter',
-    profile_photo_url:
-      'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=320&q=60',
-    bio: 'Olympic campaign strategist specialising in match racing & one-design keelboats.',
-    specialties: ['pre-starts', 'match_racing', 'race_strategy', 'mental_game'],
+    profile_photo_url: null,
+    bio: 'Olympic strategist · Match racing specialist',
+    specialties: ['pre-starts', 'match_racing', 'race_strategy'],
     experience_years: 12,
-    certifications: ['World Sailing L3 Coach', 'RegattaFlow Playbook Performance'],
+    certifications: ['World Sailing L3 Coach'],
     available_for_sessions: true,
     hourly_rate: 24000,
     currency: 'USD',
-    based_at: 'Royal Hong Kong Yacht Club',
-    available_locations: ['Asia Pacific', 'Remote'],
+    based_at: 'Hong Kong',
+    available_locations: ['Asia Pacific'],
     total_sessions: 318,
     total_clients: 64,
     average_rating: 4.9,
@@ -170,17 +160,16 @@ const MOCK_COACHES: DiscoverCoach[] = [
     id: 'coach_luke',
     user_id: 'user_luke',
     display_name: 'Luke Anders',
-    profile_photo_url:
-      'https://images.unsplash.com/photo-1542144582-1ba00456b5d5?auto=format&fit=crop&w=320&q=60',
-    bio: 'AC40 flight controller turned performance coach. Downwind VMG obsessive.',
+    profile_photo_url: null,
+    bio: 'AC40 flight controller · Downwind VMG specialist',
     specialties: ['downwind_modes', 'foiling', 'video_analysis'],
     experience_years: 8,
     certifications: ['US Sailing L2 Coach'],
     available_for_sessions: true,
     hourly_rate: 20000,
     currency: 'USD',
-    based_at: 'SailGP Inspire Programme',
-    available_locations: ['Remote', 'San Francisco', 'Sydney'],
+    based_at: 'San Francisco',
+    available_locations: ['Remote', 'San Francisco'],
     total_sessions: 204,
     total_clients: 51,
     average_rating: 4.8,
@@ -194,17 +183,16 @@ const MOCK_COACHES: DiscoverCoach[] = [
     id: 'coach_sophia',
     user_id: 'user_sophia',
     display_name: 'Sophia Lin',
-    profile_photo_url:
-      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=320&q=60',
-    bio: 'Former Volvo Ocean Race bow, now tuning & boat-speed coach for Etchells and J/70 teams.',
-    specialties: ['boat_speed', 'rig_tune', 'sail_shape', 'heavy_air'],
+    profile_photo_url: null,
+    bio: 'Former Volvo Ocean Race · Rig tuning expert',
+    specialties: ['boat_speed', 'rig_tune', 'sail_shape'],
     experience_years: 15,
-    certifications: ['RYA High Performance', 'RegattaFlow Playbook Rigging'],
+    certifications: ['RYA High Performance'],
     available_for_sessions: true,
     hourly_rate: 22000,
     currency: 'USD',
-    based_at: 'Aberdeen Boat Club',
-    available_locations: ['Hong Kong', 'Singapore', 'Remote'],
+    based_at: 'Hong Kong',
+    available_locations: ['Hong Kong', 'Singapore'],
     total_sessions: 412,
     total_clients: 83,
     average_rating: 5,
@@ -216,51 +204,22 @@ const MOCK_COACHES: DiscoverCoach[] = [
   },
 ];
 
-const MOCK_PROGRAMS: SpotlightProgram[] = [
-  {
-    id: 'program_start-line',
-    title: 'Elite Start Line Mastery',
-    subtitle: 'Six-week micro-season for one-design keelboats',
-    duration: '6 weeks · 9 sessions',
-    focus: ['time & distance', 'mixed-fleet tactics', 'accelerations'],
-    color: '#DBEAFE',
-  },
-  {
-    id: 'program_downwind',
-    title: 'Downwind VMG Accelerator',
-    subtitle: 'Foiling & planing playbook with video-driven progression',
-    duration: '4 weeks · 8 sessions',
-    focus: ['mode transitions', 'apparent wind', 'pressure mapping'],
-    color: '#DCFCE7',
-  },
-  {
-    id: 'program_regatta',
-    title: 'Championship Regatta Blueprint',
-    subtitle: 'Full campaign support from venue research to post-race analytics',
-    duration: 'Customised',
-    focus: ['venue intel', 'pack management', 'replays'],
-    color: '#FDE68A',
-  },
-];
-
 const MOCK_FEEDBACK: FeedbackItem[] = [
   {
     id: 'feedback-1',
     coach: 'Emily Carter',
-    sailor: 'Ava Thompson • J/70 Pacifico',
+    sailor: 'Ava Thompson',
     sessionType: 'Race Strategy',
-    summary: 'Shift recognition routine locked in during San Diego practice set.',
-    highlight: 'Converted 6° lifts into 3+ boat lengths consistently – team now calling puffs earlier.',
+    summary: 'Shift recognition routine locked in during practice.',
     rating: 5,
     date: format(new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), 'MMM d'),
   },
   {
     id: 'feedback-2',
     coach: 'Luke Anders',
-    sailor: 'Mateo Ruiz • WASZP #1145',
+    sailor: 'Mateo Ruiz',
     sessionType: 'Video Review',
-    summary: 'Downwind mode selection breakthrough during Garda training block.',
-    highlight: 'Used VMG overlays to cut unforced gybes by 40% in 18-22kt breeze.',
+    summary: 'Downwind mode selection breakthrough.',
     rating: 4,
     date: format(new Date(Date.now() - 1000 * 60 * 60 * 24 * 6), 'MMM d'),
   },
@@ -271,62 +230,33 @@ const MOCK_RESOURCES: ResourceItem[] = [
     id: 'resource-1',
     title: 'Five drills to teach start line time-on-distance intuition',
     category: 'Training Plans',
-    readTime: '7 min read',
+    readTime: '7 min',
   },
   {
     id: 'resource-2',
     title: 'Using polar overlays to accelerate heavy-air coaching blocks',
-    category: 'Analytics Playbook',
-    readTime: '5 min read',
-  },
-  {
-    id: 'resource-3',
-    title: 'Checklist: Post-regatta debrief templates that drive retention',
-    category: 'Client Success',
-    readTime: '4 min read',
+    category: 'Analytics',
+    readTime: '5 min',
   },
 ];
 
 const MOCK_METRICS: DashboardMetric[] = [
-  {
-    label: 'Upcoming sessions',
-    value: '3',
-    helper: 'Next 7 days',
-    icon: 'calendar-outline',
-  },
-  {
-    label: 'Active coaches',
-    value: '6',
-    helper: 'Shortlisted experts',
-    icon: 'people-outline',
-  },
-  {
-    label: 'Avg. feedback',
-    value: '4.8★',
-    helper: 'Last 10 sessions',
-    icon: 'star-outline',
-  },
-  {
-    label: 'Hours scheduled',
-    value: '11.5h',
-    helper: 'This month',
-    icon: 'time-outline',
-  },
+  { label: 'Upcoming', value: '3', helper: 'sessions' },
+  { label: 'Coaches', value: '6', helper: 'active' },
+  { label: 'Rating', value: '4.8', helper: 'avg' },
+  { label: 'Hours', value: '11.5', helper: 'this month' },
 ];
 
 export default function CoachingHubScreen() {
   // === ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS ===
 
-  // 1. Router and auth
   const router = useRouter();
   const { user } = useAuth();
 
-  // 2. All useState hooks
   const [isCoach, setIsCoach] = useState(false);
   const [checkingCoachStatus, setCheckingCoachStatus] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 3. All useEffect hooks
   useEffect(() => {
     async function checkCoachStatus() {
       if (!user?.id) {
@@ -342,7 +272,6 @@ export default function CoachingHubScreen() {
     checkCoachStatus();
   }, [user?.id]);
 
-  // 4. All data-fetching hooks (React Query) - must be called unconditionally
   const {
     data: upcomingSessionsData = [],
     isLoading: loadingUpcomingSessions,
@@ -367,23 +296,16 @@ export default function CoachingHubScreen() {
     availability: 'next_30_days',
   });
 
-  const {
-    data: metricsData,
-    isLoading: loadingMetrics,
-  } = useCoachMetrics();
+  const { data: metricsData, isLoading: loadingMetrics } = useCoachMetrics();
+  const { data: resources = [] } = useCoachResources();
 
-  const {
-    data: resources = [],
-  } = useCoachResources();
-
-  // 5. Derived values (not hooks, just computations)
   const loading = loadingUpcomingSessions || loadingRecentSessions || loadingCoaches || loadingMetrics;
   const error = upcomingSessionsError || recentSessionsError || coachesError;
 
-  const upcomingSource =
-    upcomingSessionsData.length > 0 ? upcomingSessionsData : MOCK_SESSIONS;
-  const recentSource =
-    recentSessionsData.length > 0 ? recentSessionsData : upcomingSessionsData.length > 0 ? upcomingSessionsData : MOCK_SESSIONS;
+  const upcomingSource = upcomingSessionsData.length > 0 ? upcomingSessionsData : MOCK_SESSIONS;
+  const recentSource = recentSessionsData.length > 0
+    ? recentSessionsData
+    : upcomingSessionsData.length > 0 ? upcomingSessionsData : MOCK_SESSIONS;
   const coachesToUse = coaches.length > 0
     ? coaches.map((coach) => ({
         ...coach,
@@ -392,10 +314,8 @@ export default function CoachingHubScreen() {
       }))
     : MOCK_COACHES;
 
-  // Combine sessions for metrics computation
   const allSessionsData = [...upcomingSessionsData, ...recentSessionsData];
 
-  // 6. All useMemo hooks - must be called unconditionally
   const upcomingSessions = useMemo(() => {
     return (upcomingSource || [])
       .filter((session) =>
@@ -411,20 +331,14 @@ export default function CoachingHubScreen() {
     const completed = (recentSource || []).filter(
       (session) => (session.status || '').toLowerCase() === 'completed'
     );
-    if (completed.length === 0) {
-      return MOCK_FEEDBACK;
-    }
+    if (completed.length === 0) return MOCK_FEEDBACK;
     return completed
       .map((session) => ({
         id: session.id,
         coach: session.coach?.display_name || 'Coach',
         sailor: session.sailor?.full_name || session.sailor?.email || 'Sailor',
         sessionType: formatSessionType(session.session_type || ''),
-        summary: session.session_notes || 'Detailed feedback was shared with the sailor.',
-        highlight:
-          session.homework ||
-          session.goals ||
-          'Session marked as complete with action items logged.',
+        summary: session.session_notes || 'Feedback shared with sailor.',
         rating: session.feedback?.rating ?? 5,
         date: format(sessionCompletedDate(session), 'MMM d'),
       }))
@@ -432,86 +346,39 @@ export default function CoachingHubScreen() {
   }, [recentSource]);
 
   const metrics = useMemo<DashboardMetric[]>(() => {
-    // Prefer metrics from the API if available
     if (metricsData) {
       return [
-        {
-          label: 'Upcoming sessions',
-          value: `${metricsData.upcomingSessions || 0}`,
-          helper: 'Next 14 days',
-          icon: 'calendar-outline',
-        },
-        {
-          label: 'Active coaches',
-          value: `${metricsData.activeClients || 0}`,
-          helper: 'In your roster',
-          icon: 'people-outline',
-        },
-        {
-          label: 'Avg. feedback',
-          value: metricsData.averageRating ? `${metricsData.averageRating.toFixed(1)}★` : 'N/A',
-          helper: 'Across recent sessions',
-          icon: 'star-outline',
-        },
-        {
-          label: 'Hours scheduled',
-          value: `${((metricsData.sessionsThisMonth || 0) * 60 / 60).toFixed(1)}h`,
-          helper: 'This month',
-          icon: 'time-outline',
-        },
+        { label: 'Upcoming', value: `${metricsData.upcomingSessions || 0}`, helper: 'sessions' },
+        { label: 'Coaches', value: `${metricsData.activeClients || 0}`, helper: 'active' },
+        { label: 'Rating', value: metricsData.averageRating ? metricsData.averageRating.toFixed(1) : '—', helper: 'avg' },
+        { label: 'Hours', value: `${((metricsData.sessionsThisMonth || 0) * 60 / 60).toFixed(1)}`, helper: 'this month' },
       ];
     }
 
-    // Fallback to computed metrics from sessions
-    if (!allSessionsData || allSessionsData.length === 0) {
-      return MOCK_METRICS;
-    }
+    if (!allSessionsData || allSessionsData.length === 0) return MOCK_METRICS;
 
     const scheduled = upcomingSessions.length;
     const uniqueCoaches = new Set(
       allSessionsData.map((session) => session.coach?.id || session.coach_id).filter(Boolean)
     ).size;
     const totalMinutes = allSessionsData.reduce(
-      (sum, session) => sum + (session.duration_minutes || 0),
-      0
+      (sum, session) => sum + (session.duration_minutes || 0), 0
     );
-    const averageRating = allSessionsData
+    const ratings = allSessionsData
       .filter((session) => session.feedback?.rating)
       .map((session) => session.feedback?.rating || 0);
-    const rating =
-      averageRating.length > 0
-        ? `${(averageRating.reduce((a, b) => a + b, 0) / averageRating.length).toFixed(1)}★`
-        : MOCK_METRICS[2].value;
+    const avgRating = ratings.length > 0
+      ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
+      : '—';
 
     return [
-      {
-        label: 'Upcoming sessions',
-        value: `${scheduled}`,
-        helper: 'Next 14 days',
-        icon: 'calendar-outline',
-      },
-      {
-        label: 'Active coaches',
-        value: `${Math.max(uniqueCoaches, 1)}`,
-        helper: 'In your roster',
-        icon: 'people-outline',
-      },
-      {
-        label: 'Avg. feedback',
-        value: rating,
-        helper: 'Across recent sessions',
-        icon: 'star-outline',
-      },
-      {
-        label: 'Hours scheduled',
-        value: `${(totalMinutes / 60).toFixed(1)}h`,
-        helper: 'This month',
-        icon: 'time-outline',
-      },
+      { label: 'Upcoming', value: `${scheduled}`, helper: 'sessions' },
+      { label: 'Coaches', value: `${Math.max(uniqueCoaches, 1)}`, helper: 'active' },
+      { label: 'Rating', value: avgRating, helper: 'avg' },
+      { label: 'Hours', value: `${(totalMinutes / 60).toFixed(1)}`, helper: 'this month' },
     ];
   }, [metricsData, allSessionsData, upcomingSessions]);
 
-  // 7. Callbacks
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([
@@ -522,35 +389,12 @@ export default function CoachingHubScreen() {
     setRefreshing(false);
   };
 
-  const quickActions: QuickAction[] = [
-    {
-      label: 'Discover coaches',
-      icon: 'search-outline',
-      onPress: () => router.push('/coach/discover'),
-    },
-    {
-      label: 'Manage sessions',
-      icon: 'clipboard-outline',
-      onPress: () => router.push('/coach/my-bookings'),
-    },
-    {
-      label: 'Upload race video',
-      icon: 'cloud-upload-outline',
-      onPress: () => router.push('/coach/book'),
-    },
-    {
-      label: 'Share feedback',
-      icon: 'chatbubbles-outline',
-      onPress: () => router.push('/coach/confirmation'),
-    },
-  ];
-
-  // === EARLY RETURNS - NOW SAFE BECAUSE ALL HOOKS HAVE BEEN CALLED ===
+  // === EARLY RETURNS ===
 
   if (checkingCoachStatus) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={IOS_COLORS.blue} />
       </View>
     );
   }
@@ -561,129 +405,130 @@ export default function CoachingHubScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View className="flex-1 justify-center items-center bg-[#F5F7FB]">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="text-gray-500 mt-3">Loading your coaching workspace…</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={IOS_COLORS.blue} />
+        <Text style={styles.loadingText}>Loading coaching workspace…</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-[#F5F7FB]">
+    <View style={styles.container}>
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 20, paddingBottom: 140 }}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563EB" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IOS_COLORS.blue} />
         }
       >
-        <LinearGradient
-          colors={['#1E40AF', '#1D4ED8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: 24,
-            padding: 24,
-            marginBottom: 20,
-            ...Platform.select({
-              web: {
-                boxShadow: '0px 10px 20px rgba(30, 58, 138, 0.18)',
-              },
-              default: {
-                shadowColor: '#1E3A8A',
-                shadowOpacity: 0.18,
-                shadowOffset: { width: 0, height: 10 },
-                shadowRadius: 20,
-              },
-            }),
-          }}
-        >
-          <Text className="text-white/70 text-sm uppercase tracking-widest mb-2">
-            Coaching workspace
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Coaching</Text>
+          <Text style={styles.headerSubtitle}>
+            Book sessions with world-class coaches
           </Text>
-          <Text className="text-white text-3xl font-semibold leading-snug mb-3">
-            Craft elite race outcomes with world-class coaches
-          </Text>
-          <Text className="text-white/80 text-base leading-6 mb-6">
-            Compare availability, book sessions, capture feedback, and share video in one place.
-          </Text>
-          <View className="flex-row gap-3">
-            <TouchableOpacity
-              className="bg-white/95 px-4 py-3 rounded-xl"
-              onPress={() => router.push('/coach/discover-enhanced')}
-            >
-              <Text className="text-blue-700 font-semibold">Open Coach Marketplace</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="border border-white/40 px-4 py-3 rounded-xl"
-              onPress={() => router.push('/coach/my-bookings')}
-            >
-              <Text className="text-white font-medium">Upcoming Sessions</Text>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
+        </View>
 
+        {/* Error banner */}
         {error && (
-          <View className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-4">
-            <Text className="text-amber-700 text-sm">
-              {error instanceof Error ? error.message : 'Showing sample coaching data while we reconnect…'}
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>
+              Showing sample data while reconnecting…
             </Text>
           </View>
         )}
 
-        <View className="flex-row flex-wrap justify-between gap-4 mb-20">
-          {metrics.map((metric) => (
-            <MetricCard key={metric.label} metric={metric} />
+        {/* Metrics Row */}
+        <View style={styles.metricsRow}>
+          {metrics.map((metric, index) => (
+            <View key={metric.label} style={styles.metricItem}>
+              <Text style={styles.metricValue}>{metric.value}</Text>
+              <Text style={styles.metricLabel}>{metric.label}</Text>
+              <Text style={styles.metricHelper}>{metric.helper}</Text>
+            </View>
           ))}
         </View>
 
-        <View className="mb-10">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-semibold text-gray-900">Quick actions</Text>
-            <TouchableOpacity onPress={() => router.push('/coach/profile')}>
-              <Text className="text-blue-600 font-medium">Manage profile</Text>
+        {/* Quick Actions */}
+        <TufteSection
+          title="QUICK ACTIONS"
+          action="Manage"
+          onActionPress={() => router.push('/coach/profile')}
+        >
+          <View style={styles.quickActionsContainer}>
+            <TouchableOpacity
+              style={styles.quickActionRow}
+              onPress={() => router.push('/coach/discover')}
+            >
+              <View style={styles.quickActionLeft}>
+                <Ionicons name="search-outline" size={18} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.quickActionLabel}>Discover coaches</Text>
+              </View>
+              <Text style={styles.quickActionChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionRow}
+              onPress={() => router.push('/coach/my-bookings')}
+            >
+              <View style={styles.quickActionLeft}>
+                <Ionicons name="clipboard-outline" size={18} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.quickActionLabel}>Manage sessions</Text>
+              </View>
+              <Text style={styles.quickActionChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionRow}
+              onPress={() => router.push('/coach/book')}
+            >
+              <View style={styles.quickActionLeft}>
+                <Ionicons name="cloud-upload-outline" size={18} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.quickActionLabel}>Upload race video</Text>
+              </View>
+              <Text style={styles.quickActionChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.quickActionRow, styles.quickActionRowLast]}
+              onPress={() => router.push('/coach/confirmation')}
+            >
+              <View style={styles.quickActionLeft}>
+                <Ionicons name="chatbubbles-outline" size={18} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.quickActionLabel}>Share feedback</Text>
+              </View>
+              <Text style={styles.quickActionChevron}>›</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-12 pr-4">
-              {quickActions.map((action) => (
-                <QuickActionButton key={action.label} action={action} />
-              ))}
-            </View>
-          </ScrollView>
-        </View>
+        </TufteSection>
 
-        <View className="mb-10">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-semibold text-gray-900">Your next sessions</Text>
-            <TouchableOpacity onPress={() => router.push('/coach/my-bookings')}>
-              <Text className="text-blue-600 font-medium">View calendar</Text>
-            </TouchableOpacity>
+        {/* Upcoming Sessions */}
+        <TufteSection
+          title="UPCOMING SESSIONS"
+          action="Calendar"
+          onActionPress={() => router.push('/coach/my-bookings')}
+        >
+          <View style={styles.sessionsContainer}>
+            {upcomingSessions.map((session, index) => (
+              <TufteSessionRow
+                key={session.id}
+                session={session}
+                onPress={() => router.push(`/coach/session/${session.id}`)}
+                isLast={index === upcomingSessions.length - 1}
+              />
+            ))}
+            {upcomingSessions.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No upcoming sessions</Text>
+              </View>
+            )}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-4 pr-2">
-              {upcomingSessions.map((session) => (
-                <SessionCard
-                  key={session.id}
-                  session={session}
-                  onPress={() => router.push(`/coach/session/${session.id}`)}
-                />
-              ))}
-            </View>
-          </ScrollView>
-        </View>
+        </TufteSection>
 
-        {/* Coach Spotlights - Tufte Style */}
-        <View className="mb-10">
-          <View className="flex-row items-center justify-between px-4 pt-6 pb-2">
-            <Text style={{ fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', color: '#8E8E93' }}>
-              FEATURED COACHES
-            </Text>
-            <TouchableOpacity onPress={() => router.push('/coach/discover')}>
-              <Text className="text-blue-600 font-medium text-sm">See all</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={{ backgroundColor: '#FFFFFF', borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: '#E5E7EB' }}>
+        {/* Featured Coaches */}
+        <TufteSection
+          title="FEATURED COACHES"
+          action="See all"
+          onActionPress={() => router.push('/coach/discover-enhanced')}
+        >
+          <View style={styles.coachesContainer}>
             {coachesToUse.slice(0, 4).map((coach, index) => (
               <TufteCoachRow
                 key={coach.id}
@@ -701,287 +546,511 @@ export default function CoachingHubScreen() {
               />
             ))}
           </View>
-        </View>
+        </TufteSection>
 
-        <View className="mb-10">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-semibold text-gray-900">Structured programs</Text>
-            <TouchableOpacity onPress={() => router.push('/coach/book')}>
-              <Text className="text-blue-600 font-medium">Build custom plan</Text>
-            </TouchableOpacity>
+        {/* Recent Feedback */}
+        <TufteSection title="RECENT FEEDBACK">
+          <View style={styles.feedbackContainer}>
+            {feedbackItems.map((item, index) => (
+              <TufteFeedbackRow
+                key={item.id}
+                feedback={item}
+                isLast={index === feedbackItems.length - 1}
+              />
+            ))}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-4 pr-2">
-              {MOCK_PROGRAMS.map((program) => (
-                <ProgramCard key={program.id} program={program} />
-              ))}
-            </View>
-          </ScrollView>
-        </View>
+        </TufteSection>
 
-        <View className="mb-10">
-          <Text className="text-xl font-semibold text-gray-900 mb-4">Latest coach feedback</Text>
-          {feedbackItems.map((item) => (
-            <FeedbackCard key={item.id} feedback={item} />
-          ))}
-        </View>
-
-        <View>
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-xl font-semibold text-gray-900">Resources & playbooks</Text>
-            <TouchableOpacity onPress={() => router.push('/coach/discover-enhanced')}>
-              <Text className="text-blue-600 font-medium">Library</Text>
-            </TouchableOpacity>
+        {/* Resources */}
+        <TufteSection
+          title="RESOURCES"
+          action="Library"
+          onActionPress={() => router.push('/coach/discover-enhanced')}
+        >
+          <View style={styles.resourcesContainer}>
+            {(resources.length > 0 ? resources : MOCK_RESOURCES).map((resource, index, arr) => (
+              <TufteResourceRow
+                key={resource.id}
+                resource={resource}
+                isLast={index === arr.length - 1}
+              />
+            ))}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-4 pr-2">
-              {resources.map((resource) => (
-                <ResourceCard key={resource.id} resource={resource} />
-              ))}
-            </View>
-          </ScrollView>
-        </View>
+        </TufteSection>
+
+        {/* Bottom padding */}
+        <View style={{ height: 100 }} />
       </ScrollView>
     </View>
   );
 }
 
-const MetricCard = ({ metric }: { metric: DashboardMetric }) => (
-  <View className="bg-white rounded-2xl px-5 py-4 w-[calc(50%-12px)] shadow-sm">
-    <View className="w-10 h-10 rounded-xl bg-blue-50 items-center justify-center mb-3">
-      <Ionicons name={metric.icon} size={20} color="#1D4ED8" />
-    </View>
-    <Text className="text-2xl font-semibold text-gray-900 mb-1">{metric.value}</Text>
-    <Text className="text-sm font-medium text-gray-600 mb-1">{metric.label}</Text>
-    <Text className="text-xs text-gray-400">{metric.helper}</Text>
-  </View>
-);
+// =============================================================================
+// TUFTE COMPONENTS
+// =============================================================================
 
-const QuickActionButton = ({ action }: { action: QuickAction }) => (
-  <TouchableOpacity
-    className="bg-white rounded-2xl px-4 py-5 w-40 shadow-sm"
-    onPress={action.onPress}
-    activeOpacity={0.9}
-  >
-    <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center mb-4">
-      <Ionicons name={action.icon} size={22} color="#2563EB" />
+function TufteSection({
+  title,
+  action,
+  onActionPress,
+  children,
+}: {
+  title: string;
+  action?: string;
+  onActionPress?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {action && onActionPress && (
+          <TouchableOpacity onPress={onActionPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.sectionAction}>{action}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {children}
     </View>
-    <Text className="text-sm font-semibold text-gray-900">{action.label}</Text>
-    <Text className="text-xs text-gray-400 mt-1">
-      {action.label === 'Discover coaches'
-        ? 'Browse verified experts'
-        : action.label === 'Manage sessions'
-        ? 'Track bookings & notes'
-        : action.label === 'Upload race video'
-        ? 'Share footage for review'
-        : 'Capture session learnings'}
-    </Text>
-  </TouchableOpacity>
-);
+  );
+}
 
-const SessionCard = ({
+function TufteSessionRow({
   session,
   onPress,
+  isLast,
 }: {
   session: CoachingSession;
   onPress: () => void;
-}) => {
+  isLast: boolean;
+}) {
   const scheduledDate = sessionScheduledDate(session);
   const coachName = session.coach?.display_name || 'Coach pending';
-  const focusTags = (session.focus_areas || []).slice(0, 3);
+  const sessionType = formatSessionType(session.session_type || '');
+  const location = session.location_notes || '';
+
+  const statusColor = session.status === 'confirmed'
+    ? IOS_COLORS.green
+    : session.status === 'pending'
+      ? IOS_COLORS.orange
+      : IOS_COLORS.blue;
 
   return (
     <TouchableOpacity
-      className="bg-white rounded-2xl px-4 py-5 w-72 shadow-sm"
+      style={[styles.sessionRow, isLast && styles.sessionRowLast]}
       onPress={onPress}
-      activeOpacity={0.9}
+      activeOpacity={0.6}
     >
-      <View className="flex-row items-center justify-between mb-3">
-        <View className="flex-row items-center">
-          <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3 overflow-hidden">
-            {session.coach?.profile_photo_url ? (
-              <Image
-                source={{ uri: session.coach.profile_photo_url }}
-                style={{ width: 40, height: 40 }}
-              />
-            ) : (
-              <Ionicons name="person" size={22} color="#2563EB" />
-            )}
-          </View>
-          <View>
-            <Text className="text-sm font-semibold text-gray-900">{coachName}</Text>
-            <Text className="text-xs text-gray-500">
-              {format(scheduledDate, 'EEE, MMM d • h:mm a')}
-            </Text>
-          </View>
-        </View>
-        <View className="px-3 py-1 rounded-full bg-blue-50">
-          <Text className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
-            {formatSessionType(session.session_type)}
-          </Text>
+      <View style={styles.sessionLeft}>
+        <View style={styles.sessionDateBox}>
+          <Text style={styles.sessionDateDay}>{format(scheduledDate, 'd')}</Text>
+          <Text style={styles.sessionDateMonth}>{format(scheduledDate, 'MMM')}</Text>
         </View>
       </View>
-      {session.location_notes && (
-        <Text className="text-xs text-gray-500 mb-3" numberOfLines={1}>
-          📍 {session.location_notes}
+      <View style={styles.sessionContent}>
+        <View style={styles.sessionTopRow}>
+          <Text style={styles.sessionCoach}>{coachName}</Text>
+          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+        </View>
+        <Text style={styles.sessionType}>{sessionType}</Text>
+        <Text style={styles.sessionMeta}>
+          {format(scheduledDate, 'h:mm a')}
+          {location ? ` · ${location}` : ''}
         </Text>
-      )}
-      {focusTags.length > 0 && (
-        <View className="flex-row flex-wrap gap-2">
-          {focusTags.map((focus) => (
-            <View key={focus} className="px-3 py-1 rounded-full bg-indigo-50">
-              <Text className="text-xs font-medium text-indigo-700">
-                {focus.replace(/_/g, ' ')}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
+      </View>
+      <Text style={styles.sessionChevron}>›</Text>
     </TouchableOpacity>
   );
-};
+}
 
-const CoachSpotlightCard = ({
-  coach,
-  onView,
-  onBook,
+function TufteFeedbackRow({
+  feedback,
+  isLast,
 }: {
-  coach: DiscoverCoach;
-  onView: () => void;
-  onBook: () => void;
-}) => {
-  const coachName = coach.display_name || 'Coach';
-  const location =
-    coach.based_at || coach.available_locations?.[0] || 'Worldwide availability';
-  const price =
-    typeof coach.hourly_rate === 'number'
-      ? `$${Math.round(coach.hourly_rate / 100)} / hr`
-      : 'Contact for pricing';
-  const specialties = coach.specialties.slice(0, 3);
-
+  feedback: FeedbackItem;
+  isLast: boolean;
+}) {
   return (
-    <View className="bg-white rounded-2xl px-5 py-5 mb-4 shadow-sm">
-      <View className="flex-row">
-        <View className="mr-4">
-          <View className="w-16 h-16 rounded-2xl bg-blue-100 items-center justify-center overflow-hidden">
-            {coach.profile_photo_url ? (
-              <Image
-                source={{ uri: coach.profile_photo_url }}
-                style={{ width: 64, height: 64 }}
-              />
-            ) : (
-              <Ionicons name="person-outline" size={28} color="#2563EB" />
-            )}
-          </View>
-        </View>
-        <View className="flex-1">
-          <Text className="text-lg font-semibold text-gray-900">{coachName}</Text>
-          <Text className="text-sm text-gray-500 mt-0.5">{location}</Text>
-          <View className="flex-row items-center mt-2">
-            <Ionicons name="star" size={16} color="#F59E0B" />
-            <Text className="text-sm text-gray-600 ml-1">
-              {coach.average_rating ? coach.average_rating.toFixed(1) : 'New coach'}
-            </Text>
-            <Text className="text-sm text-gray-400 ml-3">
-              {coach.total_sessions} sessions • {coach.total_clients} clients
-            </Text>
-          </View>
+    <View style={[styles.feedbackRow, isLast && styles.feedbackRowLast]}>
+      <View style={styles.feedbackTop}>
+        <Text style={styles.feedbackCoach}>{feedback.coach}</Text>
+        <View style={styles.feedbackRating}>
+          <Text style={styles.feedbackRatingText}>★ {feedback.rating.toFixed(1)}</Text>
+          <Text style={styles.feedbackDate}>{feedback.date}</Text>
         </View>
       </View>
-
-      <Text className="text-sm text-gray-600 mt-3" numberOfLines={3}>
-        {coach.bio ||
-          'Performance-focused coaching with detailed analytics, video review, and tactical debriefs.'}
-      </Text>
-
-      {specialties.length > 0 && (
-        <View className="flex-row flex-wrap gap-2 mt-3">
-          {specialties.map((specialty) => (
-            <View key={specialty} className="bg-blue-50 px-3 py-1.5 rounded-full">
-              <Text className="text-xs font-semibold text-blue-700">
-                {specialty.replace(/_/g, ' ')}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      <View className="flex-row items-center justify-between border-t border-gray-100 pt-3 mt-4">
-        <Text className="text-blue-600 font-semibold text-lg">{price}</Text>
-        <View className="flex-row gap-2">
-          <TouchableOpacity className="border border-blue-200 px-3 py-2 rounded-xl" onPress={onView}>
-            <Text className="text-blue-600 font-medium">View profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity className="bg-blue-600 px-4 py-2 rounded-xl" onPress={onBook}>
-            <Text className="text-white font-semibold">Book session</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <Text style={styles.feedbackType}>{feedback.sessionType}</Text>
+      <Text style={styles.feedbackSummary} numberOfLines={2}>{feedback.summary}</Text>
     </View>
   );
-};
+}
 
-const ProgramCard = ({ program }: { program: SpotlightProgram }) => (
-  <View
-    className="rounded-2xl px-5 py-5 w-72"
-    style={{
-      backgroundColor: program.color,
-    }}
-  >
-    <Text className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-      {program.duration}
-    </Text>
-    <Text className="text-lg font-semibold text-gray-900 mb-1">{program.title}</Text>
-    <Text className="text-sm text-gray-600 mb-3">{program.subtitle}</Text>
-    <View className="flex-row flex-wrap gap-2">
-      {program.focus.map((focus) => (
-        <View key={focus} className="bg-white/70 px-3 py-1 rounded-full">
-          <Text className="text-xs font-medium text-gray-700">{focus}</Text>
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-const FeedbackCard = ({ feedback }: { feedback: FeedbackItem }) => (
-  <View className="bg-white rounded-2xl px-5 py-5 mb-3 shadow-sm">
-    <View className="flex-row items-center justify-between">
-      <Text className="text-sm font-semibold text-gray-900">{feedback.coach}</Text>
-      <View className="flex-row items-center">
-        <Ionicons name="star" size={16} color="#F59E0B" />
-        <Text className="text-sm text-gray-600 ml-1">{feedback.rating.toFixed(1)}</Text>
-        <Text className="text-xs text-gray-400 uppercase ml-3">{feedback.date}</Text>
+function TufteResourceRow({
+  resource,
+  isLast,
+}: {
+  resource: ResourceItem;
+  isLast: boolean;
+}) {
+  return (
+    <TouchableOpacity style={[styles.resourceRow, isLast && styles.resourceRowLast]} activeOpacity={0.6}>
+      <View style={styles.resourceContent}>
+        <Text style={styles.resourceCategory}>{resource.category}</Text>
+        <Text style={styles.resourceTitle} numberOfLines={2}>{resource.title}</Text>
       </View>
-    </View>
-    <Text className="text-xs text-gray-500 mt-1">{feedback.sailor}</Text>
-    <Text className="text-xs font-semibold text-blue-600 uppercase mt-3">
-      {feedback.sessionType}
-    </Text>
-    <Text className="text-sm text-gray-700 mt-2">{feedback.summary}</Text>
-    <View className="bg-blue-50 px-3 py-2 rounded-xl mt-3">
-      <Text className="text-xs font-semibold text-blue-700 uppercase">Coaching impact</Text>
-      <Text className="text-sm text-blue-900 mt-1">{feedback.highlight}</Text>
-    </View>
-  </View>
-);
-
-const ResourceCard = ({ resource }: { resource: ResourceItem }) => (
-  <View className="bg-white rounded-2xl px-5 py-4 w-64 shadow-sm">
-    <View className="flex-row items-center justify-between mb-3">
-      <Text className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-        {resource.category}
-      </Text>
-      <Text className="text-xs text-gray-400">{resource.readTime}</Text>
-    </View>
-    <Text className="text-sm font-semibold text-gray-900" numberOfLines={3}>
-      {resource.title}
-    </Text>
-    <TouchableOpacity className="flex-row items-center mt-4">
-      <Text className="text-blue-600 font-medium text-sm">Open playbook</Text>
-      <Ionicons name="arrow-forward" size={14} color="#2563EB" style={{ marginLeft: 6 }} />
+      <View style={styles.resourceRight}>
+        <Text style={styles.resourceTime}>{resource.readTime}</Text>
+        <Text style={styles.resourceChevron}>›</Text>
+      </View>
     </TouchableOpacity>
-  </View>
-);
+  );
+}
+
+// =============================================================================
+// STYLES
+// =============================================================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: TUFTE_BACKGROUND,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: TUFTE_BACKGROUND,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Header
+  header: {
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingHorizontal: TufteTokens.spacing.section,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.color,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Error banner
+  errorBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: TufteTokens.spacing.section,
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: '#FDE68A',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#92400E',
+  },
+
+  // Metrics
+  metricsRow: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: TufteTokens.spacing.section,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.color,
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  metricLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
+  },
+  metricHelper: {
+    fontSize: 10,
+    color: IOS_COLORS.tertiaryLabel,
+    marginTop: 1,
+  },
+
+  // Section
+  section: {
+    marginTop: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingBottom: 8,
+    paddingHorizontal: TufteTokens.spacing.section,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  sectionAction: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+
+  // Quick Actions
+  quickActionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+  quickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: TufteTokens.spacing.section,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.colorSubtle,
+    minHeight: 44,
+  },
+  quickActionRowLast: {
+    borderBottomWidth: 0,
+  },
+  quickActionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  quickActionLabel: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
+  },
+  quickActionChevron: {
+    fontSize: 18,
+    color: IOS_COLORS.gray3,
+  },
+
+  // Sessions
+  sessionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+  sessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: TufteTokens.spacing.section,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.colorSubtle,
+    minHeight: 72,
+  },
+  sessionRowLast: {
+    borderBottomWidth: 0,
+  },
+  sessionLeft: {
+    marginRight: 12,
+  },
+  sessionDateBox: {
+    width: 40,
+    alignItems: 'center',
+  },
+  sessionDateDay: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  sessionDateMonth: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+  },
+  sessionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  sessionTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sessionCoach: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  sessionType: {
+    fontSize: 13,
+    color: IOS_COLORS.blue,
+  },
+  sessionMeta: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  sessionChevron: {
+    fontSize: 18,
+    color: IOS_COLORS.gray3,
+    marginLeft: 8,
+  },
+
+  // Coaches
+  coachesContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+
+  // Feedback
+  feedbackContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+  feedbackRow: {
+    paddingVertical: 12,
+    paddingHorizontal: TufteTokens.spacing.section,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.colorSubtle,
+  },
+  feedbackRowLast: {
+    borderBottomWidth: 0,
+  },
+  feedbackTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  feedbackCoach: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  feedbackRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  feedbackRatingText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#F59E0B',
+  },
+  feedbackDate: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  feedbackType: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  feedbackSummary: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
+  },
+
+  // Resources
+  resourcesContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+  resourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: TufteTokens.spacing.section,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.colorSubtle,
+    minHeight: 56,
+  },
+  resourceRowLast: {
+    borderBottomWidth: 0,
+  },
+  resourceContent: {
+    flex: 1,
+    gap: 2,
+  },
+  resourceCategory: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  resourceTitle: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 18,
+  },
+  resourceRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+  },
+  resourceTime: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  resourceChevron: {
+    fontSize: 18,
+    color: IOS_COLORS.gray3,
+  },
+
+  // Empty state
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+});
+
+// =============================================================================
+// HELPERS
+// =============================================================================
 
 const sessionScheduledDate = (session: CoachingSession) => {
   if (session.scheduled_at) return new Date(session.scheduled_at);
@@ -1004,7 +1073,7 @@ const formatSessionType = (type: string) => {
     boat_setup: 'Boat Setup',
     fitness: 'Fitness Coaching',
     mental_coaching: 'Mental Coaching',
-    one_on_one: 'One-on-One Session',
+    one_on_one: 'One-on-One',
     group: 'Group Session',
     race_debrief: 'Race Debrief',
   };
