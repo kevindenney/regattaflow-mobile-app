@@ -158,27 +158,48 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Fetch race data for analysis
+    // Fetch race data for analysis (simplified - no complex joins)
     const { data: raceData, error: raceError } = await supabaseAdmin
       .from('race_timer_sessions')
-      .select(`
-        *,
-        race_courses (
-          name,
-          course_type,
-          race_marks (*)
-        )
-      `)
+      .select('*')
       .eq('id', timerSessionId)
       .single();
 
     if (raceError || !raceData) {
       console.error('Race data error:', raceError);
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch race data' }),
+        JSON.stringify({ error: 'Failed to fetch race data', details: raceError?.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Optionally fetch course data if course_id exists
+    let courseData = null;
+    if (raceData.course_id) {
+      const { data: course } = await supabaseAdmin
+        .from('race_courses')
+        .select('name, course_type')
+        .eq('id', raceData.course_id)
+        .maybeSingle();
+      courseData = course;
+    }
+
+    // Merge course data into raceData for prompt
+    const enrichedRaceData = { ...raceData, race_courses: courseData };
+
+    console.log('Race data fetched successfully');
+
+    // Fetch sailor's past learnings for personalized analysis
+    const { data: pastLearnings } = await supabaseAdmin
+      .from('learnable_events')
+      .select('title, action_text, outcome, event_type, conditions_context')
+      .eq('sailor_id', user.id)
+      .eq('nudge_eligible', true)
+      .eq('dismissed', false)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    console.log('Fetched past learnings:', pastLearnings?.length || 0);
 
     // Call Claude API for race analysis
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -191,7 +212,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('Calling Claude API for race analysis...');
 
-    const prompt = buildRaceAnalysisPrompt(raceData);
+    const prompt = buildRaceAnalysisPrompt(enrichedRaceData, pastLearnings || []);
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -201,7 +222,7 @@ Deno.serve(async (req: Request) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-latest', // Switched from Sonnet 4 (75% cost savings)
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         messages: [{
           role: 'user',
@@ -212,12 +233,15 @@ Deno.serve(async (req: Request) => {
 
     if (!claudeResponse.ok) {
       const errorText = await claudeResponse.text();
+      console.error('Claude API error status:', claudeResponse.status);
       console.error('Claude API error:', errorText);
       return new Response(
-        JSON.stringify({ error: 'Failed to generate analysis' }),
+        JSON.stringify({ error: 'Failed to generate analysis', details: `Claude API returned ${claudeResponse.status}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('Claude API response received');
 
     const claudeResult = await claudeResponse.json();
     const analysisText = claudeResult.content?.[0]?.text || '';
@@ -233,40 +257,35 @@ Deno.serve(async (req: Request) => {
         .eq('timer_session_id', timerSessionId);
     }
 
-    // Insert new analysis
+    // Insert new analysis - use columns that match the actual database schema
     const { data: savedAnalysis, error: saveError } = await supabaseAdmin
       .from('ai_coach_analysis')
       .insert({
         timer_session_id: timerSessionId,
-        sailor_id: user.id,
-        overall_performance_score: analysis.overall_performance_score,
-        strengths: analysis.strengths,
-        areas_for_improvement: analysis.areas_for_improvement,
-        key_takeaways: analysis.key_takeaways,
+        overall_summary: analysis.overall_summary,
         start_analysis: analysis.start_analysis,
         upwind_analysis: analysis.upwind_analysis,
-        mark_rounding_analysis: analysis.mark_rounding_analysis,
         downwind_analysis: analysis.downwind_analysis,
-        finish_analysis: analysis.finish_analysis,
         tactical_decisions: analysis.tactical_decisions,
-        wind_usage: analysis.wind_usage,
         boat_handling: analysis.boat_handling,
-        race_strategy: analysis.race_strategy,
-        improvement_suggestions: analysis.improvement_suggestions,
-        comparison_to_best_practices: analysis.comparison_to_best_practices,
-        personalized_drills: analysis.personalized_drills,
-        next_race_focus_areas: analysis.next_race_focus_areas,
+        recommendations: analysis.recommendations,
+        confidence_score: analysis.confidence_score,
+        model_used: 'claude-3-haiku-20240307',
+        analysis_version: '1.0',
       })
       .select()
       .single();
 
     if (saveError) {
       console.error('Save error:', saveError);
+      console.error('Save error details:', JSON.stringify(saveError, null, 2));
       return new Response(
-        JSON.stringify({ error: 'Failed to save analysis' }),
+        JSON.stringify({ error: 'Failed to save analysis', details: saveError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('Analysis saved successfully:', savedAnalysis?.id);
 
     // Mark session as analyzed
     await supabaseAdmin
@@ -294,13 +313,82 @@ Deno.serve(async (req: Request) => {
 });
 
 /**
+ * Format past learnings for inclusion in prompt
+ */
+function formatPastLearnings(learnings: any[]): string {
+  if (!learnings || learnings.length === 0) {
+    return '';
+  }
+
+  const formattedLearnings = learnings.map(l => {
+    const outcomeEmoji = l.outcome === 'positive' ? '✅' : l.outcome === 'negative' ? '⚠️' : '📝';
+    return `${outcomeEmoji} ${l.title}: ${l.action_text}`;
+  }).join('\n');
+
+  return `
+Sailor's Past Learnings:
+The following are insights and learnings this sailor has noted from previous races.
+Reference these in your analysis when relevant, especially if patterns repeat or progress is evident.
+
+${formattedLearnings}
+
+`;
+}
+
+/**
+ * Format phase ratings for inclusion in prompt
+ */
+function formatPhaseRatings(phaseRatings: any): string {
+  if (!phaseRatings || Object.keys(phaseRatings).length === 0) {
+    return '';
+  }
+
+  const phaseLabels: Record<string, string> = {
+    prestart: 'Pre-start',
+    start: 'Start',
+    upwind: 'Upwind',
+    windwardMark: 'Windward Mark',
+    downwind: 'Downwind',
+    leewardMark: 'Leeward Mark',
+  };
+
+  const phaseOrder = ['prestart', 'start', 'upwind', 'windwardMark', 'downwind', 'leewardMark'];
+
+  const formattedPhases = phaseOrder
+    .filter(phase => phaseRatings[phase]?.rating)
+    .map(phase => {
+      const rating = phaseRatings[phase].rating;
+      const note = phaseRatings[phase].note || '';
+      const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+      return `- ${phaseLabels[phase]}: ${stars} (${rating}/5)${note ? ` - "${note}"` : ''}`;
+    })
+    .join('\n');
+
+  if (!formattedPhases) {
+    return '';
+  }
+
+  return `
+Sailor's Self-Assessment by Phase:
+The sailor rated each phase of the race immediately after finishing.
+Use these self-assessments to guide your analysis - validate their perceptions or gently challenge where needed.
+
+${formattedPhases}
+
+`;
+}
+
+/**
  * Build a comprehensive prompt for race analysis
  */
-function buildRaceAnalysisPrompt(raceData: any): string {
+function buildRaceAnalysisPrompt(raceData: any, pastLearnings: any[] = []): string {
   const courseName = raceData.race_courses?.name || 'Unknown Course';
   const duration = raceData.end_time
     ? (new Date(raceData.end_time).getTime() - new Date(raceData.start_time).getTime()) / 1000 / 60
     : 0;
+
+  const learningsContext = formatPastLearnings(pastLearnings);
+  const phaseRatingsContext = formatPhaseRatings(raceData.phase_ratings);
 
   return `You are an expert sailing coach analyzing a completed race. Provide detailed performance analysis.
 
@@ -309,39 +397,23 @@ Race Details:
 - Duration: ${duration.toFixed(1)} minutes
 - Wind Conditions: ${raceData.wind_speed_knots || 'Unknown'} knots from ${raceData.wind_direction_degrees || 'Unknown'}°
 - Weather: ${raceData.weather_description || 'Not recorded'}
+${phaseRatingsContext}${learningsContext}
+Analyze this race and provide feedback. Pay special attention to the sailor's self-assessments above - your analysis should:
+1. Validate their perceptions where appropriate
+2. Offer specific insights on phases they rated lower
+3. Suggest ways to build on phases they rated higher
+4. Reference past learnings when relevant, noting improvement or recurring issues
 
-Please analyze this race across the following dimensions:
-
-1. Overall Performance (provide a score from 1-10)
-2. Start Analysis - execution quality, line bias recognition, timing
-3. Upwind Performance - VMG, tacking decisions, wind shifts
-4. Mark Roundings - technique, positioning, speed retention
-5. Downwind Performance - angles, jibing, wave usage
-6. Finish - approach strategy, timing
-7. Tactical Decisions - laylines, positioning, risk management
-8. Wind Usage - shift recognition, advantageous positioning
-9. Boat Handling - smoothness, speed through maneuvers
-10. Race Strategy - overall game plan execution
-
-Format your response as a structured JSON object with these exact fields:
+Format your response as a JSON object with these exact fields:
 {
-  "overall_performance_score": <number 1-10>,
-  "strengths": [<array of strings>],
-  "areas_for_improvement": [<array of strings>],
-  "key_takeaways": [<array of strings>],
-  "start_analysis": "<detailed text>",
-  "upwind_analysis": "<detailed text>",
-  "mark_rounding_analysis": "<detailed text>",
-  "downwind_analysis": "<detailed text>",
-  "finish_analysis": "<detailed text>",
-  "tactical_decisions": "<detailed text>",
-  "wind_usage": "<detailed text>",
-  "boat_handling": "<detailed text>",
-  "race_strategy": "<detailed text>",
-  "improvement_suggestions": [<array of actionable suggestions>],
-  "comparison_to_best_practices": "<text>",
-  "personalized_drills": [<array of drill descriptions>],
-  "next_race_focus_areas": [<array of focus areas>]
+  "overall_summary": "<2-3 sentence summary of race performance>",
+  "start_analysis": "<analysis of start execution, line bias, timing>",
+  "upwind_analysis": "<analysis of upwind legs, tacking, wind shifts>",
+  "downwind_analysis": "<analysis of downwind legs, jibing, angles>",
+  "tactical_decisions": "<analysis of key tactical choices during the race>",
+  "boat_handling": "<analysis of maneuvers, smoothness, technique>",
+  "recommendations": ["<actionable improvement 1>", "<actionable improvement 2>", "<actionable improvement 3>"],
+  "confidence_score": <number 0.0-1.0 indicating confidence in this analysis>
 }`;
 }
 
@@ -359,24 +431,15 @@ function parseAnalysisResult(text: string): any {
     console.error('Failed to parse JSON:', e);
   }
 
-  // Fallback: return a basic structure
+  // Fallback: return a basic structure matching the database schema
   return {
-    overall_performance_score: 5,
-    strengths: ['Completed the race'],
-    areas_for_improvement: ['Data analysis pending'],
-    key_takeaways: ['Review race video and telemetry'],
-    start_analysis: text.substring(0, 500),
+    overall_summary: text.substring(0, 500) || 'Race completed. Detailed analysis pending.',
+    start_analysis: 'Analysis pending',
     upwind_analysis: 'Analysis pending',
-    mark_rounding_analysis: 'Analysis pending',
     downwind_analysis: 'Analysis pending',
-    finish_analysis: 'Analysis pending',
     tactical_decisions: 'Analysis pending',
-    wind_usage: 'Analysis pending',
     boat_handling: 'Analysis pending',
-    race_strategy: 'Analysis pending',
-    improvement_suggestions: ['Review full analysis'],
-    comparison_to_best_practices: 'Pending',
-    personalized_drills: [],
-    next_race_focus_areas: [],
+    recommendations: ['Review race recording', 'Compare to previous performances'],
+    confidence_score: 0.5,
   };
 }
