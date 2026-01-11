@@ -1160,53 +1160,27 @@ class CoachingService {
     endDate?: Date,
     availableOnly: boolean = true
   ): Promise<any[]> {
-    const baseQuery = supabase
+    // Note: coach_availability uses day_of_week + time columns for recurring availability,
+    // not timestamp columns. We query all slots and filter in memory if needed.
+    let query = supabase
       .from('coach_availability')
       .select('*')
-      .eq('coach_id', coachId);
+      .eq('coach_id', coachId)
+      .order('day_of_week', { ascending: true })
+      .order('start_time', { ascending: true });
 
-    let query = baseQuery;
-
-    if (startDate) {
-      query = query.gte('start_time', startDate.toISOString());
+    if (availableOnly) {
+      query = query.eq('is_active', true);
     }
-
-    if (endDate) {
-      query = query.lte('end_time', endDate.toISOString());
-    }
-
-    query = query.order('start_time', { ascending: true });
 
     const { data, error } = await query;
 
     if (error) {
-      // Column not found error (legacy schema without time-based slots)
-      if (error.code === '42703') {
-        const { data: fallbackData, error: fallbackError } = await baseQuery;
-        if (fallbackError) {
-          console.error('Error fetching availability slots:', fallbackError);
-          throw fallbackError;
-        }
-        return expandLegacyAvailabilitySlots(fallbackData || [], startDate, endDate);
-      }
-
       console.error('Error fetching availability slots:', error);
       throw error;
     }
 
-    if (data && data.length > 0 && !('start_time' in (data[0] || {}))) {
-      return expandLegacyAvailabilitySlots(data, startDate, endDate);
-    }
-
-    const normalized = (data || []).filter((slot) => {
-      if (!availableOnly) return true;
-      if (typeof slot.is_available === 'boolean') {
-        return slot.is_available;
-      }
-      return true;
-    });
-
-    return normalized;
+    return data || [];
   }
 
   /**
