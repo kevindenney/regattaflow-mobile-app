@@ -821,9 +821,10 @@ function AddEquipmentModal({
 
       onEquipmentAdded();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Failed to add equipment:', err);
-      Alert.alert('Error', 'Failed to add equipment. Please try again.');
+      const errorMessage = err?.message || err?.toString() || 'Unknown error';
+      Alert.alert('Error', `Failed to add equipment: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
