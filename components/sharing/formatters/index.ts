@@ -242,6 +242,148 @@ export function formatPreRaceContent(content: ShareableContent): string {
     }
   }
 
+  // Watch Schedule (for distance/offshore races)
+  if (preRace?.watchSchedule) {
+    const ws = preRace.watchSchedule;
+    lines.push(`⏰ WATCH SCHEDULE`);
+
+    // Helper to format hour
+    const formatHour = (h: number) => {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${hour12}:00 ${ampm}`;
+    };
+
+    // Mode and duration info
+    const modeLabel = ws.watchMode === 'night_only' ? 'Night-Only' : '24-Hour Coverage';
+    if (ws.watchMode === 'night_only' && ws.nightStartHour !== undefined && ws.nightEndHour !== undefined) {
+      lines.push(`Mode: ${modeLabel} (${formatHour(ws.nightStartHour)} - ${formatHour(ws.nightEndHour)})`);
+    } else {
+      lines.push(`Mode: ${modeLabel}`);
+    }
+    lines.push(`Duration: ${ws.raceDurationHours}h | Watch Length: ${ws.watchLengthHours}h`);
+
+    if (ws.scheduleStartTime) {
+      const startDateStr = ws.raceDate
+        ? new Date(ws.raceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+        : '';
+      lines.push(`Starts: ${startDateStr} ${ws.scheduleStartTime}`);
+    }
+    lines.push('');
+
+    // Generate rotation timeline
+    const formatTimeWithMinutes = (hour: number, minute: number = 0) => {
+      const h = ((hour % 24) + 24) % 24;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+    };
+
+    // Parse start time
+    const [startHour, startMinute] = (ws.scheduleStartTime || '10:00').split(':').map(Number);
+
+    // Calculate night duration if night-only
+    const nightDurationHours = ws.watchMode === 'night_only' && ws.nightStartHour !== undefined && ws.nightEndHour !== undefined
+      ? (ws.nightEndHour > ws.nightStartHour
+          ? ws.nightEndHour - ws.nightStartHour
+          : 24 - ws.nightStartHour + ws.nightEndHour)
+      : 0;
+
+    // Build timeline
+    interface RotationEntry {
+      day: number;
+      startTime: string;
+      endTime: string;
+      watchName: string;
+    }
+    const timeline: RotationEntry[] = [];
+
+    if (ws.watchMode === 'full_24h') {
+      let currentHour = startHour;
+      let currentDay = 1;
+      let rotationIndex = 0;
+      let hoursElapsed = 0;
+
+      while (hoursElapsed < ws.raceDurationHours) {
+        const watchIdx = rotationIndex % ws.watches.length;
+        const watch = ws.watches[watchIdx];
+        const endHour = currentHour + ws.watchLengthHours;
+
+        timeline.push({
+          day: currentDay,
+          startTime: formatTimeWithMinutes(currentHour, startMinute),
+          endTime: formatTimeWithMinutes(endHour, startMinute),
+          watchName: watch?.name || `Watch ${String.fromCharCode(65 + watchIdx)}`,
+        });
+
+        currentHour = endHour;
+        hoursElapsed += ws.watchLengthHours;
+        rotationIndex++;
+
+        if (currentHour >= 24) {
+          currentHour = currentHour % 24;
+          currentDay++;
+        }
+      }
+    } else if (ws.watchMode === 'night_only' && ws.nightStartHour !== undefined) {
+      const nightsInRace = Math.ceil(ws.raceDurationHours / 24);
+      let rotationIndex = 0;
+
+      for (let night = 0; night < nightsInRace; night++) {
+        const day = night + 1;
+        let currentHour = ws.nightStartHour;
+        let hoursIntoNight = 0;
+
+        while (hoursIntoNight < nightDurationHours) {
+          const watchIdx = rotationIndex % ws.watches.length;
+          const watch = ws.watches[watchIdx];
+          const remainingNightHours = nightDurationHours - hoursIntoNight;
+          const actualWatchLength = Math.min(ws.watchLengthHours, remainingNightHours);
+          const endHour = currentHour + actualWatchLength;
+
+          timeline.push({
+            day,
+            startTime: formatTimeWithMinutes(currentHour),
+            endTime: formatTimeWithMinutes(endHour),
+            watchName: watch?.name || `Watch ${String.fromCharCode(65 + watchIdx)}`,
+          });
+
+          currentHour = endHour % 24;
+          hoursIntoNight += actualWatchLength;
+          rotationIndex++;
+        }
+      }
+    }
+
+    // Group by day and output
+    const dayGroups: { [key: number]: RotationEntry[] } = {};
+    timeline.forEach((entry) => {
+      if (!dayGroups[entry.day]) dayGroups[entry.day] = [];
+      dayGroups[entry.day].push(entry);
+    });
+
+    lines.push('📅 ROTATION TIMELINE');
+    Object.entries(dayGroups).forEach(([day, rotations]) => {
+      const dayLabel = ws.watchMode === 'night_only' ? `Night ${day}` : `Day ${day}`;
+      lines.push(`${dayLabel}:`);
+      rotations.forEach((r) => {
+        lines.push(`  ${r.startTime} - ${r.endTime}  ${r.watchName}`);
+      });
+    });
+    lines.push('');
+
+    // Total rotations
+    const effectiveDuration = ws.watchMode === 'night_only'
+      ? nightDurationHours * Math.ceil(ws.raceDurationHours / 24)
+      : ws.raceDurationHours;
+    const rotations = Math.ceil(effectiveDuration / ws.watchLengthHours);
+    lines.push(`Total: ${rotations} rotations`);
+    if (ws.watchMode === 'night_only') {
+      lines.push(`No formal watches during daylight hours`);
+    }
+    lines.push('');
+  }
+
   // Check if we have any meaningful content beyond basic info
   const hasContent = preRace?.raceInfo?.weather ||
                      preRace?.raceInfo?.rigTuning ||
@@ -249,7 +391,9 @@ export function formatPreRaceContent(content: ShareableContent): string {
                      preRace?.startStrategy ||
                      preRace?.upwindStrategy ||
                      preRace?.downwindStrategy ||
-                     preRace?.aiInsights?.length;
+                     preRace?.aiInsights?.length ||
+                     preRace?.watchSchedule ||
+                     preRace?.documentData;
 
   if (!hasContent) {
     lines.push(`📋 RACE PREP CHECKLIST`);

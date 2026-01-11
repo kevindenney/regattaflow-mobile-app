@@ -22,6 +22,8 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
+  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -38,6 +40,9 @@ import {
   User,
   UserPlus,
   X,
+  Sun,
+  Moon,
+  Share2,
 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
@@ -78,13 +83,25 @@ interface WatchGroup {
   crewIds: string[];
 }
 
+type WatchMode = 'full_24h' | 'night_only';
+
 interface WatchSchedule {
   raceDurationHours: number;
   watchLengthHours: number;
   watches: WatchGroup[];
+  watchMode: WatchMode;
+  scheduleStartTime?: string;  // When first watch begins (e.g., "10:30")
+  nightStartHour?: number;     // For night-only mode (e.g., 18 for 6pm)
+  nightEndHour?: number;       // For night-only mode (e.g., 6 for 6am)
+  raceDate?: string;           // ISO date for reference
 }
 
-interface WatchScheduleWizardProps extends ChecklistToolProps {}
+interface WatchScheduleWizardProps extends ChecklistToolProps {
+  raceStartTime?: string;      // e.g., "10:30"
+  raceDate?: string;           // ISO date
+  raceDurationHours?: number;  // From time_limit_hours
+  raceName?: string;           // For share formatting
+}
 
 export function WatchScheduleWizard({
   item,
@@ -92,6 +109,10 @@ export function WatchScheduleWizard({
   boatId,
   onComplete,
   onCancel,
+  raceStartTime,
+  raceDate,
+  raceDurationHours: propRaceDuration,
+  raceName,
 }: WatchScheduleWizardProps) {
   const { user } = useAuth();
 
@@ -106,9 +127,15 @@ export function WatchScheduleWizard({
   const [error, setError] = useState<string | null>(null);
 
   // Schedule settings
-  const [raceDuration, setRaceDuration] = useState(48); // hours
+  const [raceDuration, setRaceDuration] = useState(propRaceDuration || 48); // hours
   const [watchLength, setWatchLength] = useState(4); // hours
   const [numberOfWatches, setNumberOfWatches] = useState(2);
+
+  // Watch mode settings (new)
+  const [watchMode, setWatchMode] = useState<WatchMode>('full_24h');
+  const [scheduleStartTime, setScheduleStartTime] = useState(raceStartTime || '10:00');
+  const [nightStartHour, setNightStartHour] = useState(18); // 6pm
+  const [nightEndHour, setNightEndHour] = useState(6); // 6am
 
   // Watch groups
   const [watches, setWatches] = useState<WatchGroup[]>([
@@ -129,6 +156,35 @@ export function WatchScheduleWizard({
 
   // View mode state (for existing schedules)
   const [isViewMode, setIsViewMode] = useState(false);
+
+  // Calculate night duration (hours per night)
+  const nightDurationHours = useMemo(() => {
+    if (nightEndHour > nightStartHour) {
+      // Same day (e.g., 18:00 - 22:00)
+      return nightEndHour - nightStartHour;
+    } else {
+      // Crosses midnight (e.g., 18:00 - 06:00)
+      return (24 - nightStartHour) + nightEndHour;
+    }
+  }, [nightStartHour, nightEndHour]);
+
+  // Calculate effective rotation count based on mode
+  const effectiveRotations = useMemo(() => {
+    if (watchMode === 'night_only') {
+      const nightsInRace = Math.ceil(raceDuration / 24);
+      const rotationsPerNight = Math.ceil(nightDurationHours / watchLength);
+      return nightsInRace * rotationsPerNight;
+    }
+    return Math.ceil(raceDuration / watchLength);
+  }, [watchMode, raceDuration, watchLength, nightDurationHours]);
+
+  // Format hour as time string
+  const formatHour = (hour: number) => {
+    const h = hour % 24;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${displayHour}:00 ${ampm}`;
+  };
 
   // Fetch crew and existing schedule
   useEffect(() => {
@@ -227,6 +283,20 @@ export function WatchScheduleWizard({
             const schedule = data.watch_schedule as WatchSchedule;
             setRaceDuration(schedule.raceDurationHours || 48);
             setWatchLength(schedule.watchLengthHours || 4);
+
+            // Load new watch mode settings
+            if (schedule.watchMode) {
+              setWatchMode(schedule.watchMode);
+            }
+            if (schedule.scheduleStartTime) {
+              setScheduleStartTime(schedule.scheduleStartTime);
+            }
+            if (schedule.nightStartHour !== undefined) {
+              setNightStartHour(schedule.nightStartHour);
+            }
+            if (schedule.nightEndHour !== undefined) {
+              setNightEndHour(schedule.nightEndHour);
+            }
 
             const watchesArray = schedule.watches || [];
             if (watchesArray.length > 0) {
@@ -349,6 +419,98 @@ export function WatchScheduleWizard({
     return blocks;
   }, [raceDuration, watchLength, numberOfWatches]);
 
+  // Generate rotation timeline with actual times
+  const rotationTimeline = useMemo(() => {
+    const timeline: {
+      day: number;
+      startTime: string;
+      endTime: string;
+      watchIndex: number;
+      watchName: string;
+      watchColor: string;
+    }[] = [];
+
+    // Parse schedule start time
+    const [startHour, startMinute] = (scheduleStartTime || '10:00').split(':').map(Number);
+
+    // Format time helper
+    const formatTime = (hour: number, minute: number = 0) => {
+      const h = ((hour % 24) + 24) % 24;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+    };
+
+    if (watchMode === 'full_24h') {
+      // Continuous 24-hour rotations
+      let currentHour = startHour;
+      let currentDay = 1;
+      let rotationIndex = 0;
+      let hoursElapsed = 0;
+
+      while (hoursElapsed < raceDuration) {
+        const watchIdx = rotationIndex % watches.length;
+        const watch = watches[watchIdx];
+        const endHour = currentHour + watchLength;
+
+        timeline.push({
+          day: currentDay,
+          startTime: formatTime(currentHour, startMinute),
+          endTime: formatTime(endHour, startMinute),
+          watchIndex: watchIdx,
+          watchName: watch?.name || `Watch ${String.fromCharCode(65 + watchIdx)}`,
+          watchColor: watch?.color || WATCH_COLORS[watchIdx] || IOS_COLORS.gray,
+        });
+
+        currentHour = endHour;
+        hoursElapsed += watchLength;
+        rotationIndex++;
+
+        // Track day changes
+        if (currentHour >= 24) {
+          currentHour = currentHour % 24;
+          currentDay++;
+        }
+      }
+    } else {
+      // Night-only rotations
+      const nightsInRace = Math.ceil(raceDuration / 24);
+      let rotationIndex = 0;
+
+      for (let night = 0; night < nightsInRace; night++) {
+        const day = night + 1;
+        let currentHour = nightStartHour;
+        let hoursIntoNight = 0;
+
+        while (hoursIntoNight < nightDurationHours) {
+          const watchIdx = rotationIndex % watches.length;
+          const watch = watches[watchIdx];
+          let endHour = currentHour + watchLength;
+
+          // Don't exceed night end
+          const remainingNightHours = nightDurationHours - hoursIntoNight;
+          const actualWatchLength = Math.min(watchLength, remainingNightHours);
+          endHour = currentHour + actualWatchLength;
+
+          timeline.push({
+            day,
+            startTime: formatTime(currentHour),
+            endTime: formatTime(endHour),
+            watchIndex: watchIdx,
+            watchName: watch?.name || `Watch ${String.fromCharCode(65 + watchIdx)}`,
+            watchColor: watch?.color || WATCH_COLORS[watchIdx] || IOS_COLORS.gray,
+          });
+
+          currentHour = endHour % 24;
+          hoursIntoNight += actualWatchLength;
+          rotationIndex++;
+        }
+      }
+    }
+
+    return timeline;
+  }, [scheduleStartTime, watchMode, raceDuration, watchLength, watches, nightStartHour, nightDurationHours]);
+
   // Navigate steps
   const goNext = useCallback(() => {
     if (currentStep < TOTAL_STEPS - 1) {
@@ -379,6 +541,11 @@ export function WatchScheduleWizard({
         raceDurationHours: raceDuration,
         watchLengthHours: watchLength,
         watches,
+        watchMode,
+        scheduleStartTime,
+        nightStartHour: watchMode === 'night_only' ? nightStartHour : undefined,
+        nightEndHour: watchMode === 'night_only' ? nightEndHour : undefined,
+        raceDate,
       };
 
       console.log('[WatchScheduleWizard] Saving schedule to regatta:', raceEventId, schedule);
@@ -408,13 +575,88 @@ export function WatchScheduleWizard({
     } finally {
       setIsSaving(false);
     }
-  }, [raceDuration, watchLength, watches, raceEventId, onComplete]);
+  }, [raceDuration, watchLength, watches, watchMode, scheduleStartTime, nightStartHour, nightEndHour, raceDate, raceEventId, onComplete]);
 
   // Get crew member by ID
   const getCrewMember = useCallback(
     (id: string) => crewMembers.find((m) => m.id === id),
     [crewMembers]
   );
+
+  // Format schedule for sharing
+  const formatScheduleForShare = useCallback(() => {
+    const title = raceName || 'Watch Schedule';
+    const modeText = watchMode === 'night_only'
+      ? `Night-Only (${formatHour(nightStartHour)} - ${formatHour(nightEndHour)})`
+      : '24-Hour Coverage';
+
+    let text = `⏰ WATCH SCHEDULE - ${title}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    text += `Mode: ${modeText}\n`;
+    text += `Duration: ${raceDuration} hours | Watch Length: ${watchLength} hours\n`;
+    text += `Schedule starts: ${scheduleStartTime}\n\n`;
+
+    // Watch Groups with crew
+    text += `👥 WATCH GROUPS\n`;
+    watches.forEach((watch) => {
+      const crewNames = watch.crewIds
+        .map((id) => getCrewMember(id)?.name)
+        .filter(Boolean)
+        .join(', ');
+      text += `• ${watch.name}: ${crewNames || 'No crew assigned'}\n`;
+    });
+
+    // Rotation Timeline
+    text += `\n📅 ROTATION TIMELINE\n`;
+
+    // Group timeline by day
+    const dayGroups: { [key: number]: typeof rotationTimeline } = {};
+    rotationTimeline.forEach((rotation) => {
+      if (!dayGroups[rotation.day]) {
+        dayGroups[rotation.day] = [];
+      }
+      dayGroups[rotation.day].push(rotation);
+    });
+
+    Object.entries(dayGroups).forEach(([day, rotations]) => {
+      const dayLabel = watchMode === 'night_only' ? `Night ${day}` : `Day ${day}`;
+      text += `\n${dayLabel}:\n`;
+      rotations.forEach((rotation) => {
+        // Get crew names for this watch
+        const watch = watches.find((w) => w.name === rotation.watchName);
+        const crewNames = watch?.crewIds
+          .map((id) => getCrewMember(id)?.name)
+          .filter(Boolean)
+          .join(', ') || '';
+
+        const crewInfo = crewNames ? ` (${crewNames})` : '';
+        text += `  ${rotation.startTime} - ${rotation.endTime}  ${rotation.watchName}${crewInfo}\n`;
+      });
+    });
+
+    text += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `Total: ${effectiveRotations} rotations\n`;
+    if (watchMode === 'night_only') {
+      text += `No formal watches during daylight hours`;
+    }
+
+    return text;
+  }, [raceName, watchMode, nightStartHour, nightEndHour, raceDuration, watchLength, scheduleStartTime, watches, getCrewMember, effectiveRotations, rotationTimeline]);
+
+  // Handle sharing schedule
+  const handleShareSchedule = useCallback(async () => {
+    try {
+      const message = formatScheduleForShare();
+      await Share.share({
+        message,
+        title: `Watch Schedule - ${raceName || 'Race'}`,
+      });
+    } catch (err) {
+      if ((err as Error).message !== 'User did not share') {
+        Alert.alert('Share Error', 'Unable to share schedule. Please try again.');
+      }
+    }
+  }, [formatScheduleForShare, raceName]);
 
   // Handle adding new crew member
   const handleAddCrewMember = useCallback(async () => {
@@ -466,6 +708,31 @@ export function WatchScheduleWizard({
           <Text style={styles.viewModeTitle}>Schedule Summary</Text>
         </View>
         <View style={styles.viewModeSummaryRow}>
+          <Text style={styles.viewModeSummaryLabel}>Watch Mode</Text>
+          <View style={styles.viewModeBadge}>
+            {watchMode === 'night_only' ? (
+              <Moon size={12} color={IOS_COLORS.purple} />
+            ) : (
+              <Sun size={12} color={IOS_COLORS.orange} />
+            )}
+            <Text style={styles.viewModeBadgeText}>
+              {watchMode === 'night_only' ? 'Night Only' : '24-Hour'}
+            </Text>
+          </View>
+        </View>
+        {watchMode === 'night_only' && (
+          <View style={styles.viewModeSummaryRow}>
+            <Text style={styles.viewModeSummaryLabel}>Night Hours</Text>
+            <Text style={styles.viewModeSummaryValue}>
+              {formatHour(nightStartHour)} - {formatHour(nightEndHour)}
+            </Text>
+          </View>
+        )}
+        <View style={styles.viewModeSummaryRow}>
+          <Text style={styles.viewModeSummaryLabel}>Schedule Starts</Text>
+          <Text style={styles.viewModeSummaryValue}>{scheduleStartTime}</Text>
+        </View>
+        <View style={styles.viewModeSummaryRow}>
           <Text style={styles.viewModeSummaryLabel}>Race Duration</Text>
           <Text style={styles.viewModeSummaryValue}>{raceDuration} hours</Text>
         </View>
@@ -473,9 +740,52 @@ export function WatchScheduleWizard({
           <Text style={styles.viewModeSummaryLabel}>Watch Length</Text>
           <Text style={styles.viewModeSummaryValue}>{watchLength} hours</Text>
         </View>
-        <View style={styles.viewModeSummaryRow}>
+        <View style={[styles.viewModeSummaryRow, { borderBottomWidth: 0 }]}>
           <Text style={styles.viewModeSummaryLabel}>Total Rotations</Text>
-          <Text style={styles.viewModeSummaryValue}>{Math.ceil(raceDuration / watchLength)}</Text>
+          <Text style={styles.viewModeSummaryValue}>{effectiveRotations}</Text>
+        </View>
+      </View>
+
+      {/* Rotation Timeline */}
+      <View style={styles.viewModeCard}>
+        <View style={styles.viewModeHeader}>
+          <Calendar size={20} color={IOS_COLORS.teal} />
+          <Text style={styles.viewModeTitle}>Rotation Timeline</Text>
+        </View>
+        {(() => {
+          // Group timeline by day
+          const dayGroups: { [key: number]: typeof rotationTimeline } = {};
+          rotationTimeline.forEach((rotation) => {
+            if (!dayGroups[rotation.day]) {
+              dayGroups[rotation.day] = [];
+            }
+            dayGroups[rotation.day].push(rotation);
+          });
+
+          return Object.entries(dayGroups).map(([day, rotations]) => (
+            <View key={day} style={styles.timelineDayGroup}>
+              <Text style={styles.timelineDayLabel}>
+                {watchMode === 'night_only' ? `Night ${day}` : `Day ${day}`}
+              </Text>
+              {rotations.map((rotation, idx) => (
+                <View key={idx} style={styles.timelineRow}>
+                  <Text style={styles.timelineTime}>
+                    {rotation.startTime}
+                  </Text>
+                  <View style={[styles.timelineBar, { backgroundColor: rotation.watchColor }]}>
+                    <Text style={styles.timelineBarText}>{rotation.watchName}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ));
+        })()}
+        <View style={styles.timelineNote}>
+          <Text style={styles.timelineNoteText}>
+            {watchMode === 'night_only'
+              ? `No formal watches during daylight hours`
+              : `Continuous ${watchLength}h rotations`}
+          </Text>
         </View>
       </View>
 
@@ -516,6 +826,12 @@ export function WatchScheduleWizard({
           </View>
         </View>
       ))}
+
+      {/* Share Schedule Button */}
+      <Pressable style={styles.shareScheduleButton} onPress={handleShareSchedule}>
+        <Share2 size={18} color={IOS_COLORS.blue} />
+        <Text style={styles.shareScheduleButtonText}>Share Schedule</Text>
+      </Pressable>
     </ScrollView>
   );
 
@@ -547,6 +863,123 @@ export function WatchScheduleWizard({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.stepContentInner}
     >
+      {/* Watch Mode Selector */}
+      <View style={styles.settingCard}>
+        <View style={styles.settingHeader}>
+          <Settings size={18} color={IOS_COLORS.purple} />
+          <Text style={styles.settingLabel}>WATCH MODE</Text>
+        </View>
+        <View style={styles.segmentedControl}>
+          <Pressable
+            style={[
+              styles.segmentButton,
+              watchMode === 'full_24h' && styles.segmentButtonActive,
+            ]}
+            onPress={() => setWatchMode('full_24h')}
+          >
+            <Sun size={16} color={watchMode === 'full_24h' ? '#FFFFFF' : IOS_COLORS.blue} />
+            <Text style={[
+              styles.segmentButtonText,
+              watchMode === 'full_24h' && styles.segmentButtonTextActive,
+            ]}>24-Hour</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.segmentButton,
+              watchMode === 'night_only' && styles.segmentButtonActive,
+            ]}
+            onPress={() => setWatchMode('night_only')}
+          >
+            <Moon size={16} color={watchMode === 'night_only' ? '#FFFFFF' : IOS_COLORS.blue} />
+            <Text style={[
+              styles.segmentButtonText,
+              watchMode === 'night_only' && styles.segmentButtonTextActive,
+            ]}>Night Only</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.settingHint}>
+          {watchMode === 'full_24h'
+            ? 'Watches rotate continuously throughout the race'
+            : 'Watches only during night hours (no formal watches during day)'}
+        </Text>
+      </View>
+
+      {/* Schedule Start Time */}
+      <View style={styles.settingCard}>
+        <View style={styles.settingHeader}>
+          <Clock size={18} color={IOS_COLORS.teal} />
+          <Text style={styles.settingLabel}>SCHEDULE START TIME</Text>
+        </View>
+        <View style={styles.timeInputRow}>
+          <TextInput
+            style={styles.timeInput}
+            value={scheduleStartTime}
+            onChangeText={setScheduleStartTime}
+            placeholder="10:00"
+            keyboardType="numbers-and-punctuation"
+          />
+          {raceStartTime && (
+            <Pressable
+              style={styles.suggestButton}
+              onPress={() => setScheduleStartTime(raceStartTime)}
+            >
+              <Text style={styles.suggestButtonText}>Use race start ({raceStartTime})</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* Night-Only Settings (conditional) */}
+      {watchMode === 'night_only' && (
+        <View style={styles.settingCard}>
+          <View style={styles.settingHeader}>
+            <Moon size={18} color={IOS_COLORS.purple} />
+            <Text style={styles.settingLabel}>NIGHT HOURS</Text>
+          </View>
+          <View style={styles.nightHoursRow}>
+            <View style={styles.nightHourInput}>
+              <Text style={styles.nightHourLabel}>Start</Text>
+              <View style={styles.settingRow}>
+                <Pressable
+                  style={styles.stepperButtonSmall}
+                  onPress={() => setNightStartHour((h) => (h - 1 + 24) % 24)}
+                >
+                  <Minus size={14} color={IOS_COLORS.blue} />
+                </Pressable>
+                <Text style={styles.nightHourValue}>{formatHour(nightStartHour)}</Text>
+                <Pressable
+                  style={styles.stepperButtonSmall}
+                  onPress={() => setNightStartHour((h) => (h + 1) % 24)}
+                >
+                  <Plus size={14} color={IOS_COLORS.blue} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.nightHourInput}>
+              <Text style={styles.nightHourLabel}>End</Text>
+              <View style={styles.settingRow}>
+                <Pressable
+                  style={styles.stepperButtonSmall}
+                  onPress={() => setNightEndHour((h) => (h - 1 + 24) % 24)}
+                >
+                  <Minus size={14} color={IOS_COLORS.blue} />
+                </Pressable>
+                <Text style={styles.nightHourValue}>{formatHour(nightEndHour)}</Text>
+                <Pressable
+                  style={styles.stepperButtonSmall}
+                  onPress={() => setNightEndHour((h) => (h + 1) % 24)}
+                >
+                  <Plus size={14} color={IOS_COLORS.blue} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          <Text style={styles.settingHint}>
+            Night duration: {nightDurationHours} hours per night
+          </Text>
+        </View>
+      )}
+
       {/* Race Duration */}
       <View style={styles.settingCard}>
         <View style={styles.settingHeader}>
@@ -629,11 +1062,16 @@ export function WatchScheduleWizard({
       <View style={styles.previewCard}>
         <Text style={styles.previewTitle}>Schedule Preview</Text>
         <Text style={styles.previewText}>
-          {Math.ceil(raceDuration / watchLength)} watch rotations over {raceDuration} hours
+          {effectiveRotations} watch rotations over {raceDuration} hours
         </Text>
         <Text style={styles.previewText}>
           Each watch: {watchLength} hours on, {watchLength * (numberOfWatches - 1)} hours off
         </Text>
+        {watchMode === 'night_only' && (
+          <Text style={styles.previewText}>
+            Night watches: {formatHour(nightStartHour)} - {formatHour(nightEndHour)}
+          </Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -1190,6 +1628,98 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
   },
+  // Watch Mode Selector
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 10,
+    padding: 4,
+    gap: 4,
+  },
+  segmentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  segmentButtonActive: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+  segmentButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  segmentButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  settingHint: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 8,
+  },
+  // Schedule Start Time
+  timeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timeInput: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    textAlign: 'center',
+  },
+  suggestButton: {
+    backgroundColor: `${IOS_COLORS.teal}15`,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  suggestButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.teal,
+  },
+  // Night Hours Settings
+  nightHoursRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  nightHourInput: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
+  },
+  nightHourLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  nightHourValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    minWidth: 80,
+    textAlign: 'center',
+  },
+  stepperButtonSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Crew Selection Step
   emptyState: {
     alignItems: 'center',
@@ -1627,6 +2157,35 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     paddingVertical: 8,
   },
+  viewModeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: IOS_COLORS.background,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  viewModeBadgeText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  shareScheduleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    gap: 8,
+    marginTop: 8,
+  },
+  shareScheduleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
   // Edit Button
   editButton: {
     flexDirection: 'row',
@@ -1645,6 +2204,54 @@ const styles = StyleSheet.create({
   // Header Right
   headerRight: {
     minWidth: 80,
+  },
+  // Rotation Timeline Styles
+  timelineDayGroup: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  timelineDayLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  timelineTime: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    width: 80,
+    textAlign: 'right',
+  },
+  timelineBar: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  timelineBarText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  timelineNote: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  timelineNoteText: {
+    fontSize: 12,
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
   },
 });
 

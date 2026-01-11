@@ -863,6 +863,10 @@ export function DaysBeforeContent({
             item={activeTool}
             raceEventId={race.id}
             boatId={userBoat?.id}
+            raceStartTime={race.startTime}
+            raceDate={race.date}
+            raceDurationHours={race.time_limit_hours}
+            raceName={race.name}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />

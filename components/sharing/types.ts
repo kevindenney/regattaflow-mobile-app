@@ -124,6 +124,30 @@ export interface ProhibitedArea {
 }
 
 /**
+ * Watch group for distance races
+ */
+export interface WatchGroupData {
+  id: string;
+  name: string;
+  color: string;
+  crewIds: string[];
+}
+
+/**
+ * Watch schedule data for distance/offshore races
+ */
+export interface WatchScheduleData {
+  raceDurationHours: number;
+  watchLengthHours: number;
+  watches: WatchGroupData[];
+  watchMode: 'full_24h' | 'night_only';
+  scheduleStartTime?: string;
+  nightStartHour?: number;
+  nightEndHour?: number;
+  raceDate?: string;
+}
+
+/**
  * Document data extracted from NOR/SI for sharing with crew
  */
 export interface DocumentShareData {
@@ -171,6 +195,9 @@ export interface PreRaceShareContent {
 
   /** Extracted NOR/SI data for crew briefing */
   documentData?: DocumentShareData;
+
+  /** Watch schedule for distance/offshore races */
+  watchSchedule?: WatchScheduleData;
 }
 
 export interface ShareableContent {

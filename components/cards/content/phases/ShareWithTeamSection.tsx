@@ -18,7 +18,7 @@ import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { UnifiedSharingSheet } from '@/components/sharing/UnifiedSharingSheet';
 import { ShareChannelGrid } from '@/components/sharing/ShareChannelGrid';
 import { useShareHandlers } from '@/components/sharing/hooks/useShareHandlers';
-import type { ShareChannel, DocumentShareData } from '@/components/sharing/types';
+import type { ShareChannel, DocumentShareData, WatchScheduleData } from '@/components/sharing/types';
 import type { CardRaceData } from '@/components/cards/types';
 import type { ShareableContent, PreRaceShareContent } from '@/components/sharing/types';
 
@@ -250,6 +250,9 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
       }
     }
 
+    // Get watch schedule from race (stored on regatta)
+    const watchSchedule = (race as any).watch_schedule as WatchScheduleData | undefined;
+
     const preRace: PreRaceShareContent = {
       raceInfo: {
         id: race.id,
@@ -272,6 +275,8 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
       aiInsights: aiInsights.length > 0 ? aiInsights : undefined,
       // NOR/SI extracted data for crew briefing
       documentData,
+      // Watch schedule for distance/offshore races
+      watchSchedule,
     };
 
     return {
