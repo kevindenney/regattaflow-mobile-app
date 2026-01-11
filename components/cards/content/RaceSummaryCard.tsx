@@ -9,7 +9,8 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation, ScrollView } from 'react-native';
+import { Platform, StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import {
   Navigation,
   Trophy,
@@ -710,17 +711,6 @@ export function RaceSummaryCard({
       created_by: race.created_by, // Preserve for edit/delete permissions
     };
 
-    // DEBUG: Log cardRaceData construction for troubleshooting
-    if (race.name === 'T3') {
-      console.log('🔍 [RaceSummaryCard] cardRaceData for T3:', JSON.stringify({
-        hasMetadata: !!(race as any).metadata,
-        metadataKeys: Object.keys((race as any).metadata || {}),
-        hasVenueCoordinates: !!(race as any).venueCoordinates,
-        venueCoordinates: (race as any).venueCoordinates,
-        raceObjectKeys: Object.keys(race),
-      }, null, 2));
-    }
-
     return data;
   }, [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData]);
 
@@ -866,6 +856,7 @@ export function RaceSummaryCard({
           contentContainerStyle={styles.phaseContentScrollContent}
           showsVerticalScrollIndicator={false}
           bounces={true}
+          nestedScrollEnabled={Platform.OS === 'android'}
         >
           {renderPhaseContent()}
         </ScrollView>

@@ -95,15 +95,6 @@ export function ForecastCheckWizard({
 }: ForecastCheckWizardProps) {
   const router = useRouter();
 
-  // DEBUG: Log what venue prop is received
-  console.log('🔍 [ForecastCheckWizard] Received props:', JSON.stringify({
-    raceEventId,
-    hasVenue: !!venue,
-    venue,
-    venueCoordinates: venue?.coordinates,
-    raceDate,
-  }, null, 2));
-
   // Forecast check hook
   const {
     currentForecast,
