@@ -1136,7 +1136,7 @@ class CoachingService {
         coach_id: coachId,
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
-        is_available: true,
+        is_active: true,
         recurring_pattern: options?.recurringPattern || 'none',
         notes: options?.notes,
       })
@@ -1225,7 +1225,7 @@ class CoachingService {
 
     if (updates.startTime) updateData.start_time = updates.startTime.toISOString();
     if (updates.endTime) updateData.end_time = updates.endTime.toISOString();
-    if (updates.isAvailable !== undefined) updateData.is_available = updates.isAvailable;
+    if (updates.isAvailable !== undefined) updateData.is_active = updates.isAvailable;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
 
     const { data, error } = await supabase
@@ -1775,8 +1775,7 @@ class CoachingService {
         .from('coach_availability')
         .select('*')
         .eq('coach_id', coachId)
-        .eq('is_available', true)
-        .gte('start_time', new Date().toISOString())
+        .eq('is_active', true)
         .order('start_time', { ascending: true })
         .limit(10),
     ]);
@@ -1809,9 +1808,7 @@ class CoachingService {
       .from('coach_availability')
       .select('*')
       .eq('coach_id', coachId)
-      .eq('is_available', true)
-      .gte('start_time', startDate.toISOString())
-      .lte('end_time', endDate.toISOString())
+      .eq('is_active', true)
       .order('start_time', { ascending: true });
 
     if (slotsError) throw slotsError;
