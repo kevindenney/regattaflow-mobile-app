@@ -215,7 +215,7 @@ export function RacesFloatingHeader({
                   activeOpacity={0.7}
                 >
                   <View style={[styles.menuOptionIcon, { backgroundColor: '#F0FDF4' }]}>
-                    <MaterialCommunityIcons name="buoy" size={22} color="#16A34A" />
+                    <MaterialCommunityIcons name="sail-boat" size={22} color="#16A34A" />
                   </View>
                   <View style={styles.menuOptionContent}>
                     <Text style={styles.menuOptionTitle}>Add Practice Session</Text>
