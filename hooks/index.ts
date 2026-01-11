@@ -117,3 +117,13 @@ export {
   COMMON_SAILMAKERS,
 } from './useSailProducts';
 export type { SailProduct, SailmakerGroup, UseSailProductsReturn } from './useSailProducts';
+
+// Equipment Templates Catalog (for Add Equipment modal)
+export {
+  useEquipmentTemplates,
+  formatLifespan,
+  formatMaintenanceInterval,
+  CATEGORY_GROUPS,
+  COMMON_MANUFACTURERS,
+} from './useEquipmentTemplates';
+export type { CategoryGroup, UseEquipmentTemplatesReturn } from './useEquipmentTemplates';

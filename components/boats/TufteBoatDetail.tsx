@@ -43,6 +43,15 @@ import {
   COMMON_SAILMAKERS,
   type SailProduct,
 } from '@/hooks/useSailProducts';
+import {
+  useEquipmentTemplates,
+  formatLifespan,
+  formatMaintenanceInterval,
+  CATEGORY_GROUPS,
+  COMMON_MANUFACTURERS,
+  type CategoryGroup,
+} from '@/hooks/useEquipmentTemplates';
+import { type EquipmentTemplate, type EquipmentCategory } from '@/services/EquipmentService';
 
 const logger = createLogger('TufteBoatDetail');
 
@@ -681,6 +690,376 @@ function WindRangeIndicator({
   );
 }
 
+// =============================================================================
+// ADD EQUIPMENT MODAL
+// =============================================================================
+
+interface AddEquipmentModalProps {
+  visible: boolean;
+  boatId: string;
+  sailorId: string;
+  classId: string;
+  className: string | null;
+  onClose: () => void;
+  onEquipmentAdded: () => void;
+}
+
+function AddEquipmentModal({
+  visible,
+  boatId,
+  sailorId,
+  classId,
+  className,
+  onClose,
+  onEquipmentAdded,
+}: AddEquipmentModalProps) {
+  // State
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<EquipmentTemplate | null>(null);
+  const [customName, setCustomName] = useState('');
+  const [manufacturer, setManufacturer] = useState('');
+  const [customManufacturer, setCustomManufacturer] = useState('');
+  const [model, setModel] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Fetch equipment templates
+  const {
+    categories,
+    categoryGroups,
+    templates,
+    isLoading,
+    getTemplatesForCategory,
+    getCategoryName,
+  } = useEquipmentTemplates(classId);
+
+  // Get templates for selected category
+  const categoryTemplates = selectedCategory ? getTemplatesForCategory(selectedCategory) : [];
+
+  // Get unique manufacturers from templates, or fall back to common ones
+  const availableManufacturers = categoryTemplates.length > 0
+    ? [...new Set(categoryTemplates.filter(t => t.default_manufacturer).map(t => t.default_manufacturer!))]
+    : COMMON_MANUFACTURERS;
+
+  // Reset when category changes
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+    setSelectedTemplate(null);
+    setManufacturer('');
+    setCustomManufacturer('');
+    setModel('');
+    setCustomName('');
+  };
+
+  // Handle template selection
+  const handleTemplateSelect = (template: EquipmentTemplate | null) => {
+    setSelectedTemplate(template);
+    if (template) {
+      setCustomName(template.name);
+      setManufacturer(template.default_manufacturer || '');
+      setModel(template.default_model || '');
+    } else {
+      setCustomName('');
+      setManufacturer('');
+      setModel('');
+    }
+  };
+
+  // Handle manufacturer change
+  const handleManufacturerChange = (mfr: string) => {
+    setManufacturer(mfr);
+    if (mfr !== 'Other') {
+      setCustomManufacturer('');
+    }
+  };
+
+  const handleSave = async () => {
+    const effectiveManufacturer = manufacturer === 'Other' ? customManufacturer : manufacturer;
+    const effectiveName = customName.trim() ||
+      (selectedTemplate?.name) ||
+      `${getCategoryName(selectedCategory || '')} ${model}`.trim();
+
+    if (!effectiveName && !selectedCategory) {
+      Alert.alert('Required', 'Select a category and enter a name');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (selectedTemplate) {
+        // Use the createFromTemplate method
+        await equipmentService.createFromTemplate(selectedTemplate.id, boatId, {
+          custom_name: effectiveName,
+          manufacturer: effectiveManufacturer || undefined,
+          model: model || undefined,
+          serial_number: serialNumber || undefined,
+        });
+      } else {
+        // Create custom equipment
+        await equipmentService.createEquipment({
+          boat_id: boatId,
+          sailor_id: sailorId,
+          class_id: classId,
+          category: selectedCategory || 'other',
+          custom_name: effectiveName,
+          manufacturer: effectiveManufacturer || undefined,
+          model: model || undefined,
+          serial_number: serialNumber || undefined,
+          status: 'active',
+          condition: 'good',
+        });
+      }
+
+      // Reset form
+      setSelectedCategory(null);
+      setSelectedTemplate(null);
+      setCustomName('');
+      setManufacturer('');
+      setCustomManufacturer('');
+      setModel('');
+      setSerialNumber('');
+
+      onEquipmentAdded();
+      onClose();
+    } catch (err) {
+      logger.error('Failed to add equipment:', err);
+      Alert.alert('Error', 'Failed to add equipment. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={modalStyles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* Header */}
+        <View style={modalStyles.header}>
+          <TouchableOpacity onPress={onClose} style={modalStyles.closeButton}>
+            <X size={24} color={TUFTE.ink} />
+          </TouchableOpacity>
+          <Text style={modalStyles.title}>Add Equipment</Text>
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={saving || !selectedCategory}
+            style={modalStyles.saveButton}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={TUFTE.accent} />
+            ) : (
+              <Text style={[modalStyles.saveText, !selectedCategory && { opacity: 0.3 }]}>
+                Save
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={modalStyles.content} keyboardShouldPersistTaps="handled">
+          {/* Category Selection */}
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Category</Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={TUFTE.inkMuted} style={{ marginVertical: 10 }} />
+            ) : (
+              <View style={modalStyles.categoryGroupContainer}>
+                {categoryGroups.map((group) => (
+                  <View key={group.id} style={modalStyles.categoryGroup}>
+                    <Text style={modalStyles.categoryGroupLabel}>{group.name}</Text>
+                    <View style={modalStyles.typeGrid}>
+                      {group.categories.map((cat) => (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[
+                            modalStyles.typeOption,
+                            selectedCategory === cat.id && modalStyles.typeOptionActive,
+                          ]}
+                          onPress={() => handleCategoryChange(cat.id)}
+                        >
+                          <Text
+                            style={[
+                              modalStyles.typeText,
+                              selectedCategory === cat.id && modalStyles.typeTextActive,
+                            ]}
+                          >
+                            {cat.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Template Selection - Show if category has templates */}
+          {selectedCategory && categoryTemplates.length > 0 && (
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Choose Equipment</Text>
+              <View style={modalStyles.modelList}>
+                {categoryTemplates.map((template) => (
+                  <TouchableOpacity
+                    key={template.id}
+                    style={[
+                      modalStyles.modelOption,
+                      selectedTemplate?.id === template.id && modalStyles.modelOptionActive,
+                    ]}
+                    onPress={() => handleTemplateSelect(template)}
+                  >
+                    <View style={modalStyles.modelMain}>
+                      <Text
+                        style={[
+                          modalStyles.modelName,
+                          selectedTemplate?.id === template.id && modalStyles.modelNameActive,
+                        ]}
+                      >
+                        {template.name}
+                      </Text>
+                      <Text style={modalStyles.modelMeta}>
+                        {template.default_manufacturer && `${template.default_manufacturer} · `}
+                        {template.default_expected_lifespan_years &&
+                          `Replace every ${formatLifespan(template.default_expected_lifespan_years)}`}
+                        {template.default_maintenance_interval_days &&
+                          ` · Service: ${formatMaintenanceInterval(template.default_maintenance_interval_days)}`}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {/* Custom option */}
+                <TouchableOpacity
+                  style={[
+                    modalStyles.modelOption,
+                    selectedTemplate === null && selectedCategory && modalStyles.modelOptionActive,
+                  ]}
+                  onPress={() => handleTemplateSelect(null)}
+                >
+                  <Text style={modalStyles.modelName}>Custom equipment...</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Manufacturer - Show when custom or no templates */}
+          {selectedCategory && (selectedTemplate === null || categoryTemplates.length === 0) && (
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Manufacturer</Text>
+              <View style={modalStyles.typeGrid}>
+                {availableManufacturers.slice(0, 5).map((mfr) => (
+                  <TouchableOpacity
+                    key={mfr}
+                    style={[
+                      modalStyles.typeOption,
+                      manufacturer === mfr && modalStyles.typeOptionActive,
+                    ]}
+                    onPress={() => handleManufacturerChange(mfr)}
+                  >
+                    <Text
+                      style={[
+                        modalStyles.typeText,
+                        manufacturer === mfr && modalStyles.typeTextActive,
+                      ]}
+                    >
+                      {mfr}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[
+                    modalStyles.typeOption,
+                    manufacturer === 'Other' && modalStyles.typeOptionActive,
+                  ]}
+                  onPress={() => handleManufacturerChange('Other')}
+                >
+                  <Text
+                    style={[
+                      modalStyles.typeText,
+                      manufacturer === 'Other' && modalStyles.typeTextActive,
+                    ]}
+                  >
+                    Other...
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {manufacturer === 'Other' && (
+                <TextInput
+                  style={[modalStyles.input, { marginTop: 12 }]}
+                  value={customManufacturer}
+                  onChangeText={setCustomManufacturer}
+                  placeholder="Enter manufacturer name"
+                  placeholderTextColor={TUFTE.inkMuted}
+                  autoFocus
+                />
+              )}
+            </View>
+          )}
+
+          {/* Model - Show when custom */}
+          {selectedCategory && selectedTemplate === null && (
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Model</Text>
+              <TextInput
+                style={modalStyles.input}
+                value={model}
+                onChangeText={setModel}
+                placeholder="e.g., 40.2 ST, Evolution 30"
+                placeholderTextColor={TUFTE.inkMuted}
+              />
+            </View>
+          )}
+
+          {/* Name */}
+          {selectedCategory && (
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Display Name</Text>
+              <TextInput
+                style={modalStyles.input}
+                value={customName}
+                onChangeText={setCustomName}
+                placeholder="Auto-filled from selection, or enter custom"
+                placeholderTextColor={TUFTE.inkMuted}
+              />
+              <Text style={modalStyles.hint}>
+                Used to identify this equipment in your inventory
+              </Text>
+            </View>
+          )}
+
+          {/* Serial Number */}
+          {selectedCategory && (
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Serial Number (optional)</Text>
+              <TextInput
+                style={modalStyles.input}
+                value={serialNumber}
+                onChangeText={setSerialNumber}
+                placeholder="e.g., SN12345678"
+                placeholderTextColor={TUFTE.inkMuted}
+                autoCapitalize="characters"
+              />
+            </View>
+          )}
+
+          {/* Empty state when no category */}
+          {!selectedCategory && !isLoading && (
+            <View style={modalStyles.emptyState}>
+              <Text style={modalStyles.emptyText}>
+                Select a category above to see available equipment
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 const modalStyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -815,6 +1194,31 @@ const modalStyles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 6,
   },
+  // Category group styles for equipment modal
+  categoryGroupContainer: {
+    gap: 16,
+  },
+  categoryGroup: {
+    marginBottom: 8,
+  },
+  categoryGroupLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: TUFTE.inkMuted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  // Empty state
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: TUFTE.inkMuted,
+    textAlign: 'center',
+  },
 });
 
 // =============================================================================
@@ -831,6 +1235,7 @@ export function TufteBoatDetail() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddSailModal, setShowAddSailModal] = useState(false);
+  const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
   const [showInspectionWizard, setShowInspectionWizard] = useState(false);
   const [inspectingSail, setInspectingSail] = useState<SailWithHealth | null>(null);
 
@@ -1100,7 +1505,7 @@ export function TufteBoatDetail() {
             count={equipment.length}
             action={{
               label: 'Add',
-              onPress: () => logger.debug('Add equipment pressed')
+              onPress: () => setShowAddEquipmentModal(true)
             }}
           />
 
@@ -1109,7 +1514,7 @@ export function TufteBoatDetail() {
               message="No equipment logged"
               action={{
                 label: 'Add equipment',
-                onPress: () => logger.debug('Add equipment pressed')
+                onPress: () => setShowAddEquipmentModal(true)
               }}
             />
           ) : (
@@ -1149,6 +1554,19 @@ export function TufteBoatDetail() {
           className={boat.boat_class?.name || null}
           onClose={() => setShowAddSailModal(false)}
           onSailAdded={loadData}
+        />
+      )}
+
+      {/* Add Equipment Modal */}
+      {boat && (
+        <AddEquipmentModal
+          visible={showAddEquipmentModal}
+          boatId={boat.id}
+          sailorId={boat.sailor_id}
+          classId={boat.class_id}
+          className={boat.boat_class?.name || null}
+          onClose={() => setShowAddEquipmentModal(false)}
+          onEquipmentAdded={loadData}
         />
       )}
 
