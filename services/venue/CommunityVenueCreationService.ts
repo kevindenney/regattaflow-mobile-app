@@ -22,7 +22,7 @@ export type AreaType = 'racing_area' | 'practice_area' | 'start_line' | 'mark';
 export interface VenueRacingArea {
   id: string;
   venue_id: string | null;
-  name: string;
+  area_name: string;
   description?: string;
   area_type: AreaType;
   center_lat: number;
@@ -113,7 +113,7 @@ class CommunityVenueCreationServiceClass {
       // Find nearest venue
       const { data: nearbyVenues, error: venuesError } = await supabase
         .from('sailing_venues')
-        .select('id, name, coordinates')
+        .select('id, name, coordinates_lat, coordinates_lng')
         .limit(5);
 
       if (venuesError) {
@@ -123,13 +123,12 @@ class CommunityVenueCreationServiceClass {
       // Calculate distances to venues
       const venuesWithDistance = (nearbyVenues || [])
         .map((venue) => {
-          const coords = venue.coordinates;
-          if (!coords) return null;
+          if (!venue.coordinates_lat || !venue.coordinates_lng) return null;
           const distance = this.calculateDistanceKm(
             lat,
             lng,
-            coords.latitude || coords[1],
-            coords.longitude || coords[0]
+            venue.coordinates_lat,
+            venue.coordinates_lng
           );
           return { ...venue, distanceKm: distance };
         })
@@ -159,7 +158,7 @@ class CommunityVenueCreationServiceClass {
         nearestRacingArea: nearestArea
           ? {
               id: nearestArea.id,
-              name: nearestArea.name,
+              name: nearestArea.area_name,
               distanceKm: nearestArea.distance_km,
               source: nearestArea.source as RacingAreaSource,
               verification_status: nearestArea.verification_status as VerificationStatus,
@@ -212,7 +211,7 @@ class CommunityVenueCreationServiceClass {
       .from('venue_racing_areas')
       .insert({
         venue_id: venueId || null,
-        name,
+        area_name: name,
         description,
         area_type: areaType,
         geometry,
@@ -235,7 +234,7 @@ class CommunityVenueCreationServiceClass {
     // Auto-confirm for the creator
     await this.confirmCommunityArea(data.id, centerLat, centerLng);
 
-    logger.info('Created community racing area:', { id: data.id, name });
+    logger.info('Created community racing area:', { id: data.id, area_name: name });
     return data as VenueRacingArea;
   }
 
@@ -366,7 +365,7 @@ class CommunityVenueCreationServiceClass {
       .select('*')
       .eq('venue_id', venueId)
       .order('source', { ascending: true }) // Official first
-      .order('name', { ascending: true });
+      .order('area_name', { ascending: true });
 
     if (error) {
       logger.error('Error fetching racing areas:', error);
@@ -415,7 +414,7 @@ class CommunityVenueCreationServiceClass {
       query = query.eq('venue_id', venueId);
     }
 
-    const { data: areas, error } = await query.order('name', { ascending: true });
+    const { data: areas, error } = await query.order('area_name', { ascending: true });
 
     if (error) {
       logger.error('Error fetching areas for map:', error);

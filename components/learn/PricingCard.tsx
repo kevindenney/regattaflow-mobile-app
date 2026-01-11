@@ -54,9 +54,9 @@ export function PricingCard({ tier, isDesktop = false, isFeatured = false, compa
           <Text style={[styles.tierName, compact && styles.tierNameCompact]}>
             {tier.name}
           </Text>
-          {isFeatured && (
+          {isFeatured ? (
             <Text style={styles.featuredLabel}>Recommended</Text>
-          )}
+          ) : null}
         </View>
         <View style={styles.headerRight}>
           <Text style={[
@@ -66,16 +66,16 @@ export function PricingCard({ tier, isDesktop = false, isFeatured = false, compa
           ]}>
             {priceDisplay.amount}
           </Text>
-          {priceDisplay.period && (
+          {priceDisplay.period ? (
             <Text style={styles.pricePeriod}>{priceDisplay.period}</Text>
-          )}
+          ) : null}
         </View>
       </View>
 
       {/* Monthly equivalent */}
-      {priceDisplay.monthly && (
+      {priceDisplay.monthly ? (
         <Text style={styles.monthlyEquiv}>{priceDisplay.monthly}</Text>
-      )}
+      ) : null}
 
       {/* Features: Compact list */}
       <View style={styles.featuresList}>
@@ -85,19 +85,19 @@ export function PricingCard({ tier, isDesktop = false, isFeatured = false, compa
             <Text style={styles.featureText} numberOfLines={1}>{feature}</Text>
           </View>
         ))}
-        {tier.includes.length > (compact ? 4 : 6) && (
+        {tier.includes.length > (compact ? 4 : 6) ? (
           <Text style={styles.moreFeatures}>
             +{tier.includes.length - (compact ? 4 : 6)} more
           </Text>
-        )}
+        ) : null}
       </View>
 
       {/* Excludes hint (if any) */}
-      {tier.excludes && tier.excludes.length > 0 && (
+      {tier.excludes && tier.excludes.length > 0 ? (
         <Text style={styles.excludesHint}>
           {tier.excludes.length} limitation{tier.excludes.length > 1 ? 's' : ''}
         </Text>
-      )}
+      ) : null}
 
       {/* CTA - Always outline style for Tufte consistency */}
       <TouchableOpacity

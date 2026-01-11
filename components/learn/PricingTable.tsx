@@ -111,23 +111,23 @@ export function PricingTable({
                 isFeatured && styles.tierHeaderFeatured,
               ]}
             >
-              {isFeatured && (
+              {isFeatured ? (
                 <View style={styles.featuredBadge}>
                   <Text style={styles.featuredBadgeText}>RECOMMENDED</Text>
                 </View>
-              )}
+              ) : null}
               <Text style={styles.tierName}>{tier.name}</Text>
               <View style={styles.priceContainer}>
                 <Text style={[styles.priceMain, price.main === 'FREE' && styles.priceFree]}>
                   {price.main}
                 </Text>
-                {price.period && (
+                {price.period ? (
                   <Text style={styles.pricePeriod}>{price.period}</Text>
-                )}
+                ) : null}
               </View>
-              {price.monthly && (
+              {price.monthly ? (
                 <Text style={styles.priceMonthly}>{price.monthly}</Text>
-              )}
+              ) : null}
             </View>
           );
         })}
