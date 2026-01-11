@@ -153,6 +153,21 @@ export function ForecastCheckWizard({
     return 'Just now';
   }, []);
 
+  // Format data source timestamp for footer
+  const formatDataSourceTime = useCallback((date: Date | string | undefined): string => {
+    if (!date) return '';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  }, []);
+
   // Format race date for header display (e.g., "Sat 18 Jan")
   const formatRaceDate = useCallback((dateString: string | null | undefined): string => {
     if (!dateString) return '';
@@ -620,6 +635,27 @@ export function ForecastCheckWizard({
             </View>
           )}
 
+          {/* Temperature Row */}
+          {rw.airTemperature !== undefined && (
+            <View style={rcStyles.summaryRow}>
+              <Text style={rcStyles.summaryLabel}>Temp</Text>
+              <View style={rcStyles.sparklineContainer}>
+                {/* Empty space for alignment */}
+              </View>
+              <View style={rcStyles.rangeContainer}>
+                <Text style={rcStyles.rangeValue}>Air {rw.airTemperature}°</Text>
+                <Text style={rcStyles.rangeUnit}>C</Text>
+              </View>
+              <View style={rcStyles.directionContainer}>
+                {rw.waterTemperature !== undefined && (
+                  <Text style={rcStyles.directionText}>
+                    Water {rw.waterTemperature}°C
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* Wind Trend */}
           {currentForecast.windTrend && (
             <Text style={rcStyles.trendInfo}>
@@ -722,6 +758,19 @@ export function ForecastCheckWizard({
           <View style={rcStyles.firstCheckNotice}>
             <Text style={rcStyles.firstCheckText}>
               First check · future checks will show changes
+            </Text>
+          </View>
+        )}
+
+        {/* Data Source Attribution Footer */}
+        {currentForecast?.dataSource && (
+          <View style={rcStyles.dataSourceFooter}>
+            <Text style={rcStyles.dataSourceText}>
+              {currentForecast.dataSource.isMock ? (
+                'Mock data · Development mode'
+              ) : (
+                `${currentForecast.dataSource.provider} · Updated ${formatDataSourceTime(currentForecast.dataSource.fetchedAt)}`
+              )}
             </Text>
           </View>
         )}
@@ -1965,6 +2014,17 @@ const rcStyles = StyleSheet.create({
     fontSize: 12,
     color: IOS_COLORS.gray,
     fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  dataSourceFooter: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+  },
+  dataSourceText: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
     textAlign: 'center',
   },
 

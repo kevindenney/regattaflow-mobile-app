@@ -85,6 +85,22 @@ export interface RaceWindowData {
   wavePeriodAtStart?: number;
   /** Wave direction at race start (cardinal) */
   waveDirectionAtStart?: string;
+  /** Air temperature at race start (celsius) */
+  airTemperature?: number;
+  /** Water temperature at race start (celsius) */
+  waterTemperature?: number;
+}
+
+/** Data source metadata for attribution */
+export interface DataSourceMeta {
+  /** Provider name (e.g., "Storm Glass", "Mock Data") */
+  provider: string;
+  /** Whether this is mock/simulated data */
+  isMock: boolean;
+  /** When the data was fetched */
+  fetchedAt: Date;
+  /** Reliability score 0-1 */
+  reliability?: number;
 }
 
 export interface RaceWeatherForecastData {
@@ -104,6 +120,8 @@ export interface RaceWeatherForecastData {
   windTrend?: 'building' | 'steady' | 'easing';
   /** Raw forecast data for expanded view */
   rawForecasts?: WeatherForecast[];
+  /** Data source metadata for UI attribution */
+  dataSource?: DataSourceMeta;
 
   // === Detailed time-series data ===
 
@@ -333,6 +351,14 @@ function extractRaceWindowData(
     ? degreesToCardinal(startForecast.waveDirection)
     : undefined;
 
+  // Extract temperature data
+  const airTemperature = startForecast.airTemperature !== undefined
+    ? Math.round(startForecast.airTemperature)
+    : undefined;
+  const waterTemperature = startForecast.waterTemperature !== undefined
+    ? Math.round(startForecast.waterTemperature)
+    : undefined;
+
   return {
     windAtStart,
     windAtEnd,
@@ -350,6 +376,8 @@ function extractRaceWindowData(
     waveHeightAtEnd,
     wavePeriodAtStart,
     waveDirectionAtStart,
+    airTemperature,
+    waterTemperature,
   };
 }
 
@@ -625,6 +653,17 @@ export function useRaceWeatherForecast(
         swellDirection,
       });
 
+      // Extract data source metadata for UI attribution
+      const isMockData = weatherData.sources.primary.toLowerCase().includes('mock') ||
+                        weatherData.sources.primary.toLowerCase().includes('simulated') ||
+                        weatherData.sources.primary.toLowerCase().includes('fallback');
+      const dataSource: DataSourceMeta = {
+        provider: weatherData.sources.primary,
+        isMock: isMockData,
+        fetchedAt: weatherData.lastUpdated,
+        reliability: weatherData.sources.reliability,
+      };
+
       setData({
         windForecast,
         tideForecast,
@@ -634,6 +673,8 @@ export function useRaceWeatherForecast(
         tidePeakTime,
         windTrend,
         rawForecasts: relevantForecasts,
+        // Data source metadata
+        dataSource,
         // Detailed time-series data
         hourlyWind,
         hourlyTide,
