@@ -709,10 +709,11 @@ export function RaceSummaryCard({
       metadata: (race as any).metadata, // Preserve metadata for coordinates/venue info
       venueCoordinates: (race as any).venueCoordinates, // Preserve coordinates for weather fetching
       created_by: race.created_by, // Preserve for edit/delete permissions
+      time_limit_hours: timeLimitHours, // Distance race duration for Forecast Check wizard
     };
 
     return data;
-  }, [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData]);
+  }, [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData, timeLimitHours]);
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {

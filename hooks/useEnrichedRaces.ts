@@ -13,6 +13,50 @@ const logger = createLogger('useEnrichedRaces');
 
 const FALLBACK_WARNING_TIME = '10:00';
 
+/**
+ * Calculate race duration in hours from schedule array
+ * Looks for "Race Start" and "Race Finish Deadline" events
+ */
+function calculateDurationFromSchedule(
+  schedule: Array<{ date: string; time: string; event: string }> | undefined,
+  startDate: string
+): number | null {
+  if (!schedule || !Array.isArray(schedule)) {
+    return null;
+  }
+
+  // Find finish deadline event
+  const finishEvent = schedule.find(e =>
+    e.event?.toLowerCase().includes('finish') &&
+    (e.event?.toLowerCase().includes('deadline') || e.event?.toLowerCase().includes('time'))
+  );
+
+  if (!finishEvent?.date || !finishEvent?.time) {
+    return null;
+  }
+
+  try {
+    // Parse start date (already includes time for races with start_date timestamp)
+    const start = new Date(startDate);
+    if (isNaN(start.getTime())) {
+      return null;
+    }
+
+    // Parse finish date and time
+    const [finishH, finishM] = finishEvent.time.split(':').map(Number);
+    const finishDate = new Date(finishEvent.date);
+    finishDate.setUTCHours(finishH, finishM, 0, 0);
+
+    const durationMs = finishDate.getTime() - start.getTime();
+    const durationHours = durationMs / (1000 * 60 * 60);
+
+    return durationHours > 0 ? durationHours : null;
+  } catch (error) {
+    logger.warn('[calculateDurationFromSchedule] Error calculating duration:', error);
+    return null;
+  }
+}
+
 // Cache for venue coordinates fetched from sailing_venues table
 const venueCoordinatesCache = new Map<string, { lat: number; lng: number } | null>();
 
@@ -89,8 +133,9 @@ function extract24HourTime(isoDate: string | undefined | null): string {
       return FALLBACK_WARNING_TIME;
     }
 
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
+    // Use UTC methods to match how EditRaceForm stores/reads times
+    const hours = date.getUTCHours();
+    const minutes = date.getUTCMinutes();
 
     if (hours === 0 && minutes === 0) {
       return FALLBACK_WARNING_TIME;
@@ -369,6 +414,10 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         });
 
         // First, map to basic race format - preserve created_by for edit permissions
+        // Calculate time_limit_hours from schedule if not set in DB
+        const calculatedDuration = calculateDurationFromSchedule(regatta.schedule, regatta.start_date);
+        const effectiveTimeLimitHours = regatta.time_limit_hours ?? calculatedDuration;
+
         const baseRace: Race = {
           id: regatta.id,
           name: regatta.name,
@@ -387,7 +436,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           // Distance racing fields
           race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
           total_distance_nm: regatta.total_distance_nm,
-          time_limit_hours: regatta.time_limit_hours,
+          time_limit_hours: effectiveTimeLimitHours,
           time_limit_minutes: regatta.time_limit_minutes,
           route_waypoints: regatta.route_waypoints,
           start_finish_same_location: regatta.start_finish_same_location,
@@ -703,7 +752,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
           venue: regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD',
           date: regatta.start_date,
-          startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          startTime: regatta.warning_signal_time || (() => { const d = new Date(regatta.start_date); return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`; })(),
           boatClass: className || 'Class TBD',
           classId: regatta.class_id || regatta.metadata?.class_id || regatta.metadata?.classId || null,
           vhf_channel: vhfChannel, // VHF channel at top level
@@ -723,7 +772,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           // Distance racing fields
           race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
           total_distance_nm: regatta.total_distance_nm,
-          time_limit_hours: regatta.time_limit_hours,
+          time_limit_hours: regatta.time_limit_hours ?? calculateDurationFromSchedule(regatta.schedule, regatta.start_date),
           time_limit_minutes: regatta.time_limit_minutes,
           route_waypoints: regatta.route_waypoints,
           start_finish_same_location: regatta.start_finish_same_location,
