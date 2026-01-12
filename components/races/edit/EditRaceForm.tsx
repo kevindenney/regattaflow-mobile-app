@@ -36,6 +36,7 @@ if (Platform.OS !== 'web') {
 }
 import {
   Calendar,
+  CalendarDays,
   Clock,
   MapPin,
   Radio,
@@ -55,6 +56,17 @@ import {
   Trophy,
   Scale,
   UserPlus,
+  Shield,
+  DollarSign,
+  Cloud,
+  Award,
+  Building,
+  Ship,
+  Link,
+  Mail,
+  Wind,
+  Plus,
+  Minus,
 } from 'lucide-react-native';
 
 import { EditFormSection } from './EditFormSection';
@@ -153,6 +165,88 @@ interface RaceFormData {
   // Advanced - Tactical
   venueSpecificNotes: string;
   startStrategy: string;
+
+  // Extracted Details - Distance Racing
+  timeLimitHours: string;
+  routeDescription: string;
+
+  // Extracted Details - Prohibited Areas
+  prohibitedAreas: Array<{
+    name: string;
+    description?: string;
+    coordinates?: Array<{ lat: number; lng: number }>;
+  }>;
+
+  // Extracted Details - Tide Gates
+  tideGates: Array<{
+    name: string;
+    time: string;
+    direction?: string;
+  }>;
+
+  // Extracted Details - Entry Fees
+  entryFees: Array<{
+    description: string;
+    amount: number;
+    currency?: string;
+    deadline?: string;
+  }>;
+
+  // Extracted Details - Crew
+  minimumCrew: string;
+  crewRequirements: string;
+
+  // Extracted Details - Scoring
+  scoringFormula: string;
+
+  // Extracted Details - Motoring Division
+  motoringDivisionAvailable: boolean;
+  motoringDivisionRules: string;
+
+  // Extracted Details - Contact
+  organizingAuthority: string;
+  contactEmail: string;
+  eventWebsite: string;
+
+  // Extracted Details - Schedule
+  schedule: Array<{
+    date?: string;
+    time?: string;
+    event: string;
+    location?: string;
+    mandatory?: boolean;
+  }>;
+
+  // Extracted Details - Safety
+  safetyRequirements: string;
+  retirementNotification: string;
+  insuranceRequirements: string;
+
+  // Extracted Details - Traffic & Navigation
+  trafficSeparationSchemes: Array<{
+    name: string;
+    description?: string;
+  }>;
+  startAreaDescription: string;
+
+  // Extracted Details - Scoring
+  handicapSystems: string[];
+
+  // Extracted Details - VHF Channels (enhanced)
+  vhfChannels: Array<{
+    channel: string;
+    purpose?: string;
+  }>;
+
+  // Extracted Details - Weather
+  expectedConditions: string;
+  expectedWindDirection: string;
+  expectedWindSpeedMin: string;
+  expectedWindSpeedMax: string;
+
+  // Extracted Details - Rules & Prizes
+  classRules: string[];
+  prizesDescription: string;
 }
 
 const DEFAULT_FORM_DATA: RaceFormData = {
@@ -196,6 +290,35 @@ const DEFAULT_FORM_DATA: RaceFormData = {
   skipperBriefingTime: '',
   venueSpecificNotes: '',
   startStrategy: '',
+  // Extracted Details
+  timeLimitHours: '',
+  routeDescription: '',
+  prohibitedAreas: [],
+  tideGates: [],
+  entryFees: [],
+  minimumCrew: '',
+  crewRequirements: '',
+  scoringFormula: '',
+  motoringDivisionAvailable: false,
+  motoringDivisionRules: '',
+  organizingAuthority: '',
+  contactEmail: '',
+  eventWebsite: '',
+  // New extracted details
+  schedule: [],
+  safetyRequirements: '',
+  retirementNotification: '',
+  insuranceRequirements: '',
+  trafficSeparationSchemes: [],
+  startAreaDescription: '',
+  handicapSystems: [],
+  vhfChannels: [],
+  expectedConditions: '',
+  expectedWindDirection: '',
+  expectedWindSpeedMin: '',
+  expectedWindSpeedMax: '',
+  classRules: [],
+  prizesDescription: '',
 };
 
 // =============================================================================
@@ -379,6 +502,45 @@ export function EditRaceForm({
         skipperBriefingTime: race.skipper_briefing_time || '',
         venueSpecificNotes: race.venue_specific_notes || '',
         startStrategy: race.start_strategy || '',
+        // Extracted Details - Distance Racing
+        timeLimitHours: race.time_limit_hours?.toString() || '',
+        routeDescription: race.route_description || '',
+        // Extracted Details - Course/Navigation
+        prohibitedAreas: race.prohibited_areas || [],
+        tideGates: race.tide_gates || [],
+        trafficSeparationSchemes: race.traffic_separation_schemes || [],
+        startAreaDescription: race.start_area_description || '',
+        // Extracted Details - Entry & Registration
+        entryFees: race.entry_fees || [],
+        // Extracted Details - Crew
+        minimumCrew: race.minimum_crew?.toString() || '',
+        crewRequirements: race.crew_requirements || '',
+        // Extracted Details - Safety
+        safetyRequirements: race.safety_requirements || '',
+        retirementNotification: race.retirement_notification || '',
+        insuranceRequirements: race.insurance_requirements || '',
+        // Extracted Details - Scoring
+        scoringFormula: race.scoring_formula || '',
+        handicapSystems: race.handicap_systems || [],
+        // Extracted Details - Motoring Division
+        motoringDivisionAvailable: race.motoring_division_available || false,
+        motoringDivisionRules: race.motoring_division_rules || '',
+        // Extracted Details - Communications (enhanced)
+        vhfChannels: race.vhf_channels || [],
+        // Extracted Details - Organization
+        organizingAuthority: race.organizing_authority || '',
+        eventWebsite: race.event_website || '',
+        contactEmail: race.contact_email || '',
+        // Extracted Details - Weather
+        expectedConditions: race.expected_conditions || '',
+        expectedWindDirection: race.expected_wind_direction || '',
+        expectedWindSpeedMin: race.expected_wind_speed_min?.toString() || '',
+        expectedWindSpeedMax: race.expected_wind_speed_max?.toString() || '',
+        // Extracted Details - Schedule
+        schedule: race.schedule || [],
+        // Extracted Details - Rules & Prizes
+        classRules: race.class_rules || [],
+        prizesDescription: race.prizes_description || '',
       };
 
       setFormData(loadedData);
@@ -634,6 +796,46 @@ export function EditRaceForm({
         skipper_briefing_time: formData.skipperBriefingTime || null,
         venue_specific_notes: formData.venueSpecificNotes || null,
         start_strategy: formData.startStrategy || null,
+        // Extracted Details - Distance Racing
+        time_limit_hours: formData.timeLimitHours ? parseFloat(formData.timeLimitHours) : null,
+        route_description: formData.routeDescription || null,
+        // Extracted Details - Course/Navigation
+        prohibited_areas: formData.prohibitedAreas.length > 0 ? formData.prohibitedAreas : null,
+        tide_gates: formData.tideGates.length > 0 ? formData.tideGates : null,
+        traffic_separation_schemes: formData.trafficSeparationSchemes.length > 0 ? formData.trafficSeparationSchemes : null,
+        start_area_description: formData.startAreaDescription || null,
+        // Extracted Details - Entry & Registration
+        entry_fees: formData.entryFees.length > 0 ? formData.entryFees : null,
+        entry_deadline: formData.registrationDeadline ? `${formData.registrationDeadline}T00:00:00` : null,
+        // Extracted Details - Crew
+        minimum_crew: formData.minimumCrew ? parseInt(formData.minimumCrew, 10) : null,
+        crew_requirements: formData.crewRequirements || null,
+        // Extracted Details - Safety
+        safety_requirements: formData.safetyRequirements || null,
+        retirement_notification: formData.retirementNotification || null,
+        insurance_requirements: formData.insuranceRequirements || null,
+        // Extracted Details - Scoring
+        scoring_formula: formData.scoringFormula || null,
+        handicap_systems: formData.handicapSystems.length > 0 ? formData.handicapSystems : null,
+        // Extracted Details - Motoring Division
+        motoring_division_available: formData.motoringDivisionAvailable,
+        motoring_division_rules: formData.motoringDivisionRules || null,
+        // Extracted Details - Communications (enhanced)
+        vhf_channels: formData.vhfChannels.length > 0 ? formData.vhfChannels : null,
+        // Extracted Details - Organization
+        organizing_authority: formData.organizingAuthority || null,
+        event_website: formData.eventWebsite || null,
+        contact_email: formData.contactEmail || null,
+        // Extracted Details - Weather
+        expected_conditions: formData.expectedConditions || null,
+        expected_wind_direction: formData.expectedWindDirection || null,
+        expected_wind_speed_min: formData.expectedWindSpeedMin ? parseInt(formData.expectedWindSpeedMin, 10) : null,
+        expected_wind_speed_max: formData.expectedWindSpeedMax ? parseInt(formData.expectedWindSpeedMax, 10) : null,
+        // Extracted Details - Schedule
+        schedule: formData.schedule.length > 0 ? formData.schedule : null,
+        // Extracted Details - Rules & Prizes
+        class_rules: formData.classRules.length > 0 ? formData.classRules : null,
+        prizes_description: formData.prizesDescription || null,
         // Store extended data in metadata JSONB
         metadata,
         updated_at: new Date().toISOString(),
@@ -1175,6 +1377,320 @@ export function EditRaceForm({
                   value={formData.startStrategy}
                   placeholder="Favored end, approach..."
                   onChangeText={(text) => updateField('startStrategy', text)}
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Entry & Registration */}
+            <AccordionSection
+              title="Entry & Fees"
+              icon={<DollarSign size={18} color={colors.neutral[500]} />}
+              subtitle="Entry fees and deadlines"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Entry Fees"
+                  value={formData.entryFees.length > 0
+                    ? formData.entryFees.map(f => `${f.type || 'Fee'}: ${f.currency || '$'}${f.amount}`).join(', ')
+                    : ''}
+                  placeholder="No entry fees specified"
+                />
+                <EditFormRow
+                  label="Entry Deadline"
+                  value={formData.registrationDeadline}
+                  placeholder="YYYY-MM-DD"
+                  onChangeText={(text) => updateField('registrationDeadline', text)}
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Crew & Safety */}
+            <AccordionSection
+              title="Crew & Safety"
+              icon={<Shield size={18} color={colors.neutral[500]} />}
+              subtitle="Requirements and procedures"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Minimum Crew"
+                  value={formData.minimumCrew}
+                  placeholder="Number of crew"
+                  inputMode="numeric"
+                  onChangeText={(text) => updateField('minimumCrew', text)}
+                />
+                <EditFormRow
+                  label="Crew Requirements"
+                  value={formData.crewRequirements}
+                  placeholder="Experience, certifications..."
+                  onChangeText={(text) => updateField('crewRequirements', text)}
+                />
+                <EditFormRow
+                  label="Safety Requirements"
+                  value={formData.safetyRequirements}
+                  placeholder="Equipment, procedures..."
+                  onChangeText={(text) => updateField('safetyRequirements', text)}
+                />
+                <EditFormRow
+                  label="Retirement Notification"
+                  value={formData.retirementNotification}
+                  placeholder="Notification procedure..."
+                  onChangeText={(text) => updateField('retirementNotification', text)}
+                />
+                <EditFormRow
+                  label="Insurance Requirements"
+                  value={formData.insuranceRequirements}
+                  placeholder="Third-party, coverage..."
+                  onChangeText={(text) => updateField('insuranceRequirements', text)}
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Event Schedule */}
+            <AccordionSection
+              title="Event Schedule"
+              icon={<CalendarDays size={18} color={colors.neutral[500]} />}
+              subtitle="Race day timeline"
+            >
+              <View style={styles.accordionContent}>
+                {formData.schedule.length > 0 ? (
+                  formData.schedule.map((event, idx) => (
+                    <EditFormRow
+                      key={idx}
+                      label={event.time || 'TBD'}
+                      value={event.event}
+                      placeholder="Event description"
+                      showSeparator={idx < formData.schedule.length - 1}
+                    />
+                  ))
+                ) : (
+                  <EditFormRow
+                    label="Schedule"
+                    value=""
+                    placeholder="No schedule events"
+                    showSeparator={false}
+                  />
+                )}
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Course & Navigation (distance/fleet only) */}
+            {(formData.raceType === 'distance' || formData.raceType === 'fleet') && (
+              <AccordionSection
+                title="Course & Navigation"
+                icon={<Navigation size={18} color={colors.neutral[500]} />}
+                subtitle="Hazards and tide gates"
+              >
+                <View style={styles.accordionContent}>
+                  <EditFormRow
+                    label="Start Area Description"
+                    value={formData.startAreaDescription}
+                    placeholder="Start line details..."
+                    onChangeText={(text) => updateField('startAreaDescription', text)}
+                  />
+                  <EditFormRow
+                    label="Prohibited Areas"
+                    value={formData.prohibitedAreas.length > 0
+                      ? `${formData.prohibitedAreas.length} area(s)`
+                      : ''}
+                    placeholder="No prohibited areas"
+                  />
+                  <EditFormRow
+                    label="Tide Gates"
+                    value={formData.tideGates.length > 0
+                      ? formData.tideGates.map(t => t.location || t.name).join(', ')
+                      : ''}
+                    placeholder="No tide gates"
+                  />
+                  <EditFormRow
+                    label="Traffic Separation"
+                    value={formData.trafficSeparationSchemes.length > 0
+                      ? `${formData.trafficSeparationSchemes.length} scheme(s)`
+                      : ''}
+                    placeholder="No traffic schemes"
+                    showSeparator={false}
+                  />
+                </View>
+              </AccordionSection>
+            )}
+
+            {/* Extracted Details - Motoring Division (distance only) */}
+            {formData.raceType === 'distance' && (
+              <AccordionSection
+                title="Motoring Division"
+                icon={<Ship size={18} color={colors.neutral[500]} />}
+                subtitle="Motor sailing rules"
+              >
+                <View style={styles.accordionContent}>
+                  <EditFormRow
+                    label="Available"
+                    value={formData.motoringDivisionAvailable ? 'Yes' : 'No'}
+                    accessory="chevron"
+                    onPress={() => updateField('motoringDivisionAvailable', !formData.motoringDivisionAvailable)}
+                  />
+                  {formData.motoringDivisionAvailable && (
+                    <EditFormRow
+                      label="Rules"
+                      value={formData.motoringDivisionRules}
+                      placeholder="Motoring rules..."
+                      onChangeText={(text) => updateField('motoringDivisionRules', text)}
+                      showSeparator={false}
+                    />
+                  )}
+                </View>
+              </AccordionSection>
+            )}
+
+            {/* Extracted Details - Scoring & Handicap */}
+            <AccordionSection
+              title="Scoring & Handicap"
+              icon={<Trophy size={18} color={colors.neutral[500]} />}
+              subtitle="Scoring formula and systems"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Scoring Formula"
+                  value={formData.scoringFormula}
+                  placeholder="e.g., IRC, HKPN..."
+                  onChangeText={(text) => updateField('scoringFormula', text)}
+                />
+                <EditFormRow
+                  label="Handicap Systems"
+                  value={formData.handicapSystems.length > 0
+                    ? formData.handicapSystems.join(', ')
+                    : ''}
+                  placeholder="No handicap systems"
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Communications (enhanced) */}
+            <AccordionSection
+              title="VHF Channels"
+              icon={<Radio size={18} color={colors.neutral[500]} />}
+              subtitle="Radio frequencies"
+            >
+              <View style={styles.accordionContent}>
+                {formData.vhfChannels.length > 0 ? (
+                  formData.vhfChannels.map((ch, idx) => (
+                    <EditFormRow
+                      key={idx}
+                      label={`CH ${ch.channel}`}
+                      value={ch.purpose || ''}
+                      placeholder="Purpose"
+                      showSeparator={idx < formData.vhfChannels.length - 1}
+                    />
+                  ))
+                ) : (
+                  <EditFormRow
+                    label="Channels"
+                    value={formData.vhfChannel || ''}
+                    placeholder="No channels specified"
+                    showSeparator={false}
+                  />
+                )}
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Organization */}
+            <AccordionSection
+              title="Organization"
+              icon={<Building size={18} color={colors.neutral[500]} />}
+              subtitle="Organizer contact info"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Organizing Authority"
+                  value={formData.organizingAuthority}
+                  placeholder="Club or organization..."
+                  onChangeText={(text) => updateField('organizingAuthority', text)}
+                />
+                <EditFormRow
+                  label="Event Website"
+                  value={formData.eventWebsite}
+                  placeholder="https://..."
+                  onChangeText={(text) => updateField('eventWebsite', text)}
+                />
+                <EditFormRow
+                  label="Contact Email"
+                  value={formData.contactEmail}
+                  placeholder="email@example.com"
+                  onChangeText={(text) => updateField('contactEmail', text)}
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Weather */}
+            <AccordionSection
+              title="Expected Weather"
+              icon={<Cloud size={18} color={colors.neutral[500]} />}
+              subtitle="Conditions forecast"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Conditions"
+                  value={formData.expectedConditions}
+                  placeholder="Weather description..."
+                  onChangeText={(text) => updateField('expectedConditions', text)}
+                />
+                <EditFormRow
+                  label="Wind Direction"
+                  value={formData.expectedWindDirection}
+                  placeholder="e.g., SW"
+                  onChangeText={(text) => updateField('expectedWindDirection', text)}
+                />
+                <EditFormRow
+                  label="Wind Speed Min"
+                  value={formData.expectedWindSpeedMin}
+                  placeholder="Knots"
+                  inputMode="numeric"
+                  onChangeText={(text) => updateField('expectedWindSpeedMin', text)}
+                />
+                <EditFormRow
+                  label="Wind Speed Max"
+                  value={formData.expectedWindSpeedMax}
+                  placeholder="Knots"
+                  inputMode="numeric"
+                  onChangeText={(text) => updateField('expectedWindSpeedMax', text)}
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Rules */}
+            <AccordionSection
+              title="Class Rules"
+              icon={<FileText size={18} color={colors.neutral[500]} />}
+              subtitle="Applicable rules"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Rules"
+                  value={formData.classRules.length > 0
+                    ? formData.classRules.join(', ')
+                    : ''}
+                  placeholder="No class rules specified"
+                  showSeparator={false}
+                />
+              </View>
+            </AccordionSection>
+
+            {/* Extracted Details - Prizes */}
+            <AccordionSection
+              title="Prizes"
+              icon={<Award size={18} color={colors.neutral[500]} />}
+              subtitle="Awards and trophies"
+            >
+              <View style={styles.accordionContent}>
+                <EditFormRow
+                  label="Prizes"
+                  value={formData.prizesDescription}
+                  placeholder="Prize description..."
+                  onChangeText={(text) => updateField('prizesDescription', text)}
                   showSeparator={false}
                 />
               </View>
