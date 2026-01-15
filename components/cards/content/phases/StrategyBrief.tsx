@@ -1,20 +1,50 @@
 /**
- * StrategyBrief - Condensed Strategy Summary with Drill-Down
+ * StrategyBrief - Full Strategy Checklist with Collapsible Phases
+ *
+ * Shows all 14 strategy sections across 5 collapsible phases:
+ * START, UPWIND, DOWNWIND, MARK_ROUNDING, FINISH
+ *
+ * Each section includes:
+ * - Checkbox for completion tracking
+ * - AI suggestion based on conditions + past performance
+ * - Past learning/performance data (trend, avg rating)
+ * - User intention text input
  *
  * Tufte principle: "Overview first, zoom and filter, then details on demand"
- *
- * Shows 3-5 key strategy points generated from conditions/venue data.
- * Tapping "Full Strategy" reveals the Tufte-style strategy screen.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, Pressable, Modal, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronRight, X } from 'lucide-react-native';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  Modal,
+  TextInput,
+  ScrollView,
+  Animated,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+} from 'react-native';
+import {
+  ChevronRight,
+  X,
+  Target,
+  Edit3,
+} from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
 import { TufteStrategyScreen } from '@/components/races/strategy';
-import type { StrategySectionId } from '@/types/raceStrategy';
+import { useStrategyBrief, type StrategyBriefPhase } from '@/hooks/useStrategyBrief';
+import { StrategyBriefPhaseHeader } from './StrategyBriefPhaseHeader';
+import { StrategyBriefSection } from './StrategyBriefSection';
+import type { StrategyPhase } from '@/types/raceStrategy';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -33,64 +63,8 @@ const IOS_COLORS = {
 
 interface StrategyBriefProps {
   race: CardRaceData;
+  isExpanded?: boolean;
   onOpenStrategyDetail?: () => void;
-}
-
-/**
- * Generate strategy bullets based on race conditions
- * In production, this would be AI-generated
- */
-function generateStrategyBullets(race: CardRaceData): string[] {
-  const bullets: string[] = [];
-  const wind = race.wind;
-  const tide = race.tide;
-
-  // Wind-based strategies
-  if (wind) {
-    // Direction-based
-    if (wind.direction?.includes('N')) {
-      bullets.push('Favor right side on first beat (northerly persistents)');
-    } else if (wind.direction?.includes('E')) {
-      bullets.push('Watch for oscillations from the east');
-    } else if (wind.direction?.includes('S')) {
-      bullets.push('Left side may pay on southerly shift');
-    } else if (wind.direction?.includes('W')) {
-      bullets.push('Westerly typically backs through the day');
-    }
-
-    // Strength-based
-    if (wind.speedMax && wind.speedMax > 18) {
-      bullets.push('Heavy air - reef early, power up gradually');
-    } else if (wind.speedMin && wind.speedMin < 8) {
-      bullets.push('Light air - prioritize clear air, minimize maneuvers');
-    }
-
-    // Gust differential
-    if (wind.speedMax && wind.speedMin && (wind.speedMax - wind.speedMin) > 8) {
-      bullets.push('High gust differential - sail in the puffs');
-    }
-  }
-
-  // Tide-based strategies
-  if (tide) {
-    if (tide.state === 'flooding' || tide.state === 'rising') {
-      bullets.push('Current favorable upwind - stay in main flow');
-    } else if (tide.state === 'ebbing' || tide.state === 'falling') {
-      bullets.push('Current adverse upwind - favor shallows');
-    } else if (tide.state === 'slack') {
-      bullets.push('Slack tide - focus on wind shifts, not current');
-    }
-  }
-
-  // Add generic high-value strategies if we don't have enough
-  if (bullets.length < 3) {
-    bullets.push('Pin end likely favored at start');
-  }
-  if (bullets.length < 4) {
-    bullets.push('Watch for persistent shifts after midday');
-  }
-
-  return bullets.slice(0, 5);
 }
 
 export function StrategyBrief({
@@ -98,11 +72,54 @@ export function StrategyBrief({
   isExpanded = false,
   onOpenStrategyDetail,
 }: StrategyBriefProps) {
-  // State for Tufte-style strategy modal
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  // Strategy brief hook with all phases and sections
+  const {
+    intention,
+    setIntention,
+    isIntentionSaving,
+    phases,
+    completedCount,
+    totalCount,
+    progress,
+    toggleSectionCompletion,
+    updateSectionPlan,
+    isLoading,
+  } = useStrategyBrief({
+    raceEventId: race.id,
+    race,
+  });
 
-  // Get strategy bullets (would be AI-generated in production)
-  const strategyBullets = useMemo(() => generateStrategyBullets(race), [race]);
+  // Modal state
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [isEditingIntention, setIsEditingIntention] = useState(false);
+  const [localIntention, setLocalIntention] = useState(intention);
+
+  // Phase expansion state - start with first phase expanded
+  const [expandedPhases, setExpandedPhases] = useState<Set<StrategyPhase>>(
+    new Set(['start'])
+  );
+
+  // Sync local intention when external changes
+  useEffect(() => {
+    console.log('[StrategyBrief] useEffect sync - intention changed', {
+      newIntention: intention,
+      currentLocalIntention: localIntention
+    });
+    setLocalIntention(intention);
+  }, [intention]);
+
+  // Handle intention save on blur or submit
+  const handleIntentionSave = useCallback(() => {
+    console.log('[StrategyBrief] handleIntentionSave called', {
+      localIntention,
+      intention,
+      willSave: localIntention !== intention
+    });
+    if (localIntention !== intention) {
+      setIntention(localIntention);
+    }
+    setIsEditingIntention(false);
+  }, [localIntention, intention, setIntention]);
 
   // Handle opening strategy detail
   const handleOpenDetail = useCallback(() => {
@@ -113,43 +130,127 @@ export function StrategyBrief({
     }
   }, [onOpenStrategyDetail]);
 
-  // Handle strategy section updates
-  const handleUpdateSection = useCallback((sectionId: StrategySectionId, userPlan: string) => {
-    console.log('Strategy updated:', sectionId, userPlan);
-    // TODO: Persist to storage or sync with backend
+  // Toggle phase expansion
+  const togglePhase = useCallback((phaseKey: StrategyPhase) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(phaseKey)) {
+        next.delete(phaseKey);
+      } else {
+        next.add(phaseKey);
+      }
+      return next;
+    });
   }, []);
 
   return (
     <>
-      {/* Strategy Brief Card */}
       <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerLabel}>STRATEGY BRIEF</Text>
-          <Pressable style={styles.drillDownButton} onPress={handleOpenDetail}>
-            <Text style={styles.drillDownText}>Full Strategy</Text>
-            <ChevronRight size={14} color={IOS_COLORS.blue} />
+          <View style={styles.headerRight}>
+            <Text style={styles.progressText}>
+              {completedCount}/{totalCount}
+            </Text>
+            <Pressable style={styles.drillDownButton} onPress={handleOpenDetail}>
+              <Text style={styles.drillDownText}>Full Strategy</Text>
+              <ChevronRight size={14} color={IOS_COLORS.blue} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Overall Intention Input */}
+        <View style={styles.intentionContainer}>
+          <View style={styles.intentionHeader}>
+            <Target size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.intentionLabel}>My Race Intention</Text>
+            {isIntentionSaving && (
+              <Text style={styles.savingIndicator}>Saving...</Text>
+            )}
+          </View>
+          <Pressable
+            style={styles.intentionInputContainer}
+            onPress={() => {
+              if (!isEditingIntention) {
+                setIsEditingIntention(true);
+              }
+            }}
+          >
+            {isEditingIntention ? (
+              <TextInput
+                style={styles.intentionInput}
+                value={localIntention}
+                onChangeText={(text) => {
+                  console.log('[StrategyBrief] onChangeText', { text });
+                  setLocalIntention(text);
+                }}
+                onBlur={() => {
+                  console.log('[StrategyBrief] onBlur fired');
+                  handleIntentionSave();
+                }}
+                onSubmitEditing={() => {
+                  console.log('[StrategyBrief] onSubmitEditing fired');
+                  handleIntentionSave();
+                }}
+                placeholder="What's your one key focus for today?"
+                placeholderTextColor={IOS_COLORS.gray}
+                autoFocus
+                multiline={false}
+                returnKeyType="done"
+                blurOnSubmit
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.intentionText,
+                  !localIntention && styles.intentionPlaceholder,
+                ]}
+              >
+                {localIntention || 'Tap to set your race intention'}
+              </Text>
+            )}
+            {!isEditingIntention && (
+              <Edit3 size={16} color={IOS_COLORS.gray} />
+            )}
           </Pressable>
         </View>
 
-        {/* Strategy Bullets */}
-        <View style={styles.briefContainer}>
-          {strategyBullets.map((bullet, idx) => (
-            <View key={idx} style={styles.bulletRow}>
-              <Text style={styles.bulletDot}>•</Text>
-              <Text style={styles.bulletText}>{bullet}</Text>
-            </View>
+        {/* Phases with Collapsible Sections */}
+        <ScrollView
+          style={styles.phasesScrollView}
+          contentContainerStyle={styles.phasesContent}
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
+          {phases.map((phase) => (
+            <PhaseGroup
+              key={phase.key}
+              phase={phase}
+              isExpanded={expandedPhases.has(phase.key)}
+              onToggle={() => togglePhase(phase.key)}
+              onToggleSectionComplete={toggleSectionCompletion}
+              onUpdateSectionPlan={updateSectionPlan}
+            />
           ))}
-        </View>
+        </ScrollView>
 
-        {/* Expandable hint */}
-        {!isExpanded && strategyBullets.length > 3 && (
-          <Text style={styles.expandHint}>
-            Tap "Full Strategy" for detailed leg-by-leg tactics
-          </Text>
-        )}
+        {/* Progress Bar */}
+        <View style={styles.progressBar}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${progress * 100}%` },
+              progress === 1 && styles.progressComplete,
+            ]}
+          />
+        </View>
       </View>
 
-      {/* Tufte-Style Strategy Modal */}
+      {/* Tufte Strategy Modal */}
       <Modal
         visible={showDetailModal}
         animationType="slide"
@@ -157,7 +258,6 @@ export function StrategyBrief({
         onRequestClose={() => setShowDetailModal(false)}
       >
         <View style={styles.modalContainer}>
-          {/* Close Button */}
           <View style={styles.modalCloseBar}>
             <Pressable
               style={styles.modalCloseButton}
@@ -166,12 +266,10 @@ export function StrategyBrief({
               <X size={24} color={IOS_COLORS.secondaryLabel} />
             </Pressable>
           </View>
-
-          {/* Tufte Strategy Screen */}
           <TufteStrategyScreen
+            raceId={race.id}
             raceName={race.name}
             raceDate={race.date ? new Date(race.date) : undefined}
-            onUpdateSection={handleUpdateSection}
           />
         </View>
       </Modal>
@@ -179,9 +277,54 @@ export function StrategyBrief({
   );
 }
 
+/**
+ * PhaseGroup - A collapsible phase with its sections
+ */
+interface PhaseGroupProps {
+  phase: StrategyBriefPhase;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onToggleSectionComplete: (sectionId: any) => void;
+  onUpdateSectionPlan: (sectionId: any, plan: string) => void;
+}
+
+function PhaseGroup({
+  phase,
+  isExpanded,
+  onToggle,
+  onToggleSectionComplete,
+  onUpdateSectionPlan,
+}: PhaseGroupProps) {
+  return (
+    <View style={styles.phaseGroup}>
+      <StrategyBriefPhaseHeader
+        label={phase.label}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        completedCount={phase.completedCount}
+        totalCount={phase.totalCount}
+      />
+
+      {isExpanded && (
+        <View style={styles.phaseSections}>
+          {phase.sections.map((section, index) => (
+            <StrategyBriefSection
+              key={section.id}
+              section={section}
+              onToggleComplete={() => onToggleSectionComplete(section.id)}
+              onUpdatePlan={(plan) => onUpdateSectionPlan(section.id, plan)}
+              isFirst={index === 0}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
-    gap: 8,
+    gap: 12,
   },
 
   // Header
@@ -196,6 +339,16 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
     letterSpacing: 1,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
   drillDownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -207,40 +360,92 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.blue,
   },
 
-  // Brief Container
-  briefContainer: {
+  // Intention
+  intentionContainer: {
     backgroundColor: IOS_COLORS.gray6,
     borderRadius: 10,
     padding: 12,
     borderLeftWidth: 3,
     borderLeftColor: IOS_COLORS.blue,
-    gap: 6,
-  },
-  bulletRow: {
-    flexDirection: 'row',
     gap: 8,
   },
-  bulletDot: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: IOS_COLORS.blue,
+  intentionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  bulletText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: IOS_COLORS.label,
-    lineHeight: 20,
-  },
-
-  // Expand hint
-  expandHint: {
+  intentionLabel: {
     fontSize: 12,
-    fontWeight: '400',
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    flex: 1,
+  },
+  savingIndicator: {
+    fontSize: 11,
     color: IOS_COLORS.gray,
     fontStyle: 'italic',
-    textAlign: 'center',
+  },
+  intentionInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  intentionInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    padding: 0,
+  },
+  intentionText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  intentionPlaceholder: {
+    color: IOS_COLORS.gray,
+    fontWeight: '400',
+    fontStyle: 'italic',
+  },
+
+  // Phases ScrollView
+  phasesScrollView: {
+    flex: 1,
+    maxHeight: 500, // Increased to allow more content visibility
+  },
+  phasesContent: {
+    gap: 0,
+    paddingBottom: 8,
+  },
+  phaseGroup: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+  },
+  phaseSections: {
+    paddingLeft: 8,
+    paddingBottom: 8,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    marginBottom: 8,
+  },
+
+  // Progress
+  progressBar: {
+    height: 3,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 1.5,
+    overflow: 'hidden',
     marginTop: 4,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 1.5,
+  },
+  progressComplete: {
+    backgroundColor: IOS_COLORS.green,
   },
 
   // Modal - Tufte style
