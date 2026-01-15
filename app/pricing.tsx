@@ -1,187 +1,511 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { Check } from 'lucide-react-native';
-import { LandingNav } from '@/components/landing/LandingNav';
+/**
+ * Pricing Page - Tufte-Style Design
+ *
+ * Clean, minimal presentation following Edward Tufte principles:
+ * - High data-ink ratio: every element conveys information
+ * - No chartjunk: no decorative gradients, badges, or visual noise
+ * - Typography hierarchy: let text do the work
+ * - Generous whitespace: room to breathe
+ */
 
-const PricingScreen = () => {
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('annual');
+import React from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/providers/AuthProvider';
 
-  const plans = [
-    {
-      id: 'starter',
-      name: 'Club Starter',
-      monthlyPrice: '$249',
-      annualPrice: '$2,499',
-      annualSavings: 'Save $489',
-      description: 'Perfect for small yacht clubs',
-      features: [
-        'Up to 500 members',
-        'Basic scoring system',
-        'Entry management',
-        'Results publication',
-        'Email support'
-      ],
-      buttonText: 'Get Started',
-      popular: false
-    },
-    {
-      id: 'professional',
-      name: 'Club Pro',
-      monthlyPrice: '$499',
-      annualPrice: '$4,999',
-      annualSavings: 'Save $989',
-      description: 'For active sailing clubs',
-      features: [
-        'Up to 2,000 members',
-        'Advanced scoring options',
-        'Live race tracking',
-        'Custom branding',
-        'Priority support',
-        'Mobile race committee app'
-      ],
-      buttonText: 'Get Started',
-      popular: true
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      monthlyPrice: '$899',
-      annualPrice: '$8,999',
-      annualSavings: 'Save $1,789',
-      description: 'For major sailing organizations',
-      features: [
-        'Unlimited members',
-        'Multiple venue management',
-        'Advanced analytics',
-        'API access',
-        'Dedicated support',
-        'Custom integrations'
-      ],
-      buttonText: 'Contact Sales',
-      popular: false
+// Tufte design tokens
+const TUFTE = {
+  background: '#F0EDE8',
+  backgroundSecondary: '#E8E5DF',
+  text: '#3D3832',
+  textMuted: '#6B6560',
+  textLight: '#8C8780',
+  accent: '#0284c7',
+  accentHover: '#0369a1',
+  border: '#D4D0C8',
+};
+
+interface PlanTier {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  description: string;
+  features: string[];
+  cta: string;
+  highlighted?: boolean;
+}
+
+type PricingTab = 'strategy' | 'learning';
+
+const STRATEGY_PLANS: PlanTier[] = [
+  {
+    id: 'free',
+    name: 'Free',
+    price: '$0',
+    period: '',
+    description: 'Get started with race preparation',
+    features: [
+      'Up to 3 races',
+      'Basic race checklists',
+      'Manual weather lookup',
+      '5 AI queries per month',
+      'Document upload',
+    ],
+    cta: 'Start Free',
+  },
+  {
+    id: 'basic',
+    name: 'Basic',
+    price: '$120',
+    period: '/year',
+    description: 'Essential tools for club racers',
+    features: [
+      'Unlimited races',
+      '20 AI queries per month',
+      'Automatic weather updates',
+      'Race checklists & prep tools',
+      'Document storage',
+      'Cloud backup & sync',
+    ],
+    cta: 'Go Basic',
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: '$360',
+    period: '/year',
+    description: 'Full features for serious sailors',
+    features: [
+      'Everything in Basic',
+      'Unlimited AI queries',
+      'AI strategy analysis',
+      'Team sharing & collaboration',
+      'Historical race data',
+      'Offline mode',
+      'Advanced analytics',
+    ],
+    cta: 'Go Pro',
+    highlighted: true,
+  },
+];
+
+const LEARNING_PLANS: PlanTier[] = [
+  {
+    id: 'learn-free',
+    name: 'Free Lesson',
+    price: '$0',
+    period: '',
+    description: 'Try our learning content',
+    features: [
+      'Introduction to Racing',
+      'Basic concepts & terminology',
+      'Interactive lesson format',
+      'Progress tracking',
+    ],
+    cta: 'Start Learning',
+  },
+  {
+    id: 'learn-module',
+    name: 'Single Module',
+    price: '$30',
+    period: '/year',
+    description: 'Deep dive on one topic',
+    features: [
+      'Choose any learning module',
+      'Interactive lessons',
+      'Simulations & exercises',
+      'Progress tracking',
+      'Certificate on completion',
+    ],
+    cta: 'Get Module',
+  },
+  {
+    id: 'learn-bundle',
+    name: 'All Modules',
+    price: '$100',
+    period: '/year',
+    description: 'Complete racing education',
+    features: [
+      'All learning modules',
+      'Interactive simulations',
+      'Progress tracking',
+      'Certificates on completion',
+      'New modules as released',
+      'Best value',
+    ],
+    cta: 'Get All Modules',
+    highlighted: true,
+  },
+];
+
+export default function PricingScreen() {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { isGuest, user } = useAuth();
+  const params = useLocalSearchParams<{ upgrade?: string; tab?: string }>();
+  const [activeTab, setActiveTab] = React.useState<PricingTab>(
+    (params.tab as PricingTab) || 'strategy'
+  );
+
+  const isWideScreen = width >= 768;
+  const currentPlans = activeTab === 'strategy' ? STRATEGY_PLANS : LEARNING_PLANS;
+
+  const handleSelectPlan = (planId: string) => {
+    if (planId === 'free' || planId === 'learn-free') {
+      if (isGuest) {
+        router.push('/(auth)/signup');
+      } else {
+        router.back();
+      }
+    } else {
+      // For paid plans, direct to signup first if guest, then payment
+      if (isGuest) {
+        router.push(`/(auth)/signup?plan=${planId}`);
+      } else {
+        // TODO: Connect to Stripe payment flow
+        console.log('[Pricing] Upgrade to:', planId);
+      }
     }
-  ];
+  };
+
+  const handleBack = () => {
+    router.back();
+  };
 
   return (
-    <View className="flex-1 bg-white">
-      <LandingNav transparent={false} sticky={true} />
-      <ScrollView className="flex-1">
-        <View className="p-6">
-        {/* Header */}
-        <View className="mb-8">
-          <Text className="text-3xl font-bold text-gray-900 text-center mb-2">
-            Professional regatta management
-          </Text>
-          <Text className="text-gray-600 text-center">
-            Pricing designed for yacht clubs and sailing organizations
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Minimal header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={TUFTE.text} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 40 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Title */}
+        <View style={styles.titleSection}>
+          <Text style={styles.title}>Choose Your Plan</Text>
+          <Text style={styles.subtitle}>
+            {activeTab === 'strategy'
+              ? 'Race preparation tools for every sailor'
+              : 'Learn to race with interactive lessons'}
           </Text>
         </View>
 
-        {/* Billing Toggle */}
-        <View className="flex-row justify-center mb-8">
-          <View className="flex-row bg-gray-100 rounded-full p-1">
-            <TouchableOpacity
-              onPress={() => setBillingPeriod('monthly')}
-              className={`px-6 py-2 rounded-full ${
-                billingPeriod === 'monthly' ? 'bg-white' : ''
-              }`}
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'strategy' && styles.tabActive]}
+            onPress={() => setActiveTab('strategy')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === 'strategy' && styles.tabTextActive,
+              ]}
             >
-              <Text className={billingPeriod === 'monthly' ? 'text-gray-900 font-semibold' : 'text-gray-500'}>
-                Monthly
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setBillingPeriod('annual')}
-              className={`px-6 py-2 rounded-full ${
-                billingPeriod === 'annual' ? 'bg-white' : ''
-              }`}
+              Race Strategy
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'learning' && styles.tabActive]}
+            onPress={() => setActiveTab('learning')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === 'learning' && styles.tabTextActive,
+              ]}
             >
-              <Text className={billingPeriod === 'annual' ? 'text-gray-900 font-semibold' : 'text-gray-500'}>
-                Annual
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {billingPeriod === 'annual' && (
-            <View className="ml-3 bg-green-100 px-3 py-1 rounded-full self-center">
-              <Text className="text-green-700 text-sm font-medium">2 months free</Text>
-            </View>
-          )}
+              Learning
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Pricing Plans */}
-        <View className="flex-row flex-wrap gap-4">
-          {plans.map((plan) => (
+        {/* Plans grid */}
+        <View style={[styles.plansContainer, isWideScreen && styles.plansRow]}>
+          {currentPlans.map((plan) => (
             <View
               key={plan.id}
-              className={`flex-1 min-w-[300px] rounded-3xl p-6 ${
-                plan.popular
-                  ? 'bg-white border-2 border-blue-500'
-                  : 'bg-white border border-gray-200'
-              }`}
+              style={[
+                styles.planCard,
+                isWideScreen && styles.planCardWide,
+                plan.highlighted && styles.planCardHighlighted,
+              ]}
             >
-              {plan.popular && (
-                <View className="absolute -top-3 right-6">
-                  <View className="bg-blue-500 px-4 py-1 rounded-full">
-                    <Text className="text-white text-sm font-medium">Most Popular</Text>
-                  </View>
+              {/* Plan header */}
+              <View style={styles.planHeader}>
+                <Text style={styles.planName}>{plan.name}</Text>
+                <View style={styles.priceRow}>
+                  <Text style={styles.planPrice}>{plan.price}</Text>
+                  {plan.period && (
+                    <Text style={styles.planPeriod}>{plan.period}</Text>
+                  )}
                 </View>
-              )}
-
-              <Text className="text-2xl font-bold text-gray-900 mb-2">
-                {plan.name}
-              </Text>
-
-              <View className="mb-4">
-                <Text className="text-4xl font-bold text-gray-900">
-                  {billingPeriod === 'annual' ? plan.annualPrice : plan.monthlyPrice}
-                </Text>
-                <Text className="text-gray-500 text-base">
-                  {billingPeriod === 'annual' ? '/year' : '/month'}
-                </Text>
-                {billingPeriod === 'annual' && (
-                  <Text className="text-green-600 text-sm font-medium mt-1">
-                    {plan.annualSavings}
-                  </Text>
-                )}
+                <Text style={styles.planDescription}>{plan.description}</Text>
               </View>
 
-              <Text className="text-gray-600 mb-6">
-                {plan.description}
-              </Text>
+              {/* Divider - subtle line */}
+              <View style={styles.divider} />
 
-              <View className="mb-8">
+              {/* Features - clean list, no icons */}
+              <View style={styles.featuresList}>
                 {plan.features.map((feature, index) => (
-                  <View key={index} className="flex-row items-center mb-3">
-                    <Check
-                      size={20}
-                      color="#10B981"
-                      className="mr-3"
-                    />
-                    <Text className="text-gray-700 text-base">
-                      {feature}
-                    </Text>
-                  </View>
+                  <Text key={index} style={styles.featureItem}>
+                    {feature}
+                  </Text>
                 ))}
               </View>
 
+              {/* CTA button */}
               <TouchableOpacity
-                className={`py-4 rounded-xl items-center justify-center ${
-                  plan.id === 'enterprise'
-                    ? 'bg-gray-900'
-                    : 'bg-blue-500'
-                }`}
+                style={[
+                  styles.ctaButton,
+                  plan.highlighted && styles.ctaButtonHighlighted,
+                ]}
+                onPress={() => handleSelectPlan(plan.id)}
+                activeOpacity={0.8}
               >
-                <Text className="text-white font-semibold text-base">
-                  {plan.buttonText}
+                <Text
+                  style={[
+                    styles.ctaText,
+                    plan.highlighted && styles.ctaTextHighlighted,
+                  ]}
+                >
+                  {plan.cta}
                 </Text>
               </TouchableOpacity>
             </View>
           ))}
         </View>
+
+        {/* Footer note */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            All plans include a 14-day money-back guarantee.
+          </Text>
+          <Text style={styles.footerText}>Cancel anytime.</Text>
         </View>
       </ScrollView>
     </View>
   );
-};
+}
 
-export default PricingScreen;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: TUFTE.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    padding: 4,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+  },
+
+  // Title section
+  titleSection: {
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 40,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '300',
+    color: TUFTE.text,
+    letterSpacing: -0.5,
+    marginBottom: 8,
+    // Serif feel with lighter weight
+    ...Platform.select({
+      web: { fontFamily: 'Georgia, serif' },
+      default: {},
+    }),
+  },
+  subtitle: {
+    fontSize: 16,
+    color: TUFTE.textMuted,
+    letterSpacing: 0.2,
+  },
+
+  // Tab navigation
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 32,
+    gap: 8,
+  },
+  tab: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: TUFTE.border,
+    backgroundColor: 'transparent',
+  },
+  tabActive: {
+    borderColor: TUFTE.text,
+    backgroundColor: TUFTE.backgroundSecondary,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: TUFTE.textMuted,
+    letterSpacing: 0.3,
+  },
+  tabTextActive: {
+    color: TUFTE.text,
+  },
+
+  // Plans container
+  plansContainer: {
+    gap: 24,
+  },
+  plansRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 24,
+  },
+
+  // Plan card
+  planCard: {
+    backgroundColor: TUFTE.backgroundSecondary,
+    borderRadius: 2,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: TUFTE.border,
+  },
+  planCardWide: {
+    flex: 1,
+    minWidth: 260,
+    maxWidth: 320,
+  },
+  planCardHighlighted: {
+    borderColor: TUFTE.accent,
+    borderWidth: 2,
+  },
+
+  // Plan header
+  planHeader: {
+    marginBottom: 20,
+  },
+  planName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TUFTE.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 8,
+  },
+  planPrice: {
+    fontSize: 42,
+    fontWeight: '200',
+    color: TUFTE.text,
+    letterSpacing: -1,
+  },
+  planPeriod: {
+    fontSize: 16,
+    color: TUFTE.textLight,
+    marginLeft: 4,
+  },
+  planDescription: {
+    fontSize: 15,
+    color: TUFTE.textMuted,
+    lineHeight: 22,
+  },
+
+  // Divider
+  divider: {
+    height: 1,
+    backgroundColor: TUFTE.border,
+    marginBottom: 20,
+  },
+
+  // Features list
+  featuresList: {
+    marginBottom: 24,
+    gap: 10,
+  },
+  featureItem: {
+    fontSize: 15,
+    color: TUFTE.text,
+    lineHeight: 22,
+    paddingLeft: 12,
+    // Subtle indent effect
+    borderLeftWidth: 2,
+    borderLeftColor: 'transparent',
+  },
+
+  // CTA button
+  ctaButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: TUFTE.text,
+    alignItems: 'center',
+  },
+  ctaButtonHighlighted: {
+    backgroundColor: TUFTE.accent,
+    borderColor: TUFTE.accent,
+  },
+  ctaText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: TUFTE.text,
+    letterSpacing: 0.3,
+  },
+  ctaTextHighlighted: {
+    color: '#FFFFFF',
+  },
+
+  // Footer
+  footer: {
+    marginTop: 48,
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  footerText: {
+    fontSize: 13,
+    color: TUFTE.textLight,
+    lineHeight: 20,
+  },
+});

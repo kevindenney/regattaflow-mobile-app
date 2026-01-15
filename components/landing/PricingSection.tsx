@@ -116,6 +116,47 @@ function SailorsPricing({ isDesktop, isMobile, isSmallMobile }: { isDesktop: boo
         </TouchableOpacity>
       </View>
 
+      {/* Basic */}
+      <View style={[styles.pricingCard, isMobile && styles.pricingCardMobile]}>
+        <Text style={styles.tierName}>Basic</Text>
+        <View style={styles.priceContainer}>
+          <Text style={styles.price}>$120</Text>
+          <Text style={styles.pricePeriod}>/year</Text>
+        </View>
+        <Text style={styles.effectiveMonthly}>$10/mo</Text>
+        <Text style={styles.tierTagline}>Essential tools for club racers</Text>
+
+        <View style={styles.features}>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>Unlimited races</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>20 AI queries per month</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>Automatic weather updates</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>Race checklists & prep tools</Text>
+          </View>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>Cloud backup & sync</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.ctaButton, styles.ctaButtonOutline]}
+          onPress={() => router.push('/(auth)/signup')}
+        >
+          <Text style={styles.ctaButtonOutlineText}>Get Basic</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Pro */}
       <View style={[styles.pricingCard, styles.pricingCardFeatured, isMobile && styles.pricingCardMobile]}>
         <View style={styles.popularBadge}>
@@ -123,71 +164,36 @@ function SailorsPricing({ isDesktop, isMobile, isSmallMobile }: { isDesktop: boo
         </View>
         <Text style={[styles.tierName, { color: '#3E92CC' }]}>Pro</Text>
         <View style={styles.priceContainer}>
-          <Text style={[styles.price, { color: '#3E92CC' }]}>$300</Text>
+          <Text style={[styles.price, { color: '#3E92CC' }]}>$360</Text>
           <Text style={styles.pricePeriod}>/year</Text>
         </View>
-        <Text style={styles.effectiveMonthly}>$25/mo</Text>
-        <Text style={styles.tierTagline}>Full features for serious racers</Text>
+        <Text style={styles.effectiveMonthly}>$30/mo</Text>
+        <Text style={styles.tierTagline}>Full features for serious sailors</Text>
 
         <View style={styles.features}>
+          <View style={styles.feature}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>Everything in Basic</Text>
+          </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
             <Text style={styles.featureText}>Unlimited AI queries</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Full venue intelligence access</Text>
+            <Text style={styles.featureText}>AI strategy analysis</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Advanced race strategy</Text>
+            <Text style={styles.featureText}>Team sharing & collaboration</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Performance analytics</Text>
+            <Text style={styles.featureText}>Historical race data</Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
             <Text style={styles.featureText}>Offline mode</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: '#3E92CC' }]}
-          onPress={() => router.push('/(auth)/signup')}
-        >
-          <Text style={styles.ctaButtonText}>Get Pro</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Championship */}
-      <View style={[styles.pricingCard, isMobile && styles.pricingCardMobile]}>
-        <Text style={styles.tierName}>Championship</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.price}>$480</Text>
-          <Text style={styles.pricePeriod}>/year</Text>
-        </View>
-        <Text style={styles.effectiveMonthly}>$40/mo</Text>
-        <Text style={styles.tierTagline}>For teams & serious competitors</Text>
-
-        <View style={styles.features}>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Everything in Pro</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Up to 5 team members</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Advanced team analytics</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="star" size={16} color="#8B5CF6" />
-            <Text style={[styles.featureText, { color: '#8B5CF6', fontWeight: '600' }]}>
-              All Racing Academy modules included
-            </Text>
           </View>
           <View style={styles.feature}>
             <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
@@ -196,10 +202,10 @@ function SailorsPricing({ isDesktop, isMobile, isSmallMobile }: { isDesktop: boo
         </View>
 
         <TouchableOpacity
-          style={[styles.ctaButton, styles.ctaButtonOutline]}
+          style={[styles.ctaButton, { backgroundColor: '#3E92CC' }]}
           onPress={() => router.push('/(auth)/signup')}
         >
-          <Text style={styles.ctaButtonOutlineText}>Get Championship</Text>
+          <Text style={styles.ctaButtonText}>Get Pro</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -237,13 +243,13 @@ function RacingAcademyPricing({ isDesktop }: { isDesktop: boolean }) {
           <Text style={styles.popularText}>BEST VALUE</Text>
         </View>
         <Ionicons name="library" size={32} color="#8B5CF6" />
-        <Text style={styles.academyCardTitle}>All 3 Modules</Text>
+        <Text style={styles.academyCardTitle}>All Modules</Text>
         <View style={styles.priceContainer}>
-          <Text style={[styles.price, { fontSize: 36, color: '#8B5CF6' }]}>$75</Text>
+          <Text style={[styles.price, { fontSize: 36, color: '#8B5CF6' }]}>$100</Text>
           <Text style={styles.pricePeriod}>/year</Text>
         </View>
         <Text style={[styles.academyCardDesc, { color: '#10B981', fontWeight: '600' }]}>
-          Save $15
+          Best value for complete education
         </Text>
         <View style={styles.moduleList}>
           <View style={styles.moduleItemWithCheck}>
@@ -267,11 +273,11 @@ function RacingAcademyPricing({ isDesktop }: { isDesktop: boolean }) {
         </TouchableOpacity>
       </View>
 
-      {/* Championship Callout */}
+      {/* Pro Callout */}
       <View style={styles.championshipCallout}>
         <Ionicons name="gift" size={20} color="#8B5CF6" />
         <Text style={styles.championshipCalloutText}>
-          All Racing Academy modules are included FREE with Championship subscription
+          Subscribe to both Race Strategy Pro and All Learning Modules for complete racing mastery
         </Text>
       </View>
     </View>

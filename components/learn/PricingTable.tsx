@@ -86,7 +86,7 @@ function tierHasFeature(tier: PricingTier, feature: string): boolean {
 
 export function PricingTable({
   tiers,
-  featuredTierId = 'championship',
+  featuredTierId = 'pro',
   onSelectTier,
 }: PricingTableProps) {
   const allFeatures = collectAllFeatures(tiers);

@@ -349,11 +349,18 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   };
 
   // Get the price/product to determine tier
+  // Price IDs: Basic $120/yr, Pro $360/yr (updated 2026-01-15)
   const priceId = subscription.items.data[0]?.price.id;
   const tierMap: Record<string, string> = {
-    [Deno.env.get('STRIPE_BASIC_PRICE_ID') || '']: 'basic',
-    [Deno.env.get('STRIPE_PRO_PRICE_ID') || '']: 'pro',
-    [Deno.env.get('STRIPE_TEAM_PRICE_ID') || '']: 'team',
+    // Use env vars if set, with hardcoded fallbacks
+    [Deno.env.get('STRIPE_BASIC_PRICE_ID') || 'price_1Splo2BbfEeOhHXbHi1ENal0']: 'basic',
+    [Deno.env.get('STRIPE_PRO_PRICE_ID') || 'price_1SplplBbfEeOhHXbRunl0IIa']: 'pro',
+    // Hardcoded price IDs (in case env vars differ)
+    'price_1Splo2BbfEeOhHXbHi1ENal0': 'basic',  // $120/year
+    'price_1SplplBbfEeOhHXbRunl0IIa': 'pro',    // $360/year
+    // Legacy price IDs (map old prices to appropriate tiers)
+    'price_1Sl0i8BbfEeOhHXbmUQ5OBkV': 'basic',  // old $300/year Pro -> basic
+    'price_1Sl0ljBbfEeOhHXbKmEU06Ha': 'pro',    // old $480/year Championship -> pro
   };
 
   const { error } = await supabase
@@ -363,7 +370,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
       stripe_subscription_id: subscription.id,
       stripe_customer_id: customerId,
       status: statusMap[subscription.status] || subscription.status,
-      tier: tierMap[priceId] || 'pro',
+      tier: tierMap[priceId] || 'basic',
       current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
       current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
       cancel_at: subscription.cancel_at 
@@ -389,7 +396,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     .from('users')
     .update({
       subscription_status: statusMap[subscription.status] || subscription.status,
-      subscription_tier: tierMap[priceId] || 'pro',
+      subscription_tier: tierMap[priceId] || 'basic',
       subscription_updated_at: new Date().toISOString(),
     })
     .eq('id', user.id);

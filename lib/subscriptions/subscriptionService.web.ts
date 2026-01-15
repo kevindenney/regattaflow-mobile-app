@@ -23,7 +23,7 @@ export interface SubscriptionProduct {
 export interface SubscriptionStatus {
   isActive: boolean;
   productId: string | null;
-  tier: 'free' | 'pro' | 'championship';
+  tier: 'free' | 'basic' | 'pro';
   expiresAt: Date | null;
   willRenew: boolean;
   platform: 'ios' | 'android' | 'web';
@@ -41,54 +41,98 @@ export interface PurchaseResult {
 const logger = createLogger('subscriptionService.web');
 
 /**
- * Stripe Price IDs for individual subscriptions
- * Created: 2026-01-02
+ * Stripe Price IDs for subscriptions
+ * Updated: 2026-01-15
+ *
+ * Race Strategy: Free / Basic $120/yr / Pro $360/yr
+ * Learning: Free / Module $30/yr / Bundle $100/yr
  */
 export const STRIPE_PRICE_IDS = {
-  // Individual Race Strategy Planner
-  pro_yearly: 'price_1Sl0i8BbfEeOhHXbmUQ5OBkV',           // $300/year
-  championship_yearly: 'price_1Sl0ljBbfEeOhHXbKmEU06Ha', // $480/year
+  // Race Strategy Plans (yearly only)
+  basic_yearly: 'price_1Splo2BbfEeOhHXbHi1ENal0',     // $120/year
+  pro_yearly: 'price_1SplplBbfEeOhHXbRunl0IIa',       // $360/year
 
-  // Racing Academy
-  academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',      // $30/year per module
-  academy_bundle: 'price_1Sl0nTBbfEeOhHXbnk5Yh5AE',      // $75/year all modules
+  // Racing Academy / Learning
+  academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',   // $30/year per module
+  academy_bundle: 'price_1Splr8BbfEeOhHXbUEa1Yrn6',   // $100/year all modules
 };
 
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
+  basic: {
+    id: STRIPE_PRICE_IDS.basic_yearly,
+    title: 'Basic',
+    description: 'Essential tools for club racers',
+    price: '$120/year',
+    priceAmountMicros: 120000000,
+    priceCurrencyCode: 'USD',
+    billingPeriod: 'yearly',
+    effectiveMonthly: '$10/mo',
+    features: [
+      'Unlimited races',
+      '20 AI queries per month',
+      'Automatic weather updates',
+      'Race checklists & prep tools',
+      'Document upload & storage',
+      'Cloud backup & sync',
+    ],
+  },
   pro: {
     id: STRIPE_PRICE_IDS.pro_yearly,
     title: 'Pro',
     description: 'Full racing features for serious sailors',
-    price: '$300/year',
-    priceAmountMicros: 300000000,
+    price: '$360/year',
+    priceAmountMicros: 360000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    effectiveMonthly: '$25/mo',
+    effectiveMonthly: '$30/mo',
     isPopular: true,
     features: [
+      'Everything in Basic',
       'Unlimited AI queries',
-      'Full venue intelligence access',
-      'Advanced race strategy',
-      'Performance analytics',
+      'AI strategy analysis',
+      'Team sharing & collaboration',
+      'Historical race data',
       'Offline mode',
-      'Cloud backup and sync',
+      'Advanced analytics',
+      'Priority support',
     ],
   },
-  championship: {
-    id: STRIPE_PRICE_IDS.championship_yearly,
-    title: 'Championship',
-    description: 'For teams & serious competitors',
-    price: '$480/year',
-    priceAmountMicros: 480000000,
+};
+
+/**
+ * Learning/Academy subscription products
+ */
+export const LEARNING_PRODUCTS: Record<string, SubscriptionProduct> = {
+  module: {
+    id: STRIPE_PRICE_IDS.academy_module,
+    title: 'Single Module',
+    description: 'Access one learning module',
+    price: '$30/year',
+    priceAmountMicros: 30000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    effectiveMonthly: '$40/mo',
     features: [
-      'Everything in Pro',
-      'Up to 5 team members',
-      'Advanced team analytics',
-      'All Racing Academy modules included',
-      'Priority support',
+      'Choose any learning module',
+      'Interactive lessons',
+      'Progress tracking',
+      'Certificate on completion',
+    ],
+  },
+  bundle: {
+    id: STRIPE_PRICE_IDS.academy_bundle,
+    title: 'All Modules',
+    description: 'Access all learning content',
+    price: '$100/year',
+    priceAmountMicros: 100000000,
+    priceCurrencyCode: 'USD',
+    billingPeriod: 'yearly',
+    isPopular: true,
+    features: [
+      'All learning modules included',
+      'Interactive lessons & simulations',
+      'Progress tracking',
+      'Certificates on completion',
+      'New modules as released',
     ],
   },
 };

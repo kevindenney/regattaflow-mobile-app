@@ -32,11 +32,15 @@ interface VerifyPurchaseRequest {
 }
 
 // Product ID to tier mapping
+// Updated 2026-01-15: Map old product IDs to new tier names (free/basic/pro)
+// Old "pro" products → "basic" tier ($120/year equivalent)
+// Old "championship" products → "pro" tier ($360/year equivalent)
 const PRODUCT_TIER_MAP: Record<string, string> = {
-  'regattaflow_sailor_pro_monthly': 'sailor_pro',
-  'regattaflow_sailor_pro_yearly': 'sailor_pro',
-  'regattaflow_championship_monthly': 'championship',
-  'regattaflow_championship_yearly': 'championship',
+  'regattaflow_sailor_pro_monthly': 'basic',
+  'regattaflow_sailor_pro_yearly': 'basic',
+  'regattaflow_pro_yearly': 'basic',
+  'regattaflow_championship_monthly': 'pro',
+  'regattaflow_championship_yearly': 'pro',
 };
 
 serve(async (req: Request) => {
@@ -108,7 +112,7 @@ serve(async (req: Request) => {
     }
 
     // Determine subscription tier
-    const tier = PRODUCT_TIER_MAP[productId] || 'sailor_pro';
+    const tier = PRODUCT_TIER_MAP[productId] || 'basic';
 
     // Update user subscription in database
     const { error: updateError } = await supabase
