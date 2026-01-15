@@ -5,10 +5,11 @@
  * Slides in from the left with persona-aware navigation items.
  */
 
-import React from 'react';
+import React, { useRef, useEffect, RefObject } from 'react';
 import {
   Animated,
   Dimensions,
+  LayoutRectangle,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +23,7 @@ import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/providers/AuthProvider';
 import { TUFTE_BACKGROUND, TUFTE_BACKGROUND_SECONDARY, TUFTE_TEXT } from '@/components/cards/constants';
+import { useFeatureGate } from '@/hooks/useFeatureGate';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
@@ -69,13 +71,450 @@ const COMMON_FOOTER_ITEMS: NavItem[] = [
 interface NavigationDrawerProps {
   visible: boolean;
   onClose: () => void;
+  // Layout callbacks for onboarding tour spotlight
+  onLearnItemLayout?: (layout: LayoutRectangle) => void;
+  onVenueItemLayout?: (layout: LayoutRectangle) => void;
+  onCoachingItemLayout?: (layout: LayoutRectangle) => void;
+  onPricingItemLayout?: (layout: LayoutRectangle) => void;
 }
 
-export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
-  const { userType, userProfile, user, signOut } = useAuth();
+interface NavigationDrawerContentProps {
+  visible: boolean;
+  onClose: () => void;
+  onLearnItemLayout?: (layout: LayoutRectangle) => void;
+  onVenueItemLayout?: (layout: LayoutRectangle) => void;
+  onCoachingItemLayout?: (layout: LayoutRectangle) => void;
+  onPricingItemLayout?: (layout: LayoutRectangle) => void;
+  /** Ref to measure layout relative to (for iOS coordinate system fix in OnboardingTour) */
+  measureRelativeTo?: React.RefObject<View>;
+}
+
+/**
+ * Non-Modal drawer content for use inside OnboardingTour Modal.
+ * Renders the drawer panel with backdrop, without wrapping in a Modal.
+ */
+export function NavigationDrawerContent({
+  visible,
+  onClose,
+  onLearnItemLayout,
+  onVenueItemLayout,
+  onCoachingItemLayout,
+  onPricingItemLayout,
+  measureRelativeTo,
+}: NavigationDrawerContentProps) {
+  const { userType, userProfile, user, signOut, isGuest } = useAuth();
+  const { isFree } = useFeatureGate();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+
+  // Refs for onboarding tour spotlight
+  const learnItemRef = useRef<View>(null);
+  const venueItemRef = useRef<View>(null);
+  const coachingItemRef = useRef<View>(null);
+  const pricingItemRef = useRef<View>(null);
+
+  // Helper to measure an item's layout
+  const measureItem = (ref: RefObject<View>, callback?: (layout: LayoutRectangle) => void) => {
+    if (!callback || !ref.current) return;
+
+    if (Platform.OS === 'web') {
+      // Web: use getBoundingClientRect
+      const node = ref.current as unknown as { getBoundingClientRect?: () => DOMRect };
+      if (node?.getBoundingClientRect) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          callback({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+        }
+      }
+    } else if (measureRelativeTo?.current) {
+      // iOS/Android with measureRelativeTo: use measureLayout for coordinates relative to container
+      // This fixes the coordinate system mismatch when drawer is inside OnboardingTour Modal
+      ref.current.measureLayout(
+        measureRelativeTo.current as any,
+        (x, y, width, height) => {
+          if (width > 0 && height > 0) {
+            callback({ x, y, width, height });
+          }
+        },
+        () => {
+          // Fallback to measureInWindow if measureLayout fails
+          ref.current?.measureInWindow((x, y, width, height) => {
+            if (width > 0 && height > 0) {
+              callback({ x, y, width, height });
+            }
+          });
+        }
+      );
+    } else {
+      // Fallback: use measureInWindow (window-global coordinates)
+      ref.current.measureInWindow((x, y, width, height) => {
+        if (width > 0 && height > 0) {
+          callback({ x, y, width, height });
+        }
+      });
+    }
+  };
+
+  // Measure menu items when drawer is visible (for onboarding tour)
+  useEffect(() => {
+    if (!visible) return;
+
+    // Delay to ensure drawer animation is complete (increased for slower devices)
+    const timer = setTimeout(() => {
+      measureItem(learnItemRef, onLearnItemLayout);
+      measureItem(venueItemRef, onVenueItemLayout);
+      measureItem(coachingItemRef, onCoachingItemLayout);
+      measureItem(pricingItemRef, onPricingItemLayout);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [visible, onLearnItemLayout, onVenueItemLayout, onCoachingItemLayout, onPricingItemLayout, measureRelativeTo]);
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: -DRAWER_WIDTH,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleNavigation = (route: string) => {
+    onClose();
+    setTimeout(() => {
+      router.push(route as any);
+    }, 100);
+  };
+
+  const handleSignOut = async () => {
+    onClose();
+    try {
+      await signOut();
+    } catch (e) {
+      console.error('Sign out failed:', e);
+    }
+  };
+
+  const getNavItems = (): { primary: NavItem[]; secondary: NavItem[] } => {
+    switch (userType) {
+      case 'coach':
+        return { primary: COACH_NAV_ITEMS, secondary: [] };
+      case 'club':
+        return { primary: CLUB_NAV_ITEMS, secondary: [] };
+      case 'sailor':
+      default:
+        return { primary: SAILOR_NAV_ITEMS, secondary: SAILOR_SECONDARY_ITEMS };
+    }
+  };
+
+  const { primary, secondary } = getNavItems();
+
+  const isActive = (route: string) => {
+    const normalizedRoute = route.replace('/(tabs)/', '/').replace('/index', '');
+    return pathname === normalizedRoute || pathname.startsWith(normalizedRoute + '/');
+  };
+
+  const userInitial = isGuest ? 'G' : (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
+  const displayName = isGuest ? 'Guest' : (userProfile?.full_name || 'Sailor');
+
+  if (!visible) return null;
+
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.overlay]} pointerEvents="box-none">
+      {/* Backdrop - transparent, handled by tour overlay */}
+      <Pressable style={styles.contentBackdrop} onPress={onClose} />
+
+      {/* Drawer */}
+      <Animated.View
+        style={[
+          styles.drawer,
+          {
+            transform: [{ translateX: slideAnim }],
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 16,
+          },
+        ]}
+      >
+        {/* User Section */}
+        <View style={styles.userSection}>
+          <View style={styles.userAvatar}>
+            <Text style={styles.userAvatarText}>{userInitial}</Text>
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            {!isGuest && user?.email && (
+              <Text style={styles.userEmail} numberOfLines={1}>
+                {user.email}
+              </Text>
+            )}
+            {isGuest && (
+              <Text style={styles.userEmail} numberOfLines={1}>
+                Exploring the app
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Primary Navigation */}
+        <View style={styles.navSection}>
+          {primary.map((item) => {
+            const itemRef = item.key === 'learn' ? learnItemRef
+              : item.key === 'venue' ? venueItemRef
+              : null;
+
+            const navButton = (
+              <TouchableOpacity
+                key={item.key}
+                style={[
+                  styles.navItem,
+                  isActive(item.route) && styles.navItemActive,
+                ]}
+                onPress={() => handleNavigation(item.route)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={item.icon}
+                  size={20}
+                  color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
+                />
+                <Text
+                  style={[
+                    styles.navItemText,
+                    isActive(item.route) && styles.navItemTextActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+
+            if (itemRef) {
+              return (
+                <View key={item.key} ref={itemRef} collapsable={false}>
+                  {navButton}
+                </View>
+              );
+            }
+
+            return navButton;
+          })}
+        </View>
+
+        {/* Secondary Navigation (Sailors only) */}
+        {secondary.length > 0 && (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.sectionLabel}>MORE</Text>
+            <View style={styles.navSection}>
+              {secondary.map((item) => {
+                const itemRef = item.key === 'coaches' ? coachingItemRef : null;
+
+                const navButton = (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.navItem,
+                      isActive(item.route) && styles.navItemActive,
+                    ]}
+                    onPress={() => handleNavigation(item.route)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={item.icon}
+                      size={20}
+                      color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
+                    />
+                    <Text
+                      style={[
+                        styles.navItemText,
+                        isActive(item.route) && styles.navItemTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+
+                if (itemRef) {
+                  return (
+                    <View key={item.key} ref={itemRef} collapsable={false}>
+                      {navButton}
+                    </View>
+                  );
+                }
+
+                return navButton;
+              })}
+            </View>
+          </>
+        )}
+
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
+
+        {/* Footer */}
+        <View style={styles.divider} />
+        <View style={styles.navSection}>
+          {/* Account - only for authenticated users */}
+          {!isGuest && COMMON_FOOTER_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[
+                styles.navItem,
+                isActive(item.route) && styles.navItemActive,
+              ]}
+              onPress={() => handleNavigation(item.route)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={item.icon}
+                size={20}
+                color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
+              />
+              <Text
+                style={[
+                  styles.navItemText,
+                  isActive(item.route) && styles.navItemTextActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          {/* Plans - visible to guests and free users */}
+          {(isGuest || isFree) && (
+            <View ref={pricingItemRef} collapsable={false}>
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={() => handleNavigation('/pricing')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="pricetags-outline" size={20} color={TUFTE_TEXT} />
+                <Text style={styles.navItemText}>Plans</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Guest: Sign In / Sign Up buttons */}
+          {isGuest ? (
+            <>
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={() => handleNavigation('/(auth)/login')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="log-in-outline" size={20} color="#007AFF" />
+                <Text style={[styles.navItemText, styles.signInText]}>Sign In</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={() => handleNavigation('/(auth)/signup')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="person-add-outline" size={20} color="#007AFF" />
+                <Text style={[styles.navItemText, styles.signInText]}>Sign Up</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {/* Upgrade to Pro - for free tier users */}
+              {isFree && (
+                <TouchableOpacity
+                  style={styles.upgradeButton}
+                  onPress={() => handleNavigation('/pricing?upgrade=pro')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="rocket" size={18} color="#FFFFFF" />
+                  <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Authenticated: Sign Out button */}
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={handleSignOut}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                <Text style={[styles.navItemText, styles.signOutText]}>Sign Out</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+export function NavigationDrawer({
+  visible,
+  onClose,
+  onLearnItemLayout,
+  onVenueItemLayout,
+  onCoachingItemLayout,
+  onPricingItemLayout,
+}: NavigationDrawerProps) {
+  const { userType, userProfile, user, signOut, isGuest } = useAuth();
+  const { isFree, tierName } = useFeatureGate();
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+
+  // Refs for onboarding tour spotlight
+  const learnItemRef = useRef<View>(null);
+  const venueItemRef = useRef<View>(null);
+  const coachingItemRef = useRef<View>(null);
+  const pricingItemRef = useRef<View>(null);
+
+  // Helper to measure an item's layout
+  const measureItem = (ref: RefObject<View>, callback?: (layout: LayoutRectangle) => void) => {
+    if (!callback || !ref.current) return;
+
+    if (Platform.OS === 'web') {
+      const node = ref.current as unknown as { getBoundingClientRect?: () => DOMRect };
+      if (node?.getBoundingClientRect) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          callback({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+        }
+      }
+    } else {
+      ref.current.measureInWindow((x, y, width, height) => {
+        if (width > 0 && height > 0) {
+          callback({ x, y, width, height });
+        }
+      });
+    }
+  };
+
+  // Measure menu items when drawer is visible (for onboarding tour)
+  useEffect(() => {
+    if (!visible) return;
+
+    // Delay to ensure drawer animation is complete
+    const timer = setTimeout(() => {
+      measureItem(learnItemRef, onLearnItemLayout);
+      measureItem(venueItemRef, onVenueItemLayout);
+      measureItem(coachingItemRef, onCoachingItemLayout);
+      measureItem(pricingItemRef, onPricingItemLayout);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [visible, onLearnItemLayout, onVenueItemLayout, onCoachingItemLayout, onPricingItemLayout]);
 
   React.useEffect(() => {
     if (visible) {
@@ -139,7 +578,8 @@ export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
     return activeItem?.label || 'RegattaFlow';
   };
 
-  const userInitial = (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
+  const userInitial = isGuest ? 'G' : (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
+  const displayName = isGuest ? 'Guest' : (userProfile?.full_name || 'Sailor');
 
   return (
     <Modal
@@ -170,11 +610,18 @@ export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
             </View>
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>
-                {userProfile?.full_name || 'Sailor'}
+                {displayName}
               </Text>
-              <Text style={styles.userEmail} numberOfLines={1}>
-                {user?.email}
-              </Text>
+              {!isGuest && user?.email && (
+                <Text style={styles.userEmail} numberOfLines={1}>
+                  {user.email}
+                </Text>
+              )}
+              {isGuest && (
+                <Text style={styles.userEmail} numberOfLines={1}>
+                  Exploring the app
+                </Text>
+              )}
             </View>
           </View>
 
@@ -182,31 +629,49 @@ export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
 
           {/* Primary Navigation */}
           <View style={styles.navSection}>
-            {primary.map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[
-                  styles.navItem,
-                  isActive(item.route) && styles.navItemActive,
-                ]}
-                onPress={() => handleNavigation(item.route)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={item.icon}
-                  size={20}
-                  color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
-                />
-                <Text
+            {primary.map((item) => {
+              // Get ref for onboarding tour spotlight
+              const itemRef = item.key === 'learn' ? learnItemRef
+                : item.key === 'venue' ? venueItemRef
+                : null;
+
+              const navButton = (
+                <TouchableOpacity
+                  key={item.key}
                   style={[
-                    styles.navItemText,
-                    isActive(item.route) && styles.navItemTextActive,
+                    styles.navItem,
+                    isActive(item.route) && styles.navItemActive,
                   ]}
+                  onPress={() => handleNavigation(item.route)}
+                  activeOpacity={0.7}
                 >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Ionicons
+                    name={item.icon}
+                    size={20}
+                    color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
+                  />
+                  <Text
+                    style={[
+                      styles.navItemText,
+                      isActive(item.route) && styles.navItemTextActive,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+
+              // Wrap with ref if needed for onboarding tour
+              if (itemRef) {
+                return (
+                  <View key={item.key} ref={itemRef} collapsable={false}>
+                    {navButton}
+                  </View>
+                );
+              }
+
+              return navButton;
+            })}
           </View>
 
           {/* Secondary Navigation (Sailors only) */}
@@ -215,31 +680,47 @@ export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
               <View style={styles.divider} />
               <Text style={styles.sectionLabel}>MORE</Text>
               <View style={styles.navSection}>
-                {secondary.map((item) => (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[
-                      styles.navItem,
-                      isActive(item.route) && styles.navItemActive,
-                    ]}
-                    onPress={() => handleNavigation(item.route)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={item.icon}
-                      size={20}
-                      color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
-                    />
-                    <Text
+                {secondary.map((item) => {
+                  // Get ref for onboarding tour spotlight (coaches)
+                  const itemRef = item.key === 'coaches' ? coachingItemRef : null;
+
+                  const navButton = (
+                    <TouchableOpacity
+                      key={item.key}
                       style={[
-                        styles.navItemText,
-                        isActive(item.route) && styles.navItemTextActive,
+                        styles.navItem,
+                        isActive(item.route) && styles.navItemActive,
                       ]}
+                      onPress={() => handleNavigation(item.route)}
+                      activeOpacity={0.7}
                     >
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Ionicons
+                        name={item.icon}
+                        size={20}
+                        color={isActive(item.route) ? '#007AFF' : TUFTE_TEXT}
+                      />
+                      <Text
+                        style={[
+                          styles.navItemText,
+                          isActive(item.route) && styles.navItemTextActive,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+
+                  // Wrap with ref if needed for onboarding tour
+                  if (itemRef) {
+                    return (
+                      <View key={item.key} ref={itemRef} collapsable={false}>
+                        {navButton}
+                      </View>
+                    );
+                  }
+
+                  return navButton;
+                })}
               </View>
             </>
           )}
@@ -250,7 +731,8 @@ export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
           {/* Footer */}
           <View style={styles.divider} />
           <View style={styles.navSection}>
-            {COMMON_FOOTER_ITEMS.map((item) => (
+            {/* Account - only for authenticated users */}
+            {!isGuest && COMMON_FOOTER_ITEMS.map((item) => (
               <TouchableOpacity
                 key={item.key}
                 style={[
@@ -275,14 +757,66 @@ export function NavigationDrawer({ visible, onClose }: NavigationDrawerProps) {
                 </Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={styles.navItem}
-              onPress={handleSignOut}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-              <Text style={[styles.navItemText, styles.signOutText]}>Sign Out</Text>
-            </TouchableOpacity>
+
+            {/* Plans - visible to guests and free users */}
+            {(isGuest || isFree) && (
+              <View ref={pricingItemRef} collapsable={false}>
+                <TouchableOpacity
+                  style={styles.navItem}
+                  onPress={() => handleNavigation('/pricing')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="pricetags-outline" size={20} color={TUFTE_TEXT} />
+                  <Text style={styles.navItemText}>Plans</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Guest: Sign In / Sign Up buttons */}
+            {isGuest ? (
+              <>
+                <TouchableOpacity
+                  style={styles.navItem}
+                  onPress={() => handleNavigation('/(auth)/login')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="log-in-outline" size={20} color="#007AFF" />
+                  <Text style={[styles.navItemText, styles.signInText]}>Sign In</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.navItem}
+                  onPress={() => handleNavigation('/(auth)/signup')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="person-add-outline" size={20} color="#007AFF" />
+                  <Text style={[styles.navItemText, styles.signInText]}>Sign Up</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {/* Upgrade to Pro - for free tier users */}
+                {isFree && (
+                  <TouchableOpacity
+                    style={styles.upgradeButton}
+                    onPress={() => handleNavigation('/pricing?upgrade=pro')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="rocket" size={18} color="#FFFFFF" />
+                    <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Authenticated: Sign Out button */}
+                <TouchableOpacity
+                  style={styles.navItem}
+                  onPress={handleSignOut}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                  <Text style={[styles.navItemText, styles.signOutText]}>Sign Out</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </Animated.View>
       </View>
@@ -324,6 +858,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  contentBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent', // Tour overlay handles darkening
   },
   drawer: {
     width: DRAWER_WIDTH,
@@ -415,6 +957,25 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     color: '#DC2626',
+  },
+  signInText: {
+    color: '#007AFF',
+  },
+  upgradeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#0284c7',
+    marginBottom: 8,
+    gap: 8,
+  },
+  upgradeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

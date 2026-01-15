@@ -6,8 +6,8 @@
  * Integrates with NavigationDrawer for Tufte-style navigation.
  */
 
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Pressable, Animated, useWindowDimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Pressable, Animated, useWindowDimensions, LayoutRectangle } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
 import { floatingHeaderStyles } from '@/components/races/styles';
@@ -27,6 +27,21 @@ export interface RacesFloatingHeaderProps {
   onAddRace: () => void;
   /** Callback when add practice is pressed */
   onAddPractice?: () => void;
+  /** Callback to expose the + button's layout for onboarding tour spotlight */
+  onAddButtonLayout?: (layout: LayoutRectangle) => void;
+  /** Trigger value to force re-measurement of add button (e.g., when tour becomes visible) */
+  measureTrigger?: boolean | number;
+  /** Controlled drawer visibility (for onboarding tour) */
+  drawerVisible?: boolean;
+  /** Callback when drawer visibility changes */
+  onDrawerVisibleChange?: (visible: boolean) => void;
+  /** Layout callbacks for navigation drawer menu items (onboarding tour) */
+  onLearnItemLayout?: (layout: LayoutRectangle) => void;
+  onVenueItemLayout?: (layout: LayoutRectangle) => void;
+  onCoachingItemLayout?: (layout: LayoutRectangle) => void;
+  onPricingItemLayout?: (layout: LayoutRectangle) => void;
+  /** Skip rendering drawer internally (for rendering it separately during tour) */
+  skipDrawer?: boolean;
 }
 
 /**
@@ -39,12 +54,55 @@ export function RacesFloatingHeader({
   isOnline,
   onAddRace,
   onAddPractice,
+  onAddButtonLayout,
+  measureTrigger,
+  drawerVisible: controlledDrawerVisible,
+  onDrawerVisibleChange,
+  onLearnItemLayout,
+  onVenueItemLayout,
+  onCoachingItemLayout,
+  onPricingItemLayout,
+  skipDrawer = false,
 }: RacesFloatingHeaderProps) {
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  // Support both controlled and uncontrolled drawer state
+  const [internalDrawerVisible, setInternalDrawerVisible] = useState(false);
+  const isDrawerVisible = controlledDrawerVisible ?? internalDrawerVisible;
+  const setDrawerVisible = onDrawerVisibleChange ?? setInternalDrawerVisible;
+
   const [menuVisible, setMenuVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const { width: windowWidth } = useWindowDimensions();
+
+  // Ref for the + button to expose layout for onboarding tour
+  const addButtonRef = useRef<View>(null);
+
+  // Measure and report the + button's layout for onboarding tour spotlight
+  // Re-measures when measureTrigger changes (e.g., when tour becomes visible)
+  useEffect(() => {
+    if (!onAddButtonLayout) return;
+
+    // Small delay to ensure the button has rendered and any layout changes have settled
+    const timer = setTimeout(() => {
+      if (Platform.OS === 'web') {
+        const buttonNode = addButtonRef.current as unknown as { getBoundingClientRect?: () => DOMRect };
+        if (buttonNode?.getBoundingClientRect) {
+          const rect = buttonNode.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            onAddButtonLayout({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+          }
+        }
+      } else {
+        addButtonRef.current?.measureInWindow((x, y, width, height) => {
+          if (width > 0 && height > 0) {
+            onAddButtonLayout({ x, y, width, height });
+          }
+        });
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [onAddButtonLayout, measureTrigger]);
 
   // Show menu with animation
   const showMenu = () => {
@@ -107,7 +165,7 @@ export function RacesFloatingHeader({
 
   return (
     <>
-      <View style={[floatingHeaderStyles.container, styles.headerBg, { paddingTop: topInset + 8 }]}>
+      <View style={[floatingHeaderStyles.container, styles.headerBg, { paddingTop: topInset }]}>
         {/* Left: Hamburger menu */}
         <View style={floatingHeaderStyles.left}>
           <TouchableOpacity
@@ -130,23 +188,31 @@ export function RacesFloatingHeader({
         {/* Right: Actions */}
         <View style={floatingHeaderStyles.right}>
           {!isOnline && <OfflineIndicator />}
-          {/* Add button */}
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleAddPress}
-            accessibilityLabel="Add race or practice"
-            accessibilityRole="button"
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
+          {/* Add button - wrapped with ref for onboarding tour spotlight */}
+          <View ref={addButtonRef} collapsable={false}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleAddPress}
+              accessibilityLabel="Add race or practice"
+              accessibilityRole="button"
+            >
+              <Text style={styles.addButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      {/* Navigation Drawer */}
-      <NavigationDrawer
-        visible={drawerVisible}
-        onClose={() => setDrawerVisible(false)}
-      />
+      {/* Navigation Drawer - skip when rendered separately during tour */}
+      {!skipDrawer && (
+        <NavigationDrawer
+          visible={isDrawerVisible}
+          onClose={() => setDrawerVisible(false)}
+          onLearnItemLayout={onLearnItemLayout}
+          onVenueItemLayout={onVenueItemLayout}
+          onCoachingItemLayout={onCoachingItemLayout}
+          onPricingItemLayout={onPricingItemLayout}
+        />
+      )}
 
       {/* Add Menu Modal - Custom design for all platforms */}
       <Modal
