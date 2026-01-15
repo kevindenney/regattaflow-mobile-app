@@ -6,7 +6,7 @@
 
 module.exports = {
   expo: {
-    name: 'regattaflow-app',
+    name: 'RegattaFlow',
     slug: 'regattaflow-app',
     owner: 'denneyke',
     version: '1.0.0',
@@ -27,8 +27,25 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.regattaflow.app',
+      buildNumber: '2',
+      usesAppleSignIn: true,
+      config: {
+        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+      },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSLocationWhenInUseUsageDescription:
+          'RegattaFlow needs your location to track race performance and provide accurate wind and current data.',
+        NSLocationAlwaysAndWhenInUseUsageDescription:
+          'RegattaFlow needs your location to track race performance and provide accurate wind and current data.',
+        NSCameraUsageDescription:
+          'RegattaFlow needs camera access to capture race moments and scan course marks.',
+        NSMicrophoneUsageDescription:
+          'RegattaFlow needs microphone access for voice notes and coaching feedback.',
+        NSPhotoLibraryUsageDescription:
+          'RegattaFlow needs photo library access to save and share race media.',
+        NSSpeechRecognitionUsageDescription:
+          'RegattaFlow uses speech recognition for voice commands and hands-free operation while sailing.',
       },
     },
     android: {
@@ -66,6 +83,13 @@ module.exports = {
       'expo-router',
       './plugins/withAndroidDependencyFix',
       './plugins/withGoogleMaps',
+      'expo-apple-authentication',
+      [
+        '@react-native-google-signin/google-signin',
+        {
+          iosUrlScheme: 'com.googleusercontent.apps.176626806015-s39mdhh67n9u2vpmo62jacrcif0g4g0d',
+        },
+      ],
     ],
     updates: {
       enabled: false,

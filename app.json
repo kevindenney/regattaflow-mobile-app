@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": "regattaflow-app",
+    "name": "RegattaFlow",
     "slug": "regattaflow-app",
+    "owner": "denneyke",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "regattaflow",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "deep": {
       "scheme": "regattaflow",
       "hosts": [
@@ -21,18 +22,17 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "bundleIdentifier": "com.regattaflow.app",
-      "buildNumber": "1.0.0",
       "supportsTablet": true,
+      "bundleIdentifier": "com.regattaflow.app",
+      "buildNumber": "2",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "RegattaFlow needs your location to track race performance and provide accurate wind and current data.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "RegattaFlow needs your location to track race performance and provide accurate wind and current data.",
         "NSCameraUsageDescription": "RegattaFlow needs camera access to capture race moments and scan course marks.",
         "NSMicrophoneUsageDescription": "RegattaFlow needs microphone access for voice notes and coaching feedback.",
-        "NSPhotoLibraryUsageDescription": "RegattaFlow needs photo library access to save and share race media."
-      },
-      "config": {
-        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_IOS_API_KEY"
+        "NSPhotoLibraryUsageDescription": "RegattaFlow needs photo library access to save and share race media.",
+        "NSSpeechRecognitionUsageDescription": "RegattaFlow uses speech recognition for voice commands and hands-free operation while sailing."
       }
     },
     "android": {
@@ -54,14 +54,11 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_ANDROID_API_KEY"
-        }
-      }
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
     },
     "web": {
-      "bundler": "webpack",
+      "bundler": "metro",
       "favicon": "./assets/images/favicon.png",
       "output": "single",
       "name": "RegattaFlow - Sailing Race Strategy & Performance",
@@ -75,13 +72,27 @@
       "orientation": "portrait"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "./plugins/withAndroidDependencyFix",
+      "./plugins/withGoogleMaps",
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.176626806015-s39mdhh67n9u2vpmo62jacrcif0g4g0d"
+        }
+      ]
     ],
+    "updates": {
+      "enabled": false
+    },
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "useMockWeather": false
+      "eas": {
+        "projectId": "bab702c1-4ae8-42aa-ae6a-7982de755dd7"
+      }
     }
   }
 }
