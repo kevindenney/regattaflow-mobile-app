@@ -116,14 +116,17 @@ export function useRaceListData({
 
     return liveRaces.map((regatta) => {
       const metadata = regatta?.metadata ?? {};
+      // Extract time from start_date using UTC to match how Edit Form stores/reads it
       const derivedStartTime =
         regatta?.startTime ??
         regatta?.warning_signal_time ??
         (regatta?.start_date
-          ? new Date(regatta.start_date).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
+          ? (() => {
+              const d = new Date(regatta.start_date);
+              const hours = d.getUTCHours().toString().padStart(2, '0');
+              const minutes = d.getUTCMinutes().toString().padStart(2, '0');
+              return `${hours}:${minutes}`;
+            })()
           : undefined);
 
       return {

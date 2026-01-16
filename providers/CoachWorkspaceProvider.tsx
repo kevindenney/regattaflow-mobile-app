@@ -70,12 +70,13 @@ interface CoachWorkspaceProviderProps {
 }
 
 function CoachWorkspaceProviderInner({ children }: CoachWorkspaceProviderProps) {
-  const { user, userType, coachProfile: authCoachProfile } = useAuth();
+  const { user, userType, coachProfile: authCoachProfile, capabilities } = useAuth();
 
-  // Determine if current user is a coach
-  const isCoach = userType === 'coach';
+  // Determine if current user has coaching capability
+  // Support both: new capability model (hasCoaching) and legacy (userType='coach')
+  const hasCoaching = capabilities?.hasCoaching || userType === 'coach';
   // Use user.id (which is the user_id in coach_profiles table) instead of authCoachProfile.id
-  const coachId = isCoach && user?.id ? user.id : null;
+  const coachId = hasCoaching && user?.id ? user.id : null;
 
   // Query: Coach Profile
   const {

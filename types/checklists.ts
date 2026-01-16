@@ -27,7 +27,8 @@ export type ChecklistCategory =
   | 'weather'           // All types
   | 'morning'           // Race morning general
   | 'on_water'          // On water checks
-  | 'documents';        // Race documents (NOR, SI, Course)
+  | 'documents'         // Race documents (NOR, SI, Course)
+  | 'strategy';         // Strategy brief checklist
 
 /**
  * Priority level for checklist items
@@ -183,6 +184,12 @@ export const CATEGORY_CONFIG: Record<ChecklistCategory, CategoryConfig> = {
     label: 'DOCUMENTS',
     icon: 'FileText',
     color: '#5856D6', // iOS purple
+  },
+  strategy: {
+    id: 'strategy',
+    label: 'STRATEGY',
+    icon: 'Target',
+    color: '#FF2D55', // iOS pink
   },
 };
 

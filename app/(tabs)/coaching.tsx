@@ -26,7 +26,7 @@ import { coachStrategyService } from '@/services/CoachStrategyService';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -251,7 +251,8 @@ export default function CoachingHubScreen() {
   // === ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS ===
 
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isGuest, capabilities } = useAuth();
+  const isAuthenticated = !!user && !isGuest;
 
   const [isCoach, setIsCoach] = useState(false);
   const [checkingCoachStatus, setCheckingCoachStatus] = useState(true);
@@ -390,6 +391,20 @@ export default function CoachingHubScreen() {
   };
 
   // === EARLY RETURNS ===
+
+  // Guest/unauthenticated view
+  if (!isAuthenticated) {
+    return (
+      <GuestCoachingView
+        coaches={coachesToUse}
+        loading={loadingCoaches}
+        onSignUp={() => router.push('/(auth)/signup')}
+        onLogIn={() => router.push('/(auth)/login')}
+        onBecomeCoach={() => router.push('/(auth)/coach-onboarding-welcome')}
+        onCoachPress={(coachId) => router.push(`/coach/${coachId}`)}
+      />
+    );
+  }
 
   if (checkingCoachStatus) {
     return (
@@ -578,6 +593,27 @@ export default function CoachingHubScreen() {
           </View>
         </TufteSection>
 
+        {/* Become a Coach CTA - only for sailors without coaching capability */}
+        {!capabilities?.hasCoaching && (
+          <TufteSection title="BECOME A COACH">
+            <View style={styles.becomeCoachContainer}>
+              <View style={styles.becomeCoachContent}>
+                <Text style={styles.becomeCoachTitle}>Share Your Expertise</Text>
+                <Text style={styles.becomeCoachDescription}>
+                  Turn your sailing knowledge into income. Coach sailors worldwide, set your own rates, and build your reputation on RegattaFlow.
+                </Text>
+                <TouchableOpacity
+                  style={styles.becomeCoachButton}
+                  onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+                >
+                  <Text style={styles.becomeCoachButtonText}>Get Started</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TufteSection>
+        )}
+
         {/* Bottom padding */}
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -703,6 +739,133 @@ function TufteResourceRow({
         <Text style={styles.resourceChevron}>›</Text>
       </View>
     </TouchableOpacity>
+  );
+}
+
+// =============================================================================
+// GUEST VIEW COMPONENT
+// =============================================================================
+
+interface GuestCoachingViewProps {
+  coaches: DiscoverCoach[];
+  loading: boolean;
+  onSignUp: () => void;
+  onLogIn: () => void;
+  onBecomeCoach: () => void;
+  onCoachPress: (coachId: string) => void;
+}
+
+function GuestCoachingView({
+  coaches,
+  loading,
+  onSignUp,
+  onLogIn,
+  onBecomeCoach,
+  onCoachPress,
+}: GuestCoachingViewProps) {
+  const benefits = [
+    { icon: 'videocam-outline' as const, text: 'Video analysis & race debriefs' },
+    { icon: 'boat-outline' as const, text: 'On-water & remote sessions' },
+    { icon: 'shield-checkmark-outline' as const, text: 'Secure payments & scheduling' },
+    { icon: 'star-outline' as const, text: 'Verified coach reviews' },
+  ];
+
+  return (
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.guestScrollContent}>
+        {/* Hero Section */}
+        <View style={styles.guestHero}>
+          <View style={styles.guestHeroIcon}>
+            <Ionicons name="school" size={48} color={IOS_COLORS.blue} />
+          </View>
+          <Text style={styles.guestHeroTitle}>Find Your Perfect Coach</Text>
+          <Text style={styles.guestHeroSubtitle}>
+            Connect with Olympic coaches, match racing pros, and foiling experts for personalized training sessions.
+          </Text>
+        </View>
+
+        {/* Featured Coaches Preview */}
+        <TufteSection title="FEATURED COACHES">
+          <View style={styles.coachesContainer}>
+            {loading ? (
+              <View style={styles.guestLoadingCoaches}>
+                <ActivityIndicator size="small" color={IOS_COLORS.blue} />
+                <Text style={styles.guestLoadingText}>Loading coaches...</Text>
+              </View>
+            ) : (
+              coaches.slice(0, 3).map((coach, index) => (
+                <TouchableOpacity
+                  key={coach.id}
+                  style={[styles.guestCoachRow, index === Math.min(coaches.length, 3) - 1 && styles.guestCoachRowLast]}
+                  onPress={() => onCoachPress(coach.id)}
+                  activeOpacity={0.6}
+                >
+                  <View style={styles.guestCoachAvatar}>
+                    <Ionicons name="person" size={24} color={IOS_COLORS.secondaryLabel} />
+                  </View>
+                  <View style={styles.guestCoachInfo}>
+                    <View style={styles.guestCoachNameRow}>
+                      <Text style={styles.guestCoachName}>{coach.display_name}</Text>
+                      {coach.average_rating && (
+                        <Text style={styles.guestCoachRating}>★ {coach.average_rating.toFixed(1)}</Text>
+                      )}
+                    </View>
+                    <Text style={styles.guestCoachBio} numberOfLines={1}>{coach.bio}</Text>
+                    <Text style={styles.guestCoachMeta}>
+                      {coach.based_at} · {coach.total_sessions || 0} sessions
+                    </Text>
+                  </View>
+                  <Text style={styles.guestCoachChevron}>›</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </TufteSection>
+
+        {/* Benefits Section */}
+        <TufteSection title="WHY REGATTAFLOW COACHING">
+          <View style={styles.guestBenefitsContainer}>
+            {benefits.map((benefit, index) => (
+              <View
+                key={benefit.text}
+                style={[styles.guestBenefitRow, index === benefits.length - 1 && styles.guestBenefitRowLast]}
+              >
+                <Ionicons name={benefit.icon} size={20} color={IOS_COLORS.blue} />
+                <Text style={styles.guestBenefitText}>{benefit.text}</Text>
+              </View>
+            ))}
+          </View>
+        </TufteSection>
+
+        {/* CTA Section */}
+        <View style={styles.guestCTAContainer}>
+          <TouchableOpacity style={styles.guestPrimaryButton} onPress={onSignUp}>
+            <Text style={styles.guestPrimaryButtonText}>Sign Up to Get Started</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.guestSecondaryButton} onPress={onLogIn}>
+            <Text style={styles.guestSecondaryButtonText}>Already have an account? Log In</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Become a Coach Section */}
+        <View style={styles.guestBecomeCoachSection}>
+          <View style={styles.guestBecomeCoachContent}>
+            <Ionicons name="trophy-outline" size={28} color={IOS_COLORS.blue} style={{ marginBottom: 12 }} />
+            <Text style={styles.guestBecomeCoachTitle}>Are you a coach?</Text>
+            <Text style={styles.guestBecomeCoachDescription}>
+              Share your expertise and earn money coaching sailors worldwide on RegattaFlow.
+            </Text>
+            <TouchableOpacity style={styles.guestBecomeCoachButton} onPress={onBecomeCoach}>
+              <Text style={styles.guestBecomeCoachButtonText}>Become a Coach</Text>
+              <Ionicons name="arrow-forward" size={16} color={IOS_COLORS.blue} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Bottom padding */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1045,6 +1208,251 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: IOS_COLORS.tertiaryLabel,
+  },
+
+  // ==========================================================================
+  // GUEST VIEW STYLES
+  // ==========================================================================
+
+  guestScrollContent: {
+    paddingBottom: 40,
+  },
+
+  // Guest Hero
+  guestHero: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 32,
+    paddingHorizontal: TufteTokens.spacing.section,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.color,
+  },
+  guestHeroIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#EBF5FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  guestHeroTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  guestHeroSubtitle: {
+    fontSize: 16,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 320,
+  },
+
+  // Guest Loading Coaches
+  guestLoadingCoaches: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  guestLoadingText: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Guest Coach Row
+  guestCoachRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: TufteTokens.spacing.section,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.colorSubtle,
+  },
+  guestCoachRowLast: {
+    borderBottomWidth: 0,
+  },
+  guestCoachAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  guestCoachInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  guestCoachNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  guestCoachName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  guestCoachRating: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#F59E0B',
+  },
+  guestCoachBio: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  guestCoachMeta: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  guestCoachChevron: {
+    fontSize: 20,
+    color: IOS_COLORS.gray3,
+    marginLeft: 8,
+  },
+
+  // Guest Benefits
+  guestBenefitsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+  guestBenefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: TufteTokens.spacing.section,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderBottomColor: TufteTokens.borders.colorSubtle,
+    gap: 12,
+  },
+  guestBenefitRowLast: {
+    borderBottomWidth: 0,
+  },
+  guestBenefitText: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
+  },
+
+  // Guest CTA
+  guestCTAContainer: {
+    paddingVertical: 32,
+    paddingHorizontal: TufteTokens.spacing.section,
+    gap: 12,
+  },
+  guestPrimaryButton: {
+    backgroundColor: IOS_COLORS.blue,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  guestPrimaryButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  guestSecondaryButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  guestSecondaryButtonText: {
+    fontSize: 15,
+    color: IOS_COLORS.blue,
+  },
+
+  // Guest Become a Coach
+  guestBecomeCoachSection: {
+    marginHorizontal: TufteTokens.spacing.section,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: TufteTokens.borders.color,
+    overflow: 'hidden',
+  },
+  guestBecomeCoachContent: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  guestBecomeCoachTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 8,
+  },
+  guestBecomeCoachDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  guestBecomeCoachButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue,
+  },
+  guestBecomeCoachButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+
+  // ==========================================================================
+  // BECOME A COACH SECTION (Authenticated Sailor)
+  // ==========================================================================
+
+  becomeCoachContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: TufteTokens.borders.hairline,
+    borderBottomWidth: TufteTokens.borders.hairline,
+    borderColor: TufteTokens.borders.color,
+  },
+  becomeCoachContent: {
+    paddingVertical: 20,
+    paddingHorizontal: TufteTokens.spacing.section,
+  },
+  becomeCoachTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 8,
+  },
+  becomeCoachDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  becomeCoachButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 20,
+  },
+  becomeCoachButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

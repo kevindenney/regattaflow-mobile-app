@@ -152,6 +152,7 @@ interface Race {
   id: string;
   name: string;
   venue?: string;
+  boat_id?: string | null;
   date: string;
   startTime?: string;
   boatClass?: string;
@@ -359,7 +360,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
 
         // Extract VHF channel from multiple possible locations
         // Check top-level column first (where ComprehensiveRaceEntry stores it)
-        const vhfChannel = 
+        const vhfChannel =
           regatta.vhf_channel ||  // Top-level database column
           regatta.metadata?.vhf_channel ||
           regatta.metadata?.critical_details?.vhf_channel ||
@@ -375,15 +376,15 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
         };
 
         // Extract class_id for rig tuning lookup
-        const classId = 
+        const classId =
           regatta.class_id ||
           regatta.metadata?.class_id ||
           regatta.metadata?.classId ||
           null;
 
         // Extract class name - try multiple sources including extracting from race name
-        let className = 
-          regatta.metadata?.class || 
+        let className =
+          regatta.metadata?.class ||
           regatta.metadata?.class_name ||
           null;
 
@@ -432,7 +433,9 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           critical_details,
           created_by: regatta.created_by, // Preserve for edit/delete permission checks
           venueCoordinates, // Include coordinates for weather fetching
+          venueCoordinates, // Include coordinates for weather fetching
           metadata: regatta.metadata, // Preserve full metadata for sample detection
+          boat_id: regatta.boat_id, // Preserve boat_id for equipment/sails
           // Distance racing fields
           race_type: regatta.race_type || (regatta.route_waypoints?.length > 0 ? 'distance' : 'fleet'),
           total_distance_nm: regatta.total_distance_nm,
@@ -503,7 +506,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           // For past races, check if we have stored wind data in regatta columns
           const r = regatta as any;
           const hasStoredWind = r.expected_wind_speed_min || r.expected_wind_speed_max ||
-                                r.metadata?.wind || r.weather_conditions;
+            r.metadata?.wind || r.weather_conditions;
 
           if (hasStoredWind) {
             // Check multiple sources for stored weather data
@@ -584,18 +587,18 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           // 3. venue_coordinates (alternate format)
           // 4. route_waypoints (distance races - calculate centroid)
           let coords: { lat: number; lng: number } | null = null;
-          
+
           // 1. Check racing_area_coordinates
           const racingAreaCoords = regatta.metadata?.racing_area_coordinates;
           if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
             coords = { lat: racingAreaCoords.lat, lng: racingAreaCoords.lng };
           }
-          
+
           // 2. Check venue_lat/venue_lng
           if (!coords && regatta.metadata?.venue_lat && regatta.metadata?.venue_lng) {
             coords = { lat: regatta.metadata.venue_lat, lng: regatta.metadata.venue_lng };
           }
-          
+
           // 3. Check venue_coordinates
           const venueCoords = regatta.metadata?.venue_coordinates;
           if (!coords && venueCoords?.lat && venueCoords?.lng) {
@@ -717,7 +720,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
       // Fall back to basic mapping with status indicators
       setEnrichedRaces(races.map(regatta => {
         // Extract VHF channel from multiple possible locations
-        const vhfChannel = 
+        const vhfChannel =
           regatta.vhf_channel ||
           regatta.metadata?.vhf_channel ||
           regatta.metadata?.critical_details?.vhf_channel ||
@@ -725,8 +728,8 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           null;
 
         // Extract class name - try multiple sources including extracting from race name
-        let className = 
-          regatta.metadata?.class || 
+        let className =
+          regatta.metadata?.class ||
           regatta.metadata?.class_name ||
           null;
 

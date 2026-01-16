@@ -158,14 +158,37 @@ export function StartStrategyCard({
   // Load user's manual strategy
   // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   useEffect(() => {
-    if (!user?.id || !raceEventId) return;
+    console.log('[StartStrategyCard] Load effect triggered:', {
+      raceEventId,
+      userId: user?.id,
+      hasUser: !!user
+    });
+
+    if (!user?.id || !raceEventId) {
+      console.warn('[StartStrategyCard] LOAD SKIPPED - missing:', {
+        hasUserId: !!user?.id,
+        hasRaceEventId: !!raceEventId,
+        raceEventId
+      });
+      return;
+    }
 
     const loadUserStrategy = async () => {
+      console.log('[StartStrategyCard] loadUserStrategy called:', {
+        raceEventId,
+        userId: user?.id
+      });
       try {
         const prep = await strategicPlanningService.getPreparationWithStrategy(
           raceEventId,
           user.id // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         );
+        console.log('[StartStrategyCard] loadUserStrategy result:', {
+          raceEventId,
+          hasPrep: !!prep,
+          hasStartStrategy: !!prep?.start_strategy,
+          startStrategyPreview: prep?.start_strategy?.substring(0, 50)
+        });
         if (prep?.start_strategy) {
           setUserStrategy(prep.start_strategy);
         }
@@ -180,19 +203,38 @@ export function StartStrategyCard({
   // Auto-save user's strategy on change
   // Note: sailor_race_preparation uses auth.uid() for RLS, so we use user.id
   const handleUserStrategyChange = async (text: string) => {
+    console.log('[StartStrategyCard] handleUserStrategyChange:', {
+      textLength: text.length,
+      textPreview: text.substring(0, 50),
+      raceEventId,
+      userId: user?.id,
+      hasUser: !!user
+    });
+
     setUserStrategy(text);
-    if (!user?.id || !raceEventId) return;
+
+    if (!user?.id || !raceEventId) {
+      console.warn('[StartStrategyCard] SAVE SKIPPED - missing:', {
+        hasUserId: !!user?.id,
+        hasRaceEventId: !!raceEventId,
+        raceEventId
+      });
+      return;
+    }
 
     setSavingUserStrategy(true);
     try {
+      console.log('[StartStrategyCard] Calling strategicPlanningService.updatePhaseStrategy...');
       await strategicPlanningService.updatePhaseStrategy(
         raceEventId,
         user.id, // Use user.id (auth.uid) instead of sailorId for RLS compatibility
         'startStrategy',
         text
       );
+      console.log('[StartStrategyCard] Save completed successfully');
     } catch (err) {
       logger.error('[StartStrategyCard] Error saving user strategy', err);
+      console.error('[StartStrategyCard] SAVE ERROR:', err);
     } finally {
       setSavingUserStrategy(false);
     }

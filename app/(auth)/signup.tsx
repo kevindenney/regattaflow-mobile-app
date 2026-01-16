@@ -1,16 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '../../providers/AuthProvider';
 import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
+import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 // Helper to get user-friendly error messages for signup
 const getSignupErrorMessage = (error: any): string => {
   const message = error?.message?.toLowerCase() || '';
   const code = error?.code || '';
-  
+
   if (message.includes('registered') || message.includes('duplicate') || message.includes('already') || code === 'user_already_exists') {
     return 'An account with this email already exists. Try signing in instead.';
   }
@@ -28,33 +30,26 @@ const getSignupErrorMessage = (error: any): string => {
 
 type PersonaRole = 'sailor' | 'coach' | 'club';
 
-type PersonaOption = {
-  value: PersonaRole;
-  label: string;
-  description: string;
-  icon: string;
-};
-
 export default function SignUp() {
-  const { signUp, signInWithGoogle, signInWithApple, loading: authLoading } = useAuth();
-  const personaOptions = useMemo<PersonaOption[]>(
-    () => [
-      { value: 'sailor', label: 'Sailor', description: 'Track races and improve performance', icon: '⛵' },
-      { value: 'coach', label: 'Coach', description: 'Manage clients and coaching sessions', icon: '🎯' },
-      { value: 'club', label: 'Club', description: 'Organize regattas and member programs', icon: '🏠' },
-    ],
-    []
-  );
+  const { signUp, signInWithGoogle, signInWithApple, loading: authLoading, enterGuestMode } = useAuth();
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [persona, setPersona] = useState<PersonaRole>('sailor');
+  const [persona] = useState<PersonaRole>('sailor');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const lastPersonaValue = personaOptions[personaOptions.length - 1]?.value;
+  // Apple Sign In is available on web and iOS, not Android
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(Platform.OS === 'web');
 
   const isLoading = loading || authLoading;
+
+  useEffect(() => {
+    // Check Apple Sign In availability on iOS
+    if (Platform.OS === 'ios') {
+      isAppleSignInAvailable().then(setAppleSignInAvailable);
+    }
+  }, []);
 
   const handleSignUp = async () => {
     setErrorMessage(null);
@@ -176,7 +171,7 @@ export default function SignUp() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Close sign up"
-              onPress={() => router.replace('/')}
+              onPress={() => enterGuestMode()}
               style={styles.closeButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -196,45 +191,6 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Persona Selection */}
-        <Text style={styles.sectionLabel}>I am a...</Text>
-        <View style={styles.personaRow}>
-          {personaOptions.map((option) => {
-            const selected = persona === option.value;
-            const isLast = option.value === lastPersonaValue;
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.personaButton,
-                  selected && styles.personaButtonSelected,
-                  isLast && styles.personaButtonLast,
-                ]}
-                onPress={() => setPersona(option.value)}
-                disabled={isLoading}
-                testID={`choose-${option.value}`}
-              >
-                <View style={styles.personaContent}>
-                  <Text style={styles.personaIcon}>{option.icon}</Text>
-                  <View style={styles.personaTextContainer}>
-                    <Text style={[styles.personaLabel, selected && styles.personaLabelSelected]}>
-                      {option.label}
-                    </Text>
-                    <Text style={[styles.personaDescription, selected && styles.personaDescriptionSelected]}>
-                      {option.description}
-                    </Text>
-                  </View>
-                </View>
-                {selected && (
-                  <View style={styles.checkmark}>
-                    <Text style={styles.checkmarkText}>✓</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
 
         {/* Form Fields */}
         <Text style={styles.sectionLabel}>Full Name *</Text>
@@ -302,15 +258,26 @@ export default function SignUp() {
             <Text style={styles.socialButtonText}>Continue with Google</Text>
           </TouchableOpacity>
 
-          {(Platform.OS === 'ios' || Platform.OS === 'web') && (
-            <TouchableOpacity
-              style={[styles.socialButton, styles.appleButton, isLoading && styles.buttonDisabled]}
-              onPress={handleAppleSignUp}
-              disabled={isLoading}
-            >
-              <Text style={styles.appleIcon}></Text>
-              <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
-            </TouchableOpacity>
+          {/* Apple Sign-in - iOS native button or web fallback, hidden on Android */}
+          {appleSignInAvailable && (
+            Platform.OS === 'ios' ? (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={10}
+                style={[styles.appleNativeButton, isLoading && styles.buttonDisabled]}
+                onPress={handleAppleSignUp}
+              />
+            ) : (
+              <TouchableOpacity
+                style={[styles.socialButton, styles.appleButton, isLoading && styles.buttonDisabled]}
+                onPress={handleAppleSignUp}
+                disabled={isLoading}
+              >
+                <Text style={styles.appleIcon}></Text>
+                <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
+              </TouchableOpacity>
+            )
           )}
         </View>
 
@@ -402,6 +369,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     borderColor: '#000000',
   },
+  appleNativeButton: {
+    width: '100%',
+    height: 48,
+    marginTop: 8,
+  },
   googleIcon: {
     fontSize: 18,
     fontWeight: '700',
@@ -455,71 +427,6 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     fontSize: 16,
-  },
-  
-  // Persona Selection
-  personaRow: {
-    flexDirection: 'column',
-    marginBottom: 20,
-  },
-  personaButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  personaButtonSelected: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
-  },
-  personaButtonLast: {
-    marginBottom: 0,
-  },
-  personaContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  personaIcon: {
-    fontSize: 24,
-    marginRight: 14,
-  },
-  personaTextContainer: {
-    flex: 1,
-  },
-  personaLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0F172A',
-    marginBottom: 2,
-  },
-  personaLabelSelected: {
-    color: '#1D4ED8',
-  },
-  personaDescription: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  personaDescriptionSelected: {
-    color: '#3B82F6',
-  },
-  checkmark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkmarkText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
   },
   
   // Buttons

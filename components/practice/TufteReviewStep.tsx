@@ -9,16 +9,6 @@
  * - Typography-driven hierarchy
  */
 
-import React, { useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-} from 'react-native';
-import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { TUFTE_BACKGROUND } from '@/components/cards/constants';
 import {
   TUFTE_FORM_COLORS,
@@ -26,12 +16,21 @@ import {
 } from '@/components/races/AddRaceDialog/tufteFormStyles';
 import type {
   Drill,
+  HowStepData,
   WhatStepDrill,
   WhoStepMember,
   WhyStepData,
-  HowStepData,
 } from '@/types/practice';
 import { DRILL_CATEGORY_META } from '@/types/practice';
+import { ChevronDown, ChevronUp } from 'lucide-react-native';
+import { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 interface TufteReviewStepProps {
   // Summary data
@@ -74,12 +73,7 @@ export function TufteReviewStep({
   const hasAIReasoning = !!whyData.aiReasoning;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={styles.container}>
       {/* SESSION SUMMARY */}
       <View style={styles.summaryCard}>
         <Text style={styles.summaryLabel}>SESSION SUMMARY</Text>
@@ -218,7 +212,7 @@ export function TufteReviewStep({
 
       {/* Bottom spacing */}
       <View style={styles.bottomSpacer} />
-    </ScrollView>
+    </View>
   );
 }
 

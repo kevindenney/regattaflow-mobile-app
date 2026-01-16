@@ -643,12 +643,18 @@ class DocumentExtractionService {
     documentUrl: string
   ): Promise<void> {
     try {
-      // Get current source_documents
+      // Get current source_documents (use maybeSingle to handle non-existent races)
       const { data: race } = await supabase
         .from('race_events')
         .select('source_documents')
         .eq('id', raceId)
-        .single();
+        .maybeSingle();
+
+      // Skip if race doesn't exist
+      if (!race) {
+        logger.debug('Race not found, skipping source document link', { raceId });
+        return;
+      }
 
       const sourceDocuments = (race?.source_documents as any[]) || [];
 
@@ -678,12 +684,18 @@ class DocumentExtractionService {
     documentId: string
   ): Promise<void> {
     try {
-      // Get current source_documents
+      // Get current source_documents (use maybeSingle to handle non-existent races)
       const { data: race } = await supabase
         .from('race_events')
         .select('source_documents')
         .eq('id', raceId)
-        .single();
+        .maybeSingle();
+
+      // Skip if race doesn't exist
+      if (!race) {
+        logger.debug('Race not found, skipping source document link from text', { raceId });
+        return;
+      }
 
       const sourceDocuments = (race?.source_documents as any[]) || [];
 

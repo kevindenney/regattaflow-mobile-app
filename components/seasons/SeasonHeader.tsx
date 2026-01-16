@@ -19,6 +19,8 @@ interface SeasonHeaderProps {
   currentRaceIndex?: number;
   /** Total races in the season */
   totalRaces?: number;
+  /** Override upcoming races count (calculated from displayed races) */
+  upcomingRaces?: number;
   /** Callback when archive link is tapped */
   onArchivePress?: () => void;
   /** Callback when season name is tapped (for season picker/settings) */
@@ -35,6 +37,7 @@ export function SeasonHeader({
   season,
   currentRaceIndex = 0,
   totalRaces,
+  upcomingRaces: upcomingRacesProp,
   onArchivePress,
   onSeasonPress,
   onUpcomingPress,
@@ -65,7 +68,7 @@ export function SeasonHeader({
 
   const raceCount = totalRaces ?? season.summary.total_races;
   const completedRaces = season.summary.completed_races;
-  const upcomingRaces = season.summary.upcoming_races;
+  const upcomingRaces = upcomingRacesProp ?? season.summary.upcoming_races;
   const currentRace = currentRaceIndex + 1;
 
   // Format date range

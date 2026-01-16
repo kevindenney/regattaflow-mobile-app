@@ -176,6 +176,8 @@ export interface WatchGroupData {
   name: string;
   color: string;
   crewIds: string[];
+  /** Crew names for display in shared content */
+  crewNames?: string[];
 }
 
 /**

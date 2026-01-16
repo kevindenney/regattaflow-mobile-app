@@ -37,55 +37,48 @@ export const UniversalMapInterface: React.FC<UniversalMapInterfaceProps> = ({
   initialWeather,
   style,
 }) => {
-  const { user } = useAuth();
+  const { user, capabilities } = useAuth();
   const [showFullMap, setShowFullMap] = useState(false);
   const [mapMode, setMapMode] = useState<'tactical' | 'venue' | 'race'>('venue');
+  // Enable professional mode for users with coaching capability OR legacy coach user type
+  const hasCoaching = capabilities?.hasCoaching || userType === 'coach';
   const [userPreferences, setUserPreferences] = useState({
     show3D: true,
     showWeather: true,
     showBathymetry: true,
-    professionalMode: userType === 'coach',
+    professionalMode: hasCoaching,
   });
 
   useEffect(() => {
-    // Adjust defaults based on user type
-    switch (userType) {
-      case 'sailor':
-        setMapMode('tactical');
-        setUserPreferences(prev => ({
-          ...prev,
-          show3D: true,
-          showWeather: true,
-          professionalMode: false,
-        }));
-        break;
-      case 'coach':
-        setMapMode('tactical');
-        setUserPreferences(prev => ({
-          ...prev,
-          show3D: true,
-          showWeather: true,
-          professionalMode: true,
-        }));
-        break;
-      case 'club':
-        setMapMode('race');
-        setUserPreferences(prev => ({
-          ...prev,
-          show3D: true,
-          showWeather: false,
-          professionalMode: false,
-        }));
-        break;
+    // Adjust defaults based on user type and capabilities
+    if (userType === 'club') {
+      setMapMode('race');
+      setUserPreferences(prev => ({
+        ...prev,
+        show3D: true,
+        showWeather: false,
+        professionalMode: false,
+      }));
+    } else {
+      // Sailors (including those with coaching capability)
+      setMapMode('tactical');
+      setUserPreferences(prev => ({
+        ...prev,
+        show3D: true,
+        showWeather: true,
+        professionalMode: hasCoaching,
+      }));
     }
-  }, [userType]);
+  }, [userType, hasCoaching]);
 
   const getMapTitle = () => {
+    // Sailors with coaching capability get professional analysis title
+    if (hasCoaching && userType !== 'club') {
+      return '🎯 Professional Analysis';
+    }
     switch (userType) {
       case 'sailor':
         return '🗺️ Tactical Map';
-      case 'coach':
-        return '🎯 Professional Analysis';
       case 'club':
         return '🏁 Race Operations';
       default:
@@ -94,11 +87,13 @@ export const UniversalMapInterface: React.FC<UniversalMapInterfaceProps> = ({
   };
 
   const getMapDescription = () => {
+    // Sailors with coaching capability get enhanced description
+    if (hasCoaching && userType !== 'club') {
+      return 'Advanced analysis & coaching tools';
+    }
     switch (userType) {
       case 'sailor':
         return 'Venue intelligence & race strategy';
-      case 'coach':
-        return 'Advanced analysis & coaching tools';
       case 'club':
         return 'Course management & race operations';
       default:
@@ -113,6 +108,20 @@ export const UniversalMapInterface: React.FC<UniversalMapInterfaceProps> = ({
       'Bathymetry & currents',
     ];
 
+    // Sailors with coaching capability get both sailor AND coach features
+    if (hasCoaching && userType !== 'club') {
+      return [
+        ...baseFeatures,
+        'Tactical wind analysis',
+        'Race strategy tools',
+        'Performance tracking',
+        'Advanced analytics',
+        'Client performance data',
+        'Teaching tools',
+        'Session planning',
+      ];
+    }
+
     switch (userType) {
       case 'sailor':
         return [
@@ -120,14 +129,6 @@ export const UniversalMapInterface: React.FC<UniversalMapInterfaceProps> = ({
           'Tactical wind analysis',
           'Race strategy tools',
           'Performance tracking',
-        ];
-      case 'coach':
-        return [
-          ...baseFeatures,
-          'Advanced analytics',
-          'Client performance data',
-          'Teaching tools',
-          'Session planning',
         ];
       case 'club':
         return [
@@ -231,8 +232,8 @@ export const UniversalMapInterface: React.FC<UniversalMapInterfaceProps> = ({
         />
 
         {/* User Type Specific Overlay */}
-        {userType === 'sailor' && renderSailorMapOverlay()}
-        {userType === 'coach' && renderCoachMapOverlay()}
+        {(userType === 'sailor' && !hasCoaching) && renderSailorMapOverlay()}
+        {hasCoaching && userType !== 'club' && renderCoachMapOverlay()}
         {userType === 'club' && renderClubMapOverlay()}
       </View>
     </Modal>

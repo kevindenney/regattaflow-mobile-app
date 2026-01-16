@@ -7,19 +7,16 @@
  * - Timeline: RaceTimelineLayout with vertical detail card pager
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, Platform, Dimensions } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { IOS_COLORS } from '@/components/cards/constants';
 import { AppleRaceCard } from '@/components/races/AppleRaceCard';
 import { AppleStyleRaceCard } from '@/components/races/AppleStyleRaceCard';
-import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
-import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
-import { PracticeTimelineCard } from '@/components/races/PracticeTimelineCard';
-import type { PracticeSession } from '@/types/practice';
-import { TimelineIndicators } from '@/components/races/TimelineIndicators';
 import { CarouselNavArrows } from '@/components/races/CarouselNavArrows';
+import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
+import { PracticeTimelineCard } from '@/components/races/PracticeTimelineCard';
+import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
 import { RaceDetailZone } from '@/components/races/RaceDetailZone';
 import { RaceTimelineLayout } from '@/components/races/RaceTimelineLayout';
+import { TimelineIndicators } from '@/components/races/TimelineIndicators';
 import {
   createDetailCardsForRace,
   renderDetailCardByType,
@@ -27,9 +24,12 @@ import {
   type RenderDetailCardOptions,
 } from '@/components/races/detail-cards';
 import type { DetailCardType } from '@/constants/navigationAnimations';
-import type { RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
-import { IOS_COLORS } from '@/components/cards/constants';
+import type { RaceDocumentWithDetails } from '@/services/RaceDocumentService';
+import type { PracticeSession } from '@/types/practice';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Dimensions, Platform, ScrollView, View } from 'react-native';
 
 // Layout constants
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -144,17 +144,23 @@ export function RealRacesCarousel({
   const [scrollX, setScrollX] = useState(0);
   const [scrollContentWidth, setScrollContentWidth] = useState(0);
 
-  // Combine races and practice sessions into a single timeline sorted by date
+  // Combine races and practice sessions into a single timeline
+  // Prioritize upcoming items first, then show past items
   const timelineItems: TimelineItem[] = useMemo(() => {
-    const items: TimelineItem[] = [];
+    const items: (TimelineItem & { hasDate: boolean })[] = [];
+    const now = new Date();
 
     // Add races
     races.forEach((race) => {
-      const raceDate = race.date || race.start_date || new Date().toISOString();
+      const rawDate = race.date || race.start_date;
+      // Track whether race has a valid date - races without dates should be treated as past
+      const hasDate = !!rawDate;
+      const raceDate = rawDate || new Date(0).toISOString(); // Use epoch for missing dates
       items.push({
         type: 'race',
         data: race,
         date: new Date(raceDate),
+        hasDate,
       });
     });
 
@@ -165,12 +171,33 @@ export function RealRacesCarousel({
           type: 'practice',
           data: session,
           date: new Date(session.scheduled_date),
+          hasDate: true,
         });
       });
     }
 
-    // Sort by date
-    return items.sort((a, b) => a.date.getTime() - b.date.getTime());
+    // Separate upcoming and past items
+    // Consider an item "upcoming" if it has a valid date AND hasn't ended yet (start + 3 hours buffer)
+    // Items without dates are always treated as past
+    const upcoming = items.filter((item) => {
+      if (!item.hasDate) return false;
+      const endEstimate = new Date(item.date.getTime() + 3 * 60 * 60 * 1000);
+      return endEstimate > now;
+    });
+    const past = items.filter((item) => {
+      if (!item.hasDate) return true;
+      const endEstimate = new Date(item.date.getTime() + 3 * 60 * 60 * 1000);
+      return endEstimate <= now;
+    });
+
+    // Sort upcoming by date ascending (nearest first)
+    upcoming.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Sort past by date descending (most recent first)
+    past.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    // Return upcoming first, then past
+    return [...upcoming, ...past];
   }, [races, practiceSessions]);
 
   // Find selected race index for timeline layout (searches in combined timeline)
@@ -410,7 +437,7 @@ export function RealRacesCarousel({
     if (useRefinedStyle && !isDistanceRace(race)) {
       const refinedStatus: 'past' | 'next' | 'future' =
         raceStatus === 'past' ? 'past' :
-        raceStatus === 'next' || raceStatus === 'today' ? 'next' : 'future';
+          raceStatus === 'next' || raceStatus === 'today' ? 'next' : 'future';
 
       const canManage = race.created_by === userId;
       return (
@@ -446,7 +473,7 @@ export function RealRacesCarousel({
       // Map race status to AppleRaceCard format
       const appleStatus: 'past' | 'next' | 'future' =
         raceStatus === 'past' ? 'past' :
-        raceStatus === 'next' || raceStatus === 'today' ? 'next' : 'future';
+          raceStatus === 'next' || raceStatus === 'today' ? 'next' : 'future';
 
       const canManage = race.created_by === userId;
       return (
@@ -566,6 +593,7 @@ export function RealRacesCarousel({
         <ScrollView
           ref={scrollViewRef}
           horizontal
+          pagingEnabled={false}
           showsHorizontalScrollIndicator={false}
           style={{ flex: 1 }}
           contentContainerStyle={{

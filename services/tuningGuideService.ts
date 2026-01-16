@@ -53,6 +53,13 @@ export interface TuningGuideSource {
 }
 
 const logger = createLogger('tuningGuideService');
+
+// UUID validation helper
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isValidUUID(value: string | null | undefined): boolean {
+  return !!value && UUID_REGEX.test(value);
+}
+
 class TuningGuideService {
   /**
    * Get tuning guides for a specific boat class
@@ -395,10 +402,17 @@ class TuningGuideService {
   async getGuidesByReference(params: { classId?: string | null; className?: string | null }): Promise<TuningGuide[]> {
     const { classId, className } = params;
 
+    // Early return if no class info provided - this is expected, not an error
+    if (!classId && !className) {
+      return [];
+    }
+
     let resolvedClassName = className ?? null;
     let databaseGuides: TuningGuide[] = [];
 
-    if (classId) {
+    // Only query database if classId is a valid UUID
+    // Demo/fallback class IDs (e.g., "demo-class-j70") should skip database query
+    if (classId && isValidUUID(classId)) {
       const { data, error } = await supabase
         .from('tuning_guides')
         .select('*')
@@ -451,7 +465,8 @@ class TuningGuideService {
     const { classId, className } = params;
     let resolvedClassName = className ?? null;
 
-    if (!resolvedClassName && classId) {
+    // Only query database if classId is a valid UUID
+    if (!resolvedClassName && classId && isValidUUID(classId)) {
       try {
         const { data: classData } = await supabase
           .from('boat_classes')

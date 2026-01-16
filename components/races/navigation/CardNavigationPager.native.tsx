@@ -212,8 +212,8 @@ export function CardNavigationPager<T extends RaceData>({
         initialNumToRender={INITIAL_NUM_TO_RENDER}
         maxToRenderPerBatch={MAX_TO_RENDER_PER_BATCH}
         windowSize={WINDOW_SIZE}
-        // Prevent vertical scroll interference
-        nestedScrollEnabled={false}
+        // Enable nested scroll for Android to allow vertical scrolling inside cards
+        nestedScrollEnabled={Platform.OS === 'android'}
         // Error handling for scroll to index
         onScrollToIndexFailed={(info) => {
           // Fallback: scroll to nearest valid index

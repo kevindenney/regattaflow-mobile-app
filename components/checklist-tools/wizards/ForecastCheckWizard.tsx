@@ -748,7 +748,7 @@ export function ForecastCheckWizard({
               <Text style={rcStyles.rangeUnit}>kts</Text>
             </View>
             <View style={rcStyles.directionContainer}>
-              <Text style={rcStyles.directionArrow}>↗</Text>
+              <Text style={rcStyles.directionArrow}>{getWindDirectionArrow(rw.windDirectionAtStart)}</Text>
               <Text style={rcStyles.directionText}>{rw.windDirectionAtStart}</Text>
             </View>
           </View>
@@ -786,6 +786,11 @@ export function ForecastCheckWizard({
                 <Text style={rcStyles.rangeUnit}>m</Text>
               </View>
               <View style={rcStyles.directionContainer}>
+                {(currentForecast.swellDirection || rw.waveDirectionAtStart) && (
+                  <Text style={rcStyles.directionArrow}>
+                    {getWindDirectionArrow(currentForecast.swellDirection || rw.waveDirectionAtStart || '')}
+                  </Text>
+                )}
                 <Text style={rcStyles.directionText}>
                   {currentForecast.swellDirection || rw.waveDirectionAtStart || ''}
                 </Text>
@@ -865,7 +870,7 @@ export function ForecastCheckWizard({
                 </Text>
                 <View style={[rcStyles.windCol, rcStyles.windCell]}>
                   <Text style={rcStyles.windValue}>{Math.round(event.wind)}</Text>
-                  <Text style={rcStyles.windDirection}>↗ {event.direction}</Text>
+                  <Text style={rcStyles.windDirection}>{getWindDirectionArrow(event.direction)} {event.direction}</Text>
                 </View>
                 <View style={[rcStyles.tideCol, rcStyles.tideCell]}>
                   <Text style={rcStyles.tideValue}>{event.tide.toFixed(1)}</Text>

@@ -1,13 +1,14 @@
 /**
  * TuftePracticeLogForm
  *
- * Inline log form following Tufte principles:
- * - Typography-driven hierarchy
- * - Minimal visual chrome
- * - Data-dense chip selectors
+ * True Tufte design: minimal ink, maximum data.
+ * - No boxes, no cards, no unnecessary borders
+ * - Typography creates hierarchy
+ * - Understated selection states
+ * - Feels like writing in a logbook
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,27 +17,28 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import {
-  TUFTE_FORM_COLORS,
-  TUFTE_FORM_SPACING,
-} from '@/components/races/AddRaceDialog/tufteFormStyles';
-import { TUFTE_BACKGROUND } from '@/components/cards/constants';
 import type { SkillArea } from '@/types/practice';
 
-// Skill area options - condensed labels
-const SKILL_OPTIONS: Array<{ area: SkillArea; label: string }> = [
-  { area: 'start-execution', label: 'Starts' },
-  { area: 'upwind-execution', label: 'Upwind' },
-  { area: 'downwind-speed', label: 'Downwind' },
-  { area: 'shift-awareness', label: 'Shifts' },
-  { area: 'windward-rounding', label: 'Windward' },
-  { area: 'leeward-rounding', label: 'Leeward' },
-  { area: 'crew-coordination', label: 'Crew' },
-  { area: 'equipment-prep', label: 'Boat' },
-];
+// Muted, ink-like colors
+const COLORS = {
+  ink: '#1a1a1a',
+  muted: '#666666',
+  faint: '#999999',
+  accent: '#2c5282', // Deep blue, like ink
+  underline: '#d4d4d4',
+  bg: 'transparent',
+};
 
-// Duration presets
-const DURATION_PRESETS = [15, 30, 45, 60, 90];
+// Skill area options - even more condensed
+const SKILL_OPTIONS: Array<{ area: SkillArea; label: string }> = [
+  { area: 'start-execution', label: 'starts' },
+  { area: 'upwind-execution', label: 'upwind' },
+  { area: 'downwind-speed', label: 'downwind' },
+  { area: 'shift-awareness', label: 'shifts' },
+  { area: 'windward-rounding', label: 'marks' },
+  { area: 'crew-coordination', label: 'crew' },
+  { area: 'equipment-prep', label: 'boat' },
+];
 
 export interface LogPracticeData {
   focusAreas: SkillArea[];
@@ -74,7 +76,6 @@ export function TuftePracticeLogForm({
       notes,
     });
 
-    // Reset form on success
     setFocusAreas([]);
     setDuration(30);
     setNotes('');
@@ -82,23 +83,34 @@ export function TuftePracticeLogForm({
 
   const isValid = focusAreas.length > 0 && duration > 0;
 
+  // Build duration display with inline selection
+  const formatDuration = (mins: number) => {
+    if (mins < 60) return `${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    const remaining = mins % 60;
+    return remaining > 0 ? `${hrs}h ${remaining}m` : `${hrs}h`;
+  };
+
   return (
     <View style={styles.container}>
-      {/* Focus Areas */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>WHAT DID YOU PRACTICE?</Text>
-        <View style={styles.chipGrid}>
+      {/* Focus areas as inline text flow */}
+      <View style={styles.row}>
+        <Text style={styles.prompt}>Practiced</Text>
+        <View style={styles.inlineOptions}>
           {SKILL_OPTIONS.map((option) => {
             const isSelected = focusAreas.includes(option.area);
             return (
               <TouchableOpacity
                 key={option.area}
-                style={[styles.chip, isSelected && styles.chipSelected]}
                 onPress={() => toggleFocusArea(option.area)}
-                activeOpacity={0.7}
+                activeOpacity={0.6}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
                 <Text
-                  style={[styles.chipText, isSelected && styles.chipTextSelected]}
+                  style={[
+                    styles.option,
+                    isSelected && styles.optionSelected,
+                  ]}
                 >
                   {option.label}
                 </Text>
@@ -108,26 +120,26 @@ export function TuftePracticeLogForm({
         </View>
       </View>
 
-      {/* Duration */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>HOW LONG?</Text>
-        <View style={styles.durationRow}>
-          {DURATION_PRESETS.map((mins) => {
+      {/* Duration as natural sentence */}
+      <View style={styles.row}>
+        <Text style={styles.prompt}>for</Text>
+        <View style={styles.durationOptions}>
+          {[15, 30, 45, 60, 90].map((mins) => {
             const isSelected = duration === mins;
             return (
               <TouchableOpacity
                 key={mins}
-                style={[styles.durationChip, isSelected && styles.durationChipSelected]}
                 onPress={() => setDuration(mins)}
-                activeOpacity={0.7}
+                activeOpacity={0.6}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
                 <Text
                   style={[
-                    styles.durationText,
-                    isSelected && styles.durationTextSelected,
+                    styles.durationOption,
+                    isSelected && styles.durationSelected,
                   ]}
                 >
-                  {mins}
+                  {formatDuration(mins)}
                 </Text>
               </TouchableOpacity>
             );
@@ -135,32 +147,31 @@ export function TuftePracticeLogForm({
         </View>
       </View>
 
-      {/* Notes */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>NOTES (OPTIONAL)</Text>
+      {/* Notes as simple underlined input */}
+      <View style={styles.notesRow}>
         <TextInput
           style={styles.notesInput}
           value={notes}
           onChangeText={setNotes}
-          placeholder="Key takeaways..."
-          placeholderTextColor={TUFTE_FORM_COLORS.placeholder}
+          placeholder="notes..."
+          placeholderTextColor={COLORS.faint}
           multiline
-          numberOfLines={2}
-          textAlignVertical="top"
         />
       </View>
 
-      {/* Submit */}
+      {/* Submit - just text */}
       <TouchableOpacity
-        style={[styles.submitButton, (!isValid || isSubmitting) && styles.submitButtonDisabled]}
+        style={styles.submitRow}
         onPress={handleSubmit}
         disabled={!isValid || isSubmitting}
-        activeOpacity={0.7}
+        activeOpacity={0.6}
       >
         {isSubmitting ? (
-          <ActivityIndicator size="small" color={TUFTE_FORM_COLORS.primary} />
+          <ActivityIndicator size="small" color={COLORS.accent} />
         ) : (
-          <Text style={styles.submitText}>Log This</Text>
+          <Text style={[styles.submitText, !isValid && styles.submitDisabled]}>
+            Log →
+          </Text>
         )}
       </TouchableOpacity>
     </View>
@@ -169,94 +180,74 @@ export function TuftePracticeLogForm({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: TUFTE_FORM_SPACING.lg,
-    paddingVertical: TUFTE_FORM_SPACING.lg,
-    gap: TUFTE_FORM_SPACING.lg,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 20,
   },
-  section: {
-    gap: TUFTE_FORM_SPACING.sm,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: TUFTE_FORM_COLORS.sectionLabel,
-    letterSpacing: 1.2,
-  },
-  chipGrid: {
+  row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'baseline',
+    gap: 6,
   },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 6,
-    backgroundColor: TUFTE_BACKGROUND,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: TUFTE_FORM_COLORS.inputBorder,
+  prompt: {
+    fontSize: 16,
+    color: COLORS.muted,
+    fontStyle: 'italic',
   },
-  chipSelected: {
-    backgroundColor: TUFTE_FORM_COLORS.primary,
-    borderColor: TUFTE_FORM_COLORS.primary,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: TUFTE_FORM_COLORS.secondaryLabel,
-  },
-  chipTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  durationRow: {
+  inlineOptions: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 12,
+    rowGap: 8,
   },
-  durationChip: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 6,
-    backgroundColor: TUFTE_BACKGROUND,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: TUFTE_FORM_COLORS.inputBorder,
+  option: {
+    fontSize: 16,
+    color: COLORS.faint,
   },
-  durationChipSelected: {
-    backgroundColor: TUFTE_FORM_COLORS.primary,
-    borderColor: TUFTE_FORM_COLORS.primary,
-  },
-  durationText: {
-    fontSize: 14,
+  optionSelected: {
+    color: COLORS.ink,
     fontWeight: '600',
-    color: TUFTE_FORM_COLORS.secondaryLabel,
+    textDecorationLine: 'underline',
+    textDecorationColor: COLORS.accent,
+  },
+  durationOptions: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  durationOption: {
+    fontSize: 16,
+    color: COLORS.faint,
     fontVariant: ['tabular-nums'],
   },
-  durationTextSelected: {
-    color: '#FFFFFF',
+  durationSelected: {
+    color: COLORS.ink,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+    textDecorationColor: COLORS.accent,
+  },
+  notesRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.underline,
+    paddingBottom: 4,
   },
   notesInput: {
-    backgroundColor: TUFTE_BACKGROUND,
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: TUFTE_FORM_COLORS.inputBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: TUFTE_FORM_COLORS.label,
-    minHeight: 60,
+    fontSize: 15,
+    color: COLORS.ink,
+    padding: 0,
+    minHeight: 24,
   },
-  submitButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  submitButtonDisabled: {
-    opacity: 0.4,
+  submitRow: {
+    alignItems: 'flex-end',
+    paddingTop: 4,
   },
   submitText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: TUFTE_FORM_COLORS.primary,
+    color: COLORS.accent,
+    fontWeight: '500',
+  },
+  submitDisabled: {
+    color: COLORS.faint,
   },
 });
 

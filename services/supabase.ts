@@ -623,6 +623,41 @@ export interface Database {
           status?: string
         }
       }
+      user_capabilities: {
+        Row: {
+          id: string
+          user_id: string
+          capability_type: 'coaching'
+          is_active: boolean
+          activated_at: string
+          deactivated_at: string | null
+          metadata: Record<string, unknown>
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          capability_type: 'coaching'
+          is_active?: boolean
+          activated_at?: string
+          deactivated_at?: string | null
+          metadata?: Record<string, unknown>
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          capability_type?: 'coaching'
+          is_active?: boolean
+          activated_at?: string
+          deactivated_at?: string | null
+          metadata?: Record<string, unknown>
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }

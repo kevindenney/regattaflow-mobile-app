@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Check, Info } from 'lucide-react-native';
 import { IOS_COLORS, TUFTE_BACKGROUND, TUFTE_TEXT } from '@/components/cards/constants';
 import { unicodeBar } from '@/lib/tufte';
 import { ChecklistCategory, CATEGORY_CONFIG } from '@/types/checklists';
@@ -52,6 +52,7 @@ export function TufteChecklistSection({
         {items.map((item) => {
           const isCompleted = !!completions[item.id];
           const completion = completions[item.id];
+          const hasTool = !!item.toolId && item.toolType === 'full_wizard';
 
           return (
             <Pressable
@@ -84,6 +85,20 @@ export function TufteChecklistSection({
               {/* Priority indicator for high-priority incomplete items */}
               {!isCompleted && item.priority === 'high' && (
                 <View style={styles.priorityDot} />
+              )}
+
+              {/* Tool indicator - tap to open wizard */}
+              {hasTool && onItemAction && (
+                <Pressable
+                  style={styles.toolButton}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    onItemAction(item);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Info size={18} color={IOS_COLORS.blue} />
+                </Pressable>
               )}
             </Pressable>
           );
@@ -178,6 +193,10 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: IOS_COLORS.orange,
+  },
+  toolButton: {
+    padding: 4,
+    marginLeft: 4,
   },
 });
 

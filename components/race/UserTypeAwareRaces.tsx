@@ -7,27 +7,24 @@ import { RaceBuilder } from './RaceBuilder';
 import { SailorRaceInterface } from './SailorRaceInterface';
 import { CoachRaceInterface } from './CoachRaceInterface';
 
-// Mock user types - in a real app this would come from user profile/auth
+// User types for the race interface
 export type UserType = 'sailor' | 'yacht_club' | 'coach';
 
-interface UserProfile {
-  userType: UserType;
-  // Add other user profile fields as needed
-}
-
 export function UserTypeAwareRaces() {
-  const { user } = useAuth();
+  const { user, userType: authUserType, capabilities } = useAuth();
 
-  // Mock user type detection - in real app this would come from user profile
+  // Determine display user type based on auth user type and capabilities
   const getUserType = (): UserType => {
-    // For demo purposes, we'll cycle through user types
-    // In reality, this would be stored in the user's profile
-    const mockTypes: UserType[] = ['sailor', 'yacht_club', 'coach'];
-    const hash = user?.email?.length || 0;
-    return mockTypes[hash % mockTypes.length] || 'sailor';
+    // Club users see yacht_club interface
+    if (authUserType === 'club') return 'yacht_club';
+    // Users with coaching capability see coach interface
+    if (capabilities?.hasCoaching) return 'coach';
+    // Default to sailor
+    return 'sailor';
   };
 
   const userType = getUserType();
+  const hasCoaching = capabilities?.hasCoaching;
 
   // Loading state
   if (!user) {

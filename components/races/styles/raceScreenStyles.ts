@@ -366,7 +366,7 @@ export const floatingHeaderStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 4,
     backgroundColor: 'transparent',
     zIndex: 10,
     elevation: 10, // Android requires elevation for z-index to work

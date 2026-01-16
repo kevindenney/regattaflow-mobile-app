@@ -332,7 +332,7 @@ export default function RootLayout() {
         <GluestackUIProvider mode="light">
           <StripeProvider>
             <AuthProvider>
-              <StackWithSplash />
+                <StackWithSplash />
             </AuthProvider>
           </StripeProvider>
         </GluestackUIProvider>

@@ -11,7 +11,7 @@
  */
 
 import React, { useCallback, useMemo, memo, useState, useEffect } from 'react';
-import { StyleSheet, View, Platform, LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, Platform, LayoutChangeEvent, TouchableOpacity, Text } from 'react-native';
 import {
   GestureDetector,
   Gesture,
@@ -42,6 +42,13 @@ import {
   IOS_COLORS,
 } from './constants';
 import { CardShell } from './CardShell';
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+// Maximum number of dots to show before windowing
+const MAX_VISIBLE_DOTS = 7;
 
 // =============================================================================
 // TYPES
@@ -110,10 +117,10 @@ function CardGridComponent({
 
   const dimensions = useMemo(() => {
     const baseCalc = calculateCardDimensions(effectiveWidth, effectiveHeight);
-    // Override card height to fill available space (minimal bottom padding)
+    // Override card height to fill available space (small bottom padding for breathing room)
     return {
       ...baseCalc,
-      cardHeight: effectiveHeight - 24, // Small bottom margin for visual breathing room
+      cardHeight: effectiveHeight - 24, // Bottom margin for dots + visual breathing room
     };
   }, [effectiveWidth, effectiveHeight]);
 
@@ -149,6 +156,30 @@ function CardGridComponent({
       }
     },
     [onRaceChange, races]
+  );
+
+  /**
+   * Navigate to a specific race index (used by timeline dots)
+   */
+  const goToRace = useCallback(
+    (targetIndex: number) => {
+      if (targetIndex < 0 || targetIndex >= races.length || targetIndex === jsRaceIndex) {
+        return;
+      }
+
+      // Haptic feedback
+      if (enableHaptics && Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
+      // Update shared values for animation
+      currentRaceIndex.value = targetIndex;
+      horizontalOffset.value = withSpring(targetIndex * dimensions.horizontalSnapInterval, SNAP_SPRING_CONFIG);
+
+      // Update JS state and trigger callback
+      handleRaceChange(targetIndex);
+    },
+    [races.length, jsRaceIndex, enableHaptics, dimensions.horizontalSnapInterval, handleRaceChange, currentRaceIndex, horizontalOffset]
   );
 
   const racesCount = races.length;
@@ -371,6 +402,82 @@ function CardGridComponent({
           </Animated.View>
         </GestureDetector>
       </View>
+
+      {/* Timeline Navigation Dots */}
+      {races.length > 1 && (
+        <View style={styles.timelineContainer}>
+          <View style={styles.timelineDotsRow}>
+            {/* Left arrow for windowed view */}
+            {races.length > MAX_VISIBLE_DOTS && jsRaceIndex > Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
+              <TouchableOpacity
+                onPress={() => goToRace(Math.max(0, jsRaceIndex - MAX_VISIBLE_DOTS))}
+                style={styles.timelineArrowButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.timelineArrow}>‹</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Render dots with windowing */}
+            {(() => {
+              const totalRaces = races.length;
+
+              // Calculate visible window for many races
+              let startIdx = 0;
+              let endIdx = totalRaces - 1;
+
+              if (totalRaces > MAX_VISIBLE_DOTS) {
+                const halfWindow = Math.floor((MAX_VISIBLE_DOTS - 1) / 2);
+                startIdx = Math.max(0, jsRaceIndex - halfWindow);
+                endIdx = startIdx + MAX_VISIBLE_DOTS - 1;
+                if (endIdx >= totalRaces) {
+                  endIdx = totalRaces - 1;
+                  startIdx = Math.max(0, endIdx - MAX_VISIBLE_DOTS + 1);
+                }
+              }
+
+              return races.slice(startIdx, endIdx + 1).map((race, idx) => {
+                const actualIndex = startIdx + idx;
+                const isSelected = actualIndex === jsRaceIndex;
+                const isNextRace = nextRaceIndex != null && actualIndex === nextRaceIndex;
+
+                return (
+                  <TouchableOpacity
+                    key={race.id || `dot-${actualIndex}`}
+                    onPress={() => goToRace(actualIndex)}
+                    style={styles.timelineDotContainer}
+                    hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                  >
+                    {/* Now bar - small vertical line above the upcoming race dot */}
+                    {isNextRace && (
+                      <View style={styles.timelineNowBar} />
+                    )}
+                    {/* Uniform circle: filled for active, hollow for inactive */}
+                    <View
+                      style={[
+                        styles.timelineDot,
+                        isSelected ? styles.timelineDotActive : styles.timelineDotInactive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                );
+              });
+            })()}
+
+            {/* Right arrow for windowed view */}
+            {races.length > MAX_VISIBLE_DOTS && jsRaceIndex < races.length - 1 - Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
+              <TouchableOpacity
+                onPress={() => goToRace(Math.min(races.length - 1, jsRaceIndex + MAX_VISIBLE_DOTS))}
+                style={styles.timelineArrowButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={[styles.timelineArrow, { marginLeft: 2, marginRight: 0 }]}>›</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }
@@ -410,6 +517,51 @@ const styles = StyleSheet.create({
   },
   cardPosition: {
     position: 'absolute',
+  },
+  // Timeline navigation - iOS Page Control style (below card)
+  timelineContainer: {
+    position: 'absolute',
+    bottom: 48, // Lift dots up from the bottom edge
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timelineDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  timelineDotContainer: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: 14,
+  },
+  timelineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  timelineDotActive: {
+    backgroundColor: '#374151',
+  },
+  timelineDotInactive: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  timelineNowBar: {
+    width: 2,
+    height: 5,
+    backgroundColor: '#34C759',
+    borderRadius: 1,
+    marginBottom: 2,
+  },
+  timelineArrowButton: {
+    paddingHorizontal: 4,
+  },
+  timelineArrow: {
+    fontSize: 12,
+    color: '#94A3B8',
   },
 });
 

@@ -3,7 +3,8 @@
  *
  * Displays a single strategy topic (e.g., "Line Bias") with:
  * - Title row with optional sparkline for performance trend
- * - Default tip from the strategy metadata
+ * - AI recommendation based on past races (when available)
+ * - Default tip fallback when no AI recommendation
  * - Inline editable user plan with marginalia-style connector
  *
  * Follows Tufte principles:
@@ -12,8 +13,9 @@
  * - Marginalia-style annotations for user input
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react-native';
 import { Sparkline } from '@/components/shared/charts/Sparkline';
 import type { StrategySectionMeta, StrategySectionNote } from '@/types/raceStrategy';
 import type { PerformanceTrend } from '@/types/raceLearning';
@@ -55,6 +57,23 @@ function getTrendColor(trend?: PerformanceTrend): string {
 }
 
 /**
+ * TrendIndicator - Small inline trend arrow/indicator
+ */
+function TrendIndicator({ trend }: { trend: PerformanceTrend }) {
+  const color = getTrendColor(trend);
+  const size = 14;
+
+  switch (trend) {
+    case 'improving':
+      return <TrendingUp size={size} color={color} strokeWidth={2} />;
+    case 'declining':
+      return <TrendingDown size={size} color={color} strokeWidth={2} />;
+    default:
+      return <Minus size={size} color={color} strokeWidth={2} />;
+  }
+}
+
+/**
  * Generate mock sparkline data from performance stats
  * In a real implementation, this would come from actual race history
  */
@@ -81,6 +100,13 @@ export function TufteStrategySection({
 }: TufteStrategySectionProps) {
   const [localPlan, setLocalPlan] = useState(note?.userPlan || '');
   const [isFocused, setIsFocused] = useState(false);
+
+  // Sync local state when saved plan loads asynchronously
+  useEffect(() => {
+    if (note?.userPlan && !isFocused) {
+      setLocalPlan(note.userPlan);
+    }
+  }, [note?.userPlan, isFocused]);
 
   const sparklineData = generateSparklineData(note?.pastPerformance);
   const trendColor = getTrendColor(note?.pastPerformance?.trend);
@@ -113,13 +139,31 @@ export function TufteStrategySection({
         )}
       </View>
 
-      {/* Default tip */}
-      <Text style={styles.tip}>{section.defaultTip}</Text>
+      {/* AI recommendation or default tip */}
+      {note?.aiRecommendation ? (
+        <View style={styles.aiRecommendation}>
+          <View style={styles.aiHeader}>
+            <Text style={styles.aiLabel}>
+              Based on {note.pastPerformance?.sampleCount || 'your'} race{(note.pastPerformance?.sampleCount || 0) !== 1 ? 's' : ''}
+            </Text>
+            {note.pastPerformance?.trend && (
+              <TrendIndicator trend={note.pastPerformance.trend} />
+            )}
+          </View>
+          <Text style={styles.aiText}>{note.aiRecommendation}</Text>
+        </View>
+      ) : (
+        <Text style={styles.tip}>{section.defaultTip}</Text>
+      )}
 
       {/* User plan with marginalia-style connector */}
-      <View style={styles.planRow}>
-        <Text style={styles.planConnector}>└─</Text>
-        <Text style={styles.planLabel}>Your plan:</Text>
+      <View style={[styles.planContainer, !localPlan && styles.planContainerEmpty]}>
+        <View style={styles.planRow}>
+          <Text style={styles.planConnector}>└─</Text>
+          <Text style={[styles.planLabel, !localPlan && styles.planLabelEmpty]}>
+            {localPlan ? 'Your plan:' : 'Enter your strategy:'}
+          </Text>
+        </View>
         <TextInput
           style={[
             styles.planInput,
@@ -130,10 +174,13 @@ export function TufteStrategySection({
           onChangeText={setLocalPlan}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          placeholder="Add your plan..."
+          placeholder="Tap here to write your race plan for this section..."
           placeholderTextColor={COLORS.tertiaryText}
-          multiline={false}
+          multiline
+          numberOfLines={2}
+          textAlignVertical="top"
           returnKeyType="done"
+          blurOnSubmit
         />
       </View>
     </View>
@@ -169,10 +216,48 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     marginBottom: 8,
   },
+  aiRecommendation: {
+    backgroundColor: 'rgba(139, 92, 246, 0.06)', // Very subtle purple tint
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(139, 92, 246, 0.3)', // Purple accent
+  },
+  aiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  aiLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#7C3AED', // Purple text
+    letterSpacing: 0.3,
+  },
+  aiText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.text,
+  },
+  planContainer: {
+    marginLeft: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+  },
+  planContainerEmpty: {
+    backgroundColor: 'rgba(59, 130, 246, 0.06)', // Subtle blue tint to draw attention
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.15)',
+    borderStyle: 'dashed',
+  },
   planRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 4,
+    marginBottom: 4,
   },
   planConnector: {
     fontSize: 14,
@@ -181,26 +266,32 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   planLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.secondaryText,
     fontWeight: '500',
-    marginRight: 8,
+  },
+  planLabelEmpty: {
+    color: '#3B82F6', // Blue to indicate action needed
+    fontWeight: '600',
   },
   planInput: {
-    flex: 1,
     fontSize: 14,
     color: COLORS.text,
-    paddingVertical: 4,
-    paddingHorizontal: 0,
-    backgroundColor: 'transparent',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: 6,
+    minHeight: 36,
   },
   planInputEmpty: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.inputUnderline,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
   },
   planInputFocused: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.text,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
   },
 });
 

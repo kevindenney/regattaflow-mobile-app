@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Settings2 } from 'lucide-react-native';
 
 import { IOS_COLORS } from '@/components/cards/constants';
@@ -104,6 +104,7 @@ export function ExpandedContentZone({
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled={Platform.OS === 'android'}
       >
         {modules.length === 0 ? (
           <View style={styles.emptyState}>

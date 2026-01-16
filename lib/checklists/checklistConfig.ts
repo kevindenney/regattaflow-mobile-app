@@ -14,63 +14,23 @@ import { RaceType } from '@/types/raceEvents';
 
 const DOCUMENT_ITEMS: ChecklistItem[] = [
   {
-    id: 'review_nor',
-    label: 'Review Notice of Race',
+    id: 'pre_race_briefing',
+    label: 'Pre-Race Briefing',
     priority: 'high',
-    description: 'Read NOR for entry requirements, schedule, and race format',
+    description: 'Review NOR, SI, and course in one unified briefing',
     raceTypes: ['fleet', 'distance', 'match', 'team'],
     phase: 'days_before',
     category: 'documents',
-    toolId: 'nor_review',
+    toolId: 'pre_race_briefing',
     toolType: 'full_wizard',
     learningModuleSlug: 'racing-basics',
     learningModuleId: 'lesson-1-5-1', // Understanding Race Documents
     quickTips: [
-      'Check entry deadlines and requirements',
-      'Note any equipment restrictions',
-      'Review protest procedures',
-      'Understand scoring system',
-      'Note any amendments or changes',
-    ],
-  },
-  {
-    id: 'review_si',
-    label: 'Review Sailing Instructions',
-    priority: 'high',
-    description: 'Study SI for course info, signals, and special procedures',
-    raceTypes: ['fleet', 'distance', 'match', 'team'],
-    phase: 'days_before',
-    category: 'documents',
-    toolId: 'si_review',
-    toolType: 'full_wizard',
-    learningModuleSlug: 'racing-basics',
-    learningModuleId: 'lesson-1-5-1', // Understanding Race Documents
-    quickTips: [
-      'Note VHF channel and race committee contact',
-      'Understand starting procedure and flags',
-      'Review mark rounding order',
-      'Check time limits and finishing procedures',
-      'Note any restricted areas',
-    ],
-  },
-  {
-    id: 'study_course',
-    label: 'Study course layout',
-    priority: 'high',
-    description: 'Review course marks, layout, and racing area on the map',
-    raceTypes: ['fleet', 'distance', 'match', 'team'],
-    phase: 'days_before',
-    category: 'documents',
-    toolId: 'course_map',
-    toolType: 'full_wizard',
-    learningModuleSlug: 'racing-basics',
-    learningModuleId: 'lesson-1-5-1', // Understanding Race Documents
-    quickTips: [
-      'Identify all marks and their colors/shapes',
-      'Understand the course configuration',
-      'Note any gates and rounding directions',
-      'Check for hazards and restricted areas',
-      'Plan laylines for expected wind',
+      'Review schedule and entry requirements',
+      'Study the course layout and marks',
+      'Note VHF channels and communication procedures',
+      'Understand scoring system and rules',
+      'Check for any amendments or changes',
     ],
   },
 ];
@@ -307,18 +267,10 @@ const DISTANCE_ITEMS: ChecklistItem[] = [
     raceTypes: ['distance'],
     phase: 'race_morning',
     category: 'navigation',
-    toolType: 'quick_tips',
+    toolId: 'route_briefing',
+    toolType: 'full_wizard',
     learningModuleSlug: 'distance-racing-strategy',
     learningModuleId: 'lesson-12-1-1',
-    quickTips: [
-      'Review all waypoints and coordinates with entire crew',
-      'Mark major hazards: shipping lanes, shallows, exclusion zones',
-      'Establish key decision points where strategy may change',
-      'Assign navigation duties and handoff procedures',
-      'Brief on emergency waypoints and nearest safe harbors',
-      'Discuss communication protocol for course changes',
-      'Post written route summary at nav station',
-    ],
   },
   {
     id: 'weather_routing',
@@ -328,7 +280,8 @@ const DISTANCE_ITEMS: ChecklistItem[] = [
     raceTypes: ['distance'],
     phase: 'race_morning',
     category: 'weather',
-    toolType: 'quick_tips',
+    toolId: 'weather_routing_wizard',
+    toolType: 'full_wizard',
     learningModuleSlug: 'distance-racing-strategy',
     learningModuleId: 'lesson-12-1-2',
     quickTips: [
@@ -635,6 +588,82 @@ const MORNING_ITEMS: ChecklistItem[] = [
 ];
 
 // =============================================================================
+// STRATEGY BRIEF ITEMS (Race Morning - Strategy category)
+// These are displayed in the Strategy Brief checklist with AI contextual tips
+// =============================================================================
+
+const STRATEGY_ITEMS: ChecklistItem[] = [
+  {
+    id: 'strategy_wind_forecast',
+    label: 'Review wind forecast & shifts',
+    priority: 'high',
+    description: 'Check expected conditions and shift patterns',
+    raceTypes: ['fleet', 'distance', 'match', 'team'],
+    phase: 'race_morning',
+    category: 'strategy',
+    toolId: 'wind_shift_strategy',
+    toolType: 'full_wizard',
+    learningModuleSlug: 'decoding-race-day-wind',
+    quickTips: [
+      'Note predicted wind direction at race start',
+      'Identify expected shift patterns through the race',
+      'Watch for thermal effects if racing near shore',
+    ],
+  },
+  {
+    id: 'strategy_start_plan',
+    label: 'Set start strategy',
+    priority: 'high',
+    description: 'Decide on starting approach and position',
+    raceTypes: ['fleet', 'match', 'team'],
+    phase: 'race_morning',
+    category: 'strategy',
+    toolId: 'start_planner',
+    toolType: 'full_wizard',
+    learningModuleSlug: 'perfect-start',
+    quickTips: [
+      'Check line bias before committing',
+      'Consider your first beat strategy when choosing end',
+      'Plan escape routes if crowded',
+    ],
+  },
+  {
+    id: 'strategy_upwind_approach',
+    label: 'Plan upwind approach',
+    priority: 'high',
+    description: 'Determine favored side of first beat',
+    raceTypes: ['fleet', 'distance', 'match', 'team'],
+    phase: 'race_morning',
+    category: 'strategy',
+    toolId: 'first_beat_strategy',
+    toolType: 'full_wizard',
+    learningModuleSlug: 'winning-first-beat',
+    quickTips: [
+      'Identify which tack is favored based on wind forecast',
+      'Consider geographic features affecting wind',
+      'Plan layline approach based on shift patterns',
+    ],
+  },
+  {
+    id: 'strategy_current_tide',
+    label: 'Note current/tide strategy',
+    priority: 'medium',
+    description: 'Factor tide state into tactical decisions',
+    raceTypes: ['fleet', 'distance', 'match', 'team'],
+    phase: 'race_morning',
+    category: 'strategy',
+    toolId: 'tide_strategy',
+    toolType: 'full_wizard',
+    learningModuleSlug: 'racing-in-current',
+    quickTips: [
+      'Note tide state and current direction at race time',
+      'Plan mark approaches accounting for current',
+      'Consider current when choosing sides of course',
+    ],
+  },
+];
+
+// =============================================================================
 // ON WATER ITEMS (All race types)
 // =============================================================================
 
@@ -733,6 +762,7 @@ const ALL_CHECKLIST_ITEMS: ChecklistItem[] = [
   ...MATCH_ITEMS,
   ...TEAM_ITEMS,
   ...MORNING_ITEMS,
+  ...STRATEGY_ITEMS,
   ...ON_WATER_ITEMS,
 ];
 
@@ -781,6 +811,7 @@ export function getCategoriesForPhase(
   // Sort categories in a logical order
   // Documents come first in prep phase as NOR/SI inform other decisions
   // Weather next as it impacts equipment and tactics
+  // Strategy appears after tactics in race morning
   const categoryOrder: ChecklistCategory[] = [
     'documents',
     'weather',
@@ -791,6 +822,7 @@ export function getCategoriesForPhase(
     'logistics',
     'navigation',
     'tactics',
+    'strategy',
     'rules',
     'morning',
     'on_water',
@@ -855,6 +887,7 @@ export {
   MATCH_ITEMS,
   TEAM_ITEMS,
   MORNING_ITEMS,
+  STRATEGY_ITEMS,
   ON_WATER_ITEMS,
   ALL_CHECKLIST_ITEMS,
 };

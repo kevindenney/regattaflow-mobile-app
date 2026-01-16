@@ -10,7 +10,7 @@
  */
 
 import React, { ReactNode, useCallback } from 'react';
-import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
   SharedValue,
   useAnimatedStyle,
@@ -165,6 +165,8 @@ export function AnimatedRaceCard({
       onLongPress={onLongPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      // On Android, delay press recognition to allow scroll gestures to be detected first
+      delayPressIn={Platform.OS === 'android' ? 100 : 0}
       style={[
         styles.container,
         { width: cardWidth },

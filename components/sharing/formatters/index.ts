@@ -257,7 +257,13 @@ function formatWatchScheduleSection(ws: WatchScheduleData | undefined, lines: st
     const watch = ws.watches[watchIdx];
     const endHour = currentHour + ws.watchLengthHours;
 
-    lines.push(`${formatTimeWithMinutes(currentHour, startMinute)}-${formatTimeWithMinutes(endHour, startMinute)}  ${watch?.name || `Watch ${String.fromCharCode(65 + watchIdx)}`}`);
+    // Display watch name with crew names if available
+    const crewDisplay = watch?.crewNames?.length
+      ? `: ${watch.crewNames.join(', ')}`
+      : '';
+    const watchName = watch?.name || `Watch ${String.fromCharCode(65 + watchIdx)}`;
+
+    lines.push(`${formatTimeWithMinutes(currentHour, startMinute)}-${formatTimeWithMinutes(endHour, startMinute)}  ${watchName}${crewDisplay}`);
 
     currentHour = endHour;
     hoursElapsed += ws.watchLengthHours;

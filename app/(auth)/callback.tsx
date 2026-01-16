@@ -7,6 +7,7 @@ import {ActivityIndicator, View, Text,
 } from "react-native"
 import {createLogger} from '@/lib/utils/logger'
 import {createSailorSampleData} from '@/services/onboarding/SailorSampleDataService'
+import {GuestStorageService} from '@/services/GuestStorageService'
 
 const logger = createLogger('OAuthCallback')
 
@@ -157,6 +158,22 @@ export default function Callback(){
             logger.info('Fixed user profile with default sailor type')
           }
           effectiveUserType = 'sailor'
+        }
+
+        // Check for guest race data to migrate
+        try {
+          const hasGuestRace = await GuestStorageService.hasGuestRace()
+          if (hasGuestRace) {
+            logger.info('Found guest race data, migrating to account...')
+            setStatus('Migrating your race data...')
+            const newRaceId = await GuestStorageService.migrateToAccount(session.user.id)
+            if (newRaceId) {
+              logger.info('Successfully migrated guest race:', newRaceId)
+              await GuestStorageService.clearGuestData()
+            }
+          }
+        } catch (migrationError) {
+          logger.warn('Guest data migration failed, continuing anyway:', migrationError)
         }
 
         if (pendingPersona && isNewUser) {

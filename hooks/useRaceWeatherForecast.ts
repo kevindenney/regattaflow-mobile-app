@@ -5,11 +5,11 @@
  * TinySparkline visualization, along with the "now" index position.
  */
 
-import { useState, useEffect, useMemo } from 'react';
-import { regionalWeatherService } from '@/services/weather/RegionalWeatherService';
-import type { WeatherData, WeatherForecast } from '@/services/weather/RegionalWeatherService';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import { createLogger } from '@/lib/utils/logger';
+import type { WeatherData, WeatherForecast } from '@/services/weather/RegionalWeatherService';
+import { regionalWeatherService } from '@/services/weather/RegionalWeatherService';
+import { useEffect, useState } from 'react';
 
 const logger = createLogger('useRaceWeatherForecast');
 
@@ -25,22 +25,23 @@ function degreesToCardinal(degrees: number | undefined): string {
   if (degrees === undefined) return '';
 
   const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
-                      'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   const index = Math.round(((degrees % 360) + 360) % 360 / 22.5) % 16;
   return directions[index];
 }
 
 /**
- * Format timestamp to HH:MM string
+ * Format timestamp to HH:MM string (using UTC to match how race times are stored)
  */
 function formatTime(timestamp: string | Date): string {
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  return `${date.getUTCHours().toString().padStart(2, '0')}:${date.getUTCMinutes().toString().padStart(2, '0')}`;
 }
 
 /** Hourly data point for HourlyForecastTable */
 export interface HourlyDataPoint {
   time: string;        // "09:00" format
+  timestamp: string;   // Full ISO timestamp for multi-day races
   value: number;
   direction?: string;  // "E", "NE", etc. for wind
 }
@@ -212,7 +213,7 @@ function findTidePeakTime(forecasts: WeatherForecast[], tideValues: number[]): s
   if (!peakForecast) return undefined;
 
   const peakDate = new Date(peakForecast.timestamp);
-  return `${peakDate.getHours().toString().padStart(2, '0')}:${peakDate.getMinutes().toString().padStart(2, '0')}`;
+  return `${peakDate.getUTCHours().toString().padStart(2, '0')}:${peakDate.getUTCMinutes().toString().padStart(2, '0')}`;
 }
 
 /**
@@ -250,7 +251,7 @@ function extractTideTimes(
     const lwDate = new Date(forecasts[minIndex].timestamp);
     const midMs = (hwDate.getTime() + lwDate.getTime()) / 2;
     const midDate = new Date(midMs);
-    turnTime = `${midDate.getHours().toString().padStart(2, '0')}:${midDate.getMinutes().toString().padStart(2, '0')}`;
+    turnTime = `${midDate.getUTCHours().toString().padStart(2, '0')}:${midDate.getUTCMinutes().toString().padStart(2, '0')}`;
   }
 
   return { highTide, lowTide, tideRange, turnTime };
@@ -387,6 +388,7 @@ function extractRaceWindowData(
 function extractHourlyWind(forecasts: WeatherForecast[]): HourlyDataPoint[] {
   return forecasts.map(f => ({
     time: formatTime(f.timestamp),
+    timestamp: typeof f.timestamp === 'string' ? f.timestamp : f.timestamp.toISOString(),
     value: Math.round(f.windSpeed),
     direction: degreesToCardinal(f.windDirection),
   }));
@@ -398,6 +400,7 @@ function extractHourlyWind(forecasts: WeatherForecast[]): HourlyDataPoint[] {
 function extractHourlyTide(forecasts: WeatherForecast[], tideValues: number[]): HourlyDataPoint[] {
   return forecasts.map((f, i) => ({
     time: formatTime(f.timestamp),
+    timestamp: typeof f.timestamp === 'string' ? f.timestamp : f.timestamp.toISOString(),
     value: tideValues[i] ?? 0,
   }));
 }
@@ -408,6 +411,7 @@ function extractHourlyTide(forecasts: WeatherForecast[], tideValues: number[]): 
 function extractHourlyWaves(forecasts: WeatherForecast[]): HourlyDataPoint[] {
   return forecasts.map(f => ({
     time: formatTime(f.timestamp),
+    timestamp: typeof f.timestamp === 'string' ? f.timestamp : f.timestamp.toISOString(),
     value: Math.round((f.waveHeight ?? 0) * 10) / 10,
     direction: f.waveDirection !== undefined ? degreesToCardinal(f.waveDirection) : undefined,
   }));
@@ -461,6 +465,14 @@ export function useRaceWeatherForecast(
       const now = new Date();
       const hoursUntil = Math.max(0, (raceDateObj.getTime() - now.getTime()) / (1000 * 60 * 60));
 
+      // Calculate dynamic forecast hours based on race duration
+      // For short races (<3hr), use default 8 hours
+      // For long races, use race duration + 4 hour buffer
+      const raceDurationHours = Math.ceil(expectedDurationMinutes / 60);
+      const dynamicForecastHours = raceDurationHours >= 3
+        ? Math.max(FORECAST_HOURS, raceDurationHours + 4)
+        : FORECAST_HOURS;
+
       // Debug: Log date parsing
       // IMPORTANT: If raceDate is just "YYYY-MM-DD" without time, it parses as midnight.
       // For today's races, this means raceDateObj < now is TRUE even though the race hasn't started!
@@ -476,23 +488,23 @@ export function useRaceWeatherForecast(
         ISSUE: isDateOnly && raceDateObj < now ? '⚠️ DATE-ONLY STRING CAUSES FALSE PAST CHECK!' : 'OK',
       });
 
-      // For date-only strings, treat as "sometime today" - don't skip
-      // Only skip if the parsed date is definitely past (>24 hours ago)
-      const isPastRace = isDateOnly
-        ? (now.getTime() - raceDateObj.getTime()) > 24 * 60 * 60 * 1000 // More than 24 hours ago
-        : raceDateObj < now;
+      // Relaxed check: Allow races that started within the last 24 hours
+      // This ensures "Start Strategy" works even if the race strictly "started" 5 minutes ago.
+      const msSinceRace = now.getTime() - raceDateObj.getTime();
+      const isPastRace = msSinceRace > 24 * 60 * 60 * 1000; // Only skip if > 24 hours ago
 
       if (isPastRace || hoursUntil > 240) {
         logger.debug('🔴 [useRaceWeatherForecast] Skipping - race date out of range', {
           isPastRace,
           hoursUntil,
+          msSinceRace,
         });
         setData(null);
         return;
       }
 
       // Fetch weather data - request enough hours to cover race window + buffer
-      const hoursToFetch = Math.min(240, Math.ceil(hoursUntil) + FORECAST_HOURS);
+      const hoursToFetch = Math.min(240, Math.ceil(hoursUntil) + dynamicForecastHours);
       logger.debug('[useRaceWeatherForecast] Fetching weather:', {
         venueId: venue.id,
         venueName: venue.name,
@@ -529,8 +541,8 @@ export function useRaceWeatherForecast(
         }
       });
 
-      // Extract FORECAST_HOURS of data starting from startIndex
-      const relevantForecasts = weatherData.forecast.slice(startIndex, startIndex + FORECAST_HOURS);
+      // Extract dynamicForecastHours of data starting from startIndex
+      const relevantForecasts = weatherData.forecast.slice(startIndex, startIndex + dynamicForecastHours);
 
       if (relevantForecasts.length < 2) {
         // Not enough data points for a meaningful sparkline
@@ -655,8 +667,8 @@ export function useRaceWeatherForecast(
 
       // Extract data source metadata for UI attribution
       const isMockData = weatherData.sources.primary.toLowerCase().includes('mock') ||
-                        weatherData.sources.primary.toLowerCase().includes('simulated') ||
-                        weatherData.sources.primary.toLowerCase().includes('fallback');
+        weatherData.sources.primary.toLowerCase().includes('simulated') ||
+        weatherData.sources.primary.toLowerCase().includes('fallback');
       const dataSource: DataSourceMeta = {
         provider: weatherData.sources.primary,
         isMock: isMockData,

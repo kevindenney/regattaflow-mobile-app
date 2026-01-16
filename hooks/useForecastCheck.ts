@@ -26,6 +26,8 @@ interface UseForecastCheckOptions {
   venue: SailingVenue | null;
   /** Race date (ISO string or YYYY-MM-DD) */
   raceDate: string | null;
+  /** Race start time (e.g., "10:30") - combined with raceDate for accurate timing */
+  raceStartTime?: string | null;
   /** Expected race duration in minutes (for forecast window) */
   expectedDurationMinutes?: number;
   /** Whether to enable the hook */
@@ -77,12 +79,40 @@ interface UseForecastCheckReturn {
 }
 
 /**
+ * Combine date string and time string into a proper ISO datetime
+ * @param date - Date string (YYYY-MM-DD or ISO)
+ * @param time - Time string (HH:MM or HH:MM:SS)
+ * @returns Combined ISO datetime string
+ */
+function combineDateAndTime(date: string | null, time: string | null | undefined): string | null {
+  if (!date) return null;
+
+  // If date already includes time (ISO format), use it as-is
+  if (date.includes('T')) {
+    return date;
+  }
+
+  // If we have a separate time, combine them
+  if (time) {
+    // Normalize time to HH:MM:SS format
+    const normalizedTime = time.includes(':')
+      ? (time.split(':').length === 2 ? `${time}:00` : time)
+      : '00:00:00';
+    return `${date}T${normalizedTime}`;
+  }
+
+  // Default to midnight if no time provided
+  return `${date}T00:00:00`;
+}
+
+/**
  * Hook to manage forecast checking for race preparation
  */
 export function useForecastCheck({
   raceEventId,
   venue,
   raceDate,
+  raceStartTime,
   expectedDurationMinutes = 90,
   enabled = true,
 }: UseForecastCheckOptions): UseForecastCheckReturn {
@@ -92,6 +122,16 @@ export function useForecastCheck({
     autoSave: true,
   });
 
+  // Combine date and time for accurate forecast window
+  const combinedDateTime = combineDateAndTime(raceDate, raceStartTime);
+
+  logger.debug('[useForecastCheck] Combined datetime:', {
+    raceDate,
+    raceStartTime,
+    combinedDateTime,
+    expectedDurationMinutes,
+  });
+
   // Get current live forecast
   const {
     data: currentForecast,
@@ -99,8 +139,8 @@ export function useForecastCheck({
     error: forecastError,
   } = useRaceWeatherForecast(
     venue,
-    raceDate,
-    enabled && !!venue && !!raceDate,
+    combinedDateTime,
+    enabled && !!venue && !!combinedDateTime,
     expectedDurationMinutes
   );
 

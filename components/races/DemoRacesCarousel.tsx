@@ -5,15 +5,15 @@
  * who haven't added any races yet. Includes race cards and detail view.
  */
 
-import React, { useRef } from 'react';
-import { View, ScrollView, Platform } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { DemoAddRaceHeader } from '@/components/races/DemoAddRaceHeader';
+import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
 import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
-import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { TimelineIndicators } from '@/components/races/TimelineIndicators';
-import { DemoAddRaceHeader } from '@/components/races/DemoAddRaceHeader';
 import { MOCK_RACES } from '@/constants/mockData';
+import * as Haptics from 'expo-haptics';
+import { useRef } from 'react';
+import { Platform, ScrollView, View } from 'react-native';
 
 // Layout constants
 const HERO_ZONE_HEIGHT = 280;
@@ -64,6 +64,7 @@ export function DemoRacesCarousel({
         <ScrollView
           ref={scrollViewRef}
           horizontal
+          pagingEnabled={false}
           showsHorizontalScrollIndicator={false}
           style={{ flex: 1 }}
           contentContainerStyle={{
@@ -140,10 +141,12 @@ export function DemoRacesCarousel({
         <TimelineIndicators
           races={MOCK_RACES}
           selectedId={selectedDemoRaceId}
+          nextRaceIndex={0}
           onSelect={(id) => onSelectDemoRace(id)}
           snapInterval={MOBILE_SNAP_INTERVAL}
           scrollViewRef={scrollViewRef}
           activeColor="#7C3AED"
+          nextRaceColor="#34C759"
           scrollIndexOffset={1}
         />
       </View>

@@ -1,14 +1,12 @@
 /**
- * Practice Create Screen - Tufte Redesign
+ * Practice Screen - Single Page Tufte Design
  *
- * Single unified scroll view following Tufte principles:
- * - Suggestions at top (if available)
- * - Inline log form in middle
- * - Schedule link at bottom
- * - No tabs, typography-driven hierarchy
+ * Shows AI-suggested practices based on race analysis.
+ * Shows default suggestions for new users.
+ * Tap a suggestion to log it. Simple.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,32 +14,84 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { TUFTE_BACKGROUND, IOS_COLORS } from '@/components/cards/constants';
-import {
-  TUFTE_FORM_COLORS,
-  TUFTE_FORM_SPACING,
-} from '@/components/races/AddRaceDialog/tufteFormStyles';
-import { TufteSuggestionRow } from '@/components/practice/TufteSuggestionRow';
-import { TuftePracticeLogForm } from '@/components/practice/TuftePracticeLogForm';
-import type { LogPracticeData } from '@/components/practice/TuftePracticeLogForm';
+import { ChevronLeft } from 'lucide-react-native';
 import { usePracticeSuggestions } from '@/hooks/usePracticeSuggestions';
 import { practiceSessionService } from '@/services/PracticeSessionService';
 import { useAuth } from '@/providers/AuthProvider';
-import type { PracticeSuggestion } from '@/types/practice';
+import { SKILL_AREA_LABELS } from '@/types/practice';
+import type { PracticeSuggestion, SkillArea } from '@/types/practice';
+
+// Ink-like color palette
+const COLORS = {
+  bg: '#faf9f7',
+  ink: '#1a1a1a',
+  muted: '#666666',
+  faint: '#999999',
+  accent: '#2c5282',
+  rule: '#e5e5e5',
+};
+
+// Default suggestions for new users
+const DEFAULT_SUGGESTIONS: Array<{
+  id: string;
+  skillArea: SkillArea;
+  reason: string;
+  drillName: string;
+  estimatedDuration: number;
+}> = [
+  {
+    id: 'default-starts',
+    skillArea: 'start-execution',
+    reason: 'The start often determines the race. Practice timing and line positioning.',
+    drillName: 'Rabbit Start Drill',
+    estimatedDuration: 30,
+  },
+  {
+    id: 'default-upwind',
+    skillArea: 'upwind-execution',
+    reason: 'Upwind legs are where races are won. Focus on pointing and VMG.',
+    drillName: 'Tacking on Shifts',
+    estimatedDuration: 45,
+  },
+  {
+    id: 'default-marks',
+    skillArea: 'windward-rounding',
+    reason: 'Clean mark roundings maintain momentum and position.',
+    drillName: 'Mark Rounding Circuit',
+    estimatedDuration: 30,
+  },
+  {
+    id: 'default-downwind',
+    skillArea: 'downwind-speed',
+    reason: 'Downwind speed separates good sailors from great ones.',
+    drillName: 'VMG Downwind Run',
+    estimatedDuration: 30,
+  },
+];
 
 export default function PracticeCreateScreen() {
   const { user } = useAuth();
   const { suggestions, isLoading } = usePracticeSuggestions();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [duration, setDuration] = useState(30);
+  const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(
-    new Set()
-  );
+
+  // Use AI suggestions if available, otherwise default suggestions
+  const hasAISuggestions = suggestions.length > 0;
+  const displaySuggestions = hasAISuggestions
+    ? suggestions.map((s) => ({
+        id: s.id,
+        skillArea: s.skillArea,
+        reason: s.reason,
+        drillName: s.suggestedDrills[0]?.drill.name || '',
+        estimatedDuration: s.estimatedDuration,
+      }))
+    : DEFAULT_SUGGESTIONS;
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -51,25 +101,20 @@ export default function PracticeCreateScreen() {
     }
   };
 
-  // Tap suggestion - go to wizard with pre-filled data
-  const handleSuggestionPress = (suggestion: PracticeSuggestion) => {
-    router.push({
-      pathname: '/practice/create-wizard',
-      params: {
-        mode: 'schedule',
-        fromSuggestion: 'true',
-        skillArea: suggestion.skillArea,
-        drillIds: suggestion.suggestedDrills.map((d) => d.drill.id).join(','),
-        aiReasoning: suggestion.reason,
-        contextualNotes: suggestion.contextualNotes || '',
-        estimatedDuration: suggestion.estimatedDuration.toString(),
-      },
-    });
+  const handleSelectSuggestion = (suggestion: (typeof displaySuggestions)[0]) => {
+    if (selectedId === suggestion.id) {
+      setSelectedId(null);
+    } else {
+      setSelectedId(suggestion.id);
+      setDuration(suggestion.estimatedDuration);
+    }
   };
 
-  // Log ad-hoc practice
-  const handleLogPractice = async (data: LogPracticeData) => {
-    if (!user?.id) return;
+  const handleLog = async () => {
+    if (!user?.id || !selectedId) return;
+
+    const suggestion = displaySuggestions.find((s) => s.id === selectedId);
+    if (!suggestion) return;
 
     setIsSubmitting(true);
     try {
@@ -78,137 +123,160 @@ export default function PracticeCreateScreen() {
         sailorId: user.id,
         sessionType: 'logged',
         status: 'completed',
-        actualDurationMinutes: data.durationMinutes,
-        reflectionNotes: data.notes || null,
+        actualDurationMinutes: duration,
+        reflectionNotes: notes || null,
+        aiSuggested: hasAISuggestions,
+        aiReasoning: suggestion.reason,
       });
 
-      // Add focus areas
-      if (data.focusAreas.length > 0) {
-        await practiceSessionService.addFocusAreas(
-          session.id,
-          data.focusAreas.map((area, index) => ({
-            skillArea: area,
-            priority: index + 1,
-          }))
-        );
-      }
+      await practiceSessionService.addFocusAreas(session.id, [
+        { skillArea: suggestion.skillArea, priority: 1 },
+      ]);
 
-      router.push({
+      router.replace({
         pathname: '/practice/[id]',
         params: { id: session.id },
       });
     } catch (error) {
       console.error('Failed to log practice:', error);
-      alert('Failed to log practice session. Please try again.');
+      alert('Failed to log practice. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Navigate to schedule wizard
-  const handleSchedulePress = () => {
-    router.push({
-      pathname: '/practice/create-wizard',
-      params: { mode: 'schedule' },
-    });
-  };
-
-  // Filter out dismissed suggestions
-  const activeSuggestions = suggestions.filter(
-    (s) => !dismissedSuggestions.has(s.id)
-  );
-  const hasSuggestions = activeSuggestions.length > 0;
+  const selectedSuggestion = displaySuggestions.find((s) => s.id === selectedId);
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <ChevronLeft size={24} color={TUFTE_FORM_COLORS.primary} />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Add Practice</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <ChevronLeft size={20} color={COLORS.muted} />
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* SUGGESTIONS SECTION */}
-            {isLoading ? (
-              <View style={styles.loadingSection}>
-                <ActivityIndicator size="small" color={TUFTE_FORM_COLORS.primary} />
-                <Text style={styles.loadingText}>Checking recommendations...</Text>
-              </View>
-            ) : hasSuggestions ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>SUGGESTED FOR YOU</Text>
-                <Text style={styles.sectionSubtext}>
-                  Based on your recent races
-                </Text>
-                <View style={styles.suggestionsCard}>
-                  {activeSuggestions.map((suggestion, index) => (
-                    <TufteSuggestionRow
-                      key={suggestion.id}
-                      suggestion={suggestion}
-                      onPress={handleSuggestionPress}
-                    />
-                  ))}
-                </View>
-              </View>
-            ) : null}
+          <Text style={styles.title}>Practice</Text>
 
-            {/* SEPARATOR */}
-            {hasSuggestions && <View style={styles.separator} />}
-
-            {/* LOG SECTION */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>LOG A PRACTICE</Text>
-              <Text style={styles.sectionSubtext}>
-                Record what you worked on today
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={COLORS.muted} />
+              <Text style={styles.loadingText}>
+                Analyzing your races...
               </Text>
-              <View style={styles.logFormCard}>
-                <TuftePracticeLogForm
-                  onSubmit={handleLogPractice}
-                  isSubmitting={isSubmitting}
-                />
+            </View>
+          ) : (
+            <>
+              {/* Subtitle changes based on whether we have AI suggestions */}
+              <Text style={styles.subtitle}>
+                {hasAISuggestions
+                  ? 'Based on your recent race analysis'
+                  : 'Suggestions improve as you complete races'}
+              </Text>
+
+              {/* Suggestions list */}
+              <View style={styles.suggestionsList}>
+                {displaySuggestions.map((suggestion) => (
+                  <TouchableOpacity
+                    key={suggestion.id}
+                    style={styles.suggestionRow}
+                    onPress={() => handleSelectSuggestion(suggestion)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.suggestionContent}>
+                      <Text
+                        style={[
+                          styles.suggestionSkill,
+                          selectedId === suggestion.id &&
+                            styles.suggestionSkillSelected,
+                        ]}
+                      >
+                        {SKILL_AREA_LABELS[suggestion.skillArea]}
+                      </Text>
+                      <Text style={styles.suggestionReason}>
+                        {suggestion.reason}
+                      </Text>
+                      {suggestion.drillName && (
+                        <Text style={styles.suggestionDrill}>
+                          Try: {suggestion.drillName}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.suggestionDuration}>
+                      {suggestion.estimatedDuration}m
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            </View>
 
-            {/* SEPARATOR */}
-            <View style={styles.separator} />
+              {/* Log form - appears when suggestion selected */}
+              {selectedSuggestion && (
+                <View style={styles.logForm}>
+                  <View style={styles.rule} />
 
-            {/* SCHEDULE SECTION */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>SCHEDULE A SESSION</Text>
-              <TouchableOpacity
-                style={styles.scheduleRow}
-                onPress={handleSchedulePress}
-                activeOpacity={0.7}
-              >
-                <View style={styles.scheduleContent}>
-                  <Text style={styles.scheduleTitle}>Plan a structured practice</Text>
-                  <Text style={styles.scheduleSubtext}>
-                    Select drills, assign crew tasks, set goals
+                  <Text style={styles.logPrompt}>
+                    Log {SKILL_AREA_LABELS[selectedSuggestion.skillArea]} practice
                   </Text>
-                </View>
-                <ChevronRight size={20} color={TUFTE_FORM_COLORS.secondaryLabel} />
-              </TouchableOpacity>
-            </View>
 
-            {/* Bottom spacing */}
-            <View style={styles.bottomSpacer} />
-          </ScrollView>
-        </KeyboardAvoidingView>
+                  {/* Duration selector */}
+                  <View style={styles.durationRow}>
+                    <Text style={styles.durationLabel}>Duration</Text>
+                    <View style={styles.durationOptions}>
+                      {[15, 30, 45, 60].map((mins) => (
+                        <TouchableOpacity
+                          key={mins}
+                          onPress={() => setDuration(mins)}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                        >
+                          <Text
+                            style={[
+                              styles.durationOption,
+                              duration === mins && styles.durationSelected,
+                            ]}
+                          >
+                            {mins}m
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Notes */}
+                  <View style={styles.notesRow}>
+                    <TextInput
+                      style={styles.notesInput}
+                      value={notes}
+                      onChangeText={setNotes}
+                      placeholder="What did you learn?"
+                      placeholderTextColor={COLORS.faint}
+                      multiline
+                    />
+                  </View>
+
+                  {/* Submit */}
+                  <TouchableOpacity
+                    style={styles.logButton}
+                    onPress={handleLog}
+                    disabled={isSubmitting}
+                    activeOpacity={0.6}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator size="small" color={COLORS.accent} />
+                    ) : (
+                      <Text style={styles.logButtonText}>Log Practice →</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
       </SafeAreaView>
     </>
   );
@@ -217,113 +285,150 @@ export default function PracticeCreateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: TUFTE_BACKGROUND,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: TUFTE_FORM_SPACING.lg,
-    paddingVertical: TUFTE_FORM_SPACING.md,
-    backgroundColor: TUFTE_BACKGROUND,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: TUFTE_FORM_COLORS.separator,
+    backgroundColor: COLORS.bg,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 4,
   },
   backText: {
-    fontSize: 17,
-    color: TUFTE_FORM_COLORS.primary,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: TUFTE_FORM_COLORS.label,
-  },
-  headerSpacer: {
-    width: 70,
-  },
-  keyboardView: {
-    flex: 1,
+    fontSize: 15,
+    color: COLORS.muted,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: TUFTE_FORM_SPACING.lg,
+    paddingHorizontal: 24,
+    paddingBottom: 60,
   },
-  loadingSection: {
-    flexDirection: 'row',
+  title: {
+    fontSize: 32,
+    fontWeight: '300',
+    color: COLORS.ink,
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.faint,
+    marginBottom: 32,
+    fontStyle: 'italic',
+  },
+  loadingContainer: {
+    paddingVertical: 40,
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 12,
-    paddingVertical: TUFTE_FORM_SPACING.xl,
   },
   loadingText: {
     fontSize: 14,
-    color: TUFTE_FORM_COLORS.secondaryLabel,
+    color: COLORS.muted,
+    fontStyle: 'italic',
   },
-  section: {
-    paddingHorizontal: TUFTE_FORM_SPACING.lg,
+  emptyText: {
+    fontSize: 15,
+    color: COLORS.muted,
+    lineHeight: 22,
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: TUFTE_FORM_COLORS.sectionLabel,
-    letterSpacing: 1.2,
-    marginBottom: 4,
+  suggestionsList: {
+    gap: 0,
   },
-  sectionSubtext: {
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.rule,
+  },
+  suggestionContent: {
+    flex: 1,
+    gap: 4,
+  },
+  suggestionSkill: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: COLORS.ink,
+  },
+  suggestionSkillSelected: {
+    color: COLORS.accent,
+    textDecorationLine: 'underline',
+  },
+  suggestionReason: {
+    fontSize: 14,
+    color: COLORS.muted,
+    lineHeight: 20,
+  },
+  suggestionDrill: {
     fontSize: 13,
-    color: TUFTE_FORM_COLORS.secondaryLabel,
-    marginBottom: TUFTE_FORM_SPACING.md,
+    color: COLORS.faint,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
-  suggestionsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: TUFTE_FORM_COLORS.inputBorder,
+  suggestionDuration: {
+    fontSize: 14,
+    color: COLORS.faint,
+    fontVariant: ['tabular-nums'],
+    marginLeft: 16,
   },
-  separator: {
+  logForm: {
+    marginTop: 8,
+  },
+  rule: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: TUFTE_FORM_COLORS.separator,
-    marginVertical: TUFTE_FORM_SPACING.xl,
-    marginHorizontal: TUFTE_FORM_SPACING.lg,
+    backgroundColor: COLORS.rule,
+    marginVertical: 24,
   },
-  logFormCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: TUFTE_FORM_COLORS.inputBorder,
+  logPrompt: {
+    fontSize: 16,
+    color: COLORS.ink,
+    marginBottom: 20,
   },
-  scheduleRow: {
+  durationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: TUFTE_FORM_SPACING.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: TUFTE_FORM_COLORS.inputBorder,
+    marginBottom: 20,
   },
-  scheduleContent: {
-    flex: 1,
-    gap: 2,
-  },
-  scheduleTitle: {
+  durationLabel: {
     fontSize: 15,
+    color: COLORS.muted,
+    marginRight: 16,
+  },
+  durationOptions: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  durationOption: {
+    fontSize: 15,
+    color: COLORS.faint,
+    fontVariant: ['tabular-nums'],
+  },
+  durationSelected: {
+    color: COLORS.ink,
     fontWeight: '600',
-    color: TUFTE_FORM_COLORS.label,
+    textDecorationLine: 'underline',
+    textDecorationColor: COLORS.accent,
   },
-  scheduleSubtext: {
-    fontSize: 13,
-    color: TUFTE_FORM_COLORS.secondaryLabel,
+  notesRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.rule,
+    marginBottom: 24,
+    paddingBottom: 8,
   },
-  bottomSpacer: {
-    height: 40,
+  notesInput: {
+    fontSize: 15,
+    color: COLORS.ink,
+    padding: 0,
+    minHeight: 40,
+  },
+  logButton: {
+    alignItems: 'flex-end',
+  },
+  logButtonText: {
+    fontSize: 16,
+    color: COLORS.accent,
+    fontWeight: '500',
   },
 });

@@ -2,16 +2,18 @@
  * ExtractedDetailsSummary Component
  *
  * Collapsible section showing all extracted details from AI analysis.
- * Displays rich data that doesn't have dedicated form fields.
+ * Supports inline editing of all fields with onChange callback.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   Pressable,
+  TextInput,
   StyleSheet,
-  ScrollView,
+  Switch,
+  Platform,
 } from 'react-native';
 import {
   ChevronRight,
@@ -25,10 +27,18 @@ import {
   Ship,
   FileText,
   MapPin,
+  Navigation,
+  Waves,
+  Clock,
+  Shield,
+  Pencil,
+  Plus,
+  Trash2,
 } from 'lucide-react-native';
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from './tufteFormStyles';
 import { IOS_COLORS } from '@/components/cards/constants';
 
+// Type definitions
 interface ScheduleEvent {
   date: string;
   time: string;
@@ -40,6 +50,7 @@ interface ScheduleEvent {
 interface ProhibitedArea {
   name: string;
   description?: string;
+  coordinates?: Array<{ lat: number; lng: number }>;
 }
 
 interface EntryFee {
@@ -48,7 +59,26 @@ interface EntryFee {
   deadline?: string;
 }
 
-interface ExtractedDetailsData {
+interface VHFChannel {
+  channel: string;
+  purpose?: string;
+}
+
+interface RouteWaypoint {
+  name: string;
+  latitude?: number;
+  longitude?: number;
+  type?: string;
+  notes?: string;
+}
+
+interface TideGate {
+  location: string;
+  optimalTime?: string;
+  notes?: string;
+}
+
+export interface ExtractedDetailsData {
   // Schedule
   schedule?: ScheduleEvent[];
 
@@ -60,7 +90,16 @@ interface ExtractedDetailsData {
   // Areas
   prohibitedAreas?: ProhibitedArea[];
   startAreaName?: string;
+  startAreaDescription?: string;
+  startAreaCoordinates?: { lat: number; lng: number };
   finishAreaName?: string;
+  finishAreaDescription?: string;
+  finishAreaCoordinates?: { lat: number; lng: number };
+
+  // Route (for distance races)
+  routeWaypoints?: RouteWaypoint[];
+  trafficSeparationSchemes?: string[];
+  tideGates?: TideGate[];
 
   // Entry
   entryFees?: EntryFee[];
@@ -76,7 +115,7 @@ interface ExtractedDetailsData {
   motoringDivisionRules?: string;
 
   // Communications
-  vhfChannels?: Array<{ channel: string; purpose?: string }>;
+  vhfChannels?: VHFChannel[];
 
   // Organization
   organizingAuthority?: string;
@@ -84,8 +123,20 @@ interface ExtractedDetailsData {
   contactEmail?: string;
 
   // Safety
+  safetyRequirements?: string;
+  retirementNotification?: string;
+  insuranceRequirements?: string;
   classRules?: string[];
   eligibilityRequirements?: string;
+
+  // Weather
+  expectedConditions?: string;
+  expectedWindDirection?: string;
+  expectedWindSpeedMin?: number;
+  expectedWindSpeedMax?: number;
+
+  // Prizes
+  prizesDescription?: string;
 }
 
 export interface ExtractedDetailsSummaryProps {
@@ -93,42 +144,91 @@ export interface ExtractedDetailsSummaryProps {
   data: ExtractedDetailsData | null;
   /** Whether the section is expanded */
   expanded?: boolean;
+  /** Callback when data changes (for editable mode) */
+  onChange?: (data: ExtractedDetailsData) => void;
 }
 
-export function ExtractedDetailsSummary({ data, expanded: initialExpanded = false }: ExtractedDetailsSummaryProps) {
+export function ExtractedDetailsSummary({
+  data,
+  expanded: initialExpanded = false,
+  onChange,
+}: ExtractedDetailsSummaryProps) {
   const [expanded, setExpanded] = useState(initialExpanded);
+  const isEditable = !!onChange;
 
-  console.log('[ExtractedDetailsSummary] Rendering with data:', data ? 'present' : 'null');
+  // Defensive check: warn if we receive wrapper format (should be unwrapped in TufteAddRaceForm)
+  if (data && (data as any).races) {
+    console.warn('[ExtractedDetailsSummary] Received wrapper object - data should be unwrapped to races[0]');
+  }
 
-  if (!data) {
-    console.log('[ExtractedDetailsSummary] Data is null, returning null');
+  // In editable mode, always show all fields (even empty ones)
+  // In read-only mode, only show if there's data
+  if (!data && !isEditable) {
     return null;
   }
 
-  console.log('[ExtractedDetailsSummary] Data keys:', Object.keys(data));
-  console.log('[ExtractedDetailsSummary] schedule:', data.schedule?.length);
-  console.log('[ExtractedDetailsSummary] minimumCrew:', data.minimumCrew);
-  console.log('[ExtractedDetailsSummary] prohibitedAreas:', data.prohibitedAreas?.length);
-  console.log('[ExtractedDetailsSummary] entryFees:', data.entryFees?.length);
-  console.log('[ExtractedDetailsSummary] scoringFormulaDescription:', data.scoringFormulaDescription ? 'present' : 'missing');
+  // Ensure we have a data object to work with
+  const safeData = data || {};
 
-  // Count how many detail categories have data
+  // Count how many detail categories have data (for the badge)
   const detailCount = [
-    data.schedule?.length,
-    data.minimumCrew || data.crewRequirements,
-    data.prohibitedAreas?.length,
-    data.entryFees?.length,
-    data.scoringFormulaDescription,
-    data.motoringDivisionAvailable,
-    data.classRules?.length,
+    safeData.schedule?.length,
+    safeData.minimumCrew || safeData.crewRequirements,
+    safeData.prohibitedAreas?.length,
+    safeData.routeWaypoints?.length,
+    safeData.entryFees?.length,
+    safeData.scoringFormulaDescription,
+    safeData.motoringDivisionAvailable,
+    safeData.vhfChannels?.length,
+    safeData.classRules?.length,
+    safeData.safetyRequirements,
+    safeData.expectedConditions,
+    safeData.tideGates?.length,
   ].filter(Boolean).length;
 
-  console.log('[ExtractedDetailsSummary] detailCount:', detailCount);
-
-  if (detailCount === 0) {
-    console.log('[ExtractedDetailsSummary] detailCount is 0, returning null');
+  // In read-only mode with no data, hide
+  if (detailCount === 0 && !isEditable) {
     return null;
   }
+
+  // Total possible field categories (for showing extraction coverage)
+  const totalCategories = 12;
+
+  // Update helper
+  const updateField = <K extends keyof ExtractedDetailsData>(
+    field: K,
+    value: ExtractedDetailsData[K]
+  ) => {
+    if (onChange) {
+      onChange({ ...data, [field]: value });
+    }
+  };
+
+  // Array update helpers
+  const updateArrayItem = <T,>(
+    field: keyof ExtractedDetailsData,
+    index: number,
+    itemUpdates: Partial<T>
+  ) => {
+    const array = data[field] as T[] | undefined;
+    if (!array || !onChange) return;
+    const updated = [...array];
+    updated[index] = { ...updated[index], ...itemUpdates };
+    onChange({ ...data, [field]: updated });
+  };
+
+  const removeArrayItem = (field: keyof ExtractedDetailsData, index: number) => {
+    const array = data[field] as any[] | undefined;
+    if (!array || !onChange) return;
+    const updated = array.filter((_, i) => i !== index);
+    onChange({ ...data, [field]: updated });
+  };
+
+  const addArrayItem = <T,>(field: keyof ExtractedDetailsData, newItem: T) => {
+    const array = (data[field] as T[] | undefined) || [];
+    if (!onChange) return;
+    onChange({ ...data, [field]: [...array, newItem] });
+  };
 
   return (
     <View style={styles.container}>
@@ -141,9 +241,16 @@ export function ExtractedDetailsSummary({ data, expanded: initialExpanded = fals
       >
         <View style={styles.headerLeft}>
           <FileText size={16} color={IOS_COLORS.blue} />
-          <Text style={styles.headerLabel}>EXTRACTED DETAILS</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{detailCount}</Text>
+          <Text style={styles.headerLabel}>
+            {isEditable ? 'RACE DETAILS' : 'EXTRACTED DETAILS'}
+          </Text>
+          {isEditable && (
+            <Pencil size={12} color={TUFTE_FORM_COLORS.secondaryLabel} />
+          )}
+          <View style={[styles.badge, detailCount === 0 && styles.badgeEmpty]}>
+            <Text style={styles.badgeText}>
+              {isEditable ? `${detailCount}/${totalCategories}` : detailCount}
+            </Text>
           </View>
         </View>
         {expanded ? (
@@ -156,25 +263,128 @@ export function ExtractedDetailsSummary({ data, expanded: initialExpanded = fals
       {/* Expanded Content */}
       {expanded && (
         <View style={styles.content}>
-          {/* Schedule */}
-          {data.schedule && data.schedule.length > 0 && (
+          {/* Schedule - always show in editable mode */}
+          {(safeData.schedule?.length > 0 || isEditable) && (
             <DetailSection
               icon={<Calendar size={16} color={IOS_COLORS.orange} />}
               title="Schedule"
+              onAdd={isEditable ? () => addArrayItem('schedule', { date: '', time: '', event: '' }) : undefined}
             >
-              {data.schedule.map((event, i) => (
+              {(safeData.schedule || []).map((event, i) => (
                 <View key={i} style={styles.scheduleItem}>
-                  <Text style={styles.scheduleDate}>
-                    {event.date} {event.time}
-                  </Text>
-                  <Text style={styles.scheduleEvent}>
-                    {event.event}
-                    {event.mandatory && (
-                      <Text style={styles.mandatory}> [MANDATORY]</Text>
-                    )}
-                  </Text>
-                  {event.location && (
-                    <Text style={styles.scheduleLocation}>{event.location}</Text>
+                  {isEditable ? (
+                    <>
+                      <View style={styles.inlineRow}>
+                        <EditableText
+                          value={event.date}
+                          onChange={(v) => updateArrayItem<ScheduleEvent>('schedule', i, { date: v })}
+                          placeholder="Date"
+                          style={styles.scheduleDate}
+                        />
+                        <EditableText
+                          value={event.time}
+                          onChange={(v) => updateArrayItem<ScheduleEvent>('schedule', i, { time: v })}
+                          placeholder="Time"
+                          style={styles.scheduleDate}
+                        />
+                        <Pressable onPress={() => removeArrayItem('schedule', i)}>
+                          <Trash2 size={14} color={IOS_COLORS.red} />
+                        </Pressable>
+                      </View>
+                      <EditableText
+                        value={event.event}
+                        onChange={(v) => updateArrayItem<ScheduleEvent>('schedule', i, { event: v })}
+                        placeholder="Event description"
+                        style={styles.scheduleEvent}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.scheduleDate}>
+                        {event.date} {event.time}
+                      </Text>
+                      <Text style={styles.scheduleEvent}>
+                        {event.event}
+                        {event.mandatory && (
+                          <Text style={styles.mandatory}> [MANDATORY]</Text>
+                        )}
+                      </Text>
+                      {event.location && (
+                        <Text style={styles.scheduleLocation}>{event.location}</Text>
+                      )}
+                    </>
+                  )}
+                </View>
+              ))}
+            </DetailSection>
+          )}
+
+          {/* Route Waypoints - for distance races */}
+          {(safeData.routeWaypoints?.length > 0 || isEditable) && (
+            <DetailSection
+              icon={<Navigation size={16} color={IOS_COLORS.blue} />}
+              title={`Route Waypoints${safeData.routeWaypoints?.length ? ` (${safeData.routeWaypoints.length})` : ''}`}
+              onAdd={isEditable ? () => addArrayItem('routeWaypoints', { name: '' }) : undefined}
+            >
+              {(safeData.routeWaypoints || []).map((wp, i) => (
+                <View key={i} style={styles.waypointItem}>
+                  {isEditable ? (
+                    <View style={styles.inlineRow}>
+                      <Text style={styles.waypointNumber}>{i + 1}.</Text>
+                      <EditableText
+                        value={wp.name}
+                        onChange={(v) => updateArrayItem<RouteWaypoint>('routeWaypoints', i, { name: v })}
+                        placeholder="Waypoint name"
+                        style={styles.waypointName}
+                      />
+                      <Pressable onPress={() => removeArrayItem('routeWaypoints', i)}>
+                        <Trash2 size={14} color={IOS_COLORS.red} />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={styles.listItem}>
+                      {i + 1}. {wp.name}
+                      {wp.type && <Text style={styles.listItemNote}> ({wp.type})</Text>}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </DetailSection>
+          )}
+
+          {/* VHF Channels */}
+          {(safeData.vhfChannels?.length > 0 || isEditable) && (
+            <DetailSection
+              icon={<Radio size={16} color={IOS_COLORS.teal} />}
+              title="VHF Channels"
+              onAdd={isEditable ? () => addArrayItem('vhfChannels', { channel: '' }) : undefined}
+            >
+              {(safeData.vhfChannels || []).map((ch, i) => (
+                <View key={i} style={styles.inlineRow}>
+                  {isEditable ? (
+                    <>
+                      <Text style={styles.channelLabel}>Ch</Text>
+                      <EditableText
+                        value={ch.channel}
+                        onChange={(v) => updateArrayItem<VHFChannel>('vhfChannels', i, { channel: v })}
+                        placeholder="##"
+                        style={[styles.channelNumber, { width: 40 }]}
+                      />
+                      <EditableText
+                        value={ch.purpose || ''}
+                        onChange={(v) => updateArrayItem<VHFChannel>('vhfChannels', i, { purpose: v })}
+                        placeholder="Purpose"
+                        style={styles.channelPurpose}
+                      />
+                      <Pressable onPress={() => removeArrayItem('vhfChannels', i)}>
+                        <Trash2 size={14} color={IOS_COLORS.red} />
+                      </Pressable>
+                    </>
+                  ) : (
+                    <Text style={styles.detailText}>
+                      Ch {ch.channel}
+                      {ch.purpose && <Text style={styles.listItemNote}> - {ch.purpose}</Text>}
+                    </Text>
                   )}
                 </View>
               ))}
@@ -182,135 +392,461 @@ export function ExtractedDetailsSummary({ data, expanded: initialExpanded = fals
           )}
 
           {/* Crew Requirements */}
-          {(data.minimumCrew || data.crewRequirements || data.minorSailorRules) && (
+          {(safeData.minimumCrew || safeData.crewRequirements || safeData.minorSailorRules || isEditable) && (
             <DetailSection
               icon={<Users size={16} color={IOS_COLORS.purple} />}
               title="Crew Requirements"
             >
-              {data.minimumCrew && (
-                <Text style={styles.detailText}>
-                  Minimum crew: <Text style={styles.highlight}>{data.minimumCrew}</Text>
-                </Text>
+              {(safeData.minimumCrew !== undefined || isEditable) && (
+                <View style={styles.inlineRow}>
+                  <Text style={styles.fieldLabel}>Minimum crew:</Text>
+                  {isEditable ? (
+                    <EditableText
+                      value={safeData.minimumCrew?.toString() || ''}
+                      onChange={(v) => updateField('minimumCrew', v ? parseInt(v, 10) : undefined)}
+                      placeholder="0"
+                      style={styles.highlight}
+                      keyboardType="numeric"
+                    />
+                  ) : (
+                    <Text style={styles.highlight}>{safeData.minimumCrew}</Text>
+                  )}
+                </View>
               )}
-              {data.crewRequirements && (
-                <Text style={styles.detailText}>{data.crewRequirements}</Text>
+              {(safeData.crewRequirements || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.crewRequirements || ''}
+                    onChange={(v) => updateField('crewRequirements', v)}
+                    placeholder="Crew requirements..."
+                    style={styles.detailText}
+                    multiline
+                  />
+                ) : (
+                  <Text style={styles.detailText}>{safeData.crewRequirements}</Text>
+                )
               )}
-              {data.minorSailorRules && (
-                <Text style={styles.detailTextSecondary}>Under 18: {data.minorSailorRules}</Text>
+              {safeData.minorSailorRules && (
+                <Text style={styles.detailTextSecondary}>Under 18: {safeData.minorSailorRules}</Text>
               )}
             </DetailSection>
           )}
 
           {/* Prohibited Areas */}
-          {data.prohibitedAreas && data.prohibitedAreas.length > 0 && (
+          {(safeData.prohibitedAreas?.length > 0 || isEditable) && (
             <DetailSection
               icon={<AlertTriangle size={16} color={IOS_COLORS.red} />}
-              title={`Prohibited Areas (${data.prohibitedAreas.length})`}
+              title={`Prohibited Areas${safeData.prohibitedAreas?.length ? ` (${safeData.prohibitedAreas.length})` : ''}`}
+              onAdd={isEditable ? () => addArrayItem('prohibitedAreas', { name: '' }) : undefined}
             >
-              {data.prohibitedAreas.map((area, i) => (
-                <Text key={i} style={styles.listItem}>
-                  • {area.name}
-                  {area.description && area.description !== 'Out of bounds' && (
-                    <Text style={styles.listItemNote}> ({area.description})</Text>
+              {(safeData.prohibitedAreas || []).map((area, i) => (
+                <View key={i} style={styles.inlineRow}>
+                  {isEditable ? (
+                    <>
+                      <Text style={styles.bulletPoint}>•</Text>
+                      <EditableText
+                        value={area.name}
+                        onChange={(v) => updateArrayItem<ProhibitedArea>('prohibitedAreas', i, { name: v })}
+                        placeholder="Area name"
+                        style={styles.listItemEditable}
+                      />
+                      <Pressable onPress={() => removeArrayItem('prohibitedAreas', i)}>
+                        <Trash2 size={14} color={IOS_COLORS.red} />
+                      </Pressable>
+                    </>
+                  ) : (
+                    <Text style={styles.listItem}>
+                      • {area.name}
+                      {area.description && area.description !== 'Out of bounds' && (
+                        <Text style={styles.listItemNote}> ({area.description})</Text>
+                      )}
+                    </Text>
                   )}
-                </Text>
+                </View>
+              ))}
+            </DetailSection>
+          )}
+
+          {/* Tide Gates (NEW) */}
+          {(safeData.tideGates?.length > 0 || isEditable) && (
+            <DetailSection
+              icon={<Waves size={16} color={IOS_COLORS.blue} />}
+              title="Tide Gates"
+              onAdd={isEditable ? () => addArrayItem('tideGates', { location: '' }) : undefined}
+            >
+              {(safeData.tideGates || []).map((gate, i) => (
+                <View key={i} style={styles.tideGateItem}>
+                  {isEditable ? (
+                    <View style={styles.inlineRow}>
+                      <EditableText
+                        value={gate.location}
+                        onChange={(v) => updateArrayItem<TideGate>('tideGates', i, { location: v })}
+                        placeholder="Location"
+                        style={styles.tideGateLocation}
+                      />
+                      <EditableText
+                        value={gate.optimalTime || ''}
+                        onChange={(v) => updateArrayItem<TideGate>('tideGates', i, { optimalTime: v })}
+                        placeholder="Optimal time"
+                        style={styles.tideGateTime}
+                      />
+                      <Pressable onPress={() => removeArrayItem('tideGates', i)}>
+                        <Trash2 size={14} color={IOS_COLORS.red} />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={styles.detailText}>
+                      {gate.location}
+                      {gate.optimalTime && <Text style={styles.listItemNote}> - {gate.optimalTime}</Text>}
+                    </Text>
+                  )}
+                </View>
               ))}
             </DetailSection>
           )}
 
           {/* Entry Fees */}
-          {data.entryFees && data.entryFees.length > 0 && (
+          {(safeData.entryFees?.length > 0 || isEditable) && (
             <DetailSection
               icon={<DollarSign size={16} color={IOS_COLORS.green} />}
               title="Entry Fees"
+              onAdd={isEditable ? () => addArrayItem('entryFees', { type: '', amount: '' }) : undefined}
             >
-              {data.entryFees.map((fee, i) => (
-                <Text key={i} style={styles.detailText}>
-                  {fee.type}: <Text style={styles.highlight}>{fee.amount}</Text>
-                  {fee.deadline && <Text style={styles.listItemNote}> (by {fee.deadline})</Text>}
-                </Text>
+              {(safeData.entryFees || []).map((fee, i) => (
+                <View key={i} style={styles.inlineRow}>
+                  {isEditable ? (
+                    <>
+                      <EditableText
+                        value={fee.type}
+                        onChange={(v) => updateArrayItem<EntryFee>('entryFees', i, { type: v })}
+                        placeholder="Fee type"
+                        style={styles.feeType}
+                      />
+                      <Text style={styles.colon}>:</Text>
+                      <EditableText
+                        value={fee.amount}
+                        onChange={(v) => updateArrayItem<EntryFee>('entryFees', i, { amount: v })}
+                        placeholder="Amount"
+                        style={styles.feeAmount}
+                      />
+                      <Pressable onPress={() => removeArrayItem('entryFees', i)}>
+                        <Trash2 size={14} color={IOS_COLORS.red} />
+                      </Pressable>
+                    </>
+                  ) : (
+                    <Text style={styles.detailText}>
+                      {fee.type}: <Text style={styles.highlight}>{fee.amount}</Text>
+                      {fee.deadline && <Text style={styles.listItemNote}> (by {fee.deadline})</Text>}
+                    </Text>
+                  )}
+                </View>
               ))}
-              {data.entryDeadline && (
-                <Text style={styles.detailTextSecondary}>
-                  Entry deadline: {data.entryDeadline}
-                </Text>
+              {(safeData.entryDeadline || isEditable) && (
+                <View style={styles.inlineRow}>
+                  <Text style={styles.fieldLabel}>Entry deadline:</Text>
+                  {isEditable ? (
+                    <EditableText
+                      value={safeData.entryDeadline || ''}
+                      onChange={(v) => updateField('entryDeadline', v)}
+                      placeholder="Deadline"
+                      style={styles.detailTextSecondary}
+                    />
+                  ) : (
+                    <Text style={styles.detailTextSecondary}>{safeData.entryDeadline}</Text>
+                  )}
+                </View>
+              )}
+            </DetailSection>
+          )}
+
+          {/* Safety Requirements (NEW) */}
+          {(safeData.safetyRequirements || safeData.retirementNotification || safeData.insuranceRequirements) && (
+            <DetailSection
+              icon={<Shield size={16} color={IOS_COLORS.orange} />}
+              title="Safety & Insurance"
+            >
+              {(safeData.safetyRequirements || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.safetyRequirements || ''}
+                    onChange={(v) => updateField('safetyRequirements', v)}
+                    placeholder="Safety requirements..."
+                    style={styles.detailText}
+                    multiline
+                  />
+                ) : (
+                  <Text style={styles.detailText}>{safeData.safetyRequirements}</Text>
+                )
+              )}
+              {(safeData.retirementNotification || isEditable) && (
+                <View style={styles.fieldRow}>
+                  <Text style={styles.fieldLabel}>Retirement notification:</Text>
+                  {isEditable ? (
+                    <EditableText
+                      value={safeData.retirementNotification || ''}
+                      onChange={(v) => updateField('retirementNotification', v as string)}
+                      placeholder="Notification procedure"
+                      style={styles.detailTextSecondary}
+                    />
+                  ) : (
+                    <Text style={styles.detailTextSecondary}>{safeData.retirementNotification}</Text>
+                  )}
+                </View>
+              )}
+              {(safeData.insuranceRequirements || isEditable) && (
+                <View style={styles.fieldRow}>
+                  <Text style={styles.fieldLabel}>Insurance:</Text>
+                  {isEditable ? (
+                    <EditableText
+                      value={safeData.insuranceRequirements || ''}
+                      onChange={(v) => updateField('insuranceRequirements', v)}
+                      placeholder="Insurance requirements"
+                      style={styles.detailTextSecondary}
+                    />
+                  ) : (
+                    <Text style={styles.detailTextSecondary}>{safeData.insuranceRequirements}</Text>
+                  )}
+                </View>
+              )}
+            </DetailSection>
+          )}
+
+          {/* Expected Conditions (NEW) */}
+          {(safeData.expectedConditions || safeData.expectedWindDirection) && (
+            <DetailSection
+              icon={<Waves size={16} color={IOS_COLORS.cyan} />}
+              title="Expected Conditions"
+            >
+              {(safeData.expectedConditions || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.expectedConditions || ''}
+                    onChange={(v) => updateField('expectedConditions', v)}
+                    placeholder="Expected conditions..."
+                    style={styles.detailText}
+                    multiline
+                  />
+                ) : (
+                  <Text style={styles.detailText}>{safeData.expectedConditions}</Text>
+                )
+              )}
+              {(safeData.expectedWindDirection || isEditable) && (
+                <View style={styles.inlineRow}>
+                  <Text style={styles.fieldLabel}>Wind:</Text>
+                  {isEditable ? (
+                    <>
+                      <EditableText
+                        value={safeData.expectedWindDirection || ''}
+                        onChange={(v) => updateField('expectedWindDirection', v)}
+                        placeholder="Direction"
+                        style={styles.windField}
+                      />
+                      <EditableText
+                        value={safeData.expectedWindSpeedMin?.toString() || ''}
+                        onChange={(v) => updateField('expectedWindSpeedMin', v ? parseInt(v, 10) : undefined)}
+                        placeholder="Min"
+                        style={styles.windSpeed}
+                        keyboardType="numeric"
+                      />
+                      <Text style={styles.windDash}>-</Text>
+                      <EditableText
+                        value={safeData.expectedWindSpeedMax?.toString() || ''}
+                        onChange={(v) => updateField('expectedWindSpeedMax', v ? parseInt(v, 10) : undefined)}
+                        placeholder="Max"
+                        style={styles.windSpeed}
+                        keyboardType="numeric"
+                      />
+                      <Text style={styles.windUnit}>kts</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.detailTextSecondary}>
+                      {safeData.expectedWindDirection}
+                      {safeData.expectedWindSpeedMin && safeData.expectedWindSpeedMax &&
+                        ` ${safeData.expectedWindSpeedMin}-${safeData.expectedWindSpeedMax} kts`}
+                    </Text>
+                  )}
+                </View>
               )}
             </DetailSection>
           )}
 
           {/* Scoring */}
-          {data.scoringFormulaDescription && (
+          {(safeData.scoringFormulaDescription || isEditable) && (
             <DetailSection
               icon={<Trophy size={16} color={IOS_COLORS.yellow} />}
               title="Scoring"
             >
-              <Text style={styles.detailText}>{data.scoringFormulaDescription}</Text>
-              {data.handicapSystem && data.handicapSystem.length > 0 && (
+              {isEditable ? (
+                <EditableText
+                  value={safeData.scoringFormulaDescription || ''}
+                  onChange={(v) => updateField('scoringFormulaDescription', v)}
+                  placeholder="Scoring formula description..."
+                  style={styles.detailText}
+                  multiline
+                />
+              ) : (
+                <Text style={styles.detailText}>{safeData.scoringFormulaDescription}</Text>
+              )}
+              {safeData.handicapSystem && safeData.handicapSystem.length > 0 && (
                 <Text style={styles.detailTextSecondary}>
-                  Handicap: {data.handicapSystem.join(', ')}
+                  Handicap: {safeData.handicapSystem.join(', ')}
                 </Text>
               )}
             </DetailSection>
           )}
 
           {/* Motoring Division */}
-          {data.motoringDivisionAvailable && (
+          {(safeData.motoringDivisionAvailable || isEditable) && (
             <DetailSection
               icon={<Ship size={16} color={IOS_COLORS.teal} />}
               title="Motoring Division"
             >
-              <Text style={styles.detailText}>
-                {data.motoringDivisionRules || 'Available - see sailing instructions'}
-              </Text>
+              {isEditable && (
+                <View style={styles.switchRow}>
+                  <Text style={styles.fieldLabel}>Available:</Text>
+                  <Switch
+                    value={safeData.motoringDivisionAvailable || false}
+                    onValueChange={(v) => updateField('motoringDivisionAvailable', v)}
+                    trackColor={{ false: '#E5E5EA', true: IOS_COLORS.green }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              )}
+              {(safeData.motoringDivisionRules || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.motoringDivisionRules || ''}
+                    onChange={(v) => updateField('motoringDivisionRules', v)}
+                    placeholder="Motoring rules..."
+                    style={styles.detailText}
+                    multiline
+                  />
+                ) : (
+                  <Text style={styles.detailText}>
+                    {safeData.motoringDivisionRules || 'Available - see sailing instructions'}
+                  </Text>
+                )
+              )}
             </DetailSection>
           )}
 
           {/* Start/Finish Areas */}
-          {(data.startAreaName || data.finishAreaName) && (
+          {(safeData.startAreaName || safeData.finishAreaName) && (
             <DetailSection
               icon={<MapPin size={16} color={IOS_COLORS.blue} />}
               title="Course Areas"
             >
-              {data.startAreaName && (
-                <Text style={styles.detailText}>Start: {data.startAreaName}</Text>
+              {(safeData.startAreaName || isEditable) && (
+                <View style={styles.inlineRow}>
+                  <Text style={styles.fieldLabel}>Start:</Text>
+                  {isEditable ? (
+                    <EditableText
+                      value={safeData.startAreaName || ''}
+                      onChange={(v) => updateField('startAreaName', v)}
+                      placeholder="Start area"
+                      style={styles.areaName}
+                    />
+                  ) : (
+                    <Text style={styles.detailText}>{safeData.startAreaName}</Text>
+                  )}
+                </View>
               )}
-              {data.finishAreaName && (
-                <Text style={styles.detailText}>Finish: {data.finishAreaName}</Text>
+              {(safeData.finishAreaName || isEditable) && (
+                <View style={styles.inlineRow}>
+                  <Text style={styles.fieldLabel}>Finish:</Text>
+                  {isEditable ? (
+                    <EditableText
+                      value={safeData.finishAreaName || ''}
+                      onChange={(v) => updateField('finishAreaName', v)}
+                      placeholder="Finish area"
+                      style={styles.areaName}
+                    />
+                  ) : (
+                    <Text style={styles.detailText}>{safeData.finishAreaName}</Text>
+                  )}
+                </View>
+              )}
+            </DetailSection>
+          )}
+
+          {/* Prizes (NEW) */}
+          {(safeData.prizesDescription || isEditable) && (
+            <DetailSection
+              icon={<Trophy size={16} color={IOS_COLORS.gold} />}
+              title="Prizes"
+            >
+              {isEditable ? (
+                <EditableText
+                  value={safeData.prizesDescription || ''}
+                  onChange={(v) => updateField('prizesDescription', v)}
+                  placeholder="Prize description..."
+                  style={styles.detailText}
+                  multiline
+                />
+              ) : (
+                <Text style={styles.detailText}>{safeData.prizesDescription}</Text>
               )}
             </DetailSection>
           )}
 
           {/* Safety & Rules */}
-          {data.classRules && data.classRules.length > 0 && (
+          {safeData.classRules && safeData.classRules.length > 0 && (
             <DetailSection
               icon={<FileText size={16} color={TUFTE_FORM_COLORS.secondaryLabel} />}
               title="Rules & Requirements"
             >
-              {data.classRules.map((rule, i) => (
+              {safeData.classRules.map((rule, i) => (
                 <Text key={i} style={styles.listItem}>• {rule}</Text>
               ))}
-              {data.eligibilityRequirements && (
+              {safeData.eligibilityRequirements && (
                 <Text style={styles.detailTextSecondary}>
-                  Eligibility: {data.eligibilityRequirements}
+                  Eligibility: {safeData.eligibilityRequirements}
                 </Text>
               )}
             </DetailSection>
           )}
 
           {/* Contact & Links */}
-          {(data.organizingAuthority || data.eventWebsite || data.contactEmail) && (
+          {(safeData.organizingAuthority || safeData.eventWebsite || safeData.contactEmail) && (
             <DetailSection
               icon={<Radio size={16} color={TUFTE_FORM_COLORS.secondaryLabel} />}
               title="Contact"
             >
-              {data.organizingAuthority && (
-                <Text style={styles.detailText}>{data.organizingAuthority}</Text>
+              {(safeData.organizingAuthority || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.organizingAuthority || ''}
+                    onChange={(v) => updateField('organizingAuthority', v)}
+                    placeholder="Organizing authority"
+                    style={styles.detailText}
+                  />
+                ) : (
+                  <Text style={styles.detailText}>{safeData.organizingAuthority}</Text>
+                )
               )}
-              {data.eventWebsite && (
-                <Text style={styles.linkText}>{data.eventWebsite}</Text>
+              {(safeData.eventWebsite || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.eventWebsite || ''}
+                    onChange={(v) => updateField('eventWebsite', v)}
+                    placeholder="Event website URL"
+                    style={styles.linkText}
+                  />
+                ) : (
+                  <Text style={styles.linkText}>{safeData.eventWebsite}</Text>
+                )
               )}
-              {data.contactEmail && (
-                <Text style={styles.linkText}>{data.contactEmail}</Text>
+              {(safeData.contactEmail || isEditable) && (
+                isEditable ? (
+                  <EditableText
+                    value={safeData.contactEmail || ''}
+                    onChange={(v) => updateField('contactEmail', v)}
+                    placeholder="Contact email"
+                    style={styles.linkText}
+                  />
+                ) : (
+                  <Text style={styles.linkText}>{safeData.contactEmail}</Text>
+                )
               )}
             </DetailSection>
           )}
@@ -320,21 +856,57 @@ export function ExtractedDetailsSummary({ data, expanded: initialExpanded = fals
   );
 }
 
+// Editable text field component
+function EditableText({
+  value,
+  onChange,
+  placeholder,
+  style,
+  multiline = false,
+  keyboardType = 'default',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  style?: any;
+  multiline?: boolean;
+  keyboardType?: 'default' | 'numeric' | 'email-address' | 'url';
+}) {
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChange}
+      placeholder={placeholder}
+      placeholderTextColor={TUFTE_FORM_COLORS.placeholder}
+      style={[styles.editableInput, style, multiline && styles.multilineInput]}
+      multiline={multiline}
+      keyboardType={keyboardType}
+    />
+  );
+}
+
 // Helper component for detail sections
 function DetailSection({
   icon,
   title,
   children,
+  onAdd,
 }: {
   icon: React.ReactNode;
   title: string;
   children: React.ReactNode;
+  onAdd?: () => void;
 }) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         {icon}
         <Text style={styles.sectionTitle}>{title}</Text>
+        {onAdd && (
+          <Pressable onPress={onAdd} style={styles.addButton}>
+            <Plus size={14} color={IOS_COLORS.blue} />
+          </Pressable>
+        )}
       </View>
       <View style={styles.sectionContent}>{children}</View>
     </View>
@@ -373,6 +945,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     marginLeft: 4,
   },
+  badgeEmpty: {
+    backgroundColor: TUFTE_FORM_COLORS.tertiaryLabel,
+  },
   badgeText: {
     fontSize: 11,
     fontWeight: '600',
@@ -395,6 +970,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: TUFTE_FORM_COLORS.label,
+    flex: 1,
+  },
+  addButton: {
+    padding: 4,
   },
   sectionContent: {
     paddingLeft: 24,
@@ -426,6 +1005,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: TUFTE_FORM_COLORS.label,
     lineHeight: 20,
+    flex: 1,
   },
   detailTextSecondary: {
     fontSize: 13,
@@ -442,6 +1022,11 @@ const styles = StyleSheet.create({
     color: TUFTE_FORM_COLORS.label,
     lineHeight: 20,
   },
+  listItemEditable: {
+    fontSize: 13,
+    color: TUFTE_FORM_COLORS.label,
+    flex: 1,
+  },
   listItemNote: {
     color: TUFTE_FORM_COLORS.tertiaryLabel,
     fontStyle: 'italic',
@@ -450,6 +1035,114 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.blue,
     lineHeight: 20,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  fieldRow: {
+    marginTop: 4,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  editableInput: {
+    fontSize: 14,
+    color: TUFTE_FORM_COLORS.label,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: TUFTE_FORM_COLORS.inputBorder,
+    paddingHorizontal: 8,
+    paddingVertical: Platform.OS === 'ios' ? 6 : 4,
+    minWidth: 60,
+  },
+  multilineInput: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  bulletPoint: {
+    fontSize: 13,
+    color: TUFTE_FORM_COLORS.label,
+  },
+  waypointItem: {
+    marginBottom: 4,
+  },
+  waypointNumber: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+    width: 20,
+  },
+  waypointName: {
+    flex: 1,
+    fontSize: 14,
+  },
+  channelLabel: {
+    fontSize: 13,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  channelNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  channelPurpose: {
+    flex: 1,
+    fontSize: 13,
+  },
+  tideGateItem: {
+    marginBottom: 4,
+  },
+  tideGateLocation: {
+    flex: 1,
+    fontSize: 14,
+  },
+  tideGateTime: {
+    fontSize: 13,
+    width: 100,
+  },
+  feeType: {
+    flex: 1,
+    fontSize: 14,
+  },
+  feeAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    width: 80,
+  },
+  colon: {
+    fontSize: 14,
+    color: TUFTE_FORM_COLORS.label,
+  },
+  areaName: {
+    flex: 1,
+    fontSize: 14,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  windField: {
+    fontSize: 14,
+    width: 60,
+  },
+  windSpeed: {
+    fontSize: 14,
+    width: 40,
+    textAlign: 'center',
+  },
+  windDash: {
+    fontSize: 14,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  windUnit: {
+    fontSize: 13,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
   },
 });
 

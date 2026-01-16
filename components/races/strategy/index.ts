@@ -14,5 +14,8 @@ export type { TufteStrategySectionProps } from './TufteStrategySection';
 export { TuftePhaseHeader } from './TuftePhaseHeader';
 export type { TuftePhaseHeaderProps } from './TuftePhaseHeader';
 
+export { TufteAccordionPhaseHeader } from './TufteAccordionPhaseHeader';
+export type { TufteAccordionPhaseHeaderProps } from './TufteAccordionPhaseHeader';
+
 // Legacy component used by StrategyDetailCard
 export { StrategySectionItem } from './StrategySectionItem';

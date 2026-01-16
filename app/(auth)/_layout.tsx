@@ -37,11 +37,14 @@ const ONBOARDING_ROUTES = new Set([
 const AUTH_ENTRY_ROUTES = new Set(['login', 'signup', 'callback', 'dev-login']);
 
 export default function AuthLayout() {
-  const { state, userType } = useAuth();
+  const { state, userType, isGuest } = useAuth();
   const segments = useSegments();
   const currentRoute = segments[segments.length - 1];
   const onboardingRoutes = ONBOARDING_ROUTES;
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Guest mode: Allow access to races tab without authentication
+  const isGuestMode = state === 'guest' || isGuest;
 
   // Show config error immediately if Supabase can't initialize
   if (SUPABASE_CONFIG_ERROR) {

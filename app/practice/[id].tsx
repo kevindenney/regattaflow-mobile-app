@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
@@ -43,6 +44,12 @@ import {
   PracticePhase,
   getCurrentPracticePhase,
 } from '@/types/practice';
+import { RigTuningWizard } from '@/components/checklist-tools/wizards/RigTuningWizard';
+import { ForecastCheckWizard } from '@/components/checklist-tools/wizards/ForecastCheckWizard';
+import {
+  PracticeChecklistItem,
+  getPracticeChecklistItems,
+} from '@/lib/checklists/practiceChecklists';
 
 export default function PracticeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -72,6 +79,44 @@ export default function PracticeDetailScreen() {
   });
 
   const [showMenu, setShowMenu] = useState(false);
+
+  // Wizard state for checklist tool modals
+  const [activeWizard, setActiveWizard] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<PracticeChecklistItem | null>(null);
+
+  // Get all checklist items for current phase to look up tool info
+  const phaseChecklistItems = useMemo(
+    () => getPracticeChecklistItems(currentPhase),
+    [currentPhase]
+  );
+
+  // Handle opening the appropriate tool for a checklist item
+  const handleOpenTool = useCallback((itemId: string) => {
+    const item = phaseChecklistItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    if (item.toolType === 'full_wizard' && item.toolId) {
+      setActiveWizard(item.toolId);
+      setSelectedItem(item);
+    }
+    // For quick_tips or other types, we could show a different panel
+    // For now, just toggle completion
+  }, [phaseChecklistItems]);
+
+  // Handle wizard completion
+  const handleWizardComplete = useCallback(() => {
+    if (selectedItem) {
+      handleToggleItem(selectedItem.id);
+    }
+    setActiveWizard(null);
+    setSelectedItem(null);
+  }, [selectedItem, handleToggleItem]);
+
+  // Handle wizard cancel
+  const handleWizardCancel = useCallback(() => {
+    setActiveWizard(null);
+    setSelectedItem(null);
+  }, []);
 
   // Navigation
   const handleBack = () => router.back();
@@ -220,6 +265,7 @@ export default function PracticeDetailScreen() {
             session={session}
             completions={completions}
             onToggleItem={handleToggleItem}
+            onItemAction={handleOpenTool}
           />
         );
       case 'practice_launch':
@@ -228,6 +274,7 @@ export default function PracticeDetailScreen() {
             session={session}
             completions={completions}
             onToggleItem={handleToggleItem}
+            onItemAction={handleOpenTool}
           />
         );
       case 'practice_train':
@@ -337,6 +384,73 @@ export default function PracticeDetailScreen() {
           </View>
         )}
       </SafeAreaView>
+
+      {/* Rig Tuning Wizard Modal */}
+      <Modal
+        visible={activeWizard === 'rig_tuning_wizard'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'rig_tuning_wizard' && (
+          <RigTuningWizard
+            item={{
+              id: selectedItem.id,
+              label: selectedItem.label,
+              description: selectedItem.description,
+              priority: selectedItem.priority || 'medium',
+              completed: !!completions[selectedItem.id],
+              category: selectedItem.category,
+              toolId: selectedItem.toolId,
+              toolType: selectedItem.toolType,
+            }}
+            raceEventId={session.id}
+            boatId={session.boatId}
+            boatClass={session.boatClassName}
+            classId={session.boatClassId}
+            wind={session.windSpeedMin ? {
+              direction: session.windDirection ? `${session.windDirection}°` : 'Variable',
+              speedMin: session.windSpeedMin,
+              speedMax: session.windSpeedMax || session.windSpeedMin,
+            } : undefined}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
+          />
+        )}
+      </Modal>
+
+      {/* Forecast Check Wizard Modal */}
+      <Modal
+        visible={activeWizard === 'forecast_check'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'forecast_check' && (
+          <ForecastCheckWizard
+            item={{
+              id: selectedItem.id,
+              label: selectedItem.label,
+              description: selectedItem.description,
+              priority: selectedItem.priority || 'medium',
+              completed: !!completions[selectedItem.id],
+              category: selectedItem.category,
+              toolId: selectedItem.toolId,
+              toolType: selectedItem.toolType,
+            }}
+            raceEventId={session.id}
+            boatId={session.boatId}
+            venue={session.venueId ? {
+              id: session.venueId,
+              name: session.venueName || 'Practice Venue',
+            } : null}
+            raceDate={session.scheduledDate}
+            raceName={session.title || 'Practice Session'}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
+          />
+        )}
+      </Modal>
     </>
   );
 }

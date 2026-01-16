@@ -702,6 +702,13 @@ export default function RacesScreen() {
     refetch
   } = useDashboardData();
 
+  // Log dashboard errors only when they change (not on every render)
+  useEffect(() => {
+    if (error) {
+      logger.error('Dashboard error:', error?.message || error, { name: error?.name });
+    }
+  }, [error]);
+
   // Refetch races when dashboard comes into focus (after navigation back from race creation)
   // Skip the initial mount to prevent unnecessary refetch
   const isInitialMount = useRef(true);
@@ -813,6 +820,15 @@ export default function RacesScreen() {
 
   // Total race count (real or demo) for header
   const displayRaceCount = hasRealRaces ? safeRecentRaces.length : MOCK_RACES.length;
+
+  // Count upcoming races (start date in the future)
+  const upcomingRacesCount = useMemo(() => {
+    const now = new Date();
+    return safeRecentRaces.filter((race: any) => {
+      const raceDate = new Date(race.start_date || race.date);
+      return raceDate > now;
+    }).length;
+  }, [safeRecentRaces]);
 
   const selectedDemoRace = useMemo(
     () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
@@ -2629,7 +2645,6 @@ export default function RacesScreen() {
 
   // Error state
   if (error && !profile) {
-    logger.error('Top-level error', error);
     return (
       <View className="flex-1 bg-background-0 items-center justify-center">
         <ErrorMessage
@@ -2671,6 +2686,7 @@ export default function RacesScreen() {
           season={effectiveSeason}
           currentRaceIndex={safeRecentRaces.findIndex(r => r.id === selectedRaceId)}
           totalRaces={safeRecentRaces.length}
+          upcomingRaces={upcomingRacesCount}
           onArchivePress={isGuest ? undefined : () => setShowSeasonArchive(true)}
           onSeasonPress={isGuest ? undefined : () => setShowSeasonSettings(true)}
           onStartSeasonPress={isGuest ? undefined : () => setShowSeasonSettings(true)}

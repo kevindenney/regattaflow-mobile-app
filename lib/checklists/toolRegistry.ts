@@ -178,6 +178,13 @@ export const TOOL_REGISTRY: Record<string, Omit<ToolRegistration, 'component'> &
     displayName: '4 Peaks Schedule',
     icon: 'Mountain',
   },
+  weather_routing_wizard: {
+    id: 'weather_routing_wizard',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/WeatherRoutingWizard',
+    displayName: 'Weather Routing',
+    icon: 'Navigation',
+  },
 
   // Interactive Checklists
   electronics_checklist: {

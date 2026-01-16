@@ -120,20 +120,20 @@ function patternToSectionPerformance(pattern: PerformancePattern | null): Sectio
 
 /**
  * Generate section-specific AI recommendation text
+ *
+ * Note: We intentionally use section-specific advice instead of the shared
+ * phase AI suggestion to avoid showing identical text for different sections
+ * that happen to share the same phase (e.g., Line Bias and Favored End both
+ * map to 'start' phase).
  */
 function generateSectionRecommendation(
   sectionId: StrategySectionId,
   pattern: PerformancePattern | null,
-  phaseAiSuggestion: string | null
+  _phaseAiSuggestion: string | null // Kept for future use but not used to avoid duplicates
 ): string | undefined {
   if (!pattern) return undefined;
 
-  // Use the phase AI suggestion if available
-  if (phaseAiSuggestion) {
-    return phaseAiSuggestion;
-  }
-
-  // Generate fallback based on pattern data
+  // Generate section-specific advice based on pattern data
   const isStrength = pattern.average >= 4.0;
   const isFocusArea = pattern.average <= 3.0;
 

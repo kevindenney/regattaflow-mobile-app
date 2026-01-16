@@ -1,15 +1,15 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Tabs, useRouter, useNavigation, usePathname } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
-import { BackHandler, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { NavigationHeader } from '@/components/navigation/NavigationHeader';
-import { useAuth } from '@/providers/AuthProvider';
-import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
+import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { useBoats } from '@/hooks/useData';
 import { createLogger } from '@/lib/utils/logger';
+import { useAuth, UserCapabilities } from '@/providers/AuthProvider';
+import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
+import { Ionicons } from '@expo/vector-icons';
+import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
+import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BackHandler, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type TabConfig = {
   name: string;
@@ -21,63 +21,99 @@ type TabConfig = {
 };
 
 // Define tabs for each user type (5 visible tabs for sailors)
+// Supports capability-based additive tabs for sailors with coaching capability
 
 const logger = createLogger('_layout');
-const getTabsForUserType = (userType: string | null): TabConfig[] => {
-  switch (userType) {
-    case 'sailor':
-      // Tufte-style: text-only tabs, no icons, singular forms
-      // Boat management moved to Account screen
-      return [
-        { name: 'races', title: 'Races', icon: '', iconFocused: '' },
-        { name: 'learn', title: 'Learn', icon: '', iconFocused: '' },
-        { name: 'courses', title: 'Courses', icon: '', iconFocused: '' },
-        { name: 'venue', title: 'Venue', icon: '', iconFocused: '' },
-        { name: 'more', title: '•••', icon: '', isMenuTrigger: true },
-      ];
 
-    case 'coach':
-      return [
+/**
+ * Get tabs for a user based on their type and capabilities.
+ * For sailors with coaching capability, adds coach tabs to sailor tabs.
+ */
+const getTabsForUserType = (
+  userType: string | null,
+  isGuest: boolean = false,
+  capabilities?: UserCapabilities
+): TabConfig[] => {
+  // Guests get limited sailor-style tabs (Races only for now)
+  if (isGuest) {
+    return [
+      { name: 'races', title: 'Races', icon: '', iconFocused: '' },
+      // Limited tabs for guests - just races to explore demo/sample content
+    ];
+  }
+
+  // Club admins get their own dedicated tabs (unchanged)
+  if (userType === 'club') {
+    return [
+      { name: 'events', title: 'Events', icon: 'calendar-outline', iconFocused: 'calendar' },
+      { name: 'members', title: 'Members', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'race-management', title: 'Racing', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'profile', title: 'Club', icon: 'business-outline', iconFocused: 'business' },
+      { name: 'settings', title: 'Settings', icon: 'cog-outline', iconFocused: 'cog' },
+    ];
+  }
+
+  // Legacy support: pure coach user type (will be migrated to sailor + capability)
+  if (userType === 'coach' && !capabilities?.hasCoaching) {
+    return [
+      { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
+      { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
+      { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
+    ];
+  }
+
+  // Sailors (including sailors with coaching capability)
+  if (userType === 'sailor' || userType === 'coach') {
+    // Base sailor tabs - Tufte-style: text-only tabs, no icons
+    const tabs: TabConfig[] = [
+      { name: 'races', title: 'Races', icon: '', iconFocused: '' },
+      { name: 'learn', title: 'Learn', icon: '', iconFocused: '' },
+      { name: 'courses', title: 'Courses', icon: '', iconFocused: '' },
+      { name: 'venue', title: 'Venue', icon: '', iconFocused: '' },
+    ];
+
+    // Add coaching tabs if user has coaching capability
+    if (capabilities?.hasCoaching) {
+      tabs.push(
         { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
         { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
         { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
-        { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
-      ];
+      );
+    }
 
-    case 'club':
-      return [
-        { name: 'events', title: 'Events', icon: 'calendar-outline', iconFocused: 'calendar' },
-        { name: 'members', title: 'Members', icon: 'people-outline', iconFocused: 'people' },
-        { name: 'race-management', title: 'Racing', icon: 'flag-outline', iconFocused: 'flag' },
-        { name: 'profile', title: 'Club', icon: 'business-outline', iconFocused: 'business' },
-        { name: 'settings', title: 'Settings', icon: 'cog-outline', iconFocused: 'cog' },
-      ];
+    // More menu always at the end
+    tabs.push({ name: 'more', title: '•••', icon: '', isMenuTrigger: true });
 
-    default:
-      // No tabs for non-logged-in users - they see venue page only
-      return [];
+    return tabs;
   }
+
+  // No tabs for non-logged-in users
+  return [];
 };
 
 function TabLayoutInner() {
-  const { userType, user, clubProfile, personaLoading } = useAuth();
+  const { userType, user, clubProfile, personaLoading, isGuest, capabilities } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
   const pathname = usePathname();
 
-  // Get tabs based on user type
-  const tabs = getTabsForUserType(userType ?? null);
+  // Get tabs based on user type and capabilities
+  // Sailors with coaching capability will see both sailor and coach tabs
+  const tabs = getTabsForUserType(userType ?? null, isGuest, capabilities);
   const [menuVisible, setMenuVisible] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
 
-  // Redirect coaches to /clients on initial load
+  // Redirect legacy coach users (user_type='coach' without capabilities) to /clients
+  // Note: Sailors with coaching capability do NOT redirect - they stay on /races
   useEffect(() => {
-    if (userType === 'coach' && !hasRedirected && !personaLoading) {
+    const isLegacyCoach = userType === 'coach' && !capabilities?.hasCoaching;
+    if (isLegacyCoach && !hasRedirected && !personaLoading) {
       setHasRedirected(true);
       router.replace('/(tabs)/clients');
     }
-  }, [userType, hasRedirected, personaLoading, router]);
+  }, [userType, capabilities, hasRedirected, personaLoading, router]);
 
   // Redirect club users to /events on initial load
   useEffect(() => {
@@ -97,7 +133,7 @@ function TabLayoutInner() {
   // Swallow Android hardware back while in Tabs to avoid popping to Auth
   useFocusEffect(
     React.useCallback(() => {
-      if (Platform.OS !== 'android') return () => {};
+      if (Platform.OS !== 'android') return () => { };
 
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
         // eat the event; user can switch tabs or use explicit logout
@@ -172,8 +208,10 @@ function TabLayoutInner() {
   }, [isProfileIncomplete, userType]);
 
   // User type flags for conditional rendering
+  // Guests are treated as sailors for UI purposes
   const isClubUser = userType === 'club';
-  const isSailorUser = userType === 'sailor';
+  const isSailorUser = userType === 'sailor' || isGuest;
+  const isGuestUser = isGuest;
 
   const handleMenuItemPress = (route: string) => {
     setMenuVisible(false);
@@ -277,7 +315,7 @@ function TabLayoutInner() {
   const renderClubTabButton = (props: BottomTabBarButtonProps) => {
     const { accessibilityState, children, onPress, style } = props;
     const isActive = accessibilityState?.selected;
-    
+
     return (
       <TouchableOpacity
         accessibilityRole="button"
@@ -325,7 +363,7 @@ function TabLayoutInner() {
   return (
     <View style={styles.container}>
       {/* Hide on races tab - races.tsx has its own consolidated floating header */}
-      <NavigationHeader backgroundColor="#F8FAFC" hidden={pathname === '/races' || pathname === '/(tabs)/races'} />
+      <NavigationHeader backgroundColor="#F8FAFC" hidden={pathname === '/races' || pathname === '/(tabs)/races' || pathname.includes('add-tufte')} />
       <Tabs
         screenOptions={({ route }) => {
           const visible = isTabVisible(route.name);
@@ -491,10 +529,10 @@ function TabLayoutInner() {
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('events') 
-              ? () => null 
-              : isClubUser 
-                ? renderClubTabButton 
+            tabBarButton: !isTabVisible('events')
+              ? () => null
+              : isClubUser
+                ? renderClubTabButton
                 : undefined,
           }}
         />
@@ -509,10 +547,10 @@ function TabLayoutInner() {
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('members') 
-              ? () => null 
-              : isClubUser 
-                ? renderClubTabButton 
+            tabBarButton: !isTabVisible('members')
+              ? () => null
+              : isClubUser
+                ? renderClubTabButton
                 : undefined,
           }}
         />
@@ -527,10 +565,10 @@ function TabLayoutInner() {
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('race-management') 
-              ? () => null 
-              : isClubUser 
-                ? renderClubTabButton 
+            tabBarButton: !isTabVisible('race-management')
+              ? () => null
+              : isClubUser
+                ? renderClubTabButton
                 : undefined,
           }}
         />
@@ -545,10 +583,10 @@ function TabLayoutInner() {
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('profile') 
-              ? () => null 
-              : isClubUser 
-                ? renderClubTabButton 
+            tabBarButton: !isTabVisible('profile')
+              ? () => null
+              : isClubUser
+                ? renderClubTabButton
                 : undefined,
           }}
         />
@@ -859,7 +897,7 @@ const styles = StyleSheet.create({
         touchAction: 'none',
         userSelect: 'none',
       } as any,
-      default: { 
+      default: {
         shadowOpacity: 0,
         overflow: 'hidden',
       },
@@ -1065,9 +1103,9 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web'
       ? { boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }
       : {
-          boxShadow: '0px 4px',
-          elevation: 8,
-        }
+        boxShadow: '0px 4px',
+        elevation: 8,
+      }
     ),
   },
   menuItem: {

@@ -553,7 +553,7 @@ export function useDashboardData() {
     // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
     venue: regatta.metadata?.venue_name || regatta.metadata?.venue || 'Venue TBD',
     date: regatta.start_date,
-    startTime: regatta.warning_signal_time || new Date(regatta.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    startTime: regatta.warning_signal_time || (() => { const d = new Date(regatta.start_date); return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`; })(),
     boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
     status: regatta.status || 'upcoming',
     wind: regatta.metadata?.wind, // No fallback - let useEnrichedRaces handle it

@@ -15,9 +15,10 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { ChevronDown, Sailboat, Check, X } from 'lucide-react-native';
+import { ChevronDown, Sailboat, Check, X, Plus } from 'lucide-react-native';
 import { useUserBoats } from '@/hooks/useUserBoats';
 import type { SailorBoat } from '@/services/SailorBoatService';
+import { QuickAddBoatForm } from '@/components/boats/QuickAddBoatForm';
 
 const COLORS = {
   primary: '#007AFF',
@@ -54,6 +55,7 @@ export function BoatSelector({
   halfWidth = false,
 }: BoatSelectorProps) {
   const [modalVisible, setModalVisible] = useState(false);
+  const [quickAddVisible, setQuickAddVisible] = useState(false);
   const { boats, isLoading, hasBoats, refetch } = useUserBoats();
 
   // Find the selected boat
@@ -68,6 +70,21 @@ export function BoatSelector({
     } else {
       onSelect(null, null, null);
     }
+    setModalVisible(false);
+  };
+
+  const handleBoatAdded = async (newBoatId: string) => {
+    // Refetch to get the updated boats list including the new boat
+    const result = await refetch();
+
+    // Find the newly added boat and auto-select it
+    const newBoat = result.data?.find((b) => b.id === newBoatId);
+    if (newBoat) {
+      const classId = newBoat.class_id || null;
+      const className = newBoat.boat_class?.name || null;
+      onSelect(newBoat.id, classId, className);
+    }
+
     setModalVisible(false);
   };
 
@@ -138,8 +155,18 @@ export function BoatSelector({
               <Sailboat size={48} color={COLORS.tertiaryLabel} />
               <Text style={styles.emptyTitle}>No Boats Found</Text>
               <Text style={styles.emptyDescription}>
-                Add a boat to your profile to select it here.
+                Add a boat to get started.
               </Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.addBoatButtonPrimary,
+                  pressed && styles.addBoatButtonPressed,
+                ]}
+                onPress={() => setQuickAddVisible(true)}
+              >
+                <Plus size={20} color={COLORS.secondaryBackground} />
+                <Text style={styles.addBoatButtonPrimaryText}>Add Your First Boat</Text>
+              </Pressable>
             </View>
           ) : (
             <ScrollView style={styles.boatList}>
@@ -192,10 +219,29 @@ export function BoatSelector({
                   )}
                 </Pressable>
               ))}
+
+              {/* Add New Boat button */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.addBoatButton,
+                  pressed && styles.addBoatButtonPressed,
+                ]}
+                onPress={() => setQuickAddVisible(true)}
+              >
+                <Plus size={20} color={COLORS.primary} />
+                <Text style={styles.addBoatButtonText}>Add New Boat</Text>
+              </Pressable>
             </ScrollView>
           )}
         </View>
       </Modal>
+
+      {/* Quick Add Boat Form */}
+      <QuickAddBoatForm
+        visible={quickAddVisible}
+        onClose={() => setQuickAddVisible(false)}
+        onBoatAdded={handleBoatAdded}
+      />
     </View>
   );
 }
@@ -368,6 +414,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.secondaryLabel,
     marginTop: 2,
+  },
+  addBoatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: COLORS.secondaryBackground,
+    borderRadius: 12,
+    marginBottom: 8,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+  },
+  addBoatButtonPressed: {
+    backgroundColor: COLORS.background,
+  },
+  addBoatButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  addBoatButtonPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    marginTop: 16,
+    gap: 8,
+  },
+  addBoatButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.secondaryBackground,
   },
 });
 

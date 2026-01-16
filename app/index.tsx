@@ -16,7 +16,7 @@ import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/service
 import { DashboardSkeleton } from '@/components/ui/loading';
 
 export default function LandingPage() {
-  const { signedIn, ready, userProfile, loading } = useAuth();
+  const { signedIn, ready, userProfile, loading, isGuest, state, enterGuestMode } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(() => hasPersistedSessionHint());
   const searchParams = useLocalSearchParams<{ view?: string }>();
@@ -37,6 +37,13 @@ export default function LandingPage() {
     // Wait for auth to be ready AND not loading profile
     if (!ready || loading || isRedirecting) return;
 
+    // Guest mode: redirect to races tab
+    if ((isGuest || state === 'guest') && !bypassRedirect) {
+      setIsRedirecting(true);
+      router.replace('/(tabs)/races');
+      return;
+    }
+
     // Only redirect if signed in AND profile is loaded (or explicitly null after loading)
     // BUT allow bypass if user explicitly wants to see landing page
     if (signedIn && !bypassRedirect) {
@@ -50,14 +57,22 @@ export default function LandingPage() {
 
         router.replace(destination);
       }
-    } else if (ready && !signedIn && showSkeleton) {
+    } else if (ready && !signedIn && !isGuest && !bypassRedirect) {
+      // Dawn Patrol-style freemium: auto-enter guest mode for first-time visitors
+      // This gives immediate access to /races tab with demo races
+      setIsRedirecting(true);
+      enterGuestMode();
+    } else if (ready && !signedIn && !isGuest && showSkeleton) {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton]);
+  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state, enterGuestMode]);
 
-  // Show skeleton for returning users while auth loads
-  if ((showSkeleton || signedIn) && !bypassRedirect) {
+  // Show skeleton while auth is loading, for returning users, or during redirect
+  // This prevents flash of landing page before auto-guest mode kicks in
+  // Also show skeleton if we're about to auto-enter guest mode (ready && !signedIn && !isGuest)
+  const willAutoEnterGuest = ready && !signedIn && !isGuest && !bypassRedirect;
+  if ((!ready || showSkeleton || signedIn || isRedirecting || willAutoEnterGuest) && !bypassRedirect) {
     return <DashboardSkeleton />;
   }
 

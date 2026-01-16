@@ -28,7 +28,7 @@ import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/naviga
 import { IOS_COLORS } from '@/components/cards/constants';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStrategyRecommendations } from '@/hooks/useStrategyRecommendations';
-import { strategicPlanningService } from '@/services/StrategicPlanningService';
+import { useRaceStrategyNotes } from '@/hooks/useRaceStrategyNotes';
 import { StrategySectionItem } from '@/components/races/strategy';
 import {
   STRATEGY_SECTIONS,
@@ -105,7 +105,15 @@ export function StrategyDetailCard({
   // Track collapsed sections within expanded view
   const [collapsedSections, setCollapsedSections] = useState<Set<StrategySectionId>>(new Set());
 
-  // Track user notes locally (for optimistic updates)
+  // Load and persist strategy plans using the shared hook
+  const hookRaceId = isExpanded ? raceId : undefined;
+
+  const {
+    plans: savedPlans,
+    updatePlan: persistPlan,
+  } = useRaceStrategyNotes(hookRaceId);
+
+  // Track local edits for immediate UI feedback
   const [localNotes, setLocalNotes] = useState<Partial<Record<StrategySectionId, string>>>({});
 
   // Fetch recommendations from learning profile
@@ -167,20 +175,25 @@ export function StrategyDetailCard({
     // Update local state immediately (optimistic update)
     setLocalNotes((prev) => ({ ...prev, [sectionId]: plan }));
 
-    // Save to backend
-    if (user?.id) {
-      try {
-        await strategicPlanningService.saveSectionNote(raceId, user.id, sectionId, plan);
-      } catch (error) {
-        console.error(`[StrategyDetailCard] Failed to save note for ${sectionId}:`, error);
-      }
-    }
-  }, [raceId, user?.id]);
+    // Save to backend using the shared persistence hook
+    await persistPlan(sectionId, plan);
+  }, [persistPlan, raceId, hookRaceId]);
 
-  // Merge sectionData with localNotes for display
+  // Merge sectionData with savedPlans and localNotes for display
+  // Priority: localNotes (typing) > savedPlans (database) > sectionData (AI recommendations)
   const mergedSectionData = useMemo(() => {
     const merged: Partial<Record<StrategySectionId, StrategySectionNote>> = { ...sectionData };
 
+    // Apply saved plans from database
+    for (const [sectionId, userPlan] of Object.entries(savedPlans)) {
+      const id = sectionId as StrategySectionId;
+      merged[id] = {
+        ...merged[id],
+        userPlan,
+      };
+    }
+
+    // Apply local edits (takes priority)
     for (const [sectionId, userPlan] of Object.entries(localNotes)) {
       const id = sectionId as StrategySectionId;
       merged[id] = {
@@ -190,7 +203,7 @@ export function StrategyDetailCard({
     }
 
     return merged;
-  }, [sectionData, localNotes]);
+  }, [sectionData, savedPlans, localNotes]);
 
   // Determine if we have any meaningful content
   const hasContent = Object.keys(sectionData).length > 0 || primaryStrategy || notes?.length || aiInsight;

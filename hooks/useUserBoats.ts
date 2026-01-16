@@ -5,10 +5,12 @@
  * Returns boats with their class information for auto-population.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/providers/AuthProvider';
-import { sailorBoatService, SailorBoat } from '@/services/SailorBoatService';
 import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
+import { SailorBoat, sailorBoatService } from '@/services/SailorBoatService';
+import { useQuery } from '@tanstack/react-query';
+
+import { DEMO_BOAT_IRC3, DEMO_BOAT_J70 } from '@/lib/demo/demoRaceData';
 
 const logger = createLogger('useUserBoats');
 
@@ -40,8 +42,8 @@ export function useUserBoats(options: UseUserBoatsOptions = {}): UseUserBoatsRet
   const { activeOnly = true, classId, enabled = true } = options;
   const { user, ready: authReady } = useAuth();
 
-  // Only enable query when auth is ready and we have a user
-  const queryEnabled = enabled && authReady && !!user?.id;
+  // Enable query if we have a user OR if we want to show demo boats for guests
+  const queryEnabled = enabled && authReady; // Allow running without user.id to return demo boats
 
   logger.debug('[useUserBoats] Hook state:', {
     userId: user?.id,
@@ -62,8 +64,26 @@ export function useUserBoats(options: UseUserBoatsOptions = {}): UseUserBoatsRet
       logger.info('[useUserBoats] queryFn executing for user:', user?.id);
 
       if (!user?.id) {
-        logger.debug('[useUserBoats] No user ID, returning empty');
-        return [];
+        logger.debug('[useUserBoats] No user ID, returning demo boats for guest');
+        const now = new Date().toISOString();
+
+        // Map demo boats to SailorBoat structure
+        return [DEMO_BOAT_J70, DEMO_BOAT_IRC3].map((demo, index) => ({
+          id: demo.id,
+          sailor_id: 'guest',
+          class_id: demo.class_id,
+          name: demo.name,
+          sail_number: demo.sail_number,
+          is_primary: index === 0, // Make first boat primary
+          status: 'active',
+          created_at: now,
+          updated_at: now,
+          boat_class: {
+            id: demo.class_id,
+            name: demo.class_name,
+            class_association: 'Demo Class Association'
+          }
+        } as SailorBoat));
       }
 
       let result: SailorBoat[];

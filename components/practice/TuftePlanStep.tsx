@@ -8,31 +8,29 @@
  * - Typography-driven hierarchy
  */
 
-import React, { useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-} from 'react-native';
-import { X, Plus, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { TUFTE_BACKGROUND } from '@/components/cards/constants';
 import {
   TUFTE_FORM_COLORS,
   TUFTE_FORM_SPACING,
 } from '@/components/races/AddRaceDialog/tufteFormStyles';
 import type {
-  SkillArea,
   Drill,
+  PracticeMemberRole,
+  SkillArea,
   WhatStepDrill,
   WhoStepMember,
-  PracticeMemberRole,
 } from '@/types/practice';
-import { SKILL_AREA_LABELS, DRILL_CATEGORY_META } from '@/types/practice';
+import { DRILL_CATEGORY_META } from '@/types/practice';
+import { ChevronDown, ChevronUp, Plus, X } from 'lucide-react-native';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 // Skill area options
 const SKILL_OPTIONS: Array<{ area: SkillArea; label: string }> = [
@@ -115,12 +113,7 @@ export function TuftePlanStep({
   );
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={styles.container}>
       {/* Duration Summary */}
       {estimatedDuration > 0 && (
         <View style={styles.durationBanner}>
@@ -303,7 +296,7 @@ export function TuftePlanStep({
 
       {/* Bottom spacing */}
       <View style={styles.bottomSpacer} />
-    </ScrollView>
+    </View>
   );
 }
 

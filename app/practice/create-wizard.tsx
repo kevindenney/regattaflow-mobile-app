@@ -1,38 +1,38 @@
 /**
  * Practice Create Wizard Screen - Tufte Redesign
  *
- * Simplified 2-step wizard following Tufte principles:
- * 1. PLAN - Focus areas, drills, crew (combined WHAT + WHO)
- * 2. REVIEW - Summary, reasoning, instructions (combined WHY + HOW)
+ * Simplified single-page form following Tufte principles:
+ * - Plan: Focus areas, drills, crew
+ * - Review: Summary, reasoning, instructions
+ * - Single scrolling view for simplicity
  */
 
-import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, X, Calendar, Clock } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { TuftePlanStep } from '@/components/practice/TuftePlanStep';
+import { TufteReviewStep } from '@/components/practice/TufteReviewStep';
 import {
   TUFTE_FORM_COLORS,
   TUFTE_FORM_SPACING,
 } from '@/components/races/AddRaceDialog/tufteFormStyles';
-import { TuftePlanStep } from '@/components/practice/TuftePlanStep';
-import { TufteReviewStep } from '@/components/practice/TufteReviewStep';
-import { usePracticeCreationWizard } from '@/hooks/usePracticeCreationWizard';
 import { useDrillLibrary } from '@/hooks/useDrillLibrary';
+import { usePracticeCreationWizard } from '@/hooks/usePracticeCreationWizard';
+import { useAuth } from '@/providers/AuthProvider';
 import type { SkillArea } from '@/types/practice';
-
-// Simplified 2-step wizard
-type SimpleWizardStep = 'plan' | 'review';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Calendar, ChevronLeft, Clock, X } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function PracticeCreateWizardScreen() {
   const params = useLocalSearchParams<{
@@ -45,9 +45,9 @@ export default function PracticeCreateWizardScreen() {
     mode?: 'schedule' | 'log';
   }>();
 
+  const { user, isGuest } = useAuth();
   const wizard = usePracticeCreationWizard();
   const { drills: availableDrills, isLoading: isLoadingDrills } = useDrillLibrary();
-  const [currentStep, setCurrentStep] = useState<SimpleWizardStep>('plan');
   const [hasInitialized, setHasInitialized] = useState(false);
 
   // Scheduling state
@@ -102,37 +102,9 @@ export default function PracticeCreateWizardScreen() {
     }
   }, [params.drillIds, params.fromSuggestion, availableDrills]);
 
-  const isFirstStep = currentStep === 'plan';
-  const isLastStep = currentStep === 'review';
-
-  // Validation for PLAN step
-  const canProceed =
-    currentStep === 'plan'
-      ? wizard.state.what.focusAreas.length > 0 && wizard.state.what.drills.length > 0
-      : true;
+  const canProceed = wizard.state.what.focusAreas.length > 0 && wizard.state.what.drills.length > 0;
 
   const handleBack = () => {
-    if (isFirstStep) {
-      Alert.alert('Discard Practice?', 'Your progress will be lost.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(tabs)/races');
-            }
-          },
-        },
-      ]);
-    } else {
-      setCurrentStep('plan');
-    }
-  };
-
-  const handleClose = () => {
     Alert.alert('Discard Practice?', 'Your progress will be lost.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -149,15 +121,25 @@ export default function PracticeCreateWizardScreen() {
     ]);
   };
 
-  const handleNext = () => {
-    if (isLastStep) {
-      handleCreate();
-    } else {
-      setCurrentStep('review');
-    }
-  };
+  const handleClose = handleBack;
 
   const handleCreate = async () => {
+    // Guest Restriction
+    if (isGuest || !user?.id) {
+      Alert.alert(
+        'Sign Up Required',
+        'Please sign up to create practice sessions and track your progress.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Up',
+            onPress: () => router.push('/(auth)/signup')
+          }
+        ]
+      );
+      return;
+    }
+
     try {
       const sessionId = await wizard.createSession();
       router.replace({
@@ -210,14 +192,6 @@ export default function PracticeCreateWizardScreen() {
     });
   };
 
-  const stepTitles = {
-    plan: 'Plan Practice',
-    review: 'Review & Create',
-  };
-
-  const nextButtonText = isLastStep ? 'Create Session' : 'Continue';
-  const nextButtonDisabled = !canProceed || wizard.state.isSubmitting;
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -232,10 +206,7 @@ export default function PracticeCreateWizardScreen() {
           <ChevronLeft size={24} color={TUFTE_FORM_COLORS.primary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{stepTitles[currentStep]}</Text>
-          <Text style={styles.headerSubtitle}>
-            Step {currentStep === 'plan' ? '1' : '2'} of 2
-          </Text>
+          <Text style={styles.headerTitle}>New Practice Session</Text>
         </View>
         <TouchableOpacity
           style={styles.closeButton}
@@ -244,48 +215,6 @@ export default function PracticeCreateWizardScreen() {
         >
           <X size={20} color={TUFTE_FORM_COLORS.secondaryLabel} />
         </TouchableOpacity>
-      </View>
-
-      {/* Progress Indicator - Simple 2-dot version */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressRow}>
-          <View
-            style={[
-              styles.progressDot,
-              currentStep === 'plan' && styles.progressDotActive,
-              currentStep === 'review' && styles.progressDotCompleted,
-            ]}
-          >
-            {currentStep === 'review' && (
-              <Text style={styles.progressCheck}>✓</Text>
-            )}
-          </View>
-          <View style={styles.progressLine} />
-          <View
-            style={[
-              styles.progressDot,
-              currentStep === 'review' && styles.progressDotActive,
-            ]}
-          />
-        </View>
-        <View style={styles.progressLabels}>
-          <Text
-            style={[
-              styles.progressLabel,
-              currentStep === 'plan' && styles.progressLabelActive,
-            ]}
-          >
-            PLAN
-          </Text>
-          <Text
-            style={[
-              styles.progressLabel,
-              currentStep === 'review' && styles.progressLabelActive,
-            ]}
-          >
-            REVIEW
-          </Text>
-        </View>
       </View>
 
       {/* Schedule Section - shown in schedule mode */}
@@ -332,37 +261,52 @@ export default function PracticeCreateWizardScreen() {
 
       {/* Content */}
       <KeyboardAvoidingView
-        style={styles.content}
+        style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={100}
       >
-        {currentStep === 'plan' ? (
-          <TuftePlanStep
-            focusAreas={wizard.state.what.focusAreas}
-            drills={wizard.state.what.drills}
-            availableDrills={availableDrills}
-            estimatedDuration={wizard.state.what.estimatedDurationMinutes}
-            onFocusAreasChange={wizard.setFocusAreas}
-            onAddDrill={wizard.addDrill}
-            onRemoveDrill={wizard.removeDrill}
-            members={wizard.state.who.members}
-            onAddMember={wizard.addMember}
-            onRemoveMember={wizard.removeMember}
-            isLoadingDrills={isLoadingDrills}
-          />
-        ) : (
-          <TufteReviewStep
-            drills={wizard.state.what.drills}
-            availableDrills={availableDrills}
-            members={wizard.state.who.members}
-            estimatedDuration={wizard.state.what.estimatedDurationMinutes}
-            whyData={wizard.state.why}
-            onUserRationaleChange={wizard.setUserRationale}
-            howData={wizard.state.how}
-            onDrillInstructionsChange={wizard.setDrillInstructions}
-            onSessionNotesChange={wizard.setSessionNotes}
-          />
-        )}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Plan</Text>
+            <TuftePlanStep
+              focusAreas={wizard.state.what.focusAreas}
+              drills={wizard.state.what.drills}
+              availableDrills={availableDrills}
+              estimatedDuration={wizard.state.what.estimatedDurationMinutes}
+              onFocusAreasChange={wizard.setFocusAreas}
+              onAddDrill={wizard.addDrill}
+              onRemoveDrill={wizard.removeDrill}
+              members={wizard.state.who.members}
+              onAddMember={wizard.addMember}
+              onRemoveMember={wizard.removeMember}
+              isLoadingDrills={isLoadingDrills}
+            />
+          </View>
+
+          <View style={styles.separator} />
+
+          <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Details</Text>
+            <TufteReviewStep
+              drills={wizard.state.what.drills}
+              availableDrills={availableDrills}
+              members={wizard.state.who.members}
+              estimatedDuration={wizard.state.what.estimatedDurationMinutes}
+              whyData={wizard.state.why}
+              onUserRationaleChange={wizard.setUserRationale}
+              howData={wizard.state.how}
+              onDrillInstructionsChange={wizard.setDrillInstructions}
+              onSessionNotesChange={wizard.setSessionNotes}
+            />
+          </View>
+
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Footer */}
@@ -373,19 +317,19 @@ export default function PracticeCreateWizardScreen() {
         <TouchableOpacity
           style={[
             styles.nextButton,
-            nextButtonDisabled && styles.nextButtonDisabled,
+            (!canProceed || wizard.state.isSubmitting) && styles.nextButtonDisabled,
           ]}
-          onPress={handleNext}
-          disabled={nextButtonDisabled}
+          onPress={handleCreate}
+          disabled={!canProceed || wizard.state.isSubmitting}
           activeOpacity={0.7}
         >
           <Text
             style={[
               styles.nextButtonText,
-              nextButtonDisabled && styles.nextButtonTextDisabled,
+              (!canProceed || wizard.state.isSubmitting) && styles.nextButtonTextDisabled,
             ]}
           >
-            {wizard.state.isSubmitting ? 'Creating...' : nextButtonText}
+            {wizard.state.isSubmitting ? 'Creating...' : 'Create Session'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -422,68 +366,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: TUFTE_FORM_COLORS.label,
   },
-  headerSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: TUFTE_FORM_COLORS.secondaryLabel,
-    marginTop: 2,
-  },
   closeButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Progress indicator
-  progressContainer: {
-    paddingHorizontal: 60,
-    paddingVertical: TUFTE_FORM_SPACING.md,
-    backgroundColor: TUFTE_BACKGROUND,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDotActive: {
-    backgroundColor: TUFTE_FORM_COLORS.primary,
-  },
-  progressDotCompleted: {
-    backgroundColor: '#16A34A',
-  },
-  progressCheck: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  progressLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  progressLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: TUFTE_FORM_COLORS.sectionLabel,
-    letterSpacing: 1,
-  },
-  progressLabelActive: {
-    color: TUFTE_FORM_COLORS.primary,
-  },
-  // Schedule section
   scheduleSection: {
     flexDirection: 'row',
     gap: 12,
@@ -511,8 +399,34 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: TUFTE_FORM_COLORS.label,
   },
-  content: {
+  keyboardView: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: TUFTE_FORM_SPACING.xl,
+  },
+  stepContainer: {
+    // No padding needed as steps handle it
+  },
+  stepTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TUFTE_FORM_COLORS.label,
+    marginHorizontal: TUFTE_FORM_SPACING.lg,
+    marginTop: TUFTE_FORM_SPACING.lg,
+    marginBottom: TUFTE_FORM_SPACING.sm,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: TUFTE_FORM_COLORS.separator, // Use darker separator
+    marginVertical: TUFTE_FORM_SPACING.lg,
+    marginHorizontal: TUFTE_FORM_SPACING.lg,
+  },
+  bottomSpacer: {
+    height: 20,
   },
   footer: {
     backgroundColor: '#FFFFFF',

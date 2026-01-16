@@ -8,9 +8,12 @@
 import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { GuestStorageService } from '@/services/GuestStorageService';
 import { createLogger } from '@/lib/utils/logger';
+import { v4 as uuid } from 'uuid';
 
 const logger = createLogger('useAddRace');
 
@@ -105,6 +108,8 @@ export interface UseAddRaceReturn {
   isAddingRace: boolean;
   /** Whether the family button form is expanded */
   familyButtonExpanded: boolean;
+  /** Whether signup prompt should be shown (guest trying to add 2nd race) */
+  showSignupPrompt: boolean;
   /** Handler to show add race sheet */
   handleShowAddRaceSheet: () => void;
   /** Handler to close add race sheet */
@@ -119,6 +124,8 @@ export interface UseAddRaceReturn {
   setShowAddRaceSheet: React.Dispatch<React.SetStateAction<boolean>>;
   /** Setter for familyButtonExpanded */
   setFamilyButtonExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  /** Setter for showSignupPrompt */
+  setShowSignupPrompt: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 /**
@@ -129,24 +136,23 @@ export function useAddRace({
   onRaceCreated,
 }: UseAddRaceParams): UseAddRaceReturn {
   const router = useRouter();
-  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { user, isGuest } = useAuth();
 
   const [showAddRaceSheet, setShowAddRaceSheet] = useState(false);
   const [isAddingRace, setIsAddingRace] = useState(false);
   const [familyButtonExpanded, setFamilyButtonExpanded] = useState(false);
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
 
   // Handler to show add race sheet
   // Note: Using page navigation instead of modal due to iOS modal presentation issues
   // The /(tabs)/race/add-tufte page has clean Tufte-style UI with real AI extraction
   const handleShowAddRaceSheet = useCallback(() => {
-    console.log('[useAddRace] handleShowAddRaceSheet called - navigating to add race page');
     router.push('/(tabs)/race/add-tufte');
   }, [router]);
 
   // Handler to close add race sheet
   const handleCloseAddRaceSheet = useCallback(() => {
-    console.log('[useAddRace] handleCloseAddRaceSheet called');
-    console.trace('[useAddRace] Close stack trace:');
     setShowAddRaceSheet(false);
   }, []);
 
@@ -157,11 +163,57 @@ export function useAddRace({
 
   // Handler for quick add race form (simple name + date/time)
   const handleQuickAddRaceSubmit = useCallback(async (data: QuickAddRaceData) => {
-    if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to create a race');
+    // Guest mode: save to local storage
+    if (isGuest || !user?.id) {
+      setIsAddingRace(true);
+      try {
+        // Check if guest already has a race
+        const hasRace = await GuestStorageService.hasGuestRace();
+        if (hasRace) {
+          // Save the new race as "pending" before showing signup prompt
+          // This preserves the race data during the authentication flow
+          const pendingRace = {
+            id: uuid(),
+            name: data.name,
+            start_date: data.dateTime,
+            venue: '',
+            created_at: new Date().toISOString(),
+          };
+          await GuestStorageService.savePendingRace(pendingRace);
+
+          // Show signup prompt - guest can only have one race
+          setShowSignupPrompt(true);
+          return;
+        }
+
+        // Save to local storage
+        const guestRace = {
+          id: uuid(),
+          name: data.name,
+          start_date: data.dateTime,
+          venue: '',
+          created_at: new Date().toISOString(),
+        };
+        await GuestStorageService.saveGuestRace(guestRace);
+
+        // Refresh guest race query
+        queryClient.invalidateQueries({ queryKey: ['guestRace'] });
+
+        // Success - close sheet
+        setShowAddRaceSheet(false);
+        refetchRaces?.();
+
+        // Notify caller
+        onRaceCreated?.(guestRace.id);
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save race');
+      } finally {
+        setIsAddingRace(false);
+      }
       return;
     }
 
+    // Authenticated user: save to Supabase
     setIsAddingRace(true);
     try {
       // Insert into regattas table (what the app displays)
@@ -195,15 +247,93 @@ export function useAddRace({
     } finally {
       setIsAddingRace(false);
     }
-  }, [refetchRaces, onRaceCreated, user?.id]);
+  }, [refetchRaces, onRaceCreated, user?.id, isGuest, queryClient]);
 
   // Handler for full add race dialog with race type support
   const handleAddRaceDialogSave = useCallback(async (formData: RaceFormData) => {
-    if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to create a race');
+    // Guest mode: save to local storage
+    if (isGuest || !user?.id) {
+      setIsAddingRace(true);
+      try {
+        // Check if guest already has a race
+        const hasRace = await GuestStorageService.hasGuestRace();
+        if (hasRace) {
+          // Save the new race as "pending" before showing signup prompt
+          // This preserves the race data during the authentication flow
+          const pendingStartTime = `${formData.date}T${formData.time}:00`;
+          const pendingRace = {
+            id: uuid(),
+            name: formData.name,
+            start_date: pendingStartTime,
+            venue: formData.location || '',
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+            race_type: formData.raceType,
+            metadata: {
+              venue_name: formData.location,
+              course_type: formData.fleet?.courseType,
+              number_of_laps: formData.fleet?.numberOfLaps ? parseInt(formData.fleet.numberOfLaps) : undefined,
+              expected_fleet_size: formData.fleet?.expectedFleetSize ? parseInt(formData.fleet.expectedFleetSize) : undefined,
+              class_name: formData.fleet?.boatClass,
+              total_distance_nm: formData.distance?.totalDistanceNm ? parseFloat(formData.distance.totalDistanceNm) : undefined,
+              time_limit_hours: formData.distance?.timeLimitHours ? parseFloat(formData.distance.timeLimitHours) : undefined,
+              route_description: formData.distance?.routeDescription,
+              marks: formData.marks,
+              route_waypoints: formData.routeWaypoints,
+            },
+            created_at: new Date().toISOString(),
+          };
+          await GuestStorageService.savePendingRace(pendingRace);
+
+          // Show signup prompt - guest can only have one race
+          setShowSignupPrompt(true);
+          return;
+        }
+
+        // Build start_time from date and time
+        const startTime = `${formData.date}T${formData.time}:00`;
+
+        // Save to local storage with metadata
+        const guestRace = {
+          id: uuid(),
+          name: formData.name,
+          start_date: startTime,
+          venue: formData.location || '',
+          latitude: formData.latitude,
+          longitude: formData.longitude,
+          race_type: formData.raceType,
+          metadata: {
+            venue_name: formData.location,
+            course_type: formData.fleet?.courseType,
+            number_of_laps: formData.fleet?.numberOfLaps ? parseInt(formData.fleet.numberOfLaps) : undefined,
+            expected_fleet_size: formData.fleet?.expectedFleetSize ? parseInt(formData.fleet.expectedFleetSize) : undefined,
+            class_name: formData.fleet?.boatClass,
+            total_distance_nm: formData.distance?.totalDistanceNm ? parseFloat(formData.distance.totalDistanceNm) : undefined,
+            time_limit_hours: formData.distance?.timeLimitHours ? parseFloat(formData.distance.timeLimitHours) : undefined,
+            route_description: formData.distance?.routeDescription,
+          },
+          created_at: new Date().toISOString(),
+        };
+        await GuestStorageService.saveGuestRace(guestRace);
+
+        // Refresh guest race query
+        queryClient.invalidateQueries({ queryKey: ['guestRace'] });
+
+        // Success - close sheet
+        setShowAddRaceSheet(false);
+        refetchRaces?.();
+
+        // Notify caller
+        onRaceCreated?.(guestRace.id);
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save race');
+      } finally {
+        setIsAddingRace(false);
+      }
       return;
     }
 
+    // Authenticated user: save to Supabase
     setIsAddingRace(true);
     try {
       // Build start_time from date and time
@@ -340,6 +470,115 @@ export function useAddRace({
         logger.debug('[useAddRace] Adding racing area polygon:', formData.racingAreaPolygon.length, 'points');
       }
 
+      // Add extracted details from AI analysis
+      const extractedDetails = (formData as any).extractedDetails;
+      if (extractedDetails) {
+        logger.debug('[useAddRace] Adding extracted details:', Object.keys(extractedDetails));
+
+        // Entry & Registration
+        if (extractedDetails.entryFees) {
+          regattaData.entry_fees = extractedDetails.entryFees;
+        }
+        if (extractedDetails.entryDeadline) {
+          regattaData.entry_deadline = extractedDetails.entryDeadline;
+        }
+
+        // Crew & Safety
+        if (extractedDetails.minimumCrew) {
+          regattaData.minimum_crew = extractedDetails.minimumCrew;
+        }
+        if (extractedDetails.crewRequirements) {
+          regattaData.crew_requirements = extractedDetails.crewRequirements;
+        }
+        if (extractedDetails.safetyRequirements) {
+          regattaData.safety_requirements = extractedDetails.safetyRequirements;
+        }
+        if (extractedDetails.retirementNotification) {
+          regattaData.retirement_notification = extractedDetails.retirementNotification;
+        }
+        if (extractedDetails.insuranceRequirements) {
+          regattaData.insurance_requirements = extractedDetails.insuranceRequirements;
+        }
+
+        // Schedule
+        if (extractedDetails.schedule && extractedDetails.schedule.length > 0) {
+          regattaData.schedule = extractedDetails.schedule;
+        }
+
+        // Course Details
+        if (extractedDetails.prohibitedAreas && extractedDetails.prohibitedAreas.length > 0) {
+          regattaData.prohibited_areas = extractedDetails.prohibitedAreas;
+        }
+        if (extractedDetails.trafficSeparationSchemes) {
+          regattaData.traffic_separation_schemes = extractedDetails.trafficSeparationSchemes;
+        }
+        if (extractedDetails.tideGates && extractedDetails.tideGates.length > 0) {
+          regattaData.tide_gates = extractedDetails.tideGates;
+        }
+        if (extractedDetails.startAreaName) {
+          regattaData.start_area_name = extractedDetails.startAreaName;
+        }
+        if (extractedDetails.startAreaDescription) {
+          regattaData.start_area_description = extractedDetails.startAreaDescription;
+        }
+
+        // Scoring
+        if (extractedDetails.scoringFormulaDescription) {
+          regattaData.scoring_formula = extractedDetails.scoringFormulaDescription;
+        }
+        if (extractedDetails.handicapSystem) {
+          regattaData.handicap_systems = extractedDetails.handicapSystem;
+        }
+
+        // Motoring (distance races)
+        if (extractedDetails.motoringDivisionAvailable !== undefined) {
+          regattaData.motoring_division_available = extractedDetails.motoringDivisionAvailable;
+        }
+        if (extractedDetails.motoringDivisionRules) {
+          regattaData.motoring_division_rules = extractedDetails.motoringDivisionRules;
+        }
+
+        // Communications
+        if (extractedDetails.vhfChannels && extractedDetails.vhfChannels.length > 0) {
+          regattaData.vhf_channels = extractedDetails.vhfChannels;
+        }
+
+        // Organization
+        if (extractedDetails.organizingAuthority) {
+          regattaData.organizing_authority = extractedDetails.organizingAuthority;
+        }
+        if (extractedDetails.eventWebsite) {
+          regattaData.event_website = extractedDetails.eventWebsite;
+        }
+        if (extractedDetails.contactEmail) {
+          regattaData.contact_email = extractedDetails.contactEmail;
+        }
+
+        // Weather & Conditions
+        if (extractedDetails.expectedConditions) {
+          regattaData.expected_conditions = extractedDetails.expectedConditions;
+        }
+        if (extractedDetails.expectedWindDirection) {
+          regattaData.expected_wind_direction = extractedDetails.expectedWindDirection;
+        }
+        if (extractedDetails.expectedWindSpeedMin) {
+          regattaData.expected_wind_speed_min = extractedDetails.expectedWindSpeedMin;
+        }
+        if (extractedDetails.expectedWindSpeedMax) {
+          regattaData.expected_wind_speed_max = extractedDetails.expectedWindSpeedMax;
+        }
+
+        // Rules
+        if (extractedDetails.classRules) {
+          regattaData.class_rules = extractedDetails.classRules;
+        }
+
+        // Prizes
+        if (extractedDetails.prizesDescription) {
+          regattaData.prizes_description = extractedDetails.prizesDescription;
+        }
+      }
+
       logger.debug('[useAddRace] Creating regatta:', regattaData);
 
       const { data: newRace, error } = await supabase
@@ -370,12 +609,13 @@ export function useAddRace({
     } finally {
       setIsAddingRace(false);
     }
-  }, [refetchRaces, onRaceCreated, user?.id]);
+  }, [refetchRaces, onRaceCreated, user?.id, isGuest, queryClient]);
 
   return {
     showAddRaceSheet,
     isAddingRace,
     familyButtonExpanded,
+    showSignupPrompt,
     handleShowAddRaceSheet,
     handleCloseAddRaceSheet,
     handleAddRaceNavigation,
@@ -383,6 +623,7 @@ export function useAddRace({
     handleAddRaceDialogSave,
     setShowAddRaceSheet,
     setFamilyButtonExpanded,
+    setShowSignupPrompt,
   };
 }
 

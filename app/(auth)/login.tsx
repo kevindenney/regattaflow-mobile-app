@@ -1,10 +1,12 @@
 import { Link, router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ViewStyle } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
 import { supabase } from '../../services/supabase';
+import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 const cardShadowStyle: ViewStyle =
   Platform.OS === 'web'
@@ -42,10 +44,19 @@ const getAuthErrorMessage = (error: any): string => {
 };
 
 export default function Login() {
-  const { signIn, signInWithGoogle, signInWithApple, loading } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple, loading, enterGuestMode } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Apple Sign In is available on web and iOS, not Android
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(Platform.OS === 'web');
+
+  useEffect(() => {
+    // Check Apple Sign In availability on iOS
+    if (Platform.OS === 'ios') {
+      isAppleSignInAvailable().then(setAppleSignInAvailable);
+    }
+  }, []);
 
   const onEmailLogin = async () => {
     setErrorMessage(null); // Clear previous errors
@@ -163,7 +174,7 @@ export default function Login() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Close sign in"
-              onPress={() => router.replace('/')}
+              onPress={() => enterGuestMode()}
               style={styles.closeButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -198,17 +209,29 @@ export default function Login() {
               <Text style={styles.socialButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* Apple Sign-in */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="apple-sign-in"
-              onPress={onAppleLogin}
-              disabled={loading}
-              style={[styles.socialButton, styles.appleButton, loading && styles.buttonDisabled]}
-            >
-              <Text style={styles.appleIcon}></Text>
-              <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
-            </TouchableOpacity>
+            {/* Apple Sign-in - iOS native button or web fallback, hidden on Android */}
+            {appleSignInAvailable && (
+              Platform.OS === 'ios' ? (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={10}
+                  style={[styles.appleNativeButton, loading && styles.buttonDisabled]}
+                  onPress={onAppleLogin}
+                />
+              ) : (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="apple-sign-in"
+                  onPress={onAppleLogin}
+                  disabled={loading}
+                  style={[styles.socialButton, styles.appleButton, loading && styles.buttonDisabled]}
+                >
+                  <Text style={styles.appleIcon}></Text>
+                  <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
+                </TouchableOpacity>
+              )
+            )}
           </View>
 
           <View style={styles.dividerRow}>
@@ -353,6 +376,11 @@ const styles = StyleSheet.create({
   appleButton: {
     backgroundColor: '#000000',
     borderColor: '#000000',
+  },
+  appleNativeButton: {
+    width: '100%',
+    height: 48,
+    marginTop: 8,
   },
   googleIcon: {
     fontSize: 18,

@@ -1,6 +1,8 @@
 /**
- * Coach Onboarding - Payment Setup Screen
- * Guides coaches through Stripe Connect setup to receive payments
+ * Coach Onboarding - Payment Setup (Step 5 of 5)
+ *
+ * Tufte-inspired design with clean iOS styling
+ * Single-focus Stripe Connect flow
  */
 
 import React, { useState, useEffect } from 'react';
@@ -12,24 +14,36 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  StyleSheet,
+  Platform,
 } from 'react-native';
-import {
-  ChevronRight,
-  CreditCard,
-  Shield,
-  Zap,
-  Globe,
-  DollarSign,
-  AlertCircle,
-  CheckCircle,
-  ArrowRight,
-} from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoachOnboardingState } from '@/hooks/useCoachOnboardingState';
 import { useAuth } from '@/providers/AuthProvider';
-import { OnboardingProgress } from '@/components/onboarding';
 import { StripeConnectService } from '@/services/StripeConnectService';
 import { supabase } from '@/services/supabase';
+
+// Design tokens (consistent with other screens)
+const COLORS = {
+  primary: '#007AFF',
+  primaryLight: '#E5F1FF',
+  background: '#F2F2F7',
+  card: '#FFFFFF',
+  label: '#000000',
+  secondaryLabel: '#3C3C43',
+  tertiaryLabel: '#8E8E93',
+  separator: '#C6C6C8',
+  success: '#34C759',
+  warning: '#FF9500',
+  selected: '#007AFF',
+  selectedBg: '#007AFF',
+  unselected: '#E5E5EA',
+  border: '#D1D1D6',
+};
+
+const STEP_COUNT = 5;
+const CURRENT_STEP = 5;
 
 type PaymentSetupStatus = 'not_started' | 'in_progress' | 'complete' | 'error';
 
@@ -48,7 +62,6 @@ const CoachOnboardingPaymentSetup = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
 
-  // Check for existing Stripe status on mount
   useEffect(() => {
     checkStripeStatus();
   }, [user]);
@@ -57,7 +70,6 @@ const CoachOnboardingPaymentSetup = () => {
     if (!user) return;
 
     try {
-      // First, check if we have a coach profile
       const { data: profile } = await supabase
         .from('coach_profiles')
         .select('id, stripe_account_id, stripe_onboarding_complete, stripe_onboarding_skipped')
@@ -76,7 +88,6 @@ const CoachOnboardingPaymentSetup = () => {
             detailsSubmitted: true,
           });
         } else if (profile.stripe_account_id) {
-          // Check actual Stripe status
           const status = await StripeConnectService.getConnectStatus(profile.id);
           setStripeStatus({
             connected: status.connected,
@@ -106,11 +117,9 @@ const CoachOnboardingPaymentSetup = () => {
     setIsConnecting(true);
 
     try {
-      // First, ensure we have a coach profile saved
       let profileId = coachProfileId;
 
       if (!profileId) {
-        // Save the profile data first
         const { data: profile, error: profileError } = await supabase
           .from('coach_profiles')
           .upsert({
@@ -139,7 +148,6 @@ const CoachOnboardingPaymentSetup = () => {
         throw new Error('Failed to get or create coach profile');
       }
 
-      // Start Stripe Connect onboarding
       const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://regattaflow.com';
       const result = await StripeConnectService.startOnboarding(
         profileId,
@@ -151,10 +159,8 @@ const CoachOnboardingPaymentSetup = () => {
         throw new Error(result.error || 'Failed to start Stripe onboarding');
       }
 
-      // Update local state
       updatePaymentSetup({ stripeOnboardingStarted: true });
 
-      // Redirect to Stripe
       if (typeof window !== 'undefined') {
         window.location.href = result.url;
       } else {
@@ -172,15 +178,14 @@ const CoachOnboardingPaymentSetup = () => {
   const handleSkipForNow = async () => {
     Alert.alert(
       'Skip Payment Setup?',
-      "You won't be able to accept paid bookings until you complete payment setup. You can always set this up later from your dashboard.",
+      "You won't be able to accept paid bookings until you complete payment setup. You can set this up later from your dashboard.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Skip for Now',
-          style: 'default',
+          text: 'Skip',
+          style: 'destructive',
           onPress: async () => {
             try {
-              // Mark as skipped in database
               if (coachProfileId) {
                 await supabase
                   .from('coach_profiles')
@@ -191,10 +196,7 @@ const CoachOnboardingPaymentSetup = () => {
                   .eq('id', coachProfileId);
               }
 
-              // Update local state
               updatePaymentSetup({ stripeOnboardingSkipped: true });
-
-              // Navigate to profile preview
               router.push('/(auth)/coach-onboarding-profile-preview');
             } catch (error) {
               console.error('Error skipping payment setup:', error);
@@ -210,255 +212,161 @@ const CoachOnboardingPaymentSetup = () => {
     router.push('/(auth)/coach-onboarding-profile-preview');
   };
 
-  // Get pricing info from state for the preview
-  const getPricingDisplay = () => {
-    if (!state.pricing) return { rate: '$0', fee: '$0', youReceive: '$0' };
-
-    const rate = state.pricing.pricingModel === 'hourly'
-      ? parseFloat(state.pricing.hourlyRate || '0')
-      : parseFloat(state.pricing.packagePrices?.single || '0');
-
-    const platformFee = rate * 0.15;
-    const youReceive = rate - platformFee;
-
-    const symbol = state.pricing.currency === 'USD' ? '$' :
-                   state.pricing.currency === 'EUR' ? '€' :
-                   state.pricing.currency === 'GBP' ? '£' : '$';
-
-    return {
-      rate: `${symbol}${rate.toFixed(2)}`,
-      fee: `${symbol}${platformFee.toFixed(2)}`,
-      youReceive: `${symbol}${youReceive.toFixed(2)}`,
-    };
+  // Get pricing info for net earnings display
+  const getNetEarnings = () => {
+    if (!state.pricing) return '85%';
+    return '85%';
   };
-
-  const pricing = getPricingDisplay();
 
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="text-gray-600 mt-4">Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Progress Indicator */}
-      <View className="px-4 pt-4 bg-white">
-        <OnboardingProgress
-          currentStep={5}
-          totalSteps={6}
-          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Payments', 'Review']}
-          color="#059669"
-          showStepLabels={false}
-        />
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.stepIndicator}>Step {CURRENT_STEP} of {STEP_COUNT}</Text>
+        </View>
+        <View style={styles.headerRight} />
       </View>
 
-      <ScrollView className="flex-1 px-4 py-6">
-        {/* Header */}
-        <View className="items-center mb-6">
-          <View className="w-16 h-16 bg-blue-100 rounded-full items-center justify-center mb-4">
-            <CreditCard size={32} color="#2563EB" />
+      {/* Progress Bar */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${(CURRENT_STEP / STEP_COUNT) * 100}%` }]} />
+        </View>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIconContainer}>
+            <Ionicons name="card" size={32} color={COLORS.primary} />
           </View>
-          <Text className="text-2xl font-bold text-gray-800 text-center">
-            Get Paid for Your Coaching
-          </Text>
-          <Text className="text-gray-600 mt-2 text-center">
-            Connect with Stripe to receive payments directly to your bank account
+          <Text style={styles.heroTitle}>Payments</Text>
+          <Text style={styles.heroSubtitle}>
+            Connect your bank account to receive payouts
           </Text>
         </View>
 
-        {/* Stripe Status Card */}
+        {/* Status Card */}
         {setupStatus === 'complete' && (
-          <View className="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
-            <View className="flex-row items-center mb-3">
-              <CheckCircle size={24} color="#059669" />
-              <Text className="font-bold text-green-800 text-lg ml-2">
-                Payments Enabled!
-              </Text>
+          <View style={styles.successCard}>
+            <View style={styles.statusHeader}>
+              <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />
+              <Text style={styles.statusTitle}>Payments Enabled</Text>
             </View>
-            <Text className="text-green-700">
-              Your Stripe account is connected and ready to receive payments from sailors.
+            <Text style={styles.statusDescription}>
+              Your Stripe account is connected and ready to receive payments.
             </Text>
           </View>
         )}
 
         {setupStatus === 'in_progress' && (
-          <View className="bg-yellow-50 border border-yellow-200 rounded-2xl p-5 mb-6">
-            <View className="flex-row items-center mb-3">
-              <AlertCircle size={24} color="#D97706" />
-              <Text className="font-bold text-yellow-800 text-lg ml-2">
-                Setup In Progress
-              </Text>
+          <View style={styles.warningCard}>
+            <View style={styles.statusHeader}>
+              <Ionicons name="alert-circle" size={24} color={COLORS.warning} />
+              <Text style={styles.statusTitleWarning}>Setup In Progress</Text>
             </View>
-            <Text className="text-yellow-700 mb-3">
-              Your Stripe account needs a few more details to be fully activated.
+            <Text style={styles.statusDescriptionWarning}>
+              Your account needs a few more details to be fully activated.
             </Text>
             <TouchableOpacity
-              className="bg-yellow-600 py-3 px-4 rounded-xl flex-row items-center justify-center"
+              style={styles.completeButton}
               onPress={handleStartStripeConnect}
               disabled={isConnecting}
             >
               {isConnecting ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <>
-                  <Text className="text-white font-semibold">Complete Setup</Text>
-                  <ArrowRight size={18} color="#FFFFFF" className="ml-2" />
-                </>
+                <Text style={styles.completeButtonText}>Complete Setup</Text>
               )}
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Value Props */}
+        {/* Info Section */}
         {setupStatus !== 'complete' && (
-          <View className="mb-6">
-            <View className="flex-row items-center bg-gray-50 rounded-xl p-4 mb-3">
-              <View className="w-10 h-10 bg-green-100 rounded-full items-center justify-center mr-3">
-                <Shield size={20} color="#059669" />
-              </View>
-              <View className="flex-1">
-                <Text className="font-semibold text-gray-800">Secure Payments</Text>
-                <Text className="text-gray-600 text-sm">
-                  Industry-leading payment security by Stripe
-                </Text>
-              </View>
-            </View>
+          <View style={styles.section}>
+            <Text style={styles.infoText}>
+              Stripe handles all payments securely. You'll earn {getNetEarnings()} of each session fee, deposited weekly.
+            </Text>
 
-            <View className="flex-row items-center bg-gray-50 rounded-xl p-4 mb-3">
-              <View className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center mr-3">
-                <Zap size={20} color="#EA580C" />
-              </View>
-              <View className="flex-1">
-                <Text className="font-semibold text-gray-800">Fast Payouts</Text>
-                <Text className="text-gray-600 text-sm">
-                  Get paid within 2-7 business days
-                </Text>
-              </View>
-            </View>
+            <View style={styles.requirementsCard}>
+              <Text style={styles.requirementsTitle}>REQUIREMENTS</Text>
 
-            <View className="flex-row items-center bg-gray-50 rounded-xl p-4">
-              <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mr-3">
-                <Globe size={20} color="#2563EB" />
+              <View style={styles.requirementRow}>
+                <Ionicons name="checkmark" size={16} color={COLORS.tertiaryLabel} />
+                <Text style={styles.requirementText}>Bank account details</Text>
               </View>
-              <View className="flex-1">
-                <Text className="font-semibold text-gray-800">Global Support</Text>
-                <Text className="text-gray-600 text-sm">
-                  Accept payments from sailors worldwide
-                </Text>
+
+              <View style={styles.requirementRow}>
+                <Ionicons name="checkmark" size={16} color={COLORS.tertiaryLabel} />
+                <Text style={styles.requirementText}>Government ID verification</Text>
+              </View>
+
+              <View style={styles.requirementRow}>
+                <Ionicons name="checkmark" size={16} color={COLORS.tertiaryLabel} />
+                <Text style={styles.requirementText}>Takes about 5 minutes</Text>
               </View>
             </View>
           </View>
         )}
 
-        {/* Platform Fee Disclosure */}
-        <View className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-6">
-          <View className="flex-row items-center mb-3">
-            <DollarSign size={20} color="#2563EB" />
-            <Text className="font-bold text-gray-800 text-lg ml-2">
-              How Payments Work
-            </Text>
-          </View>
-
-          <Text className="text-gray-600 mb-4">
-            RegattaFlow charges a 15% service fee on each booking to cover payment processing, 
-            platform maintenance, and customer support.
-          </Text>
-
-          {/* Pricing Example */}
-          <View className="bg-white rounded-xl p-4">
-            <Text className="text-gray-500 text-sm mb-3 font-medium">
-              EXAMPLE BASED ON YOUR PRICING
-            </Text>
-
-            <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-gray-700">Session Rate</Text>
-              <Text className="font-semibold text-gray-800">{pricing.rate}</Text>
-            </View>
-
-            <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-gray-700">Platform Fee (15%)</Text>
-              <Text className="font-semibold text-red-600">-{pricing.fee}</Text>
-            </View>
-
-            <View className="border-t border-gray-200 my-2" />
-
-            <View className="flex-row justify-between items-center">
-              <Text className="font-semibold text-gray-800">You Receive</Text>
-              <Text className="font-bold text-green-600 text-lg">{pricing.youReceive}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* What You'll Need */}
-        {setupStatus === 'not_started' && (
-          <View className="bg-gray-50 rounded-2xl p-5 mb-6">
-            <Text className="font-bold text-gray-800 mb-3">What You'll Need</Text>
-            <View className="space-y-2">
-              <View className="flex-row items-center">
-                <CheckCircle size={16} color="#6B7280" />
-                <Text className="text-gray-600 ml-2">Bank account details</Text>
-              </View>
-              <View className="flex-row items-center mt-2">
-                <CheckCircle size={16} color="#6B7280" />
-                <Text className="text-gray-600 ml-2">Government-issued ID</Text>
-              </View>
-              <View className="flex-row items-center mt-2">
-                <CheckCircle size={16} color="#6B7280" />
-                <Text className="text-gray-600 ml-2">About 5 minutes to complete</Text>
-              </View>
-            </View>
-          </View>
-        )}
+        {/* Bottom padding */}
+        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Action Buttons */}
-      <View className="px-4 pb-6 border-t border-gray-100 pt-4">
+      {/* Footer */}
+      <View style={styles.footer}>
         {setupStatus === 'complete' ? (
-          <TouchableOpacity
-            className="flex-row items-center justify-center py-4 rounded-xl bg-blue-600"
-            onPress={handleContinue}
-          >
-            <Text className="text-white font-bold text-lg">Continue to Profile Preview</Text>
-            <ChevronRight color="white" size={20} className="ml-2" />
+          <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
+            <Text style={styles.continueButtonText}>Continue</Text>
+            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (
           <>
             <TouchableOpacity
-              className={`flex-row items-center justify-center py-4 rounded-xl mb-3 ${
-                isConnecting ? 'bg-gray-400' : 'bg-blue-600'
-              }`}
+              style={[styles.stripeButton, isConnecting && styles.stripeButtonDisabled]}
               onPress={handleStartStripeConnect}
               disabled={isConnecting}
             >
               {isConnecting ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <CreditCard size={20} color="#FFFFFF" />
-                  <Text className="text-white font-bold text-lg ml-2">
-                    Connect with Stripe
-                  </Text>
+                  <Ionicons name="card" size={20} color="#FFFFFF" />
+                  <Text style={styles.stripeButtonText}>Connect with Stripe</Text>
                 </>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="py-3 items-center"
+              style={styles.skipButton}
               onPress={handleSkipForNow}
               disabled={isConnecting}
             >
-              <Text className="text-gray-500 font-medium">I'll set this up later</Text>
+              <Text style={styles.skipButtonText}>Skip for now</Text>
             </TouchableOpacity>
 
-            {/* Skip Warning */}
-            <View className="flex-row items-center justify-center mt-2 px-4">
-              <AlertCircle size={14} color="#9CA3AF" />
-              <Text className="text-gray-400 text-xs ml-1 text-center">
-                You won't be able to accept paid bookings without payment setup
+            <View style={styles.skipWarning}>
+              <Ionicons name="information-circle" size={14} color={COLORS.tertiaryLabel} />
+              <Text style={styles.skipWarningText}>
+                Required to accept paid bookings
               </Text>
             </View>
           </>
@@ -468,5 +376,252 @@ const CoachOnboardingPaymentSetup = () => {
   );
 };
 
-export default CoachOnboardingPaymentSetup;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+  },
 
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: COLORS.background,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stepIndicator: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  headerRight: {
+    width: 44,
+  },
+
+  // Progress
+  progressContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    backgroundColor: COLORS.background,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: COLORS.unselected,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+
+  // Scroll
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+
+  // Hero
+  hero: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  heroIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.label,
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+
+  // Status Cards
+  successCard: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statusTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#166534',
+    marginLeft: 8,
+  },
+  statusDescription: {
+    fontSize: 15,
+    color: '#166534',
+    lineHeight: 22,
+  },
+
+  warningCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  statusTitleWarning: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#92400E',
+    marginLeft: 8,
+  },
+  statusDescriptionWarning: {
+    fontSize: 15,
+    color: '#92400E',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  completeButton: {
+    backgroundColor: COLORS.warning,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  completeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
+  // Section
+  section: {
+    marginBottom: 24,
+  },
+  infoText: {
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+
+  // Requirements
+  requirementsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 16,
+  },
+  requirementsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  requirementText: {
+    fontSize: 15,
+    color: COLORS.label,
+    marginLeft: 10,
+  },
+
+  // Footer
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    backgroundColor: COLORS.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.separator,
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  continueButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  stripeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#635BFF', // Stripe brand color
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 8,
+  },
+  stripeButtonDisabled: {
+    backgroundColor: COLORS.unselected,
+  },
+  stripeButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  skipButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  skipButtonText: {
+    fontSize: 15,
+    color: COLORS.primary,
+  },
+  skipWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  skipWarningText: {
+    fontSize: 13,
+    color: COLORS.tertiaryLabel,
+  },
+});
+
+export default CoachOnboardingPaymentSetup;

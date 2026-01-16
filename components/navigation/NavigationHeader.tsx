@@ -31,7 +31,7 @@ export function NavigationHeader({
   showDrawer = true, // Default to Tufte mode
 }: NavigationHeaderProps) {
   // All hooks must be called unconditionally (React Rules of Hooks)
-  const { user, userType } = useAuth();
+  const { user, userType, isGuest } = useAuth();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -59,7 +59,7 @@ export function NavigationHeader({
       ]}>
         <View style={styles.navigationContent}>
           {/* Left: Hamburger Menu (Tufte mode) */}
-          {showDrawer && user && !isOnboardingPage ? (
+          {showDrawer && (user || isGuest) && !isOnboardingPage ? (
             <TouchableOpacity
               style={styles.hamburgerButton}
               onPress={() => setDrawerVisible(true)}
@@ -74,15 +74,15 @@ export function NavigationHeader({
           )}
 
           {/* Center: Section Name (Tufte mode) */}
-          {showDrawer && user && !isOnboardingPage ? (
+          {showDrawer && (user || isGuest) && !isOnboardingPage ? (
             <Text style={styles.sectionTitle}>{sectionName}</Text>
           ) : (
             <View style={styles.spacer} />
           )}
 
-          {/* Right: Navigation Actions (only for unauthenticated users) */}
+          {/* Right: Navigation Actions (only for unauthenticated non-guest users) */}
           <View style={styles.navigationActions}>
-            {!user && (
+            {!user && !isGuest && (
               <View style={styles.authButtons}>
                 {!isLoginPage && (
                   <TouchableOpacity
@@ -108,7 +108,7 @@ export function NavigationHeader({
       </View>
 
       {/* Navigation Drawer (Tufte mode) */}
-      {showDrawer && user && (
+      {showDrawer && (user || isGuest) && (
         <NavigationDrawer
           visible={drawerVisible}
           onClose={() => setDrawerVisible(false)}

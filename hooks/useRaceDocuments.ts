@@ -436,14 +436,32 @@ export function useRaceDocuments(
           setExtractionResult(null);
 
           // Run extraction in background (don't await)
+          logger.info('🔍 [DEBUG] Starting extraction for SI document', {
+            url: url.trim(),
+            documentId: result.document.id,
+            raceId,
+            documentType
+          });
           documentExtractionService.extractAndUpdateRace({
             documentUrl: url.trim(),
             documentId: result.document.id,
             raceId,
             documentType,
           }).then((extractResult) => {
+            logger.info('🔍 [DEBUG] Extraction completed', {
+              success: extractResult.success,
+              hasData: !!extractResult.data,
+              marksCount: extractResult.data?.marks?.length ?? 0,
+              confidence: extractResult.confidence,
+              extractedFields: extractResult.extractedFields,
+              error: extractResult.error
+            });
             hasExtractedDataRef.current = !!extractResult.data;
             setExtractionResult(extractResult);
+            logger.info('🔍 [DEBUG] setExtractionResult called with:', {
+              success: extractResult.success,
+              marksCount: extractResult.data?.marks?.length ?? 0
+            });
             setIsExtracting(false);
 
             if (extractResult.success && extractResult.extractedFields) {
@@ -452,7 +470,7 @@ export function useRaceDocuments(
               logger.warn('Extraction failed', { error: extractResult.error });
             }
           }).catch((err) => {
-            logger.error('Extraction error', { error: err });
+            logger.error('🔍 [DEBUG] Extraction error caught', { error: err });
             hasExtractedDataRef.current = false;
             setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
             setIsExtracting(false);
@@ -592,12 +610,33 @@ export function useRaceDocuments(
 
   // Trigger extraction for an existing document
   const triggerExtraction = useCallback(
-    (documentUrl: string, documentId: string, documentType: RaceDocumentType) => {
+    async (documentUrl: string, documentId: string, documentType: RaceDocumentType) => {
       if (!raceId || isExtracting) return;
 
       // Check ref to prevent extraction when we already have stored data
       // This avoids race conditions with stale closure values
-      if (hasExtractedDataRef.current) return;
+      if (hasExtractedDataRef.current) {
+        logger.debug('Skipping extraction - hasExtractedDataRef is true');
+        return;
+      }
+
+      // IMPORTANT: Check for stored extraction FIRST before triggering new extraction
+      // This prevents re-extraction when navigating between pages that each have their own hook instance
+      try {
+        logger.debug('Checking for stored extraction before triggering', { documentId });
+        const storedExtraction = await documentExtractionService.getStoredExtraction(documentId);
+        if (storedExtraction?.data) {
+          logger.debug('Found stored extraction, skipping new extraction', {
+            documentId,
+            fieldsCount: storedExtraction.extractedFields?.length
+          });
+          hasExtractedDataRef.current = true;
+          setExtractionResult(storedExtraction);
+          return;
+        }
+      } catch (err) {
+        logger.warn('Error checking stored extraction, proceeding with new extraction', { error: err });
+      }
 
       logger.debug('Triggering extraction for existing document', { documentUrl, documentId, documentType });
       setIsExtracting(true);

@@ -844,6 +844,137 @@
             "enabled": true,
             "name": "Race Preparation Mastery Certificate"
           }
+        },
+        {
+          "id": "course-14",
+          "title": "Launch Phase Strategy",
+          "slug": "launch-phase-strategy",
+          "level": "level-2",
+          "status": "available",
+          "releaseDate": "2025-01-15",
+          "duration": {
+            "totalMinutes": 150,
+            "lessons": 4,
+            "estimatedHours": 2.5
+          },
+          "price": {
+            "cents": 7500,
+            "currency": "USD",
+            "tier": "sailor"
+          },
+          "description": "Master the critical race morning decisions: wind shifts, starting strategy, first beat planning, and current tactics. Build your pre-race game plan with confidence.",
+          "longDescription": "This course focuses on the strategic decisions you make in the final hour before racing. Learn to read and predict wind shifts, choose your starting position, plan your first beat approach, and factor in current effects. Each lesson includes interactive simulations and quizzes to reinforce learning.",
+          "whatYouLearn": [
+            "Reading and predicting wind shift patterns",
+            "Choosing the favored end and position on the start line",
+            "Planning your first beat strategy based on conditions",
+            "Factoring current and tides into your tactical decisions",
+            "Building contingency plans for when conditions change"
+          ],
+          "modules": [
+            {
+              "id": "module-14-1",
+              "title": "Wind Strategy",
+              "orderIndex": 1,
+              "durationMinutes": 35,
+              "lessons": [
+                {
+                  "id": "lesson-14-1-1",
+                  "title": "Decoding Race Day Wind",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "DecodingWindInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 1800,
+                  "isFreePreview": true,
+                  "description": "Learn to read synoptic charts, identify shift patterns, and build a wind strategy before racing"
+                }
+              ]
+            },
+            {
+              "id": "module-14-2",
+              "title": "Start Strategy",
+              "orderIndex": 2,
+              "durationMinutes": 40,
+              "lessons": [
+                {
+                  "id": "lesson-14-2-1",
+                  "title": "The Perfect Start",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "PerfectStartInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 2400,
+                  "isFreePreview": false,
+                  "description": "Master line bias, position selection, timing runs, and escape routes for race starts"
+                }
+              ]
+            },
+            {
+              "id": "module-14-3",
+              "title": "First Beat Strategy",
+              "orderIndex": 3,
+              "durationMinutes": 45,
+              "lessons": [
+                {
+                  "id": "lesson-14-3-1",
+                  "title": "Winning the First Beat",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "FirstBeatInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 2700,
+                  "isFreePreview": false,
+                  "description": "Side selection, commitment levels, layline strategy, and traffic management for the first beat"
+                }
+              ]
+            },
+            {
+              "id": "module-14-4",
+              "title": "Current Strategy",
+              "orderIndex": 4,
+              "durationMinutes": 35,
+              "lessons": [
+                {
+                  "id": "lesson-14-4-1",
+                  "title": "Racing in Current",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "RacingInCurrentInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 2100,
+                  "isFreePreview": false,
+                  "description": "Read current from visual cues, factor tides into laylines, and use current strategically"
+                }
+              ]
+            }
+          ],
+          "instructor": {
+            "name": "Kevin Denney",
+            "bio": "NorthU Certified Instructor with 20+ years of racing experience across multiple classes",
+            "photoUrl": "/images/instructors/kevin-denney.jpg"
+          },
+          "thumbnailUrl": "/images/courses/launch-phase.jpg",
+          "skillsUsed": [
+            "wind-shift-predictor",
+            "start-line-tactician",
+            "race-strategy-analyst",
+            "tidal-opportunism-analyst"
+          ],
+          "targetMarkets": [
+            "individual",
+            "club-racing",
+            "junior-program",
+            "university-team"
+          ],
+          "tags": [
+            "intermediate",
+            "strategy",
+            "wind",
+            "starting",
+            "tactics",
+            "current"
+          ],
+          "certificate": {
+            "enabled": true,
+            "name": "Launch Phase Strategy Certificate"
+          }
         }
       ]
     },

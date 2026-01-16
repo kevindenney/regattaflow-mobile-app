@@ -57,6 +57,9 @@ interface CardGridWebProps extends CardGridProps {
 // CARD GRID COMPONENT
 // =============================================================================
 
+// Timeline indicator constants
+const MAX_VISIBLE_DOTS = 7;
+
 function CardGridComponent({
   races,
   initialRaceIndex = 0,
@@ -70,7 +73,8 @@ function CardGridComponent({
   onUploadDocument,
   onRaceComplete,
   onOpenPostRaceInterview,
-}: CardGridWebProps) {
+  nextRaceIndex,
+}: CardGridWebProps & { nextRaceIndex?: number | null }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
 
@@ -278,12 +282,78 @@ function CardGridComponent({
         {races.map((race, raceIndex) => renderCard(race, raceIndex))}
       </ScrollView>
 
-      {/* Navigation hints */}
-      <View style={styles.navigationHint}>
-        <View style={styles.hintDot} />
-        <View style={[styles.hintDot, styles.hintDotActive]} />
-        <View style={styles.hintDot} />
-      </View>
+      {/* Timeline Navigation Dots */}
+      {races.length > 1 && (
+        <View style={styles.timelineContainer}>
+          <View style={styles.timelineDotsRow}>
+            {/* Left arrow for windowed view */}
+            {races.length > MAX_VISIBLE_DOTS && currentRaceIndex > Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
+              <Pressable
+                onPress={() => goToRace(Math.max(0, currentRaceIndex - MAX_VISIBLE_DOTS))}
+                style={styles.timelineArrowButton}
+              >
+                <span style={{ color: '#94A3B8', fontSize: 12 }}>‹</span>
+              </Pressable>
+            )}
+
+            {/* Render dots */}
+            {(() => {
+              const totalRaces = races.length;
+
+              // Calculate visible window for many races
+              let startIdx = 0;
+              let endIdx = totalRaces - 1;
+
+              if (totalRaces > MAX_VISIBLE_DOTS) {
+                const halfWindow = Math.floor((MAX_VISIBLE_DOTS - 1) / 2);
+                startIdx = Math.max(0, currentRaceIndex - halfWindow);
+                endIdx = startIdx + MAX_VISIBLE_DOTS - 1;
+                if (endIdx >= totalRaces) {
+                  endIdx = totalRaces - 1;
+                  startIdx = Math.max(0, endIdx - MAX_VISIBLE_DOTS + 1);
+                }
+              }
+
+              return races.slice(startIdx, endIdx + 1).map((race, idx) => {
+                const actualIndex = startIdx + idx;
+                const isSelected = actualIndex === currentRaceIndex;
+                const isNextRace = nextRaceIndex !== null && nextRaceIndex !== undefined && actualIndex === nextRaceIndex;
+
+                return (
+                  <Pressable
+                    key={race.id || `dot-${actualIndex}`}
+                    onPress={() => goToRace(actualIndex)}
+                    style={styles.timelineDotContainer}
+                  >
+                    {/* Now bar - small vertical line above the upcoming race dot */}
+                    {isNextRace && (
+                      <View style={styles.timelineNowBar} />
+                    )}
+                    {/* Uniform circle: filled for active, hollow for inactive */}
+                    <View
+                      style={[
+                        styles.timelineDot,
+                        isSelected ? styles.timelineDotActive : styles.timelineDotInactive,
+                      ]}
+                    />
+                  </Pressable>
+                );
+              });
+            })()}
+
+            {/* Right arrow for windowed view */}
+            {races.length > MAX_VISIBLE_DOTS && currentRaceIndex < races.length - 1 - Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
+              <Pressable
+                onPress={() => goToRace(Math.min(races.length - 1, currentRaceIndex + MAX_VISIBLE_DOTS))}
+                style={styles.timelineArrowButton}
+              >
+                <span style={{ color: '#94A3B8', fontSize: 12 }}>›</span>
+              </Pressable>
+            )}
+          </View>
+
+        </View>
+      )}
     </View>
   );
 }
@@ -324,26 +394,50 @@ const styles = StyleSheet.create({
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
     transition: 'transform 0.2s ease, opacity 0.2s ease',
   },
-  navigationHint: {
+  // Timeline Indicators - iOS Page Control style (below card)
+  timelineContainer: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 4,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
   },
-  hintDot: {
+  timelineDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  timelineDotContainer: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: 14,
+    // @ts-ignore - Web cursor
+    cursor: 'pointer',
+  },
+  timelineDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: IOS_COLORS.gray4,
   },
-  hintDotActive: {
-    width: 20,
-    borderRadius: 3,
-    backgroundColor: IOS_COLORS.gray,
+  timelineDotActive: {
+    backgroundColor: '#374151',
+  },
+  timelineDotInactive: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  timelineNowBar: {
+    width: 2,
+    height: 5,
+    backgroundColor: '#34C759',
+    borderRadius: 1,
+    marginBottom: 2,
+  },
+  timelineArrowButton: {
+    padding: 4,
+    // @ts-ignore - Web cursor
+    cursor: 'pointer',
   },
 });
 

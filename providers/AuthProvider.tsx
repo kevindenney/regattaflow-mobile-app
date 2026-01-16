@@ -1,15 +1,21 @@
 import { signOutEverywhere } from '@/lib/auth-actions'
+import { nativeGoogleSignIn, nativeAppleSignIn, signOutFromNativeProviders } from '@/lib/auth/nativeOAuth'
 import { createLogger } from '@/lib/utils/logger'
+import { GuestStorageService } from '@/services/GuestStorageService'
 import { supabase, UserType } from '@/services/supabase'
 import { bindAuthDiagnostics } from '@/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/utils/errToText'
 import { AuthApiError } from '@supabase/supabase-js'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform } from 'react-native'
+import { UserCapabilities, DEFAULT_CAPABILITIES, CapabilityType } from '@/types/capabilities'
 
 // Re-export UserType for backward compatibility
 export type { UserType } from '@/services/supabase'
+// Export capabilities types for consumers
+export type { UserCapabilities, CapabilityType } from '@/types/capabilities'
 
 type PersonaRole = Exclude<UserType, null>;
 const DEFAULT_PERSONA: PersonaRole = 'sailor';
@@ -97,12 +103,13 @@ const buildApiUrl = (path: string) => {
   return url
 }
 
-type AuthState = 'checking' | 'signed_out' | 'ready'
+type AuthState = 'checking' | 'signed_out' | 'guest' | 'ready'
 
 type AuthCtx = {
   state: AuthState
   ready: boolean
   signedIn: boolean
+  isGuest: boolean
   user: any | null
   loading: boolean
   personaLoading: boolean
@@ -111,15 +118,20 @@ type AuthCtx = {
   signOut: () => Promise<void>
   signInWithGoogle: (persona?: PersonaRole) => Promise<void>
   signInWithApple: (persona?: PersonaRole) => Promise<void>
+  enterGuestMode: () => void
   biometricAvailable: boolean
   biometricEnabled: boolean
   userProfile?: any
   userType?: UserType
+  /** User capabilities (coaching, etc.) - additive on top of base user type */
+  capabilities: UserCapabilities
   clubProfile: any | null
   coachProfile: any | null
   refreshPersonaContext: () => Promise<void>
   updateUserProfile: (updates: any) => Promise<void>
   fetchUserProfile: (userId?: string) => Promise<any>
+  /** Add a capability to the current user (e.g., 'coaching') */
+  addCapability: (type: CapabilityType) => Promise<void>
   isDemoSession: boolean
 }
 
@@ -127,6 +139,7 @@ const Ctx = createContext<AuthCtx>({
   state: 'checking',
   ready: false,
   signedIn: false,
+  isGuest: false,
   user: null,
   loading: false,
   personaLoading: false,
@@ -135,13 +148,16 @@ const Ctx = createContext<AuthCtx>({
   signOut: async () => {},
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
+  enterGuestMode: () => {},
   biometricAvailable: false,
   biometricEnabled: false,
   clubProfile: null,
   coachProfile: null,
+  capabilities: DEFAULT_CAPABILITIES,
   refreshPersonaContext: async () => {},
   updateUserProfile: async () => {},
   fetchUserProfile: async (_userId?: string) => null,
+  addCapability: async () => {},
   userType: null,
   userProfile: null,
   isDemoSession: false,
@@ -150,6 +166,7 @@ const Ctx = createContext<AuthCtx>({
 export function AuthProvider({children}:{children: React.ReactNode}) {
   const [ready, setReady] = useState(false) // Start as not ready until we check session
   const [signedIn, setSignedIn] = useState(false)
+  const [isGuest, setIsGuest] = useState(false) // Guest mode for freemium experience
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [personaLoading, setPersonaLoading] = useState(false)
@@ -157,6 +174,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [userType, setUserType] = useState<UserType>(null)
   const [clubProfile, setClubProfile] = useState<any | null>(null)
   const [coachProfile, setCoachProfile] = useState<any | null>(null)
+  const [capabilities, setCapabilities] = useState<UserCapabilities>(DEFAULT_CAPABILITIES)
   const [isDemoSession, setIsDemoSession] = useState(false)
 
   // Ref to prevent duplicate profile fetches during race conditions
@@ -182,6 +200,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     setPersonaLoading(false)
     setClubProfile(null)
     setCoachProfile(null)
+    setCapabilities(DEFAULT_CAPABILITIES)
   }, [])
 
   const fetchUserProfile = async (userId?: string) => {
@@ -400,36 +419,18 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('[loadPersonaContext] Early return - no user or demo session')
       setClubProfile(null)
       setCoachProfile(null)
-      setPersonaLoading(false)
-      return
-    }
-
-    const effectiveUserType =
-      userType ?? (userProfile?.club_id ? ('club' as UserType) : null)
-
-    if (!effectiveUserType) {
-      authDebugLog('[loadPersonaContext] Early return - no effective user type')
-      setClubProfile(null)
-      setCoachProfile(null)
-      setPersonaLoading(false)
-      return
-    }
-
-    if (effectiveUserType === 'sailor' && !userProfile?.club_id) {
-      authDebugLog('[loadPersonaContext] Early return - sailor without club context')
-      setClubProfile(null)
-      setCoachProfile(null)
+      setCapabilities(DEFAULT_CAPABILITIES)
       setPersonaLoading(false)
       return
     }
 
     setPersonaLoading(true)
-    authDebugLog('[loadPersonaContext] Starting to load persona context for:', effectiveUserType)
+    authDebugLog('[loadPersonaContext] Starting to load persona context')
 
     // Direct Supabase query for club profile - no external API needed
     const resolveClubWorkspaceDirect = async () => {
       authDebugLog('[loadPersonaContext] Resolving club workspace directly from Supabase')
-      
+
       // First check if user has a club membership
       const { data: membership, error: membershipError } = await supabase
         .from('club_members')
@@ -472,6 +473,67 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
 
     try {
+      // 1. Load user capabilities from user_capabilities table
+      authDebugLog('[loadPersonaContext] Loading user capabilities...')
+      const { data: capabilityRecords, error: capError } = await supabase
+        .from('user_capabilities')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+
+      if (capError && capError.code !== 'PGRST116') {
+        authDebugLog('[loadPersonaContext] Capabilities query error:', capError.message)
+      }
+
+      const hasCoachingCapability = capabilityRecords?.some(
+        (c: any) => c.capability_type === 'coaching'
+      ) ?? false
+
+      authDebugLog('[loadPersonaContext] Capabilities loaded:', {
+        hasCoaching: hasCoachingCapability,
+        count: capabilityRecords?.length ?? 0
+      })
+
+      // 2. Load coach profile if user has coaching capability OR user_type is 'coach' (backward compat)
+      const shouldLoadCoachProfile = hasCoachingCapability || userType === 'coach'
+      let loadedCoachProfile = null
+
+      if (shouldLoadCoachProfile) {
+        authDebugLog('[loadPersonaContext] Loading coach profile with user.id:', user.id)
+
+        const { data, error } = await supabase
+          .from('coach_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        authDebugLog('[loadPersonaContext] Coach profile query result:', {
+          hasData: !!data,
+          error: error?.message
+        })
+
+        if (error && error.code !== 'PGRST116') {
+          throw error
+        }
+
+        loadedCoachProfile = data ?? null
+        setCoachProfile(loadedCoachProfile)
+        authDebugLog('[loadPersonaContext] Coach profile set:', !!data)
+      } else {
+        setCoachProfile(null)
+      }
+
+      // 3. Update capabilities state with loaded data
+      setCapabilities({
+        hasCoaching: hasCoachingCapability || userType === 'coach', // Include legacy coach users
+        coachingProfile: loadedCoachProfile,
+        rawCapabilities: capabilityRecords ?? [],
+      })
+
+      // 4. Load club context if applicable
+      const effectiveUserType =
+        userType ?? (userProfile?.club_id ? ('club' as UserType) : null)
+
       if (effectiveUserType === 'club' || userProfile?.club_id) {
         authDebugLog('[loadPersonaContext] Loading club profile for user:', user?.id)
 
@@ -497,39 +559,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       } else {
         setClubProfile(null)
       }
-
-      if (effectiveUserType === 'coach') {
-        authDebugLog('[loadPersonaContext] Loading coach profile with user.id:', user.id)
-
-        const { data, error } = await supabase
-          .from('coach_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        authDebugLog('[loadPersonaContext] Coach profile query result:', {
-          hasData: !!data,
-          error: error?.message
-        })
-
-        if (error && error.code !== 'PGRST116') {
-          throw error
-        }
-
-        setCoachProfile(data ?? null)
-        authDebugLog('[loadPersonaContext] Coach profile set:', !!data)
-      } else {
-        setCoachProfile(null)
-      }
     } catch (error) {
       console.error('[AuthProvider] Failed to load persona context:', error)
       authDebugLog('[loadPersonaContext] Exception caught:', error)
-      if (effectiveUserType === 'club' || userProfile?.club_id) {
-        setClubProfile(null)
-      }
-      if (effectiveUserType === 'coach') {
-        setCoachProfile(null)
-      }
+      setClubProfile(null)
+      setCoachProfile(null)
+      setCapabilities(DEFAULT_CAPABILITIES)
     } finally {
       setPersonaLoading(false)
       authDebugLog('[loadPersonaContext] Completed, personaLoading set to false')
@@ -581,6 +616,15 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         setSignedIn(!!session)
         setUser(authUser || null)
+
+        // If no session, check if user has guest data (freemium mode)
+        if (!session) {
+          const hasGuestRace = await GuestStorageService.hasGuestRace()
+          if (hasGuestRace) {
+            authDebugLog('[AUTH] Guest race found, entering guest mode')
+            setIsGuest(true)
+          }
+        }
 
         if (authUser?.id) {
           authDebugLog('[AUTH] Fetching user profile for:', authUser.id)
@@ -637,6 +681,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     if (!signedIn || !user?.id || isDemoSession) {
       setClubProfile(null)
       setCoachProfile(null)
+      setCapabilities(DEFAULT_CAPABILITIES)
       setPersonaLoading(false)
       return
     }
@@ -671,6 +716,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setUser(session?.user || null)
       if (session?.user) {
         setIsDemoSession(false)
+        setIsGuest(false) // Clear guest mode when user signs in
       }
       authDebugLog('🔔 [AUTH] Auth state updated:', { signedIn: !!session, hasUser: !!session?.user })
 
@@ -712,6 +758,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setPersonaLoading(false)
         setClubProfile(null)
         setCoachProfile(null)
+        setCapabilities(DEFAULT_CAPABILITIES)
 
         authDebugLog('🚪 [AUTH] State cleanup complete. Starting navigation...')
         
@@ -750,6 +797,35 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         authDebugLog('🔔 [AUTH] Set loading=true while fetching profile')
 
         try {
+          // Check for guest race data to migrate
+          try {
+            const hasGuestRace = await GuestStorageService.hasGuestRace()
+            if (hasGuestRace) {
+              authDebugLog('🔔 [AUTH] Found guest race data, migrating to account...')
+              const newRaceId = await GuestStorageService.migrateToAccount(session.user.id)
+              if (newRaceId) {
+                authDebugLog('🔔 [AUTH] Successfully migrated guest race:', newRaceId)
+                await GuestStorageService.clearGuestData()
+              }
+            }
+          } catch (migrationError) {
+            console.warn('[AUTH] Guest data migration failed, continuing anyway:', migrationError)
+          }
+
+          // Check for pending race data (saved when guest tried to add 2nd race before signup)
+          try {
+            const pendingRace = await GuestStorageService.getPendingRace()
+            if (pendingRace) {
+              authDebugLog('🔔 [AUTH] Found pending race data, migrating to account...')
+              const newPendingRaceId = await GuestStorageService.migratePendingRaceToAccount(session.user.id)
+              if (newPendingRaceId) {
+                authDebugLog('🔔 [AUTH] Successfully migrated pending race:', newPendingRaceId)
+              }
+            }
+          } catch (pendingMigrationError) {
+            console.warn('[AUTH] Pending race migration failed, continuing anyway:', pendingMigrationError)
+          }
+
           // Fetch profile and update state - let gates handle routing
           authDebugLog('🔔 [AUTH] Fetching profile data...')
           const profileData = await fetchUserProfile(session.user.id)
@@ -844,6 +920,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setLoading(false)
       setClubProfile(null)
       setCoachProfile(null)
+      setCapabilities(DEFAULT_CAPABILITIES)
       setIsDemoSession(false)
       return
     }
@@ -865,6 +942,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setPersonaLoading(false)
         setClubProfile(null)
         setCoachProfile(null)
+        setCapabilities(DEFAULT_CAPABILITIES)
         if (typeof window !== 'undefined') {
           try {
             window.history.replaceState(null, '', '/')
@@ -881,6 +959,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       await signOutEverywhere()
       authDebugLog('🚪 [AUTH] signOutEverywhere() completed successfully')
 
+      // Sign out from native OAuth providers (Google, etc.)
+      if (Platform.OS !== 'web') {
+        await signOutFromNativeProviders()
+        authDebugLog('🚪 [AUTH] Native OAuth providers signed out')
+      }
+
       // Clear state immediately - don't wait for SIGNED_OUT event
       // (Event may not fire if network is down but local storage was cleared)
       authDebugLog('🚪 [AUTH] Clearing auth state immediately after local cleanup...')
@@ -892,6 +976,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setPersonaLoading(false)
       setClubProfile(null)
       setCoachProfile(null)
+      setCapabilities(DEFAULT_CAPABILITIES)
       clearTimeout(fallbackTimer)
       authDebugLog('🚪 [AUTH] Auth state cleared successfully')
     } catch (error) {
@@ -905,6 +990,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setPersonaLoading(false)
       setClubProfile(null)
       setCoachProfile(null)
+      setCapabilities(DEFAULT_CAPABILITIES)
       if (typeof window !== 'undefined') {
         try {
           window.history.replaceState(null, '', '/')
@@ -1053,19 +1139,92 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         })
         if (error) throw error
       } else {
-        // For mobile, we'd need to implement the full OAuth flow
-        // For now, let's throw an error to indicate it's not implemented
-        throw new Error('Google sign-in not yet implemented for mobile')
+        // Native mobile: Store persona in AsyncStorage, then use native OAuth
+        if (persona) {
+          await AsyncStorage.setItem('oauth_pending_persona', persona)
+          authDebugLog('🔍 [LOGIN] Stored pending persona in AsyncStorage:', persona)
+        }
+
+        authDebugLog('🔍 [LOGIN] Starting native Google sign-in')
+        const result = await nativeGoogleSignIn()
+        authDebugLog('🔍 [LOGIN] Native Google sign-in successful:', result?.user?.id)
+
+        // Handle profile creation for new users with persona
+        if (result?.user?.id && persona) {
+          await handleNativeOAuthProfile(result.user, persona)
+        }
+
+        // Clear stored persona after successful sign-in
+        await AsyncStorage.removeItem('oauth_pending_persona')
       }
     } catch (error) {
       console.error('🔍 [LOGIN] Google sign-in failed:', error)
-      // Clear the stored persona on error (web only)
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        window.localStorage.removeItem('oauth_pending_persona')
+      // Clear the stored persona on error
+      if (Platform.OS === 'web') {
+        safeLocalStorage.removeItem('oauth_pending_persona')
+      } else {
+        await AsyncStorage.removeItem('oauth_pending_persona')
       }
       throw error
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Helper to handle profile creation after native OAuth sign-in
+  const handleNativeOAuthProfile = async (user: any, persona: PersonaRole) => {
+    try {
+      authDebugLog('🔍 [LOGIN] Checking/creating profile for OAuth user:', user.id)
+
+      // Check if profile already has a user_type set
+      const { data: existingProfile } = await supabase
+        .from('users')
+        .select('id, user_type')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (existingProfile?.user_type) {
+        authDebugLog('🔍 [LOGIN] Existing profile found with user_type:', existingProfile.user_type)
+        return // Profile already set up, nothing to do
+      }
+
+      // Create/update profile with the selected persona
+      const profilePayload = {
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+        user_type: persona,
+        onboarding_completed: persona === 'sailor',
+      }
+
+      authDebugLog('🔍 [LOGIN] Upserting OAuth profile:', profilePayload)
+      const { error: upsertError } = await supabase
+        .from('users')
+        .upsert(profilePayload, { onConflict: 'id' })
+
+      if (upsertError) {
+        console.error('🔍 [LOGIN] Profile upsert failed:', upsertError)
+      } else {
+        authDebugLog('🔍 [LOGIN] Profile upsert successful')
+        setUserProfile((prev: any) => ({ ...(prev ?? {}), ...profilePayload }))
+        setUserType(persona)
+
+        // For new sailors, create sample data
+        if (persona === 'sailor') {
+          try {
+            const { createSailorSampleData } = await import('@/services/onboarding/SailorSampleDataService')
+            await createSailorSampleData({
+              userId: user.id,
+              userName: profilePayload.full_name || 'Sailor',
+            })
+            authDebugLog('🔍 [LOGIN] Sample data created for new sailor')
+          } catch (sampleError) {
+            console.warn('🔍 [LOGIN] Sample data creation failed:', sampleError)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('🔍 [LOGIN] handleNativeOAuthProfile error:', error)
     }
   }
 
@@ -1095,14 +1254,31 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         })
         if (error) throw error
       } else {
-        // For mobile, we'd need to implement the full OAuth flow
-        throw new Error('Apple sign-in not yet implemented for mobile')
+        // Native mobile (iOS only): Use native Apple Sign-In
+        if (persona) {
+          await AsyncStorage.setItem('oauth_pending_persona', persona)
+          authDebugLog('🔍 [LOGIN] Stored pending persona in AsyncStorage:', persona)
+        }
+
+        authDebugLog('🔍 [LOGIN] Starting native Apple sign-in')
+        const result = await nativeAppleSignIn()
+        authDebugLog('🔍 [LOGIN] Native Apple sign-in successful:', result?.user?.id)
+
+        // Handle profile creation for new users with persona
+        if (result?.user?.id && persona) {
+          await handleNativeOAuthProfile(result.user, persona)
+        }
+
+        // Clear stored persona after successful sign-in
+        await AsyncStorage.removeItem('oauth_pending_persona')
       }
     } catch (error) {
       console.error('🔍 [LOGIN] Apple sign-in failed:', error)
-      // Clear the stored persona on error (web only)
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        window.localStorage.removeItem('oauth_pending_persona')
+      // Clear the stored persona on error
+      if (Platform.OS === 'web') {
+        safeLocalStorage.removeItem('oauth_pending_persona')
+      } else {
+        await AsyncStorage.removeItem('oauth_pending_persona')
       }
       throw error
     } finally {
@@ -1110,21 +1286,88 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
+  /**
+   * Add a capability to the current user (e.g., 'coaching')
+   * Creates the capability record and reloads persona context
+   */
+  const addCapability = useCallback(async (capabilityType: CapabilityType) => {
+    if (!user?.id) {
+      throw new Error('No user logged in')
+    }
+
+    authDebugLog('[AUTH] Adding capability:', capabilityType)
+
+    try {
+      // Insert the capability record
+      const { data, error } = await supabase
+        .from('user_capabilities')
+        .insert({
+          user_id: user.id,
+          capability_type: capabilityType,
+          is_active: true,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        // Handle duplicate (user already has this capability)
+        if (error.code === '23505') {
+          authDebugLog('[AUTH] User already has capability:', capabilityType)
+          // Reactivate if it was deactivated
+          const { error: updateError } = await supabase
+            .from('user_capabilities')
+            .update({ is_active: true, deactivated_at: null })
+            .eq('user_id', user.id)
+            .eq('capability_type', capabilityType)
+
+          if (updateError) {
+            throw updateError
+          }
+        } else {
+          throw error
+        }
+      }
+
+      authDebugLog('[AUTH] Capability added successfully:', data)
+
+      // Reload persona context to pick up the new capability
+      await loadPersonaContext()
+
+    } catch (error) {
+      console.error('[AUTH] Failed to add capability:', error)
+      throw error
+    }
+  }, [user?.id, loadPersonaContext])
+
+  /**
+   * Enter guest mode for freemium experience
+   * Called when user chooses to continue without signing up
+   */
+  const enterGuestMode = useCallback(() => {
+    authDebugLog('[AUTH] Entering guest mode')
+    setIsGuest(true)
+    // Navigate to races tab
+    router.replace('/(tabs)/races')
+  }, [])
+
   const value = useMemo<AuthCtx>(() => {
-    // Compute state from ready, signedIn, and userType
+    // Compute state from ready, signedIn, isGuest, and userType
     let state: AuthState = 'checking'
     if (!ready) {
       state = 'checking'
-    } else if (!signedIn) {
-      state = 'signed_out'
-    } else {
+    } else if (signedIn) {
       state = 'ready'
+    } else if (isGuest) {
+      state = 'guest'
+    } else {
+      state = 'signed_out'
     }
 
     return {
       state,
       ready,
       signedIn,
+      isGuest,
       user,
       loading,
       personaLoading,
@@ -1133,18 +1376,21 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       signOut,
       signInWithGoogle,
       signInWithApple,
+      enterGuestMode,
       biometricAvailable: false,
       biometricEnabled: false,
       userProfile,
       userType,
+      capabilities,
       clubProfile,
       coachProfile,
       refreshPersonaContext: loadPersonaContext,
       updateUserProfile,
       fetchUserProfile,
+      addCapability,
       isDemoSession
     }
-  }, [ready, signedIn, user, loading, personaLoading, userProfile, userType, clubProfile, coachProfile, loadPersonaContext, isDemoSession])
+  }, [ready, signedIn, isGuest, user, loading, personaLoading, userProfile, userType, capabilities, clubProfile, coachProfile, loadPersonaContext, isDemoSession, enterGuestMode, addCapability])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

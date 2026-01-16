@@ -347,8 +347,40 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
       }
     }
 
-    // Get watch schedule from race (stored on regatta)
-    const watchSchedule = (race as any).watch_schedule as WatchScheduleData | undefined;
+    // Get watch schedule from sailor's intentions (created via Watch Schedule wizard)
+    // Convert WatchSchedule to WatchScheduleData format for sharing
+    let watchSchedule: WatchScheduleData | undefined;
+    if (intentions?.watchSchedule) {
+      const ws = intentions.watchSchedule;
+      const watchDuration = ws.system === '4on4off' ? 4 : 3;
+
+      // Convert crew to watch groups with names
+      const watchA = ws.crew.filter(c => c.watch === 'A');
+      const watchB = ws.crew.filter(c => c.watch === 'B');
+
+      watchSchedule = {
+        raceDurationHours: ws.estimatedDuration,
+        watchLengthHours: watchDuration,
+        watches: [
+          {
+            id: 'A',
+            name: `Watch A`,
+            color: '#007AFF',
+            crewIds: watchA.map(c => c.id),
+            crewNames: watchA.map(c => c.name),
+          },
+          {
+            id: 'B',
+            name: `Watch B`,
+            color: '#34C759',
+            crewIds: watchB.map(c => c.id),
+            crewNames: watchB.map(c => c.name),
+          },
+        ],
+        watchMode: 'full_24h',
+        scheduleStartTime: ws.raceStart ? new Date(ws.raceStart).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : race.startTime,
+      };
+    }
 
     const preRace: PreRaceShareContent = {
       raceInfo: {

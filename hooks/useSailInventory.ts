@@ -4,10 +4,13 @@
  * Fetches available sails from a boat's equipment inventory.
  * Groups sails by category (mainsail, jib, genoa, spinnaker, code_zero)
  * for use in the sail selection UI.
+ *
+ * Also supports demo boats for the freemium guest experience.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { equipmentService } from '@/services/EquipmentService';
+import { isDemoBoatId, getDemoSailsForBoat } from '@/lib/demo/demoRaceData';
 import type { SailInventoryItem, GroupedSailInventory } from '@/types/raceIntentions';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -62,7 +65,7 @@ export function useSailInventory({
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Fetch sails from equipment service
+   * Fetch sails from equipment service (or demo data for demo boats)
    */
   const fetchSails = useCallback(async () => {
     if (!boatId || !enabled) {
@@ -74,7 +77,29 @@ export function useSailInventory({
     setError(null);
 
     try {
-      // Fetch all equipment for the boat
+      // Check if this is a demo boat - return demo sails directly
+      if (isDemoBoatId(boatId)) {
+        const demoSails = getDemoSailsForBoat(boatId);
+        const sails: SailInventoryItem[] = demoSails
+          .filter((item) => !activeOnly || item.status === 'active')
+          .map((item) => ({
+            id: item.id,
+            customName: item.custom_name || undefined,
+            category: item.category as SailInventoryItem['category'],
+            manufacturer: item.manufacturer || undefined,
+            model: item.model || undefined,
+            conditionRating: item.condition_rating || undefined,
+            status: item.status as SailInventoryItem['status'],
+            totalRacesUsed: item.total_races_used || undefined,
+            lastUsedDate: item.last_used_date || undefined,
+          }));
+
+        setAllSails(sails);
+        logger.info(`Loaded ${sails.length} demo sails for demo boat ${boatId}`);
+        return;
+      }
+
+      // Fetch all equipment for the boat from the database
       const equipment = await equipmentService.getEquipmentForBoat(boatId);
 
       // Filter to sail categories and map to SailInventoryItem

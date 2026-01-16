@@ -143,11 +143,11 @@ class MutationQueueService {
               `Mutation ${mutation.id} failed after ${MAX_RETRIES} retries:`,
               error
             );
-            // Optionally: move to a "dead letter queue" or discard
-            // For now, we'll keep it in the queue but log the error
+            // Discard failed mutations after max retries
+            continue; // Don't add back to queue
           }
 
-          // Keep in queue for retry
+          // Keep in queue for retry (only if under max retries)
           remainingQueue.push(mutation);
         }
 

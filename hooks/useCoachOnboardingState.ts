@@ -351,6 +351,25 @@ export const useCoachOnboardingState = () => {
 
       if (publishError) throw publishError;
 
+      // Add coaching capability to enable coach features
+      // Uses upsert so it's safe if capability already exists
+      const { error: capabilityError } = await supabase
+        .from('user_capabilities')
+        .upsert({
+          user_id: user.id,
+          capability_type: 'coaching',
+          is_active: true,
+          activated_at: new Date().toISOString(),
+          metadata: { source: 'coach_onboarding', published_at: new Date().toISOString() },
+        }, {
+          onConflict: 'user_id,capability_type',
+        });
+
+      if (capabilityError) {
+        console.warn('Failed to add coaching capability:', capabilityError);
+        // Don't fail the whole operation for capability error
+      }
+
       return { success: true };
     } catch (error: any) {
       console.error('Error publishing coach profile:', error);

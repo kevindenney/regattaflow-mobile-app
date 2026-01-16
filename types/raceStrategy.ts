@@ -1,9 +1,20 @@
 /**
  * Race Strategy Types
  * Structures for strategy planning with AI recommendations and user notes
+ *
+ * Supports race-type-specific strategy sections:
+ * - Fleet: Traditional buoy racing (START, UPWIND, DOWNWIND, MARK ROUNDING, FINISH)
+ * - Distance: Offshore/passage racing with leg-by-leg strategy
+ * - Match: 1-on-1 match racing tactics
+ * - Team: Multi-boat team racing coordination
  */
 
 import type { PerformanceTrend } from './raceLearning';
+
+/**
+ * Race format types
+ */
+export type RaceType = 'fleet' | 'distance' | 'match' | 'team';
 
 /**
  * Past performance data for a strategy section
@@ -83,8 +94,14 @@ export interface RaceStrategyNotes {
 
 /**
  * Strategy section identifiers for lookup
+ * Now flexible to support dynamic IDs for distance racing legs (e.g., 'leg.1.navigation')
  */
-export type StrategySectionId =
+export type StrategySectionId = string;
+
+/**
+ * Fleet racing section IDs (for type safety when working with fleet races)
+ */
+export type FleetStrategySectionId =
   // Start
   | 'start.lineBias'
   | 'start.favoredEnd'
@@ -106,24 +123,54 @@ export type StrategySectionId =
   | 'finish.finalApproach';
 
 /**
- * Strategy phase categories
+ * Strategy phase categories - expanded for all race types
  */
-export type StrategyPhase = 'start' | 'upwind' | 'downwind' | 'markRounding' | 'finish';
+export type StrategyPhase =
+  // Fleet racing phases (existing)
+  | 'start'
+  | 'upwind'
+  | 'downwind'
+  | 'markRounding'
+  | 'finish'
+  // Distance racing phases (new)
+  | 'passage'
+  | 'weatherRouting'
+  | 'watchSchedule'
+  | 'crewManagement'
+  // Match racing phases (new)
+  | 'preStart'
+  | 'dialUp'
+  | 'control'
+  | 'coverage'
+  // Team racing phases (new)
+  | 'teamCoordination'
+  | 'combinations'
+  | 'passing';
+
+/**
+ * Dynamic phase key for distance racing legs and peaks
+ * Format: 'leg-{number}' or 'peak-{peakId}'
+ */
+export type DynamicPhaseKey = `leg-${number}` | `peak-${string}`;
 
 /**
  * Section metadata for UI rendering
  */
 export interface StrategySectionMeta {
   id: StrategySectionId;
-  phase: StrategyPhase;
+  phase: StrategyPhase | DynamicPhaseKey;
   title: string;
   icon: string;
   description: string;
   defaultTip: string; // Generic best practice when no history
+  raceTypes?: RaceType[]; // Which race types use this section (undefined = all)
+  legIndex?: number; // For distance racing leg sections
+  peakId?: string; // For Four Peaks climbing sections
 }
 
 /**
- * All strategy sections with metadata
+ * Fleet racing strategy sections (legacy constant for backward compatibility)
+ * For new code, use getStrategyConfig() from lib/strategy/strategyConfig.ts
  */
 export const STRATEGY_SECTIONS: StrategySectionMeta[] = [
   // Start
@@ -246,15 +293,71 @@ export const STRATEGY_SECTIONS: StrategySectionMeta[] = [
 ];
 
 /**
- * Get sections for a specific phase
+ * Get sections for a specific phase (fleet racing only - legacy function)
+ * @deprecated Use getStrategyConfig() from lib/strategy/strategyConfig.ts
  */
 export function getSectionsForPhase(phase: StrategyPhase): StrategySectionMeta[] {
   return STRATEGY_SECTIONS.filter((s) => s.phase === phase);
 }
 
 /**
- * Get section metadata by ID
+ * Get section metadata by ID (fleet racing only - legacy function)
+ * @deprecated Use getStrategyConfig() from lib/strategy/strategyConfig.ts
  */
 export function getSectionMeta(id: StrategySectionId): StrategySectionMeta | undefined {
   return STRATEGY_SECTIONS.find((s) => s.id === id);
+}
+
+// =============================================================================
+// RACE TYPE STRATEGY CONFIG INTERFACES
+// =============================================================================
+
+/**
+ * Phase info for rendering in UI
+ */
+export interface PhaseInfo {
+  key: StrategyPhase | DynamicPhaseKey;
+  label: string;
+}
+
+/**
+ * Data needed to generate dynamic sections for distance races
+ */
+export interface DistanceRaceData {
+  routeWaypoints?: Array<{
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    passingInstruction?: string;
+  }>;
+  legs?: Array<{
+    legNumber: number;
+    name: string;
+    startLocation: string;
+    endLocation: string;
+    estimatedDurationHours?: number;
+    followedByPeak?: string | null;
+  }>;
+  peaks?: Array<{
+    id: string;
+    name: string;
+    location: string;
+    estimatedClimbHours: number;
+  }>;
+  totalDistanceNm?: number;
+  timeLimitHours?: number;
+}
+
+/**
+ * Configuration for race-type-specific strategy
+ */
+export interface RaceTypeStrategyConfig {
+  raceType: RaceType;
+  phases: PhaseInfo[];
+  staticSections: StrategySectionMeta[];
+  generateDynamicSections?: (raceData: DistanceRaceData) => {
+    phases: PhaseInfo[];
+    sections: StrategySectionMeta[];
+  };
 }

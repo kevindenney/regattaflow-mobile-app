@@ -1,9 +1,66 @@
+/**
+ * Coach Onboarding - Expertise (Step 2 of 5)
+ *
+ * Tufte-inspired design with clean iOS styling
+ */
+
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { ChevronRight, Award, Target, Anchor, Wind } from 'lucide-react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  StyleSheet,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoachOnboardingState } from '@/hooks/useCoachOnboardingState';
-import { OnboardingProgress } from '@/components/onboarding';
+
+// Design tokens (consistent with welcome screen)
+const COLORS = {
+  primary: '#007AFF',
+  primaryLight: '#E5F1FF',
+  background: '#F2F2F7',
+  card: '#FFFFFF',
+  label: '#000000',
+  secondaryLabel: '#3C3C43',
+  tertiaryLabel: '#8E8E93',
+  separator: '#C6C6C8',
+  success: '#34C759',
+  selected: '#007AFF',
+  selectedBg: '#007AFF',
+  unselected: '#E5E5EA',
+  border: '#D1D1D6',
+};
+
+const STEP_COUNT = 5;
+const CURRENT_STEP = 2;
+
+// Sailing-specific expertise areas
+const expertiseOptions = [
+  { id: 'match_racing', title: 'Match Racing', subtitle: 'One-on-one tactical racing' },
+  { id: 'fleet_racing', title: 'Fleet Racing', subtitle: 'Multi-boat competition tactics' },
+  { id: 'boat_handling', title: 'Boat Handling', subtitle: 'Sail trim and boat control' },
+  { id: 'tactics', title: 'Racing Tactics', subtitle: 'Strategic race planning' },
+  { id: 'speed_tuning', title: 'Speed & Tuning', subtitle: 'Boat speed optimization' },
+  { id: 'starting', title: 'Starting Techniques', subtitle: 'Race start excellence' },
+  { id: 'strategy', title: 'Race Strategy', subtitle: 'Course strategy & planning' },
+  { id: 'offshore', title: 'Offshore Racing', subtitle: 'Long-distance racing' },
+];
+
+// Sailing class specialties
+const specialtiesOptions = [
+  { id: 'dragon', title: 'Dragon' },
+  { id: 'melges', title: 'Melges' },
+  { id: '470', title: '470' },
+  { id: 'laser', title: 'Laser/ILCA' },
+  { id: 'swan', title: 'Swan' },
+  { id: 'j_boats', title: 'J/Boats' },
+  { id: 'one_design', title: 'One-Design' },
+  { id: 'grand_prix', title: 'Grand Prix' },
+];
 
 const CoachOnboardingExpertise = () => {
   const router = useRouter();
@@ -19,30 +76,6 @@ const CoachOnboardingExpertise = () => {
       setSelectedSpecialties(state.expertise.specialties || []);
     }
   }, [state.expertise]);
-
-  // Sailing-specific expertise areas
-  const expertiseOptions = [
-    { id: 'match_racing', title: 'Match Racing', description: 'One-on-one tactical racing', icon: Target },
-    { id: 'fleet_racing', title: 'Fleet Racing', description: 'Multi-boat competition tactics', icon: Anchor },
-    { id: 'boat_handling', title: 'Boat Handling', description: 'Sail trim and boat control', icon: Wind },
-    { id: 'tactics', title: 'Racing Tactics', description: 'Strategic race planning', icon: Target },
-    { id: 'speed_tuning', title: 'Speed & Tuning', description: 'Boat speed optimization', icon: Wind },
-    { id: 'starting', title: 'Starting Techniques', description: 'Race start excellence', icon: Target },
-    { id: 'strategy', title: 'Race Strategy', description: 'Course strategy & planning', icon: Award },
-    { id: 'offshore', title: 'Offshore Racing', description: 'Long-distance racing', icon: Anchor },
-  ];
-
-  // Sailing class specialties
-  const specialtiesOptions = [
-    { id: 'dragon', title: 'Dragon Class', description: 'Keelboat racing' },
-    { id: 'melges', title: 'Melges Classes', description: 'Melges 20/24/32' },
-    { id: '470', title: '470 Class', description: 'Olympic two-person dinghy' },
-    { id: 'laser', title: 'Laser/ILCA', description: 'Single-handed dinghy' },
-    { id: 'swan', title: 'Swan Classes', description: 'Luxury racing yachts' },
-    { id: 'j_boats', title: 'J/Boats', description: 'J/70, J/80, J/105, etc.' },
-    { id: 'one_design', title: 'One-Design Racing', description: 'Identical boat racing' },
-    { id: 'grand_prix', title: 'Grand Prix Racing', description: 'High-performance racing' },
-  ];
 
   const toggleExpertise = (id: string) => {
     setSelectedExpertise(prev =>
@@ -61,203 +94,440 @@ const CoachOnboardingExpertise = () => {
   };
 
   const isFormValid = () => {
-    return selectedExpertise.length > 0 || selectedSpecialties.length > 0;
+    return selectedExpertise.length > 0;
   };
 
   const handleContinue = () => {
     if (!isFormValid()) return;
 
-    // Save to state
     updateExpertise({
       areas: selectedExpertise,
       specialties: selectedSpecialties,
     });
 
-    // Navigate to next step
     router.push('/(auth)/coach-onboarding-availability');
   };
 
   const handleCompleteLater = () => {
-    // Save current progress
     if (selectedExpertise.length > 0 || selectedSpecialties.length > 0) {
       updateExpertise({
         areas: selectedExpertise,
         specialties: selectedSpecialties,
       });
     }
-
-    // Navigate back to main app
-    router.replace('/(tabs)/dashboard');
+    router.replace('/(tabs)/coaching');
   };
 
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="text-gray-600 mt-4">Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Progress Indicator */}
-      <View className="px-4 pt-4 bg-white">
-        <OnboardingProgress
-          currentStep={2}
-          totalSteps={6}
-          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Payments', 'Review']}
-          color="#059669"
-          showStepLabels={false}
-        />
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.stepIndicator}>Step {CURRENT_STEP} of {STEP_COUNT}</Text>
+        </View>
+        <View style={styles.headerRight} />
       </View>
 
-      <ScrollView className="flex-1 px-4 py-6">
-        <View className="mb-2">
-          <Text className="text-2xl font-bold text-gray-800">Your Sailing Expertise</Text>
-          <Text className="text-gray-600 mt-1">
-            Select your areas of expertise to help sailors find the right coach
+      {/* Progress Bar */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${(CURRENT_STEP / STEP_COUNT) * 100}%` }]} />
+        </View>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIconContainer}>
+            <Ionicons name="ribbon" size={32} color={COLORS.primary} />
+          </View>
+          <Text style={styles.heroTitle}>Expertise</Text>
+          <Text style={styles.heroSubtitle}>
+            What sailing areas do you specialize in?
           </Text>
         </View>
 
-        {/* Expertise Areas */}
-        <View className="mt-6">
-          <View className="flex-row items-center mb-3">
-            <Award size={18} color="#2563EB" className="mr-2" />
-            <Text className="font-bold text-gray-800 text-lg">Areas of Expertise</Text>
-          </View>
-          <Text className="text-gray-600 text-sm mb-3">
-            What types of sailing coaching do you specialize in?
-          </Text>
+        {/* Coaching Focus Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>COACHING FOCUS</Text>
+          <Text style={styles.sectionSubtitle}>Select all areas you can coach</Text>
 
-          <View className="flex-row flex-wrap -mx-1">
-            {expertiseOptions.map((item) => {
-              const IconComponent = item.icon;
+          <View style={styles.card}>
+            {expertiseOptions.map((item, index) => {
+              const isSelected = selectedExpertise.includes(item.id);
               return (
-                <View key={item.id} className="w-1/2 px-1 mb-2">
-                  <TouchableOpacity
-                    className={`bg-white border rounded-xl p-4 ${
-                      selectedExpertise.includes(item.id)
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200'
-                    }`}
-                    onPress={() => toggleExpertise(item.id)}
-                  >
-                    <View className="flex-row items-center justify-between mb-2">
-                      <IconComponent
-                        color={selectedExpertise.includes(item.id) ? '#2563EB' : '#6B7280'}
-                        size={20}
-                      />
-                      {selectedExpertise.includes(item.id) && (
-                        <View className="w-5 h-5 bg-blue-600 rounded-full items-center justify-center">
-                          <Text className="text-white text-xs">✓</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text
-                      className={`font-medium ${
-                        selectedExpertise.includes(item.id) ? 'text-blue-700' : 'text-gray-800'
-                      }`}
-                    >
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.checkboxRow,
+                    index < expertiseOptions.length - 1 && styles.checkboxRowBorder,
+                  ]}
+                  onPress={() => toggleExpertise(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.checkboxContent}>
+                    <Text style={[styles.checkboxLabel, isSelected && styles.checkboxLabelSelected]}>
                       {item.title}
                     </Text>
-                    <Text className="text-gray-500 text-xs mt-1">{item.description}</Text>
-                  </TouchableOpacity>
-                </View>
+                    <Text style={styles.checkboxSubtitle}>{item.subtitle}</Text>
+                  </View>
+                  <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                    {isSelected && (
+                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                    )}
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </View>
         </View>
 
-        {/* Class Specialties */}
-        <View className="mt-6">
-          <View className="flex-row items-center mb-3">
-            <Anchor size={18} color="#2563EB" className="mr-2" />
-            <Text className="font-bold text-gray-800 text-lg">Class Specialties</Text>
-          </View>
-          <Text className="text-gray-600 text-sm mb-3">
-            Which boat classes do you have experience coaching? (Optional)
-          </Text>
+        {/* Boat Classes Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>BOAT CLASSES</Text>
+          <Text style={styles.sectionSubtitle}>Which classes do you have experience coaching? (optional)</Text>
 
-          <View>
-            {specialtiesOptions.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                className={`flex-row items-center justify-between border rounded-xl px-4 py-3 mb-2 ${
-                  selectedSpecialties.includes(item.id)
-                    ? 'border-blue-300 bg-blue-50'
-                    : 'border-gray-200'
-                }`}
-                onPress={() => toggleSpecialty(item.id)}
-              >
-                <View className="flex-1">
-                  <Text
-                    className={`font-medium ${
-                      selectedSpecialties.includes(item.id) ? 'text-blue-700' : 'text-gray-800'
-                    }`}
-                  >
+          <View style={styles.chipGrid}>
+            {specialtiesOptions.map((item) => {
+              const isSelected = selectedSpecialties.includes(item.id);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.classChip,
+                    isSelected && styles.classChipSelected,
+                  ]}
+                  onPress={() => toggleSpecialty(item.id)}
+                  activeOpacity={0.7}
+                >
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={14} color="#FFFFFF" style={styles.classChipIcon} />
+                  )}
+                  <Text style={[styles.classChipText, isSelected && styles.classChipTextSelected]}>
                     {item.title}
                   </Text>
-                  <Text className="text-gray-500 text-xs mt-1">{item.description}</Text>
-                </View>
-                <View
-                  className={`w-5 h-5 rounded-full border ${
-                    selectedSpecialties.includes(item.id)
-                      ? 'bg-blue-600 border-blue-600'
-                      : 'border-gray-300'
-                  }`}
-                >
-                  {selectedSpecialties.includes(item.id) && (
-                    <View className="w-3 h-3 bg-white rounded-full m-0.5" />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        {/* Selection Summary */}
+        {/* Summary */}
         {(selectedExpertise.length > 0 || selectedSpecialties.length > 0) && (
-          <View className="mt-6 bg-blue-50 rounded-xl p-4">
-            <Text className="font-bold text-gray-800 mb-2">Your Expertise Summary</Text>
-            <Text className="text-gray-600 text-sm">
-              {selectedExpertise.length > 0 && (
-                <>
-                  <Text className="font-medium">{selectedExpertise.length}</Text> area
-                  {selectedExpertise.length !== 1 ? 's' : ''} of expertise
-                </>
-              )}
-              {selectedExpertise.length > 0 && selectedSpecialties.length > 0 && ' • '}
-              {selectedSpecialties.length > 0 && (
-                <>
-                  <Text className="font-medium">{selectedSpecialties.length}</Text> class{' '}
-                  {selectedSpecialties.length !== 1 ? 'specialties' : 'specialty'}
-                </>
-              )}
-            </Text>
+          <View style={styles.summaryContainer}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Selected</Text>
+              <Text style={styles.summaryValue}>
+                {selectedExpertise.length} area{selectedExpertise.length !== 1 ? 's' : ''}
+                {selectedSpecialties.length > 0 && (
+                  <Text> · {selectedSpecialties.length} class{selectedSpecialties.length !== 1 ? 'es' : ''}</Text>
+                )}
+              </Text>
+            </View>
           </View>
         )}
+
+        {/* Bottom padding */}
+        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Action Buttons */}
-      <View className="px-4 pb-6">
+      {/* Footer */}
+      <View style={styles.footer}>
         <TouchableOpacity
-          className={`flex-row items-center justify-center py-4 rounded-xl mb-4 ${
-            isFormValid() ? 'bg-blue-600' : 'bg-gray-300'
-          }`}
+          style={[styles.continueButton, !isFormValid() && styles.continueButtonDisabled]}
           disabled={!isFormValid()}
           onPress={handleContinue}
         >
-          <Text className="text-white font-bold text-lg">Continue to Availability</Text>
-          <ChevronRight color="white" size={20} className="ml-2" />
+          <Text style={[styles.continueButtonText, !isFormValid() && styles.continueButtonTextDisabled]}>
+            Continue
+          </Text>
+          <Ionicons
+            name="arrow-forward"
+            size={20}
+            color={isFormValid() ? '#FFFFFF' : COLORS.tertiaryLabel}
+          />
         </TouchableOpacity>
 
-        <TouchableOpacity className="py-3 items-center" onPress={handleCompleteLater}>
-          <Text className="text-blue-600 font-medium">Complete later</Text>
+        <TouchableOpacity style={styles.laterButton} onPress={handleCompleteLater}>
+          <Text style={styles.laterButtonText}>Save & Complete Later</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: COLORS.background,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stepIndicator: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  headerRight: {
+    width: 44,
+  },
+
+  // Progress
+  progressContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    backgroundColor: COLORS.background,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: COLORS.unselected,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+
+  // Scroll
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+
+  // Hero
+  hero: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  heroIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.label,
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+    textAlign: 'center',
+  },
+
+  // Section
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: COLORS.tertiaryLabel,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+
+  // Card
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+
+  // Checkbox Row
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  checkboxRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.separator,
+  },
+  checkboxContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  checkboxLabel: {
+    fontSize: 17,
+    color: COLORS.label,
+  },
+  checkboxLabelSelected: {
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  checkboxSubtitle: {
+    fontSize: 13,
+    color: COLORS.tertiaryLabel,
+    marginTop: 2,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+
+  // Class Chips
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  classChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  classChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  classChipIcon: {
+    marginRight: 6,
+  },
+  classChipText: {
+    fontSize: 15,
+    color: COLORS.label,
+  },
+  classChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+
+  // Summary
+  summaryContainer: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+
+  // Footer
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    backgroundColor: COLORS.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.separator,
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  continueButtonDisabled: {
+    backgroundColor: COLORS.unselected,
+  },
+  continueButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  continueButtonTextDisabled: {
+    color: COLORS.tertiaryLabel,
+  },
+  laterButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  laterButtonText: {
+    fontSize: 15,
+    color: COLORS.primary,
+  },
+});
 
 export default CoachOnboardingExpertise;

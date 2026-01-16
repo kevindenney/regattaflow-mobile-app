@@ -103,13 +103,56 @@ export function useTeamSharing({
 
   /**
    * Load primary crew members
+   * Checks crew_members table first, then falls back to sailor_crew_preferences
    */
   const loadPrimaryCrew = useCallback(async () => {
-    if (!sailorId || !boatClassId) return [];
+    if (!sailorId) return [];
 
     try {
-      const crew = await crewManagementService.getPrimaryCrew(sailorId, boatClassId);
-      return crew;
+      // First try crew_members table (if we have a valid UUID boatClassId)
+      // Skip for demo class IDs (strings like "demo-class-j70") - DB expects UUIDs
+      if (boatClassId && !boatClassId.startsWith('demo-')) {
+        const crew = await crewManagementService.getPrimaryCrew(sailorId, boatClassId);
+        if (crew.length > 0) {
+          return crew;
+        }
+      }
+
+      // Fallback: check sailor_crew_preferences (from onboarding)
+      const { data: sailorProfile } = await supabase
+        .from('sailor_profiles')
+        .select('id')
+        .eq('user_id', sailorId)
+        .maybeSingle();
+
+      if (sailorProfile?.id) {
+        const { data: crewPrefs } = await supabase
+          .from('sailor_crew_preferences')
+          .select('crew_members')
+          .eq('sailor_id', sailorProfile.id)
+          .maybeSingle();
+
+        if (crewPrefs?.crew_members && Array.isArray(crewPrefs.crew_members)) {
+          // Map onboarding crew format to CrewMember format
+          return crewPrefs.crew_members.map((member: any) => ({
+            id: member.id || `onboard-${member.name}`,
+            sailorId,
+            classId: boatClassId || '',
+            email: member.email || '',
+            name: member.name || 'Crew Member',
+            role: member.role || 'crew',
+            accessLevel: 'view' as const,
+            status: 'active' as const,
+            isPrimary: true,
+            certifications: [],
+            performanceNotes: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }));
+        }
+      }
+
+      return [];
     } catch (err) {
       logger.error('Failed to load primary crew:', err);
       return [];

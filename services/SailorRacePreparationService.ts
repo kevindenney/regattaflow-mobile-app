@@ -94,54 +94,45 @@ class SailorRacePreparationService {
   async upsertPreparation(
     preparation: SailorRacePreparation
   ): Promise<SailorRacePreparation | null> {
-    try {
-      // Validate that the race_event exists before attempting upsert
-      const { data: raceEventExists, error: raceEventError } = await supabase
-        .from('race_events')
-        .select('id')
-        .eq('id', preparation.race_event_id)
-        .maybeSingle();
+    // Validate that the race exists in regattas table before attempting upsert
+    // Note: FK constraint references regattas table (not race_events)
+    const { data: regattaExists } = await supabase
+      .from('regattas')
+      .select('id')
+      .eq('id', preparation.race_event_id)
+      .maybeSingle();
 
-      if (raceEventError) {
-        logger.error('Error checking race event existence:', raceEventError);
-        throw raceEventError;
-      }
-
-      if (!raceEventExists) {
-        logger.info(`Race event ${preparation.race_event_id} does not exist, skipping upsert`);
-        return null;
-      }
-
-      const { data, error } = await supabase
-        .from('sailor_race_preparation')
-        .upsert(
-          {
-            race_event_id: preparation.race_event_id,
-            sailor_id: preparation.sailor_id,
-            rig_notes: preparation.rig_notes,
-            selected_rig_preset_id: preparation.selected_rig_preset_id,
-            regulatory_acknowledgements: preparation.regulatory_acknowledgements,
-            race_brief_data: preparation.race_brief_data,
-            user_intentions: preparation.user_intentions,
-          },
-          {
-            onConflict: 'race_event_id,sailor_id',
-          }
-        )
-        .select()
-        .single();
-
-      if (error) {
-        logger.error('Error upserting race preparation:', error);
-        throw error;
-      }
-
-      logger.info('Race preparation upserted successfully');
-      return data;
-    } catch (error) {
-      logger.error('Failed to upsert race preparation:', error);
+    if (!regattaExists) {
+      logger.info(`Race ${preparation.race_event_id} does not exist in regattas, skipping upsert`);
       return null;
     }
+
+    const { data, error } = await supabase
+      .from('sailor_race_preparation')
+      .upsert(
+        {
+          race_event_id: preparation.race_event_id,
+          sailor_id: preparation.sailor_id,
+          rig_notes: preparation.rig_notes,
+          selected_rig_preset_id: preparation.selected_rig_preset_id,
+          regulatory_acknowledgements: preparation.regulatory_acknowledgements,
+          race_brief_data: preparation.race_brief_data,
+          user_intentions: preparation.user_intentions,
+        },
+        {
+          onConflict: 'race_event_id,sailor_id',
+        }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error upserting race preparation:', error);
+      throw error;
+    }
+
+    logger.info('Race preparation upserted successfully');
+    return data;
   }
 
   /**

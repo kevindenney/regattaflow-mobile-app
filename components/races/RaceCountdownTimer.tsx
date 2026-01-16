@@ -14,11 +14,17 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, Alert, StyleSheet, Vibration } from 'react-native';
-import { Play, Square, Navigation, Timer, RotateCcw } from 'lucide-react-native';
+import { Play, Square, Navigation, Timer, RotateCcw, RefreshCw } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import {
+  getTimerConfig,
+  calculateSyncTime,
+  usesStartSequence as checkUsesStartSequence,
+  type RaceType as ConfigRaceType,
+} from '@/lib/races/timerConfig';
 
 // =============================================================================
 // TYPES
@@ -43,8 +49,6 @@ type TimerState = 'pre-race' | 'race-day' | 'start-sequence' | 'racing' | 'compl
 // =============================================================================
 
 const DEFAULT_RACE_TIME = '10:00';
-const START_SEQUENCE_SECONDS = 5 * 60; // 5 minutes
-const ALERT_INTERVALS = [300, 240, 60, 30, 10, 5, 4, 3, 2, 1, 0];
 
 // =============================================================================
 // HELPERS
@@ -130,6 +134,11 @@ export function RaceCountdownTimer({
 }: RaceCountdownTimerProps) {
   const { user } = useAuth();
 
+  // Get race-type-specific timer configuration
+  const timerConfig = useMemo(() => getTimerConfig(raceType), [raceType]);
+  const usesStartSequence = checkUsesStartSequence(raceType);
+  const isDistanceRace = raceType === 'distance';
+
   // Timer state
   const [timerState, setTimerState] = useState<TimerState>('pre-race');
   const [timeUntilRace, setTimeUntilRace] = useState<{
@@ -144,13 +153,12 @@ export function RaceCountdownTimer({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gpsPointCount, setGpsPointCount] = useState(0);
 
-  // Start sequence state (for fleet/team races)
-  const [sequenceSecondsRemaining, setSequenceSecondsRemaining] = useState(START_SEQUENCE_SECONDS);
+  // Start sequence state (for fleet/team/match races)
+  const [sequenceSecondsRemaining, setSequenceSecondsRemaining] = useState(timerConfig.durationSeconds);
   const [lastAlert, setLastAlert] = useState<number | null>(null);
 
-  // Determine if this race type uses start sequence
-  const usesStartSequence = raceType === 'fleet' || raceType === 'team';
-  const isDistanceRace = raceType === 'distance';
+  // Sync button state
+  const [showSyncFlash, setShowSyncFlash] = useState(false);
 
   // Memoize race date time
   const raceDateTimeMs = useMemo(() => {
@@ -214,7 +222,7 @@ export function RaceCountdownTimer({
     return () => clearInterval(interval);
   }, [raceDateTimeMs, timerState]);
 
-  // Start sequence countdown (fleet/team races)
+  // Start sequence countdown (fleet/team/match races)
   useEffect(() => {
     if (timerState !== 'start-sequence') return;
 
@@ -222,7 +230,7 @@ export function RaceCountdownTimer({
       setSequenceSecondsRemaining((prev) => {
         const newValue = prev - 1;
 
-        if (ALERT_INTERVALS.includes(newValue)) {
+        if (timerConfig.alertIntervals.includes(newValue)) {
           announceTime(newValue);
         }
 
@@ -237,7 +245,7 @@ export function RaceCountdownTimer({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [timerState, announceTime]);
+  }, [timerState, announceTime, timerConfig.alertIntervals]);
 
   // Update elapsed time and GPS point count during racing
   useEffect(() => {
@@ -259,22 +267,42 @@ export function RaceCountdownTimer({
     }
   }, [timerState]);
 
-  // Start the start sequence (fleet/team) or GPS directly (distance/match)
+  // Start the start sequence (fleet/team/match) or GPS directly (distance)
   const handleStartRace = useCallback(() => {
     if (usesStartSequence) {
       setTimerState('start-sequence');
-      setSequenceSecondsRemaining(START_SEQUENCE_SECONDS);
+      setSequenceSecondsRemaining(timerConfig.durationSeconds);
     } else {
       handleStartGPS();
     }
-  }, [usesStartSequence]);
+  }, [usesStartSequence, timerConfig.durationSeconds]);
 
   // Reset start sequence
   const handleResetSequence = useCallback(() => {
     setTimerState('race-day');
-    setSequenceSecondsRemaining(START_SEQUENCE_SECONDS);
+    setSequenceSecondsRemaining(timerConfig.durationSeconds);
     setLastAlert(null);
-  }, []);
+  }, [timerConfig.durationSeconds]);
+
+  // Sync timer to nearest minute mark (rounds UP)
+  const handleSync = useCallback(() => {
+    if (timerState !== 'start-sequence') {
+      // If not in sequence yet, start it at configured duration
+      setTimerState('start-sequence');
+      setSequenceSecondsRemaining(timerConfig.durationSeconds);
+    } else {
+      // Calculate sync time (round up to nearest minute)
+      const syncedTime = calculateSyncTime(sequenceSecondsRemaining);
+      setSequenceSecondsRemaining(syncedTime);
+    }
+
+    // Visual feedback
+    setShowSyncFlash(true);
+    setTimeout(() => setShowSyncFlash(false), 300);
+
+    // Haptic feedback (quick double-tap feel)
+    vibrate([0, 50, 50, 50]);
+  }, [timerState, sequenceSecondsRemaining, timerConfig.durationSeconds, vibrate]);
 
   // Start GPS tracking
   const handleStartGPS = useCallback(async () => {
@@ -403,7 +431,7 @@ export function RaceCountdownTimer({
   }
 
   // =========================================================================
-  // RENDER: Start sequence state (fleet/team races)
+  // RENDER: Start sequence state (fleet/team/match races)
   // =========================================================================
   if (timerState === 'start-sequence') {
     const mins = Math.floor(sequenceSecondsRemaining / 60);
@@ -419,16 +447,36 @@ export function RaceCountdownTimer({
                 {mins}:{String(secs).padStart(2, '0')}
               </Text>
             </View>
-            <Text style={styles.sequenceLabel}>Start Sequence</Text>
+            <Text style={styles.sequenceLabel}>{timerConfig.label}</Text>
           </View>
 
-          <TouchableOpacity
-            onPress={handleResetSequence}
-            style={styles.resetButton}
-            accessibilityLabel="Reset start sequence"
-          >
-            <RotateCcw size={18} color={IOS_COLORS.secondaryLabel} />
-          </TouchableOpacity>
+          <View style={styles.sequenceButtons}>
+            {/* Sync Button - PRIMARY ACTION */}
+            {timerConfig.usesSync && (
+              <TouchableOpacity
+                onPress={handleSync}
+                style={[
+                  styles.syncButton,
+                  showSyncFlash && styles.syncButtonFlash,
+                ]}
+                accessibilityLabel="Sync timer to RC signal"
+                accessibilityHint="Rounds timer to nearest minute mark"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <RefreshCw size={18} color={IOS_COLORS.blue} />
+                <Text style={styles.syncButtonText}>Sync</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Reset Button */}
+            <TouchableOpacity
+              onPress={handleResetSequence}
+              style={styles.resetButton}
+              accessibilityLabel="Reset start sequence"
+            >
+              <RotateCcw size={18} color={IOS_COLORS.secondaryLabel} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -480,7 +528,7 @@ export function RaceCountdownTimer({
           <Text style={styles.tapHint}>
             {isReadyToStart
               ? usesStartSequence
-                ? 'Tap to start 5-min sequence'
+                ? `Tap to start ${timerConfig.label.toLowerCase()}`
                 : 'Tap to start GPS tracking'
               : 'Tap when ready to start'}
           </Text>
@@ -586,6 +634,33 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     fontSize: 12,
     marginTop: 2,
+  },
+  sequenceButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: IOS_COLORS.blue + '15',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue + '30',
+    minWidth: 80,
+    minHeight: 44, // iOS HIG minimum tap target
+  },
+  syncButtonFlash: {
+    backgroundColor: IOS_COLORS.blue + '40',
+    borderColor: IOS_COLORS.blue,
+  },
+  syncButtonText: {
+    color: IOS_COLORS.blue,
+    fontSize: 15,
+    fontWeight: '600',
   },
   resetButton: {
     backgroundColor: IOS_COLORS.gray5,

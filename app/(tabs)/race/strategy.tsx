@@ -2,29 +2,34 @@
  * Race Strategy Screen - Tufte Style
  *
  * A complete race strategy planning interface following Edward Tufte's
- * principles of information design. Shows all 14 strategy sections
+ * principles of information design. Shows all strategy sections
  * at once with typography-driven hierarchy and inline editing.
  */
 
 import React from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { TufteStrategyScreen } from '@/components/races/strategy';
-import type { StrategySectionId } from '@/types/raceStrategy';
 
 export default function RaceStrategyScreen() {
-  // Mock race data - in production this would come from route params or context
-  const raceName = 'Annual Regatta Challenge';
-  const raceDate = new Date('2024-06-15');
+  // Get race ID from route params (e.g., /race/strategy?raceId=xxx)
+  const { raceId, raceName, raceDate } = useLocalSearchParams<{
+    raceId?: string;
+    raceName?: string;
+    raceDate?: string;
+  }>();
 
-  const handleUpdateSection = (sectionId: StrategySectionId, userPlan: string) => {
-    // TODO: Persist to storage or sync with backend
-    console.log('Strategy updated:', sectionId, userPlan);
-  };
+  // Use provided values or fallback to demo data
+  const displayName = raceName || 'Annual Regatta Challenge';
+  const displayDate = raceDate ? new Date(raceDate) : new Date('2024-06-15');
+
+  // Fallback race ID for demo/testing
+  const effectiveRaceId = raceId || 'eaa69b1e-b7fa-4f80-a8ab-83b9501d3454';
 
   return (
     <TufteStrategyScreen
-      raceName={raceName}
-      raceDate={raceDate}
-      onUpdateSection={handleUpdateSection}
+      raceId={effectiveRaceId}
+      raceName={displayName}
+      raceDate={displayDate}
     />
   );
 }

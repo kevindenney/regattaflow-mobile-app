@@ -219,14 +219,19 @@ export class NominatimService {
     region?: string
   ): Promise<NominatimResult | null> {
     const options: NominatimSearchOptions = {
-      limit: 1,
+      limit: 5, // Get more results to find best match
     };
 
-    // Country code filtering
+    // Country code filtering - expanded list with variations
     const countryCodeMap: Record<string, string> = {
       'Hong Kong SAR': 'hk',
+      'Hong Kong': 'hk',
+      'Hong Kong Waters': 'hk',
+      'HK': 'hk',
       'United States': 'us',
+      'USA': 'us',
       'United Kingdom': 'gb',
+      'UK': 'gb',
       'Australia': 'au',
       'New Zealand': 'nz',
       'China': 'cn',
@@ -234,18 +239,50 @@ export class NominatimService {
       'Singapore': 'sg',
     };
 
-    if (country && countryCodeMap[country]) {
-      options.countrycodes = countryCodeMap[country];
+    // Extract country code from various inputs
+    let countryCode: string | undefined;
+    if (country) {
+      // Check direct mapping
+      countryCode = countryCodeMap[country];
+      // Also check if any key is contained in the country string
+      if (!countryCode) {
+        for (const [key, code] of Object.entries(countryCodeMap)) {
+          if (country.toLowerCase().includes(key.toLowerCase())) {
+            countryCode = code;
+            break;
+          }
+        }
+      }
     }
 
-    // Build comprehensive query
-    const queryParts = [name];
-    if (region) queryParts.push(region);
-    if (country) queryParts.push(country);
+    if (countryCode) {
+      options.countrycodes = countryCode;
+    }
 
-    const results = await this.search(queryParts.join(', '), options);
+    // Build search query - try multiple variations
+    const queries = [
+      // Primary: name + simplified region
+      `${name}, Hong Kong`,
+      // Fallback: just name with country code filter
+      name,
+      // For peaks/mountains, try adding "mountain" or "peak"
+      `${name} peak, Hong Kong`,
+      `${name} mountain, Hong Kong`,
+    ];
 
-    return results[0] || null;
+    for (const query of queries) {
+      try {
+        const results = await this.search(query, options);
+
+        if (results.length > 0) {
+          return results[0];
+        }
+      } catch (error) {
+        // Query failed, try next one
+      }
+    }
+
+    return null;
   }
 
   /**

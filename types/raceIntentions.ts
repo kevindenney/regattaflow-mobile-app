@@ -168,6 +168,16 @@ export interface ForecastIntention {
 }
 
 /**
+ * Strategy Brief intention - user's race focus and strategy checklist state
+ */
+export interface StrategyBriefIntention {
+  /** User's primary focus/intention for the race (e.g., "Stay left on first beat") */
+  raceIntention?: string;
+  /** When the intention was last updated */
+  intentionUpdatedAt?: string;
+}
+
+/**
  * Complete race intentions structure
  * Stored in sailor_race_preparation.user_intentions JSONB column
  */
@@ -195,6 +205,9 @@ export interface RaceIntentions {
 
   /** Forecast Check - weather snapshots and AI analysis */
   forecastCheck?: ForecastIntention;
+
+  /** Strategy Brief - race intention and strategy checklist */
+  strategyBrief?: StrategyBriefIntention;
 
   /** Last update timestamp */
   updatedAt: string;

@@ -86,7 +86,7 @@ export function useRaceAnalysisState(
         const { data: resultData } = await supabase
           .from('race_results')
           .select('position, points')
-          .eq('race_id', raceId)
+          .eq('regatta_id', raceId)
           .eq('sailor_id', userId)
           .maybeSingle();
 

@@ -6,11 +6,11 @@
  * Enhanced: Now supports boat-specific equipment context for personalized recommendations.
  */
 
-import { tuningGuideService, type TuningGuide } from './tuningGuideService';
-import type { ExtractedSection } from './TuningGuideExtractionService';
-import { raceTuningEngine, type RaceTuningCandidate } from './ai/RaceTuningEngine';
-import { equipmentService, type BoatEquipment } from './EquipmentService';
 import { createLogger } from '@/lib/utils/logger';
+import { raceTuningEngine, type RaceTuningCandidate } from './ai/RaceTuningEngine';
+import { equipmentService } from './EquipmentService';
+import type { ExtractedSection } from './TuningGuideExtractionService';
+import { tuningGuideService, type TuningGuide } from './tuningGuideService';
 
 export interface RaceTuningRequest {
   classId?: string | null;
@@ -80,14 +80,26 @@ class RaceTuningService {
    * Get equipment context for a boat to personalize tuning recommendations
    */
   async getEquipmentContext(boatId: string): Promise<EquipmentContext | null> {
+    // Handle demo boat ID to prevent UUID error
+    if (boatId.includes('demo')) {
+      return {
+        boatId,
+        boatName: 'Demo J/70',
+        mast: { manufacturer: 'Seldén', type: 'Standard' },
+        shrouds: { manufacturer: 'Standard', type: 'Wire' },
+        sails: [],
+        hasMaintenanceAlerts: false
+      };
+    }
+
     try {
       const equipmentData = await equipmentService.getEquipmentContextForTuning(boatId);
       const health = await equipmentService.getBoatEquipmentHealth(boatId);
       const alerts = await equipmentService.getEquipmentRequiringAttention(boatId);
-      
+
       // Get boat name
       const boat = equipmentData.allEquipment[0]?.boat;
-      
+
       return {
         boatId,
         boatName: boat?.name,
@@ -116,7 +128,7 @@ class RaceTuningService {
           conditionRating: s.condition_rating,
         })),
         hasMaintenanceAlerts: alerts.length > 0 || !health.race_ready,
-        maintenanceAlerts: alerts.map(a => 
+        maintenanceAlerts: alerts.map(a =>
           `${a.custom_name}: ${a.next_maintenance_date ? `service due ${new Date(a.next_maintenance_date).toLocaleDateString()}` : 'needs attention'}`
         ),
       };
@@ -248,7 +260,7 @@ class RaceTuningService {
 
       // Enhance recommendations with equipment context if available
       const filteredRecommendations = recommendations.filter(rec => rec.settings.length > 0);
-      
+
       if (equipmentContext && filteredRecommendations.length > 0) {
         return filteredRecommendations.map(rec => ({
           ...rec,
@@ -259,7 +271,12 @@ class RaceTuningService {
 
       return filteredRecommendations;
     } catch (error) {
-      logger.error('Failed to load tuning recommendations', error);
+      // Log as debug since this can happen when no guides exist - not a critical error
+      logger.debug('Could not load tuning recommendations', {
+        error: (error as Error)?.message,
+        classId,
+        className
+      });
       return [];
     }
   }
@@ -342,7 +359,10 @@ class RaceTuningService {
 
       return recommendations.length > 0 ? recommendations : null;
     } catch (error) {
-      logger.error('AI tuning generation failed, falling back to deterministic recommendations', error);
+      // Log as debug - AI failures are expected when no guides exist or API is unavailable
+      logger.debug('AI tuning generation unavailable', {
+        error: (error as Error)?.message
+      });
       return null;
     }
   }
@@ -718,7 +738,10 @@ class RaceTuningService {
 
       return { light, medium, heavy, currentRange: null, equipmentContext };
     } catch (error) {
-      logger.error('Failed to load all wind range sections', error);
+      // Log as debug - this can happen when no boat class is configured
+      logger.debug('Could not load wind range sections', {
+        error: (error as Error)?.message
+      });
       return { light: null, medium: null, heavy: null, currentRange: null, equipmentContext };
     }
   }

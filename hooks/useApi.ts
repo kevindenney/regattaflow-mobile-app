@@ -94,7 +94,7 @@ export function useApi<T>(
       logger.debug('Normalized result:', { hasData: !!normalized.data, hasError: !!normalized.error });
 
       if (normalized.error) {
-        logger.error('Error in result:', normalized.error);
+        logger.error('Error in result:', normalized.error?.message || normalized.error, { name: normalized.error?.name, stack: normalized.error?.stack?.split('\n').slice(0, 3).join('\n') });
         setError(normalized.error);
         onErrorRef.current?.(normalized.error);
       }
@@ -103,7 +103,7 @@ export function useApi<T>(
       onSuccessRef.current?.(normalized.data);
     } catch (err) {
       const typedError = err as Error;
-      logger.error('Exception caught:', typedError);
+      logger.error('Exception caught:', typedError?.message || String(err), { name: typedError?.name, stack: typedError?.stack?.split('\n').slice(0, 3).join('\n') });
       setError(typedError);
       onErrorRef.current?.(typedError);
     } finally {

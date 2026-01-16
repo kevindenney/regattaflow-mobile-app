@@ -69,7 +69,7 @@ export function StrategySectionItem({
         setIsSaving(false);
       }
     }
-  }, [localPlan, onUserPlanChange]);
+  }, [localPlan, onUserPlanChange, section.id]);
 
   const handleToggle = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

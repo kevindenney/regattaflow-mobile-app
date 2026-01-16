@@ -1,56 +1,94 @@
+/**
+ * Coach Onboarding - Availability (Step 3 of 5)
+ *
+ * Tufte-inspired design with clean iOS styling
+ */
+
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
-import { ChevronRight, MapPin, Clock, Calendar, Users, Globe } from 'lucide-react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Switch,
+  ActivityIndicator,
+  StyleSheet,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoachOnboardingState } from '@/hooks/useCoachOnboardingState';
-import { OnboardingProgress } from '@/components/onboarding';
+import Slider from '@react-native-community/slider';
+
+// Design tokens (consistent with other screens)
+const COLORS = {
+  primary: '#007AFF',
+  primaryLight: '#E5F1FF',
+  background: '#F2F2F7',
+  card: '#FFFFFF',
+  label: '#000000',
+  secondaryLabel: '#3C3C43',
+  tertiaryLabel: '#8E8E93',
+  separator: '#C6C6C8',
+  success: '#34C759',
+  selected: '#007AFF',
+  selectedBg: '#007AFF',
+  unselected: '#E5E5EA',
+  border: '#D1D1D6',
+};
+
+const STEP_COUNT = 5;
+const CURRENT_STEP = 3;
+
+const days = [
+  { key: 'monday', label: 'M' },
+  { key: 'tuesday', label: 'T' },
+  { key: 'wednesday', label: 'W' },
+  { key: 'thursday', label: 'T' },
+  { key: 'friday', label: 'F' },
+  { key: 'saturday', label: 'S' },
+  { key: 'sunday', label: 'S' },
+];
+
+const timeSlots = [
+  { key: 'morning', label: 'Morning', time: '6a-12p' },
+  { key: 'afternoon', label: 'Afternoon', time: '12-6p' },
+  { key: 'evening', label: 'Evening', time: '6-10p' },
+];
+
+const groupOptions = [
+  { key: 'individual', label: 'Individual' },
+  { key: 'smallGroup', label: 'Small (2-4)' },
+  { key: 'largeGroup', label: 'Large (5+)' },
+];
 
 const CoachOnboardingAvailability = () => {
   const router = useRouter();
   const { state, updateAvailability, loading } = useCoachOnboardingState();
 
-  const [availability, setAvailability] = useState<{
-    monday: boolean;
-    tuesday: boolean;
-    wednesday: boolean;
-    thursday: boolean;
-    friday: boolean;
-    saturday: boolean;
-    sunday: boolean;
-    [key: string]: boolean;
-  }>({
+  const [availability, setAvailability] = useState<{ [key: string]: boolean }>({
     monday: true,
     tuesday: true,
     wednesday: true,
-    thursday: true,
+    thursday: false,
     friday: false,
     saturday: true,
-    sunday: false
+    sunday: false,
   });
 
-  const [selectedHours, setSelectedHours] = useState<{
-    morning: boolean;
-    afternoon: boolean;
-    evening: boolean;
-    [key: string]: boolean;
-  }>({
+  const [selectedHours, setSelectedHours] = useState<{ [key: string]: boolean }>({
     morning: true,
     afternoon: true,
-    evening: false
+    evening: false,
   });
 
-  const [locationPreference, setLocationPreference] = useState<'in-person' | 'remote'>('in-person');
+  const [inPersonCoaching, setInPersonCoaching] = useState(true);
   const [remoteCoaching, setRemoteCoaching] = useState(true);
   const [maxDistance, setMaxDistance] = useState(50);
-  const [groupSizes, setGroupSizes] = useState<{
-    individual: boolean;
-    smallGroup: boolean;
-    largeGroup: boolean;
-    [key: string]: boolean;
-  }>({
+  const [groupSizes, setGroupSizes] = useState<{ [key: string]: boolean }>({
     individual: true,
     smallGroup: true,
-    largeGroup: false
+    largeGroup: false,
   });
 
   // Load saved state
@@ -70,7 +108,7 @@ const CoachOnboardingAvailability = () => {
         afternoon: state.availability.afternoon,
         evening: state.availability.evening,
       });
-      setLocationPreference(state.availability.locationPreference);
+      setInPersonCoaching(state.availability.locationPreference === 'in-person');
       setRemoteCoaching(state.availability.remoteCoaching);
       setMaxDistance(state.availability.maxDistance);
       setGroupSizes({
@@ -82,38 +120,28 @@ const CoachOnboardingAvailability = () => {
   }, [state.availability]);
 
   const toggleDay = (day: string) => {
-    setAvailability({
-      ...availability,
-      [day]: !availability[day]
-    });
+    setAvailability({ ...availability, [day]: !availability[day] });
   };
 
   const toggleHour = (hour: string) => {
-    setSelectedHours({
-      ...selectedHours,
-      [hour]: !selectedHours[hour]
-    });
+    setSelectedHours({ ...selectedHours, [hour]: !selectedHours[hour] });
   };
 
   const toggleGroupSize = (size: string) => {
-    setGroupSizes({
-      ...groupSizes,
-      [size]: !groupSizes[size]
-    });
+    setGroupSizes({ ...groupSizes, [size]: !groupSizes[size] });
   };
 
   const isFormValid = () => {
     const hasDaySelected = Object.values(availability).some(day => day);
     const hasHourSelected = Object.values(selectedHours).some(hour => hour);
     const hasGroupSizeSelected = Object.values(groupSizes).some(size => size);
-
-    return hasDaySelected && hasHourSelected && hasGroupSizeSelected;
+    const hasLocationSelected = inPersonCoaching || remoteCoaching;
+    return hasDaySelected && hasHourSelected && hasGroupSizeSelected && hasLocationSelected;
   };
 
   const handleContinue = () => {
     if (!isFormValid()) return;
 
-    // Save to state
     updateAvailability({
       monday: availability.monday,
       tuesday: availability.tuesday,
@@ -125,7 +153,7 @@ const CoachOnboardingAvailability = () => {
       morning: selectedHours.morning,
       afternoon: selectedHours.afternoon,
       evening: selectedHours.evening,
-      locationPreference,
+      locationPreference: inPersonCoaching ? 'in-person' : 'remote',
       remoteCoaching,
       maxDistance,
       individualSessions: groupSizes.individual,
@@ -133,12 +161,10 @@ const CoachOnboardingAvailability = () => {
       largeGroup: groupSizes.largeGroup,
     });
 
-    // Navigate to next step
     router.push('/(auth)/coach-onboarding-pricing');
   };
 
   const handleCompleteLater = () => {
-    // Save current progress
     updateAvailability({
       monday: availability.monday,
       tuesday: availability.tuesday,
@@ -150,7 +176,7 @@ const CoachOnboardingAvailability = () => {
       morning: selectedHours.morning,
       afternoon: selectedHours.afternoon,
       evening: selectedHours.evening,
-      locationPreference,
+      locationPreference: inPersonCoaching ? 'in-person' : 'remote',
       remoteCoaching,
       maxDistance,
       individualSessions: groupSizes.individual,
@@ -158,220 +184,579 @@ const CoachOnboardingAvailability = () => {
       largeGroup: groupSizes.largeGroup,
     });
 
-    // Navigate back to main app
-    router.replace('/(tabs)/dashboard');
+    router.replace('/(tabs)/coaching');
+  };
+
+  // Generate summary text
+  const getSummaryText = () => {
+    const selectedDays = Object.entries(availability)
+      .filter(([_, selected]) => selected)
+      .map(([day]) => day.charAt(0).toUpperCase() + day.slice(1, 3))
+      .join(', ');
+
+    const selectedTimes = Object.entries(selectedHours)
+      .filter(([_, selected]) => selected)
+      .map(([time]) => time.charAt(0).toUpperCase() + time.slice(1))
+      .join(', ');
+
+    return `${selectedDays} · ${selectedTimes}`;
   };
 
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="text-gray-600 mt-4">Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
-  const days = [
-    { key: 'monday', label: 'Mon' },
-    { key: 'tuesday', label: 'Tue' },
-    { key: 'wednesday', label: 'Wed' },
-    { key: 'thursday', label: 'Thu' },
-    { key: 'friday', label: 'Fri' },
-    { key: 'saturday', label: 'Sat' },
-    { key: 'sunday', label: 'Sun' }
-  ];
-
-  const hours = [
-    { key: 'morning', label: 'Morning (6am - 12pm)' },
-    { key: 'afternoon', label: 'Afternoon (12pm - 6pm)' },
-    { key: 'evening', label: 'Evening (6pm - 10pm)' }
-  ];
-
-  const groupOptions = [
-    { key: 'individual', label: 'Individual Sessions' },
-    { key: 'smallGroup', label: 'Small Groups (2-4)' },
-    { key: 'largeGroup', label: 'Large Groups (5+)' }
-  ];
-
   return (
-    <View className="flex-1 bg-white">
-      {/* Progress Indicator */}
-      <View className="px-4 pt-4 bg-white">
-        <OnboardingProgress
-          currentStep={3}
-          totalSteps={6}
-          stepLabels={['Welcome', 'Expertise', 'Availability', 'Pricing', 'Payments', 'Review']}
-          color="#059669"
-          showStepLabels={false}
-        />
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.stepIndicator}>Step {CURRENT_STEP} of {STEP_COUNT}</Text>
+        </View>
+        <View style={styles.headerRight} />
       </View>
 
-      <ScrollView className="flex-1 px-4 py-6">
-        <View className="mb-2">
-          <Text className="text-2xl font-bold text-gray-800">Availability & Location</Text>
-          <Text className="text-gray-600 mt-1">Set your preferred coaching times and locations</Text>
+      {/* Progress Bar */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${(CURRENT_STEP / STEP_COUNT) * 100}%` }]} />
         </View>
-        
-        {/* Availability Days */}
-        <View className="mt-6">
-          <View className="flex-row items-center mb-3">
-            <Calendar size={18} color="#2563EB" className="mr-2" />
-            <Text className="font-bold text-gray-800 text-lg">Available Days</Text>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIconContainer}>
+            <Ionicons name="calendar" size={32} color={COLORS.primary} />
           </View>
-          <Text className="text-gray-600 text-sm mb-3">Select the days you're available for coaching</Text>
-          
-          <View className="flex-row flex-wrap justify-between">
-            {days.map((day) => (
-              <TouchableOpacity
-                key={day.key}
-                className={`border rounded-xl px-4 py-3 mb-2 ${availability[day.key] ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}
-                style={{ width: '30%' }}
-                onPress={() => toggleDay(day.key)}
-              >
-                <Text className={`text-center ${availability[day.key] ? 'text-white' : 'text-gray-700'}`}>
-                  {day.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={styles.heroTitle}>Availability</Text>
+          <Text style={styles.heroSubtitle}>
+            When can you coach?
+          </Text>
         </View>
-        
-        {/* Time of Day */}
-        <View className="mt-6">
-          <View className="flex-row items-center mb-3">
-            <Clock size={18} color="#2563EB" className="mr-2" />
-            <Text className="font-bold text-gray-800 text-lg">Time of Day</Text>
-          </View>
-          <Text className="text-gray-600 text-sm mb-3">When are you available for coaching sessions?</Text>
-          
-          <View>
-            {hours.map((hour) => (
-              <TouchableOpacity
-                key={hour.key}
-                className={`flex-row items-center justify-between border rounded-xl px-4 py-3 mb-2 ${selectedHours[hour.key] ? 'border-blue-300 bg-blue-50' : 'border-gray-300'}`}
-                onPress={() => toggleHour(hour.key)}
-              >
-                <Text className={selectedHours[hour.key] ? 'text-blue-700 font-medium' : 'text-gray-700'}>
-                  {hour.label}
-                </Text>
-                <View className={`w-5 h-5 rounded-full border ${selectedHours[hour.key] ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                  {selectedHours[hour.key] && <View className="w-3 h-3 bg-white rounded-full m-1" />}
-                </View>
-              </TouchableOpacity>
-            ))}
+
+        {/* Days Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>DAYS</Text>
+
+          <View style={styles.daysRow}>
+            {days.map((day) => {
+              const isSelected = availability[day.key];
+              return (
+                <TouchableOpacity
+                  key={day.key}
+                  style={[styles.dayCircle, isSelected && styles.dayCircleSelected]}
+                  onPress={() => toggleDay(day.key)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}>
+                    {day.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
-        
-        {/* Location Preferences */}
-        <View className="mt-6">
-          <View className="flex-row items-center mb-3">
-            <MapPin size={18} color="#2563EB" className="mr-2" />
-            <Text className="font-bold text-gray-800 text-lg">Location Preferences</Text>
+
+        {/* Times Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>TIMES</Text>
+
+          <View style={styles.chipGrid}>
+            {timeSlots.map((slot) => {
+              const isSelected = selectedHours[slot.key];
+              return (
+                <TouchableOpacity
+                  key={slot.key}
+                  style={[styles.timeChip, isSelected && styles.timeChipSelected]}
+                  onPress={() => toggleHour(slot.key)}
+                  activeOpacity={0.7}
+                >
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={14} color="#FFFFFF" style={styles.chipIcon} />
+                  )}
+                  <Text style={[styles.timeChipText, isSelected && styles.timeChipTextSelected]}>
+                    {slot.label}
+                  </Text>
+                  <Text style={[styles.timeChipSubtext, isSelected && styles.timeChipSubtextSelected]}>
+                    {slot.time}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          
-          <View className="border border-gray-300 rounded-xl p-4 mb-4">
-            <TouchableOpacity 
-              className={`flex-row items-center justify-between py-2 ${locationPreference === 'in-person' ? 'border-b border-gray-200 pb-4 mb-3' : ''}`}
-              onPress={() => setLocationPreference('in-person')}
-            >
-              <Text className={locationPreference === 'in-person' ? 'text-blue-700 font-medium' : 'text-gray-700'}>
-                In-Person Coaching
-              </Text>
-              <View className={`w-5 h-5 rounded-full border ${locationPreference === 'in-person' ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                {locationPreference === 'in-person' && <View className="w-3 h-3 bg-white rounded-full m-1" />}
+        </View>
+
+        {/* Location Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>LOCATION</Text>
+
+          <View style={styles.card}>
+            {/* In-Person Toggle */}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleContent}>
+                <Ionicons name="location" size={20} color={COLORS.secondaryLabel} />
+                <Text style={styles.toggleLabel}>In-person coaching</Text>
               </View>
-            </TouchableOpacity>
-            
-            {locationPreference === 'in-person' && (
-              <View className="mt-3">
-                <Text className="text-gray-600 text-sm mb-2">Maximum Travel Distance</Text>
-                <View className="flex-row items-center">
-                  <Text className="text-gray-700 mr-2">0 km</Text>
-                  <View className="flex-1 h-2 bg-gray-200 rounded-full">
-                    <View 
-                      className="h-2 bg-blue-600 rounded-full" 
-                      style={{ width: `${(maxDistance / 100) * 100}%` }}
-                    />
-                  </View>
-                  <Text className="text-gray-700 ml-2">100 km</Text>
+              <Switch
+                value={inPersonCoaching}
+                onValueChange={setInPersonCoaching}
+                trackColor={{ false: COLORS.unselected, true: COLORS.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Distance Slider (only shown when in-person is enabled) */}
+            {inPersonCoaching && (
+              <View style={styles.sliderContainer}>
+                <View style={styles.sliderHeader}>
+                  <Text style={styles.sliderLabel}>Travel distance</Text>
+                  <Text style={styles.sliderValue}>{maxDistance} km</Text>
                 </View>
-                <Text className="text-center text-blue-600 font-medium mt-1">{maxDistance} km</Text>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={5}
+                  maximumValue={100}
+                  step={5}
+                  value={maxDistance}
+                  onValueChange={setMaxDistance}
+                  minimumTrackTintColor={COLORS.primary}
+                  maximumTrackTintColor={COLORS.unselected}
+                  thumbTintColor={COLORS.primary}
+                />
+                <View style={styles.sliderRange}>
+                  <Text style={styles.sliderRangeText}>5 km</Text>
+                  <Text style={styles.sliderRangeText}>100 km</Text>
+                </View>
               </View>
             )}
-            
-            <TouchableOpacity 
-              className="flex-row items-center justify-between py-2 mt-3"
-              onPress={() => setLocationPreference('remote')}
-            >
-              <Text className={locationPreference === 'remote' ? 'text-blue-700 font-medium' : 'text-gray-700'}>
-                Remote Coaching (Video Calls)
-              </Text>
-              <View className={`w-5 h-5 rounded-full border ${locationPreference === 'remote' ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                {locationPreference === 'remote' && <View className="w-3 h-3 bg-white rounded-full m-1" />}
+
+            <View style={styles.inputSeparator} />
+
+            {/* Remote Toggle */}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleContent}>
+                <Ionicons name="videocam" size={20} color={COLORS.secondaryLabel} />
+                <Text style={styles.toggleLabel}>Remote / video calls</Text>
               </View>
-            </TouchableOpacity>
-          </View>
-          
-          <View className="flex-row items-center justify-between bg-blue-50 rounded-xl p-4">
-            <View className="flex-row items-center">
-              <Globe size={18} color="#2563EB" className="mr-2" />
-              <Text className="text-gray-800 font-medium">Available for remote coaching</Text>
+              <Switch
+                value={remoteCoaching}
+                onValueChange={setRemoteCoaching}
+                trackColor={{ false: COLORS.unselected, true: COLORS.primary }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-            <Switch
-              value={remoteCoaching}
-              onValueChange={setRemoteCoaching}
-              trackColor={{ false: "#d1d5db", true: "#2563eb" }}
-              thumbColor={remoteCoaching ? "#ffffff" : "#f4f4f5"}
-            />
           </View>
         </View>
-        
-        {/* Group Sizes */}
-        <View className="mt-6">
-          <View className="flex-row items-center mb-3">
-            <Users size={18} color="#2563EB" className="mr-2" />
-            <Text className="font-bold text-gray-800 text-lg">Group Sizes</Text>
-          </View>
-          <Text className="text-gray-600 text-sm mb-3">What session sizes can you accommodate?</Text>
-          
-          <View>
-            {groupOptions.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                className={`flex-row items-center justify-between border rounded-xl px-4 py-3 mb-2 ${groupSizes[option.key] ? 'border-blue-300 bg-blue-50' : 'border-gray-300'}`}
-                onPress={() => toggleGroupSize(option.key)}
-              >
-                <Text className={groupSizes[option.key] ? 'text-blue-700 font-medium' : 'text-gray-700'}>
-                  {option.label}
-                </Text>
-                <View className={`w-5 h-5 rounded-full border ${groupSizes[option.key] ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                  {groupSizes[option.key] && <View className="w-3 h-3 bg-white rounded-full m-1" />}
-                </View>
-              </TouchableOpacity>
-            ))}
+
+        {/* Group Size Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>GROUP SIZE</Text>
+
+          <View style={styles.chipGrid}>
+            {groupOptions.map((option) => {
+              const isSelected = groupSizes[option.key];
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.groupChip, isSelected && styles.groupChipSelected]}
+                  onPress={() => toggleGroupSize(option.key)}
+                  activeOpacity={0.7}
+                >
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={14} color="#FFFFFF" style={styles.chipIcon} />
+                  )}
+                  <Text style={[styles.groupChipText, isSelected && styles.groupChipTextSelected]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
+
+        {/* Summary */}
+        {isFormValid() && (
+          <View style={styles.summaryContainer}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Schedule</Text>
+              <Text style={styles.summaryValue} numberOfLines={1}>
+                {getSummaryText()}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Bottom padding */}
+        <View style={{ height: 40 }} />
       </ScrollView>
-      
-      {/* Action Buttons */}
-      <View className="px-4 pb-6">
+
+      {/* Footer */}
+      <View style={styles.footer}>
         <TouchableOpacity
-          className={`flex-row items-center justify-center py-4 rounded-xl mb-4 ${
-            isFormValid() ? 'bg-blue-600' : 'bg-gray-300'
-          }`}
+          style={[styles.continueButton, !isFormValid() && styles.continueButtonDisabled]}
           disabled={!isFormValid()}
           onPress={handleContinue}
         >
-          <Text className="text-white font-bold text-lg">Continue to Pricing</Text>
-          <ChevronRight color="white" size={20} className="ml-2" />
+          <Text style={[styles.continueButtonText, !isFormValid() && styles.continueButtonTextDisabled]}>
+            Continue
+          </Text>
+          <Ionicons
+            name="arrow-forward"
+            size={20}
+            color={isFormValid() ? '#FFFFFF' : COLORS.tertiaryLabel}
+          />
         </TouchableOpacity>
 
-        <TouchableOpacity className="py-3 items-center" onPress={handleCompleteLater}>
-          <Text className="text-blue-600 font-medium">Complete later</Text>
+        <TouchableOpacity style={styles.laterButton} onPress={handleCompleteLater}>
+          <Text style={styles.laterButtonText}>Save & Complete Later</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: COLORS.background,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stepIndicator: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  headerRight: {
+    width: 44,
+  },
+
+  // Progress
+  progressContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    backgroundColor: COLORS.background,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: COLORS.unselected,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+
+  // Scroll
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+
+  // Hero
+  hero: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  heroIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.label,
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+    textAlign: 'center',
+  },
+
+  // Section
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+
+  // Days
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCircleSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  dayLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.label,
+  },
+  dayLabelSelected: {
+    color: '#FFFFFF',
+  },
+
+  // Chips
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  chipIcon: {
+    marginRight: 6,
+  },
+
+  // Time Chips
+  timeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  timeChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  timeChipText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.label,
+  },
+  timeChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  timeChipSubtext: {
+    fontSize: 13,
+    color: COLORS.tertiaryLabel,
+    marginLeft: 6,
+  },
+  timeChipSubtextSelected: {
+    color: 'rgba(255,255,255,0.8)',
+  },
+
+  // Group Chips
+  groupChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  groupChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  groupChipText: {
+    fontSize: 15,
+    color: COLORS.label,
+  },
+  groupChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+
+  // Card
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+
+  // Toggle Row
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  toggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toggleLabel: {
+    fontSize: 17,
+    color: COLORS.label,
+    marginLeft: 12,
+  },
+
+  // Slider
+  sliderContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sliderLabel: {
+    fontSize: 13,
+    color: COLORS.tertiaryLabel,
+  },
+  sliderValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  sliderRange: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sliderRangeText: {
+    fontSize: 11,
+    color: COLORS.tertiaryLabel,
+  },
+
+  inputSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: COLORS.separator,
+    marginLeft: 16,
+  },
+
+  // Summary
+  summaryContainer: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 15,
+    color: COLORS.secondaryLabel,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 12,
+  },
+
+  // Footer
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    backgroundColor: COLORS.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.separator,
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  continueButtonDisabled: {
+    backgroundColor: COLORS.unselected,
+  },
+  continueButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  continueButtonTextDisabled: {
+    color: COLORS.tertiaryLabel,
+  },
+  laterButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  laterButtonText: {
+    fontSize: 15,
+    color: COLORS.primary,
+  },
+});
 
 export default CoachOnboardingAvailability;

@@ -22,6 +22,8 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/providers/AuthProvider';
+import { TOUR_STORAGE_KEYS } from '@/hooks/useOnboardingTour';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
 import { sailorBoatService } from '@/services/SailorBoatService';
@@ -51,7 +53,7 @@ interface UserBoat {
 }
 
 export default function AccountScreen() {
-  const { user, userProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
+  const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities } = useAuth();
   const { t } = useTranslation(['settings', 'common']);
 
   // User settings (tips, learning links)
@@ -216,6 +218,30 @@ export default function AccountScreen() {
     );
   }, [user, userProfile]);
 
+  // Handler for replaying the onboarding tour
+  const handleReplayTour = useCallback(async () => {
+    Alert.alert(
+      'Replay Tour',
+      'This will restart the onboarding tour the next time you open the Races tab.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Replay',
+          onPress: async () => {
+            try {
+              // Remove the tour completion flag
+              await AsyncStorage.removeItem(TOUR_STORAGE_KEYS.sailor);
+              Alert.alert('Success', 'The onboarding tour will play when you open the Races tab.');
+            } catch (error) {
+              console.error('[Account] Failed to reset tour:', error);
+              Alert.alert('Error', 'Failed to reset tour. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, []);
+
   // Early return for unauthenticated
   if (!user) {
     return (
@@ -293,6 +319,33 @@ export default function AccountScreen() {
           />
         </TufteAccountSection>
 
+        {/* Become a Coach - shown for sailors without coaching capability */}
+        {userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching && (
+          <TufteAccountSection title="Expand Your Role">
+            <TufteSettingRow
+              label="Become a Coach"
+              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+              isLast
+            />
+          </TufteAccountSection>
+        )}
+
+        {/* Coach Profile - shown for users with coaching capability */}
+        {capabilities?.hasCoaching && (
+          <TufteAccountSection title="Coach Profile">
+            <TufteDataRow
+              label="Status"
+              value={capabilities.coachingProfile?.profile_published ? 'Published' : 'Draft'}
+              status={capabilities.coachingProfile?.profile_published ? 'active' : 'inactive'}
+            />
+            <TufteSettingRow
+              label="Edit Coach Profile"
+              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+              isLast
+            />
+          </TufteAccountSection>
+        )}
+
         {/* Preferences */}
         <TufteAccountSection title="Preferences">
           <TufteSettingRow
@@ -345,6 +398,10 @@ export default function AccountScreen() {
               onPress={handleResetSampleData}
             />
           )}
+          <TufteSettingRow
+            label="Replay Onboarding Tour"
+            onPress={handleReplayTour}
+          />
           <TufteSettingRow
             label="Help & Support"
             onPress={() => Alert.alert('Support', 'Email us at support@regattaflow.com')}

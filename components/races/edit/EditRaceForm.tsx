@@ -49,6 +49,7 @@ import {
   AlertTriangle,
   Trash2,
   X,
+  Check,
   Target,
   Users,
   User,
@@ -75,7 +76,7 @@ import { AccordionSection } from '../AccordionSection';
 import { RaceTypeSelector, type RaceType } from '../RaceTypeSelector';
 import { LocationMapPicker } from '../LocationMapPicker';
 import { BoatSelector } from '../AddRaceDialog/BoatSelector';
-import { CourseBuilder, type CourseDraft } from '@/components/courses/CourseBuilder';
+import { DistanceRouteMap, type RouteWaypoint } from '@/components/races/DistanceRouteMap';
 import { TufteTokens, colors } from '@/constants/designSystem';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { supabase } from '@/services/supabase';
@@ -354,8 +355,9 @@ export function EditRaceForm({
   // Location picker state
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
-  // Course builder state (for distance races)
-  const [showCourseBuilder, setShowCourseBuilder] = useState(false);
+  // Route map state (for distance races - unified map component)
+  const [showRouteMap, setShowRouteMap] = useState(false);
+  const [tempWaypoints, setTempWaypoints] = useState<RouteWaypoint[]>([]);
 
   // ==========================================================================
   // DATA LOADING
@@ -606,28 +608,49 @@ export function EditRaceForm({
     }
   }, [updateField]);
 
-  const handleCourseDesigned = useCallback((course: CourseDraft) => {
-    // Extract waypoints from course marks
-    const waypoints = course.marks.map(m => ({
-      name: m.name,
-      lat: m.lat,
-      lng: m.lng,
-      type: m.type,
+  // ==========================================================================
+  // DISTANCE ROUTE MAP HANDLERS (Unified map component for distance races)
+  // ==========================================================================
+
+  // Convert form waypoints to RouteWaypoint format for DistanceRouteMap
+  const formWaypointsToRouteWaypoints = useCallback((
+    waypoints: RaceFormData['routeWaypoints']
+  ): RouteWaypoint[] => {
+    return waypoints.map((wp, idx) => ({
+      id: `waypoint-${idx}`,
+      name: wp.name || `Waypoint ${idx + 1}`,
+      latitude: wp.lat,
+      longitude: wp.lng,
+      type: (wp.type as RouteWaypoint['type']) || 'waypoint',
+      required: true,
     }));
-    updateField('routeWaypoints', waypoints);
+  }, []);
 
-    // Auto-fill distance if calculated
-    if (course.length) {
-      updateField('totalDistanceNm', course.length.toFixed(2));
-    }
+  // Convert RouteWaypoint back to form format
+  const routeWaypointsToFormWaypoints = useCallback((
+    waypoints: RouteWaypoint[]
+  ): RaceFormData['routeWaypoints'] => {
+    return waypoints.map((wp) => ({
+      name: wp.name,
+      lat: wp.latitude,
+      lng: wp.longitude,
+      type: wp.type,
+    }));
+  }, []);
 
-    // Auto-fill venue from course if set
-    if (course.venue && !formData.venue) {
-      updateField('venue', course.venue);
-    }
+  const handleOpenRouteMap = useCallback(() => {
+    setTempWaypoints(formWaypointsToRouteWaypoints(formData.routeWaypoints));
+    setShowRouteMap(true);
+  }, [formData.routeWaypoints, formWaypointsToRouteWaypoints]);
 
-    setShowCourseBuilder(false);
-  }, [updateField, formData.venue]);
+  const handleSaveWaypoints = useCallback(() => {
+    updateField('routeWaypoints', routeWaypointsToFormWaypoints(tempWaypoints));
+    setShowRouteMap(false);
+  }, [tempWaypoints, updateField, routeWaypointsToFormWaypoints]);
+
+  const handleTotalDistanceChange = useCallback((distance: number) => {
+    updateField('totalDistanceNm', distance.toFixed(1));
+  }, [updateField]);
 
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return '';
@@ -904,9 +927,8 @@ export function EditRaceForm({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert('Success', 'Race updated successfully', [
-        { text: 'OK', onPress: () => onSave?.(raceId) }
-      ]);
+      // Navigate back immediately without alert for smoother UX
+      onSave?.(raceId);
     } catch (err) {
       logger.error('[EditRaceForm] Unexpected save error:', err);
       Alert.alert('Error', 'An unexpected error occurred');
@@ -1164,7 +1186,7 @@ export function EditRaceForm({
                 }
                 placeholder="Design route"
                 accessory="chevron"
-                onPress={() => setShowCourseBuilder(true)}
+                onPress={handleOpenRouteMap}
                 showSeparator={false}
               />
             </EditFormSection>
@@ -1845,39 +1867,40 @@ export function EditRaceForm({
         initialName={formData.venue}
       />
 
-      {/* Course Builder for Distance Races */}
+      {/* Route Map for Distance Races (unified map component - works on web + native) */}
       <Modal
-        visible={showCourseBuilder}
+        visible={showRouteMap}
         animationType="slide"
         presentationStyle="fullScreen"
-        onRequestClose={() => setShowCourseBuilder(false)}
+        onRequestClose={() => setShowRouteMap(false)}
       >
-        <CourseBuilder
-          initialCourse={
-            formData.routeWaypoints.length > 0
-              ? {
-                  name: formData.name || 'Race Route',
-                  venue: formData.venue,
-                  courseType: 'coastal',
-                  marks: formData.routeWaypoints.map((wp, idx) => ({
-                    name: wp.name || `Waypoint ${idx + 1}`,
-                    lat: wp.lat,
-                    lng: wp.lng,
-                    type: wp.type as any,
-                  })),
-                  windRange: { min: 8, max: 18 },
-                }
-              : undefined
-          }
-          venueCenter={
-            formData.venueCoordinates
-              ? { lat: formData.venueCoordinates.lat, lng: formData.venueCoordinates.lng }
-              : undefined
-          }
-          venueName={formData.venue}
-          onSave={handleCourseDesigned}
-          onCancel={() => setShowCourseBuilder(false)}
-        />
+        <SafeAreaView style={styles.mapModalContainer}>
+          <View style={styles.mapModalHeader}>
+            <TouchableOpacity style={styles.mapModalButton} onPress={() => setShowRouteMap(false)}>
+              <X size={24} color={colors.neutral[500]} />
+            </TouchableOpacity>
+            <Text style={styles.mapModalTitle}>Plot Route</Text>
+            <TouchableOpacity
+              style={[styles.mapModalButton, styles.mapModalSaveButton]}
+              onPress={handleSaveWaypoints}
+            >
+              <Check size={20} color="#FFFFFF" />
+              <Text style={styles.mapModalSaveText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.mapContainer}>
+            <DistanceRouteMap
+              waypoints={tempWaypoints}
+              onWaypointsChange={setTempWaypoints}
+              onTotalDistanceChange={handleTotalDistanceChange}
+              initialCenter={
+                formData.venueCoordinates
+                  ? { lat: formData.venueCoordinates.lat, lng: formData.venueCoordinates.lng }
+                  : undefined
+              }
+            />
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -2077,6 +2100,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: IOS_COLORS.systemBackground,
+  },
+
+  // Route Map Modal styles
+  mapModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+  },
+  mapModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  mapModalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.neutral[900],
+  },
+  mapModalButton: {
+    padding: 8,
+  },
+  mapModalSaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary[600],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  mapModalSaveText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  mapContainer: {
+    flex: 1,
   },
 });
 

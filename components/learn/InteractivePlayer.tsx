@@ -51,6 +51,11 @@ import { CourseSignalsInteractive } from './interactives/CourseSignalsInteractiv
 // Distance racing interactives
 import { RouteBriefingInteractive } from './interactives/RouteBriefingInteractive';
 import { WeatherRoutingInteractive } from './interactives/WeatherRoutingInteractive';
+// Launch phase strategy interactives
+import { DecodingWindInteractive } from './interactives/DecodingWindInteractive';
+import { PerfectStartInteractive } from './interactives/PerfectStartInteractive';
+import { FirstBeatInteractive } from './interactives/FirstBeatInteractive';
+import { RacingInCurrentInteractive } from './interactives/RacingInCurrentInteractive';
 
 // Component registry
 const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -91,6 +96,11 @@ const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
   // Distance racing interactives
   'RouteBriefingInteractive': RouteBriefingInteractive,
   'WeatherRoutingInteractive': WeatherRoutingInteractive,
+  // Launch phase strategy interactives
+  'DecodingWindInteractive': DecodingWindInteractive,
+  'PerfectStartInteractive': PerfectStartInteractive,
+  'FirstBeatInteractive': FirstBeatInteractive,
+  'RacingInCurrentInteractive': RacingInCurrentInteractive,
 };
 
 export function InteractivePlayer({ componentName, onComplete }: InteractivePlayerProps) {

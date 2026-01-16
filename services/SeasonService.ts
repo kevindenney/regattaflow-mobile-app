@@ -281,7 +281,7 @@ class SeasonServiceClass {
     const { data, error } = await query;
 
     if (error) {
-      logger.error('[SeasonService] Failed to get user seasons', { userId, error });
+      logger.error('Failed to get user seasons:', error.message, { userId, code: error.code, details: error.details });
       throw new Error(`Failed to get user seasons: ${error.message}`);
     }
 
