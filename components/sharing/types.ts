@@ -21,10 +21,55 @@ export interface WeatherForecast {
   windDirection?: string;
   temperature?: number;
   waveHeight?: number;
+  wavePeriod?: number;
+  waveDirection?: string;
   tideState?: string;
   tideHeight?: number;
   currentSpeed?: number;
   currentDirection?: string;
+  waterTemperature?: number;
+}
+
+/** Hourly weather data point for detailed forecast */
+export interface HourlyWeatherPoint {
+  time: string; // ISO timestamp or formatted time
+  windSpeed?: number;
+  windDirection?: number | string;
+  tideHeight?: number;
+  tideState?: 'rising' | 'falling' | 'slack';
+}
+
+/** Tide extreme (high/low) */
+export interface TideExtreme {
+  type: 'high' | 'low';
+  time: string;
+  height: number;
+}
+
+/** Detailed weather briefing for sharing */
+export interface DetailedWeatherBriefing {
+  summary?: string; // e.g., "E 6-10kts building to 12-15kts"
+  windTrend?: 'building' | 'easing' | 'steady';
+  hourlyForecast?: HourlyWeatherPoint[];
+  tideExtremes?: TideExtreme[];
+  tideTurnTime?: string;
+  currentSpeed?: number;
+  currentDirection?: string;
+  waveHeight?: number;
+  wavePeriod?: number;
+  waveDirection?: string;
+  airTemperature?: number;
+  waterTemperature?: number;
+}
+
+/** Sail selection details */
+export interface SailPlan {
+  mainsail?: string;
+  jib?: string;
+  spinnaker?: string;
+  codeZero?: string;
+  stormSails?: string;
+  notes?: string;
 }
 
 export interface RigTuning {
@@ -192,6 +237,12 @@ export interface PreRaceShareContent {
   windStrategy?: string;
   tideStrategy?: string;
   currentStrategy?: string;
+
+  /** Detailed weather briefing with hourly forecast */
+  weatherBriefing?: DetailedWeatherBriefing;
+
+  /** Sail plan with individual sail selections */
+  sailPlan?: SailPlan;
 
   /** Extracted NOR/SI data for crew briefing */
   documentData?: DocumentShareData;

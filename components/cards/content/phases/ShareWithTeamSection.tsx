@@ -18,9 +18,10 @@ import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { UnifiedSharingSheet } from '@/components/sharing/UnifiedSharingSheet';
 import { ShareChannelGrid } from '@/components/sharing/ShareChannelGrid';
 import { useShareHandlers } from '@/components/sharing/hooks/useShareHandlers';
-import type { ShareChannel, DocumentShareData, WatchScheduleData } from '@/components/sharing/types';
+import type { ShareChannel, DocumentShareData, WatchScheduleData, DetailedWeatherBriefing, SailPlan, HourlyWeatherPoint, TideExtreme } from '@/components/sharing/types';
 import type { CardRaceData } from '@/components/cards/types';
 import type { ShareableContent, PreRaceShareContent } from '@/components/sharing/types';
+import type { RaceWeatherForecastData } from '@/hooks/useRaceWeatherForecast';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -108,19 +109,115 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
   // Fetch weather forecast for the race
   const { data: forecastData, loading: forecastLoading, error: forecastError } = useRaceWeatherForecast(venueForForecast, race.date, !!venueForForecast);
 
+  // Build comprehensive weather briefing from forecast data
+  const buildWeatherBriefing = (forecast: RaceWeatherForecastData | null | undefined): DetailedWeatherBriefing | undefined => {
+    if (!forecast?.raceWindow) return undefined;
+
+    const rw = forecast.raceWindow;
+
+    // Build wind summary (e.g., "E 6-10kts building")
+    const windDir = rw.windDirectionAtStart || '';
+    const windMin = Math.min(rw.windAtStart, rw.windAtEnd);
+    const windMax = Math.max(rw.windAtStart, rw.windAtEnd);
+    const trendLabel = forecast.windTrend === 'building' ? ' building' :
+                       forecast.windTrend === 'easing' ? ' easing' : '';
+    const summary = windMin === windMax
+      ? `${windDir} ${windMin}kts${trendLabel}`
+      : `${windDir} ${windMin}-${windMax}kts${trendLabel}`;
+
+    // Convert hourly wind to HourlyWeatherPoint format
+    const hourlyForecast: HourlyWeatherPoint[] | undefined = forecast.hourlyWind?.map(hw => ({
+      time: hw.time,
+      windSpeed: hw.value,
+      windDirection: hw.direction,
+    }));
+
+    // Build tide extremes
+    const tideExtremes: TideExtreme[] = [];
+    if (forecast.highTide) {
+      tideExtremes.push({
+        type: 'high',
+        time: forecast.highTide.time,
+        height: forecast.highTide.height,
+      });
+    }
+    if (forecast.lowTide) {
+      tideExtremes.push({
+        type: 'low',
+        time: forecast.lowTide.time,
+        height: forecast.lowTide.height,
+      });
+    }
+    // Sort by time
+    tideExtremes.sort((a, b) => a.time.localeCompare(b.time));
+
+    return {
+      summary,
+      windTrend: forecast.windTrend,
+      hourlyForecast,
+      tideExtremes: tideExtremes.length > 0 ? tideExtremes : undefined,
+      tideTurnTime: forecast.turnTime,
+      currentSpeed: undefined, // Will be added from currentAtRaceTime if available
+      currentDirection: undefined,
+      waveHeight: rw.waveHeightAtStart,
+      wavePeriod: rw.wavePeriodAtStart,
+      waveDirection: rw.waveDirectionAtStart,
+      airTemperature: rw.airTemperature,
+      waterTemperature: rw.waterTemperature,
+    };
+  };
+
+  // Build sail plan from intentions
+  const buildSailPlan = (): SailPlan | undefined => {
+    const sail = intentions?.sailSelection;
+    if (!sail) return undefined;
+
+    return {
+      mainsail: sail.mainsailName,
+      jib: sail.jibName,
+      spinnaker: sail.spinnakerName,
+      notes: sail.notes,
+    };
+  };
+
   // Build shareable content from race data and sailor's preparation
   const shareableContent = useMemo((): ShareableContent => {
     // Extract strategy notes from intentions
     const strategyNotes = intentions?.strategyNotes || {};
 
-    // Build rig tuning info from intentions
-    const rigTuning = intentions?.rigIntentions ? {
-      preset: selectedRigPresetId || undefined,
-      windRange: undefined,
-      settings: intentions.rigIntentions.settings ? {
-        cunningham: Object.values(intentions.rigIntentions.settings).find(s => s)?.value,
+    // Build comprehensive rig tuning info from intentions
+    const rigIntentions = intentions?.rigIntentions;
+    const rigTuning = rigIntentions ? {
+      preset: rigIntentions.presetName || selectedRigPresetId || undefined,
+      windRange: rigIntentions.windRange || undefined,
+      settings: rigIntentions.settings ? {
+        backstay: rigIntentions.settings.backstay?.value,
+        forestay: rigIntentions.settings.forestay?.value,
+        cunningham: rigIntentions.settings.cunningham?.value,
+        outhaul: rigIntentions.settings.outhaul?.value,
+        vang: rigIntentions.settings.vang?.value,
+        mast: rigIntentions.settings.mast?.value,
+        upperShrouds: rigIntentions.settings.upperShrouds?.value,
+        lowerShrouds: rigIntentions.settings.lowerShrouds?.value,
       } : undefined,
+      notes: rigIntentions.notes || rigNotes || undefined,
     } : undefined;
+
+    // Build comprehensive weather briefing
+    const weatherBriefing = buildWeatherBriefing(forecastData);
+
+    // Add current data to weather briefing if available
+    if (weatherBriefing && forecastData?.raceWindow) {
+      // Current speed/direction would come from additional data sources
+      // For now, use data already in the race object
+      if (race.tide?.current?.speed) {
+        weatherBriefing.currentSpeed = race.tide.current.speed;
+        weatherBriefing.currentDirection = race.tide.current.direction;
+      }
+    }
+
+    // Build sail plan
+    const sailPlan = buildSailPlan();
 
     // Get wind/tide from race data OR from fetched forecast
     const raceWindow = forecastData?.raceWindow;
@@ -265,14 +362,22 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
         startTime: race.startTime,
         raceType: race.race_type,
         totalDistanceNm: race.total_distance_nm as number | undefined,
+        courseName: (race as any).course_name || (race as any).courseName,
       },
       // Strategy notes from sailor's preparation
       userNotes,
       startStrategy: strategyNotes['start'] || strategyNotes['start-strategy'] || undefined,
       upwindStrategy: strategyNotes['upwind'] || strategyNotes['upwind-strategy'] || undefined,
       downwindStrategy: strategyNotes['downwind'] || strategyNotes['downwind-strategy'] || undefined,
+      windwardMarkStrategy: strategyNotes['windward-mark'] || strategyNotes['windwardMark'] || undefined,
+      leewardMarkStrategy: strategyNotes['leeward-mark'] || strategyNotes['leewardMark'] || undefined,
+      finishStrategy: strategyNotes['finish'] || strategyNotes['finish-strategy'] || undefined,
       // AI-generated insights from conditions
       aiInsights: aiInsights.length > 0 ? aiInsights : undefined,
+      // Comprehensive weather briefing with hourly data
+      weatherBriefing,
+      // Sail plan with individual sail selections
+      sailPlan,
       // NOR/SI extracted data for crew briefing
       documentData,
       // Watch schedule for distance/offshore races
@@ -347,7 +452,7 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
                 styles.emptyActionButtonMuted,
                 pressed && styles.emptyActionButtonPressed,
               ]}
-              onPress={() => router.push('/(tabs)/crew')}
+              onPress={() => router.push('/crew')}
             >
               <UserPlus size={14} color={IOS_COLORS.gray} />
               <Text style={styles.emptyActionTextMuted}>Add Crew</Text>
