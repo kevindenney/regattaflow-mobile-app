@@ -18,6 +18,20 @@ export interface RouteWaypoint {
   longitude: number;
   type: 'start' | 'waypoint' | 'gate' | 'finish';
   required: boolean;
+  needsPositioning?: boolean; // True if geocoding failed and user needs to position manually
+}
+
+// Course element types for start/finish areas and prohibited zones
+export interface CourseArea {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+export interface ProhibitedAreaMarker {
+  name: string;
+  description?: string;
+  coordinates?: Array<{ lat: number; lng: number }>;
 }
 
 interface DistanceRouteMapProps {
@@ -28,6 +42,14 @@ interface DistanceRouteMapProps {
   totalDistanceNm?: number;
   onTotalDistanceChange?: (distance: number) => void;
   onReimportWaypoints?: () => void; // Optional callback for re-importing waypoints
+  // Start/Finish areas from AI extraction (geocoded)
+  startArea?: CourseArea;
+  finishArea?: CourseArea;
+  onStartAreaChange?: (coords: { lat: number; lng: number }) => void;
+  onFinishAreaChange?: (coords: { lat: number; lng: number }) => void;
+  // Prohibited areas from AI extraction (geocoded)
+  prohibitedAreas?: ProhibitedAreaMarker[];
+  onProhibitedAreasChange?: (areas: ProhibitedAreaMarker[]) => void;
 }
 
 // Calculate distance between two points in nautical miles
@@ -84,11 +106,20 @@ export function DistanceRouteMap({
   initialZoom = 10,
   onTotalDistanceChange,
   onReimportWaypoints,
+  startArea,
+  finishArea,
+  onStartAreaChange,
+  onFinishAreaChange,
+  prohibitedAreas,
+  onProhibitedAreasChange,
 }: DistanceRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const maplibreRef = useRef<any>(null); // Store maplibre module reference
   const markersRef = useRef<any[]>([]);
+  const startMarkerRef = useRef<any>(null);
+  const finishMarkerRef = useRef<any>(null);
+  const prohibitedMarkersRef = useRef<any[]>([]);
   const polylineRef = useRef<any>(null);
   const hasFitBoundsRef = useRef(false); // Track if we've already fit bounds to prevent re-fitting on every update
   const lastWaypointsKeyRef = useRef<string>(''); // Track waypoint changes to detect actual coordinate changes
@@ -263,7 +294,6 @@ export function DistanceRouteMap({
           
           // Check if we're selecting location for editing a waypoint
           if (isSelectingOnMapRef.current && editingWaypointRef.current) {
-            console.log('[DistanceRouteMap] Selecting location for waypoint:', lat, lng);
             // Update coordinates via state - this will trigger a re-render
             setEditLat(lat.toFixed(6));
             setEditLng(lng.toFixed(6));
@@ -274,13 +304,10 @@ export function DistanceRouteMap({
           }
           
           // Otherwise, handle adding new waypoint
-          console.log('[DistanceRouteMap] Map clicked, isAddingWaypoint:', isAddingWaypointRef.current);
           if (!isAddingWaypointRef.current) return;
-          
+
           // Prevent default map behavior (panning) when adding waypoints
           e.preventDefault?.();
-          
-          console.log('[DistanceRouteMap] Adding waypoint at:', lat, lng, 'type:', nextWaypointTypeRef.current);
           
           // Create waypoint directly here to avoid stale closure issues
           const currentWaypoints = waypointsRef.current;
@@ -325,7 +352,6 @@ export function DistanceRouteMap({
         });
 
         map.on('load', () => {
-          console.log('[DistanceRouteMap] Map loaded, initializing...');
           mapRef.current = map;
           setMapLoaded(true);
           
@@ -401,49 +427,23 @@ export function DistanceRouteMap({
 
   // Update map when waypoints change
   useEffect(() => {
-    console.log('[DistanceRouteMap] Waypoints effect triggered:', {
-      waypointsCount: waypoints.length,
-      mapRef: !!mapRef.current,
-      mapLoaded,
-      maplibreRef: !!maplibreRef.current
-    });
-
     if (!mapRef.current || !mapLoaded || !maplibreRef.current) {
-      console.log('[DistanceRouteMap] Map not ready, skipping marker update');
       return;
     }
-
-    console.log('[DistanceRouteMap] Updating markers for', waypoints.length, 'waypoints');
 
     // Clear existing markers
     markersRef.current.forEach(marker => {
       try {
         marker.remove();
-      } catch (e) {
-        console.warn('[DistanceRouteMap] Error removing marker:', e);
+      } catch {
+        // Marker already removed
       }
     });
     markersRef.current = [];
 
     // Add markers for each waypoint
-    console.log('[DistanceRouteMap] Processing waypoints:', waypoints.map(wp => ({ 
-      name: wp.name, 
-      type: wp.type, 
-      lat: wp.latitude, 
-      lng: wp.longitude 
-    })));
-    
     waypoints.forEach((wp, index) => {
       try {
-        // Debug: Log each waypoint being processed
-        console.log(`[DistanceRouteMap] Processing waypoint ${index}:`, {
-          name: wp.name,
-          type: wp.type,
-          lat: wp.latitude,
-          lng: wp.longitude,
-          id: wp.id
-        });
-        
         const el = document.createElement('div');
         el.className = 'waypoint-marker';
         // Note: Do NOT add transform, position, top, left, etc. - MapLibre handles positioning via offset
@@ -480,17 +480,12 @@ export function DistanceRouteMap({
         // Ensure coordinates are valid numbers
         const lat = typeof wp.latitude === 'number' ? wp.latitude : parseFloat(String(wp.latitude)) || 0;
         const lng = typeof wp.longitude === 'number' ? wp.longitude : parseFloat(String(wp.longitude)) || 0;
-        
-        console.log(`[DistanceRouteMap] Waypoint ${wp.name} (${wp.type}): lat=${lat}, lng=${lng}`);
-        
+
         if (lat === 0 && lng === 0) {
-          console.warn(`[DistanceRouteMap] ⚠️ SKIPPING waypoint "${wp.name}" (type: ${wp.type}) with invalid coordinates (0,0)`);
-          console.warn(`[DistanceRouteMap] This waypoint will NOT appear on the map and will NOT be saved to Supabase!`);
           return;
         }
-        
+
         if (isNaN(lat) || isNaN(lng)) {
-          console.warn(`[DistanceRouteMap] ⚠️ SKIPPING waypoint "${wp.name}" (type: ${wp.type}) with NaN coordinates`);
           return;
         }
 
@@ -522,20 +517,17 @@ export function DistanceRouteMap({
         });
 
         markersRef.current.push(marker);
-        console.log('[DistanceRouteMap] Added marker for', wp.name, 'at', wp.latitude, wp.longitude);
-      } catch (error) {
-        console.error('[DistanceRouteMap] Error creating marker for waypoint', wp.name, ':', error);
+      } catch {
+        // Error creating marker
       }
     });
 
     // Filter out waypoints with invalid coordinates (0,0 or null)
     const validWaypoints = waypoints.filter(
-      wp => wp.latitude && wp.longitude && 
+      wp => wp.latitude && wp.longitude &&
             wp.latitude !== 0 && wp.longitude !== 0 &&
             !isNaN(wp.latitude) && !isNaN(wp.longitude)
     );
-    
-    console.log(`[DistanceRouteMap] Valid waypoints: ${validWaypoints.length}/${waypoints.length}`);
     
     // Update route line
     const routeSource = mapRef.current.getSource('route');
@@ -580,12 +572,195 @@ export function DistanceRouteMap({
       }
     } else if (waypoints.length > 0 && validWaypoints.length === 0 && !hasFitBoundsRef.current) {
       // If we have waypoints but no valid coordinates, center on initial center
-      console.log('[DistanceRouteMap] No valid waypoint coordinates, centering on initial location');
       mapRef.current.setCenter([initialCenter.lng, initialCenter.lat]);
       mapRef.current.setZoom(initialZoom);
       hasFitBoundsRef.current = true;
     }
   }, [waypoints, mapLoaded, onWaypointsChange]);
+
+  // Render start area marker
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !maplibreRef.current) return;
+
+    // Remove existing start area marker
+    if (startMarkerRef.current) {
+      try {
+        startMarkerRef.current.remove();
+      } catch {
+        // Marker already removed
+      }
+      startMarkerRef.current = null;
+    }
+
+    // Add start area marker if we have one
+    if (startArea && startArea.lat && startArea.lng) {
+      const el = document.createElement('div');
+      el.className = 'start-area-marker';
+      el.style.cssText = `
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+        border: 3px solid white;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+        line-height: 1;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+        cursor: pointer;
+        z-index: 1001;
+      `;
+      el.innerHTML = '🚩';
+      el.title = `Start: ${startArea.name}`;
+
+      const marker = new maplibreRef.current.Marker({
+        element: el,
+        draggable: !!onStartAreaChange,
+        offset: [-18, -18],
+      })
+        .setLngLat([startArea.lng, startArea.lat])
+        .addTo(mapRef.current);
+
+      if (onStartAreaChange) {
+        marker.on('dragend', () => {
+          const lngLat = marker.getLngLat();
+          onStartAreaChange({ lat: lngLat.lat, lng: lngLat.lng });
+        });
+      }
+
+      startMarkerRef.current = marker;
+    }
+  }, [startArea, mapLoaded, onStartAreaChange]);
+
+  // Render finish area marker
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !maplibreRef.current) return;
+
+    // Remove existing finish area marker
+    if (finishMarkerRef.current) {
+      try {
+        finishMarkerRef.current.remove();
+      } catch {
+        // Marker already removed
+      }
+      finishMarkerRef.current = null;
+    }
+
+    // Add finish area marker if we have one
+    if (finishArea && finishArea.lat && finishArea.lng) {
+      const el = document.createElement('div');
+      el.className = 'finish-area-marker';
+      el.style.cssText = `
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+        border: 3px solid white;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+        line-height: 1;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+        cursor: pointer;
+        z-index: 1001;
+      `;
+      el.innerHTML = '🏁';
+      el.title = `Finish: ${finishArea.name}`;
+
+      const marker = new maplibreRef.current.Marker({
+        element: el,
+        draggable: !!onFinishAreaChange,
+        offset: [-18, -18],
+      })
+        .setLngLat([finishArea.lng, finishArea.lat])
+        .addTo(mapRef.current);
+
+      if (onFinishAreaChange) {
+        marker.on('dragend', () => {
+          const lngLat = marker.getLngLat();
+          onFinishAreaChange({ lat: lngLat.lat, lng: lngLat.lng });
+        });
+      }
+
+      finishMarkerRef.current = marker;
+    }
+  }, [finishArea, mapLoaded, onFinishAreaChange]);
+
+  // Render prohibited area markers
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !maplibreRef.current) return;
+
+    // Remove existing prohibited area markers
+    prohibitedMarkersRef.current.forEach(marker => {
+      try {
+        marker.remove();
+      } catch {
+        // Marker already removed
+      }
+    });
+    prohibitedMarkersRef.current = [];
+
+    // Add markers for prohibited areas with coordinates
+    if (prohibitedAreas && prohibitedAreas.length > 0) {
+      prohibitedAreas.forEach((area, index) => {
+        // Check if the area has valid coordinates
+        const coords = area.coordinates?.[0];
+        if (!coords || !coords.lat || !coords.lng) {
+          return;
+        }
+
+        const el = document.createElement('div');
+        el.className = 'prohibited-area-marker';
+        el.style.cssText = `
+          width: 32px;
+          height: 32px;
+          background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+          border: 2px solid white;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: bold;
+          font-size: 14px;
+          line-height: 1;
+          box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+          cursor: pointer;
+          z-index: 999;
+        `;
+        el.innerHTML = '⛔';
+        el.title = `Prohibited: ${area.name}${area.description ? ` - ${area.description}` : ''}`;
+
+        const marker = new maplibreRef.current.Marker({
+          element: el,
+          draggable: !!onProhibitedAreasChange,
+          offset: [-16, -16],
+        })
+          .setLngLat([coords.lng, coords.lat])
+          .addTo(mapRef.current);
+
+        if (onProhibitedAreasChange) {
+          marker.on('dragend', () => {
+            const lngLat = marker.getLngLat();
+            const updatedAreas = [...prohibitedAreas];
+            updatedAreas[index] = {
+              ...updatedAreas[index],
+              coordinates: [{ lat: lngLat.lat, lng: lngLat.lng }],
+            };
+            onProhibitedAreasChange(updatedAreas);
+          });
+        }
+
+        prohibitedMarkersRef.current.push(marker);
+      });
+    }
+  }, [prohibitedAreas, mapLoaded, onProhibitedAreasChange]);
 
   // Add a new waypoint
   const addWaypoint = useCallback((lat: number, lng: number) => {
@@ -779,13 +954,40 @@ export function DistanceRouteMap({
             })}
           </View>
         )}
+
+        {/* Course Elements Legend - shown when start/finish/prohibited areas exist */}
+        {(startArea || finishArea || (prohibitedAreas && prohibitedAreas.length > 0)) && (
+          <View className="flex-row flex-wrap gap-3 mt-2 pt-2 border-t border-purple-100">
+            <Text className="text-xs text-gray-500 font-semibold mr-1">Course:</Text>
+            {startArea && (
+              <View className="flex-row items-center gap-1">
+                <Text>🚩</Text>
+                <Text className="text-xs text-gray-600">{startArea.name}</Text>
+              </View>
+            )}
+            {finishArea && (
+              <View className="flex-row items-center gap-1">
+                <Text>🏁</Text>
+                <Text className="text-xs text-gray-600">{finishArea.name}</Text>
+              </View>
+            )}
+            {prohibitedAreas && prohibitedAreas.filter(a => a.coordinates?.[0]).length > 0 && (
+              <View className="flex-row items-center gap-1">
+                <Text>⛔</Text>
+                <Text className="text-xs text-gray-600">
+                  {prohibitedAreas.filter(a => a.coordinates?.[0]).length} restricted
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
-      
+
       {/* Map Container */}
-      <div 
-        ref={mapContainerRef} 
-        style={{ 
-          height: 350, 
+      <div
+        ref={mapContainerRef}
+        style={{
+          height: 350,
           width: '100%',
           position: 'relative',
         }} 

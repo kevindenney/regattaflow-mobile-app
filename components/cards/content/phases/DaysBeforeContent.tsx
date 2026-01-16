@@ -32,16 +32,21 @@ import {
   ListChecks,
   Info,
   FileText,
+  ChevronRight,
+  Clock,
+  Wind,
+  Waves,
 } from 'lucide-react-native';
 
 import { CardRaceData, getTimeContext } from '../../types';
 import { useRaceChecklist, ChecklistItemWithState } from '@/hooks/useRaceChecklist';
 import { useTeamRaceEntry, useTeamChecklist } from '@/hooks';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
 import { useAuth } from '@/providers/AuthProvider';
 import { sailorBoatService, SailorBoat } from '@/services/SailorBoatService';
 import { SailInspectionWizard } from '@/components/sail-inspection';
 import { QuickTipsPanel } from '@/components/checklist-tools/QuickTipsPanel';
-import { SafetyGearWizard, RiggingInspectionWizard, WatchScheduleWizard, ForecastCheckWizard, DocumentReviewWizard, CourseMapWizard } from '@/components/checklist-tools/wizards';
+import { SafetyGearWizard, RiggingInspectionWizard, WatchScheduleWizard, ForecastCheckWizard, DocumentReviewWizard, CourseMapWizard, PreRaceBriefingWizard } from '@/components/checklist-tools/wizards';
 import { ElectronicsChecklist } from '@/components/checklist-tools/checklists/ElectronicsChecklist';
 import { InteractiveChecklist } from '@/components/checklist-tools/InteractiveChecklist';
 import { PositionAssignmentPanel, MeetingPointPicker } from '@/components/checklist-tools/crew';
@@ -61,6 +66,24 @@ import {
 
 // Pre-race sharing
 import { ShareWithTeamSection } from './ShareWithTeamSection';
+
+// Historical view components
+import {
+  HistoricalSummaryCard,
+  CompletionMeter,
+  DataStatement,
+  type CategoryProgress,
+} from './historical';
+import {
+  summarizeChecklistCompletions,
+  formatForecastSummary,
+  formatArrivalTime,
+  getForecastEvolution,
+  getCompletedItems,
+  formatRelativeTime,
+  hasPhaseData,
+} from '@/lib/historical/transformIntentions';
+import { getItemsGroupedByCategory, getCategoriesForPhase } from '@/lib/checklists/checklistConfig';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -98,6 +121,7 @@ const CATEGORY_ICONS: Record<ChecklistCategory, React.ComponentType<any>> = {
 interface DaysBeforeContentProps {
   race: CardRaceData;
   isExpanded?: boolean;
+  onSwitchToReview?: () => void;
 }
 
 /**
@@ -295,9 +319,112 @@ function CategorySection({
   );
 }
 
+/**
+ * Retrospective Checklist Section - Shows all checklist items with completed/not status
+ * Used in historical view to show what was done vs what could have been done
+ */
+interface RetrospectiveChecklistSectionProps {
+  raceType: RaceType;
+  phase: 'days_before' | 'race_morning' | 'on_water';
+  completions: Record<string, { completedAt: string; notes?: string }> | undefined;
+}
+
+function RetrospectiveChecklistSection({
+  raceType,
+  phase,
+  completions,
+}: RetrospectiveChecklistSectionProps) {
+  const itemsByCategory = getItemsGroupedByCategory(raceType, phase);
+  const categories = getCategoriesForPhase(raceType, phase);
+
+  // Calculate totals
+  const allItems = Object.values(itemsByCategory).flat();
+  const completedCount = allItems.filter((item) => completions?.[item.id]).length;
+  const totalCount = allItems.length;
+
+  if (totalCount === 0) return null;
+
+  return (
+    <HistoricalSummaryCard
+      icon={ListChecks}
+      iconColor={IOS_COLORS.blue}
+      title="Preparation Checklist"
+      expandable={true}
+      summary={
+        <View style={styles.retroSummary}>
+          <Text style={styles.retroSummaryText}>
+            {completedCount} of {totalCount} items completed
+          </Text>
+          <View style={styles.retroProgressBar}>
+            <View
+              style={[
+                styles.retroProgressFill,
+                { width: `${(completedCount / totalCount) * 100}%` },
+              ]}
+            />
+          </View>
+        </View>
+      }
+      details={
+        <View style={styles.retroDetailsList}>
+          {categories.map((category) => {
+            const items = itemsByCategory[category];
+            if (!items || items.length === 0) return null;
+            const config = CATEGORY_CONFIG[category];
+            const IconComponent = CATEGORY_ICONS[category] || Wrench;
+            const categoryCompletedCount = items.filter(
+              (item) => completions?.[item.id]
+            ).length;
+
+            return (
+              <View key={category} style={styles.retroCategory}>
+                <View style={styles.retroCategoryHeader}>
+                  <IconComponent size={14} color={config.color} />
+                  <Text style={styles.retroCategoryLabel}>{config.label}</Text>
+                  <Text style={styles.retroCategoryCount}>
+                    {categoryCompletedCount}/{items.length}
+                  </Text>
+                </View>
+                <View style={styles.retroItemsList}>
+                  {items.map((item) => {
+                    const isCompleted = !!completions?.[item.id];
+                    return (
+                      <View key={item.id} style={styles.retroItem}>
+                        <View
+                          style={[
+                            styles.retroCheckbox,
+                            isCompleted && styles.retroCheckboxDone,
+                          ]}
+                        >
+                          {isCompleted && (
+                            <Text style={styles.retroCheckmark}>✓</Text>
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.retroItemLabel,
+                            !isCompleted && styles.retroItemLabelNotDone,
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      }
+    />
+  );
+}
+
 export function DaysBeforeContent({
   race,
   isExpanded = true,
+  onSwitchToReview,
 }: DaysBeforeContentProps) {
   const { user } = useAuth();
   const currentUserId = user?.id;
@@ -332,22 +459,6 @@ export function DaysBeforeContent({
 
   // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
   const coords = venueCoordinates || metadataCoords;
-
-  // DEBUG: Log venue data extraction for troubleshooting
-  if (race.name === 'T3') {
-    console.log('🔍 [DaysBeforeContent] Venue extraction for T3:', JSON.stringify({
-      raceId: race.id,
-      hasRaceVenueCoords: !!venueCoordinates,
-      venueCoordinates,
-      hasMetadata: !!metadata && Object.keys(metadata).length > 0,
-      metadataKeys: Object.keys(metadata),
-      metadataStartCoords: metadata.start_coordinates,
-      metadataVenueCoords: metadata.venue_coordinates,
-      metadataCoords,
-      finalCoords: coords,
-      willCreateVenueForForecast: !!coords,
-    }, null, 2));
-  }
 
   // Create a minimal venue object that the weather services can use
   const venueForForecast = coords ? {
@@ -412,25 +523,8 @@ export function DaysBeforeContent({
   const actionItems = useMemo(() => {
     const allItems = Object.values(itemsByCategory).flat();
     const itemsWithTools = allItems.filter(item => hasTool(item));
-
-    // DEBUG: Log action items for troubleshooting
-    if (race.name === 'T3') {
-      const weatherItem = allItems.find(i => i.id === 'check_weather_forecast');
-      console.log('🔍 [DaysBeforeContent] Action items for T3:', JSON.stringify({
-        totalItems: allItems.length,
-        itemsWithToolsCount: itemsWithTools.length,
-        itemsWithToolsIds: itemsWithTools.map(i => i.id),
-        weatherItem: weatherItem ? {
-          id: weatherItem.id,
-          toolId: weatherItem.toolId,
-          toolType: weatherItem.toolType,
-          hasTool: hasTool(weatherItem),
-        } : 'NOT FOUND',
-      }, null, 2));
-    }
-
     return itemsWithTools.map(item => item.id);
-  }, [itemsByCategory, race.name]);
+  }, [itemsByCategory]);
 
   // Handle checklist item actions (launch tools)
   const handleItemAction = useCallback((itemId: string) => {
@@ -561,6 +655,11 @@ export function DaysBeforeContent({
   // Time context (handles past and future races)
   const timeContext = getTimeContext(race.date, race.startTime);
 
+  // Race preparation data (for historical view)
+  const { intentions, isLoading: isPreparationLoading } = useRacePreparation({
+    raceEventId: race.id,
+  });
+
   // Categories to show based on expansion state
   const visibleCategories = useMemo(() => {
     if (isExpanded) {
@@ -581,13 +680,229 @@ export function DaysBeforeContent({
   // RENDER
   // ==========================================================================
 
-  // For past races, show a different view
+  // For past races, show historical data view
   if (timeContext.isPast) {
+    // Get historical data summaries
+    const categorySummaries = summarizeChecklistCompletions(
+      intentions.checklistCompletions,
+      'days_before',
+      raceType
+    );
+    const forecastSummary = formatForecastSummary(intentions.forecastCheck);
+    const forecastEvolution = getForecastEvolution(intentions.forecastCheck);
+    const arrivalTime = formatArrivalTime(intentions);
+    const completedItems = getCompletedItems(
+      intentions.checklistCompletions,
+      'days_before',
+      raceType
+    );
+    const hasData = hasPhaseData(intentions, 'days_before');
+
+    if (isPreparationLoading) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading preparation data...</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Format race conditions from race object (always available)
+    const windData = race.wind;
+    const tideData = race.tide;
+    const hasRaceConditions = !!(windData || tideData);
+
+    // Format wind summary
+    const windSummary = windData
+      ? `${windData.direction || ''} ${windData.speedMin || 0}-${windData.speedMax || 0}kt`.trim()
+      : null;
+
+    // Format tide summary
+    const tideSummary = tideData?.state
+      ? `${tideData.state.charAt(0).toUpperCase() + tideData.state.slice(1)}${tideData.height ? ` (${tideData.height}m)` : ''}`
+      : null;
+
+    // Format time badge text - handle "Completed" case specially
+    const timeBadgeText = timeContext.value === 'Completed'
+      ? 'Completed'
+      : `${timeContext.value} ago`;
+
     return (
       <View style={styles.container}>
-        <View style={styles.pastRaceNotice}>
-          <Text style={styles.pastRaceValue}>{timeContext.value}</Text>
-          <Text style={styles.pastRaceLabel}>This phase has passed</Text>
+        {/* Subtle Time Badge */}
+        <View style={styles.historicalBadge}>
+          <Clock size={12} color={IOS_COLORS.gray} />
+          <Text style={styles.historicalBadgeText}>
+            {timeBadgeText}
+          </Text>
+        </View>
+
+        <View style={styles.historicalContent}>
+          {/* Race Conditions - Always show from race object */}
+          {hasRaceConditions && (
+            <HistoricalSummaryCard
+              icon={CloudSun}
+              iconColor={IOS_COLORS.blue}
+              title="Race Conditions"
+              expandable={false}
+              summary={
+                <View style={styles.conditionsRow}>
+                  {windSummary && (
+                    <View style={styles.conditionItem}>
+                      <Wind size={14} color={IOS_COLORS.secondaryLabel} />
+                      <Text style={styles.conditionText}>{windSummary}</Text>
+                    </View>
+                  )}
+                  {tideSummary && (
+                    <View style={styles.conditionItem}>
+                      <Waves size={14} color={IOS_COLORS.secondaryLabel} />
+                      <Text style={styles.conditionText}>{tideSummary}</Text>
+                    </View>
+                  )}
+                </View>
+              }
+            />
+          )}
+
+          {/* Race Info - Venue, Type, Date */}
+          <HistoricalSummaryCard
+            icon={Compass}
+            iconColor={IOS_COLORS.green}
+            title="Race Info"
+            expandable={false}
+            summary={
+              <View style={styles.raceInfoContainer}>
+                {race.venue && (
+                  <DataStatement label="Venue" value={race.venue} />
+                )}
+                <DataStatement
+                  label="Type"
+                  value={raceType.charAt(0).toUpperCase() + raceType.slice(1)}
+                />
+                <DataStatement
+                  label="Date"
+                  value={new Date(race.date).toLocaleDateString()}
+                />
+              </View>
+            }
+          />
+
+          {/* User-Captured Preparation Data (if any) */}
+          {hasData && (
+            <>
+              {/* Checklist Completion Summary */}
+              {categorySummaries.length > 0 && (
+                <HistoricalSummaryCard
+                  icon={ListChecks}
+                  iconColor={IOS_COLORS.blue}
+                  title="Your Preparation"
+                  summary={
+                    <CompletionMeter
+                      categories={categorySummaries.map((cat) => ({
+                        id: cat.id,
+                        name: cat.name,
+                        completed: cat.completed,
+                        total: cat.total,
+                        color: cat.color,
+                      }))}
+                      variant="compact"
+                    />
+                  }
+                  details={
+                    completedItems.length > 0 ? (
+                      <View style={styles.historicalDetailsList}>
+                        <Text style={styles.historicalDetailsHeader}>
+                          Completed Items ({completedItems.length})
+                        </Text>
+                        {completedItems.slice(0, 10).map((item) => (
+                          <View key={item.id} style={styles.historicalDetailItem}>
+                            <Text style={styles.historicalDetailLabel}>
+                              {item.label}
+                            </Text>
+                            <Text style={styles.historicalDetailSubtext}>
+                              {formatRelativeTime(item.completedAt)}
+                            </Text>
+                          </View>
+                        ))}
+                        {completedItems.length > 10 && (
+                          <Text style={styles.historicalMoreItems}>
+                            +{completedItems.length - 10} more items
+                          </Text>
+                        )}
+                      </View>
+                    ) : undefined
+                  }
+                />
+              )}
+
+              {/* Weather Forecast Summary - User captured */}
+              {forecastSummary && (
+                <HistoricalSummaryCard
+                  icon={CloudSun}
+                  iconColor={IOS_COLORS.blue}
+                  title="Your Forecast Checks"
+                  summary={
+                    <View style={styles.historicalSummaryRow}>
+                      <Text style={styles.historicalSummaryText}>
+                        {forecastSummary}
+                      </Text>
+                      {forecastEvolution.snapshotCount > 1 && (
+                        <Text style={styles.historicalSummaryMeta}>
+                          {forecastEvolution.snapshotCount} checks
+                        </Text>
+                      )}
+                    </View>
+                  }
+                  details={
+                    forecastEvolution.latestAnalysis ? (
+                      <View style={styles.historicalDetailsList}>
+                        <Text style={styles.historicalDetailsHeader}>
+                          Forecast Evolution
+                        </Text>
+                        <Text style={styles.historicalDetailText}>
+                          {forecastEvolution.latestAnalysis}
+                        </Text>
+                      </View>
+                    ) : undefined
+                  }
+                />
+              )}
+
+              {/* Arrival Time Intention */}
+              {arrivalTime && (
+                <HistoricalSummaryCard
+                  icon={Car}
+                  iconColor={IOS_COLORS.green}
+                  title="Arrival Plan"
+                  expandable={false}
+                  summary={
+                    <Text style={styles.historicalSummaryText}>{arrivalTime}</Text>
+                  }
+                />
+              )}
+            </>
+          )}
+
+          {/* Retrospective Checklist - Show all items with completed/not status */}
+          <RetrospectiveChecklistSection
+            raceType={raceType}
+            phase="days_before"
+            completions={intentions.checklistCompletions}
+          />
+
+          {/* Review Button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.reviewButton,
+              pressed && styles.reviewButtonPressed,
+            ]}
+            onPress={onSwitchToReview}
+          >
+            <Clock size={18} color={IOS_COLORS.blue} />
+            <Text style={styles.reviewButtonText}>Review your race</Text>
+            <ChevronRight size={16} color={IOS_COLORS.gray} />
+          </Pressable>
         </View>
       </View>
     );
@@ -865,7 +1180,7 @@ export function DaysBeforeContent({
             boatId={userBoat?.id}
             raceStartTime={race.startTime}
             raceDate={race.date}
-            raceDurationHours={race.time_limit_hours}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
             raceName={race.name}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -880,15 +1195,6 @@ export function DaysBeforeContent({
           presentationStyle="pageSheet"
           onRequestClose={handleToolCancel}
         >
-          {/* DEBUG: Log at exact moment ForecastCheckWizard renders */}
-          {console.log('🚨 [DaysBeforeContent] MODAL RENDER - venueForForecast:', JSON.stringify({
-            raceName: race.name,
-            raceId: race.id,
-            venueForForecast,
-            coords,
-            metadataCoords,
-            hasMetadata: !!metadata && Object.keys(metadata).length > 0,
-          }, null, 2))}
           <ForecastCheckWizard
             item={activeTool}
             raceEventId={race.id}
@@ -897,6 +1203,7 @@ export function DaysBeforeContent({
             raceDate={race.date}
             raceName={race.name}
             raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -955,6 +1262,26 @@ export function DaysBeforeContent({
             boatId={userBoat?.id}
             course={race.course}
             venue={venueForForecast}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Pre-Race Briefing Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'pre_race_briefing' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <PreRaceBriefingWizard
+            item={activeTool}
+            raceEventId={race.id}
+            boatId={userBoat?.id}
+            raceName={race.name}
+            raceDate={race.date}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -1142,7 +1469,7 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
   },
 
-  // Past Race Notice
+  // Past Race Notice (legacy - kept for reference)
   pastRaceNotice: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1157,6 +1484,209 @@ const styles = StyleSheet.create({
   pastRaceLabel: {
     fontSize: 14,
     fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+
+  // Historical View Styles
+  historicalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  historicalBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  historicalContent: {
+    gap: 12,
+  },
+  emptyHistoricalContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  emptyHistoricalText: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  historicalSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  historicalSummaryText: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    fontWeight: '500',
+    flex: 1,
+  },
+  historicalSummaryMeta: {
+    fontSize: 12,
+    color: IOS_COLORS.gray,
+  },
+  historicalDetailsList: {
+    gap: 8,
+  },
+  historicalDetailsHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  historicalDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  historicalDetailLabel: {
+    fontSize: 13,
+    color: IOS_COLORS.label,
+    flex: 1,
+  },
+  historicalDetailSubtext: {
+    fontSize: 11,
+    color: IOS_COLORS.gray,
+  },
+  historicalDetailText: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
+  },
+  historicalMoreItems: {
+    fontSize: 12,
+    color: IOS_COLORS.blue,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingTop: 4,
+  },
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  reviewButtonPressed: {
+    backgroundColor: IOS_COLORS.gray5,
+  },
+  reviewButtonText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  conditionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  conditionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  conditionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  raceInfoContainer: {
+    gap: 8,
+  },
+
+  // Retrospective Checklist Styles
+  retroSummary: {
+    gap: 8,
+  },
+  retroSummaryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  retroProgressBar: {
+    height: 6,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  retroProgressFill: {
+    height: '100%',
+    backgroundColor: IOS_COLORS.green,
+    borderRadius: 3,
+  },
+  retroDetailsList: {
+    gap: 16,
+    marginTop: 8,
+  },
+  retroCategory: {
+    gap: 8,
+  },
+  retroCategoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  retroCategoryLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  retroCategoryCount: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  retroItemsList: {
+    gap: 6,
+    paddingLeft: 20,
+  },
+  retroItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  retroCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.gray3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retroCheckboxDone: {
+    backgroundColor: IOS_COLORS.green,
+    borderColor: IOS_COLORS.green,
+  },
+  retroCheckmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  retroItemLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.label,
+  },
+  retroItemLabelNotDone: {
     color: IOS_COLORS.gray,
   },
 

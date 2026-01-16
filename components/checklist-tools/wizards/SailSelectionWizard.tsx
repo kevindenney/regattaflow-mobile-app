@@ -6,47 +6,44 @@
  * allows user to select sails and add notes for the learning loop.
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  Platform,
-  ActivityIndicator,
-  TextInput,
-  KeyboardAvoidingView,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  X,
-  CheckCircle2,
-  Wind,
-  AlertTriangle,
-  Sparkles,
-  Check,
-  BookOpen,
-  Sailboat,
-  ChevronDown,
-  ChevronUp,
-  History,
-  CircleDot,
-} from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { useSailInventory, formatSailDisplayName, getSailConditionColor } from '@/hooks/useSailInventory';
-import { sailRecommendationService, SAIL_HINTS, WIND_RANGES, getWindRange } from '@/services/ai/SailRecommendationService';
-import { QuickAddSailForm, QuickAddSailButton } from '@/components/checklist-tools/QuickAddSailForm';
 import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
+import { QuickAddSailButton, QuickAddSailForm } from '@/components/checklist-tools/QuickAddSailForm';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
+import { formatSailDisplayName, getSailConditionColor, useSailInventory } from '@/hooks/useSailInventory';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
+import { SAIL_HINTS, WIND_RANGES, getWindRange, sailRecommendationService } from '@/services/ai/SailRecommendationService';
 import type {
+  SailRecommendation,
   SailSelectionIntention,
   SailSelectionRecommendations,
-  SailRecommendation,
 } from '@/types/morningChecklist';
 import type { SailInventoryItem } from '@/types/raceIntentions';
-import type { PersonalizedNudge } from '@/types/adaptiveLearning';
+import { useRouter } from 'expo-router';
+import {
+  AlertTriangle,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  CircleDot,
+  Sailboat,
+  Sparkles,
+  Wind,
+  X
+} from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -108,7 +105,7 @@ export function SailSelectionWizard({
     isLoading: isLoadingSails,
     error: sailError,
     hasSails,
-  refresh: refreshSails,
+    refresh: refreshSails,
   } = useSailInventory({
     boatId: boatId || null,
     enabled: !!boatId,
@@ -232,9 +229,7 @@ export function SailSelectionWizard({
         savedAt: new Date().toISOString(),
       };
 
-      // TODO: Save to sailor_race_preparation.user_intentions via service
-      console.log('Saving sail selection intention:', intention);
-
+      // TODO: Persist intention to sailor_race_preparation via service
       onComplete();
     } catch (error) {
       console.error('Failed to save sail selection intention:', error);
@@ -375,25 +370,6 @@ export function SailSelectionWizard({
     await refreshSails();
   }, [refreshSails]);
 
-  // Render loading state
-  if (isLoadingSails || (isLoadingRecommendations && !recommendations)) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable style={styles.closeButton} onPress={onCancel}>
-            <X size={24} color={IOS_COLORS.gray} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Sail Selection</Text>
-          <View style={styles.headerRight} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={IOS_COLORS.blue} />
-          <Text style={styles.loadingText}>Loading sails...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   // Calculate wind range for generic recommendations
   const windAvg = useMemo(() => {
     if (wind?.average) return wind.average;
@@ -415,6 +391,25 @@ export function SailSelectionWizard({
     router.push('/(tabs)/boat');
     onCancel();
   }, [router, onCancel]);
+
+  // Render loading state
+  if (isLoadingSails || (isLoadingRecommendations && !recommendations)) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Pressable style={styles.closeButton} onPress={onCancel}>
+            <X size={24} color={IOS_COLORS.gray} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Sail Selection</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={IOS_COLORS.blue} />
+          <Text style={styles.loadingText}>Loading sails...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // Render error/no sails state
   if (sailError || !hasSails) {

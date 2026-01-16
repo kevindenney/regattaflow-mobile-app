@@ -548,8 +548,6 @@ export function WatchScheduleWizard({
         raceDate,
       };
 
-      console.log('[WatchScheduleWizard] Saving schedule to regatta:', raceEventId, schedule);
-
       // Save to regattas table (raceEventId is actually a regatta ID)
       const { data: updateData, error: updateError } = await supabase
         .from('regattas')
@@ -558,16 +556,13 @@ export function WatchScheduleWizard({
         .select('id, watch_schedule');
 
       if (updateError) {
-        console.error('[WatchScheduleWizard] Update error:', updateError);
         throw updateError;
       }
 
       if (!updateData || updateData.length === 0) {
-        console.error('[WatchScheduleWizard] Update returned no rows - RLS may be blocking');
         throw new Error('Unable to save schedule. You may not have permission to update this race.');
       }
 
-      console.log('[WatchScheduleWizard] Save successful:', updateData);
       onComplete();
     } catch (err) {
       console.error('Failed to save schedule:', err);

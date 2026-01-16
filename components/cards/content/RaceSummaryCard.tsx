@@ -8,44 +8,41 @@
  * - Every pixel shows data, not decoration
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { Platform, StyleSheet, Text, View, Pressable, TextInput, LayoutAnimation } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
 import {
+  Flag,
   Navigation,
   Trophy,
   Users,
-  Flag,
 } from 'lucide-react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 
-import {
-  CardContentProps,
-  RacePhase,
-  RACE_PHASES,
-  RACE_PHASE_SHORT_LABELS,
-  getCurrentPhaseForRace,
-} from '../types';
-import type { DetailCardType } from '@/constants/navigationAnimations';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
+import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
-import { detectRaceType } from '@/lib/races/raceDataUtils';
-import { useRacePreparation } from '@/hooks/useRacePreparation';
-import { TinySparkline } from '@/components/shared/charts';
-import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
-import { useRaceAnalysisState } from '@/hooks/useRaceAnalysisState';
+import type { DetailCardType } from '@/constants/navigationAnimations';
 import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
-import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useRaceAnalysisState } from '@/hooks/useRaceAnalysisState';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
 import { useRaceSeriesPosition } from '@/hooks/useRaceSeriesPosition';
 import { useRaceStartOrder } from '@/hooks/useRaceStartOrder';
-import { Marginalia } from '@/components/ui/Marginalia';
-import type { ArrivalTimeIntention } from '@/types/raceIntentions';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
+import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { detectRaceType } from '@/lib/races/raceDataUtils';
 import {
-  DaysBeforeContent,
-  RaceMorningContent,
-  OnWaterContent,
+  CardContentProps,
+  RACE_PHASES,
+  RACE_PHASE_SHORT_LABELS,
+  RacePhase,
+  getCurrentPhaseForRace,
+} from '../types';
+import {
   AfterRaceContent,
+  DaysBeforeContent,
+  OnWaterContent,
+  RaceMorningContent,
 } from './phases';
-import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -330,7 +327,7 @@ function getOrdinalSuffix(n: number): string {
  * Multi-race: "R1: 2/18 · R2: 5/18"
  */
 function formatMultiRaceResults(
-  raceResults?: Array<{raceNumber: number; position: number | null; fleetSize: number | null; keyMoment: string | null}>,
+  raceResults?: Array<{ raceNumber: number; position: number | null; fleetSize: number | null; keyMoment: string | null }>,
   singlePosition?: number,
   singleFleetSize?: number
 ): string | null {
@@ -365,7 +362,7 @@ function formatMultiRaceResults(
  * Multi-race: "R1: Good start · R2: Lost downwind"
  */
 function formatMultiRaceKeyMoments(
-  raceResults?: Array<{raceNumber: number; position: number | null; fleetSize: number | null; keyMoment: string | null}>,
+  raceResults?: Array<{ raceNumber: number; position: number | null; fleetSize: number | null; keyMoment: string | null }>,
   singleKeyMoment?: string
 ): string | null {
   // Check for multi-race key moments
@@ -710,6 +707,8 @@ export function RaceSummaryCard({
       venueCoordinates: (race as any).venueCoordinates, // Preserve coordinates for weather fetching
       created_by: race.created_by, // Preserve for edit/delete permissions
       time_limit_hours: timeLimitHours, // Distance race duration for Forecast Check wizard
+      boat_id: (race as any).boat_id, // Preserve for sail selection/equipment
+      class_id: (race as any).class_id, // Preserve for tuning recommendations
     };
 
     return data;
@@ -735,9 +734,6 @@ export function RaceSummaryCard({
         return (
           <OnWaterContent
             race={cardRaceData}
-            onStartTimer={() => {
-              // TODO: Connect to race timer
-            }}
           />
         );
       case 'after_race':

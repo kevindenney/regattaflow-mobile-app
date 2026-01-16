@@ -85,8 +85,10 @@ const MARK_COLORS: Record<string, string> = {
   finish: '#ef4444',
   windward: '#3b82f6',
   leeward: '#f59e0b',
+  gate: '#8b5cf6',
   gate_left: '#8b5cf6',
   gate_right: '#8b5cf6',
+  wing: '#06b6d4',
   offset: '#ec4899',
 };
 
@@ -159,6 +161,11 @@ export function CourseMapWizard({
   const [urlValue, setUrlValue] = useState('');
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
 
+  // SI URL input state (separate from course diagram URL)
+  const [showSIUrlInput, setShowSIUrlInput] = useState(false);
+  const [siUrlValue, setSIUrlValue] = useState('');
+  const [isSubmittingSIUrl, setIsSubmittingSIUrl] = useState(false);
+
   // Image extraction state
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -171,6 +178,9 @@ export function CourseMapWizard({
     loading: docsLoading,
     upload,
     addFromUrl,
+    isExtracting: siIsExtracting,
+    extractionResult: siExtractionResult,
+    clearExtractionResult: clearSIExtractionResult,
   } = useRaceDocuments({
     raceId: raceEventId,
     userId: user?.id,
@@ -224,7 +234,7 @@ export function CourseMapWizard({
     await upload('course_diagram');
   }, [upload]);
 
-  // Handle URL submit
+  // Handle URL submit (for course diagram)
   const handleUrlSubmit = useCallback(async () => {
     if (!urlValue.trim()) return;
     setIsSubmittingUrl(true);
@@ -238,6 +248,21 @@ export function CourseMapWizard({
       setIsSubmittingUrl(false);
     }
   }, [urlValue, addFromUrl]);
+
+  // Handle SI URL submit
+  const handleSIUrlSubmit = useCallback(async () => {
+    if (!siUrlValue.trim()) return;
+    setIsSubmittingSIUrl(true);
+    try {
+      const success = await addFromUrl(siUrlValue.trim(), 'sailing_instructions');
+      if (success) {
+        setSIUrlValue('');
+        setShowSIUrlInput(false);
+      }
+    } finally {
+      setIsSubmittingSIUrl(false);
+    }
+  }, [siUrlValue, addFromUrl]);
 
   // Request camera permission
   const requestCameraPermission = async (): Promise<boolean> => {
@@ -887,15 +912,177 @@ export function CourseMapWizard({
         <Text style={styles.documentSectionDescription}>
           Upload NOR or SI documents (PDF link or paste text)
         </Text>
-        <Pressable
-          style={styles.documentUploadButton}
-          onPress={handleUpload}
-        >
-          <Upload size={18} color={IOS_COLORS.blue} />
-          <Text style={styles.documentUploadButtonText}>
-            {sailingInstructions ? 'Update SI Document' : 'Add SI Document'}
-          </Text>
-        </Pressable>
+
+        {showSIUrlInput ? (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.siUrlInputContainer}
+          >
+            <View style={styles.urlInputWrapper}>
+              <TextInput
+                style={styles.urlInput}
+                placeholder="Paste URL to SI document..."
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                value={siUrlValue}
+                onChangeText={setSIUrlValue}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="go"
+                onSubmitEditing={handleSIUrlSubmit}
+                editable={!isSubmittingSIUrl}
+              />
+              <Pressable
+                style={[
+                  styles.urlLinkButton,
+                  (!siUrlValue.trim() || isSubmittingSIUrl) && styles.uploadButtonDisabled,
+                ]}
+                onPress={handleSIUrlSubmit}
+                disabled={!siUrlValue.trim() || isSubmittingSIUrl}
+              >
+                {isSubmittingSIUrl ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Link2 size={18} color="#FFFFFF" />
+                )}
+              </Pressable>
+            </View>
+            <Pressable
+              style={styles.cancelUrlButton}
+              onPress={() => {
+                setShowSIUrlInput(false);
+                setSIUrlValue('');
+              }}
+            >
+              <Text style={styles.cancelUrlText}>Cancel</Text>
+            </Pressable>
+          </KeyboardAvoidingView>
+        ) : (
+          <View style={styles.siButtonsRow}>
+            <Pressable
+              style={styles.documentUploadButton}
+              onPress={handleUpload}
+            >
+              <Upload size={18} color={IOS_COLORS.blue} />
+              <Text style={styles.documentUploadButtonText}>
+                {sailingInstructions ? 'Update SI' : 'Add SI Document'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.siUrlButton}
+              onPress={() => setShowSIUrlInput(true)}
+            >
+              <Link2 size={18} color={IOS_COLORS.blue} />
+              <Text style={styles.documentUploadButtonText}>Add URL</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* SI Extraction Status */}
+        {siIsExtracting && (
+          <View style={styles.siExtractingBanner}>
+            <ActivityIndicator size="small" color={IOS_COLORS.blue} />
+            <Text style={styles.siExtractingBannerText}>
+              Extracting course data from Sailing Instructions...
+            </Text>
+          </View>
+        )}
+
+        {/* SI Extraction Results - show when extraction succeeds (with or without marks) */}
+        {siExtractionResult?.success && siExtractionResult.data && (
+          <View style={styles.siExtractionResults}>
+            {/* Confidence Card */}
+            <View style={styles.siConfidenceCard}>
+              <Sparkles size={18} color={IOS_COLORS.blue} />
+              <Text style={styles.siConfidenceText}>
+                {(siExtractionResult.confidence ?? 0) >= 80 ? 'High' :
+                 (siExtractionResult.confidence ?? 0) >= 50 ? 'Moderate' : 'Low'} confidence ({Math.round(siExtractionResult.confidence ?? 0)}%)
+              </Text>
+            </View>
+
+            {/* Extracted Fields Summary */}
+            {siExtractionResult.extractedFields && siExtractionResult.extractedFields.length > 0 && (
+              <View style={styles.siCourseInfoCard}>
+                <Text style={styles.siCourseInfoLabel}>Extracted {siExtractionResult.extractedFields.length} Fields</Text>
+                <Text style={styles.siCourseInfoValue}>
+                  {siExtractionResult.extractedFields.slice(0, 5).join(', ')}
+                  {siExtractionResult.extractedFields.length > 5 && ` +${siExtractionResult.extractedFields.length - 5} more`}
+                </Text>
+              </View>
+            )}
+
+            {/* Extracted Marks List - only show if marks exist */}
+            {siExtractionResult.data.marks && siExtractionResult.data.marks.length > 0 ? (
+              <View style={styles.siExtractedMarksContainer}>
+                <Text style={styles.siExtractedSectionTitle}>Course Marks from SI</Text>
+                {siExtractionResult.data.marks.map((mark, index) => (
+                  <View key={index} style={styles.siExtractedMarkRow}>
+                    <View style={[styles.siMarkTypeBadge, { backgroundColor: `${getMarkColor(mark.type)}20` }]}>
+                      <Text style={[styles.siMarkTypeBadgeText, { color: getMarkColor(mark.type) }]}>
+                        {mark.type}
+                      </Text>
+                    </View>
+                    <Text style={styles.siExtractedMarkName}>{mark.name}</Text>
+                    {mark.latitude && mark.longitude && (
+                      <Text style={styles.siExtractedMarkCoords}>
+                        {mark.latitude.toFixed(4)}, {mark.longitude.toFixed(4)}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.siNoMarksCard}>
+                <Text style={styles.siNoMarksText}>
+                  No course marks found in this document. Distance races often describe routes differently - check the Route Waypoints section.
+                </Text>
+              </View>
+            )}
+
+            {/* VHF Channels */}
+            {siExtractionResult.data.vhfChannel && (
+              <View style={styles.siCourseInfoCard}>
+                <Text style={styles.siCourseInfoLabel}>VHF Channel</Text>
+                <Text style={styles.siCourseInfoValue}>{siExtractionResult.data.vhfChannel}</Text>
+              </View>
+            )}
+
+            {/* Potential Courses */}
+            {siExtractionResult.data.potentialCourses && siExtractionResult.data.potentialCourses.length > 0 && (
+              <View style={styles.siCourseInfoCard}>
+                <Text style={styles.siCourseInfoLabel}>Potential Courses</Text>
+                <Text style={styles.siCourseInfoValue}>
+                  {siExtractionResult.data.potentialCourses.join(', ')}
+                </Text>
+              </View>
+            )}
+
+            {/* Wind Direction */}
+            {siExtractionResult.data.expectedWindDirection && (
+              <View style={styles.siWindDirectionRow}>
+                <Wind size={16} color={IOS_COLORS.green} />
+                <Text style={styles.siWindDirectionText}>
+                  Expected Wind: {siExtractionResult.data.expectedWindDirection}°
+                </Text>
+              </View>
+            )}
+
+            {/* Clear Button */}
+            <Pressable style={styles.siClearButton} onPress={clearSIExtractionResult}>
+              <Text style={styles.siClearButtonText}>Clear & Try Again</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* SI Extraction Error */}
+        {siExtractionResult && !siExtractionResult.success && (
+          <View style={styles.siExtractionErrorBanner}>
+            <AlertTriangle size={16} color={IOS_COLORS.red} />
+            <Text style={styles.siExtractionErrorText}>
+              {siExtractionResult.error || 'Could not extract course data'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Course Diagram Section */}
@@ -1825,6 +2012,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   documentUploadButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1838,6 +2026,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: IOS_COLORS.blue,
+  },
+  siButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  siUrlButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue,
+    borderStyle: 'dashed',
+  },
+  siUrlInputContainer: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
   },
   diagramButtonsRow: {
     flexDirection: 'row',
@@ -1906,6 +2117,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: IOS_COLORS.blue,
+  },
+  // SI Extraction styles
+  siExtractingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  siExtractingBannerText: {
+    fontSize: 14,
+    color: IOS_COLORS.blue,
+    fontWeight: '500',
+  },
+  siExtractionResults: {
+    backgroundColor: IOS_COLORS.tertiaryBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    gap: 12,
+  },
+  siConfidenceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 10,
+  },
+  siConfidenceText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  siExtractedMarksContainer: {
+    gap: 8,
+  },
+  siExtractedSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  siExtractedMarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 8,
+  },
+  siMarkTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  siMarkTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  siExtractedMarkName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  siExtractedMarkCoords: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  siCourseInfoCard: {
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    borderRadius: 8,
+    padding: 12,
+  },
+  siCourseInfoLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.tertiaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  siCourseInfoValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  siWindDirectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: `${IOS_COLORS.green}15`,
+    borderRadius: 10,
+  },
+  siWindDirectionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
+  },
+  siClearButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignSelf: 'center',
+  },
+  siClearButtonText: {
+    fontSize: 14,
+    color: IOS_COLORS.blue,
+    fontWeight: '500',
+  },
+  siExtractionErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    backgroundColor: `${IOS_COLORS.red}10`,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  siExtractionErrorText: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.red,
+  },
+  siNoMarksCard: {
+    backgroundColor: `${IOS_COLORS.orange}10`,
+    borderRadius: 8,
+    padding: 12,
+  },
+  siNoMarksText: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
   },
 });
 

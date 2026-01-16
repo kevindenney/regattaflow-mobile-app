@@ -127,9 +127,6 @@ const getSmartDefaults = (lastLocationData?: LastLocationData): FormState => {
 // =============================================================================
 
 export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormProps) {
-  // Debug logging for iOS issue
-  console.log('[TufteAddRaceForm] render with visible:', visible);
-
   // State
   const [formState, setFormState] = useState<FormState>(getSmartDefaults());
   const [errors, setErrors] = useState<FormErrors>({});
@@ -360,7 +357,6 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
         shape: mark.shape,
       }));
       newAiFields.add('marks');
-      console.log('[TufteAddRaceForm] Extracted marks from AI:', updates.marks?.length);
     }
 
     // Extract route waypoints for distance races (for tactical map)
@@ -376,7 +372,6 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
         order: wp.order,
       }));
       newAiFields.add('routeWaypoints');
-      console.log('[TufteAddRaceForm] Extracted route waypoints from AI:', updates.routeWaypoints?.length);
     }
 
     // Extract racing area polygon if available
@@ -386,15 +381,16 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
         lng: coord.longitude || coord.lng,
       }));
       newAiFields.add('racingAreaPolygon');
-      console.log('[TufteAddRaceForm] Extracted racing area polygon from AI:', updates.racingAreaPolygon?.length, 'points');
     }
 
     setFormState((prev) => ({ ...prev, ...updates }));
     setAiExtractedFields(newAiFields);
 
     // Store raw extraction data for details summary
+    // Handle both wrapper format { multipleRaces, races } and direct race data
     if (rawData) {
-      setExtractedDetailsData(rawData);
+      const dataToStore = rawData.races?.[0] || rawData;
+      setExtractedDetailsData(dataToStore);
     }
   }, []);
 
@@ -491,15 +487,17 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       // Add course/map data from AI extraction or manual entry
       if (formState.marks.length > 0) {
         (raceData as any).marks = formState.marks;
-        console.log('[TufteAddRaceForm] Saving marks:', formState.marks.length);
       }
       if (formState.routeWaypoints.length > 0) {
         (raceData as any).routeWaypoints = formState.routeWaypoints;
-        console.log('[TufteAddRaceForm] Saving route waypoints:', formState.routeWaypoints.length);
       }
       if (formState.racingAreaPolygon.length > 0) {
         (raceData as any).racingAreaPolygon = formState.racingAreaPolygon;
-        console.log('[TufteAddRaceForm] Saving racing area polygon:', formState.racingAreaPolygon.length, 'points');
+      }
+
+      // Add extracted details data for persistence
+      if (extractedDetailsData) {
+        (raceData as any).extractedDetails = extractedDetailsData;
       }
 
       await onSave(raceData);
@@ -509,7 +507,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
     } finally {
       setIsSaving(false);
     }
-  }, [formState, validateForm, isSaving, onSave, onClose]);
+  }, [formState, validateForm, isSaving, onSave, onClose, extractedDetailsData]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -570,10 +568,12 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
               raceType={formState.raceType}
             />
 
-            {/* Extracted Details Summary (shows after extraction) */}
-            {extractedDetailsData && (
-              <ExtractedDetailsSummary data={extractedDetailsData} />
-            )}
+            {/* Race Details - editable fields for NOR/SI information */}
+            {/* Always shown in editable mode; extracted values are pre-populated */}
+            <ExtractedDetailsSummary
+              data={extractedDetailsData}
+              onChange={setExtractedDetailsData}
+            />
 
             {/* Essentials Section */}
             <TufteSectionLabel first>ESSENTIALS</TufteSectionLabel>

@@ -43,6 +43,7 @@ import {
   TideTimesDisplay,
 } from '@/components/shared/charts';
 import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import type { SailSelectionIntention, SailInventoryItem } from '@/types/raceIntentions';
 import type { SailingVenue } from '@/types/venue';
 
@@ -114,6 +115,60 @@ function getWaveImpact(height: number, period?: number): string {
   return 'Heavy conditions, survival mode';
 }
 
+// ============================================================================
+// TUFTE HELPER FUNCTIONS - Start-focused conditions display
+// ============================================================================
+
+// Format race duration humanely for Tufte header
+function formatRaceDuration(minutes: number): string {
+  const hours = Math.round(minutes / 60);
+  if (hours < 2) return `${minutes}min race`;
+  return `${hours}h race`;
+}
+
+// Get setup header based on wind range (class-specific or generic)
+function getSetupHeader(windRange?: string, speedMin?: number): string {
+  if (windRange) {
+    const range = windRange.toLowerCase();
+    if (range.includes('light')) return 'LIGHT AIR SETUP';
+    if (range.includes('medium') || range.includes('moderate')) return 'MODERATE BREEZE';
+    if (range.includes('heavy') || range.includes('strong')) return 'HEAVY AIR SETUP';
+  }
+  // Fallback to speed-based
+  const speed = speedMin || 8;
+  if (speed < 8) return 'LIGHT AIR SETUP';
+  if (speed < 16) return 'MODERATE BREEZE';
+  return 'HEAVY AIR SETUP';
+}
+
+// Format key rig settings for compact Tufte display
+function formatRigSummary(settings?: Array<{ key: string; value: string }>): string {
+  if (!settings || settings.length === 0) return '';
+  const priorityKeys = ['upper_shrouds', 'shrouds', 'forestay', 'mast_rake', 'backstay'];
+  const formatted: string[] = [];
+
+  for (const key of priorityKeys) {
+    if (formatted.length >= 2) break;
+    const setting = settings.find(s => s.key.includes(key));
+    if (setting?.value) {
+      const label = setting.key
+        .replace(/_/g, ' ')
+        .replace('upper ', 'U/')
+        .replace('lower ', 'L/');
+      formatted.push(`${label}: ${setting.value}`);
+    }
+  }
+  return formatted.join(' · ');
+}
+
+// Generic rig recommendation when no class-specific data
+function getGenericRigAdvice(speedMin?: number): string {
+  const speed = speedMin || 8;
+  if (speed < 8) return 'Ease shrouds, rake forward';
+  if (speed < 16) return 'Base settings';
+  return 'Tighten shrouds, rake aft';
+}
+
 interface ConditionsDetailCardProps {
   raceId: string;
   wind?: {
@@ -161,6 +216,8 @@ interface ConditionsDetailCardProps {
   customTitle?: string;
   // Sail selection props
   boatId?: string;
+  classId?: string | null; // For rig tuning lookup
+  className?: string | null; // Boat class name for tuning lookup
   sailSelection?: SailSelectionIntention;
   onSailSelectionChange?: (selection: SailSelectionIntention) => void;
   // Venue and date for forecast fetching
@@ -191,6 +248,8 @@ export function ConditionsDetailCard({
   isDistanceRace = false,
   customTitle,
   boatId,
+  classId,
+  className,
   sailSelection,
   onSailSelectionChange,
   venue,
@@ -211,33 +270,6 @@ export function ConditionsDetailCard({
     expectedDurationMinutes
   );
 
-  // Debug logging for Tufte sparklines
-  if (__DEV__) {
-    console.log('🔍 [ConditionsDetailCard] Venue/forecast debug:', {
-      // Venue details
-      hasVenue: !!venue,
-      venueId: venue?.id,
-      venueName: venue?.name,
-      venueCoords: venue?.coordinates,
-      coordsType: venue?.coordinates ? (Array.isArray(venue.coordinates) ? 'array' : typeof venue.coordinates) : 'undefined',
-      coordsLength: Array.isArray(venue?.coordinates) ? venue.coordinates.length : 'N/A',
-      // Date
-      raceDate,
-      // Forecast status
-      forecastLoading,
-      forecastError: forecastError?.message,
-      hasData: !!forecastData,
-      windForecastLength: forecastData?.windForecast?.length,
-    });
-
-    // Extra debug: show raw venue object
-    if (venue) {
-      console.log('🟢 [ConditionsDetailCard] Venue object received:', JSON.stringify(venue, null, 2));
-    } else {
-      console.log('🔴 [ConditionsDetailCard] NO VENUE - cannot fetch forecast');
-    }
-  }
-
   const windForecast = forecastData?.windForecast;
   const tideForecast = forecastData?.tideForecast;
   const forecastNowIndex = forecastData?.forecastNowIndex ?? 0;
@@ -254,6 +286,16 @@ export function ConditionsDetailCard({
   const turnTime = forecastData?.turnTime;
   // Race-window specific data for Tufte display
   const raceWindow = forecastData?.raceWindow;
+
+  // Fetch class-specific rig tuning recommendations for Tufte setup section
+  const { recommendation: rigRecommendation, settings: rigSettings, loading: rigLoading } = useRaceTuningRecommendation({
+    classId: classId,
+    className: className,
+    boatId: boatId,
+    windMin: wind?.speedMin,
+    windMax: wind?.speedMax,
+    enabled: !!(classId || className || boatId),
+  });
 
   // Fetch sail inventory if boatId is provided
   const { sails, isLoading: sailsLoading } = useSailInventory({
@@ -367,105 +409,121 @@ export function ConditionsDetailCard({
       {/* Tufte Design: Data-first grid, no redundant labels */}
       {hasData ? (
         <>
-          {/* Collapsed: Tufte race-window focused display */}
+          {/* Collapsed: Tufte start-focused conditions display */}
           {!isExpanded && (
-            <View style={styles.tufteGrid}>
-              {/* Wind row - Race window focused: shows start→end with sparkline */}
+            <View style={styles.startConditionsCard}>
+              {/* Header: START CONDITIONS + race duration */}
+              <View style={styles.startHeader}>
+                <Text style={styles.startLabel}>START CONDITIONS</Text>
+                <Text style={styles.raceDuration}>
+                  {formatRaceDuration(expectedDurationMinutes)}
+                </Text>
+              </View>
+
+              {/* Wind: Integrated horizontal strip with sparkline */}
               {wind && (
-                <View style={styles.tufteRow}>
-                  <Text style={styles.tufteDirectionLabel}>{raceWindow?.windDirectionAtStart || wind.direction}</Text>
-                  <Text style={styles.tufteRaceWindowValue}>
-                    {raceWindow
-                      ? `${raceWindow.windAtStart}→${raceWindow.windAtEnd}`
-                      : `${wind.speedMin}–${wind.speedMax}`}
-                    <Text style={styles.tufteUnit}>kt</Text>
+                <View style={styles.windStrip}>
+                  <Text style={styles.windStart}>
+                    {raceWindow?.windDirectionAtStart || wind.direction} {raceWindow?.windAtStart || wind.speedMin}
                   </Text>
-                  {windForecast && windForecast.length >= 2 && (
-                    <View style={styles.tufteSparklineInline}>
+                  {windForecast && windForecast.length >= 2 ? (
+                    <View style={styles.windSparklineStrip}>
                       <TinySparkline
                         data={windForecast}
-                        width={50}
-                        height={14}
-                        color={IOS_COLORS.secondaryLabel}
+                        width={100}
+                        height={20}
+                        color={IOS_COLORS.blue}
                         nowIndex={raceStartIndex}
                         showNowDot
                         variant="line"
                       />
                     </View>
-                  )}
-                  <Text style={styles.tufteTrend}>
-                    {windTrend || ''}
-                  </Text>
-                  <Text style={styles.tufteBeaufort}>
-                    {raceWindow
-                      ? `F${raceWindow.beaufortAtStart}${raceWindow.beaufortAtEnd !== raceWindow.beaufortAtStart ? `–${raceWindow.beaufortAtEnd}` : ''}`
-                      : `F${getBeaufortScale((wind.speedMin + wind.speedMax) / 2).force}`}
-                  </Text>
-                </View>
-              )}
-
-              {/* Tide row - Race window focused: shows start→peak→end with HW time */}
-              {tide && (
-                <View style={styles.tufteRow}>
-                  <MaterialCommunityIcons
-                    name={tide.state === 'rising' ? 'arrow-up' : tide.state === 'falling' ? 'arrow-down' : 'minus'}
-                    size={16}
-                    color={tide.state === 'rising' ? IOS_COLORS.green : tide.state === 'falling' ? IOS_COLORS.orange : IOS_COLORS.gray}
-                  />
-                  <Text style={styles.tufteRaceWindowValue}>
-                    {raceWindow
-                      ? `${raceWindow.tideAtStart.toFixed(1)}→${raceWindow.tidePeakDuringRace?.height.toFixed(1) || raceWindow.tideAtEnd.toFixed(1)}`
-                      : tide.height !== undefined ? tide.height.toFixed(1) : '—'}
-                    <Text style={styles.tufteUnit}>m</Text>
-                  </Text>
-                  {tideForecast && tideForecast.length >= 2 && (
-                    <View style={styles.tufteSparklineInline}>
-                      <TinySparkline
-                        data={tideForecast}
-                        width={50}
-                        height={14}
-                        color={IOS_COLORS.secondaryLabel}
-                        nowIndex={raceStartIndex}
-                        showNowDot
-                        highlightPeak
-                        variant="area"
-                      />
+                  ) : (
+                    <View style={styles.windSparklineStrip}>
+                      <Text style={styles.windTrendText}>{windTrend || '→'}</Text>
                     </View>
                   )}
-                  <Text style={styles.tufteTideAnnotation}>
-                    {raceWindow?.tidePeakDuringRace
-                      ? `HW ${raceWindow.tidePeakDuringRace.time}`
-                      : raceWindow?.hasTurnDuringRace
-                        ? `turn ${raceWindow.turnTimeDuringRace}`
-                        : highTide
-                          ? `HW ${highTide.time}`
-                          : ''}
+                  <Text style={styles.windEnd}>
+                    {raceWindow?.windAtEnd || wind.speedMax}kt
                   </Text>
+                  <View style={styles.beaufortBadge}>
+                    <Text style={styles.beaufortBadgeText}>
+                      F{raceWindow?.beaufortAtStart || getBeaufortScale((wind.speedMin + wind.speedMax) / 2).force}
+                      {raceWindow && raceWindow.beaufortAtEnd !== raceWindow.beaufortAtStart ? `→${raceWindow.beaufortAtEnd}` : ''}
+                    </Text>
+                  </View>
                 </View>
               )}
 
-              {/* Racing insight as plain italic text - no box */}
+              {/* Tide: Compact single line with HW time */}
+              {tide && (
+                <View style={styles.tideStrip}>
+                  <MaterialCommunityIcons
+                    name={tide.state === 'rising' ? 'arrow-up' : tide.state === 'falling' ? 'arrow-down' : 'minus'}
+                    size={14}
+                    color={tide.state === 'rising' ? IOS_COLORS.green : tide.state === 'falling' ? IOS_COLORS.orange : IOS_COLORS.gray}
+                  />
+                  <Text style={styles.tideState}>
+                    {tide.state.charAt(0).toUpperCase() + tide.state.slice(1)}
+                  </Text>
+                  {raceWindow ? (
+                    <Text style={styles.tideValue}>
+                      {raceWindow.tideAtStart.toFixed(1)}→{raceWindow.tideAtEnd.toFixed(1)}m
+                    </Text>
+                  ) : tide.height !== undefined ? (
+                    <Text style={styles.tideValue}>{tide.height.toFixed(1)}m</Text>
+                  ) : null}
+                  {(raceWindow?.tidePeakDuringRace || highTide) && (
+                    <Text style={styles.hwTime}>
+                      HW {raceWindow?.tidePeakDuringRace?.time || highTide?.time}
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* Setup Section: Class-specific rig advice with sail recommendation */}
               {wind && (
-                <View style={styles.tufteInsightRow}>
-                  <Text style={styles.tufteInsightText}>
+                <View style={styles.setupSection}>
+                  <Text style={styles.setupHeader}>
+                    {getSetupHeader(rigRecommendation?.conditionSummary, wind.speedMin)}
+                  </Text>
+                  <Text style={styles.setupSails}>
                     {getSailRecommendation(wind.speedMin, wind.speedMax)}
                   </Text>
-                  <Animated.View style={chevronStyle}>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={18}
-                      color={IOS_COLORS.gray3}
-                    />
-                  </Animated.View>
+                  {rigSettings && rigSettings.length > 0 ? (
+                    <Text style={styles.setupRig}>
+                      {formatRigSummary(rigSettings)}
+                    </Text>
+                  ) : (
+                    <Text style={styles.setupRigGeneric}>
+                      {getGenericRigAdvice(wind.speedMin)}
+                    </Text>
+                  )}
+                  {rigRecommendation?.guideSource && (
+                    <Text style={styles.setupSource}>
+                      via {rigRecommendation.guideSource}
+                    </Text>
+                  )}
                 </View>
               )}
 
-              {/* Sail selection summary */}
+              {/* Sail selection summary if available */}
               {boatId && sailSummary && (
                 <View style={styles.tufteSailRow}>
                   <Text style={[styles.tufteValue, styles.tufteSailValue]}>{sailSummary}</Text>
                 </View>
               )}
+
+              {/* Expand chevron */}
+              <View style={styles.chevronRow}>
+                <Animated.View style={chevronStyle}>
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={18}
+                    color={IOS_COLORS.gray3}
+                  />
+                </Animated.View>
+              </View>
             </View>
           )}
 
@@ -944,6 +1002,135 @@ const styles = StyleSheet.create({
 
   // ==========================================================================
   // TUFTE STYLES - Data-first, maximum ink-to-data ratio
+  // ==========================================================================
+
+  // ==========================================================================
+  // NEW: Start-focused Tufte redesign (collapsed view)
+  // ==========================================================================
+  startConditionsCard: {
+    gap: 8,
+  },
+  startHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 4,
+  },
+  startLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  raceDuration: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+  },
+  windStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  windStart: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    minWidth: 55,
+  },
+  windSparklineStrip: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  windTrendText: {
+    fontSize: 16,
+    color: IOS_COLORS.gray,
+  },
+  windEnd: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    fontVariant: ['tabular-nums'],
+  },
+  beaufortBadge: {
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  beaufortBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+  },
+  tideStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  tideState: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tideValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.teal,
+    fontVariant: ['tabular-nums'],
+  },
+  hwTime: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    marginLeft: 'auto',
+  },
+  setupSection: {
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+    gap: 2,
+  },
+  setupHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    letterSpacing: 0.5,
+  },
+  setupSails: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  setupRig: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
+  },
+  setupRigGeneric: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    fontStyle: 'italic',
+  },
+  setupSource: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    marginTop: 2,
+  },
+  chevronRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: 4,
+  },
+
+  // ==========================================================================
+  // Legacy Tufte styles (kept for expanded view)
   // ==========================================================================
 
   // Main grid container for collapsed view

@@ -12,40 +12,68 @@
  * - Race-type-specific checklist items
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, Pressable, Modal } from 'react-native';
-import {
-  Wind,
-  Waves,
-  ChevronRight,
-  Wrench,
-  Users,
-  CloudSun,
-  Shield,
-  Compass,
-  Target,
-  BookOpen,
-  Info,
-} from 'lucide-react-native';
-import { QuickTipsPanel } from '@/components/checklist-tools/QuickTipsPanel';
 import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
-import { RigTuningWizard } from '@/components/checklist-tools/wizards/RigTuningWizard';
-import { SailSelectionWizard } from '@/components/checklist-tools/wizards/SailSelectionWizard';
-import { TacticsReviewWizard } from '@/components/checklist-tools/wizards/TacticsReviewWizard';
+import { QuickTipsPanel } from '@/components/checklist-tools/QuickTipsPanel';
+import { FirstBeatStrategyWizard } from '@/components/checklist-tools/wizards/FirstBeatStrategyWizard';
 import { ForecastCheckWizard } from '@/components/checklist-tools/wizards/ForecastCheckWizard';
+import { RigTuningWizard } from '@/components/checklist-tools/wizards/RigTuningWizard';
+import { RouteBriefingWizard } from '@/components/checklist-tools/wizards/RouteBriefingWizard';
+import { SailSelectionWizard } from '@/components/checklist-tools/wizards/SailSelectionWizard';
+import { StartPlannerWizard } from '@/components/checklist-tools/wizards/StartPlannerWizard';
+import { TacticsReviewWizard } from '@/components/checklist-tools/wizards/TacticsReviewWizard';
+import { TideStrategyWizard } from '@/components/checklist-tools/wizards/TideStrategyWizard';
+import { WindShiftStrategyWizard } from '@/components/checklist-tools/wizards/WindShiftStrategyWizard';
+import type { DetailCardType } from '@/constants/navigationAnimations';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
 import { useUserSettings } from '@/hooks/useUserSettings';
-import type { DetailCardType } from '@/constants/navigationAnimations';
+import {
+  BookOpen,
+  Car,
+  ChevronRight,
+  Clock,
+  CloudSun,
+  Compass,
+  FileText,
+  Info,
+  ListChecks,
+  Shield,
+  Target,
+  Users,
+  Waves,
+  Wind,
+  Wrench,
+} from 'lucide-react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { CardRaceData, getTimeContext } from '../../types';
 import { TinySparkline } from '@/components/shared/charts';
-import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { ChecklistItemWithState, useRaceChecklist } from '@/hooks/useRaceChecklist';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
-import { useRaceChecklist, ChecklistItemWithState } from '@/hooks/useRaceChecklist';
-import { CATEGORY_CONFIG, ChecklistCategory } from '@/types/checklists';
+import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { ChecklistCategory } from '@/types/checklists';
 import type { RaceType } from '@/types/raceEvents';
-import { StrategyBrief } from './StrategyBrief';
+import { CardRaceData, getTimeContext } from '../../types';
 import { ShareWithTeamSection } from './ShareWithTeamSection';
+import { StrategyBrief } from './StrategyBrief';
+
+// Historical view components
+import {
+  HistoricalSummaryCard,
+  CompletionMeter,
+  DataStatement,
+} from './historical';
+import {
+  summarizeChecklistCompletions,
+  formatSailSelectionCompact,
+  formatRigSettingsCompact,
+  getStrategyIntention,
+  getStrategyNotesCount,
+  formatForecastSummary,
+  hasPhaseData,
+} from '@/lib/historical/transformIntentions';
+import { getItemsGroupedByCategory, getCategoriesForPhase } from '@/lib/checklists/checklistConfig';
+import { CATEGORY_CONFIG } from '@/types/checklists';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -65,7 +93,7 @@ const IOS_COLORS = {
 const CATEGORY_ICONS: Record<ChecklistCategory, React.ComponentType<any>> = {
   equipment: Wrench,
   crew: Users,
-  logistics: CloudSun,
+  logistics: Car,
   safety: Shield,
   navigation: Compass,
   tactics: Target,
@@ -74,6 +102,8 @@ const CATEGORY_ICONS: Record<ChecklistCategory, React.ComponentType<any>> = {
   weather: CloudSun,
   morning: CloudSun,
   on_water: Compass,
+  documents: FileText,
+  strategy: Target,
 };
 
 interface RaceMorningContentProps {
@@ -81,6 +111,7 @@ interface RaceMorningContentProps {
   /** Callback to open detail bottom sheet for a specific type */
   onOpenDetail?: (type: DetailCardType) => void;
   isExpanded?: boolean;
+  onSwitchToReview?: () => void;
 }
 
 /**
@@ -209,10 +240,113 @@ function ChecklistItem({
   );
 }
 
+/**
+ * Retrospective Checklist Section - Shows all checklist items with completed/not status
+ * Used in historical view to show what was done vs what could have been done
+ */
+interface RetrospectiveChecklistSectionProps {
+  raceType: RaceType;
+  phase: 'days_before' | 'race_morning' | 'on_water';
+  completions: Record<string, { completedAt: string; notes?: string }> | undefined;
+}
+
+function RetrospectiveChecklistSection({
+  raceType,
+  phase,
+  completions,
+}: RetrospectiveChecklistSectionProps) {
+  const itemsByCategory = getItemsGroupedByCategory(raceType, phase);
+  const categories = getCategoriesForPhase(raceType, phase);
+
+  // Calculate totals
+  const allItems = Object.values(itemsByCategory).flat();
+  const completedCount = allItems.filter((item) => completions?.[item.id]).length;
+  const totalCount = allItems.length;
+
+  if (totalCount === 0) return null;
+
+  return (
+    <HistoricalSummaryCard
+      icon={ListChecks}
+      iconColor={IOS_COLORS.blue}
+      title="Morning Checklist"
+      expandable={true}
+      summary={
+        <View style={styles.retroSummary}>
+          <Text style={styles.retroSummaryText}>
+            {completedCount} of {totalCount} items completed
+          </Text>
+          <View style={styles.retroProgressBar}>
+            <View
+              style={[
+                styles.retroProgressFill,
+                { width: `${(completedCount / totalCount) * 100}%` },
+              ]}
+            />
+          </View>
+        </View>
+      }
+      details={
+        <View style={styles.retroDetailsList}>
+          {categories.map((category) => {
+            const items = itemsByCategory[category];
+            if (!items || items.length === 0) return null;
+            const config = CATEGORY_CONFIG[category];
+            const IconComponent = CATEGORY_ICONS[category] || Wrench;
+            const categoryCompletedCount = items.filter(
+              (item) => completions?.[item.id]
+            ).length;
+
+            return (
+              <View key={category} style={styles.retroCategory}>
+                <View style={styles.retroCategoryHeader}>
+                  <IconComponent size={14} color={config.color} />
+                  <Text style={styles.retroCategoryLabel}>{config.label}</Text>
+                  <Text style={styles.retroCategoryCount}>
+                    {categoryCompletedCount}/{items.length}
+                  </Text>
+                </View>
+                <View style={styles.retroItemsList}>
+                  {items.map((item) => {
+                    const isCompleted = !!completions?.[item.id];
+                    return (
+                      <View key={item.id} style={styles.retroItem}>
+                        <View
+                          style={[
+                            styles.retroCheckbox,
+                            isCompleted && styles.retroCheckboxDone,
+                          ]}
+                        >
+                          {isCompleted && (
+                            <Text style={styles.retroCheckmark}>✓</Text>
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.retroItemLabel,
+                            !isCompleted && styles.retroItemLabelNotDone,
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      }
+    />
+  );
+}
+
 export function RaceMorningContent({
   race,
   onOpenDetail,
   isExpanded = true,
+  onSwitchToReview,
 }: RaceMorningContentProps) {
   const raceType = getRaceType(race);
 
@@ -236,17 +370,6 @@ export function RaceMorningContent({
 
   // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
   const coords = venueCoordinates || metadataCoords;
-
-  // Debug: Log venue data to help diagnose forecast issues
-  if (__DEV__ && !coords) {
-    console.log('🔴 [RaceMorningContent] No coordinates on race:', {
-      raceId: race.id,
-      raceName: race.name,
-      venueString: race.venue,
-      venueId: (race as any).venue_id,
-      metadata,
-    });
-  }
 
   // Create a minimal venue object that the weather services can use
   // The RegionalWeatherService.resolveVenueLocation() looks for venue.coordinates as an object
@@ -321,6 +444,11 @@ export function RaceMorningContent({
   // Time context for past race detection
   const timeContext = getTimeContext(race.date, race.startTime);
 
+  // Race preparation data (for historical view)
+  const { intentions, isLoading: isPreparationLoading } = useRacePreparation({
+    raceEventId: race.id,
+  });
+
   // Handle opening the appropriate tool for an item
   const handleOpenTool = useCallback((item: ChecklistItemWithState) => {
     if (item.toolType === 'full_wizard') {
@@ -352,265 +480,627 @@ export function RaceMorningContent({
   // RENDER
   // ==========================================================================
 
-  // For past races, show a different view
+  // For past races, show historical data view
   if (timeContext.isPast) {
+    // Get historical data summaries
+    const sailSelection = formatSailSelectionCompact(intentions.sailSelection);
+    const rigSettingsFromIntentions = formatRigSettingsCompact(intentions.rigIntentions);
+    const strategyIntention = getStrategyIntention(intentions);
+    const strategyNotesCount = getStrategyNotesCount(intentions);
+    const forecastSummary = formatForecastSummary(intentions.forecastCheck);
+    const categorySummaries = summarizeChecklistCompletions(
+      intentions.checklistCompletions,
+      'race_morning',
+      raceType
+    );
+    const hasData = hasPhaseData(intentions, 'race_morning');
+
+    if (isPreparationLoading) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading preparation data...</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Format race conditions from race object (always available)
+    const hasRaceConditions = !!(windData || tideData);
+
+    // Format wind summary from race data
+    const windSummary = windData
+      ? `${windData.direction || ''} ${windData.speedMin || 0}-${windData.speedMax || 0}kt`.trim()
+      : null;
+
+    // Format tide summary
+    const tideSummary = tideData?.state
+      ? `${tideData.state.charAt(0).toUpperCase() + tideData.state.slice(1)}${tideData.height ? ` (${tideData.height}m)` : ''}`
+      : null;
+
+    // Format rig settings from useRaceTuningRecommendation hook (generated from race conditions)
+    const hasRigRecommendations = rigSettings && rigSettings.length > 0;
+    const rigRecommendationsSummary = hasRigRecommendations
+      ? rigSettings.slice(0, 4).map(s => `${simplifyLabel(s.label)}: ${simplifyValue(s.value)}`).join(' | ')
+      : null;
+
+    // Format time badge text - handle "Completed" case specially
+    const timeBadgeText = timeContext.value === 'Completed'
+      ? 'Completed'
+      : `${timeContext.value} ago`;
+
     return (
       <View style={styles.container}>
-        <View style={styles.pastRaceNotice}>
-          <Text style={styles.pastRaceValue}>{timeContext.value}</Text>
-          <Text style={styles.pastRaceLabel}>This phase has passed</Text>
+        {/* Subtle Time Badge */}
+        <View style={styles.historicalBadge}>
+          <Clock size={12} color={IOS_COLORS.gray} />
+          <Text style={styles.historicalBadgeText}>
+            {timeBadgeText}
+          </Text>
+        </View>
+
+        <View style={styles.historicalContent}>
+          {/* Race Conditions - Always show from race object */}
+          {hasRaceConditions && (
+            <HistoricalSummaryCard
+              icon={CloudSun}
+              iconColor={IOS_COLORS.blue}
+              title="Race Conditions"
+              expandable={false}
+              summary={
+                <View style={styles.conditionsHistoricalRow}>
+                  {windSummary && (
+                    <View style={styles.conditionHistoricalItem}>
+                      <Wind size={14} color={IOS_COLORS.secondaryLabel} />
+                      <Text style={styles.conditionHistoricalText}>{windSummary}</Text>
+                    </View>
+                  )}
+                  {tideSummary && (
+                    <View style={styles.conditionHistoricalItem}>
+                      <Waves size={14} color={IOS_COLORS.secondaryLabel} />
+                      <Text style={styles.conditionHistoricalText}>{tideSummary}</Text>
+                    </View>
+                  )}
+                </View>
+              }
+            />
+          )}
+
+          {/* Rig Tuning Recommendations - Generated from conditions */}
+          {rigRecommendationsSummary && (
+            <HistoricalSummaryCard
+              icon={Wrench}
+              iconColor={IOS_COLORS.blue}
+              title="Rig Recommendations"
+              expandable={hasRigRecommendations && rigSettings.length > 4}
+              summary={
+                <Text style={styles.historicalSummaryText}>{rigRecommendationsSummary}</Text>
+              }
+              details={
+                hasRigRecommendations && rigSettings.length > 4 ? (
+                  <View style={styles.rigSettingsGrid}>
+                    {rigSettings.map((setting, index) => (
+                      <View key={index} style={styles.rigSettingItem}>
+                        <Text style={styles.rigSettingLabel}>{simplifyLabel(setting.label)}</Text>
+                        <Text style={styles.rigSettingValue}>{simplifyValue(setting.value)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : undefined
+              }
+            />
+          )}
+
+          {/* Fallback: Race Details when no conditions or recommendations */}
+          {!hasRaceConditions && !hasRigRecommendations && (
+            <HistoricalSummaryCard
+              icon={Compass}
+              iconColor={IOS_COLORS.gray}
+              title="Race Details"
+              expandable={false}
+              summary={
+                <View style={styles.raceMetadataColumn}>
+                  <DataStatement
+                    label="Type"
+                    value={raceType.charAt(0).toUpperCase() + raceType.slice(1)}
+                    variant="inline"
+                  />
+                  {venueName && (
+                    <DataStatement label="Venue" value={venueName} variant="inline" />
+                  )}
+                  {boatClassName && (
+                    <DataStatement label="Class" value={boatClassName} variant="inline" />
+                  )}
+                  {race.date && (
+                    <DataStatement
+                      label="Date"
+                      value={new Date(race.date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                      variant="inline"
+                    />
+                  )}
+                </View>
+              }
+            />
+          )}
+
+          {/* User-Captured Data (if any) */}
+          {hasData && (
+            <>
+              {/* User's Sail Selection */}
+              {sailSelection && (
+                <HistoricalSummaryCard
+                  icon={Wrench}
+                  iconColor={IOS_COLORS.orange}
+                  title="Your Sail Selection"
+                  expandable={false}
+                  summary={
+                    <Text style={styles.historicalSummaryText}>{sailSelection}</Text>
+                  }
+                />
+              )}
+
+              {/* User's Rig Settings */}
+              {rigSettingsFromIntentions && (
+                <HistoricalSummaryCard
+                  icon={Wrench}
+                  iconColor={IOS_COLORS.blue}
+                  title="Your Rig Tuning"
+                  expandable={false}
+                  summary={
+                    <Text style={styles.historicalSummaryText}>{rigSettingsFromIntentions}</Text>
+                  }
+                />
+              )}
+
+              {/* Strategy Intention */}
+              {strategyIntention && (
+                <HistoricalSummaryCard
+                  icon={Target}
+                  iconColor={IOS_COLORS.green}
+                  title="Your Race Intention"
+                  expandable={false}
+                  summary={
+                    <View style={styles.historicalSummaryRow}>
+                      <Text style={styles.historicalIntentionText}>
+                        "{strategyIntention}"
+                      </Text>
+                      {strategyNotesCount > 0 && (
+                        <Text style={styles.historicalSummaryMeta}>
+                          +{strategyNotesCount} notes
+                        </Text>
+                      )}
+                    </View>
+                  }
+                />
+              )}
+
+              {/* User's Weather Forecast Checks */}
+              {forecastSummary && (
+                <HistoricalSummaryCard
+                  icon={CloudSun}
+                  iconColor={IOS_COLORS.blue}
+                  title="Your Forecast Checks"
+                  expandable={false}
+                  summary={
+                    <Text style={styles.historicalSummaryText}>{forecastSummary}</Text>
+                  }
+                />
+              )}
+
+              {/* Checklist Completion */}
+              {categorySummaries.length > 0 && (
+                <HistoricalSummaryCard
+                  icon={Compass}
+                  iconColor={IOS_COLORS.gray}
+                  title="Your Checklist"
+                  expandable={false}
+                  summary={
+                    <CompletionMeter
+                      categories={categorySummaries.map((cat) => ({
+                        id: cat.id,
+                        name: cat.name,
+                        completed: cat.completed,
+                        total: cat.total,
+                        color: cat.color,
+                      }))}
+                      variant="compact"
+                    />
+                  }
+                />
+              )}
+            </>
+          )}
+
+          {/* Retrospective Checklist - Show all items with completed/not status */}
+          <RetrospectiveChecklistSection
+            raceType={raceType}
+            phase="race_morning"
+            completions={intentions.checklistCompletions}
+          />
+
+          {/* Review Button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.reviewButton,
+              pressed && styles.reviewButtonPressed,
+            ]}
+            onPress={onSwitchToReview}
+          >
+            <Clock size={18} color={IOS_COLORS.blue} />
+            <Text style={styles.reviewButtonText}>Review your race</Text>
+            <ChevronRight size={16} color={IOS_COLORS.gray} />
+          </Pressable>
         </View>
       </View>
     );
   }
 
   return (
-  <>
-    <View style={styles.container}>
-      {/* Weather Section - Tappable to open Conditions detail */}
-      {(windData || tideData) && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.section,
-            styles.tappableSection,
-            pressed && styles.tappableSectionPressed,
-          ]}
-          onPress={() => onOpenDetail?.('conditions')}
-        >
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>CONDITIONS</Text>
-            {onOpenDetail && (
-              <ChevronRight size={16} color={IOS_COLORS.gray} />
+    <>
+      <View style={styles.container}>
+        {/* Weather Section - Tappable to open Conditions detail */}
+        {(windData || tideData) && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.section,
+              styles.tappableSection,
+              pressed && styles.tappableSectionPressed,
+            ]}
+            onPress={() => onOpenDetail?.('conditions')}
+          >
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>CONDITIONS</Text>
+              {onOpenDetail && (
+                <ChevronRight size={16} color={IOS_COLORS.gray} />
+              )}
+            </View>
+            <View style={styles.conditionsGrid}>
+              {windData && (
+                <View style={styles.conditionRow}>
+                  <Wind size={16} color={IOS_COLORS.secondaryLabel} />
+                  <Text style={styles.conditionValue}>
+                    {windData.direction} {windData.speedMin}–{windData.speedMax}kt
+                  </Text>
+                  {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
+                    <TinySparkline
+                      data={forecastData.windForecast}
+                      width={60}
+                      height={16}
+                      color={IOS_COLORS.secondaryLabel}
+                      nowIndex={forecastData.forecastNowIndex}
+                    />
+                  )}
+                </View>
+              )}
+              {tideData && (
+                <View style={styles.conditionRow}>
+                  <Waves size={16} color={IOS_COLORS.secondaryLabel} />
+                  <Text style={styles.conditionValue}>
+                    {formatTideState(tideData.state)}
+                    {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
+                  </Text>
+                  {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
+                    <TinySparkline
+                      data={forecastData.tideForecast}
+                      width={60}
+                      height={16}
+                      color={IOS_COLORS.secondaryLabel}
+                      nowIndex={forecastData.forecastNowIndex}
+                      variant="area"
+                    />
+                  )}
+                </View>
+              )}
+            </View>
+          </Pressable>
+        )}
+
+        {/* Rig Tune Section - Tappable to open Rig detail */}
+        {rigSettings && rigSettings.length > 0 && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.section,
+              styles.tappableSection,
+              pressed && styles.tappableSectionPressed,
+            ]}
+            onPress={() => onOpenDetail?.('rig')}
+          >
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>RIG TUNE</Text>
+              {onOpenDetail && (
+                <ChevronRight size={16} color={IOS_COLORS.gray} />
+              )}
+            </View>
+            <View style={styles.rigGrid}>
+              {rigSettings.slice(0, isExpanded ? 4 : 2).map((setting, idx) => (
+                <View key={idx} style={styles.rigItem}>
+                  <Text style={styles.rigLabel}>{simplifyLabel(setting.label)}</Text>
+                  <Text style={styles.rigValue}>{simplifyValue(setting.value)}</Text>
+                </View>
+              ))}
+            </View>
+          </Pressable>
+        )}
+
+        {/* Strategy Brief Section */}
+        {/* Note: We don't pass onOpenStrategyDetail so StrategyBrief uses its built-in Tufte modal */}
+        <StrategyBrief
+          race={race}
+          isExpanded={isExpanded}
+        />
+
+        {/* Personalized Nudges from Past Races */}
+        {morningNudges.length > 0 && (
+          <View style={styles.section}>
+            <NudgeList
+              nudges={morningNudges}
+              title="From Your Past Races"
+              channel="checklist"
+              maxVisible={3}
+              isLoading={isLoadingNudges}
+              onRecordDelivery={recordDelivery}
+              compact
+            />
+          </View>
+        )}
+
+        {/* Morning Checklist Section - Data-driven by race type */}
+        {checklistItems.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>
+                {raceType === 'team' ? 'TEAM MORNING PREP' :
+                  raceType === 'match' ? 'MATCH MORNING PREP' :
+                    raceType === 'distance' ? 'PASSAGE PREP' :
+                      'MORNING CHECKLIST'}
+              </Text>
+              <Text style={styles.progressText}>
+                {completedCount}/{totalCount}
+              </Text>
+            </View>
+            <View style={styles.checklistContainer}>
+              {checklistItems.slice(0, isExpanded ? undefined : 4).map((item) => (
+                <ChecklistItem
+                  key={item.id}
+                  item={item}
+                  onToggle={() => toggleItem(item.id)}
+                  onOpenTool={() => handleOpenTool(item)}
+                  showQuickTips={userSettings.showQuickTips}
+                />
+              ))}
+            </View>
+            {!isExpanded && checklistItems.length > 4 && (
+              <Text style={styles.moreItemsText}>
+                +{checklistItems.length - 4} more items
+              </Text>
             )}
           </View>
-          <View style={styles.conditionsGrid}>
-            {windData && (
-              <View style={styles.conditionRow}>
-                <Wind size={16} color={IOS_COLORS.secondaryLabel} />
-                <Text style={styles.conditionValue}>
-                  {windData.direction} {windData.speedMin}–{windData.speedMax}kt
-                </Text>
-                {forecastData?.windForecast && forecastData.windForecast.length >= 2 && (
-                  <TinySparkline
-                    data={forecastData.windForecast}
-                    width={60}
-                    height={16}
-                    color={IOS_COLORS.secondaryLabel}
-                    nowIndex={forecastData.forecastNowIndex}
-                  />
-                )}
-              </View>
-            )}
-            {tideData && (
-              <View style={styles.conditionRow}>
-                <Waves size={16} color={IOS_COLORS.secondaryLabel} />
-                <Text style={styles.conditionValue}>
-                  {formatTideState(tideData.state)}
-                  {tideData.height ? ` ${tideData.height.toFixed(1)}m` : ''}
-                </Text>
-                {forecastData?.tideForecast && forecastData.tideForecast.length >= 2 && (
-                  <TinySparkline
-                    data={forecastData.tideForecast}
-                    width={60}
-                    height={16}
-                    color={IOS_COLORS.secondaryLabel}
-                    nowIndex={forecastData.forecastNowIndex}
-                    variant="area"
-                  />
-                )}
-              </View>
-            )}
-          </View>
-        </Pressable>
+        )}
+
+        {/* Share with Team Section */}
+        <ShareWithTeamSection race={race} />
+
+      </View>
+
+      {/* QuickTipsPanel for non-wizard items - rendered OUTSIDE container for proper overlay */}
+      {selectedItem && selectedItem.toolType !== 'full_wizard' && (
+        <QuickTipsPanel
+          item={selectedItem}
+          visible={!!selectedItem && !activeWizard}
+          onComplete={() => {
+            if (selectedItem) {
+              toggleItem(selectedItem.id);
+            }
+            setSelectedItem(null);
+          }}
+          onCancel={() => setSelectedItem(null)}
+        />
       )}
 
-      {/* Rig Tune Section - Tappable to open Rig detail */}
-      {rigSettings && rigSettings.length > 0 && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.section,
-            styles.tappableSection,
-            pressed && styles.tappableSectionPressed,
-          ]}
-          onPress={() => onOpenDetail?.('rig')}
-        >
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>RIG TUNE</Text>
-            {onOpenDetail && (
-              <ChevronRight size={16} color={IOS_COLORS.gray} />
-            )}
-          </View>
-          <View style={styles.rigGrid}>
-            {rigSettings.slice(0, isExpanded ? 4 : 2).map((setting, idx) => (
-              <View key={idx} style={styles.rigItem}>
-                <Text style={styles.rigLabel}>{simplifyLabel(setting.label)}</Text>
-                <Text style={styles.rigValue}>{simplifyValue(setting.value)}</Text>
-              </View>
-            ))}
-          </View>
-        </Pressable>
-      )}
-
-      {/* Strategy Brief Section */}
-      {/* Note: We don't pass onOpenStrategyDetail so StrategyBrief uses its built-in Tufte modal */}
-      <StrategyBrief
-        race={race}
-        isExpanded={isExpanded}
-      />
-
-      {/* Personalized Nudges from Past Races */}
-      {morningNudges.length > 0 && (
-        <View style={styles.section}>
-          <NudgeList
-            nudges={morningNudges}
-            title="From Your Past Races"
-            channel="checklist"
-            maxVisible={3}
-            isLoading={isLoadingNudges}
-            onRecordDelivery={recordDelivery}
-            compact
+      {/* Full Wizard Modal for rig tuning */}
+      <Modal
+        visible={activeWizard === 'rig_tuning_wizard'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'rig_tuning_wizard' && (
+          <RigTuningWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            boatClass={boatClassName}
+            classId={(race as any).class_id}
+            wind={windData}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
           />
-        </View>
-      )}
+        )}
+      </Modal>
 
-      {/* Morning Checklist Section - Data-driven by race type */}
-      {checklistItems.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>
-              {raceType === 'team' ? 'TEAM MORNING PREP' :
-               raceType === 'match' ? 'MATCH MORNING PREP' :
-               raceType === 'distance' ? 'PASSAGE PREP' :
-               'MORNING CHECKLIST'}
-            </Text>
-            <Text style={styles.progressText}>
-              {completedCount}/{totalCount}
-            </Text>
-          </View>
-          <View style={styles.checklistContainer}>
-            {checklistItems.slice(0, isExpanded ? undefined : 4).map((item) => (
-              <ChecklistItem
-                key={item.id}
-                item={item}
-                onToggle={() => toggleItem(item.id)}
-                onOpenTool={() => handleOpenTool(item)}
-                showQuickTips={userSettings.showQuickTips}
-              />
-            ))}
-          </View>
-          {!isExpanded && checklistItems.length > 4 && (
-            <Text style={styles.moreItemsText}>
-              +{checklistItems.length - 4} more items
-            </Text>
-          )}
-        </View>
-      )}
+      {/* Full Wizard Modal for sail selection */}
+      <Modal
+        visible={activeWizard === 'sail_selection_wizard'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'sail_selection_wizard' && (
+          <SailSelectionWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            boatClass={boatClassName}
+            boatClassId={boatClassId}
+            venueId={venueId}
+            wind={windData}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
+          />
+        )}
+      </Modal>
 
-      {/* Share with Team Section */}
-      <ShareWithTeamSection race={race} />
+      {/* Full Wizard Modal for tactics review */}
+      <Modal
+        visible={activeWizard === 'tactics_review_wizard'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'tactics_review_wizard' && (
+          <TacticsReviewWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            venueId={venueId}
+            venueName={venueName}
+            wind={windData}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
+          />
+        )}
+      </Modal>
 
-    </View>
+      {/* Full Wizard Modal for forecast check */}
+      <Modal
+        visible={activeWizard === 'forecast_check'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'forecast_check' && (
+          <ForecastCheckWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
+          />
+        )}
+      </Modal>
 
-    {/* QuickTipsPanel for non-wizard items - rendered OUTSIDE container for proper overlay */}
-    {selectedItem && selectedItem.toolType !== 'full_wizard' && (
-      <QuickTipsPanel
-        item={selectedItem}
-        visible={!!selectedItem && !activeWizard}
-        onComplete={() => {
-          if (selectedItem) {
-            toggleItem(selectedItem.id);
-          }
-          setSelectedItem(null);
-        }}
-        onCancel={() => setSelectedItem(null)}
-      />
-    )}
+      {/* Full Wizard Modal for route briefing */}
+      <Modal
+        visible={activeWizard === 'route_briefing'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'route_briefing' && (
+          <RouteBriefingWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            raceName={race.name}
+            raceDate={race.date}
+            venue={venueForForecast}
+            onComplete={handleWizardComplete}
+            onCancel={handleWizardCancel}
+          />
+        )}
+      </Modal>
 
-    {/* Full Wizard Modal for rig tuning */}
-    <Modal
-      visible={activeWizard === 'rig_tuning_wizard'}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleWizardCancel}
-    >
-      {selectedItem && activeWizard === 'rig_tuning_wizard' && (
-        <RigTuningWizard
-          item={selectedItem}
-          raceEventId={race.id}
-          boatId={(race as any).boat_id}
-          boatClass={boatClassName}
-          classId={(race as any).class_id}
-          wind={windData}
-          onComplete={handleWizardComplete}
-          onCancel={handleWizardCancel}
-        />
-      )}
-    </Modal>
+      {/* Full Wizard Modal for wind shift strategy */}
+      <Modal
+        visible={activeWizard === 'wind_shift_strategy'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'wind_shift_strategy' && (
+          <WindShiftStrategyWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            onCancel={handleWizardCancel}
+            onComplete={handleWizardComplete}
+          />
+        )}
+      </Modal>
 
-    {/* Full Wizard Modal for sail selection */}
-    <Modal
-      visible={activeWizard === 'sail_selection_wizard'}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleWizardCancel}
-    >
-      {selectedItem && activeWizard === 'sail_selection_wizard' && (
-        <SailSelectionWizard
-          item={selectedItem}
-          raceEventId={race.id}
-          boatId={(race as any).boat_id}
-          boatClass={boatClassName}
-          boatClassId={boatClassId}
-          venueId={venueId}
-          wind={windData}
-          onComplete={handleWizardComplete}
-          onCancel={handleWizardCancel}
-        />
-      )}
-    </Modal>
+      {/* Full Wizard Modal for start planner */}
+      <Modal
+        visible={activeWizard === 'start_planner'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'start_planner' && (
+          <StartPlannerWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            onCancel={handleWizardCancel}
+            onComplete={handleWizardComplete}
+          />
+        )}
+      </Modal>
 
-    {/* Full Wizard Modal for tactics review */}
-    <Modal
-      visible={activeWizard === 'tactics_review_wizard'}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleWizardCancel}
-    >
-      {selectedItem && activeWizard === 'tactics_review_wizard' && (
-        <TacticsReviewWizard
-          item={selectedItem}
-          raceEventId={race.id}
-          venueId={venueId}
-          venueName={venueName}
-          wind={windData}
-          onComplete={handleWizardComplete}
-          onCancel={handleWizardCancel}
-        />
-      )}
-    </Modal>
+      {/* Full Wizard Modal for first beat strategy */}
+      <Modal
+        visible={activeWizard === 'first_beat_strategy'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'first_beat_strategy' && (
+          <FirstBeatStrategyWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            onCancel={handleWizardCancel}
+            onComplete={handleWizardComplete}
+          />
+        )}
+      </Modal>
 
-    {/* Full Wizard Modal for forecast check */}
-    <Modal
-      visible={activeWizard === 'forecast_check'}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleWizardCancel}
-    >
-      {selectedItem && activeWizard === 'forecast_check' && (
-        <ForecastCheckWizard
-          item={selectedItem}
-          raceEventId={race.id}
-          boatId={(race as any).boat_id}
-          venue={venueForForecast}
-          raceDate={race.date}
-          raceName={race.name}
-          raceStartTime={race.startTime}
-          onComplete={handleWizardComplete}
-          onCancel={handleWizardCancel}
-        />
-      )}
-    </Modal>
-  </>
+      {/* Full Wizard Modal for tide strategy */}
+      <Modal
+        visible={activeWizard === 'tide_strategy'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'tide_strategy' && (
+          <TideStrategyWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            onCancel={handleWizardCancel}
+            onComplete={handleWizardComplete}
+          />
+        )}
+      </Modal>
+    </>
   );
 }
 
@@ -619,7 +1109,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 
-  // Past Race Notice
+  // Past Race Notice (legacy)
   pastRaceNotice: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -635,6 +1125,212 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: IOS_COLORS.gray,
+  },
+
+  // Historical View Styles
+  historicalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  historicalBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  historicalContent: {
+    gap: 12,
+  },
+  emptyHistoricalContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  emptyHistoricalText: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  historicalSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  historicalSummaryText: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    fontWeight: '500',
+    flex: 1,
+  },
+  historicalSummaryMeta: {
+    fontSize: 12,
+    color: IOS_COLORS.gray,
+  },
+  historicalIntentionText: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    fontStyle: 'italic',
+    flex: 1,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  conditionsHistoricalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  conditionHistoricalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  conditionHistoricalText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  rigSettingsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  rigSettingItem: {
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: '45%',
+  },
+  rigSettingLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    marginBottom: 1,
+  },
+  rigSettingValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  raceMetadataColumn: {
+    gap: 6,
+  },
+
+  // Retrospective Checklist Styles
+  retroSummary: {
+    gap: 8,
+  },
+  retroSummaryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  retroProgressBar: {
+    height: 6,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  retroProgressFill: {
+    height: '100%',
+    backgroundColor: IOS_COLORS.green,
+    borderRadius: 3,
+  },
+  retroDetailsList: {
+    gap: 16,
+    marginTop: 8,
+  },
+  retroCategory: {
+    gap: 8,
+  },
+  retroCategoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  retroCategoryLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  retroCategoryCount: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  retroItemsList: {
+    gap: 6,
+    paddingLeft: 20,
+  },
+  retroItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  retroCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.gray3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retroCheckboxDone: {
+    backgroundColor: IOS_COLORS.green,
+    borderColor: IOS_COLORS.green,
+  },
+  retroCheckmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  retroItemLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.label,
+  },
+  retroItemLabelNotDone: {
+    color: IOS_COLORS.gray,
+  },
+
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  reviewButtonPressed: {
+    backgroundColor: IOS_COLORS.gray5,
+  },
+  reviewButtonText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
   },
 
   // Section

@@ -73,6 +73,34 @@ const IOS_COLORS = {
 
 type WizardStep = 'loading' | 'current' | 'comparison' | 'analysis' | 'confirm';
 
+/**
+ * Get arrow pointing where wind is GOING (opposite of stated "from" direction)
+ * Wind direction data uses meteorological convention: direction wind comes FROM
+ * Arrow should visually show where wind blows TO
+ */
+const getWindDirectionArrow = (cardinal: string): string => {
+  // Map cardinal direction (FROM) to arrow pointing opposite direction (TO)
+  const arrowMap: Record<string, string> = {
+    'N': '↓',    // Wind from N blows to S
+    'NNE': '↙',
+    'NE': '↙',   // Wind from NE blows to SW
+    'ENE': '↙',
+    'E': '←',    // Wind from E blows to W
+    'ESE': '↖',
+    'SE': '↖',   // Wind from SE blows to NW
+    'SSE': '↖',
+    'S': '↑',    // Wind from S blows to N
+    'SSW': '↗',
+    'SW': '↗',   // Wind from SW blows to NE
+    'WSW': '↗',
+    'W': '→',    // Wind from W blows to E
+    'WNW': '↘',
+    'NW': '↘',   // Wind from NW blows to SE
+    'NNW': '↓',
+  };
+  return arrowMap[cardinal?.toUpperCase()] || '↗';
+};
+
 interface ForecastCheckWizardProps extends ChecklistToolProps {
   venue?: SailingVenue | null;
   raceDate?: string | null;
@@ -80,6 +108,8 @@ interface ForecastCheckWizardProps extends ChecklistToolProps {
   raceName?: string;
   /** Actual race start time (e.g., "10:30") - used instead of forecast timestamps */
   raceStartTime?: string;
+  /** Race duration in hours (for distance races) */
+  raceDurationHours?: number;
 }
 
 export function ForecastCheckWizard({
@@ -92,6 +122,7 @@ export function ForecastCheckWizard({
   raceDate,
   raceName,
   raceStartTime,
+  raceDurationHours,
 }: ForecastCheckWizardProps) {
   const router = useRouter();
 
@@ -113,6 +144,8 @@ export function ForecastCheckWizard({
     raceEventId,
     venue: venue || null,
     raceDate: raceDate || null,
+    raceStartTime: raceStartTime || null,
+    expectedDurationMinutes: raceDurationHours ? raceDurationHours * 60 : undefined,
   });
 
   // State
@@ -321,14 +354,25 @@ export function ForecastCheckWizard({
     }
   };
 
-  // Helper: Interpolate wind at a specific time
+  // Helper: Interpolate wind at a specific timestamp (for multi-day races)
   const interpolateWind = (
     hourlyWind: HourlyDataPoint[],
-    targetTime: string
+    targetTime: string,
+    targetTimestamp?: number  // Unix timestamp in ms for multi-day accuracy
   ): { speed: number; direction: string } | null => {
     if (!hourlyWind.length) return null;
 
-    // Find closest hour
+    // If we have a target timestamp, use it for accurate multi-day matching
+    if (targetTimestamp) {
+      const closest = hourlyWind.reduce((prev, curr) => {
+        const prevTs = new Date(prev.timestamp).getTime();
+        const currTs = new Date(curr.timestamp).getTime();
+        return Math.abs(currTs - targetTimestamp) < Math.abs(prevTs - targetTimestamp) ? curr : prev;
+      });
+      return { speed: closest.value, direction: closest.direction || '' };
+    }
+
+    // Fallback: Find closest hour (for backwards compatibility)
     const targetHour = parseInt(targetTime.split(':')[0], 10);
     const closest = hourlyWind.reduce((prev, curr) => {
       const prevHour = parseInt(prev.time.split(':')[0], 10);
@@ -349,8 +393,13 @@ export function ForecastCheckWizard({
           <Text style={styles.errorTitle}>Venue Location Required</Text>
           <Text style={styles.errorDescription}>
             To see the weather forecast, please set a venue location for this race.
-            You can do this by editing the race and selecting or creating a venue with coordinates.
           </Text>
+          {raceEventId && (
+            <Pressable style={styles.editRaceButton} onPress={handleEditRace}>
+              <Text style={styles.editRaceButtonText}>Edit Race</Text>
+              <ArrowRight size={16} color={IOS_COLORS.blue} />
+            </Pressable>
+          )}
         </View>
       );
     }
@@ -401,10 +450,24 @@ export function ForecastCheckWizard({
       rw.raceStartTime
     );
 
-    // Helper: Interpolate wave at a specific time
-    const interpolateWave = (targetTime: string): number | null => {
+    // Helper: Interpolate wave at a specific time (with multi-day timestamp support)
+    const interpolateWave = (
+      targetTime: string,
+      targetTimestamp?: number  // Unix timestamp in ms for multi-day accuracy
+    ): number | null => {
       if (!hourlyWaves.length) return null;
 
+      // If we have a target timestamp, use it for accurate multi-day matching
+      if (targetTimestamp) {
+        const closest = hourlyWaves.reduce((prev, curr) => {
+          const prevTs = new Date(prev.timestamp).getTime();
+          const currTs = new Date(curr.timestamp).getTime();
+          return Math.abs(currTs - targetTimestamp) < Math.abs(prevTs - targetTimestamp) ? curr : prev;
+        });
+        return closest.value;
+      }
+
+      // Fallback: hour-only matching for backwards compatibility
       const targetHour = parseInt(targetTime.split(':')[0], 10);
       const closest = hourlyWaves.reduce((prev, curr) => {
         const prevHour = parseInt(prev.time.split(':')[0], 10);
@@ -427,13 +490,32 @@ export function ForecastCheckWizard({
         wave?: number;
       }> = [];
 
-      // Parse start time
-      const [startH, startM] = rw.raceStartTime.split(':').map(Number);
-      const [endH, endM] = rw.raceEndTime.split(':').map(Number);
+      // Use passed raceStartTime if available, otherwise fall back to forecast-derived time
+      const effectiveStartTime = raceStartTime || rw.raceStartTime;
+      const [startH, startM] = effectiveStartTime.split(':').map(Number);
 
-      // Calculate duration in minutes
-      let durationMin = (endH * 60 + endM) - (startH * 60 + startM);
-      if (durationMin < 0) durationMin += 24 * 60; // Handle overnight
+      // Calculate duration: use raceDurationHours if provided, otherwise derive from forecast window
+      let durationMin: number;
+      let effectiveEndTime: string;
+
+      if (raceDurationHours && raceDurationHours > 0) {
+        // Use explicit race duration (for distance races with time limits)
+        durationMin = raceDurationHours * 60;
+        // Calculate end time from start + duration
+        const endTotalMin = (startH * 60 + startM + durationMin) % (24 * 60);
+        const endHCalc = Math.floor(endTotalMin / 60);
+        const endMCalc = endTotalMin % 60;
+        effectiveEndTime = `${endHCalc.toString().padStart(2, '0')}:${endMCalc.toString().padStart(2, '0')}`;
+      } else {
+        // Fall back to forecast-derived times
+        const [endH, endM] = rw.raceEndTime.split(':').map(Number);
+        durationMin = (endH * 60 + endM) - (startH * 60 + startM);
+        if (durationMin <= 0) durationMin += 24 * 60; // Handle overnight/next day
+        effectiveEndTime = rw.raceEndTime;
+      }
+
+      const durationHours = durationMin / 60;
+      const isLongRace = durationHours >= 3;
 
       // Helper to format time
       const formatEventTime = (h: number, m: number) => {
@@ -450,87 +532,175 @@ export function ForecastCheckWizard({
         };
       };
 
-      // -30m before start
-      const minus30 = addMinutes(startH, startM, -30);
-      const minus30Time = formatEventTime(minus30.h, minus30.m);
-      const minus30Wind = interpolateWind(hourlyWind, minus30Time);
-      const minus30Wave = interpolateWave(minus30Time);
-      events.push({
-        time: minus30Time,
-        label: '-30m',
-        wind: minus30Wind?.speed || rw.windAtStart,
-        direction: minus30Wind?.direction || rw.windDirectionAtStart,
-        tide: rw.tideAtStart,
-        tideState: tideState,
-        wave: minus30Wave ?? rw.waveHeightAtStart,
-      });
+      // Helper to calculate progress through race (0-1)
+      const getProgress = (elapsedMin: number) => elapsedMin / durationMin;
 
-      // Warning signal (-5m)
-      const warn = addMinutes(startH, startM, -5);
-      const warnTime = formatEventTime(warn.h, warn.m);
-      const warnWind = interpolateWind(hourlyWind, warnTime);
-      const warnWave = interpolateWave(warnTime);
-      events.push({
-        time: warnTime,
-        label: 'Warn',
-        wind: warnWind?.speed || rw.windAtStart,
-        direction: warnWind?.direction || rw.windDirectionAtStart,
-        tide: rw.tideAtStart,
-        tideState: tideState,
-        wave: warnWave ?? rw.waveHeightAtStart,
-      });
+      // Helper to interpolate values based on progress
+      const interpolateTide = (progress: number) => {
+        return rw.tideAtStart + (rw.tideAtEnd - rw.tideAtStart) * progress;
+      };
 
-      // Start
-      events.push({
-        time: rw.raceStartTime,
-        label: 'Start',
-        wind: rw.windAtStart,
-        direction: rw.windDirectionAtStart,
-        tide: rw.tideAtStart,
-        tideState: tideState,
-        wave: rw.waveHeightAtStart,
-      });
+      // Helper to calculate actual timestamp for multi-day accuracy
+      const getEventTimestamp = (elapsedMin: number): number | undefined => {
+        if (!raceDate) return undefined;
+        const baseDate = new Date(raceDate);
+        // Set to start time
+        baseDate.setHours(startH, startM, 0, 0);
+        // Add elapsed minutes
+        return baseDate.getTime() + elapsedMin * 60 * 1000;
+      };
 
-      // Mid-race
-      const mid = addMinutes(startH, startM, Math.floor(durationMin / 2));
-      const midTime = formatEventTime(mid.h, mid.m);
-      const midWind = interpolateWind(hourlyWind, midTime);
-      const midWave = interpolateWave(midTime);
-      const midTideState = getTideState(
-        (rw.tideAtStart + rw.tideAtEnd) / 2,
-        currentForecast.highTide,
-        currentForecast.lowTide,
-        midTime
-      );
-      const midWaveHeight = rw.waveHeightAtStart !== undefined && rw.waveHeightAtEnd !== undefined
-        ? (rw.waveHeightAtStart + rw.waveHeightAtEnd) / 2
-        : undefined;
-      events.push({
-        time: midTime,
-        label: 'Mid',
-        wind: midWind?.speed || Math.round((rw.windAtStart + rw.windAtEnd) / 2),
-        direction: midWind?.direction || rw.windDirectionAtStart,
-        tide: (rw.tideAtStart + rw.tideAtEnd) / 2,
-        tideState: midTideState,
-        wave: midWave ?? midWaveHeight,
-      });
+      // Helper to format time with optional date for multi-day races
+      const formatEventTimeWithDate = (elapsedMin: number) => {
+        const eventTime = addMinutes(startH, startM, elapsedMin);
+        const timeStr = formatEventTime(eventTime.h, eventTime.m);
 
-      // Finish
-      const endTideState = getTideState(
-        rw.tideAtEnd,
-        currentForecast.highTide,
-        currentForecast.lowTide,
-        rw.raceEndTime
-      );
-      events.push({
-        time: rw.raceEndTime,
-        label: 'Finish',
-        wind: rw.windAtEnd,
-        direction: rw.windDirectionAtStart, // May shift but using start as default
-        tide: rw.tideAtEnd,
-        tideState: endTideState,
-        wave: rw.waveHeightAtEnd,
-      });
+        // For races > 24 hours, show day info
+        if (durationHours > 24 && raceDate) {
+          const timestamp = getEventTimestamp(elapsedMin);
+          if (timestamp) {
+            const eventDate = new Date(timestamp);
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dayName = dayNames[eventDate.getDay()];
+            return `${dayName} ${timeStr}`;
+          }
+        }
+        return timeStr;
+      };
+
+      // Helper to create an event at a given elapsed time
+      const createEvent = (elapsedMin: number, label: string) => {
+        const eventTime = addMinutes(startH, startM, elapsedMin);
+        const eventTimeStr = formatEventTime(eventTime.h, eventTime.m);
+        const displayTime = formatEventTimeWithDate(elapsedMin);
+        const eventTimestamp = getEventTimestamp(elapsedMin);
+        const wind = interpolateWind(hourlyWind, eventTimeStr, eventTimestamp);
+        const wave = interpolateWave(eventTimeStr, eventTimestamp);
+        const progress = getProgress(elapsedMin);
+        const tide = interpolateTide(progress);
+        const eventTideState = getTideState(
+          tide,
+          currentForecast.highTide,
+          currentForecast.lowTide,
+          eventTimeStr
+        );
+
+        return {
+          time: displayTime,
+          label,
+          wind: wind?.speed || Math.round(rw.windAtStart + (rw.windAtEnd - rw.windAtStart) * progress),
+          direction: wind?.direction || rw.windDirectionAtStart,
+          tide,
+          tideState: eventTideState,
+          wave: wave ?? (rw.waveHeightAtStart !== undefined && rw.waveHeightAtEnd !== undefined
+            ? rw.waveHeightAtStart + (rw.waveHeightAtEnd - rw.waveHeightAtStart) * progress
+            : undefined),
+        };
+      };
+
+      if (!isLongRace) {
+        // Short race behavior (< 3 hours): -30m, Warn, Start, Mid, Finish
+
+        // -30m before start
+        const minus30 = addMinutes(startH, startM, -30);
+        const minus30Time = formatEventTime(minus30.h, minus30.m);
+        const minus30Wind = interpolateWind(hourlyWind, minus30Time);
+        const minus30Wave = interpolateWave(minus30Time);
+        events.push({
+          time: minus30Time,
+          label: '-30m',
+          wind: minus30Wind?.speed || rw.windAtStart,
+          direction: minus30Wind?.direction || rw.windDirectionAtStart,
+          tide: rw.tideAtStart,
+          tideState: tideState,
+          wave: minus30Wave ?? rw.waveHeightAtStart,
+        });
+
+        // Warning signal (-5m)
+        const warn = addMinutes(startH, startM, -5);
+        const warnTime = formatEventTime(warn.h, warn.m);
+        const warnWind = interpolateWind(hourlyWind, warnTime);
+        const warnWave = interpolateWave(warnTime);
+        events.push({
+          time: warnTime,
+          label: 'Warn',
+          wind: warnWind?.speed || rw.windAtStart,
+          direction: warnWind?.direction || rw.windDirectionAtStart,
+          tide: rw.tideAtStart,
+          tideState: tideState,
+          wave: warnWave ?? rw.waveHeightAtStart,
+        });
+
+        // Start
+        events.push({
+          time: effectiveStartTime,
+          label: 'Start',
+          wind: rw.windAtStart,
+          direction: rw.windDirectionAtStart,
+          tide: rw.tideAtStart,
+          tideState: tideState,
+          wave: rw.waveHeightAtStart,
+        });
+
+        // Mid-race
+        const mid = addMinutes(startH, startM, Math.floor(durationMin / 2));
+        const midTime = formatEventTime(mid.h, mid.m);
+        const midWind = interpolateWind(hourlyWind, midTime);
+        const midWave = interpolateWave(midTime);
+        const midTideState = getTideState(
+          (rw.tideAtStart + rw.tideAtEnd) / 2,
+          currentForecast.highTide,
+          currentForecast.lowTide,
+          midTime
+        );
+        const midWaveHeight = rw.waveHeightAtStart !== undefined && rw.waveHeightAtEnd !== undefined
+          ? (rw.waveHeightAtStart + rw.waveHeightAtEnd) / 2
+          : undefined;
+        events.push({
+          time: midTime,
+          label: 'Mid',
+          wind: midWind?.speed || Math.round((rw.windAtStart + rw.windAtEnd) / 2),
+          direction: midWind?.direction || rw.windDirectionAtStart,
+          tide: (rw.tideAtStart + rw.tideAtEnd) / 2,
+          tideState: midTideState,
+          wave: midWave ?? midWaveHeight,
+        });
+
+        // Finish
+        const endTideState = getTideState(
+          rw.tideAtEnd,
+          currentForecast.highTide,
+          currentForecast.lowTide,
+          effectiveEndTime
+        );
+        events.push({
+          time: effectiveEndTime,
+          label: 'Finish',
+          wind: rw.windAtEnd,
+          direction: rw.windDirectionAtStart,
+          tide: rw.tideAtEnd,
+          tideState: endTideState,
+          wave: rw.waveHeightAtEnd,
+        });
+      } else {
+        // Long race behavior (>= 3 hours): Start, key intervals every 4-6 hours, Finish
+        // Calculate interval: aim for ~4 hour intervals, max ~10 rows
+        const intervalHours = durationHours <= 12 ? 4 : durationHours <= 24 ? 6 : Math.ceil(durationHours / 8);
+        const intervalMin = intervalHours * 60;
+
+        // Start (use createEvent for proper interpolation and date display)
+        events.push(createEvent(0, 'Start'));
+
+        // Add checkpoints at regular intervals
+        for (let elapsedMin = intervalMin; elapsedMin < durationMin - intervalMin / 2; elapsedMin += intervalMin) {
+          const elapsedHours = Math.floor(elapsedMin / 60);
+          const label = `+${elapsedHours}h`;
+          events.push(createEvent(elapsedMin, label));
+        }
+
+        // Finish (use createEvent for proper interpolation and date display)
+        events.push(createEvent(durationMin, 'Finish'));
+      }
 
       return events;
     };
@@ -1396,6 +1566,21 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  editRaceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    borderRadius: 10,
+  },
+  editRaceButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
   },
   // Overview header
   overviewHeader: {

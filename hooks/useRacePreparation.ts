@@ -1,23 +1,27 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
 import {
   sailorRacePreparationService,
-  type RegulatoryAcknowledgements,
   type RaceBriefData,
+  type RegulatoryAcknowledgements,
   type SailorRacePreparation,
 } from '@/services/SailorRacePreparationService';
+import { DemoRaceService } from '@/services/DemoRaceService';
 import type {
+  ArrivalTimeIntention,
+  CourseSelectionIntention,
   RaceIntentions,
   RaceIntentionUpdate,
-  ArrivalTimeIntention,
-  SailSelectionIntention,
   RigIntentions,
-  CourseSelectionIntention,
+  SailSelectionIntention,
   StrategyNotes,
 } from '@/types/raceIntentions';
-import { useAuth } from '@/providers/AuthProvider';
-import { createLogger } from '@/lib/utils/logger';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const logger = createLogger('useRacePreparation');
+
+const STORAGE_KEY_PREFIX = 'demo_race_prep_';
 
 /**
  * Validates if a string is a valid UUID format
@@ -28,6 +32,35 @@ const isValidUUID = (id: string): boolean =>
 const DEFAULT_INTENTIONS: RaceIntentions = {
   updatedAt: new Date().toISOString(),
 };
+
+/**
+ * Deep merges intention updates, preserving nested fields from concurrent updates.
+ * This prevents race conditions where one caller's update overwrites another's.
+ */
+function deepMergeIntentions(
+  target: RaceIntentions,
+  source: RaceIntentionUpdate
+): RaceIntentions {
+  const result = { ...target };
+
+  for (const key of Object.keys(source) as (keyof RaceIntentionUpdate)[]) {
+    const sourceValue = source[key];
+    const targetValue = result[key as keyof RaceIntentions];
+
+    if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
+      // Deep merge nested objects (strategyBrief, checklistCompletions, etc.)
+      result[key as keyof RaceIntentions] = {
+        ...(targetValue as object || {}),
+        ...sourceValue,
+      } as any;
+    } else if (sourceValue !== undefined) {
+      // Direct assignment for primitives and arrays
+      result[key as keyof RaceIntentions] = sourceValue as any;
+    }
+  }
+
+  return result;
+}
 
 interface UseRacePreparationOptions {
   raceEventId: string | null;
@@ -92,18 +125,85 @@ export function useRacePreparation({
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const pendingChangesRef = useRef<Partial<SailorRacePreparation>>({});
 
+
+
   /**
-   * Load preparation data from Supabase
+   * Load preparation data from Supabase or AsyncStorage
    */
   const loadPreparation = useCallback(async () => {
-    if (!raceEventId || !user?.id) {
+    if (!raceEventId) {
       setIsLoading(false);
       return;
     }
 
-    // Skip database queries for non-UUID race IDs (e.g., demo races)
+    // Handle non-UUID race IDs (demo races) with local storage
     if (!isValidUUID(raceEventId)) {
-      setIsLoading(false);
+      try {
+        const userId = user?.id || 'guest';
+        const key = `${STORAGE_KEY_PREFIX}${raceEventId}_${userId}`;
+        const saved = await AsyncStorage.getItem(key);
+        if (saved) {
+          const data = JSON.parse(saved);
+          const existingIntentions = data.user_intentions;
+
+          // Check if existing data is essentially empty (no checklist completions)
+          const hasCompletions = existingIntentions?.checklistCompletions &&
+            Object.keys(existingIntentions.checklistCompletions).length > 0;
+
+          // If existing data is empty, try to seed with demo data
+          if (!hasCompletions) {
+            const seededData = DemoRaceService.getDemoRacePreparation(raceEventId);
+            if (seededData) {
+              logger.info('Seeding demo race with preparation data (existing was empty)');
+              setIntentions(seededData);
+              // Update AsyncStorage with seeded data
+              await AsyncStorage.setItem(key, JSON.stringify({
+                ...data,
+                user_intentions: seededData,
+                updated_at: new Date().toISOString()
+              }));
+            } else {
+              // Not a seeded demo race, use existing empty data
+              setRigNotesState(data.rig_notes || '');
+              setSelectedRigPresetIdState(data.selected_rig_preset_id || null);
+              setAcknowledgements(data.regulatory_acknowledgements || DEFAULT_ACKNOWLEDGEMENTS);
+              setRaceBriefData(data.race_brief_data || null);
+              setIntentions(existingIntentions || DEFAULT_INTENTIONS);
+            }
+          } else {
+            // Existing data has completions, use it
+            setRigNotesState(data.rig_notes || '');
+            setSelectedRigPresetIdState(data.selected_rig_preset_id || null);
+            setAcknowledgements(data.regulatory_acknowledgements || DEFAULT_ACKNOWLEDGEMENTS);
+            setRaceBriefData(data.race_brief_data || null);
+            setIntentions(existingIntentions);
+            logger.info('Loaded demo race preparation data from local storage');
+          }
+        } else {
+          // No existing data - check for seeded demo data
+          const seededData = DemoRaceService.getDemoRacePreparation(raceEventId);
+          if (seededData) {
+            logger.info('Using seeded demo race preparation data');
+            setIntentions(seededData);
+            // Save seeded data to AsyncStorage so it persists
+            await AsyncStorage.setItem(key, JSON.stringify({
+              user_intentions: seededData,
+              updated_at: new Date().toISOString()
+            }));
+          } else {
+            // Truly no data available, reset to defaults
+            setRigNotesState('');
+            setSelectedRigPresetIdState(null);
+            setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
+            setRaceBriefData(null);
+            setIntentions(DEFAULT_INTENTIONS);
+          }
+        }
+      } catch (error) {
+        console.error('[useRacePreparation] loadPreparation - AsyncStorage failed', error);
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -117,7 +217,6 @@ export function useRacePreparation({
         setAcknowledgements(data.regulatory_acknowledgements || DEFAULT_ACKNOWLEDGEMENTS);
         setRaceBriefData(data.race_brief_data || null);
         setIntentions(data.user_intentions || DEFAULT_INTENTIONS);
-        logger.info('Loaded race preparation data');
       } else {
         // No existing data, reset to defaults
         setRigNotesState('');
@@ -125,7 +224,6 @@ export function useRacePreparation({
         setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
         setRaceBriefData(null);
         setIntentions(DEFAULT_INTENTIONS);
-        logger.info('No existing race preparation data');
       }
     } catch (error) {
       logger.error('Failed to load race preparation:', error);
@@ -135,16 +233,39 @@ export function useRacePreparation({
   }, [raceEventId, user?.id]);
 
   /**
-   * Save pending changes to Supabase
+   * Save pending changes to Supabase or AsyncStorage
    */
   const saveChanges = useCallback(async () => {
-    if (!raceEventId || !user?.id || Object.keys(pendingChangesRef.current).length === 0) {
+    // For demo races (non-UUID), we allow saving even without a user ID (guest mode)
+    const isDemoRace = !isValidUUID(raceEventId);
+    if (!raceEventId || (!user?.id && !isDemoRace) || Object.keys(pendingChangesRef.current).length === 0) {
       return;
     }
 
-    // Skip saving for non-UUID race IDs (e.g., demo races)
-    if (!isValidUUID(raceEventId)) {
-      pendingChangesRef.current = {};
+    // Handle non-UUID race IDs (demo races) with local storage
+    if (isDemoRace) {
+      try {
+        setIsSaving(true);
+        const userId = user?.id || 'guest';
+        const key = `${STORAGE_KEY_PREFIX}${raceEventId}_${userId}`;
+
+        // Load existing to merge updates
+        const existingStr = await AsyncStorage.getItem(key);
+        const existing = existingStr ? JSON.parse(existingStr) : {};
+
+        const merged = {
+          ...existing,
+          ...pendingChangesRef.current,
+          updated_at: new Date().toISOString()
+        };
+
+        await AsyncStorage.setItem(key, JSON.stringify(merged));
+        pendingChangesRef.current = {};
+      } catch {
+        // AsyncStorage save failed
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
 
@@ -157,11 +278,17 @@ export function useRacePreparation({
         ...pendingChangesRef.current,
       };
 
-      await sailorRacePreparationService.upsertPreparation(updates);
-      pendingChangesRef.current = {};
-      logger.info('Saved race preparation changes');
+      const result = await sailorRacePreparationService.upsertPreparation(updates);
+
+      if (result) {
+        pendingChangesRef.current = {};
+      } else {
+        // Race doesn't exist in regattas table - this is expected for some races
+        pendingChangesRef.current = {};
+      }
     } catch (error) {
       logger.error('Failed to save race preparation:', error);
+      // Keep pending changes so they can be retried
     } finally {
       setIsSaving(false);
     }
@@ -171,7 +298,9 @@ export function useRacePreparation({
    * Schedule a save with debouncing
    */
   const scheduleSave = useCallback(() => {
-    if (!autoSave) return;
+    if (!autoSave) {
+      return;
+    }
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -273,25 +402,32 @@ export function useRacePreparation({
   );
 
   /**
-   * Update user intentions (partial update, merges with existing)
+   * Update user intentions (partial update, deep merges with existing)
+   * Uses deep merge to prevent race conditions from concurrent callers
    */
   const updateIntentions = useCallback(
     (update: RaceIntentionUpdate) => {
       setIntentions((prev) => {
-        const merged: RaceIntentions = {
-          ...prev,
-          ...update,
-          updatedAt: new Date().toISOString(),
-        };
+        // Deep merge to preserve nested fields from concurrent updates
+        const merged = deepMergeIntentions(prev, update);
+        merged.updatedAt = new Date().toISOString();
+
+        // Accumulate into pending changes using deep merge
+        // This ensures multiple rapid updates are combined, not overwritten
+        const existingIntentions = pendingChangesRef.current.user_intentions || prev;
+        const accumulatedIntentions = deepMergeIntentions(existingIntentions, update);
+        accumulatedIntentions.updatedAt = merged.updatedAt;
+
         pendingChangesRef.current = {
           ...pendingChangesRef.current,
-          user_intentions: merged,
+          user_intentions: accumulatedIntentions,
         };
+
         scheduleSave();
         return merged;
       });
     },
-    [scheduleSave]
+    [scheduleSave, raceEventId, user?.id]
   );
 
   /**

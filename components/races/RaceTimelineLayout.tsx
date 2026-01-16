@@ -10,7 +10,9 @@
  * - Vertical swipe: Navigate between detail cards (with card pager mode)
  */
 
-import React, { useCallback, useRef, useState, useEffect, ReactElement } from 'react';
+import * as Haptics from 'expo-haptics';
+import { ChevronUp } from 'lucide-react-native';
+import React, { ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -25,12 +27,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import { ChevronUp } from 'lucide-react-native';
 
-import { ZONE_HEIGHTS, type DetailCardType } from '@/constants/navigationAnimations';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { DetailCardPager, DetailCardData, RenderCardOptions } from './navigation/DetailCardPager';
+import { ZONE_HEIGHTS, type DetailCardType } from '@/constants/navigationAnimations';
+import { DetailCardData, DetailCardPager, RenderCardOptions } from './navigation/DetailCardPager';
+
+// =============================================================================
+// TIMELINE INDICATOR CONSTANTS
+// =============================================================================
+const MAX_VISIBLE_DOTS = 7;
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -89,16 +94,6 @@ export function RaceTimelineLayout({
   enableHaptics = true,
   nextRaceIndex,
 }: RaceTimelineLayoutProps) {
-  // Debug props - CRITICAL LOG
-  console.log('🔷🔷🔷 [RaceTimelineLayout] RENDER 🔷🔷🔷', {
-    useCardPagerMode,
-    hasRenderDetailCard: !!renderDetailCard,
-    detailCardsLength: detailCards?.length ?? 'undefined',
-    racesLength: races.length,
-    selectedRaceIndex,
-    nextRaceIndex,
-  });
-
   const flatListRef = useRef<FlatList>(null);
   const detailScrollRef = useRef<ScrollView>(null);
   const [isScrolling, setIsScrolling] = useState(false);
@@ -255,7 +250,7 @@ export function RaceTimelineLayout({
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           horizontal
-          pagingEnabled
+          pagingEnabled={false}
           showsHorizontalScrollIndicator={false}
           snapToInterval={snapInterval}
           snapToAlignment="start"
@@ -273,7 +268,102 @@ export function RaceTimelineLayout({
           initialNumToRender={3}
         />
 
-        {/* Timeline Indicators removed - season header provides temporal context */}
+        {/* Timeline Indicators (Dots) */}
+        {races.length > 1 && (
+          <View style={styles.timelineDotsContainer}>
+            <View style={styles.timelineDotsRow}>
+              {/* Left arrow for windowed view */}
+              {races.length > MAX_VISIBLE_DOTS && selectedRaceIndex > Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
+                <Text style={styles.timelineArrow}>‹</Text>
+              )}
+
+              {/* Render dots */}
+              {(() => {
+                const totalRaces = races.length;
+
+                // Calculate visible window for many races
+                let startIdx = 0;
+                let endIdx = totalRaces - 1;
+
+                if (totalRaces > MAX_VISIBLE_DOTS) {
+                  const halfWindow = Math.floor((MAX_VISIBLE_DOTS - 1) / 2);
+                  startIdx = Math.max(0, selectedRaceIndex - halfWindow);
+                  endIdx = startIdx + MAX_VISIBLE_DOTS - 1;
+                  if (endIdx >= totalRaces) {
+                    endIdx = totalRaces - 1;
+                    startIdx = Math.max(0, endIdx - MAX_VISIBLE_DOTS + 1);
+                  }
+                }
+
+                return races.slice(startIdx, endIdx + 1).map((race: any, idx: number) => {
+                  const actualIndex = startIdx + idx;
+                  const isSelected = actualIndex === selectedRaceIndex;
+                  const isNextRace = actualIndex === nextRaceIndex;
+
+                  return (
+                    <TouchableOpacity
+                      key={race.id || `dot-${actualIndex}`}
+                      onPress={() => {
+                        if (enableHaptics && Platform.OS !== 'web') {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }
+                        flatListRef.current?.scrollToIndex({
+                          index: actualIndex,
+                          animated: true,
+                        });
+                        onRaceChange(actualIndex);
+                      }}
+                      style={[
+                        styles.timelineDot,
+                        isSelected && styles.timelineDotActive,
+                        isNextRace && !isSelected && styles.timelineDotNext,
+                      ]}
+                      hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                    />
+                  );
+                });
+              })()}
+
+              {/* Right arrow for windowed view */}
+              {races.length > MAX_VISIBLE_DOTS && selectedRaceIndex < races.length - 1 - Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
+                <Text style={[styles.timelineArrow, { marginLeft: 2, marginRight: 0 }]}>›</Text>
+              )}
+            </View>
+
+            {/* Now button - jump to next upcoming race */}
+            {nextRaceIndex !== undefined && nextRaceIndex !== selectedRaceIndex && (
+              <TouchableOpacity
+                onPress={() => {
+                  if (enableHaptics && Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }
+                  flatListRef.current?.scrollToIndex({
+                    index: nextRaceIndex,
+                    animated: true,
+                  });
+                  onRaceChange(nextRaceIndex);
+                }}
+                style={styles.timelineNowButton}
+              >
+                <Text style={styles.timelineNowButtonText}>Now</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Position indicator - clickable to jump to next */}
+            <TouchableOpacity
+              onPress={() => {
+                if (nextRaceIndex !== undefined) {
+                  handleJumpToNext();
+                }
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.timelinePositionIndicator}>
+                {selectedRaceIndex + 1}/{races.length}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Jump to Next Race FAB */}
         {nextRaceIndex !== undefined && (
@@ -406,6 +496,57 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.systemBackground,
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  // Timeline Indicators
+  timelineDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingBottom: 24, // Lift dots up from the bottom edge
+    gap: 8,
+  },
+  timelineDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D1D5DB',
+  },
+  timelineDotActive: {
+    width: 24,
+    backgroundColor: IOS_COLORS.blue,
+  },
+  timelineDotNext: {
+    borderWidth: 1.5,
+    borderColor: '#34C759',
+  },
+  timelineArrow: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginRight: 2,
+  },
+  timelineNowButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  timelineNowButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#34C759',
+  },
+  timelinePositionIndicator: {
+    fontSize: 10,
+    color: '#64748B',
+    marginLeft: 8,
   },
 });
 

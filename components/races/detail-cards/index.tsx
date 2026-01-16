@@ -86,6 +86,11 @@ export interface RaceDataForDetailCards {
   route_waypoints?: any[];
   number_of_legs?: number;
 
+  // Boat class for rig tuning recommendations
+  classId?: string | null;
+  className?: string | null;
+  boatClass?: string | null;
+
   // Race status fields
   status?: 'upcoming' | 'completed' | 'in_progress';
   endTime?: string;
@@ -293,22 +298,11 @@ export function createDetailCardsForRace(
   raceData: RaceDataForDetailCards
 ): RaceDetailCardData[] {
   const completed = isRaceCompleted(raceData);
-  console.log('[createDetailCardsForRace] Called with:', {
-    id: raceData.id,
-    name: raceData.name,
-    status: raceData.status,
-    endTime: raceData.endTime,
-    isCompleted: completed,
-  });
 
   if (completed) {
-    const cards = createCompletedRaceCards(raceData);
-    console.log('[createDetailCardsForRace] Returning COMPLETED cards:', cards.map(c => c.type));
-    return cards;
+    return createCompletedRaceCards(raceData);
   }
-  const cards = createUpcomingRaceCards(raceData);
-  console.log('[createDetailCardsForRace] Returning UPCOMING cards:', cards.map(c => c.type));
-  return cards;
+  return createUpcomingRaceCards(raceData);
 }
 
 /**
@@ -347,18 +341,10 @@ export function renderDetailCardByType(
     // Upcoming Race Cards
     // =====================
     case 'conditions':
-      // Debug logging for venue data flow
-      if (__DEV__) {
-        console.log('🔍 [detail-cards/index] Rendering ConditionsDetailCard:', {
-          raceId,
-          hasRaceData: !!raceData,
-          hasVenue: !!raceData?.venue,
-          venue: raceData?.venue,
-          raceDate: raceData?.date,
-          raceStartTime: (raceData as any)?.start_time,
-          raceDataKeys: raceData ? Object.keys(raceData) : [],
-        });
-      }
+      // Calculate expected duration from time_limit_hours if available
+      const durationMinutes = raceData?.time_limit_hours
+        ? raceData.time_limit_hours * 60
+        : raceIsDistance ? 480 : 90;
       return (
         <ConditionsDetailCard
           key={card.id}
@@ -374,7 +360,9 @@ export function renderDetailCardByType(
           venue={raceData?.venue}
           raceDate={raceData?.date}
           raceStartTime={(raceData as any)?.start_time}
-          expectedDurationMinutes={raceIsDistance ? 480 : 90}
+          expectedDurationMinutes={durationMinutes}
+          classId={raceData?.classId}
+          className={raceData?.className || raceData?.boatClass}
         />
       );
 

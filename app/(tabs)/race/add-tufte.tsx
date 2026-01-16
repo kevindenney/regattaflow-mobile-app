@@ -12,50 +12,53 @@
  * - Typography does the heavy lifting
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { addDays, format } from 'date-fns';
+import * as DocumentPicker from 'expo-document-picker';
+import { useRouter } from 'expo-router';
 import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  TextInput,
+  CheckCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Info,
+  Link,
+  Map,
+  MapPin,
+  Navigation,
+  Sailboat,
+  Sparkles,
+  Trophy,
+  Users,
+} from 'lucide-react-native';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Alert,
-  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
-import {
-  ChevronLeft,
-  Sparkles,
-  Map,
-  ChevronDown,
-  ChevronRight,
-  MapPin,
-  FileText,
-  Link,
-  Sailboat,
-  Users,
-  Trophy,
-  Navigation,
-  CheckCircle,
-  Info,
-} from 'lucide-react-native';
-import { format, addDays } from 'date-fns';
-import * as DocumentPicker from 'expo-document-picker';
 
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
-import { createLogger } from '@/lib/utils/logger';
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
-import { PDFExtractionService } from '@/services/PDFExtractionService';
-import { LocationMapPicker } from '@/components/races/LocationMapPicker';
 import { BoatSelector } from '@/components/races/AddRaceDialog/BoatSelector';
+import { CourseSelector } from '@/components/races/AddRaceDialog/CourseSelector';
+import { ExtractedDetailsData, ExtractedDetailsSummary } from '@/components/races/AddRaceDialog/ExtractedDetailsSummary';
 import { DistanceRouteMap } from '@/components/races/DistanceRouteMap';
+import { LocationMapPicker } from '@/components/races/LocationMapPicker';
+import { createLogger } from '@/lib/utils/logger';
+import { useAuth } from '@/providers/AuthProvider';
+import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
+import { geocodeExtractedLocations, geocodeSingleLocation } from '@/services/location/geocodeExtractedLocations';
+import { PDFExtractionService } from '@/services/PDFExtractionService';
+import { supabase } from '@/services/supabase';
 
 import type { RaceType } from '@/components/races/RaceTypeSelector';
 
@@ -158,6 +161,8 @@ interface FormState {
   aiSelectedFile: DocumentPicker.DocumentPickerAsset | null;
   aiExtractedFields: Set<string>;
   extractionComplete: boolean;
+  // Extracted details from AI (for display and saving)
+  extractedDetails: ExtractedDetailsData | null;
 }
 
 // =============================================================================
@@ -166,7 +171,7 @@ interface FormState {
 
 export default function AddRaceScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
 
   // Form state
   const getInitialState = (): FormState => ({
@@ -196,12 +201,13 @@ export default function AddRaceScreen() {
     teamSize: '',
     routeWaypoints: [],
     marks: [],
-    aiExpanded: false,
+    aiExpanded: true,
     aiInputText: '',
     aiInputMethod: 'paste',
     aiSelectedFile: null,
     aiExtractedFields: new Set(),
     extractionComplete: false,
+    extractedDetails: null,
   });
 
   const [form, setForm] = useState<FormState>(getInitialState());
@@ -326,10 +332,15 @@ export default function AddRaceScreen() {
         return;
       }
     } else if (form.aiInputMethod === 'url') {
-      const url = form.aiInputText.trim();
+      let url = form.aiInputText.trim();
+      // Normalize URL - add https:// if no protocol specified
       if (!url.startsWith('http')) {
-        Alert.alert('Error', 'Please enter a valid URL');
-        return;
+        if (url.startsWith('www.')) {
+          url = `https://${url}`;
+        } else {
+          Alert.alert('Error', 'Please enter a valid URL');
+          return;
+        }
       }
 
       setIsExtracting(true);
@@ -340,18 +351,24 @@ export default function AddRaceScreen() {
           const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
           const response = await fetch(`${supabaseUrl}/functions/v1/extract-pdf-text`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+            },
             body: JSON.stringify({ url }),
           });
           const result = await response.json();
-          if (!result.success) throw new Error(result.error);
+          if (!response.ok || !result.success) {
+            throw new Error(result.error || `Failed to extract PDF: ${response.status}`);
+          }
           textContent = result.text;
         } else {
           const response = await fetch(url);
           textContent = await response.text();
         }
       } catch (err) {
-        Alert.alert('Error', 'Could not fetch content from URL');
+        const errorMsg = err instanceof Error ? err.message : 'Could not fetch content from URL';
+        Alert.alert('Error', errorMsg);
         setIsExtracting(false);
         return;
       }
@@ -405,14 +422,19 @@ export default function AddRaceScreen() {
 
       // Route waypoints
       if (extracted.routeWaypoints?.length > 0) {
-        updates.routeWaypoints = extracted.routeWaypoints.map((wp: any, i: number) => ({
+        const mappedWaypoints = extracted.routeWaypoints.map((wp: any, i: number) => ({
           id: `wp-${Date.now()}-${i}`,
           name: wp.name || `Waypoint ${i + 1}`,
           latitude: wp.latitude || 0,
           longitude: wp.longitude || 0,
           type: wp.type || 'waypoint',
           required: wp.type === 'start' || wp.type === 'finish',
-        })).filter((wp: RouteWaypoint) => wp.latitude !== 0 || wp.longitude !== 0);
+        }));
+
+        // FIX: Don't filter here! Keep ALL waypoints - geocoding will fill in coordinates
+        // The filter was removing waypoints without coordinates BEFORE geocoding could run
+        updates.routeWaypoints = mappedWaypoints;
+
         if (updates.routeWaypoints.length > 0) aiFields.add('routeWaypoints');
       }
 
@@ -422,17 +444,201 @@ export default function AddRaceScreen() {
         aiFields.add('marks');
       }
 
+      // Map raw extraction to ExtractedDetailsData for display in ExtractedDetailsSummary
+      const extractedDetails: ExtractedDetailsData = {
+        schedule: extracted.schedule,
+        minimumCrew: extracted.minimumCrew,
+        crewRequirements: extracted.crewRequirements,
+        minorSailorRules: extracted.minorSailorRules,
+        prohibitedAreas: extracted.prohibitedAreas?.map((a: any) => ({
+          name: a.name,
+          description: a.description,
+        })),
+        startAreaName: extracted.startAreaName,
+        startAreaDescription: extracted.startAreaDescription,
+        finishAreaName: extracted.finishAreaName,
+        finishAreaDescription: extracted.finishAreaDescription,
+        routeWaypoints: extracted.routeWaypoints?.map((wp: any) => ({
+          name: wp.name,
+          latitude: wp.latitude,
+          longitude: wp.longitude,
+          type: wp.type,
+          notes: wp.notes,
+        })),
+        trafficSeparationSchemes: extracted.trafficSeparationSchemes?.map((t: any) => t.name),
+        tideGates: extracted.tideGates?.map((tg: any) => ({
+          location: tg.location,
+          optimalTime: tg.optimalPassingTime,
+          notes: tg.notes,
+        })),
+        entryFees: extracted.entryFeeAmount ? [{
+          type: 'Entry Fee',
+          amount: `${extracted.entryFeeCurrency || 'HKD'} ${extracted.entryFeeAmount}`,
+        }] : undefined,
+        entryDeadline: extracted.entryDeadline,
+        entryFormUrl: extracted.entryFormUrl,
+        scoringFormulaDescription: extracted.scoringFormulaDescription,
+        handicapSystem: extracted.scoringSystem ? [extracted.scoringSystem] : undefined,
+        motoringDivisionAvailable: extracted.motoringDivisionAvailable,
+        motoringDivisionRules: extracted.motoringDivisionRules,
+        vhfChannels: extracted.vhfChannels,
+        organizingAuthority: extracted.organizingAuthority,
+        eventWebsite: extracted.eventWebsite,
+        safetyRequirements: extracted.safetyRequirements,
+        retirementNotification: extracted.retirementNotificationRequirements,
+        insuranceRequirements: extracted.insurancePolicyReference,
+        classRules: extracted.classRules ? [extracted.classRules] : undefined,
+        eligibilityRequirements: extracted.eligibilityRequirements,
+        expectedConditions: extracted.expectedConditions,
+        expectedWindDirection: extracted.expectedWindDirection?.toString(),
+        expectedWindSpeedMin: extracted.expectedWindSpeedMin,
+        expectedWindSpeedMax: extracted.expectedWindSpeedMax,
+        prizesDescription: extracted.prizesDescription,
+      };
+
+      // =========================================================================
+      // GEOCODING PHASE: Auto-geocode locations that have names but no coordinates
+      // =========================================================================
+      const regionHint = extracted.venue || extracted.location || 'Hong Kong';
+
+      // 1. Geocode START area if it has a name but no coordinates
+      if (extractedDetails.startAreaName) {
+        try {
+          const startResult = await geocodeSingleLocation(extractedDetails.startAreaName, regionHint);
+          if (startResult) {
+            logger.debug('[AddRaceScreen] Geocoded start area:', extractedDetails.startAreaName, startResult);
+            extractedDetails.startAreaCoordinates = startResult;
+          }
+        } catch (err) {
+          logger.warn('[AddRaceScreen] Failed to geocode start area:', err);
+        }
+      }
+
+      // 2. Geocode FINISH area if it has a name but no coordinates
+      if (extractedDetails.finishAreaName) {
+        try {
+          const finishResult = await geocodeSingleLocation(extractedDetails.finishAreaName, regionHint);
+          if (finishResult) {
+            logger.debug('[AddRaceScreen] Geocoded finish area:', extractedDetails.finishAreaName, finishResult);
+            extractedDetails.finishAreaCoordinates = finishResult;
+          }
+        } catch (err) {
+          logger.warn('[AddRaceScreen] Failed to geocode finish area:', err);
+        }
+      }
+
+      // 3. Geocode ROUTE WAYPOINTS (peaks) that don't have coordinates
+      if (extractedDetails.routeWaypoints && extractedDetails.routeWaypoints.length > 0) {
+        try {
+          const waypointsToGeocode = extractedDetails.routeWaypoints.map(wp => ({
+            name: wp.name,
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+            type: wp.type,
+            notes: wp.notes,
+          }));
+
+          const geocodedWaypoints = await geocodeExtractedLocations(waypointsToGeocode, regionHint);
+
+          extractedDetails.routeWaypoints = geocodedWaypoints;
+
+          // Also update the form's routeWaypoints for map display
+          const waypointsWithCoords = geocodedWaypoints.filter(wp => wp.latitude && wp.longitude);
+          const waypointsWithoutCoords = geocodedWaypoints.filter(wp => !wp.latitude || !wp.longitude);
+
+          // Calculate a default position for waypoints that failed geocoding
+          // Use the center of successfully geocoded waypoints, or default to Hong Kong
+          let defaultLat = 22.3193; // Hong Kong default
+          let defaultLng = 114.1694;
+
+          if (waypointsWithCoords.length > 0) {
+            defaultLat = waypointsWithCoords.reduce((sum, wp) => sum + wp.latitude!, 0) / waypointsWithCoords.length;
+            defaultLng = waypointsWithCoords.reduce((sum, wp) => sum + wp.longitude!, 0) / waypointsWithCoords.length;
+          }
+
+          // Include ALL waypoints - those with coords and those needing positioning
+          const allWaypoints = [
+            ...waypointsWithCoords.map((wp, i) => ({
+              id: `wp-${Date.now()}-${i}`,
+              name: wp.name,
+              latitude: wp.latitude!,
+              longitude: wp.longitude!,
+              type: (wp.type as 'start' | 'waypoint' | 'gate' | 'finish') || 'waypoint',
+              required: wp.type === 'start' || wp.type === 'finish',
+              needsPositioning: false,
+            })),
+            // Place failed geocoding waypoints at default position with offset so they don't stack
+            ...waypointsWithoutCoords.map((wp, i) => ({
+              id: `wp-${Date.now()}-needs-${i}`,
+              name: wp.name,
+              latitude: defaultLat + (i * 0.01), // Slight offset so they don't stack
+              longitude: defaultLng + (i * 0.01),
+              type: (wp.type as 'start' | 'waypoint' | 'gate' | 'finish') || 'waypoint',
+              required: wp.type === 'start' || wp.type === 'finish',
+              needsPositioning: true, // Flag for UI to show differently
+            })),
+          ];
+
+          if (allWaypoints.length > 0) {
+            updates.routeWaypoints = allWaypoints;
+            aiFields.add('routeWaypoints');
+          }
+        } catch (err) {
+          logger.warn('[AddRaceScreen] Failed to geocode waypoints:', err);
+        }
+      }
+
+      // 4. Geocode PROHIBITED AREAS that don't have coordinates
+      if (extractedDetails.prohibitedAreas && extractedDetails.prohibitedAreas.length > 0) {
+        try {
+          const areasToGeocode = extractedDetails.prohibitedAreas.map(area => ({
+            name: area.name,
+            description: area.description,
+            latitude: undefined as number | undefined,
+            longitude: undefined as number | undefined,
+          }));
+
+          const geocodedAreas = await geocodeExtractedLocations(areasToGeocode, regionHint);
+
+          extractedDetails.prohibitedAreas = geocodedAreas.map((area, i) => ({
+            name: area.name,
+            description: extractedDetails.prohibitedAreas![i].description,
+            coordinates: area.latitude && area.longitude
+              ? [{ lat: area.latitude, lng: area.longitude }]
+              : undefined,
+          }));
+
+          logger.debug('[AddRaceScreen] Geocoded prohibited areas:', geocodedAreas.filter(a => a.latitude).length);
+        } catch (err) {
+          logger.warn('[AddRaceScreen] Failed to geocode prohibited areas:', err);
+        }
+      }
+
+      logger.debug('[AddRaceScreen] Geocoding phase complete');
+
       setForm(prev => ({
         ...prev,
         ...updates,
         aiExtractedFields: aiFields,
         extractionComplete: true,
-        aiExpanded: false,
+        // Keep AI section expanded - don't auto-collapse after extraction
+        extractedDetails,
       }));
 
-      // Auto-show route map if waypoints were extracted
-      if (updates.routeWaypoints && updates.routeWaypoints.length > 0) {
+      // Auto-show route map if any geocoded course elements exist
+      const hasWaypoints = updates.routeWaypoints && updates.routeWaypoints.length > 0;
+      const hasStartArea = extractedDetails.startAreaCoordinates?.lat && extractedDetails.startAreaCoordinates?.lng;
+      const hasFinishArea = extractedDetails.finishAreaCoordinates?.lat && extractedDetails.finishAreaCoordinates?.lng;
+      const hasProhibitedAreas = extractedDetails.prohibitedAreas?.some(a => a.coordinates?.[0]?.lat);
+
+      if (hasWaypoints || hasStartArea || hasFinishArea || hasProhibitedAreas) {
         setShowRouteMap(true);
+        logger.debug('[AddRaceScreen] Auto-showing route map:', {
+          waypoints: updates.routeWaypoints?.length || 0,
+          hasStartArea: !!hasStartArea,
+          hasFinishArea: !!hasFinishArea,
+          prohibitedAreas: extractedDetails.prohibitedAreas?.filter(a => a.coordinates?.[0]).length || 0,
+        });
       }
 
       logger.debug('[AddRaceScreen] Extraction complete:', { fieldsExtracted: aiFields.size });
@@ -486,17 +692,41 @@ export default function AddRaceScreen() {
 
   // Save handler
   const handleSave = useCallback(async () => {
-    if (!isFormValid || !user?.id || isSaving) return;
+    if (!isFormValid || isSaving) return;
+    // For non-guests, we still need a user ID
+    if (!isGuest && !user?.id) return;
 
     setIsSaving(true);
     try {
-      const startTime = `${form.date}T${form.time}:00`;
+      // Normalize time format - handle both "10:30" and "1030" formats
+      const normalizedTime = form.time.includes(':')
+        ? form.time
+        : `${form.time.slice(0, 2)}:${form.time.slice(2)}`;
+      const startTime = `${form.date}T${normalizedTime}:00`;
 
       // Build metadata
       const metadata: Record<string, any> = {
         venue_name: form.location || null,
       };
 
+      // Guest Restriction: Prevent saving for guests and prompt to sign up
+      if (isGuest || !user?.id) {
+        Alert.alert(
+          'Sign Up Required',
+          'Please sign up to create and save races, and access advanced features like AI extraction and weather integration.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Sign Up',
+              onPress: () => router.push('/(auth)/signup')
+            }
+          ]
+        );
+        setIsSaving(false);
+        return;
+      }
+
+      // Authenticated User Saving Logic (Supabase)
       // Build race data
       const raceData: Record<string, any> = {
         name: form.name.trim(),
@@ -507,12 +737,14 @@ export default function AddRaceScreen() {
         vhf_channel: form.vhfChannel || null,
       };
 
+      // ... (rest of the existing Supabase logic) ...
+
       // Add location name
       if (form.location) {
         raceData.start_area_name = form.location;
       }
 
-      // Add coordinates to metadata (no dedicated column exists)
+      // Add coordinates to metadata
       if (form.latitude && form.longitude) {
         metadata.start_coordinates = { lat: form.latitude, lng: form.longitude };
       }
@@ -564,6 +796,58 @@ export default function AddRaceScreen() {
         raceData.mark_designations = form.marks;
       }
 
+      // Add extracted details to database
+      if (form.extractedDetails) {
+        const details = form.extractedDetails;
+
+        // Entry & Registration
+        if (details.entryFees?.length) raceData.entry_fees = details.entryFees;
+        if (details.entryDeadline) raceData.entry_deadline = details.entryDeadline;
+
+        // Crew & Safety
+        if (details.minimumCrew) raceData.minimum_crew = details.minimumCrew;
+        if (details.crewRequirements) raceData.crew_requirements = details.crewRequirements;
+        if (details.safetyRequirements) raceData.safety_requirements = details.safetyRequirements;
+        if (details.retirementNotification) raceData.retirement_notification = details.retirementNotification;
+
+        // Schedule
+        if (details.schedule?.length) raceData.schedule = details.schedule;
+
+        // Course Details
+        if (details.prohibitedAreas?.length) raceData.prohibited_areas = details.prohibitedAreas;
+        if (details.tideGates?.length) raceData.tide_gates = details.tideGates;
+        if (details.startAreaName) raceData.start_area_name = details.startAreaName;
+        if (details.startAreaDescription) raceData.start_area_description = details.startAreaDescription;
+
+        // Scoring
+        if (details.scoringFormulaDescription) raceData.scoring_formula = details.scoringFormulaDescription;
+        if (details.handicapSystem?.length) raceData.handicap_systems = details.handicapSystem;
+
+        // Motoring
+        if (details.motoringDivisionAvailable !== undefined) raceData.motoring_division_available = details.motoringDivisionAvailable;
+        if (details.motoringDivisionRules) raceData.motoring_division_rules = details.motoringDivisionRules;
+
+        // Communications
+        if (details.vhfChannels?.length) raceData.vhf_channels = details.vhfChannels;
+
+        // Organization
+        if (details.organizingAuthority) raceData.organizing_authority = details.organizingAuthority;
+        if (details.eventWebsite) raceData.event_website = details.eventWebsite;
+        if (details.contactEmail) raceData.contact_email = details.contactEmail;
+
+        // Weather
+        if (details.expectedConditions) raceData.expected_conditions = details.expectedConditions;
+        if (details.expectedWindDirection) raceData.expected_wind_direction = details.expectedWindDirection;
+        if (details.expectedWindSpeedMin) raceData.expected_wind_speed_min = details.expectedWindSpeedMin;
+        if (details.expectedWindSpeedMax) raceData.expected_wind_speed_max = details.expectedWindSpeedMax;
+
+        // Insurance
+        if (details.insuranceRequirements) raceData.insurance_requirements = details.insuranceRequirements;
+
+        // Prizes
+        if (details.prizesDescription) raceData.prizes_description = details.prizesDescription;
+      }
+
       logger.debug('[AddRaceScreen] Saving race:', raceData);
 
       const { data: newRace, error } = await supabase
@@ -575,17 +859,32 @@ export default function AddRaceScreen() {
       if (error) throw error;
 
       // Save NOR document if extracted from URL
-      if (form.aiInputMethod === 'url' && form.aiInputText.trim().startsWith('http') && newRace?.id) {
+      if (form.aiInputMethod === 'url' && form.aiInputText?.trim() && newRace?.id) {
         try {
-          const url = form.aiInputText.trim();
+          // Normalize URL - add https:// if no protocol specified
+          let norUrl = form.aiInputText.trim();
+          if (!norUrl.startsWith('http://') && !norUrl.startsWith('https://')) {
+            norUrl = `https://${norUrl}`;
+          }
+
+          logger.debug('[AddRaceScreen] Saving NOR with normalized URL:', norUrl);
+
+          // Update the race with the NOR URL
+          await supabase
+            .from('regattas')
+            .update({ notice_of_race_url: norUrl })
+            .eq('id', newRace.id);
+
+          // Also save to documents table for document management
           const { data: doc } = await supabase
             .from('documents')
             .insert({
               user_id: user.id,
-              filename: url.split('/').pop() || 'notice-of-race.pdf',
+              filename: norUrl.split('/').pop() || 'notice-of-race',
               title: `${form.name} - Notice of Race`,
-              file_path: url,
-              mime_type: 'application/pdf',
+              file_path: norUrl,
+              file_size: 0, // URL reference, no actual file
+              mime_type: 'text/html', // Web URL, not necessarily PDF
               document_type: 'nor',
               processing_status: 'completed',
               regatta_id: newRace.id,
@@ -602,6 +901,7 @@ export default function AddRaceScreen() {
               user_id: user.id,
               document_type: 'nor',
             });
+            logger.debug('[AddRaceScreen] NOR document saved:', doc.id);
           }
         } catch (docErr) {
           logger.warn('[AddRaceScreen] Failed to save NOR document:', docErr);
@@ -616,7 +916,7 @@ export default function AddRaceScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [form, isFormValid, user?.id, isSaving, calculatedDistance, router]);
+  }, [form, isFormValid, user?.id, isGuest, isSaving, calculatedDistance, router]);
 
   const handleClose = useCallback(() => {
     router.canGoBack() ? router.back() : router.replace('/(tabs)/races');
@@ -626,7 +926,11 @@ export default function AddRaceScreen() {
   const canExtract = useMemo(() => {
     if (form.aiInputMethod === 'paste') return form.aiInputText.trim().length > 20;
     if (form.aiInputMethod === 'upload') return form.aiSelectedFile !== null;
-    if (form.aiInputMethod === 'url') return form.aiInputText.trim().startsWith('http');
+    if (form.aiInputMethod === 'url') {
+      const url = form.aiInputText.trim();
+      // Accept URLs with http/https or starting with www.
+      return url.startsWith('http') || url.startsWith('www.');
+    }
     return false;
   }, [form.aiInputMethod, form.aiInputText, form.aiSelectedFile]);
 
@@ -635,11 +939,19 @@ export default function AddRaceScreen() {
     if (form.latitude && form.longitude) {
       return { lat: form.latitude, lng: form.longitude };
     }
+    // Try extracted start area coordinates
+    if (form.extractedDetails?.startAreaCoordinates) {
+      return form.extractedDetails.startAreaCoordinates;
+    }
     if (form.routeWaypoints.length > 0) {
       return { lat: form.routeWaypoints[0].latitude, lng: form.routeWaypoints[0].longitude };
     }
+    // Try extracted finish area coordinates
+    if (form.extractedDetails?.finishAreaCoordinates) {
+      return form.extractedDetails.finishAreaCoordinates;
+    }
     return { lat: 22.28, lng: 114.16 }; // Default: Hong Kong
-  }, [form.latitude, form.longitude, form.routeWaypoints]);
+  }, [form.latitude, form.longitude, form.routeWaypoints, form.extractedDetails?.startAreaCoordinates, form.extractedDetails?.finishAreaCoordinates]);
 
   // =============================================================================
   // RENDER
@@ -874,13 +1186,15 @@ export default function AddRaceScreen() {
           {form.raceType === 'fleet' && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>FLEET RACING</Text>
-              <FieldRow
-                label="Course Type"
-                value={form.courseType}
-                onChangeText={(v) => updateField('courseType', v)}
-                placeholder="e.g., Windward-Leeward"
-                aiExtracted={form.aiExtractedFields.has('courseType')}
-              />
+              <View style={{ marginBottom: 16 }}>
+                <CourseSelector
+                  label="Course Type"
+                  selectedCourse={form.courseType}
+                  onSelect={(courseName) => updateField('courseType', courseName || '')}
+                  placeholder="Select course type"
+                  aiExtracted={form.aiExtractedFields.has('courseType')}
+                />
+              </View>
               <View style={styles.row}>
                 <FieldRow
                   label="Laps"
@@ -956,6 +1270,43 @@ export default function AddRaceScreen() {
                         onWaypointsChange={handleWaypointsChange}
                         initialCenter={mapCenter}
                         onTotalDistanceChange={setCalculatedDistance}
+                        // Start/Finish areas from AI extraction (geocoded)
+                        startArea={form.extractedDetails?.startAreaName && form.extractedDetails?.startAreaCoordinates ? {
+                          name: form.extractedDetails.startAreaName,
+                          lat: form.extractedDetails.startAreaCoordinates.lat,
+                          lng: form.extractedDetails.startAreaCoordinates.lng,
+                        } : undefined}
+                        finishArea={form.extractedDetails?.finishAreaName && form.extractedDetails?.finishAreaCoordinates ? {
+                          name: form.extractedDetails.finishAreaName,
+                          lat: form.extractedDetails.finishAreaCoordinates.lat,
+                          lng: form.extractedDetails.finishAreaCoordinates.lng,
+                        } : undefined}
+                        onStartAreaChange={(coords) => {
+                          if (form.extractedDetails) {
+                            updateField('extractedDetails', {
+                              ...form.extractedDetails,
+                              startAreaCoordinates: coords,
+                            });
+                          }
+                        }}
+                        onFinishAreaChange={(coords) => {
+                          if (form.extractedDetails) {
+                            updateField('extractedDetails', {
+                              ...form.extractedDetails,
+                              finishAreaCoordinates: coords,
+                            });
+                          }
+                        }}
+                        // Prohibited areas from AI extraction (geocoded)
+                        prohibitedAreas={form.extractedDetails?.prohibitedAreas}
+                        onProhibitedAreasChange={(areas) => {
+                          if (form.extractedDetails) {
+                            updateField('extractedDetails', {
+                              ...form.extractedDetails,
+                              prohibitedAreas: areas,
+                            });
+                          }
+                        }}
                       />
                       {form.routeWaypoints.length === 0 && (
                         <View style={styles.mapHint}>
@@ -1050,6 +1401,15 @@ export default function AddRaceScreen() {
             />
           </View>
 
+          {/* Extracted Race Details (if AI extraction completed) */}
+          {form.extractedDetails && (
+            <ExtractedDetailsSummary
+              data={form.extractedDetails}
+              expanded={true}
+              onChange={(updatedDetails) => updateField('extractedDetails', updatedDetails)}
+            />
+          )}
+
           <View style={{ height: 60 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1134,7 +1494,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.separator,
   },

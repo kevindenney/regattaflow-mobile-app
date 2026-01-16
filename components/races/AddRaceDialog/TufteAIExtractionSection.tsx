@@ -273,22 +273,27 @@ export function TufteAIExtractionSection({
           const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
           const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
 
-          const extractResponse = await fetch(extractUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url }),
-          });
+          try {
+            const extractResponse = await fetch(extractUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ url }),
+            });
 
-          const extractResult = await extractResponse.json();
+            const extractResult = await extractResponse.json();
 
-          if (!extractResponse.ok || !extractResult.success) {
-            throw new Error(extractResult.error || `Failed to extract PDF text: ${extractResponse.status}`);
+            if (!extractResponse.ok || !extractResult.success) {
+              throw new Error(extractResult.error || `Failed to extract PDF text: ${extractResponse.status}`);
+            }
+
+            textContent = extractResult.text;
+          } catch (pdfError: any) {
+            console.error('[TufteAIExtractionSection] PDF extraction failed:', pdfError);
+            throw new Error(`PDF extraction failed: ${pdfError.message}`);
           }
-
-          textContent = extractResult.text;
         } else {
           // Non-PDF URL - try direct fetch
           try {
