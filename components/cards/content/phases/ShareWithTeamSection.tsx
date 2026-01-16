@@ -405,20 +405,26 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
     setLoadingChannel(null);
   };
 
-  // Don't render if no user or still loading
-  if (!user?.id || loading || prepLoading) {
+  // Don't render if no user
+  if (!user?.id) {
     return null;
   }
 
   // Check if no team available - show external share options as primary
   const hasTeam = primaryCoach || primaryCrew.length > 0;
-  if (!hasTeam) {
+
+  // Show quick share while team data is loading (allows sharing even during load)
+  const isLoadingTeamData = loading || prepLoading;
+
+  // Show external share options if no team OR still loading team data
+  // This ensures sharing is always available even while team data loads
+  if (!hasTeam || isLoadingTeamData) {
     return (
       <View style={styles.section}>
         {/* Section Header */}
         <View style={styles.sectionHeader}>
           <Share2 size={16} color={IOS_COLORS.teal} />
-          <Text style={styles.sectionLabel}>Share</Text>
+          <Text style={styles.sectionLabel}>Quick Share</Text>
         </View>
 
         {/* External Share Options - Primary Action */}
@@ -430,35 +436,37 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
           />
         </View>
 
-        {/* Team Discovery - Secondary */}
-        <View style={styles.teamDiscovery}>
-          <Text style={styles.teamDiscoveryText}>
-            Want to track who you've shared with?
-          </Text>
-          <View style={styles.emptyActions}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.emptyActionButtonMuted,
-                pressed && styles.emptyActionButtonPressed,
-              ]}
-              onPress={() => router.push('/coach/discover')}
-            >
-              <GraduationCap size={14} color={IOS_COLORS.gray} />
-              <Text style={styles.emptyActionTextMuted}>Find a Coach</Text>
-            </Pressable>
+        {/* Team Discovery - Only show if not loading and truly no team */}
+        {!isLoadingTeamData && (
+          <View style={styles.teamDiscovery}>
+            <Text style={styles.teamDiscoveryText}>
+              Want to track who you've shared with?
+            </Text>
+            <View style={styles.emptyActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.emptyActionButtonMuted,
+                  pressed && styles.emptyActionButtonPressed,
+                ]}
+                onPress={() => router.push('/coach/discover')}
+              >
+                <GraduationCap size={14} color={IOS_COLORS.gray} />
+                <Text style={styles.emptyActionTextMuted}>Find a Coach</Text>
+              </Pressable>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.emptyActionButtonMuted,
-                pressed && styles.emptyActionButtonPressed,
-              ]}
-              onPress={() => router.push('/crew')}
-            >
-              <UserPlus size={14} color={IOS_COLORS.gray} />
-              <Text style={styles.emptyActionTextMuted}>Add Crew</Text>
-            </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.emptyActionButtonMuted,
+                  pressed && styles.emptyActionButtonPressed,
+                ]}
+                onPress={() => router.push('/crew')}
+              >
+                <UserPlus size={14} color={IOS_COLORS.gray} />
+                <Text style={styles.emptyActionTextMuted}>Add Crew</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+        )}
       </View>
     );
   }
