@@ -129,6 +129,55 @@ export const TOOL_REGISTRY: Record<string, Omit<ToolRegistration, 'component'> &
     displayName: 'Course Study',
     icon: 'Map',
   },
+  pre_race_briefing: {
+    id: 'pre_race_briefing',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/PreRaceBriefingWizard',
+    displayName: 'Pre-Race Briefing',
+    icon: 'FileText',
+  },
+  route_briefing: {
+    id: 'route_briefing',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/RouteBriefingWizard',
+    displayName: 'Route Briefing',
+    icon: 'Navigation',
+  },
+  tide_strategy: {
+    id: 'tide_strategy',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/TideStrategyWizard',
+    displayName: 'Tide Strategy',
+    icon: 'Waves',
+  },
+  wind_shift_strategy: {
+    id: 'wind_shift_strategy',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/WindShiftStrategyWizard',
+    displayName: 'Wind Shift Strategy',
+    icon: 'Wind',
+  },
+  start_planner: {
+    id: 'start_planner',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/StartPlannerWizard',
+    displayName: 'Start Planner',
+    icon: 'Flag',
+  },
+  first_beat_strategy: {
+    id: 'first_beat_strategy',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/FirstBeatStrategyWizard',
+    displayName: 'First Beat Strategy',
+    icon: 'TrendingUp',
+  },
+  four_peaks_schedule: {
+    id: 'four_peaks_schedule',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/wizards/FourPeaksScheduleWizard',
+    displayName: '4 Peaks Schedule',
+    icon: 'Mountain',
+  },
 
   // Interactive Checklists
   electronics_checklist: {
