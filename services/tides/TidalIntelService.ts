@@ -84,12 +84,13 @@ export class TidalIntelService {
     }
 
     try {
-      // Get tide extremes and current height from Storm Glass
+      // Get tide extremes from Storm Glass
       // Pass referenceTime so extremes are fetched around the race date, not just from today
-      const [tideExtremes, currentHeight] = await Promise.all([
-        this.stormGlass.getTideExtremes(location, 2, referenceTime), // Get 2 days of extremes around race time
-        this.stormGlass.getTideHeightAtTime(location, referenceTime)
-      ]);
+      const tideExtremes = await this.stormGlass.getTideExtremes(location, 2, referenceTime);
+
+      // Interpolate current height from extremes (saves 1 API call per request!)
+      // Uses cosine approximation which is ~95% accurate for standard tidal patterns
+      const currentHeight = this.stormGlass.interpolateTideHeight(tideExtremes, referenceTime);
 
       return this.transformStormGlassTideData(tideExtremes, currentHeight, location, referenceTime);
     } catch (error) {

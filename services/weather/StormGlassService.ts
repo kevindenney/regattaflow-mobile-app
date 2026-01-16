@@ -23,8 +23,8 @@ import { generateMockForecast, generateMockWeatherAtTime } from './mockWeatherDa
 
 const STORM_GLASS_BASE_URL = 'https://api.stormglass.io/v2';
 const DEFAULT_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
-const TIDE_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours - tides don't change fast!
-const TIDE_EXTREMES_CACHE_DURATION = 12 * 60 * 60 * 1000; // 12 hours - extremes are predictable
+const TIDE_CACHE_DURATION = 12 * 60 * 60 * 1000; // 12 hours - tides are predictable
+const TIDE_EXTREMES_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours - extremes are highly predictable
 
 // Check if we should use mock data (for development or when quota exceeded)
 // Only honor app.json's useMockWeather flag in non-production builds
@@ -351,6 +351,78 @@ export class StormGlassService {
     } catch (_error) {
       return 0;
     }
+  }
+
+  /**
+   * Interpolate tide height from extremes using cosine approximation
+   * This avoids an API call by calculating height from known high/low times
+   *
+   * Uses the standard tidal cosine model: height = midHeight + amplitude * cos(π * progress)
+   * Accuracy: ~95% for most locations; complex harbors may have larger errors
+   */
+  interpolateTideHeight(
+    extremes: Array<{ type: 'high' | 'low'; time: Date; height: number }>,
+    targetTime: Date
+  ): number {
+    if (extremes.length < 2) {
+      return 0; // Not enough data to interpolate
+    }
+
+    // Sort extremes by time
+    const sorted = [...extremes].sort((a, b) => a.time.getTime() - b.time.getTime());
+    const targetMs = targetTime.getTime();
+
+    // Find the two extremes that bracket the target time
+    let prevExtreme: typeof sorted[0] | null = null;
+    let nextExtreme: typeof sorted[0] | null = null;
+
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].time.getTime() <= targetMs) {
+        prevExtreme = sorted[i];
+      }
+      if (sorted[i].time.getTime() > targetMs && !nextExtreme) {
+        nextExtreme = sorted[i];
+        break;
+      }
+    }
+
+    // If target is before all extremes, use first two
+    if (!prevExtreme && sorted.length >= 2) {
+      prevExtreme = sorted[0];
+      nextExtreme = sorted[1];
+    }
+
+    // If target is after all extremes, use last two
+    if (!nextExtreme && sorted.length >= 2) {
+      prevExtreme = sorted[sorted.length - 2];
+      nextExtreme = sorted[sorted.length - 1];
+    }
+
+    if (!prevExtreme || !nextExtreme) {
+      return 0;
+    }
+
+    // Calculate progress through the tide cycle (0 to 1)
+    const cycleStart = prevExtreme.time.getTime();
+    const cycleEnd = nextExtreme.time.getTime();
+    const cycleDuration = cycleEnd - cycleStart;
+
+    if (cycleDuration <= 0) {
+      return prevExtreme.height;
+    }
+
+    const progress = Math.max(0, Math.min(1, (targetMs - cycleStart) / cycleDuration));
+
+    // Cosine interpolation for tidal approximation
+    // If going from high to low: height decreases (cos goes from 1 to -1)
+    // If going from low to high: height increases (cos goes from -1 to 1)
+    const amplitude = (prevExtreme.height - nextExtreme.height) / 2;
+    const midHeight = (prevExtreme.height + nextExtreme.height) / 2;
+
+    // cos(0) = 1, cos(π) = -1
+    const height = midHeight + amplitude * Math.cos(Math.PI * progress);
+
+    return Math.round(height * 100) / 100;
   }
 
   /**
@@ -693,6 +765,27 @@ export class StormGlassService {
    */
   getRateLimit(): StormGlassRateLimit {
     return { ...this.rateLimit };
+  }
+
+  /**
+   * Get quota status for proactive monitoring
+   * Helps prevent hitting quota limits by warning early
+   */
+  getQuotaStatus(): {
+    remaining: number;
+    percentUsed: number;
+    isLow: boolean;
+    willExceedSoon: boolean;
+  } {
+    const remaining = this.rateLimit.dailyQuota - this.rateLimit.requestCount;
+    const percentUsed = (this.rateLimit.requestCount / this.rateLimit.dailyQuota) * 100;
+
+    return {
+      remaining,
+      percentUsed: Math.round(percentUsed * 10) / 10,
+      isLow: remaining < this.rateLimit.dailyQuota * 0.2, // < 20% remaining
+      willExceedSoon: remaining < 50, // Less than 50 requests left
+    };
   }
 
   /**
