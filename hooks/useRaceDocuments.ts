@@ -12,6 +12,7 @@ import { raceDocumentService } from '@/services/RaceDocumentService';
 import { documentStorageService } from '@/services/storage/DocumentStorageService';
 import { documentExtractionService, type ExtractionResult } from '@/services/DocumentExtractionService';
 import { createLogger } from '@/lib/utils/logger';
+import type { RaceDisplayDocument } from '@/types/documents';
 
 const logger = createLogger('useRaceDocuments');
 
@@ -36,6 +37,8 @@ export interface UseRaceDocumentsOptions {
   isDemoSession?: boolean;
   /** Key to trigger reload */
   reloadKey?: number;
+  /** Whether to include inherited club documents (default: true) */
+  includeClubDocs?: boolean;
 }
 
 export interface UseRaceDocumentsReturn {
@@ -43,6 +46,12 @@ export interface UseRaceDocumentsReturn {
   documents: RaceDocumentWithDetails[];
   /** Formatted documents for display */
   documentsForDisplay: RaceDocumentsCardDocument[];
+  /** Unified documents with source info (race + club) */
+  displayDocuments: {
+    raceDocuments: RaceDisplayDocument[];
+    clubDocuments: RaceDisplayDocument[];
+    allDocuments: RaceDisplayDocument[];
+  };
   /** Loading state */
   loading: boolean;
   /** Error message if any */
@@ -79,10 +88,15 @@ export interface UseRaceDocumentsReturn {
 export function useRaceDocuments(
   options: UseRaceDocumentsOptions
 ): UseRaceDocumentsReturn {
-  const { raceId, userId, isDemoSession = false, reloadKey = 0 } = options;
+  const { raceId, userId, isDemoSession = false, reloadKey = 0, includeClubDocs = true } = options;
 
   // State
   const [documents, setDocuments] = useState<RaceDocumentWithDetails[]>([]);
+  const [displayDocuments, setDisplayDocuments] = useState<{
+    raceDocuments: RaceDisplayDocument[];
+    clubDocuments: RaceDisplayDocument[];
+    allDocuments: RaceDisplayDocument[];
+  }>({ raceDocuments: [], clubDocuments: [], allDocuments: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -117,6 +131,7 @@ export function useRaceDocuments(
 
     if (!raceId || isDemoSession) {
       setDocuments([]);
+      setDisplayDocuments({ raceDocuments: [], clubDocuments: [], allDocuments: [] });
       setError(null);
       setLoading(false);
       return () => {
@@ -129,13 +144,22 @@ export function useRaceDocuments(
       setError(null);
 
       try {
+        // Load race documents (legacy format for backward compatibility)
         const docs = await raceDocumentService.getRaceDocuments(raceId);
         if (!isActive) return;
         setDocuments(docs);
+
+        // Also load unified display documents (with optional club inheritance)
+        const displayDocs = await raceDocumentService.getRaceDocumentsWithInheritance(raceId, {
+          includeClubDocs,
+        });
+        if (!isActive) return;
+        setDisplayDocuments(displayDocs);
       } catch (err) {
         if (!isActive) return;
         logger.warn('Unable to load race documents', { error: err, raceId });
         setDocuments([]);
+        setDisplayDocuments({ raceDocuments: [], clubDocuments: [], allDocuments: [] });
         setError('Unable to load race documents');
       } finally {
         if (isActive) {
@@ -149,7 +173,7 @@ export function useRaceDocuments(
     return () => {
       isActive = false;
     };
-  }, [raceId, reloadKey, internalReloadKey, isDemoSession]);
+  }, [raceId, reloadKey, internalReloadKey, isDemoSession, includeClubDocs]);
 
   // Load stored extraction data when documents change
   useEffect(() => {
@@ -679,6 +703,7 @@ export function useRaceDocuments(
   return {
     documents,
     documentsForDisplay,
+    displayDocuments,
     loading,
     error,
     isUploading,

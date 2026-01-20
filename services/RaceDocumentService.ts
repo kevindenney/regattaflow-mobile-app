@@ -6,6 +6,8 @@
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
 import { documentStorageService, StoredDocument } from './storage/DocumentStorageService';
+import { clubDocumentService } from './ClubDocumentService';
+import type { RaceDisplayDocument, ClubDocumentWithDetails } from '@/types/documents';
 
 const logger = createLogger('RaceDocumentService');
 
@@ -257,6 +259,141 @@ class RaceDocumentService {
       logger.error('Exception in getRaceDocuments:', error);
       return [];
     }
+  }
+
+  /**
+   * Get all documents for a race including inherited club documents
+   * Returns a unified list with source indicators
+   */
+  async getRaceDocumentsWithInheritance(
+    raceId: string,
+    options?: {
+      includeClubDocs?: boolean;
+    }
+  ): Promise<{
+    raceDocuments: RaceDisplayDocument[];
+    clubDocuments: RaceDisplayDocument[];
+    allDocuments: RaceDisplayDocument[];
+  }> {
+    try {
+      const includeClubDocs = options?.includeClubDocs ?? true;
+
+      // Get race-specific documents
+      const raceDocumentsRaw = await this.getRaceDocuments(raceId);
+
+      // Map race documents to unified display format
+      const raceDocuments: RaceDisplayDocument[] = raceDocumentsRaw.map((doc) => ({
+        id: doc.id,
+        source: 'race' as const,
+        documentType: doc.documentType,
+        title: doc.document?.name || doc.document?.filename || 'Document',
+        url: doc.document?.url || doc.document?.public_url,
+        filename: doc.document?.filename,
+        fileType: doc.document?.file_type,
+        fileSize: doc.document?.file_size,
+        uploadedAt: doc.createdAt,
+      }));
+
+      // Get inherited club documents if requested
+      let clubDocuments: RaceDisplayDocument[] = [];
+
+      if (includeClubDocs) {
+        // Resolve club ID for this race
+        const clubId = await clubDocumentService.getClubIdForRace(raceId);
+
+        if (clubId) {
+          // Check if race has inherit_club_documents enabled
+          const shouldInherit = await this.checkInheritClubDocuments(raceId);
+
+          if (shouldInherit) {
+            const clubDocs = await clubDocumentService.getClubDocuments(clubId);
+            clubDocuments = this.mapClubDocumentsToDisplay(clubDocs);
+          }
+        }
+      }
+
+      // Combine all documents
+      const allDocuments = [...raceDocuments, ...clubDocuments];
+
+      return {
+        raceDocuments,
+        clubDocuments,
+        allDocuments,
+      };
+    } catch (error) {
+      logger.error('Exception in getRaceDocumentsWithInheritance:', error);
+      return {
+        raceDocuments: [],
+        clubDocuments: [],
+        allDocuments: [],
+      };
+    }
+  }
+
+  /**
+   * Check if a race has inherit_club_documents enabled
+   */
+  private async checkInheritClubDocuments(raceId: string): Promise<boolean> {
+    try {
+      // First check if we have any race_documents records that specify inherit_club_documents
+      const { data } = await supabase
+        .from('race_documents')
+        .select('inherit_club_documents')
+        .or(`regatta_id.eq.${raceId},race_event_id.eq.${raceId}`)
+        .limit(1)
+        .maybeSingle();
+
+      // Default to true (inherit) if no record found or column is true
+      return data?.inherit_club_documents !== false;
+    } catch (error) {
+      // Default to true on error
+      return true;
+    }
+  }
+
+  /**
+   * Set whether a race should inherit club documents
+   */
+  async setInheritClubDocuments(raceId: string, inherit: boolean): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('race_documents')
+        .update({ inherit_club_documents: inherit })
+        .or(`regatta_id.eq.${raceId},race_event_id.eq.${raceId}`);
+
+      if (error) {
+        logger.error('Error setting inherit_club_documents:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      logger.error('Exception in setInheritClubDocuments:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Map club documents to unified display format
+   */
+  private mapClubDocumentsToDisplay(docs: ClubDocumentWithDetails[]): RaceDisplayDocument[] {
+    return docs.map((doc) => ({
+      id: doc.id,
+      source: 'club' as const,
+      clubDocumentCategory: doc.documentCategory,
+      clubDocumentSubtype: doc.documentSubtype,
+      title: doc.title,
+      description: doc.description,
+      url: doc.document?.url || doc.document?.publicUrl,
+      externalUrl: doc.externalUrl,
+      filename: doc.document?.filename,
+      fileType: doc.document?.fileType,
+      fileSize: doc.document?.fileSize,
+      uploadedAt: doc.createdAt,
+      version: doc.version,
+      displayOrder: doc.displayOrder,
+      hasAIExtraction: !!doc.aiExtraction,
+      aiExtraction: doc.aiExtraction,
+    }));
   }
 
   /**

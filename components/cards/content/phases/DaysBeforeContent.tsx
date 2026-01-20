@@ -67,6 +67,10 @@ import {
 // Pre-race sharing
 import { ShareWithTeamSection } from './ShareWithTeamSection';
 
+// Race documents display (with club document inheritance)
+import { RaceDocumentsDisplay } from '@/components/races/RaceDocumentsDisplay';
+import { useRaceDocuments } from '@/hooks/useRaceDocuments';
+
 // Historical view components
 import {
   HistoricalSummaryCard,
@@ -512,7 +516,7 @@ export function DaysBeforeContent({
     toggleItem,
     isLoading,
   } = useRaceChecklist({
-    raceEventId: race.id,
+    regattaId: race.id,
     raceName: race.name,
     raceType,
     phase: 'days_before',
@@ -657,7 +661,16 @@ export function DaysBeforeContent({
 
   // Race preparation data (for historical view)
   const { intentions, isLoading: isPreparationLoading } = useRacePreparation({
-    raceEventId: race.id,
+    regattaId: race.id,
+  });
+
+  // Race documents (with inherited club documents)
+  const {
+    displayDocuments,
+    isLoading: isDocumentsLoading,
+  } = useRaceDocuments({
+    raceId: race.id,
+    includeClubDocs: true,
   });
 
   // Categories to show based on expansion state
@@ -1095,6 +1108,22 @@ export function DaysBeforeContent({
         );
       })}
 
+      {/* Race Documents Section (with inherited club SSI) */}
+      {!isDocumentsLoading && (displayDocuments.raceDocuments.length > 0 || displayDocuments.clubDocuments.length > 0) && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <FileText size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.sectionLabel}>DOCUMENTS</Text>
+          </View>
+          <RaceDocumentsDisplay
+            raceDocuments={displayDocuments.raceDocuments}
+            clubDocuments={displayDocuments.clubDocuments}
+            showEmptyState={false}
+            compact={!isExpanded}
+          />
+        </View>
+      )}
+
       {/* Share with Team Section */}
       <ShareWithTeamSection race={race} />
 
@@ -1182,6 +1211,7 @@ export function DaysBeforeContent({
             raceDate={race.date}
             raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
             raceName={race.name}
+            raceDistance={race.total_distance_nm ? Number(race.total_distance_nm) : undefined}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
