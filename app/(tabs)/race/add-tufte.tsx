@@ -57,6 +57,7 @@ import { LocationMapPicker } from '@/components/races/LocationMapPicker';
 import { MultiRaceSelectionScreen } from '@/components/races/MultiRaceSelectionScreen';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
+import { SSIUploadSection } from '@/components/documents/ssi';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { geocodeExtractedLocations, geocodeSingleLocation } from '@/services/location/geocodeExtractedLocations';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
@@ -225,6 +226,9 @@ export default function AddRaceScreen() {
   const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
   const [isCreatingMultiple, setIsCreatingMultiple] = useState(false);
 
+  // SSI document state
+  const [ssiDocumentId, setSsiDocumentId] = useState<string | null>(null);
+
   // Reset form when screen is focused
   useFocusEffect(
     useCallback(() => {
@@ -234,6 +238,7 @@ export default function AddRaceScreen() {
       setClubSuggestion(null);
       setCalculatedDistance(null);
       setShowRouteMap(false);
+      setSsiDocumentId(null);
       logger.debug('[AddRaceScreen] Form reset on focus');
 
       // Load club suggestion
@@ -1367,6 +1372,21 @@ export default function AddRaceScreen() {
                 </Pressable>
               </View>
             )}
+          </View>
+
+          {/* Sailing Instructions Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>SAILING INSTRUCTIONS</Text>
+            <SSIUploadSection
+              clubId={undefined}
+              raceId={undefined}
+              title="Upload SSI"
+              description="Upload the Sailing Instructions PDF to extract VHF channels, marks, and emergency contacts."
+              showHeader={false}
+              showPrivacyToggle={false}
+              compact={false}
+              onDocumentUploaded={setSsiDocumentId}
+            />
           </View>
 
           {/* Essentials Section */}
