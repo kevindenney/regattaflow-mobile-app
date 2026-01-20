@@ -51,8 +51,10 @@ import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
 import { BoatSelector } from '@/components/races/AddRaceDialog/BoatSelector';
 import { CourseSelector } from '@/components/races/AddRaceDialog/CourseSelector';
 import { ExtractedDetailsData, ExtractedDetailsSummary } from '@/components/races/AddRaceDialog/ExtractedDetailsSummary';
+import type { ExtractedData, MultiRaceExtractedData } from '@/components/races/AIValidationScreen';
 import { DistanceRouteMap } from '@/components/races/DistanceRouteMap';
 import { LocationMapPicker } from '@/components/races/LocationMapPicker';
+import { MultiRaceSelectionScreen } from '@/components/races/MultiRaceSelectionScreen';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
@@ -218,6 +220,11 @@ export default function AddRaceScreen() {
   const [clubSuggestion, setClubSuggestion] = useState<ClubEventSuggestion | null>(null);
   const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
 
+  // Multi-race detection state
+  const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
+  const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
+  const [isCreatingMultiple, setIsCreatingMultiple] = useState(false);
+
   // Reset form when screen is focused
   useFocusEffect(
     useCallback(() => {
@@ -307,6 +314,9 @@ export default function AddRaceScreen() {
 
   // Handle AI extraction
   const handleExtract = useCallback(async () => {
+    logger.debug('[AddRaceScreen] handleExtract called, isExtracting:', isExtracting);
+    console.log('[AddRaceScreen] EXTRACT BUTTON CLICKED - v4');
+
     if (isExtracting) return;
 
     let textContent = '';
@@ -390,7 +400,16 @@ export default function AddRaceScreen() {
         throw new Error(result.error || 'Extraction failed');
       }
 
-      // Apply extracted data to form
+      // Check for multiple races
+      if (result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
+        logger.debug('[AddRaceScreen] Multiple races detected:', result.data.races.length);
+        setMultiRaceData(result.data as MultiRaceExtractedData);
+        setShowMultiRaceModal(true);
+        setIsExtracting(false);
+        return;
+      }
+
+      // Apply extracted data to form (single race)
       const extracted = result.data;
       const aiFields = new Set<string>();
       const updates: Partial<FormState> = {};
@@ -664,6 +683,236 @@ export default function AddRaceScreen() {
     } catch (err) {
       Alert.alert('Error', 'Failed to select file');
     }
+  }, []);
+
+  // Handle multi-race selection confirmation
+  const handleMultiRaceConfirm = useCallback(async (selectedRaces: ExtractedData[]) => {
+    console.log('[handleMultiRaceConfirm] Called with', selectedRaces.length, 'races');
+    console.log('[handleMultiRaceConfirm] user?.id:', user?.id, 'isGuest:', isGuest);
+
+    if (!selectedRaces.length) {
+      console.log('[handleMultiRaceConfirm] No races selected, closing modal');
+      setShowMultiRaceModal(false);
+      return;
+    }
+
+    // If only one race selected, apply to form like single extraction
+    if (selectedRaces.length === 1) {
+      const race = selectedRaces[0];
+      const aiFields = new Set<string>();
+      const updates: Partial<FormState> = {};
+
+      if (race.raceName) { updates.name = race.raceName; aiFields.add('name'); }
+      if (race.raceDate) { updates.date = race.raceDate; aiFields.add('date'); }
+      if (race.warningSignalTime) { updates.time = race.warningSignalTime; aiFields.add('time'); }
+      if (race.venue) { updates.location = race.venue; aiFields.add('location'); }
+
+      setForm(prev => ({
+        ...prev,
+        ...updates,
+        aiExtractedFields: aiFields,
+        extractionComplete: true,
+      }));
+
+      setShowMultiRaceModal(false);
+      setMultiRaceData(null);
+      logger.debug('[AddRaceScreen] Applied single race from multi-race selection');
+      return;
+    }
+
+    // Multiple races selected - create all in database
+    if (!user?.id || isGuest) {
+      console.log('[handleMultiRaceConfirm] Auth check failed - user?.id:', user?.id, 'isGuest:', isGuest);
+      if (Platform.OS === 'web') {
+        window.alert('Please sign up to create multiple races at once.');
+      } else {
+        Alert.alert(
+          'Sign Up Required',
+          'Please sign up to create multiple races at once.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign Up', onPress: () => router.push('/(auth)/signup') }
+          ]
+        );
+      }
+      return;
+    }
+    console.log('[handleMultiRaceConfirm] Auth check passed, proceeding to create races');
+
+    setIsCreatingMultiple(true);
+    try {
+      const createdRaces: string[] = [];
+
+      for (const race of selectedRaces) {
+        // Normalize time format
+        const time = race.warningSignalTime || '12:00';
+        const normalizedTime = time.includes(':')
+          ? time
+          : `${time.slice(0, 2)}:${time.slice(2)}`;
+        const startTime = `${race.raceDate}T${normalizedTime}:00`;
+
+        // Build comprehensive race data from extracted NOR fields
+        const raceData: Record<string, any> = {
+          // === BASIC INFO ===
+          name: race.raceName || 'Untitled Race',
+          start_date: startTime,
+          created_by: user.id,
+          status: 'planned',
+          race_type: race.raceType || 'distance',
+          start_area_name: race.venue || race.venueVariant || race.startAreaName || null,
+
+          // === COMMUNICATIONS ===
+          vhf_channel: race.vhfChannel || (race.vhfChannels?.[0]?.channel) || null,
+        };
+
+        // === ENTRY & REGISTRATION ===
+        if (race.entryFees?.length) raceData.entry_fees = race.entryFees;
+        if (race.entryDeadline) raceData.entry_deadline = race.entryDeadline;
+
+        // === CREW & SAFETY ===
+        if (race.minimumCrew) raceData.minimum_crew = race.minimumCrew;
+        if (race.crewRequirements) raceData.crew_requirements = race.crewRequirements;
+        if (race.safetyRequirements) raceData.safety_requirements = race.safetyRequirements;
+        if (race.retirementNotification) raceData.retirement_notification = race.retirementNotification;
+
+        // === SCHEDULE ===
+        if (race.schedule?.length) raceData.schedule = race.schedule;
+
+        // === COURSE DETAILS ===
+        if (race.prohibitedAreas?.length) raceData.prohibited_areas = race.prohibitedAreas;
+        if (race.tideGates?.length) raceData.tide_gates = race.tideGates;
+        if (race.startAreaDescription) raceData.start_area_description = race.startAreaDescription;
+
+        // === SCORING ===
+        if (race.scoringFormulaDescription || race.scoringSystem) {
+          raceData.scoring_formula = race.scoringFormulaDescription || race.scoringSystem;
+        }
+        if (race.handicapSystem?.length) raceData.handicap_systems = race.handicapSystem;
+
+        // === MOTORING DIVISION ===
+        if (race.motoringDivisionAvailable !== undefined) raceData.motoring_division_available = race.motoringDivisionAvailable;
+        if (race.motoringDivisionRules) raceData.motoring_division_rules = race.motoringDivisionRules;
+
+        // === COMMUNICATIONS (detailed) ===
+        if (race.vhfChannels?.length) raceData.vhf_channels = race.vhfChannels;
+
+        // === ORGANIZATION ===
+        if (race.organizingAuthority || multiRaceData?.organizingAuthority) {
+          raceData.organizing_authority = race.organizingAuthority || multiRaceData?.organizingAuthority;
+        }
+        if (race.eventWebsite) raceData.event_website = race.eventWebsite;
+        if (race.contactEmail) raceData.contact_email = race.contactEmail;
+
+        // === WEATHER ===
+        if (race.expectedConditions) raceData.expected_conditions = race.expectedConditions;
+        if (race.expectedWindDirection) raceData.expected_wind_direction = race.expectedWindDirection;
+        if (race.expectedWindSpeedMin) raceData.expected_wind_speed_min = race.expectedWindSpeedMin;
+        if (race.expectedWindSpeedMax) raceData.expected_wind_speed_max = race.expectedWindSpeedMax;
+
+        // === INSURANCE ===
+        if (race.insuranceRequirements) raceData.insurance_requirements = race.insuranceRequirements;
+
+        // === PRIZES ===
+        if (race.prizesDescription) raceData.prizes_description = race.prizesDescription;
+
+        // === METADATA (for fields that don't have dedicated columns) ===
+        raceData.metadata = {
+          venue_name: race.venue || null,
+          created_from_multi_race: true,
+          document_type: multiRaceData?.documentType,
+          // Racing rules stored in metadata
+          racing_rules_system: race.racingRulesSystem,
+          prescriptions: race.prescriptions,
+          class_rules: race.classRules,
+          ssi_reference: race.ssiReference,
+          course_attachment_reference: race.courseAttachmentReference,
+          // Eligibility
+          eligibility_requirements: race.eligibilityRequirements,
+          entry_form_url: race.entryFormUrl,
+          sign_on_requirement: race.signOnRequirement,
+          crew_list_requirement: race.crewListRequirement,
+          safety_briefing_required: race.safetyBriefingRequired,
+          // Class & Fleet
+          boat_class: race.boatClass,
+          class_divisions: race.classDivisions,
+          // Course
+          course_area: race.courseArea,
+          course_selection_criteria: race.courseSelectionCriteria,
+          course_description: race.courseDescription,
+          potential_courses: race.potentialCourses,
+          // Scoring details
+          discards_policy: race.discardsPolicy,
+          series_races_required: race.seriesRacesRequired,
+          // Safety details
+          safety_consequences: race.safetyConsequences,
+          insurance_required: race.insuranceRequired,
+          minimum_insurance_coverage: race.minimumInsuranceCoverage,
+          // Race officer & officials
+          race_officer: race.raceOfficer,
+          class_secretary: race.classSecretary,
+          organizer: race.organizer,
+          special_designations: race.specialDesignations,
+          // Start lines
+          start_lines: race.startLines,
+          // Series info
+          race_series_name: race.raceSeriesName,
+          race_number: race.raceNumber,
+          total_races_in_series: race.totalRacesInSeries,
+          races_per_day: race.racesPerDay,
+        };
+
+        console.log('[handleMultiRaceConfirm] Creating race:', race.raceName, 'with', Object.keys(raceData).length, 'fields');
+
+        const { data: newRace, error } = await supabase
+          .from('regattas')
+          .insert(raceData)
+          .select()
+          .single();
+
+        if (error) {
+          logger.error('[AddRaceScreen] Failed to create race:', error);
+        } else if (newRace) {
+          createdRaces.push(newRace.id);
+        }
+      }
+
+      console.log('[handleMultiRaceConfirm] Created multiple races:', createdRaces.length);
+      logger.debug('[AddRaceScreen] Created multiple races:', createdRaces.length);
+
+      if (createdRaces.length > 0) {
+        const message = `Successfully created ${createdRaces.length} race${createdRaces.length > 1 ? 's' : ''}.`;
+        if (Platform.OS === 'web') {
+          window.alert(`Races Created!\n\n${message}`);
+          router.replace('/(tabs)/races');
+        } else {
+          Alert.alert(
+            'Races Created!',
+            message,
+            [{ text: 'View Races', onPress: () => router.replace('/(tabs)/races') }]
+          );
+        }
+      } else {
+        console.log('[handleMultiRaceConfirm] No races were created successfully');
+      }
+    } catch (err) {
+      console.error('[handleMultiRaceConfirm] Multi-race creation failed:', err);
+      logger.error('[AddRaceScreen] Multi-race creation failed:', err);
+      if (Platform.OS === 'web') {
+        window.alert('Error: Failed to create races');
+      } else {
+        Alert.alert('Error', 'Failed to create races');
+      }
+    } finally {
+      setIsCreatingMultiple(false);
+      setShowMultiRaceModal(false);
+      setMultiRaceData(null);
+    }
+  }, [user?.id, isGuest, router, multiRaceData]);
+
+  // Handle multi-race modal cancel
+  const handleMultiRaceCancel = useCallback(() => {
+    setShowMultiRaceModal(false);
+    setMultiRaceData(null);
   }, []);
 
   // Handle location selection
@@ -1423,6 +1672,23 @@ export default function AddRaceScreen() {
         initialLocation={form.latitude && form.longitude ? { lat: form.latitude, lng: form.longitude } : null}
         initialName={form.location}
       />
+
+      {/* Multi-Race Selection Modal */}
+      {showMultiRaceModal && multiRaceData && (
+        <View style={styles.multiRaceModalOverlay}>
+          <MultiRaceSelectionScreen
+            extractedData={multiRaceData}
+            onConfirm={handleMultiRaceConfirm}
+            onCancel={handleMultiRaceCancel}
+          />
+          {isCreatingMultiple && (
+            <View style={styles.creatingOverlay}>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text style={styles.creatingText}>Creating races...</Text>
+            </View>
+          )}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1807,5 +2073,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.success,
     fontWeight: '500',
+  },
+
+  // Multi-Race Modal
+  multiRaceModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#F8FAFC',
+    zIndex: 1000,
+  },
+  creatingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    zIndex: 1001,
+  },
+  creatingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

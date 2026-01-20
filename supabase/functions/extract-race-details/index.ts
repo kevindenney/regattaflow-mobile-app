@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 8192,
+        max_tokens: 8192,  // Max for Haiku - use efficient extraction for multi-race documents
         temperature: 0,
         messages: [
           {
@@ -122,9 +122,14 @@ CRITICAL: First determine if this document contains:
 2. **RACE SERIES**: Multiple races under one series name (e.g., "Croucher Series")
 3. **MULTIPLE SERIES**: Multiple distinct race series (e.g., "Croucher Series", "Corinthian Series")
 
-If multiple races/series are detected, extract ALL of them. Do not limit to one race.
+**TOKEN EFFICIENCY FOR MULTI-RACE DOCUMENTS:**
+When extracting multiple race days from a series document:
+- Extract COMMON fields (rules, eligibility, scoring, safety, etc.) at the document level (in the top-level fields)
+- For EACH RACE DAY, only include the UNIQUE/VARYING fields: raceName, raceSeriesName, raceDate, venue, venueVariant, warningSignalTime, racesPerDay
+- DO NOT repeat identical information across race entries - keep them minimal
+- This allows extracting 15+ race days without hitting token limits
 
-Extract ALL available information from the following document. Be thorough and extract every field you can find.
+IMPORTANT: You MUST extract ALL race days from ALL series. If you see 5 series with 3 race days each, create 15 race entries!
 
 Document:
 ${documentText}
@@ -387,14 +392,17 @@ Return a JSON object with this EXACT structure:
 }
 
 IMPORTANT INSTRUCTIONS:
-1. If you detect multiple race series (like Croucher, Corinthian, Commodore), extract ALL of them
-2. For each race in a series with multiple race days, create a separate race object
+1. **CRITICAL - EXTRACT ALL RACE DAYS**: If you detect multiple race series (like Croucher, Corinthian, Commodore, Moonraker, Phyloong), you MUST extract EVERY SINGLE RACE DAY from EVERY SERIES. Do NOT stop after extracting one or two races!
+   - Example: If there are 5 series with 3 race days each, you must extract 15 race day entries
+   - Look at EVERY date mentioned in the SCHEDULE section and create a race entry for each one
+2. For each race DAY (not individual race), create a separate race object with all the races for that day
 3. Extract dates carefully - they may be in various formats (e.g., "Saturday 27 September 2025")
 4. Extract ALL governing rules, SSI references, and course attachments
 5. If a field is not found in the document, set it to null (not undefined)
 6. Be generous with confidence scores for clearly stated information (0.9-1.0 for explicit data)
-7. For race series, use naming like "Croucher Series Race 1", "Croucher Series Race 2", etc.
+7. For race days within series, use naming like "Croucher Series Races 1 & 2", "Croucher Series Races 3 & 4", etc. (matching the document)
 8. Extract venue variants carefully (Port Shelter vs Clearwater Bay vs Harbour)
+9. **COUNT YOUR RACES**: Before returning, verify you have extracted ALL race days from ALL series mentioned in the document. If the document mentions 5 series with 3 race days each, you should have ~15 race entries
 
 **RACE TYPE DETECTION (CRITICAL)**:
    - Detect "fleet" vs "distance" race type from document content
