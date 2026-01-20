@@ -29,7 +29,7 @@ import { URLInput } from './URLInput';
 import { PasteInput } from './PasteInput';
 import { PDFUpload, type SelectedFile } from './PDFUpload';
 import { DocumentTypeSelector, type DocumentType } from './DocumentTypeSelector';
-import { ExtractionProgress, type ExtractionStatus } from './ExtractionProgress';
+import { ExtractionProgress, type ExtractionStatus, type BatchProgress, type BatchUrlResult } from './ExtractionProgress';
 import { DuplicateWarning } from './DuplicateWarning';
 
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
@@ -179,6 +179,10 @@ export function UnifiedDocumentInput({
   const [pasteValue, setPasteValue] = useState('');
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
 
+  // Multi-URL tracking
+  const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+
   // Extraction states
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle');
   const [extractionError, setExtractionError] = useState<string | null>(null);
@@ -212,13 +216,18 @@ export function UnifiedDocumentInput({
     setActiveMethod('url');
   }, []);
 
+  // Handle URLs detected from URL input (for multi-URL support)
+  const handleUrlsDetected = useCallback((urls: string[]) => {
+    setDetectedUrls(urls);
+  }, []);
+
   // Check if we can extract
   const canExtract = useCallback(() => {
-    if (activeMethod === 'url') return urlValue.trim().startsWith('http');
+    if (activeMethod === 'url') return detectedUrls.length > 0;
     if (activeMethod === 'paste') return pasteValue.trim().length >= 20;
     if (activeMethod === 'upload') return selectedFile !== null;
     return false;
-  }, [activeMethod, urlValue, pasteValue, selectedFile]);
+  }, [activeMethod, detectedUrls, pasteValue, selectedFile]);
 
   // Check for duplicates before extraction
   const checkForDuplicate = useCallback(async (source: DocumentSource): Promise<ServiceRaceSourceDocument | null> => {
@@ -238,16 +247,214 @@ export function UnifiedDocumentInput({
     }
   }, [regattaId, mode]);
 
+  // Helper function to extract from a single URL
+  const extractFromUrl = useCallback(async (url: string): Promise<{
+    success: boolean;
+    textContent?: string;
+    error?: string;
+  }> => {
+    try {
+      // Check if URL is a PDF
+      const isPdfUrl = url.toLowerCase().includes('.pdf') ||
+                       url.toLowerCase().includes('pdf=') ||
+                       url.includes('_files/ugd/');
+
+      let textContent = '';
+
+      if (isPdfUrl) {
+        // Use server-side PDF extraction
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
+
+        const extractResponse = await fetch(extractUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ url }),
+        });
+
+        const extractResult = await extractResponse.json();
+
+        if (!extractResponse.ok || !extractResult.success) {
+          return { success: false, error: extractResult.error || `Failed to extract PDF: ${extractResponse.status}` };
+        }
+
+        textContent = extractResult.text;
+      } else {
+        // Non-PDF URL - try direct fetch
+        const response = await fetch(url);
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('pdf')) {
+          // Retry as PDF
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
+
+          const extractResponse = await fetch(extractUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url }),
+          });
+
+          const extractResult = await extractResponse.json();
+
+          if (!extractResponse.ok || !extractResult.success) {
+            return { success: false, error: extractResult.error || 'Failed to extract PDF' };
+          }
+
+          textContent = extractResult.text;
+        } else {
+          textContent = await response.text();
+        }
+      }
+
+      if (textContent.length < 20) {
+        return { success: false, error: 'Not enough content to extract race details' };
+      }
+
+      return { success: true, textContent };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch URL' };
+    }
+  }, []);
+
   // Main extraction handler
   const handleExtract = useCallback(async (skipDuplicateCheck = false) => {
     if (!canExtract() || extractionStatus === 'fetching' || extractionStatus === 'extracting') {
       return;
     }
 
-    // Build source first for duplicate check
+    // Handle multi-URL extraction for URL input method
+    if (activeMethod === 'url' && detectedUrls.length > 1) {
+      // Batch extraction mode
+      setExtractionStatus('fetching');
+      setExtractionError(null);
+      setBatchProgress({
+        current: 1,
+        total: detectedUrls.length,
+        results: detectedUrls.map(url => ({ url, success: false })),
+      });
+
+      const results: BatchUrlResult[] = [];
+      let totalFieldCount = 0;
+      let hasAnySuccess = false;
+
+      for (let i = 0; i < detectedUrls.length; i++) {
+        const url = detectedUrls[i];
+
+        // Update batch progress - fetching
+        setBatchProgress(prev => prev ? {
+          ...prev,
+          current: i + 1,
+          results: [...results, { url, success: false }],
+        } : null);
+        setExtractionStatus('fetching');
+
+        // Fetch content
+        const fetchResult = await extractFromUrl(url);
+
+        if (!fetchResult.success || !fetchResult.textContent) {
+          results.push({ url, success: false, error: fetchResult.error });
+          continue;
+        }
+
+        // Update status to extracting
+        setExtractionStatus('extracting');
+
+        // AI extraction
+        try {
+          const agent = new ComprehensiveRaceExtractionAgent();
+          const result = await agent.extractRaceDetails(fetchResult.textContent);
+
+          if (!result.success || !result.data) {
+            results.push({ url, success: false, error: result.error || 'Extraction failed' });
+            continue;
+          }
+
+          // Check for multi-race detection (for the first URL only, to avoid complexity)
+          if (i === 0 && result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
+            if (onMultiRaceDetected) {
+              const source: DocumentSource = { type: 'url', url };
+              const enrichedData = {
+                ...result.data,
+                sourceTracking: {
+                  documentType,
+                  sourceType: source.type,
+                  sourceUrl: source.url,
+                },
+              };
+              // Note: We continue processing other URLs even if first has multiple races
+              onMultiRaceDetected(enrichedData as MultiRaceExtractedData);
+            }
+          }
+
+          // Transform and count fields
+          const raceData = result.data.races?.[0] || result.data;
+          const extractedData = transformExtractionResult(raceData, raceType);
+          const fieldCount = Object.values(extractedData)
+            .flat()
+            .filter((f: any) => f.value && f.confidence !== 'missing').length;
+
+          results.push({ url, success: true, extractedFieldCount: fieldCount });
+          totalFieldCount += fieldCount;
+          hasAnySuccess = true;
+
+          // Call the callback for each successful extraction
+          if (onExtractionComplete) {
+            const source: DocumentSource = { type: 'url', url };
+            setCurrentSource(source);
+            onExtractionComplete(extractedData, {
+              ...raceData,
+              sourceTracking: {
+                documentType,
+                sourceType: source.type,
+                sourceUrl: source.url,
+              },
+            });
+          }
+        } catch (err) {
+          results.push({
+            url,
+            success: false,
+            error: err instanceof Error ? err.message : 'Extraction failed',
+          });
+        }
+      }
+
+      // Finalize batch progress
+      setBatchProgress({
+        current: detectedUrls.length,
+        total: detectedUrls.length,
+        results,
+      });
+
+      setExtractedFieldCount(totalFieldCount);
+
+      if (hasAnySuccess) {
+        setExtractionStatus('completed');
+        setExtractionComplete(true);
+
+        // Collapse after short delay
+        setTimeout(() => {
+          setExpanded(false);
+        }, 500);
+      } else {
+        setExtractionStatus('failed');
+        setExtractionError('All URLs failed to extract');
+      }
+
+      return;
+    }
+
+    // Single URL/paste/upload extraction (original logic)
     let source: DocumentSource;
     if (activeMethod === 'url') {
-      source = { type: 'url', url: urlValue.trim() };
+      source = { type: 'url', url: detectedUrls[0] || urlValue.trim() };
     } else if (activeMethod === 'paste') {
       const hash = await hashContent(pasteValue.trim());
       source = { type: 'paste', pastedContent: pasteValue.trim(), contentHash: hash };
@@ -269,54 +476,23 @@ export function UnifiedDocumentInput({
 
     setExtractionStatus('fetching');
     setExtractionError(null);
+    setBatchProgress(null); // Clear any batch progress for single extraction
 
     try {
       let textContent = '';
 
       // Get content based on input method
       if (activeMethod === 'url') {
-        const url = urlValue.trim();
+        const url = source.url!;
+        const fetchResult = await extractFromUrl(url);
 
-        // Check if URL is a PDF
-        const isPdfUrl = url.toLowerCase().includes('.pdf') ||
-                         url.toLowerCase().includes('pdf=') ||
-                         url.includes('_files/ugd/');
-
-        if (isPdfUrl) {
-          // Use server-side PDF extraction
-          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-          const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
-
-          const extractResponse = await fetch(extractUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url }),
-          });
-
-          const extractResult = await extractResponse.json();
-
-          if (!extractResponse.ok || !extractResult.success) {
-            throw new Error(extractResult.error || `Failed to extract PDF: ${extractResponse.status}`);
-          }
-
-          textContent = extractResult.text;
-        } else {
-          // Non-PDF URL - try direct fetch
-          const response = await fetch(url);
-          const contentType = response.headers.get('content-type') || '';
-
-          if (contentType.includes('pdf')) {
-            throw new Error('This URL returns a PDF. It will be processed automatically.');
-          }
-
-          textContent = await response.text();
+        if (!fetchResult.success || !fetchResult.textContent) {
+          throw new Error(fetchResult.error || 'Failed to fetch URL');
         }
+
+        textContent = fetchResult.textContent;
       } else if (activeMethod === 'paste') {
         textContent = pasteValue.trim();
-        // Source already set above
       } else if (activeMethod === 'upload' && selectedFile) {
         // Extract text from PDF
         const pdfResult = await PDFExtractionService.extractText(selectedFile.uri, {
@@ -328,7 +504,6 @@ export function UnifiedDocumentInput({
         }
 
         textContent = pdfResult.text;
-        // Source already set above
       } else {
         throw new Error('No content to extract');
       }
@@ -409,6 +584,7 @@ export function UnifiedDocumentInput({
     extractionStatus,
     activeMethod,
     urlValue,
+    detectedUrls,
     pasteValue,
     selectedFile,
     documentType,
@@ -418,6 +594,7 @@ export function UnifiedDocumentInput({
     checkForDuplicate,
     regattaId,
     mode,
+    extractFromUrl,
   ]);
 
   // Reset handler
@@ -429,6 +606,7 @@ export function UnifiedDocumentInput({
     setCurrentSource(null);
     setDuplicateDocument(null);
     setPendingSource(null);
+    setBatchProgress(null);
   }, []);
 
   // Duplicate warning handlers
@@ -525,6 +703,7 @@ export function UnifiedDocumentInput({
               onChangeText={setUrlValue}
               disabled={isProcessing}
               onAutoDetect={handleUrlAutoDetect}
+              onUrlsDetected={handleUrlsDetected}
             />
           )}
 
@@ -564,6 +743,7 @@ export function UnifiedDocumentInput({
               error={extractionError}
               extractedFieldCount={extractedFieldCount}
               documentType={documentType}
+              batchProgress={batchProgress}
             />
           )}
 
@@ -578,7 +758,11 @@ export function UnifiedDocumentInput({
               disabled={!canExtract()}
             >
               <Sparkles size={16} color="#FFFFFF" />
-              <Text style={styles.extractButtonText}>Extract Race Details</Text>
+              <Text style={styles.extractButtonText}>
+                {activeMethod === 'url' && detectedUrls.length > 1
+                  ? `Extract from ${detectedUrls.length} URLs`
+                  : 'Extract Race Details'}
+              </Text>
             </Pressable>
           )}
 
@@ -690,6 +874,6 @@ const styles = StyleSheet.create({
 
 // Export sub-components for individual use
 export { InputMethodTabs, URLInput, PasteInput, PDFUpload, DocumentTypeSelector, ExtractionProgress };
-export type { InputMethod, SelectedFile, DocumentType, ExtractionStatus };
+export type { InputMethod, SelectedFile, DocumentType, ExtractionStatus, BatchProgress, BatchUrlResult };
 
 export default UnifiedDocumentInput;

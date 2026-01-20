@@ -3,10 +3,12 @@
  *
  * URL input field with smart detection for document type.
  * Supports pasting from email, browser share sheet, etc.
+ * Now supports multiple URLs (one per line).
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, TextInput, Text, StyleSheet, Platform } from 'react-native';
+import { Link2 } from 'lucide-react-native';
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRaceDialog/tufteFormStyles';
 
 interface URLInputProps {
@@ -16,24 +18,53 @@ interface URLInputProps {
   disabled?: boolean;
   error?: string | null;
   onAutoDetect?: (info: { isPdf: boolean; suggestedType?: string }) => void;
+  /** Callback when multiple URLs are detected */
+  onUrlsDetected?: (urls: string[]) => void;
+}
+
+/**
+ * Parse URLs from text input (one URL per line)
+ */
+function parseUrls(text: string): string[] {
+  if (!text.trim()) return [];
+
+  return text
+    .split(/[\n\r]+/) // Split by newlines
+    .map(line => line.trim())
+    .filter(line => line.startsWith('http://') || line.startsWith('https://'));
 }
 
 export function URLInput({
   value,
   onChangeText,
-  placeholder = 'https://club.com/notice-of-race.pdf',
+  placeholder = 'Paste one or more URLs (one per line)\nhttps://club.com/notice-of-race.pdf',
   disabled = false,
   error,
   onAutoDetect,
+  onUrlsDetected,
 }: URLInputProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const lastUrlsRef = useRef<string>('');
+
+  // Parse URLs from current value
+  const detectedUrls = useMemo(() => parseUrls(value), [value]);
+  const urlCount = detectedUrls.length;
+  const hasMultipleUrls = urlCount > 1;
 
   const handleChangeText = useCallback((text: string) => {
     onChangeText(text);
 
-    // Auto-detect document characteristics
-    if (onAutoDetect && text.trim()) {
-      const lowerUrl = text.toLowerCase();
+    // Parse URLs and notify parent if changed
+    const urls = parseUrls(text);
+    const urlsKey = urls.join('|');
+    if (onUrlsDetected && urlsKey !== lastUrlsRef.current) {
+      lastUrlsRef.current = urlsKey;
+      onUrlsDetected(urls);
+    }
+
+    // Auto-detect document characteristics from the first URL
+    if (onAutoDetect && urls.length > 0) {
+      const lowerUrl = urls[0].toLowerCase();
       const isPdf = lowerUrl.includes('.pdf') ||
                     lowerUrl.includes('pdf=') ||
                     lowerUrl.includes('_files/ugd/'); // Wix PDF pattern
@@ -51,15 +82,20 @@ export function URLInput({
 
       onAutoDetect({ isPdf, suggestedType });
     }
-  }, [onChangeText, onAutoDetect]);
+  }, [onChangeText, onAutoDetect, onUrlsDetected]);
 
-  const isValidUrl = value.trim().startsWith('http');
+  const hasValidUrl = urlCount > 0;
+  const hasInvalidLines = value.trim().length > 0 &&
+    value.split(/[\n\r]+/).some(line =>
+      line.trim().length > 0 && !line.trim().startsWith('http')
+    );
 
   return (
     <View style={styles.container}>
       <TextInput
         style={[
           styles.input,
+          styles.inputMultiline,
           isFocused && styles.inputFocused,
           error && styles.inputError,
           disabled && styles.inputDisabled,
@@ -74,11 +110,26 @@ export function URLInput({
         editable={!disabled}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-        selectTextOnFocus
+        multiline
+        numberOfLines={3}
+        textAlignVertical="top"
       />
 
-      {value.trim() && !isValidUrl && (
-        <Text style={styles.hint}>URL should start with http:// or https://</Text>
+      {/* URL count indicator */}
+      {urlCount > 0 && (
+        <View style={styles.urlCountContainer}>
+          <Link2 size={14} color={hasMultipleUrls ? TUFTE_FORM_COLORS.aiAccent : TUFTE_FORM_COLORS.secondaryLabel} />
+          <Text style={[
+            styles.urlCountText,
+            hasMultipleUrls && styles.urlCountTextMultiple,
+          ]}>
+            {urlCount} URL{urlCount !== 1 ? 's' : ''} detected
+          </Text>
+        </View>
+      )}
+
+      {hasInvalidLines && !hasValidUrl && (
+        <Text style={styles.hint}>URLs should start with http:// or https://</Text>
       )}
 
       {error && <Text style={styles.errorText}>{error}</Text>}
@@ -100,6 +151,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: TUFTE_FORM_COLORS.label,
   },
+  inputMultiline: {
+    minHeight: 80,
+    paddingTop: 12,
+  },
   inputFocused: {
     borderColor: TUFTE_FORM_COLORS.inputBorderFocus,
     borderWidth: 1.5,
@@ -110,6 +165,20 @@ const styles = StyleSheet.create({
   inputDisabled: {
     backgroundColor: TUFTE_FORM_COLORS.inputBackgroundDisabled,
     color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  urlCountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  urlCountText: {
+    fontSize: 12,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  urlCountTextMultiple: {
+    color: TUFTE_FORM_COLORS.aiAccent,
+    fontWeight: '500',
   },
   hint: {
     fontSize: 12,
