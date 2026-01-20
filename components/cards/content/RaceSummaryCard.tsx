@@ -495,7 +495,7 @@ export function RaceSummaryCard({
 
   // Hook for race preparation data (includes arrival intentions)
   const { intentions, updateArrivalIntention, isSaving } = useRacePreparation({
-    raceEventId: race.id,
+    regattaId: race.id,
     autoSave: true,
     debounceMs: 1000,
   });
@@ -709,10 +709,13 @@ export function RaceSummaryCard({
       time_limit_hours: timeLimitHours, // Distance race duration for Forecast Check wizard
       boat_id: (race as any).boat_id, // Preserve for sail selection/equipment
       class_id: (race as any).class_id, // Preserve for tuning recommendations
+      // Distance racing fields for Weather Routing wizard
+      route_waypoints: routeWaypoints, // Already extracted above
+      total_distance_nm: totalDistanceNm,
     };
 
     return data;
-  }, [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData, timeLimitHours]);
+  }, [race, vhfChannel, detectedRaceType, boatClassName, windData, tideData, timeLimitHours, routeWaypoints, totalDistanceNm]);
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {

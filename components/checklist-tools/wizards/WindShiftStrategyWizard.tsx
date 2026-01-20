@@ -96,7 +96,7 @@ interface ThermalAssessment {
 
 export function WindShiftStrategyWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -114,7 +114,7 @@ export function WindShiftStrategyWizard({
     isLoadingForecast,
     forecastError,
   } = useForecastCheck({
-    raceEventId,
+    regattaId,
     venue: venue || null,
     raceDate: raceDate || null,
     raceStartTime: raceStartTime || null,
@@ -350,12 +350,12 @@ ${shiftAnalysis.pattern === 'stable'
 
   // Navigate to edit race
   const handleEditRace = useCallback(() => {
-    if (!raceEventId) return;
+    if (!regattaId) return;
     onCancel();
     setTimeout(() => {
-      router.push(`/race/edit/${raceEventId}`);
+      router.push(`/race/edit/${regattaId}`);
     }, 150);
-  }, [raceEventId, onCancel, router]);
+  }, [regattaId, onCancel, router]);
 
   // Format race date
   const formatRaceDate = useCallback((dateString: string | null | undefined): string => {
@@ -438,7 +438,7 @@ ${shiftAnalysis.pattern === 'stable'
           <Text style={styles.errorDescription}>
             To see the wind forecast, please set a venue location for this race.
           </Text>
-          {raceEventId && (
+          {regattaId && (
             <Pressable style={styles.editRaceButton} onPress={handleEditRace}>
               <Text style={styles.editRaceButtonText}>Edit Race</Text>
               <ArrowRight size={16} color={IOS_COLORS.blue} />

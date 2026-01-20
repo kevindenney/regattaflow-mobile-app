@@ -39,7 +39,7 @@ export interface ChecklistItemWithState extends ChecklistItem {
  * Options for the useRaceChecklist hook
  */
 interface UseRaceChecklistOptions {
-  raceEventId: string;
+  regattaId: string;
   raceName?: string;
   raceType: RaceType;
   phase: RacePhase;
@@ -75,7 +75,7 @@ interface UseRaceChecklistReturn {
  * Hook to manage race-type-specific checklists
  */
 export function useRaceChecklist({
-  raceEventId,
+  regattaId,
   raceName,
   raceType,
   phase,
@@ -88,7 +88,7 @@ export function useRaceChecklist({
 
   // Get race preparation for persisting checklist state
   const { intentions, updateIntentions, isLoading, isSaving } = useRacePreparation({
-    raceEventId,
+    regattaId,
     autoSave: true,
     debounceMs: 500, // Faster save for checklist toggling
   });
@@ -96,7 +96,7 @@ export function useRaceChecklist({
   // Get carryover equipment issues (only for days_before phase)
   const { carryoverIssues, resolveIssue } = useEquipmentFlow({
     userId,
-    currentRaceId: raceEventId,
+    currentRaceId: regattaId,
     unresolvedOnly: true,
   });
 
@@ -201,12 +201,12 @@ export function useRaceChecklist({
       // If this is a carryover item, also resolve it in equipment flow
       if (itemId.startsWith('carryover_')) {
         const originalIssueId = itemId.replace('carryover_', '');
-        resolveIssue(originalIssueId, raceEventId);
+        resolveIssue(originalIssueId, regattaId);
       }
 
-      logger.info('Completed checklist item', { itemId, raceEventId });
+      logger.info('Completed checklist item', { itemId, regattaId });
     },
-    [user, intentions, updateIntentions, resolveIssue, raceEventId]
+    [user, intentions, updateIntentions, resolveIssue, regattaId]
   );
 
   /**
@@ -221,9 +221,9 @@ export function useRaceChecklist({
         checklistCompletions: currentCompletions,
       });
 
-      logger.info('Uncompleted checklist item', { itemId, raceEventId });
+      logger.info('Uncompleted checklist item', { itemId, regattaId });
     },
-    [intentions, updateIntentions, raceEventId]
+    [intentions, updateIntentions, regattaId]
   );
 
   /**
@@ -247,8 +247,8 @@ export function useRaceChecklist({
     updateIntentions({
       checklistCompletions: {},
     });
-    logger.info('Reset all checklist items', { raceEventId });
-  }, [updateIntentions, raceEventId]);
+    logger.info('Reset all checklist items', { regattaId });
+  }, [updateIntentions, regattaId]);
 
   return {
     // Items

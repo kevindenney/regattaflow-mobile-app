@@ -101,7 +101,7 @@ interface FourPeaksScheduleWizardProps extends ChecklistToolProps {
 
 export function FourPeaksScheduleWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -152,12 +152,12 @@ export function FourPeaksScheduleWizard({
       }
 
       // Load existing schedule if available
-      if (raceEventId) {
+      if (regattaId) {
         try {
           const { data } = await supabase
             .from('regattas')
             .select('multi_activity_schedule, watch_schedule')
-            .eq('id', raceEventId)
+            .eq('id', regattaId)
             .maybeSingle();
 
           if (data?.multi_activity_schedule) {
@@ -200,7 +200,7 @@ export function FourPeaksScheduleWizard({
     };
 
     initialize();
-  }, [raceEventId, raceStartTime, raceDate]);
+  }, [regattaId, raceStartTime, raceDate]);
 
   // Generate schedule when moving to review step
   useEffect(() => {
@@ -339,7 +339,7 @@ export function FourPeaksScheduleWizard({
 
   // Save schedule
   const handleSave = useCallback(async () => {
-    if (!schedule || !raceEventId) {
+    if (!schedule || !regattaId) {
       onComplete();
       return;
     }
@@ -351,7 +351,7 @@ export function FourPeaksScheduleWizard({
       const { error: updateError } = await supabase
         .from('regattas')
         .update({ multi_activity_schedule: schedule })
-        .eq('id', raceEventId);
+        .eq('id', regattaId);
 
       if (updateError) throw updateError;
 
@@ -362,7 +362,7 @@ export function FourPeaksScheduleWizard({
     } finally {
       setIsSaving(false);
     }
-  }, [schedule, raceEventId, onComplete]);
+  }, [schedule, regattaId, onComplete]);
 
   // Share schedule
   const handleShare = useCallback(async () => {

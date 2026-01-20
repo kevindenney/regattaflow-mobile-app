@@ -503,7 +503,7 @@ export default function RacesScreen() {
     isLoading: isLoadingPreparation,
     isSaving: isSavingPreparation,
   } = useRacePreparation({
-    raceEventId: selectedRaceData?.id || null,
+    regattaId: selectedRaceData?.id || null,
     autoSave: true,
     debounceMs: 1000,
   });
@@ -1012,7 +1012,7 @@ export default function RacesScreen() {
 
   // Use race brief sync for AI chat integration
   const { getAIContext, isStale: isRaceBriefStale, refreshContext } = useRaceBriefSync({
-    raceEventId: selectedRaceData?.id || null,
+    regattaId: selectedRaceData?.id || null,
     raceBrief,
     enabled: true,
   });

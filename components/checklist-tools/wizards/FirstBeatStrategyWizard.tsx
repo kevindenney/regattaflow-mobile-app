@@ -23,6 +23,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path, Circle, Line, Rect, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import {
   X,
   ChevronRight,
@@ -72,6 +73,359 @@ const IOS_COLORS = {
   separator: '#3C3C4349',
 };
 
+// Helper: Convert cardinal direction to degrees
+function cardinalToDegrees(cardinal: string): number {
+  const map: Record<string, number> = {
+    'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
+    'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
+    'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
+    'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5,
+  };
+  return map[cardinal] ?? 0;
+}
+
+// Helper: Convert degrees to cardinal direction
+function degreesToCardinal(degrees: number): string {
+  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+    'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const index = Math.round(((degrees % 360) + 360) % 360 / 22.5) % 16;
+  return directions[index];
+}
+
+// Helper: Determine current flow state from tide timing
+function getCurrentFlowState(
+  highTideTime: string | undefined,
+  raceStartTime: string
+): 'flooding' | 'ebbing' | 'slack' {
+  if (!highTideTime) return 'slack';
+
+  const parseTime = (t: string): number => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + (m || 0);
+  };
+
+  const startMins = parseTime(raceStartTime);
+  const highMins = parseTime(highTideTime);
+  const diff = startMins - highMins;
+
+  // Within 30 mins of high tide = slack
+  if (Math.abs(diff) < 30) return 'slack';
+  // After high tide = ebbing
+  if (diff > 0 && diff < 360) return 'ebbing';
+  // Before high tide = flooding
+  return 'flooding';
+}
+
+// Helper: Get zone heuristics for wind and current
+function getZoneHeuristics(
+  windDegrees: number,
+  currentDegrees: number | undefined,
+  favoredSide: 'left' | 'right' | 'middle'
+): { moreWind: 'left' | 'right' | null; lessCurrent: 'left' | 'right' | null; reason: string } {
+  // Basic heuristics:
+  // - Wind bends toward shore (shore side often has more pressure from geographic lift)
+  // - Shallow water has less current (shore side often shallower)
+  // - If current is cross-course, one side will have less adverse current
+
+  let moreWind: 'left' | 'right' | null = null;
+  let lessCurrent: 'left' | 'right' | null = null;
+  let reason = '';
+
+  // If current is flowing across the course (roughly E or W when wind is N-ish)
+  if (currentDegrees !== undefined) {
+    // Normalize to determine if current is left-to-right or right-to-left relative to wind
+    const relativeAngle = ((currentDegrees - windDegrees) + 360) % 360;
+
+    if (relativeAngle > 45 && relativeAngle < 135) {
+      // Current flowing to the right of wind direction
+      lessCurrent = 'left';
+      reason = 'Current flowing right, left side has less adverse current';
+    } else if (relativeAngle > 225 && relativeAngle < 315) {
+      // Current flowing to the left of wind direction
+      lessCurrent = 'right';
+      reason = 'Current flowing left, right side has less adverse current';
+    }
+  }
+
+  // For wind: assume shore effects create more pressure on the favored side
+  // This is a simplification - real shore effects depend on geography
+  if (favoredSide !== 'middle') {
+    moreWind = favoredSide;
+  }
+
+  return { moreWind, lessCurrent, reason };
+}
+
+// First Beat Diagram Component
+interface FirstBeatDiagramProps {
+  windDirection: string;
+  windDegrees?: number;
+  windSpeed: number;
+  currentDirection?: number;
+  currentSpeed?: number;
+  tideState: 'flooding' | 'ebbing' | 'slack';
+  favoredSide: 'left' | 'right' | 'middle';
+  favoredReason?: string;
+}
+
+function FirstBeatDiagram({
+  windDirection,
+  windDegrees,
+  windSpeed,
+  currentDirection,
+  currentSpeed,
+  tideState,
+  favoredSide,
+  favoredReason,
+}: FirstBeatDiagramProps) {
+  const width = 280;
+  const height = 240;
+  const padding = 20;
+
+  // Calculate wind arrow rotation (wind comes FROM this direction, so arrows point opposite)
+  const windRotation = (windDegrees ?? cardinalToDegrees(windDirection)) + 180;
+
+  // Current arrow rotation (current flows TO this direction)
+  const currentRotation = currentDirection ?? 90; // Default to east if unknown
+
+  // Determine favored side shading
+  const leftFavored = favoredSide === 'left';
+  const rightFavored = favoredSide === 'right';
+
+  // Get zone heuristics
+  const zoneHints = getZoneHeuristics(
+    windDegrees ?? cardinalToDegrees(windDirection),
+    currentDirection,
+    favoredSide
+  );
+
+  // Current strength color
+  const currentColor = !currentSpeed || currentSpeed < 0.3 ? IOS_COLORS.gray
+    : currentSpeed < 1 ? IOS_COLORS.teal
+    : IOS_COLORS.orange;
+
+  return (
+    <View style={diagramStyles.container}>
+      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <Defs>
+          {/* Gradient for favored side */}
+          <LinearGradient id="leftFade" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={IOS_COLORS.green} stopOpacity={leftFavored ? 0.15 : 0} />
+            <Stop offset="1" stopColor={IOS_COLORS.green} stopOpacity={0} />
+          </LinearGradient>
+          <LinearGradient id="rightFade" x1="1" y1="0" x2="0" y2="0">
+            <Stop offset="0" stopColor={IOS_COLORS.blue} stopOpacity={rightFavored ? 0.15 : 0} />
+            <Stop offset="1" stopColor={IOS_COLORS.blue} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+
+        {/* Background with favored side shading */}
+        <Rect x={padding} y={padding} width={(width - 2 * padding) / 2} height={height - 2 * padding} fill="url(#leftFade)" />
+        <Rect x={width / 2} y={padding} width={(width - 2 * padding) / 2} height={height - 2 * padding} fill="url(#rightFade)" />
+
+        {/* Windward Mark at TOP */}
+        <Circle cx={width / 2} cy={padding + 15} r={10} fill={IOS_COLORS.red} opacity={0.2} />
+        <Circle cx={width / 2} cy={padding + 15} r={6} fill={IOS_COLORS.red} />
+        <Circle cx={width / 2} cy={padding + 15} r={3} fill="white" />
+
+        {/* Wind arrows (3 arrows showing wind direction coming INTO the course) */}
+        <G transform={`translate(${width / 2}, 70) rotate(${windRotation})`}>
+          <Path d="M0,-12 L4,4 L0,0 L-4,4 Z" fill={IOS_COLORS.blue} />
+        </G>
+        <G transform={`translate(${width / 2 - 35}, 75) rotate(${windRotation})`}>
+          <Path d="M0,-10 L3,3 L0,0 L-3,3 Z" fill={IOS_COLORS.blue} opacity={0.7} />
+        </G>
+        <G transform={`translate(${width / 2 + 35}, 75) rotate(${windRotation})`}>
+          <Path d="M0,-10 L3,3 L0,0 L-3,3 Z" fill={IOS_COLORS.blue} opacity={0.7} />
+        </G>
+
+        {/* Course center line (dashed) */}
+        <Line
+          x1={width / 2}
+          y1={padding + 30}
+          x2={width / 2}
+          y2={height - padding - 20}
+          stroke={IOS_COLORS.separator}
+          strokeWidth={1}
+          strokeDasharray="4,4"
+        />
+
+        {/* Current arrows (horizontal flow) */}
+        {currentDirection !== undefined && (
+          <>
+            <G transform={`translate(${width / 2 - 50}, ${height / 2 + 10}) rotate(${currentRotation - 90})`}>
+              <Path d="M-15,0 L10,0 M5,-4 L10,0 L5,4" stroke={currentColor} strokeWidth={2} fill="none" />
+            </G>
+            <G transform={`translate(${width / 2 + 50}, ${height / 2 + 10}) rotate(${currentRotation - 90})`}>
+              <Path d="M-15,0 L10,0 M5,-4 L10,0 L5,4" stroke={currentColor} strokeWidth={2} fill="none" />
+            </G>
+          </>
+        )}
+
+        {/* Start line at BOTTOM */}
+        <Line
+          x1={padding + 20}
+          y1={height - padding - 8}
+          x2={width - padding - 20}
+          y2={height - padding - 8}
+          stroke={IOS_COLORS.green}
+          strokeWidth={3}
+        />
+
+        {/* Side labels */}
+        {/* Left label */}
+        {/* Right label */}
+
+        {/* Favored badge */}
+        {favoredSide === 'left' && (
+          <G transform={`translate(${padding + 30}, ${height / 2 - 20})`}>
+            <Rect x={-25} y={-10} width={50} height={20} rx={4} fill={IOS_COLORS.green} />
+          </G>
+        )}
+        {favoredSide === 'right' && (
+          <G transform={`translate(${width - padding - 30}, ${height / 2 - 20})`}>
+            <Rect x={-25} y={-10} width={50} height={20} rx={4} fill={IOS_COLORS.blue} />
+          </G>
+        )}
+      </Svg>
+
+      {/* Text labels (using RN Text for better rendering) */}
+      <View style={diagramStyles.labelsContainer}>
+        {/* Mark label */}
+        <Text style={[diagramStyles.markLabel, { top: padding - 2 }]}>MARK</Text>
+
+        {/* Wind label */}
+        <View style={[diagramStyles.windLabelContainer, { top: 88 }]}>
+          <Wind size={14} color={IOS_COLORS.blue} />
+          <Text style={diagramStyles.windLabel}>{windSpeed} kts {windDirection}</Text>
+        </View>
+
+        {/* Current label */}
+        {currentDirection !== undefined && (
+          <View style={[diagramStyles.currentLabelContainer, { top: height / 2 + 30 }]}>
+            <Waves size={14} color={currentColor} />
+            <Text style={[diagramStyles.currentLabel, { color: currentColor }]}>
+              {tideState.charAt(0).toUpperCase() + tideState.slice(1)} {currentSpeed ? `${currentSpeed.toFixed(1)}kt` : ''} {degreesToCardinal(currentDirection)}
+            </Text>
+          </View>
+        )}
+
+        {/* Side labels */}
+        <Text style={[diagramStyles.sideLabel, { left: padding + 10, bottom: padding + 16 }]}>LEFT</Text>
+        <Text style={[diagramStyles.sideLabel, { right: padding + 10, bottom: padding + 16 }]}>RIGHT</Text>
+
+        {/* Start label */}
+        <Text style={[diagramStyles.startLabel, { bottom: padding - 6 }]}>START</Text>
+
+        {/* Favored badge text */}
+        {favoredSide === 'left' && (
+          <Text style={[diagramStyles.favoredBadge, { left: padding + 5, top: height / 2 - 26 }]}>FAVORED</Text>
+        )}
+        {favoredSide === 'right' && (
+          <Text style={[diagramStyles.favoredBadge, { right: padding + 5, top: height / 2 - 26 }]}>FAVORED</Text>
+        )}
+
+        {/* Zone hints */}
+        {zoneHints.moreWind && (
+          <Text style={[
+            diagramStyles.zoneHint,
+            zoneHints.moreWind === 'left' ? { left: padding + 5 } : { right: padding + 5 },
+            { top: height / 2 + 55 }
+          ]}>
+            More wind
+          </Text>
+        )}
+        {zoneHints.lessCurrent && (
+          <Text style={[
+            diagramStyles.zoneHint,
+            zoneHints.lessCurrent === 'left' ? { left: padding + 5 } : { right: padding + 5 },
+            { top: height / 2 + 70 }
+          ]}>
+            Less current
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const diagramStyles = StyleSheet.create({
+  container: {
+    position: 'relative',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  labelsContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  markLabel: {
+    position: 'absolute',
+    alignSelf: 'center',
+    fontSize: 10,
+    fontWeight: '600',
+    color: IOS_COLORS.red,
+    letterSpacing: 0.5,
+  },
+  windLabelContainer: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 4,
+  },
+  windLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  currentLabelContainer: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 4,
+  },
+  currentLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  sideLabel: {
+    position: 'absolute',
+    fontSize: 10,
+    fontWeight: '500',
+    color: IOS_COLORS.tertiaryLabel,
+    letterSpacing: 0.5,
+  },
+  startLabel: {
+    position: 'absolute',
+    alignSelf: 'center',
+    fontSize: 10,
+    fontWeight: '600',
+    color: IOS_COLORS.green,
+    letterSpacing: 0.5,
+  },
+  favoredBadge: {
+    position: 'absolute',
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  zoneHint: {
+    position: 'absolute',
+    fontSize: 9,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    fontStyle: 'italic',
+  },
+});
+
 type WizardStep = 'loading' | 'overview' | 'side_selection' | 'tack_selection' | 'laylines' | 'beat_plan';
 
 interface FirstBeatStrategyWizardProps extends ChecklistToolProps {
@@ -98,7 +452,7 @@ interface SideFactor {
 
 export function FirstBeatStrategyWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -116,7 +470,7 @@ export function FirstBeatStrategyWizard({
     isLoadingForecast,
     forecastError,
   } = useForecastCheck({
-    raceEventId,
+    regattaId,
     venue: venue || null,
     raceDate: raceDate || null,
     raceStartTime: raceStartTime || null,
@@ -432,12 +786,12 @@ Switch strategy if you observe:
 
   // Navigate to edit race
   const handleEditRace = useCallback(() => {
-    if (!raceEventId) return;
+    if (!regattaId) return;
     onCancel();
     setTimeout(() => {
-      router.push(`/race/edit/${raceEventId}`);
+      router.push(`/race/edit/${regattaId}`);
     }, 150);
-  }, [raceEventId, onCancel, router]);
+  }, [regattaId, onCancel, router]);
 
   // Format race date
   const formatRaceDate = useCallback((dateString: string | null | undefined): string => {
@@ -491,7 +845,7 @@ Switch strategy if you observe:
           <Text style={styles.errorDescription}>
             Unable to analyze first beat without forecast data.
           </Text>
-          {raceEventId && (
+          {regattaId && (
             <Pressable style={styles.editRaceButton} onPress={handleEditRace}>
               <Text style={styles.editRaceButtonText}>Edit Race</Text>
               <ArrowRight size={16} color={IOS_COLORS.blue} />
@@ -519,29 +873,17 @@ Switch strategy if you observe:
             </View>
           </View>
 
-          {/* Beat diagram placeholder */}
-          <View style={styles.beatDiagram}>
-            <View style={styles.windArrow}>
-              <Wind size={20} color={IOS_COLORS.blue} />
-              <Text style={styles.windLabel}>{rw.windDirectionAtStart}</Text>
-            </View>
-
-            <View style={styles.beatPath}>
-              <View style={styles.startLine}>
-                <Text style={styles.startText}>START</Text>
-              </View>
-              <View style={styles.beatTrack} />
-              <View style={styles.windwardMark}>
-                <Target size={24} color={IOS_COLORS.red} />
-                <Text style={styles.markText}>MARK</Text>
-              </View>
-            </View>
-
-            <View style={styles.sideLabels}>
-              <Text style={styles.sideLabel}>LEFT</Text>
-              <Text style={styles.sideLabel}>RIGHT</Text>
-            </View>
-          </View>
+          {/* First Beat Diagram with wind, current, and strategy */}
+          <FirstBeatDiagram
+            windDirection={rw.windDirectionAtStart}
+            windDegrees={rw.windDirectionDegreesAtStart}
+            windSpeed={rw.windAtStart}
+            currentDirection={rw.currentDirectionAtStart}
+            currentSpeed={rw.currentSpeedAtStart}
+            tideState={getCurrentFlowState(currentForecast.highTide?.time, rw.raceStartTime)}
+            favoredSide={favoredSide.side}
+            favoredReason={favoredSide.description}
+          />
         </View>
 
         {/* Conditions summary */}

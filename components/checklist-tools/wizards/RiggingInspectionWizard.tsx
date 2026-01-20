@@ -126,7 +126,7 @@ interface RiggingInspectionWizardProps extends ChecklistToolProps {}
 
 export function RiggingInspectionWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,

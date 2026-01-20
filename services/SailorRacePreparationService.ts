@@ -8,6 +8,8 @@ import type {
   RigIntentions,
   CourseSelectionIntention,
 } from '@/types/raceIntentions';
+import type { SSIExtraction, UserClubDocument } from '@/types/ssi';
+import { userDocumentService } from './UserDocumentService';
 
 const logger = createLogger('SailorRacePreparationService');
 
@@ -37,7 +39,7 @@ export interface RaceBriefData {
 
 export interface SailorRacePreparation {
   id?: string;
-  race_event_id: string;
+  regatta_id: string;
   sailor_id: string;
   rig_notes?: string;
   selected_rig_preset_id?: string;
@@ -57,14 +59,14 @@ class SailorRacePreparationService {
   }
 
   /**
-   * Get race preparation data for a specific sailor and race
+   * Get race preparation data for a specific sailor and regatta
    */
   async getPreparation(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string
   ): Promise<SailorRacePreparation | null> {
     // Skip queries for non-UUID race IDs (e.g., demo races)
-    if (!this.isValidUUID(raceEventId)) {
+    if (!this.isValidUUID(regattaId)) {
       return null;
     }
 
@@ -72,7 +74,7 @@ class SailorRacePreparationService {
       const { data, error } = await supabase
         .from('sailor_race_preparation')
         .select('*')
-        .eq('race_event_id', raceEventId)
+        .eq('regatta_id', regattaId)
         .eq('sailor_id', sailorId)
         .maybeSingle();
 
@@ -94,16 +96,15 @@ class SailorRacePreparationService {
   async upsertPreparation(
     preparation: SailorRacePreparation
   ): Promise<SailorRacePreparation | null> {
-    // Validate that the race exists in regattas table before attempting upsert
-    // Note: FK constraint references regattas table (not race_events)
+    // Validate that the regatta exists before attempting upsert
     const { data: regattaExists } = await supabase
       .from('regattas')
       .select('id')
-      .eq('id', preparation.race_event_id)
+      .eq('id', preparation.regatta_id)
       .maybeSingle();
 
     if (!regattaExists) {
-      logger.info(`Race ${preparation.race_event_id} does not exist in regattas, skipping upsert`);
+      logger.info(`Regatta ${preparation.regatta_id} does not exist, skipping upsert`);
       return null;
     }
 
@@ -111,7 +112,7 @@ class SailorRacePreparationService {
       .from('sailor_race_preparation')
       .upsert(
         {
-          race_event_id: preparation.race_event_id,
+          regatta_id: preparation.regatta_id,
           sailor_id: preparation.sailor_id,
           rig_notes: preparation.rig_notes,
           selected_rig_preset_id: preparation.selected_rig_preset_id,
@@ -120,7 +121,7 @@ class SailorRacePreparationService {
           user_intentions: preparation.user_intentions,
         },
         {
-          onConflict: 'race_event_id,sailor_id',
+          onConflict: 'regatta_id,sailor_id',
         }
       )
       .select()
@@ -136,28 +137,28 @@ class SailorRacePreparationService {
   }
 
   /**
-   * Update rig notes for a race
+   * Update rig notes for a regatta
    */
   async updateRigNotes(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     rigNotes: string
   ): Promise<boolean> {
     try {
-      // Validate that the race_event exists before attempting upsert
-      const { data: raceEventExists, error: raceEventError } = await supabase
-        .from('race_events')
+      // Validate that the regatta exists before attempting upsert
+      const { data: regattaExists, error: regattaError } = await supabase
+        .from('regattas')
         .select('id')
-        .eq('id', raceEventId)
+        .eq('id', regattaId)
         .maybeSingle();
 
-      if (raceEventError) {
-        logger.error('Error checking race event existence:', raceEventError);
-        throw raceEventError;
+      if (regattaError) {
+        logger.error('Error checking regatta existence:', regattaError);
+        throw regattaError;
       }
 
-      if (!raceEventExists) {
-        logger.info(`Race event ${raceEventId} does not exist, skipping rig notes update`);
+      if (!regattaExists) {
+        logger.info(`Regatta ${regattaId} does not exist, skipping rig notes update`);
         return false;
       }
 
@@ -165,12 +166,12 @@ class SailorRacePreparationService {
         .from('sailor_race_preparation')
         .upsert(
           {
-            race_event_id: raceEventId,
+            regatta_id: regattaId,
             sailor_id: sailorId,
             rig_notes: rigNotes,
           },
           {
-            onConflict: 'race_event_id,sailor_id',
+            onConflict: 'regatta_id,sailor_id',
           }
         );
 
@@ -188,28 +189,28 @@ class SailorRacePreparationService {
   }
 
   /**
-   * Update selected rig preset for a race
+   * Update selected rig preset for a regatta
    */
   async updateRigPreset(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     rigPresetId: string
   ): Promise<boolean> {
     try {
-      // Validate that the race_event exists before attempting upsert
-      const { data: raceEventExists, error: raceEventError } = await supabase
-        .from('race_events')
+      // Validate that the regatta exists before attempting upsert
+      const { data: regattaExists, error: regattaError } = await supabase
+        .from('regattas')
         .select('id')
-        .eq('id', raceEventId)
+        .eq('id', regattaId)
         .maybeSingle();
 
-      if (raceEventError) {
-        logger.error('Error checking race event existence:', raceEventError);
-        throw raceEventError;
+      if (regattaError) {
+        logger.error('Error checking regatta existence:', regattaError);
+        throw regattaError;
       }
 
-      if (!raceEventExists) {
-        logger.info(`Race event ${raceEventId} does not exist, skipping rig preset update`);
+      if (!regattaExists) {
+        logger.info(`Regatta ${regattaId} does not exist, skipping rig preset update`);
         return false;
       }
 
@@ -217,12 +218,12 @@ class SailorRacePreparationService {
         .from('sailor_race_preparation')
         .upsert(
           {
-            race_event_id: raceEventId,
+            regatta_id: regattaId,
             sailor_id: sailorId,
             selected_rig_preset_id: rigPresetId,
           },
           {
-            onConflict: 'race_event_id,sailor_id',
+            onConflict: 'regatta_id,sailor_id',
           }
         );
 
@@ -240,28 +241,28 @@ class SailorRacePreparationService {
   }
 
   /**
-   * Update regulatory acknowledgements for a race
+   * Update regulatory acknowledgements for a regatta
    */
   async updateAcknowledgements(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     acknowledgements: RegulatoryAcknowledgements
   ): Promise<boolean> {
     try {
-      // Validate that the race_event exists before attempting upsert
-      const { data: raceEventExists, error: raceEventError } = await supabase
-        .from('race_events')
+      // Validate that the regatta exists before attempting upsert
+      const { data: regattaExists, error: regattaError } = await supabase
+        .from('regattas')
         .select('id')
-        .eq('id', raceEventId)
+        .eq('id', regattaId)
         .maybeSingle();
 
-      if (raceEventError) {
-        logger.error('Error checking race event existence:', raceEventError);
-        throw raceEventError;
+      if (regattaError) {
+        logger.error('Error checking regatta existence:', regattaError);
+        throw regattaError;
       }
 
-      if (!raceEventExists) {
-        logger.info(`Race event ${raceEventId} does not exist, skipping acknowledgements update`);
+      if (!regattaExists) {
+        logger.info(`Regatta ${regattaId} does not exist, skipping acknowledgements update`);
         return false;
       }
 
@@ -269,12 +270,12 @@ class SailorRacePreparationService {
         .from('sailor_race_preparation')
         .upsert(
           {
-            race_event_id: raceEventId,
+            regatta_id: regattaId,
             sailor_id: sailorId,
             regulatory_acknowledgements: acknowledgements,
           },
           {
-            onConflict: 'race_event_id,sailor_id',
+            onConflict: 'regatta_id,sailor_id',
           }
         );
 
@@ -295,25 +296,25 @@ class SailorRacePreparationService {
    * Update race brief data for AI context
    */
   async updateRaceBrief(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     raceBriefData: RaceBriefData
   ): Promise<boolean> {
     try {
-      // Validate that the race_event exists before attempting upsert
-      const { data: raceEventExists, error: raceEventError } = await supabase
-        .from('race_events')
+      // Validate that the regatta exists before attempting upsert
+      const { data: regattaExists, error: regattaError } = await supabase
+        .from('regattas')
         .select('id')
-        .eq('id', raceEventId)
+        .eq('id', regattaId)
         .maybeSingle();
 
-      if (raceEventError) {
-        logger.error('Error checking race event existence:', raceEventError);
-        throw raceEventError;
+      if (regattaError) {
+        logger.error('Error checking regatta existence:', regattaError);
+        throw regattaError;
       }
 
-      if (!raceEventExists) {
-        logger.info(`Race event ${raceEventId} does not exist, skipping race brief update`);
+      if (!regattaExists) {
+        logger.info(`Regatta ${regattaId} does not exist, skipping race brief update`);
         return false;
       }
 
@@ -321,12 +322,12 @@ class SailorRacePreparationService {
         .from('sailor_race_preparation')
         .upsert(
           {
-            race_event_id: raceEventId,
+            regatta_id: regattaId,
             sailor_id: sailorId,
             race_brief_data: raceBriefData,
           },
           {
-            onConflict: 'race_event_id,sailor_id',
+            onConflict: 'regatta_id,sailor_id',
           }
         );
 
@@ -347,14 +348,14 @@ class SailorRacePreparationService {
    * Delete race preparation data
    */
   async deletePreparation(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string
   ): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('sailor_race_preparation')
         .delete()
-        .eq('race_event_id', raceEventId)
+        .eq('regatta_id', regattaId)
         .eq('sailor_id', sailorId);
 
       if (error) {
@@ -397,13 +398,13 @@ class SailorRacePreparationService {
    * Toggle a specific acknowledgement
    */
   async toggleAcknowledgement(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     key: keyof RegulatoryAcknowledgements
   ): Promise<boolean> {
     try {
       // First, get the current acknowledgements
-      const current = await this.getPreparation(raceEventId, sailorId);
+      const current = await this.getPreparation(regattaId, sailorId);
 
       const currentAcknowledgements = current?.regulatory_acknowledgements || {
         cleanRegatta: false,
@@ -419,7 +420,7 @@ class SailorRacePreparationService {
 
       // Update in database
       return await this.updateAcknowledgements(
-        raceEventId,
+        regattaId,
         sailorId,
         updatedAcknowledgements
       );
@@ -434,17 +435,17 @@ class SailorRacePreparationService {
   // ============================================================
 
   /**
-   * Get user intentions for a race
+   * Get user intentions for a regatta
    */
   async getIntentions(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string
   ): Promise<RaceIntentions | null> {
     try {
       const { data, error } = await supabase
         .from('sailor_race_preparation')
         .select('user_intentions')
-        .eq('race_event_id', raceEventId)
+        .eq('regatta_id', regattaId)
         .eq('sailor_id', sailorId)
         .maybeSingle();
 
@@ -464,30 +465,30 @@ class SailorRacePreparationService {
    * Update full user intentions object
    */
   async updateIntentions(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     intentions: RaceIntentionUpdate
   ): Promise<boolean> {
     try {
-      // Validate that the race_event exists
-      const { data: raceEventExists, error: raceEventError } = await supabase
-        .from('race_events')
+      // Validate that the regatta exists
+      const { data: regattaExists, error: regattaError } = await supabase
+        .from('regattas')
         .select('id')
-        .eq('id', raceEventId)
+        .eq('id', regattaId)
         .maybeSingle();
 
-      if (raceEventError) {
-        logger.error('Error checking race event existence:', raceEventError);
-        throw raceEventError;
+      if (regattaError) {
+        logger.error('Error checking regatta existence:', regattaError);
+        throw regattaError;
       }
 
-      if (!raceEventExists) {
-        logger.info(`Race event ${raceEventId} does not exist, skipping intentions update`);
+      if (!regattaExists) {
+        logger.info(`Regatta ${regattaId} does not exist, skipping intentions update`);
         return false;
       }
 
       // Get current intentions to merge
-      const current = await this.getIntentions(raceEventId, sailorId);
+      const current = await this.getIntentions(regattaId, sailorId);
       const mergedIntentions: RaceIntentions = {
         ...current,
         ...intentions,
@@ -498,12 +499,12 @@ class SailorRacePreparationService {
         .from('sailor_race_preparation')
         .upsert(
           {
-            race_event_id: raceEventId,
+            regatta_id: regattaId,
             sailor_id: sailorId,
             user_intentions: mergedIntentions,
           },
           {
-            onConflict: 'race_event_id,sailor_id',
+            onConflict: 'regatta_id,sailor_id',
           }
         );
 
@@ -524,44 +525,68 @@ class SailorRacePreparationService {
    * Update arrival time intention
    */
   async updateArrivalIntention(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     arrivalTime: ArrivalTimeIntention
   ): Promise<boolean> {
-    return this.updateIntentions(raceEventId, sailorId, { arrivalTime });
+    return this.updateIntentions(regattaId, sailorId, { arrivalTime });
   }
 
   /**
    * Update sail selection intention
    */
   async updateSailSelection(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     sailSelection: SailSelectionIntention
   ): Promise<boolean> {
-    return this.updateIntentions(raceEventId, sailorId, { sailSelection });
+    return this.updateIntentions(regattaId, sailorId, { sailSelection });
   }
 
   /**
    * Update rig intentions
    */
   async updateRigIntentions(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     rigIntentions: RigIntentions
   ): Promise<boolean> {
-    return this.updateIntentions(raceEventId, sailorId, { rigIntentions });
+    return this.updateIntentions(regattaId, sailorId, { rigIntentions });
   }
 
   /**
    * Update course selection intention
    */
   async updateCourseSelection(
-    raceEventId: string,
+    regattaId: string,
     sailorId: string,
     courseSelection: CourseSelectionIntention
   ): Promise<boolean> {
-    return this.updateIntentions(raceEventId, sailorId, { courseSelection });
+    return this.updateIntentions(regattaId, sailorId, { courseSelection });
+  }
+
+  // ============================================================
+  // SSI Document Methods
+  // ============================================================
+
+  /**
+   * Get SSI extraction data for a race
+   * Returns user's own SSI for race → shared club SSI → null
+   *
+   * @param raceId - The race/regatta ID
+   * @param clubId - Optional club ID for fallback to shared club SSI
+   * @returns SSI extraction data and document info, or null if not found
+   */
+  async getSSIForRace(
+    raceId: string,
+    clubId?: string
+  ): Promise<{ document: UserClubDocument; extraction: SSIExtraction } | null> {
+    try {
+      return await userDocumentService.getSSIForRace(raceId, clubId);
+    } catch (error) {
+      logger.error('Error getting SSI for race:', error);
+      return null;
+    }
   }
 }
 

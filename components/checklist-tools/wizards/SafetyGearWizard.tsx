@@ -126,7 +126,7 @@ interface SafetyGearWizardProps extends ChecklistToolProps {}
 
 export function SafetyGearWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,

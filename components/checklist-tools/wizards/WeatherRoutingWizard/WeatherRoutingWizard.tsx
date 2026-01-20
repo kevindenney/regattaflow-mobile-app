@@ -87,7 +87,7 @@ interface WeatherRoutingWizardProps extends ChecklistToolProps {
 
 export function WeatherRoutingWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -99,6 +99,15 @@ export function WeatherRoutingWizard({
   routeWaypoints,
 }: WeatherRoutingWizardProps) {
   const router = useRouter();
+
+  // Debug: Log incoming props
+  console.log('[WeatherRoutingWizard] Props:', {
+    regattaId,
+    routeWaypointsLength: routeWaypoints?.length ?? 0,
+    routeWaypoints: routeWaypoints?.slice(0, 2), // Just first 2 for brevity
+    raceDate,
+    raceName,
+  });
 
   // Parse start time
   const startTimeString = useMemo(() => {
@@ -136,7 +145,7 @@ export function WeatherRoutingWizard({
     riskColor,
     agreementColor,
   } = useWeatherRouting({
-    raceEventId,
+    regattaId,
     waypoints: routeWaypoints || null,
     startTime: startTimeString,
     boatId,
@@ -195,41 +204,95 @@ export function WeatherRoutingWizard({
     }
   };
 
-  // Render loading state
-  const renderLoading = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color={IOS_COLORS.blue} />
-      <Text style={styles.loadingText}>Analyzing route weather...</Text>
-      {routeWaypoints && (
-        <Text style={styles.loadingSubtext}>
-          {routeWaypoints.length} waypoints, {totalDistanceNm.toFixed(1)} nm
-        </Text>
-      )}
-    </View>
-  );
+  // Check if prerequisites are missing (not a runtime error, just missing data)
+  const missingPrerequisites = useMemo(() => {
+    if (!routeWaypoints || !Array.isArray(routeWaypoints)) {
+      return {
+        title: 'Route Required',
+        description: 'This race needs route waypoints to analyze weather conditions along the course.',
+        actionLabel: 'Add route waypoints in race settings to use weather routing.',
+      };
+    }
+    if (routeWaypoints.length < 2) {
+      return {
+        title: 'More Waypoints Needed',
+        description: `Only ${routeWaypoints.length} waypoint found. Weather routing needs at least 2 waypoints to analyze conditions between legs.`,
+        actionLabel: 'Add more waypoints to define the race route.',
+      };
+    }
+    if (!startTimeString) {
+      return {
+        title: 'Start Time Required',
+        description: 'A race start time is needed to forecast weather conditions at each leg.',
+        actionLabel: 'Set the race start time to enable weather routing.',
+      };
+    }
+    return null;
+  }, [routeWaypoints, startTimeString]);
 
-  // Render error state
-  const renderError = () => (
-    <View style={styles.errorContainer}>
-      <AlertTriangle size={48} color={IOS_COLORS.orange} />
-      <Text style={styles.errorTitle}>Unable to analyze route</Text>
-      <Text style={styles.errorDescription}>
-        {!hasValidRoute
-          ? 'This race needs at least 2 waypoints to analyze weather routing.'
-          : error?.message || 'Failed to fetch weather data. Please try again.'}
-      </Text>
-      <Pressable style={styles.retryButton} onPress={refreshAnalysis}>
-        <Text style={styles.retryButtonText}>Try Again</Text>
-      </Pressable>
-    </View>
-  );
+  // Render prerequisite not met state (clean, no loading indicator)
+  const renderPrerequisitesMissing = () => {
+    if (!missingPrerequisites) return null;
+
+    return (
+      <View style={styles.prerequisiteContainer}>
+        <View style={styles.prerequisiteIconContainer}>
+          <Route size={48} color={IOS_COLORS.gray} />
+        </View>
+        <Text style={styles.prerequisiteTitle}>{missingPrerequisites.title}</Text>
+        <Text style={styles.prerequisiteDescription}>{missingPrerequisites.description}</Text>
+        <View style={styles.prerequisiteActionBox}>
+          <Compass size={16} color={IOS_COLORS.blue} />
+          <Text style={styles.prerequisiteActionText}>{missingPrerequisites.actionLabel}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Render loading state (only when we have valid route)
+  const renderLoading = () => {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={IOS_COLORS.blue} />
+        <Text style={styles.loadingText}>Analyzing route weather...</Text>
+        {routeWaypoints && routeWaypoints.length > 0 && (
+          <Text style={styles.loadingSubtext}>
+            {routeWaypoints.length} waypoints, {totalDistanceNm.toFixed(1)} nm
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  // Render runtime error state (failed after trying)
+  const renderError = () => {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertTriangle size={48} color={IOS_COLORS.orange} />
+        <Text style={styles.errorTitle}>Unable to Load Weather</Text>
+        <Text style={styles.errorDescription}>
+          {error?.message || 'Failed to fetch weather data for the route. Please check your connection and try again.'}
+        </Text>
+        <Pressable style={styles.retryButton} onPress={refreshAnalysis}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </Pressable>
+      </View>
+    );
+  };
 
   // Render step content
   const renderStepContent = () => {
+    // First check if prerequisites are missing
+    if (missingPrerequisites) {
+      return renderPrerequisitesMissing();
+    }
+
+    // Show loading while fetching
     if (step === 'loading' || isLoading) {
       return renderLoading();
     }
 
+    // Show error if fetch failed
     if (error || !analysis) {
       return renderError();
     }
@@ -308,20 +371,24 @@ export function WeatherRoutingWizard({
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Progress bar */}
-      <View style={styles.progressContainer}>
-        <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
-      </View>
+      {/* Progress bar - hide when prerequisites missing */}
+      {!missingPrerequisites && (
+        <View style={styles.progressContainer}>
+          <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
+        </View>
+      )}
 
-      {/* Step indicator */}
-      <View style={styles.stepIndicator}>
-        <Text style={styles.stepText}>{stepTitles[step]}</Text>
-        {step !== 'loading' && (
-          <Text style={styles.stepProgress}>
-            {currentStepIndex + 1} of {STEPS.length}
-          </Text>
-        )}
-      </View>
+      {/* Step indicator - hide when prerequisites missing */}
+      {!missingPrerequisites && (
+        <View style={styles.stepIndicator}>
+          <Text style={styles.stepText}>{stepTitles[step]}</Text>
+          {step !== 'loading' && (
+            <Text style={styles.stepProgress}>
+              {currentStepIndex + 1} of {STEPS.length}
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* Content */}
       <View style={styles.content}>
@@ -469,6 +536,51 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: IOS_COLORS.secondaryBackground,
+  },
+  // Prerequisites missing state (cleaner than error)
+  prerequisiteContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  prerequisiteIconContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: IOS_COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  prerequisiteTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  prerequisiteDescription: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 300,
+    marginBottom: 24,
+  },
+  prerequisiteActionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.background,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 8,
+  },
+  prerequisiteActionText: {
+    fontSize: 13,
+    color: IOS_COLORS.blue,
+    flex: 1,
   },
   footer: {
     flexDirection: 'row',

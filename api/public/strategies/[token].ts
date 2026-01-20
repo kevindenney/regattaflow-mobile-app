@@ -188,7 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         share_token,
         share_enabled,
         public_shared_at,
-        race_event_id,
+        regatta_id,
         sailor_id,
         rig_notes,
         selected_rig_preset_id,
@@ -217,49 +217,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let raceInfo = null;
     let regattaInfo = null;
     
-    if (preparation.race_event_id) {
-      const { data: raceEvent } = await supabase
-        .from('race_events')
+    if (preparation.regatta_id) {
+      // Query regattas table directly (sailor_race_preparation now references regattas)
+      const { data: regatta } = await supabase
+        .from('regattas')
         .select(`
           id,
           name,
-          event_date,
-          venue_location,
+          venue,
+          start_date,
+          end_date,
           boat_class,
-          regatta_id,
-          metadata,
-          regattas (
-            id,
-            name,
-            venue,
-            start_date
-          )
+          race_type,
+          total_distance_nm,
+          waypoints
         `)
-        .eq('id', preparation.race_event_id)
+        .eq('id', preparation.regatta_id)
         .single();
 
-      if (raceEvent) {
-        const metadata = raceEvent.metadata as any;
+      if (regatta) {
+        // Populate both raceInfo and regattaInfo from the same regatta record
         raceInfo = {
-          id: raceEvent.id,
-          name: raceEvent.name,
-          event_date: raceEvent.event_date,
-          venue: raceEvent.venue_location,
-          boat_class: raceEvent.boat_class,
-          race_type: detectRaceType(raceEvent.name, metadata?.race_type, metadata?.total_distance_nm),
-          total_distance_nm: metadata?.total_distance_nm || null,
-          waypoints: metadata?.waypoints || null,
+          id: regatta.id,
+          name: regatta.name,
+          event_date: regatta.start_date,
+          venue: regatta.venue,
+          boat_class: regatta.boat_class,
+          race_type: detectRaceType(regatta.name, regatta.race_type, regatta.total_distance_nm),
+          total_distance_nm: regatta.total_distance_nm || null,
+          waypoints: regatta.waypoints || null,
         };
 
-        if (raceEvent.regattas) {
-          const regatta = raceEvent.regattas as any;
-          regattaInfo = {
-            id: regatta.id,
-            name: regatta.name,
-            venue: regatta.venue,
-            start_date: regatta.start_date,
-          };
-        }
+        regattaInfo = {
+          id: regatta.id,
+          name: regatta.name,
+          venue: regatta.venue,
+          start_date: regatta.start_date,
+        };
       }
     }
 
@@ -348,14 +342,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Fetch user notes from race_strategies table
     let userNotes: string | null = null;
-    if (preparation.sailor_id && preparation.race_event_id) {
+    if (preparation.sailor_id && preparation.regatta_id) {
       const { data: raceStrat } = await supabase
         .from('race_strategies')
         .select('notes, strategy_content')
-        .eq('regatta_id', preparation.race_event_id)
+        .eq('regatta_id', preparation.regatta_id)
         .eq('user_id', preparation.sailor_id)
         .maybeSingle();
-      
+
       userNotes = raceStrat?.notes || (raceStrat?.strategy_content as any)?.userNotes || null;
     }
 

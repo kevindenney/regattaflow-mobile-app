@@ -143,7 +143,7 @@ interface CourseMapWizardProps extends ChecklistToolProps {
 
 export function CourseMapWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -182,7 +182,7 @@ export function CourseMapWizard({
     extractionResult: siExtractionResult,
     clearExtractionResult: clearSIExtractionResult,
   } = useRaceDocuments({
-    raceId: raceEventId,
+    raceId: regattaId,
     userId: user?.id,
   });
 

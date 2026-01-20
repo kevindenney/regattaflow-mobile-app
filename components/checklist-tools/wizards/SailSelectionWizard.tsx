@@ -85,7 +85,7 @@ type SailCategory = 'mainsail' | 'headsail' | 'downwind';
 
 export function SailSelectionWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -117,7 +117,7 @@ export function SailSelectionWizard({
     checklistAdditions,
     isLoading: isLoadingNudges,
     recordDelivery,
-  } = usePersonalizedNudges(raceEventId || '', {
+  } = usePersonalizedNudges(regattaId || '', {
     venueId: venueId || undefined,
     boatClassId: boatClassId || undefined,
     forecast: wind?.average ? {

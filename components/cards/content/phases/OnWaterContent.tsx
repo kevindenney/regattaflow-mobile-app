@@ -870,7 +870,7 @@ export function OnWaterContent({
 
   // Race preparation data (for historical view)
   const { intentions } = useRacePreparation({
-    raceEventId: race.id,
+    regattaId: race.id,
   });
 
   useEffect(() => {

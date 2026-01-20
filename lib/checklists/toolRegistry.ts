@@ -13,7 +13,7 @@ import { ChecklistItem, ChecklistToolType } from '@/types/checklists';
  */
 export interface ChecklistToolProps {
   item: ChecklistItem;
-  raceEventId: string;
+  regattaId: string;
   boatId?: string;
   onComplete: () => void;
   onCancel: () => void;

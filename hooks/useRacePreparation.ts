@@ -63,7 +63,7 @@ function deepMergeIntentions(
 }
 
 interface UseRacePreparationOptions {
-  raceEventId: string | null;
+  regattaId: string | null;
   autoSave?: boolean;
   debounceMs?: number;
 }
@@ -104,7 +104,7 @@ const DEFAULT_ACKNOWLEDGEMENTS: RegulatoryAcknowledgements = {
  * Hook to manage sailor race preparation data with automatic persistence
  */
 export function useRacePreparation({
-  raceEventId,
+  regattaId,
   autoSave = true,
   debounceMs = 1000,
 }: UseRacePreparationOptions): UseRacePreparationReturn {
@@ -131,16 +131,16 @@ export function useRacePreparation({
    * Load preparation data from Supabase or AsyncStorage
    */
   const loadPreparation = useCallback(async () => {
-    if (!raceEventId) {
+    if (!regattaId) {
       setIsLoading(false);
       return;
     }
 
     // Handle non-UUID race IDs (demo races) with local storage
-    if (!isValidUUID(raceEventId)) {
+    if (!isValidUUID(regattaId)) {
       try {
         const userId = user?.id || 'guest';
-        const key = `${STORAGE_KEY_PREFIX}${raceEventId}_${userId}`;
+        const key = `${STORAGE_KEY_PREFIX}${regattaId}_${userId}`;
         const saved = await AsyncStorage.getItem(key);
         if (saved) {
           const data = JSON.parse(saved);
@@ -152,7 +152,7 @@ export function useRacePreparation({
 
           // If existing data is empty, try to seed with demo data
           if (!hasCompletions) {
-            const seededData = DemoRaceService.getDemoRacePreparation(raceEventId);
+            const seededData = DemoRaceService.getDemoRacePreparation(regattaId);
             if (seededData) {
               logger.info('Seeding demo race with preparation data (existing was empty)');
               setIntentions(seededData);
@@ -181,7 +181,7 @@ export function useRacePreparation({
           }
         } else {
           // No existing data - check for seeded demo data
-          const seededData = DemoRaceService.getDemoRacePreparation(raceEventId);
+          const seededData = DemoRaceService.getDemoRacePreparation(regattaId);
           if (seededData) {
             logger.info('Using seeded demo race preparation data');
             setIntentions(seededData);
@@ -209,7 +209,7 @@ export function useRacePreparation({
 
     try {
       setIsLoading(true);
-      const data = await sailorRacePreparationService.getPreparation(raceEventId, user.id);
+      const data = await sailorRacePreparationService.getPreparation(regattaId, user.id);
 
       if (data) {
         setRigNotesState(data.rig_notes || '');
@@ -230,15 +230,15 @@ export function useRacePreparation({
     } finally {
       setIsLoading(false);
     }
-  }, [raceEventId, user?.id]);
+  }, [regattaId, user?.id]);
 
   /**
    * Save pending changes to Supabase or AsyncStorage
    */
   const saveChanges = useCallback(async () => {
     // For demo races (non-UUID), we allow saving even without a user ID (guest mode)
-    const isDemoRace = !isValidUUID(raceEventId);
-    if (!raceEventId || (!user?.id && !isDemoRace) || Object.keys(pendingChangesRef.current).length === 0) {
+    const isDemoRace = !isValidUUID(regattaId);
+    if (!regattaId || (!user?.id && !isDemoRace) || Object.keys(pendingChangesRef.current).length === 0) {
       return;
     }
 
@@ -247,7 +247,7 @@ export function useRacePreparation({
       try {
         setIsSaving(true);
         const userId = user?.id || 'guest';
-        const key = `${STORAGE_KEY_PREFIX}${raceEventId}_${userId}`;
+        const key = `${STORAGE_KEY_PREFIX}${regattaId}_${userId}`;
 
         // Load existing to merge updates
         const existingStr = await AsyncStorage.getItem(key);
@@ -273,7 +273,7 @@ export function useRacePreparation({
       setIsSaving(true);
 
       const updates: SailorRacePreparation = {
-        race_event_id: raceEventId,
+        regatta_id: regattaId,
         sailor_id: user.id,
         ...pendingChangesRef.current,
       };
@@ -283,7 +283,7 @@ export function useRacePreparation({
       if (result) {
         pendingChangesRef.current = {};
       } else {
-        // Race doesn't exist in regattas table - this is expected for some races
+        // Regatta doesn't exist - this is expected for some races
         pendingChangesRef.current = {};
       }
     } catch (error) {
@@ -292,7 +292,7 @@ export function useRacePreparation({
     } finally {
       setIsSaving(false);
     }
-  }, [raceEventId, user?.id]);
+  }, [regattaId, user?.id]);
 
   /**
    * Schedule a save with debouncing
@@ -427,7 +427,7 @@ export function useRacePreparation({
         return merged;
       });
     },
-    [scheduleSave, raceEventId, user?.id]
+    [scheduleSave, regattaId, user?.id]
   );
 
   /**

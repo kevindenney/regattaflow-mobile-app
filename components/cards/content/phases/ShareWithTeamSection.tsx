@@ -76,7 +76,7 @@ export function ShareWithTeamSection({ race }: ShareWithTeamSectionProps) {
     selectedRigPresetId,
     isLoading: prepLoading,
   } = useRacePreparation({
-    raceEventId: race.id,
+    regattaId: race.id,
     autoSave: false, // Read-only for sharing
   });
 

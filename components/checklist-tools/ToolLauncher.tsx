@@ -17,7 +17,7 @@ import { InteractiveChecklist } from './InteractiveChecklist';
 
 interface ToolLauncherProps {
   item: ChecklistItem;
-  raceEventId: string;
+  regattaId: string;
   boatId?: string;
   visible: boolean;
   onComplete: () => void;
@@ -25,7 +25,7 @@ interface ToolLauncherProps {
   // For full wizard tools, we can pass a custom component
   WizardComponent?: React.ComponentType<{
     item: ChecklistItem;
-    raceEventId: string;
+    regattaId: string;
     boatId?: string;
     onComplete: () => void;
     onCancel: () => void;
@@ -34,7 +34,7 @@ interface ToolLauncherProps {
 
 export function ToolLauncher({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   visible,
   onComplete,
@@ -79,7 +79,7 @@ export function ToolLauncher({
       >
         <InteractiveChecklist
           item={item}
-          raceEventId={raceEventId}
+          regattaId={regattaId}
           boatId={boatId}
           onComplete={handleComplete}
           onCancel={handleCancel}
@@ -100,7 +100,7 @@ export function ToolLauncher({
         >
           <WizardComponent
             item={item}
-            raceEventId={raceEventId}
+            regattaId={regattaId}
             boatId={boatId}
             onComplete={handleComplete}
             onCancel={handleCancel}
@@ -121,7 +121,7 @@ export function ToolLauncher({
         <View style={styles.placeholderContainer}>
           <InteractiveChecklist
             item={item}
-            raceEventId={raceEventId}
+            regattaId={regattaId}
             boatId={boatId}
             onComplete={handleComplete}
             onCancel={handleCancel}

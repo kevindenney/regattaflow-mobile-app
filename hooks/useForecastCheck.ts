@@ -21,7 +21,7 @@ const logger = createLogger('useForecastCheck');
 
 interface UseForecastCheckOptions {
   /** Race event ID */
-  raceEventId: string | null;
+  regattaId: string | null;
   /** Venue for weather lookup */
   venue: SailingVenue | null;
   /** Race date (ISO string or YYYY-MM-DD) */
@@ -109,7 +109,7 @@ function combineDateAndTime(date: string | null, time: string | null | undefined
  * Hook to manage forecast checking for race preparation
  */
 export function useForecastCheck({
-  raceEventId,
+  regattaId,
   venue,
   raceDate,
   raceStartTime,
@@ -118,7 +118,7 @@ export function useForecastCheck({
 }: UseForecastCheckOptions): UseForecastCheckReturn {
   // Get preparation state (includes intentions with forecastCheck)
   const { intentions, updateIntentions } = useRacePreparation({
-    raceEventId,
+    regattaId,
     autoSave: true,
   });
 
@@ -164,7 +164,7 @@ export function useForecastCheck({
     if (!venue) {
       throw new Error('Venue is required to capture snapshot');
     }
-    if (!raceEventId) {
+    if (!regattaId) {
       throw new Error('Race event ID is required');
     }
 
@@ -174,7 +174,7 @@ export function useForecastCheck({
     try {
       // 1. Create snapshot from current forecast
       const snapshot = ForecastCheckService.createSnapshot(
-        raceEventId,
+        regattaId,
         venue,
         currentForecast
       );
@@ -227,7 +227,7 @@ export function useForecastCheck({
   }, [
     currentForecast,
     venue,
-    raceEventId,
+    regattaId,
     raceDate,
     forecastIntention,
     updateIntentions,

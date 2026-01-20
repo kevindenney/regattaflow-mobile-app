@@ -105,7 +105,7 @@ const CATEGORY_LABELS: Record<InsightCategory, string> = {
 
 export function TacticsReviewWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -139,7 +139,7 @@ export function TacticsReviewWizard({
     reminders,
     isLoading: isLoadingNudges,
     recordDelivery,
-  } = usePersonalizedNudges(raceEventId || '', {
+  } = usePersonalizedNudges(regattaId || '', {
     venueId: venueId || undefined,
     forecast: wind?.speedMin ? {
       windSpeed: wind.speedMin,

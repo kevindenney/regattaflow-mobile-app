@@ -114,7 +114,7 @@ interface ForecastCheckWizardProps extends ChecklistToolProps {
 
 export function ForecastCheckWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -141,7 +141,7 @@ export function ForecastCheckWizard({
     hasChanges,
     changeLevel,
   } = useForecastCheck({
-    raceEventId,
+    regattaId,
     venue: venue || null,
     raceDate: raceDate || null,
     raceStartTime: raceStartTime || null,
@@ -210,12 +210,12 @@ export function ForecastCheckWizard({
 
   // Navigate to edit race
   const handleEditRace = useCallback(() => {
-    if (!raceEventId) return;
+    if (!regattaId) return;
     onCancel(); // Close modal first
     setTimeout(() => {
-      router.push(`/race/edit/${raceEventId}`);
+      router.push(`/race/edit/${regattaId}`);
     }, 150);
-  }, [raceEventId, onCancel, router]);
+  }, [regattaId, onCancel, router]);
 
   // Get trend icon
   const getTrendIcon = useCallback((trend: string) => {
@@ -394,7 +394,7 @@ export function ForecastCheckWizard({
           <Text style={styles.errorDescription}>
             To see the weather forecast, please set a venue location for this race.
           </Text>
-          {raceEventId && (
+          {regattaId && (
             <Pressable style={styles.editRaceButton} onPress={handleEditRace}>
               <Text style={styles.editRaceButtonText}>Edit Race</Text>
               <ArrowRight size={16} color={IOS_COLORS.blue} />
@@ -720,7 +720,7 @@ export function ForecastCheckWizard({
         <Pressable
           style={rcStyles.header}
           onPress={handleEditRace}
-          disabled={!raceEventId}
+          disabled={!regattaId}
         >
           <Text style={rcStyles.headerTitle}>
             {raceName || 'Race Forecast'}
@@ -729,7 +729,7 @@ export function ForecastCheckWizard({
             <Text style={rcStyles.headerTime}>
               {formattedDate ? `${formattedDate} · ` : ''}{displayStartTime} start
             </Text>
-            {raceEventId && (
+            {regattaId && (
               <ChevronRight size={14} color={IOS_COLORS.gray} style={{ marginLeft: 4 }} />
             )}
           </View>

@@ -189,10 +189,10 @@ function convertDemoRaceToExtractedData(demoRace: ReturnType<typeof DemoRaceServ
 }
 
 // Helper to fetch race data with extracted details
-async function fetchRaceData(raceEventId: string): Promise<ExtractedRaceData | null> {
+async function fetchRaceData(regattaId: string): Promise<ExtractedRaceData | null> {
   // Check if this is a demo race
-  if (DemoRaceService.isDemoRace(raceEventId)) {
-    const demoRace = DemoRaceService.getDemoRaceById(raceEventId);
+  if (DemoRaceService.isDemoRace(regattaId)) {
+    const demoRace = DemoRaceService.getDemoRaceById(regattaId);
     return convertDemoRaceToExtractedData(demoRace);
   }
 
@@ -230,7 +230,7 @@ async function fetchRaceData(raceEventId: string): Promise<ExtractedRaceData | n
         prizes_description,
         route_waypoints
       `)
-      .eq('id', raceEventId)
+      .eq('id', regattaId)
       .single();
 
     if (error) {
@@ -307,7 +307,7 @@ function SectionHeader({ title }: { title: string }) {
 
 export function PreRaceBriefingWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -322,7 +322,7 @@ export function PreRaceBriefingWizard({
 
   // Fetch race data on mount
   useEffect(() => {
-    if (!raceEventId) {
+    if (!regattaId) {
       setIsLoading(false);
       return;
     }
@@ -331,7 +331,7 @@ export function PreRaceBriefingWizard({
       try {
         setIsLoading(true);
         setError(null);
-        const data = await fetchRaceData(raceEventId);
+        const data = await fetchRaceData(regattaId);
         setRaceData(data);
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to load race data'));
@@ -341,7 +341,7 @@ export function PreRaceBriefingWizard({
     };
 
     loadData();
-  }, [raceEventId]);
+  }, [regattaId]);
 
   // Mark section as reviewed
   const markSectionReviewed = useCallback((sectionId: string) => {

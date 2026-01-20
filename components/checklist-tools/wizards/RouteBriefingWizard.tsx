@@ -186,7 +186,7 @@ function calculateBearing(
 
 export function RouteBriefingWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -216,7 +216,7 @@ export function RouteBriefingWizard({
   // Fetch race data
   useEffect(() => {
     async function fetchData() {
-      if (!raceEventId) {
+      if (!regattaId) {
         setError('No race ID provided');
         setIsLoading(false);
         setStep('overview');
@@ -246,7 +246,7 @@ export function RouteBriefingWizard({
             expected_wind_speed_max
           `
           )
-          .eq('id', raceEventId)
+          .eq('id', regattaId)
           .single();
 
         if (fetchError) {
@@ -275,7 +275,7 @@ export function RouteBriefingWizard({
     }
 
     fetchData();
-  }, [raceEventId]);
+  }, [regattaId]);
 
   // Weather integration - use venue coordinates from props or first waypoint
   const firstWaypoint = raceData?.route_waypoints?.[0];
@@ -509,7 +509,7 @@ export function RouteBriefingWizard({
 
   // Save waypoints to database
   const handleSaveWaypoints = useCallback(async () => {
-    if (!raceEventId || !hasWaypointChanges) return;
+    if (!regattaId || !hasWaypointChanges) return;
 
     setIsSaving(true);
     try {
@@ -529,7 +529,7 @@ export function RouteBriefingWizard({
           route_waypoints: waypointsForDb,
           total_distance_nm: editedTotalDistance,
         })
-        .eq('id', raceEventId);
+        .eq('id', regattaId);
 
       if (updateError) {
         console.error('Error saving waypoints:', updateError);
@@ -551,7 +551,7 @@ export function RouteBriefingWizard({
     } finally {
       setIsSaving(false);
     }
-  }, [raceEventId, hasWaypointChanges, editedWaypoints, editedTotalDistance]);
+  }, [regattaId, hasWaypointChanges, editedWaypoints, editedTotalDistance]);
 
   // Navigate to edit step
   const handleEditRoute = useCallback(() => {

@@ -1035,7 +1035,7 @@ interface DocumentReviewWizardProps extends ChecklistToolProps {
 
 export function DocumentReviewWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,
@@ -1075,7 +1075,7 @@ export function DocumentReviewWizard({
     triggerExtraction,
     clearExtractionResult,
   } = useRaceDocuments({
-    raceId: raceEventId,
+    raceId: regattaId,
     userId: user?.id,
   });
 

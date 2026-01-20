@@ -53,7 +53,7 @@ export function useDebriefSailContext({
 }: UseDebriefSailContextParams): DebriefSailContext {
   // Load race preparation data (includes sail selection intentions)
   const { intentions, isLoading: prepLoading } = useRacePreparation({
-    raceEventId: raceId ?? null,
+    regattaId: raceId ?? null,
   });
 
   // Load user's boats to get primary boat

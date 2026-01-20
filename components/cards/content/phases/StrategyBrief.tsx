@@ -39,7 +39,6 @@ import { TufteStrategyScreen } from '@/components/races/strategy';
 import { useStrategyBrief, type StrategyBriefPhase } from '@/hooks/useStrategyBrief';
 import { StrategyBriefPhaseHeader } from './StrategyBriefPhaseHeader';
 import { StrategyBriefSection } from './StrategyBriefSection';
-import type { StrategyPhase } from '@/types/raceStrategy';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -85,7 +84,7 @@ export function StrategyBrief({
     updateSectionPlan,
     isLoading,
   } = useStrategyBrief({
-    raceEventId: race.id,
+    regattaId: race.id,
     race,
   });
 
@@ -95,8 +94,9 @@ export function StrategyBrief({
   const [localIntention, setLocalIntention] = useState(intention);
 
   // Phase expansion state - start with first phase expanded
-  const [expandedPhases, setExpandedPhases] = useState<Set<StrategyPhase>>(
-    new Set(['start'])
+  // Use string type for dynamic phase keys (supports fleet, distance, match, team racing)
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(
+    () => new Set(phases.length > 0 ? [phases[0].key] : [])
   );
 
   // Sync local intention when external changes
@@ -107,6 +107,13 @@ export function StrategyBrief({
     });
     setLocalIntention(intention);
   }, [intention]);
+
+  // Expand first phase when phases load (handles async loading of race-type-specific sections)
+  useEffect(() => {
+    if (phases.length > 0 && expandedPhases.size === 0) {
+      setExpandedPhases(new Set([phases[0].key]));
+    }
+  }, [phases]);
 
   // Handle intention save on blur or submit
   const handleIntentionSave = useCallback(() => {
@@ -131,7 +138,7 @@ export function StrategyBrief({
   }, [onOpenStrategyDetail]);
 
   // Toggle phase expansion
-  const togglePhase = useCallback((phaseKey: StrategyPhase) => {
+  const togglePhase = useCallback((phaseKey: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedPhases((prev) => {
       const next = new Set(prev);

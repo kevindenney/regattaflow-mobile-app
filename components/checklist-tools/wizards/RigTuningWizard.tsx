@@ -78,7 +78,7 @@ interface RigTuningWizardProps extends ChecklistToolProps {
 
 export function RigTuningWizard({
   item,
-  raceEventId,
+  regattaId,
   boatId,
   onComplete,
   onCancel,

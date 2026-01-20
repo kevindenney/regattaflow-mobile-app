@@ -22,6 +22,7 @@ import { SailSelectionWizard } from '@/components/checklist-tools/wizards/SailSe
 import { StartPlannerWizard } from '@/components/checklist-tools/wizards/StartPlannerWizard';
 import { TacticsReviewWizard } from '@/components/checklist-tools/wizards/TacticsReviewWizard';
 import { TideStrategyWizard } from '@/components/checklist-tools/wizards/TideStrategyWizard';
+import { WeatherRoutingWizard } from '@/components/checklist-tools/wizards/WeatherRoutingWizard';
 import { WindShiftStrategyWizard } from '@/components/checklist-tools/wizards/WindShiftStrategyWizard';
 import type { DetailCardType } from '@/constants/navigationAnimations';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
@@ -348,6 +349,14 @@ export function RaceMorningContent({
   isExpanded = true,
   onSwitchToReview,
 }: RaceMorningContentProps) {
+  // Debug: Log race data to trace route_waypoints
+  console.log('[RaceMorningContent] race.route_waypoints:', {
+    hasWaypoints: !!(race as any).route_waypoints,
+    waypointCount: (race as any).route_waypoints?.length ?? 0,
+    raceId: race.id,
+    raceName: race.name,
+  });
+
   const raceType = getRaceType(race);
 
   // User settings for quick tips visibility
@@ -411,7 +420,7 @@ export function RaceMorningContent({
     toggleItem,
     isLoading,
   } = useRaceChecklist({
-    raceEventId: race.id,
+    regattaId: race.id,
     raceName: race.name,
     raceType,
     phase: 'race_morning',
@@ -446,7 +455,7 @@ export function RaceMorningContent({
 
   // Race preparation data (for historical view)
   const { intentions, isLoading: isPreparationLoading } = useRacePreparation({
-    raceEventId: race.id,
+    regattaId: race.id,
   });
 
   // Handle opening the appropriate tool for an item
@@ -1095,6 +1104,30 @@ export function RaceMorningContent({
             raceName={race.name}
             raceStartTime={race.startTime}
             raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            onCancel={handleWizardCancel}
+            onComplete={handleWizardComplete}
+          />
+        )}
+      </Modal>
+
+      {/* Full Wizard Modal for weather routing */}
+      <Modal
+        visible={activeWizard === 'weather_routing_wizard'}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleWizardCancel}
+      >
+        {selectedItem && activeWizard === 'weather_routing_wizard' && (
+          <WeatherRoutingWizard
+            item={selectedItem}
+            raceEventId={race.id}
+            boatId={(race as any).boat_id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            routeWaypoints={(race as any).route_waypoints}
             onCancel={handleWizardCancel}
             onComplete={handleWizardComplete}
           />

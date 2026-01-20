@@ -1,7 +1,8 @@
 /**
  * useStrategyBrief Hook
  *
- * Manages strategy brief checklist with all 14 strategy sections across 5 phases.
+ * Manages strategy brief checklist with race-type-specific sections.
+ * Supports fleet, distance, match, and team racing with appropriate phases.
  * Integrates with useStrategyRecommendations for AI tips + past performance,
  * and useRaceStrategyNotes for user plans.
  */
@@ -11,11 +12,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useRacePreparation } from './useRacePreparation';
 import { useStrategyRecommendations } from './useStrategyRecommendations';
 import { useRaceStrategyNotes } from './useRaceStrategyNotes';
+import { useRaceTypeStrategy } from './useRaceTypeStrategy';
 import {
-  STRATEGY_SECTIONS,
-  getSectionsForPhase,
   type StrategySectionId,
-  type StrategyPhase,
   type StrategySectionMeta,
   type StrategySectionNote,
   type SectionPerformance,
@@ -36,9 +35,10 @@ export interface StrategyBriefSectionWithState extends StrategySectionMeta {
 
 /**
  * Phase with its sections and completion stats
+ * Uses string key to support dynamic phases (legs, peaks, etc.)
  */
 export interface StrategyBriefPhase {
-  key: StrategyPhase;
+  key: string;
   label: string;
   sections: StrategyBriefSectionWithState[];
   completedCount: number;
@@ -46,7 +46,7 @@ export interface StrategyBriefPhase {
 }
 
 interface UseStrategyBriefOptions {
-  raceEventId: string;
+  regattaId: string;
   race: CardRaceData;
 }
 
@@ -76,28 +76,26 @@ interface UseStrategyBriefReturn {
   hasUnsavedChanges: boolean;
 }
 
-const PHASE_LABELS: Record<StrategyPhase, string> = {
-  start: 'START',
-  upwind: 'UPWIND',
-  downwind: 'DOWNWIND',
-  markRounding: 'MARK ROUNDING',
-  finish: 'FINISH',
-};
-
-const PHASE_ORDER: StrategyPhase[] = ['start', 'upwind', 'downwind', 'markRounding', 'finish'];
 
 /**
- * Hook to manage strategy brief checklist with all phases and sections
+ * Hook to manage strategy brief checklist with race-type-specific phases and sections
  */
 export function useStrategyBrief({
-  raceEventId,
+  regattaId,
   race,
 }: UseStrategyBriefOptions): UseStrategyBriefReturn {
   const { user } = useAuth();
 
+  // Get race-type-specific phases and sections
+  const {
+    phases: racePhases,
+    sections: raceSections,
+    isLoading: isLoadingRaceType,
+  } = useRaceTypeStrategy(regattaId, race.name);
+
   // Get race preparation for intention and completion tracking
   const { intentions, updateIntentions, isLoading: isLoadingPrep, isSaving } = useRacePreparation({
-    raceEventId,
+    regattaId,
     autoSave: true,
     debounceMs: 800,
   });
@@ -113,14 +111,14 @@ export function useStrategyBrief({
   );
 
   // Get user plans
-  const { plans, updatePlan, isLoading: isLoadingPlans, hasUnsavedChanges } = useRaceStrategyNotes(raceEventId);
+  const { plans, updatePlan, isLoading: isLoadingPlans, hasUnsavedChanges } = useRaceStrategyNotes(regattaId);
 
   // Get completions from intentions
   const completions = intentions?.checklistCompletions || {};
 
-  // Build sections with full state
+  // Build sections with full state using dynamic race-type sections
   const allSections: StrategyBriefSectionWithState[] = useMemo(() => {
-    return STRATEGY_SECTIONS.map((section) => {
+    return raceSections.map((section) => {
       const recommendation = sectionData[section.id];
       const completion = completions[section.id];
 
@@ -133,23 +131,24 @@ export function useStrategyBrief({
         userPlan: plans[section.id],
       };
     });
-  }, [sectionData, completions, plans]);
+  }, [raceSections, sectionData, completions, plans]);
 
-  // Build phases with their sections
+  // Build phases with their sections using dynamic race-type phases
   const phases: StrategyBriefPhase[] = useMemo(() => {
-    return PHASE_ORDER.map((phaseKey) => {
+    return racePhases.map((phase) => {
+      const phaseKey = phase.key as string;
       const phaseSections = allSections.filter((s) => s.phase === phaseKey);
       const completedCount = phaseSections.filter((s) => s.isCompleted).length;
 
       return {
         key: phaseKey,
-        label: PHASE_LABELS[phaseKey],
+        label: phase.label,
         sections: phaseSections,
         completedCount,
         totalCount: phaseSections.length,
       };
     });
-  }, [allSections]);
+  }, [racePhases, allSections]);
 
   // Calculate overall progress
   const completedCount = allSections.filter((s) => s.isCompleted).length;
@@ -164,7 +163,7 @@ export function useStrategyBrief({
     (value: string) => {
       console.log('[useStrategyBrief] setIntention called', {
         value,
-        raceEventId,
+        regattaId,
         currentIntention: intentions?.strategyBrief?.raceIntention
       });
       updateIntentions({
@@ -175,7 +174,7 @@ export function useStrategyBrief({
         },
       });
     },
-    [intentions?.strategyBrief, updateIntentions, raceEventId]
+    [intentions?.strategyBrief, updateIntentions, regattaId]
   );
 
   // Toggle section completion
@@ -216,7 +215,7 @@ export function useStrategyBrief({
     [updatePlan]
   );
 
-  const isLoading = isLoadingPrep || isLoadingRecs || isLoadingPlans;
+  const isLoading = isLoadingRaceType || isLoadingPrep || isLoadingRecs || isLoadingPlans;
 
   return {
     intention,

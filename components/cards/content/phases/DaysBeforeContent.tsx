@@ -71,6 +71,10 @@ import { ShareWithTeamSection } from './ShareWithTeamSection';
 import { RaceDocumentsDisplay } from '@/components/races/RaceDocumentsDisplay';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 
+// SSI document display
+import { SSIUploadSection, VHFQuickReference } from '@/components/documents/ssi';
+import { useRaceSSI } from '@/hooks/useSSIUpload';
+
 // Historical view components
 import {
   HistoricalSummaryCard,
@@ -673,6 +677,14 @@ export function DaysBeforeContent({
     includeClubDocs: true,
   });
 
+  // User-uploaded SSI data for this race
+  const {
+    loading: isSSILoading,
+    extraction: ssiExtraction,
+    hasSSI,
+    refetch: refetchSSI,
+  } = useRaceSSI(race.id, race.club_id);
+
   // Categories to show based on expansion state
   const visibleCategories = useMemo(() => {
     if (isExpanded) {
@@ -1121,6 +1133,33 @@ export function DaysBeforeContent({
             showEmptyState={false}
             compact={!isExpanded}
           />
+        </View>
+      )}
+
+      {/* SSI Quick Reference Section */}
+      {!isSSILoading && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <FileText size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.sectionLabel}>SAILING INSTRUCTIONS</Text>
+          </View>
+          {hasSSI && ssiExtraction ? (
+            <View style={styles.ssiContainer}>
+              {/* VHF Quick Reference */}
+              <VHFQuickReference extraction={ssiExtraction} />
+            </View>
+          ) : (
+            <SSIUploadSection
+              clubId={race.club_id}
+              raceId={race.id}
+              title=""
+              description="Upload SSI to extract VHF channels, marks, and contacts"
+              showHeader={false}
+              showPrivacyToggle={true}
+              compact
+              onExtractionComplete={() => refetchSSI()}
+            />
+          )}
         </View>
       )}
 
@@ -1751,6 +1790,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOS_COLORS.gray,
     letterSpacing: 1,
+  },
+
+  // SSI Container
+  ssiContainer: {
+    backgroundColor: '#F0F7FF',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
   },
 
   // Carryover
