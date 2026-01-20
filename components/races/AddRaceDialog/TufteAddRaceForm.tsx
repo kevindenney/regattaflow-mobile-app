@@ -41,6 +41,7 @@ import { TufteMatchFields } from './TufteMatchFields';
 import { TufteTeamFields } from './TufteTeamFields';
 import { LocationMapPicker } from '../LocationMapPicker';
 import { ExtractedDetailsSummary } from './ExtractedDetailsSummary';
+import { SSIUploadSection } from '@/components/documents/ssi';
 
 import type { RaceType } from '../RaceTypeSelector';
 import type { RaceFormData } from './RaceDetailsStep';
@@ -50,6 +51,8 @@ import type { MatchRaceData } from './MatchRaceFields';
 import type { TeamRaceData } from './TeamRaceFields';
 import type { ExtractedRaceData } from '../ExtractionResults';
 import type { CourseMark, RouteWaypoint } from '@/hooks/useAddRace';
+import type { MultiRaceExtractedData, ExtractedData } from '../AIValidationScreen';
+import { MultiRaceSelectionScreen } from '../MultiRaceSelectionScreen';
 
 // =============================================================================
 // TYPES
@@ -138,6 +141,12 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   // Key to force remount of AI extraction section when modal opens
   const [aiSectionKey, setAiSectionKey] = useState(0);
+  // Multi-race selection state
+  const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
+  const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
+  const [isCreatingMultiple, setIsCreatingMultiple] = useState(false);
+  // SSI document state
+  const [ssiDocumentId, setSsiDocumentId] = useState<string | null>(null);
 
   // Load last used location (now with coordinates)
   useEffect(() => {
@@ -175,6 +184,12 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       setAiExtractedFields(new Set());
       setExtractedDetailsData(null);
       setShowLocationPicker(false);
+      // Reset multi-race state
+      setShowMultiRaceModal(false);
+      setMultiRaceData(null);
+      setIsCreatingMultiple(false);
+      // Reset SSI state
+      setSsiDocumentId(null);
       // Increment key to force remount of AI extraction section, clearing its internal state
       setAiSectionKey((prev) => prev + 1);
     }
@@ -394,6 +409,112 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
     }
   }, []);
 
+  // Multi-race detection handler
+  const handleMultiRaceDetected = useCallback((data: MultiRaceExtractedData) => {
+    setMultiRaceData(data);
+    setShowMultiRaceModal(true);
+  }, []);
+
+  // Helper function to populate form with a single race's data
+  const populateFormWithRace = useCallback((race: ExtractedData) => {
+    const newAiFields = new Set<string>();
+    const updates: Partial<FormState> = {};
+
+    // Set race type from extraction if available
+    if (race.raceType && ['fleet', 'distance', 'match', 'team'].includes(race.raceType)) {
+      updates.raceType = race.raceType as RaceType;
+      newAiFields.add('raceType');
+    }
+
+    // Basic fields
+    if (race.raceName) {
+      updates.name = race.raceName;
+      newAiFields.add('name');
+    }
+    if (race.raceDate) {
+      updates.date = race.raceDate;
+      newAiFields.add('date');
+    }
+    if (race.warningSignalTime) {
+      updates.time = race.warningSignalTime;
+      newAiFields.add('time');
+    }
+    if (race.venue) {
+      updates.location = race.venue;
+      newAiFields.add('location');
+    }
+
+    // VHF channel
+    if (race.vhfChannels && race.vhfChannels.length > 0) {
+      updates.vhfChannel = race.vhfChannels[0].channel;
+      newAiFields.add('vhfChannel');
+    } else if (race.vhfChannel) {
+      updates.vhfChannel = race.vhfChannel;
+      newAiFields.add('vhfChannel');
+    }
+
+    setFormState((prev) => ({ ...prev, ...updates }));
+    setAiExtractedFields(newAiFields);
+    setExtractedDetailsData(race);
+  }, []);
+
+  // Helper to build RaceFormData from ExtractedData
+  const buildRaceFormData = useCallback((race: ExtractedData): RaceFormData => {
+    const raceType = (race.raceType as RaceType) || 'fleet';
+
+    const data: RaceFormData = {
+      name: race.raceName || 'Untitled Race',
+      date: race.raceDate || format(new Date(), 'yyyy-MM-dd'),
+      time: race.warningSignalTime || '14:00',
+      location: race.venue || '',
+      raceType,
+      vhfChannel: race.vhfChannels?.[0]?.channel || race.vhfChannel,
+    };
+
+    // Add extracted details
+    (data as any).extractedDetails = race;
+
+    return data;
+  }, []);
+
+  // Multi-race confirmation handler
+  const handleMultiRaceConfirm = useCallback(async (selectedRaces: ExtractedData[]) => {
+    if (selectedRaces.length === 0) {
+      setShowMultiRaceModal(false);
+      return;
+    }
+
+    if (selectedRaces.length === 1) {
+      // Single race selected - populate form and let user continue editing
+      populateFormWithRace(selectedRaces[0]);
+      setShowMultiRaceModal(false);
+      return;
+    }
+
+    // Multiple races selected - create all of them
+    setIsCreatingMultiple(true);
+    try {
+      for (const race of selectedRaces) {
+        const formData = buildRaceFormData(race);
+        await onSave(formData);
+      }
+      // Close everything on success
+      setShowMultiRaceModal(false);
+      onClose();
+    } catch (error) {
+      console.error('[TufteAddRaceForm] Failed to create multiple races:', error);
+      // Keep modal open so user can retry or select fewer races
+    } finally {
+      setIsCreatingMultiple(false);
+    }
+  }, [populateFormWithRace, buildRaceFormData, onSave, onClose]);
+
+  // Multi-race cancel handler
+  const handleMultiRaceCancel = useCallback(() => {
+    setShowMultiRaceModal(false);
+    setMultiRaceData(null);
+  }, []);
+
   // Validation
   const validateForm = useCallback((): boolean => {
     const newErrors: FormErrors = {};
@@ -565,6 +686,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
               expanded={aiSectionExpanded}
               onToggle={() => setAiSectionExpanded(!aiSectionExpanded)}
               onExtracted={handleAIExtracted}
+              onMultiRaceDetected={handleMultiRaceDetected}
               raceType={formState.raceType}
             />
 
@@ -573,6 +695,19 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
             <ExtractedDetailsSummary
               data={extractedDetailsData}
               onChange={setExtractedDetailsData}
+            />
+
+            {/* SSI Documents Section - positioned after AI extraction for document grouping */}
+            <TufteSectionLabel>SAILING INSTRUCTIONS</TufteSectionLabel>
+            <SSIUploadSection
+              clubId={undefined}
+              raceId={undefined}
+              title="Upload SSI"
+              description="Upload the Sailing Instructions PDF to extract VHF channels, marks, and emergency contacts."
+              showHeader={false}
+              showPrivacyToggle={false}
+              compact={false}
+              onDocumentUploaded={setSsiDocumentId}
             />
 
             {/* Essentials Section */}
@@ -719,6 +854,22 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
         }
         initialName={formState.location}
       />
+
+      {/* Multi-Race Selection Modal */}
+      <Modal
+        visible={showMultiRaceModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={handleMultiRaceCancel}
+      >
+        {multiRaceData && (
+          <MultiRaceSelectionScreen
+            extractedData={multiRaceData}
+            onConfirm={handleMultiRaceConfirm}
+            onCancel={handleMultiRaceCancel}
+          />
+        )}
+      </Modal>
     </Modal>
   );
 }
