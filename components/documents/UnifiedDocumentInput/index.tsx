@@ -1,0 +1,695 @@
+/**
+ * UnifiedDocumentInput Component
+ *
+ * Unified document input for race creation and document management.
+ * Replaces separate AI Extraction + SSI Upload sections with a single
+ * cohesive experience.
+ *
+ * Features:
+ * - Mobile-first: URL input primary (easy paste from email/browser)
+ * - Smart content detection (URL vs text, document type)
+ * - Source provenance tracking
+ * - Support for incremental document addition
+ */
+
+import React, { useState, useCallback, useEffect } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Platform,
+} from 'react-native';
+import { ChevronRight, ChevronDown, Sparkles, CheckCircle } from 'lucide-react-native';
+import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRaceDialog/tufteFormStyles';
+import { IOS_COLORS } from '@/components/cards/constants';
+
+import { InputMethodTabs, type InputMethod } from './InputMethodTabs';
+import { URLInput } from './URLInput';
+import { PasteInput } from './PasteInput';
+import { PDFUpload, type SelectedFile } from './PDFUpload';
+import { DocumentTypeSelector, type DocumentType } from './DocumentTypeSelector';
+import { ExtractionProgress, type ExtractionStatus } from './ExtractionProgress';
+import { DuplicateWarning } from './DuplicateWarning';
+
+import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
+import { PDFExtractionService } from '@/services/PDFExtractionService';
+import {
+  UnifiedDocumentService,
+  type RaceSourceDocument as ServiceRaceSourceDocument,
+} from '@/services/UnifiedDocumentService';
+import type { ExtractedRaceData } from '@/components/races/ExtractionResults';
+import type { MultiRaceExtractedData, ExtractedData } from '@/components/races/AIValidationScreen';
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+export interface DocumentSource {
+  type: 'url' | 'upload' | 'paste';
+  url?: string;
+  file?: SelectedFile;
+  pastedContent?: string;
+  contentHash?: string;
+}
+
+export interface RaceSourceDocument {
+  id: string;
+  regattaId?: string;
+  sourceType: 'url' | 'upload' | 'paste';
+  sourceUrl?: string;
+  filePath?: string;
+  pastedContentHash?: string;
+  documentType: DocumentType;
+  title: string;
+  extractionStatus: ExtractionStatus;
+  extractedData?: any;
+  contributedFields?: string[];
+}
+
+export interface UnifiedDocumentInputProps {
+  /** Regatta ID if adding to existing race */
+  regattaId?: string;
+  /** Mode of operation */
+  mode: 'race_creation' | 'document_management';
+  /** Default document type selection */
+  defaultDocumentType?: DocumentType;
+  /** Callback when extraction completes successfully */
+  onExtractionComplete?: (data: ExtractedRaceData, rawData?: any, documentId?: string) => void;
+  /** Callback when multiple races are detected */
+  onMultiRaceDetected?: (data: MultiRaceExtractedData) => void;
+  /** Callback when document is added (before extraction) */
+  onDocumentAdded?: (document: RaceSourceDocument) => void;
+  /** Compact mode for inline usage */
+  compact?: boolean;
+  /** Initial expanded state */
+  initialExpanded?: boolean;
+  /** Currently selected race type (for extraction context) */
+  raceType?: string;
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+function transformExtractionResult(result: any, raceType: string): ExtractedRaceData {
+  const createField = (
+    label: string,
+    value: string | undefined | null,
+    confidence: 'high' | 'medium' | 'low' | 'missing' = 'medium'
+  ) => ({
+    label,
+    value: value || '',
+    confidence: value ? confidence : 'missing',
+    editable: true,
+  });
+
+  // Get VHF channel
+  const getVhfChannel = () => {
+    if (result.vhfChannel) return result.vhfChannel;
+    if (result.vhfChannels && result.vhfChannels.length > 0) {
+      return result.vhfChannels.map((v: { channel: string; purpose?: string }) =>
+        v.purpose ? `Ch ${v.channel} (${v.purpose})` : `Ch ${v.channel}`
+      ).join(', ');
+    }
+    return undefined;
+  };
+
+  return {
+    basic: [
+      createField('Race Name', result.raceName || result.race_name, result.raceName ? 'high' : 'missing'),
+      createField('Date', result.raceDate || result.date, result.raceDate || result.date ? 'high' : 'missing'),
+      createField('Start Time', result.warningSignalTime || result.startTime, 'medium'),
+      createField('Location', result.venue || result.location, result.venue ? 'high' : 'medium'),
+      createField('Organizing Authority', result.organizingAuthority, 'medium'),
+    ],
+    timing: [
+      createField('First Warning', result.warningSignalTime, 'medium'),
+      createField('Race Series', result.raceSeriesName, 'medium'),
+    ],
+    course: raceType === 'distance'
+      ? [
+          createField('Total Distance (nm)', result.totalDistanceNm?.toString(), 'medium'),
+          createField('Time Limit (hours)', result.timeLimitHours?.toString(), 'medium'),
+          createField('Route Description', result.courseDescription, 'medium'),
+        ]
+      : [
+          createField('Course Type', result.courseType, 'medium'),
+          createField('Expected Fleet Size', result.expectedFleetSize?.toString(), 'low'),
+          createField('Boat Class', result.boatClass, result.boatClass ? 'high' : 'medium'),
+        ],
+    conditions: [
+      createField('VHF Channel', getVhfChannel(), 'medium'),
+      createField('Weather Notes', result.expectedConditions, 'low'),
+    ],
+  };
+}
+
+async function hashContent(content: string): Promise<string> {
+  // Simple hash for deduplication
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// =============================================================================
+// COMPONENT
+// =============================================================================
+
+export function UnifiedDocumentInput({
+  regattaId,
+  mode = 'race_creation',
+  defaultDocumentType = 'nor',
+  onExtractionComplete,
+  onMultiRaceDetected,
+  onDocumentAdded,
+  compact = false,
+  initialExpanded = false,
+  raceType = 'fleet',
+}: UnifiedDocumentInputProps) {
+  // State
+  const [expanded, setExpanded] = useState(initialExpanded);
+  const [activeMethod, setActiveMethod] = useState<InputMethod>('url');
+  const [documentType, setDocumentType] = useState<DocumentType>(defaultDocumentType);
+
+  // Input states
+  const [urlValue, setUrlValue] = useState('');
+  const [pasteValue, setPasteValue] = useState('');
+  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+
+  // Extraction states
+  const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle');
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [extractionComplete, setExtractionComplete] = useState(false);
+  const [extractedFieldCount, setExtractedFieldCount] = useState<number | undefined>();
+
+  // Document source for provenance
+  const [currentSource, setCurrentSource] = useState<DocumentSource | null>(null);
+
+  // Duplicate detection state
+  const [duplicateDocument, setDuplicateDocument] = useState<ServiceRaceSourceDocument | null>(null);
+  const [pendingSource, setPendingSource] = useState<DocumentSource | null>(null);
+
+  // Auto-detect document type from content
+  const handleUrlAutoDetect = useCallback((info: { isPdf: boolean; suggestedType?: string }) => {
+    if (info.suggestedType) {
+      setDocumentType(info.suggestedType as DocumentType);
+    }
+  }, []);
+
+  const handleFileAutoDetect = useCallback((info: { suggestedType?: string }) => {
+    if (info.suggestedType) {
+      setDocumentType(info.suggestedType as DocumentType);
+    }
+  }, []);
+
+  // Handle URL detected in paste input (switch to URL tab)
+  const handleUrlDetected = useCallback((url: string) => {
+    setUrlValue(url);
+    setPasteValue('');
+    setActiveMethod('url');
+  }, []);
+
+  // Check if we can extract
+  const canExtract = useCallback(() => {
+    if (activeMethod === 'url') return urlValue.trim().startsWith('http');
+    if (activeMethod === 'paste') return pasteValue.trim().length >= 20;
+    if (activeMethod === 'upload') return selectedFile !== null;
+    return false;
+  }, [activeMethod, urlValue, pasteValue, selectedFile]);
+
+  // Check for duplicates before extraction
+  const checkForDuplicate = useCallback(async (source: DocumentSource): Promise<ServiceRaceSourceDocument | null> => {
+    if (!regattaId || mode === 'race_creation') {
+      return null; // No duplicate check for new races
+    }
+
+    try {
+      return await UnifiedDocumentService.checkForDuplicate(regattaId, {
+        type: source.type,
+        url: source.url,
+        pastedContent: source.pastedContent,
+      });
+    } catch (error) {
+      console.error('[UnifiedDocumentInput] Duplicate check failed:', error);
+      return null;
+    }
+  }, [regattaId, mode]);
+
+  // Main extraction handler
+  const handleExtract = useCallback(async (skipDuplicateCheck = false) => {
+    if (!canExtract() || extractionStatus === 'fetching' || extractionStatus === 'extracting') {
+      return;
+    }
+
+    // Build source first for duplicate check
+    let source: DocumentSource;
+    if (activeMethod === 'url') {
+      source = { type: 'url', url: urlValue.trim() };
+    } else if (activeMethod === 'paste') {
+      const hash = await hashContent(pasteValue.trim());
+      source = { type: 'paste', pastedContent: pasteValue.trim(), contentHash: hash };
+    } else if (activeMethod === 'upload' && selectedFile) {
+      source = { type: 'upload', file: selectedFile };
+    } else {
+      return;
+    }
+
+    // Check for duplicates (unless explicitly skipped)
+    if (!skipDuplicateCheck && regattaId && mode === 'document_management') {
+      const existing = await checkForDuplicate(source);
+      if (existing) {
+        setDuplicateDocument(existing);
+        setPendingSource(source);
+        return; // Show duplicate warning instead of proceeding
+      }
+    }
+
+    setExtractionStatus('fetching');
+    setExtractionError(null);
+
+    try {
+      let textContent = '';
+
+      // Get content based on input method
+      if (activeMethod === 'url') {
+        const url = urlValue.trim();
+
+        // Check if URL is a PDF
+        const isPdfUrl = url.toLowerCase().includes('.pdf') ||
+                         url.toLowerCase().includes('pdf=') ||
+                         url.includes('_files/ugd/');
+
+        if (isPdfUrl) {
+          // Use server-side PDF extraction
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const extractUrl = `${supabaseUrl}/functions/v1/extract-pdf-text`;
+
+          const extractResponse = await fetch(extractUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url }),
+          });
+
+          const extractResult = await extractResponse.json();
+
+          if (!extractResponse.ok || !extractResult.success) {
+            throw new Error(extractResult.error || `Failed to extract PDF: ${extractResponse.status}`);
+          }
+
+          textContent = extractResult.text;
+        } else {
+          // Non-PDF URL - try direct fetch
+          const response = await fetch(url);
+          const contentType = response.headers.get('content-type') || '';
+
+          if (contentType.includes('pdf')) {
+            throw new Error('This URL returns a PDF. It will be processed automatically.');
+          }
+
+          textContent = await response.text();
+        }
+      } else if (activeMethod === 'paste') {
+        textContent = pasteValue.trim();
+        // Source already set above
+      } else if (activeMethod === 'upload' && selectedFile) {
+        // Extract text from PDF
+        const pdfResult = await PDFExtractionService.extractText(selectedFile.uri, {
+          maxPages: 50,
+        });
+
+        if (!pdfResult.success || !pdfResult.text) {
+          throw new Error(pdfResult.error || 'Failed to extract text from PDF');
+        }
+
+        textContent = pdfResult.text;
+        // Source already set above
+      } else {
+        throw new Error('No content to extract');
+      }
+
+      if (textContent.length < 20) {
+        throw new Error('Not enough content to extract race details');
+      }
+
+      // Store the source for provenance
+      setCurrentSource(source);
+
+      // Now do AI extraction
+      setExtractionStatus('extracting');
+
+      const agent = new ComprehensiveRaceExtractionAgent();
+      const result = await agent.extractRaceDetails(textContent);
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to extract race details');
+      }
+
+      // Check for multi-race detection
+      if (result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
+        if (onMultiRaceDetected) {
+          // Attach source info to the extraction result
+          const enrichedData = {
+            ...result.data,
+            sourceTracking: {
+              documentType,
+              sourceType: source.type,
+              sourceUrl: source.url,
+            },
+          };
+          setExtractionStatus('completed');
+          setExtractionComplete(true);
+          onMultiRaceDetected(enrichedData as MultiRaceExtractedData);
+          return;
+        }
+      }
+
+      // Single race extraction
+      const raceData = result.data.races?.[0] || result.data;
+      const extractedData = transformExtractionResult(raceData, raceType);
+
+      // Count extracted fields
+      const fieldCount = Object.values(extractedData)
+        .flat()
+        .filter((f: any) => f.value && f.confidence !== 'missing').length;
+      setExtractedFieldCount(fieldCount);
+
+      setExtractionStatus('completed');
+      setExtractionComplete(true);
+
+      // Call the callback with source info
+      if (onExtractionComplete) {
+        onExtractionComplete(extractedData, {
+          ...raceData,
+          sourceTracking: {
+            documentType,
+            sourceType: source.type,
+            sourceUrl: source.url,
+          },
+        });
+      }
+
+      // Collapse after short delay
+      setTimeout(() => {
+        setExpanded(false);
+      }, 500);
+
+    } catch (err) {
+      console.error('[UnifiedDocumentInput] Extraction error:', err);
+      setExtractionStatus('failed');
+      setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
+    }
+  }, [
+    canExtract,
+    extractionStatus,
+    activeMethod,
+    urlValue,
+    pasteValue,
+    selectedFile,
+    documentType,
+    raceType,
+    onExtractionComplete,
+    onMultiRaceDetected,
+    checkForDuplicate,
+    regattaId,
+    mode,
+  ]);
+
+  // Reset handler
+  const handleReset = useCallback(() => {
+    setExtractionStatus('idle');
+    setExtractionError(null);
+    setExtractionComplete(false);
+    setExtractedFieldCount(undefined);
+    setCurrentSource(null);
+    setDuplicateDocument(null);
+    setPendingSource(null);
+  }, []);
+
+  // Duplicate warning handlers
+  const handleAddAsAmendment = useCallback(async () => {
+    if (!duplicateDocument || !pendingSource) return;
+
+    setDuplicateDocument(null);
+    setPendingSource(null);
+
+    // Proceed with extraction - document will be saved as amendment
+    handleExtract(true);
+  }, [duplicateDocument, pendingSource, handleExtract]);
+
+  const handleCancelDuplicate = useCallback(() => {
+    setDuplicateDocument(null);
+    setPendingSource(null);
+  }, []);
+
+  const handleReplaceDuplicate = useCallback(async () => {
+    if (!duplicateDocument) return;
+
+    try {
+      // Delete the existing document
+      await UnifiedDocumentService.deleteDocument(duplicateDocument.id);
+    } catch (error) {
+      console.error('[UnifiedDocumentInput] Failed to delete existing document:', error);
+    }
+
+    setDuplicateDocument(null);
+    setPendingSource(null);
+
+    // Proceed with extraction
+    handleExtract(true);
+  }, [duplicateDocument, handleExtract]);
+
+  // Toggle section
+  const handleToggle = useCallback(() => {
+    setExpanded(!expanded);
+  }, [expanded]);
+
+  const isProcessing = extractionStatus === 'fetching' || extractionStatus === 'extracting';
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <Pressable
+        style={styles.header}
+        onPress={handleToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel="Race documents section"
+      >
+        <View style={styles.headerLeft}>
+          <Sparkles size={16} color={TUFTE_FORM_COLORS.aiAccent} />
+          <Text style={styles.headerLabel}>RACE DOCUMENTS</Text>
+          <Text style={styles.headerOptional}>(AI extraction)</Text>
+          {extractionComplete && (
+            <CheckCircle size={14} color={TUFTE_FORM_COLORS.success} style={styles.successIcon} />
+          )}
+        </View>
+        {expanded ? (
+          <ChevronDown size={20} color={TUFTE_FORM_COLORS.secondaryLabel} />
+        ) : (
+          <ChevronRight size={20} color={TUFTE_FORM_COLORS.secondaryLabel} />
+        )}
+      </Pressable>
+
+      {/* Expanded Content */}
+      {expanded && (
+        <View style={styles.content}>
+          {/* Input Method Tabs */}
+          <InputMethodTabs
+            activeMethod={activeMethod}
+            onMethodChange={setActiveMethod}
+            disabled={isProcessing}
+          />
+
+          {/* Document Type Selector (compact) */}
+          <View style={styles.documentTypeRow}>
+            <Text style={styles.fieldLabel}>Document type:</Text>
+            <DocumentTypeSelector
+              value={documentType}
+              onChange={setDocumentType}
+              disabled={isProcessing}
+              compact
+              showCommonOnly
+            />
+          </View>
+
+          {/* Input Area */}
+          {activeMethod === 'url' && (
+            <URLInput
+              value={urlValue}
+              onChangeText={setUrlValue}
+              disabled={isProcessing}
+              onAutoDetect={handleUrlAutoDetect}
+            />
+          )}
+
+          {activeMethod === 'paste' && (
+            <PasteInput
+              value={pasteValue}
+              onChangeText={setPasteValue}
+              disabled={isProcessing}
+              onUrlDetected={handleUrlDetected}
+              minHeight={compact ? 80 : 120}
+            />
+          )}
+
+          {activeMethod === 'upload' && (
+            <PDFUpload
+              selectedFile={selectedFile}
+              onFileSelect={setSelectedFile}
+              disabled={isProcessing}
+              onAutoDetect={handleFileAutoDetect}
+            />
+          )}
+
+          {/* Duplicate Warning */}
+          {duplicateDocument && (
+            <DuplicateWarning
+              existingDocument={duplicateDocument}
+              onAddAsAmendment={handleAddAsAmendment}
+              onCancel={handleCancelDuplicate}
+              onReplace={handleReplaceDuplicate}
+            />
+          )}
+
+          {/* Extraction Progress */}
+          {extractionStatus !== 'idle' && !duplicateDocument && (
+            <ExtractionProgress
+              status={extractionStatus}
+              error={extractionError}
+              extractedFieldCount={extractedFieldCount}
+              documentType={documentType}
+            />
+          )}
+
+          {/* Extract Button */}
+          {extractionStatus === 'idle' && !duplicateDocument && (
+            <Pressable
+              style={[
+                styles.extractButton,
+                !canExtract() && styles.extractButtonDisabled,
+              ]}
+              onPress={() => handleExtract()}
+              disabled={!canExtract()}
+            >
+              <Sparkles size={16} color="#FFFFFF" />
+              <Text style={styles.extractButtonText}>Extract Race Details</Text>
+            </Pressable>
+          )}
+
+          {/* Try Again Button (on failure) */}
+          {extractionStatus === 'failed' && (
+            <View style={styles.actionButtons}>
+              <Pressable style={styles.resetButton} onPress={handleReset}>
+                <Text style={styles.resetButtonText}>Try Again</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Hint */}
+          <Text style={styles.hint}>
+            AI will extract race name, date, location, VHF channels, and more from your document.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// =============================================================================
+// STYLES
+// =============================================================================
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: TUFTE_FORM_SPACING.lg,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: TUFTE_FORM_SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: TUFTE_FORM_COLORS.separator,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: TUFTE_FORM_COLORS.sectionLabel,
+    letterSpacing: 1.2,
+  },
+  headerOptional: {
+    fontSize: 11,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  successIcon: {
+    marginLeft: 4,
+  },
+  content: {
+    paddingTop: TUFTE_FORM_SPACING.md,
+    gap: TUFTE_FORM_SPACING.md,
+  },
+  documentTypeRow: {
+    gap: 8,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+  },
+  extractButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: TUFTE_FORM_COLORS.aiAccent,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  extractButtonDisabled: {
+    opacity: 0.5,
+  },
+  extractButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  resetButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: TUFTE_FORM_COLORS.inputBackgroundDisabled,
+  },
+  resetButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: TUFTE_FORM_COLORS.label,
+  },
+  hint: {
+    fontSize: 12,
+    color: TUFTE_FORM_COLORS.secondaryLabel,
+    textAlign: 'center',
+  },
+});
+
+// Export sub-components for individual use
+export { InputMethodTabs, URLInput, PasteInput, PDFUpload, DocumentTypeSelector, ExtractionProgress };
+export type { InputMethod, SelectedFile, DocumentType, ExtractionStatus };
+
+export default UnifiedDocumentInput;

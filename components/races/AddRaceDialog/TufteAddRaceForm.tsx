@@ -32,7 +32,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tufteFormStyles, TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from './tufteFormStyles';
 import { TUFTE_BACKGROUND, IOS_COLORS } from '@/components/cards/constants';
 import { TufteRaceTypeSelector } from './TufteRaceTypeSelector';
-import { TufteAIExtractionSection } from './TufteAIExtractionSection';
 import { TufteSectionLabel } from './TufteSectionLabel';
 import { TufteFieldRow } from './TufteFieldRow';
 import { TufteFleetFields } from './TufteFleetFields';
@@ -41,7 +40,7 @@ import { TufteMatchFields } from './TufteMatchFields';
 import { TufteTeamFields } from './TufteTeamFields';
 import { LocationMapPicker } from '../LocationMapPicker';
 import { ExtractedDetailsSummary } from './ExtractedDetailsSummary';
-import { SSIUploadSection } from '@/components/documents/ssi';
+import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 
 import type { RaceType } from '../RaceTypeSelector';
 import type { RaceFormData } from './RaceDetailsStep';
@@ -133,20 +132,19 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
   // State
   const [formState, setFormState] = useState<FormState>(getSmartDefaults());
   const [errors, setErrors] = useState<FormErrors>({});
-  const [aiSectionExpanded, setAiSectionExpanded] = useState(false);
   const [aiExtractedFields, setAiExtractedFields] = useState<Set<string>>(new Set());
   const [extractedDetailsData, setExtractedDetailsData] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastLocationData, setLastLocationData] = useState<LastLocationData | undefined>();
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  // Key to force remount of AI extraction section when modal opens
-  const [aiSectionKey, setAiSectionKey] = useState(0);
+  // Key to force remount of document input section when modal opens
+  const [documentInputKey, setDocumentInputKey] = useState(0);
   // Multi-race selection state
   const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
   const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
   const [isCreatingMultiple, setIsCreatingMultiple] = useState(false);
-  // SSI document state
-  const [ssiDocumentId, setSsiDocumentId] = useState<string | null>(null);
+  // Source document tracking for provenance
+  const [sourceDocumentIds, setSourceDocumentIds] = useState<string[]>([]);
 
   // Load last used location (now with coordinates)
   useEffect(() => {
@@ -180,7 +178,6 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
     if (visible) {
       setFormState(getSmartDefaults(lastLocationData));
       setErrors({});
-      setAiSectionExpanded(false);
       setAiExtractedFields(new Set());
       setExtractedDetailsData(null);
       setShowLocationPicker(false);
@@ -188,10 +185,10 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       setShowMultiRaceModal(false);
       setMultiRaceData(null);
       setIsCreatingMultiple(false);
-      // Reset SSI state
-      setSsiDocumentId(null);
-      // Increment key to force remount of AI extraction section, clearing its internal state
-      setAiSectionKey((prev) => prev + 1);
+      // Reset source document tracking
+      setSourceDocumentIds([]);
+      // Increment key to force remount of document input section, clearing its internal state
+      setDocumentInputKey((prev) => prev + 1);
     }
   }, [visible, lastLocationData]);
 
@@ -621,6 +618,11 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
         (raceData as any).extractedDetails = extractedDetailsData;
       }
 
+      // Add source document IDs for provenance tracking
+      if (sourceDocumentIds.length > 0) {
+        (raceData as any).sourceDocumentIds = sourceDocumentIds;
+      }
+
       await onSave(raceData);
       onClose();
     } catch (error) {
@@ -628,7 +630,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
     } finally {
       setIsSaving(false);
     }
-  }, [formState, validateForm, isSaving, onSave, onClose, extractedDetailsData]);
+  }, [formState, validateForm, isSaving, onSave, onClose, extractedDetailsData, sourceDocumentIds]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -680,13 +682,19 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
               onSelect={handleRaceTypeSelect}
             />
 
-            {/* AI Extraction Section */}
-            <TufteAIExtractionSection
-              key={aiSectionKey}
-              expanded={aiSectionExpanded}
-              onToggle={() => setAiSectionExpanded(!aiSectionExpanded)}
-              onExtracted={handleAIExtracted}
+            {/* Unified Document Input - AI Extraction with source tracking */}
+            <UnifiedDocumentInput
+              key={documentInputKey}
+              mode="race_creation"
+              defaultDocumentType="nor"
+              onExtractionComplete={(data, rawData, documentId) => {
+                handleAIExtracted(data, rawData);
+                if (documentId) {
+                  setSourceDocumentIds((prev) => [...prev, documentId]);
+                }
+              }}
               onMultiRaceDetected={handleMultiRaceDetected}
+              compact={false}
               raceType={formState.raceType}
             />
 
@@ -695,19 +703,6 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
             <ExtractedDetailsSummary
               data={extractedDetailsData}
               onChange={setExtractedDetailsData}
-            />
-
-            {/* SSI Documents Section - positioned after AI extraction for document grouping */}
-            <TufteSectionLabel>SAILING INSTRUCTIONS</TufteSectionLabel>
-            <SSIUploadSection
-              clubId={undefined}
-              raceId={undefined}
-              title="Upload SSI"
-              description="Upload the Sailing Instructions PDF to extract VHF channels, marks, and emergency contacts."
-              showHeader={false}
-              showPrivacyToggle={false}
-              compact={false}
-              onDocumentUploaded={setSsiDocumentId}
             />
 
             {/* Essentials Section */}

@@ -8,7 +8,88 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
  * - Detects single race OR multiple races (series/calendar)
  * - Extracts comprehensive fields from NOR/SI documents
  * - Returns multi-race data when calendar detected
+ * - Includes source tracking for provenance
  */
+
+/**
+ * Build source tracking information for document provenance
+ */
+function buildSourceTracking(extractedData: any, sourceUrl?: string): {
+  sourceType: 'url' | 'paste';
+  sourceUrl?: string;
+  extractedFields: string[];
+  fieldConfidence: Record<string, number>;
+  documentType: string;
+} {
+  const extractedFields: string[] = [];
+  const fieldConfidence: Record<string, number> = {};
+
+  // Helper to recursively extract field paths with values
+  function extractFieldsFromObject(obj: any, prefix = ''): void {
+    if (!obj || typeof obj !== 'object') return;
+
+    for (const [key, value] of Object.entries(obj)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+
+      // Skip metadata fields
+      if (['confidenceScores', 'multipleRaces', 'documentType', 'overallConfidence'].includes(key)) {
+        continue;
+      }
+
+      if (value === null || value === undefined) {
+        // Skip null/undefined values
+        continue;
+      }
+
+      if (Array.isArray(value)) {
+        if (value.length > 0) {
+          extractedFields.push(path);
+          // For arrays, recurse into first element for nested fields
+          if (typeof value[0] === 'object') {
+            extractFieldsFromObject(value[0], `${path}[0]`);
+          }
+        }
+      } else if (typeof value === 'object') {
+        extractFieldsFromObject(value, path);
+      } else if (value !== '' && value !== 0) {
+        extractedFields.push(path);
+      }
+    }
+  }
+
+  // Extract fields from first race (or all races for multi-race)
+  if (extractedData.races && extractedData.races.length > 0) {
+    const firstRace = extractedData.races[0];
+    extractFieldsFromObject(firstRace, 'races[0]');
+
+    // Build confidence scores from the race's confidenceScores if available
+    if (firstRace.confidenceScores) {
+      for (const [field, score] of Object.entries(firstRace.confidenceScores)) {
+        if (typeof score === 'number') {
+          fieldConfidence[`races[0].${field}`] = score;
+        }
+      }
+    }
+  }
+
+  // Also extract top-level fields
+  extractFieldsFromObject({
+    organizingAuthority: extractedData.organizingAuthority,
+  });
+
+  // Add overall confidence
+  if (extractedData.overallConfidence) {
+    fieldConfidence['overall'] = extractedData.overallConfidence;
+  }
+
+  return {
+    sourceType: sourceUrl ? 'url' : 'paste',
+    sourceUrl: sourceUrl || undefined,
+    extractedFields,
+    fieldConfidence,
+    documentType: extractedData.documentType || 'OTHER',
+  };
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -792,11 +873,19 @@ Return ONLY the JSON object, no additional text.`,
       warningSignalTime: firstRace?.warningSignalTime,
     });
 
-    // Return the extracted data
+    // Build source tracking information for provenance
+    const sourceTracking = buildSourceTracking(extractedData, url);
+    console.log('[extract-race-details] Source tracking:', {
+      sourceType: sourceTracking.sourceType,
+      extractedFieldCount: sourceTracking.extractedFields.length,
+    });
+
+    // Return the extracted data with source tracking
     return new Response(
       JSON.stringify({
         success: true,
         ...extractedData,
+        sourceTracking,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
