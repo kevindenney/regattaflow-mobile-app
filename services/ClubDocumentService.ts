@@ -6,6 +6,7 @@
 
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isUuid } from '@/utils/uuid';
 import type {
   ClubDocument,
   ClubDocumentWithDetails,
@@ -446,6 +447,11 @@ class ClubDocumentService {
    * Used to resolve which club's documents should be inherited
    */
   async getClubIdForRace(raceId: string): Promise<string | null> {
+    // Skip query for demo races or invalid UUIDs to prevent 400 errors
+    if (!raceId || !isUuid(raceId)) {
+      return null;
+    }
+
     try {
       // First check regattas table
       const { data: regatta } = await supabase

@@ -5,6 +5,7 @@
 
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isUuid } from '@/utils/uuid';
 import { documentStorageService, StoredDocument } from './storage/DocumentStorageService';
 import { clubDocumentService } from './ClubDocumentService';
 import type { RaceDisplayDocument, ClubDocumentWithDetails } from '@/types/documents';
@@ -138,8 +139,8 @@ class RaceDocumentService {
    * Returns either { regattaId } or { raceEventId } depending on what we find
    */
   private async resolveRaceReference(id: string): Promise<{ regattaId?: string; raceEventId?: string } | null> {
-    // Skip demo race IDs (string IDs) - DB expects UUIDs
-    if (!id || id === 'demo-race' || id.startsWith('demo-')) {
+    // Skip demo race IDs and invalid UUIDs - DB expects valid UUIDs
+    if (!id || !isUuid(id)) {
       return null;
     }
 
@@ -334,6 +335,11 @@ class RaceDocumentService {
    * Check if a race has inherit_club_documents enabled
    */
   private async checkInheritClubDocuments(raceId: string): Promise<boolean> {
+    // Skip query for invalid UUIDs - default to true
+    if (!raceId || !isUuid(raceId)) {
+      return true;
+    }
+
     try {
       // First check if we have any race_documents records that specify inherit_club_documents
       const { data } = await supabase
