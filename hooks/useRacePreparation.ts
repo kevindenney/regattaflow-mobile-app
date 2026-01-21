@@ -36,6 +36,10 @@ const DEFAULT_INTENTIONS: RaceIntentions = {
 /**
  * Deep merges intention updates, preserving nested fields from concurrent updates.
  * This prevents race conditions where one caller's update overwrites another's.
+ *
+ * NOTE: checklistCompletions is a special case - it uses full replacement instead of
+ * merge because deletions (uncompleting items) need to be preserved. Object spread
+ * doesn't remove keys, so we need to use the source value directly.
  */
 function deepMergeIntentions(
   target: RaceIntentions,
@@ -47,8 +51,12 @@ function deepMergeIntentions(
     const sourceValue = source[key];
     const targetValue = result[key as keyof RaceIntentions];
 
-    if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
-      // Deep merge nested objects (strategyBrief, checklistCompletions, etc.)
+    // checklistCompletions needs full replacement to support deletions (unchecking items)
+    // Object spread doesn't remove keys, so we can't merge here
+    if (key === 'checklistCompletions') {
+      result[key as keyof RaceIntentions] = sourceValue as any;
+    } else if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
+      // Deep merge nested objects (strategyBrief, etc.)
       result[key as keyof RaceIntentions] = {
         ...(targetValue as object || {}),
         ...sourceValue,
@@ -260,9 +268,12 @@ export function useRacePreparation({
         };
 
         await AsyncStorage.setItem(key, JSON.stringify(merged));
+        logger.info('Demo race preparation saved to AsyncStorage', { regattaId });
         pendingChangesRef.current = {};
-      } catch {
-        // AsyncStorage save failed
+      } catch (error) {
+        console.error('[useRacePreparation] AsyncStorage save failed:', error);
+        logger.error('AsyncStorage save failed:', error);
+        // Keep pending changes so they can be retried
       } finally {
         setIsSaving(false);
       }
@@ -278,15 +289,28 @@ export function useRacePreparation({
         ...pendingChangesRef.current,
       };
 
+      console.log('[useRacePreparation] Saving to Supabase:', {
+        regattaId,
+        sailorId: user.id,
+        hasIntentions: !!updates.user_intentions,
+        checklistKeys: updates.user_intentions?.checklistCompletions
+          ? Object.keys(updates.user_intentions.checklistCompletions)
+          : [],
+      });
+      logger.info('Saving race preparation to Supabase', { regattaId, hasIntentions: !!updates.user_intentions });
       const result = await sailorRacePreparationService.upsertPreparation(updates);
 
       if (result) {
+        logger.info('Race preparation saved successfully', { regattaId });
         pendingChangesRef.current = {};
       } else {
-        // Regatta doesn't exist - this is expected for some races
+        // Regatta doesn't exist - log this for debugging
+        console.warn('[useRacePreparation] Regatta does not exist, cannot save preparation:', regattaId);
+        logger.warn('Regatta does not exist, skipping save', { regattaId });
         pendingChangesRef.current = {};
       }
     } catch (error) {
+      console.error('[useRacePreparation] Failed to save race preparation:', error);
       logger.error('Failed to save race preparation:', error);
       // Keep pending changes so they can be retried
     } finally {

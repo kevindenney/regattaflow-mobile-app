@@ -179,7 +179,10 @@ export function useRaceChecklist({
    */
   const completeItem = useCallback(
     (itemId: string, notes?: string) => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        console.warn('[useRaceChecklist] Cannot complete item - no user ID');
+        return;
+      }
 
       const newCompletion: ChecklistCompletion = {
         itemId,
@@ -191,11 +194,13 @@ export function useRaceChecklist({
 
       // Update intentions with new completion
       const currentCompletions = intentions?.checklistCompletions || {};
+      const updatedCompletions = {
+        ...currentCompletions,
+        [itemId]: newCompletion,
+      };
+
       updateIntentions({
-        checklistCompletions: {
-          ...currentCompletions,
-          [itemId]: newCompletion,
-        },
+        checklistCompletions: updatedCompletions,
       });
 
       // If this is a carryover item, also resolve it in equipment flow
@@ -231,13 +236,15 @@ export function useRaceChecklist({
    */
   const toggleItem = useCallback(
     (itemId: string) => {
-      if (completions[itemId]) {
+      const isCurrentlyCompleted = !!completions[itemId];
+
+      if (isCurrentlyCompleted) {
         uncompleteItem(itemId);
       } else {
         completeItem(itemId);
       }
     },
-    [completions, completeItem, uncompleteItem]
+    [completions, completeItem, uncompleteItem, regattaId]
   );
 
   /**

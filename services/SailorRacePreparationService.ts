@@ -96,17 +96,40 @@ class SailorRacePreparationService {
   async upsertPreparation(
     preparation: SailorRacePreparation
   ): Promise<SailorRacePreparation | null> {
+    // Skip if regatta_id is not a valid UUID
+    if (!this.isValidUUID(preparation.regatta_id)) {
+      logger.info(`Regatta ${preparation.regatta_id} is not a valid UUID, skipping upsert`);
+      return null;
+    }
+
     // Validate that the regatta exists before attempting upsert
-    const { data: regattaExists } = await supabase
+    const { data: regattaExists, error: regattaCheckError } = await supabase
       .from('regattas')
       .select('id')
       .eq('id', preparation.regatta_id)
       .maybeSingle();
 
+    if (regattaCheckError) {
+      console.error('[SailorRacePreparationService] Error checking regatta existence:', regattaCheckError);
+      logger.error('Error checking regatta existence:', regattaCheckError);
+      return null;
+    }
+
     if (!regattaExists) {
+      console.warn('[SailorRacePreparationService] Regatta does not exist:', preparation.regatta_id);
       logger.info(`Regatta ${preparation.regatta_id} does not exist, skipping upsert`);
       return null;
     }
+
+    logger.info('Upserting race preparation', { regattaId: preparation.regatta_id, sailorId: preparation.sailor_id });
+    console.log('[SailorRacePreparationService] Upserting:', {
+      regattaId: preparation.regatta_id,
+      sailorId: preparation.sailor_id,
+      hasUserIntentions: !!preparation.user_intentions,
+      checklistKeys: preparation.user_intentions?.checklistCompletions
+        ? Object.keys(preparation.user_intentions.checklistCompletions)
+        : [],
+    });
 
     const { data, error } = await supabase
       .from('sailor_race_preparation')
@@ -128,10 +151,21 @@ class SailorRacePreparationService {
       .single();
 
     if (error) {
+      console.error('[SailorRacePreparationService] Supabase upsert error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       logger.error('Error upserting race preparation:', error);
       throw error;
     }
 
+    console.log('[SailorRacePreparationService] Upsert succeeded:', {
+      id: data.id,
+      regattaId: data.regatta_id,
+      hasUserIntentions: !!data.user_intentions,
+    });
     logger.info('Race preparation upserted successfully');
     return data;
   }
