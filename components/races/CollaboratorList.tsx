@@ -111,8 +111,11 @@ export function CollaboratorList({
 
   const handleShareCode = async () => {
     if (inviteCode) {
-      const shareUrl = `regattaflow://join-race?code=${inviteCode}`;
-      const message = `Join my race on RegattaFlow! Use invite code: ${inviteCode}\n\nOr tap this link: ${shareUrl}`;
+      // Use web URL on web platform, deep link on native
+      const webUrl = Platform.OS === 'web'
+        ? `${window.location.origin}/join-race/${inviteCode}`
+        : `regattaflow://join-race?code=${inviteCode}`;
+      const message = `Join my race on RegattaFlow! Use invite code: ${inviteCode}\n\nOr tap this link: ${webUrl}`;
 
       try {
         await Share.share({

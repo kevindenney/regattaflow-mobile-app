@@ -61,18 +61,31 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
     setError(null);
 
     try {
-      // Fetch in parallel
-      const [collaboratorsData, messagesData, accessData] = await Promise.all([
-        RaceCollaborationService.getCollaborators(regattaId),
-        RaceCollaborationService.getMessages(regattaId),
-        RaceCollaborationService.checkAccess(regattaId),
-      ]);
-
-      setCollaborators(collaboratorsData);
-      setMessages(messagesData);
+      // Fetch access first - this determines if user can see anything
+      const accessData = await RaceCollaborationService.checkAccess(regattaId);
       setUserAccess(accessData.accessLevel || null);
       setIsOwner(accessData.isOwner);
       setCurrentCollaboratorId(accessData.collaboratorId || null);
+
+      // Then fetch collaborators and messages (these might fail due to RLS if not owner/collaborator)
+      const [collaboratorsResult, messagesResult] = await Promise.allSettled([
+        RaceCollaborationService.getCollaborators(regattaId),
+        RaceCollaborationService.getMessages(regattaId),
+      ]);
+
+      if (collaboratorsResult.status === 'fulfilled') {
+        setCollaborators(collaboratorsResult.value);
+      } else {
+        logger.warn('Failed to fetch collaborators:', collaboratorsResult.reason);
+        setCollaborators([]);
+      }
+
+      if (messagesResult.status === 'fulfilled') {
+        setMessages(messagesResult.value);
+      } else {
+        logger.warn('Failed to fetch messages:', messagesResult.reason);
+        setMessages([]);
+      }
     } catch (err) {
       logger.error('Failed to fetch collaboration data:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch data'));

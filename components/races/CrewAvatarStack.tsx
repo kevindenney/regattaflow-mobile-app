@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/avatar';
 import { RaceCollaborator } from '@/types/raceCollaboration';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { UserPlus } from 'lucide-react-native';
 
 interface CrewAvatarStackProps {
   /** List of collaborators to display */
@@ -28,6 +29,8 @@ interface CrewAvatarStackProps {
   onPress?: () => void;
   /** Whether to show pending status badges */
   showPendingBadge?: boolean;
+  /** Show add button when no collaborators (for owners to invite crew) */
+  showAddButton?: boolean;
 }
 
 /**
@@ -84,14 +87,47 @@ export function CrewAvatarStack({
   size = 'sm',
   onPress,
   showPendingBadge = true,
+  showAddButton = false,
 }: CrewAvatarStackProps) {
   // Only show accepted collaborators by default, plus pending if badges enabled
   const displayCollaborators = showPendingBadge
     ? collaborators
     : collaborators.filter((c) => c.status === 'accepted');
 
+  // Show add button when no collaborators
   if (displayCollaborators.length === 0) {
-    return null;
+    if (!showAddButton) {
+      return null;
+    }
+
+    // Render the "+" add crew button
+    const addButton = (
+      <View style={styles.addButtonContainer}>
+        <View style={[styles.addButton, size === 'xs' && styles.addButtonXs]}>
+          <UserPlus
+            size={size === 'xs' ? 12 : size === 'sm' ? 14 : 16}
+            color={IOS_COLORS.blue}
+          />
+        </View>
+        <Text style={[styles.addButtonLabel, size === 'xs' && styles.addButtonLabelXs]}>
+          Crew
+        </Text>
+      </View>
+    );
+
+    if (onPress) {
+      return (
+        <Pressable
+          onPress={onPress}
+          style={({ pressed }) => [pressed && styles.pressed]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          {addButton}
+        </Pressable>
+      );
+    }
+
+    return addButton;
   }
 
   const visible = displayCollaborators.slice(0, maxVisible);
@@ -174,6 +210,36 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
     fontSize: 10,
     fontWeight: '600',
+  },
+  addButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  addButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.blue,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonXs: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+  },
+  addButtonLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  addButtonLabelXs: {
+    fontSize: 10,
   },
 });
 

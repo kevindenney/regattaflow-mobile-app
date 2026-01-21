@@ -366,15 +366,14 @@ export function RaceCard({
           </View>
         )}
 
-        {/* Crew Avatars */}
-        {collaborators && collaborators.length > 0 && (
-          <CrewAvatarStack
-            collaborators={collaborators}
-            maxVisible={3}
-            size="xs"
-            onPress={onCollaboratorsPress}
-          />
-        )}
+        {/* Crew Avatars / Add Crew Button */}
+        <CrewAvatarStack
+          collaborators={collaborators || []}
+          maxVisible={3}
+          size="xs"
+          onPress={onCollaboratorsPress}
+          showAddButton={!!onCollaboratorsPress}
+        />
       </View>
 
       {/* Header Zone - Countdown left, Details right */}

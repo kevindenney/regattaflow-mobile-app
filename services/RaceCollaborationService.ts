@@ -102,16 +102,13 @@ class RaceCollaborationServiceClass {
 
   /**
    * Get all collaborators for a race
-   * Includes profile data with avatar info
+   * Fetches basic collaborator data, then enriches with profile info
    */
   async getCollaborators(regattaId: string): Promise<RaceCollaborator[]> {
-    const { data, error } = await supabase
+    // First, get the basic collaborator data
+    const { data: collaborators, error } = await supabase
       .from('race_collaborators')
-      .select(`
-        *,
-        profiles:user_id(full_name, avatar_url, email),
-        sailor_profiles:user_id(avatar_emoji, avatar_color)
-      `)
+      .select('*')
       .eq('regatta_id', regattaId)
       .order('created_at', { ascending: true });
 
@@ -120,17 +117,60 @@ class RaceCollaborationServiceClass {
       throw error;
     }
 
-    return (data || []).map((row: any) => ({
-      ...rowToRaceCollaborator(row as RaceCollaboratorRow),
-      profile: row.profiles || row.sailor_profiles
-        ? {
-            fullName: row.profiles?.full_name,
-            avatarEmoji: row.sailor_profiles?.avatar_emoji,
-            avatarColor: row.sailor_profiles?.avatar_color,
-            email: row.profiles?.email,
-          }
-        : undefined,
-    }));
+    if (!collaborators || collaborators.length === 0) {
+      return [];
+    }
+
+    // Get unique user IDs that have values
+    const userIds = collaborators
+      .map((c) => c.user_id)
+      .filter((id): id is string => !!id);
+
+    // Fetch profile data for those users if we have any
+    let profilesMap: Record<string, any> = {};
+    let sailorProfilesMap: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const [profilesResult, sailorProfilesResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, email')
+          .in('id', userIds),
+        supabase
+          .from('sailor_profiles')
+          .select('user_id, avatar_emoji, avatar_color, full_name')
+          .in('user_id', userIds),
+      ]);
+
+      if (profilesResult.data) {
+        profilesMap = Object.fromEntries(
+          profilesResult.data.map((p) => [p.id, p])
+        );
+      }
+      if (sailorProfilesResult.data) {
+        sailorProfilesMap = Object.fromEntries(
+          sailorProfilesResult.data.map((p) => [p.user_id, p])
+        );
+      }
+    }
+
+    // Combine collaborator data with profile info
+    return collaborators.map((row: any) => {
+      const profile = profilesMap[row.user_id];
+      const sailorProfile = sailorProfilesMap[row.user_id];
+
+      return {
+        ...rowToRaceCollaborator(row as RaceCollaboratorRow),
+        profile: profile || sailorProfile
+          ? {
+              fullName: sailorProfile?.full_name || profile?.full_name,
+              avatarEmoji: sailorProfile?.avatar_emoji,
+              avatarColor: sailorProfile?.avatar_color,
+              email: profile?.email,
+            }
+          : undefined,
+      };
+    });
   }
 
   /**
@@ -139,11 +179,7 @@ class RaceCollaborationServiceClass {
   async getCollaborator(collaboratorId: string): Promise<RaceCollaborator | null> {
     const { data, error } = await supabase
       .from('race_collaborators')
-      .select(`
-        *,
-        profiles:user_id(full_name, avatar_url, email),
-        sailor_profiles:user_id(avatar_emoji, avatar_color)
-      `)
+      .select('*')
       .eq('id', collaboratorId)
       .single();
 
@@ -153,16 +189,37 @@ class RaceCollaborationServiceClass {
       throw error;
     }
 
+    // Fetch profile data if user_id exists
+    let profile = undefined;
+    if (data.user_id) {
+      const [profileResult, sailorProfileResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, email')
+          .eq('id', data.user_id)
+          .single(),
+        supabase
+          .from('sailor_profiles')
+          .select('user_id, avatar_emoji, avatar_color, full_name')
+          .eq('user_id', data.user_id)
+          .single(),
+      ]);
+
+      const p = profileResult.data;
+      const sp = sailorProfileResult.data;
+      if (p || sp) {
+        profile = {
+          fullName: sp?.full_name || p?.full_name,
+          avatarEmoji: sp?.avatar_emoji,
+          avatarColor: sp?.avatar_color,
+          email: p?.email,
+        };
+      }
+    }
+
     return {
       ...rowToRaceCollaborator(data as RaceCollaboratorRow),
-      profile: data.profiles || data.sailor_profiles
-        ? {
-            fullName: data.profiles?.full_name,
-            avatarEmoji: data.sailor_profiles?.avatar_emoji,
-            avatarColor: data.sailor_profiles?.avatar_color,
-            email: data.profiles?.email,
-          }
-        : undefined,
+      profile,
     };
   }
 
@@ -232,29 +289,48 @@ class RaceCollaborationServiceClass {
   }> {
     const { data: user } = await supabase.auth.getUser();
     if (!user?.user) {
+      logger.debug('checkAccess: No authenticated user');
       return { hasAccess: false, isOwner: false };
     }
 
+    logger.debug('checkAccess: Checking access for user', { userId: user.user.id, regattaId });
+
     // Check if user is owner
-    const { data: regatta } = await supabase
+    const { data: regatta, error: regattaError } = await supabase
       .from('regattas')
       .select('created_by')
       .eq('id', regattaId)
       .single();
 
+    if (regattaError) {
+      logger.warn('checkAccess: Failed to fetch regatta', regattaError);
+    }
+
+    logger.debug('checkAccess: Regatta result', {
+      regattaCreatedBy: regatta?.created_by,
+      userId: user.user.id,
+      match: regatta?.created_by === user.user.id
+    });
+
     if (regatta?.created_by === user.user.id) {
+      logger.debug('checkAccess: User is owner');
       return { hasAccess: true, accessLevel: 'full', isOwner: true };
     }
 
     // Check if user is collaborator
-    const { data: collaborator } = await supabase
+    const { data: collaborator, error: collabError } = await supabase
       .from('race_collaborators')
       .select('id, access_level, status')
       .eq('regatta_id', regattaId)
       .eq('user_id', user.user.id)
       .single();
 
+    if (collabError && collabError.code !== 'PGRST116') {
+      logger.warn('checkAccess: Failed to fetch collaborator', collabError);
+    }
+
     if (collaborator && collaborator.status === 'accepted') {
+      logger.debug('checkAccess: User is collaborator', { accessLevel: collaborator.access_level });
       return {
         hasAccess: true,
         accessLevel: collaborator.access_level as AccessLevel,
@@ -263,6 +339,7 @@ class RaceCollaborationServiceClass {
       };
     }
 
+    logger.debug('checkAccess: User has no access');
     return { hasAccess: false, isOwner: false };
   }
 
@@ -274,13 +351,9 @@ class RaceCollaborationServiceClass {
    * Get messages for a race
    */
   async getMessages(regattaId: string, limit: number = 100): Promise<RaceMessage[]> {
-    const { data, error } = await supabase
+    const { data: messages, error } = await supabase
       .from('race_messages')
-      .select(`
-        *,
-        profiles:user_id(full_name),
-        sailor_profiles:user_id(avatar_emoji, avatar_color)
-      `)
+      .select('*')
       .eq('regatta_id', regattaId)
       .order('created_at', { ascending: true })
       .limit(limit);
@@ -290,16 +363,56 @@ class RaceCollaborationServiceClass {
       throw error;
     }
 
-    return (data || []).map((row: any) => ({
-      ...rowToRaceMessage(row as RaceMessageRow),
-      profile: row.profiles || row.sailor_profiles
-        ? {
-            fullName: row.profiles?.full_name,
-            avatarEmoji: row.sailor_profiles?.avatar_emoji,
-            avatarColor: row.sailor_profiles?.avatar_color,
-          }
-        : undefined,
-    }));
+    if (!messages || messages.length === 0) {
+      return [];
+    }
+
+    // Get unique user IDs
+    const userIds = [...new Set(messages.map((m) => m.user_id))];
+
+    // Fetch profile data
+    let profilesMap: Record<string, any> = {};
+    let sailorProfilesMap: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const [profilesResult, sailorProfilesResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds),
+        supabase
+          .from('sailor_profiles')
+          .select('user_id, avatar_emoji, avatar_color, full_name')
+          .in('user_id', userIds),
+      ]);
+
+      if (profilesResult.data) {
+        profilesMap = Object.fromEntries(
+          profilesResult.data.map((p) => [p.id, p])
+        );
+      }
+      if (sailorProfilesResult.data) {
+        sailorProfilesMap = Object.fromEntries(
+          sailorProfilesResult.data.map((p) => [p.user_id, p])
+        );
+      }
+    }
+
+    return messages.map((row: any) => {
+      const profile = profilesMap[row.user_id];
+      const sailorProfile = sailorProfilesMap[row.user_id];
+
+      return {
+        ...rowToRaceMessage(row as RaceMessageRow),
+        profile: profile || sailorProfile
+          ? {
+              fullName: sailorProfile?.full_name || profile?.full_name,
+              avatarEmoji: sailorProfile?.avatar_emoji,
+              avatarColor: sailorProfile?.avatar_color,
+            }
+          : undefined,
+      };
+    });
   }
 
   /**

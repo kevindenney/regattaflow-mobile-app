@@ -18,7 +18,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 
+import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
+import { RaceCollaborationDrawer } from '@/components/races/RaceCollaborationDrawer';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
+import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
 import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import type { DetailCardType } from '@/constants/navigationAnimations';
@@ -458,6 +461,10 @@ export function RaceSummaryCard({
   // Detailed Review modal state
   const [showDetailedReview, setShowDetailedReview] = useState(false);
 
+  // Crew collaboration state
+  const [showCollaborationDrawer, setShowCollaborationDrawer] = useState(false);
+  const { collaborators } = useRaceCollaborators(race.id);
+
   // Handler to open detail sheet
   const handleOpenDetail = useCallback((type: DetailCardType) => {
     setActiveDetailSheet(type);
@@ -813,11 +820,21 @@ export function RaceSummaryCard({
             {!countdown.isPast && ` · ${urgency.label}`}
             {numberOfLegs > 0 && ` · ${numberOfLegs} legs`}
           </Text>
-          {canManage && menuItems.length > 0 && (
-            <View pointerEvents="box-none">
-              <CardMenu items={menuItems} />
-            </View>
-          )}
+          <View style={styles.headerRightGroup}>
+            {/* Crew Avatars / Add Crew Button */}
+            <CrewAvatarStack
+              collaborators={collaborators || []}
+              maxVisible={3}
+              size="xs"
+              onPress={() => setShowCollaborationDrawer(true)}
+              showAddButton
+            />
+            {canManage && menuItems.length > 0 && (
+              <View pointerEvents="box-none">
+                <CardMenu items={menuItems} />
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Demo Race Badge - shown when this is a placeholder race for empty state */}
@@ -884,6 +901,13 @@ export function RaceSummaryCard({
         } : undefined}
         onClose={handleCloseDetailedReview}
         onComplete={handleDetailedReviewComplete}
+      />
+
+      {/* Crew Collaboration Drawer */}
+      <RaceCollaborationDrawer
+        regattaId={race.id}
+        isOpen={showCollaborationDrawer}
+        onClose={() => setShowCollaborationDrawer(false)}
       />
     </>
   );
