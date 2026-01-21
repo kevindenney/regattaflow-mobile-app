@@ -717,12 +717,14 @@ interface RetrospectiveChecklistSectionProps {
   raceType: RaceType;
   phase: 'days_before' | 'race_morning' | 'on_water';
   completions: Record<string, { completedAt: string; notes?: string }> | undefined;
+  initialExpanded?: boolean;
 }
 
 function RetrospectiveChecklistSection({
   raceType,
   phase,
   completions,
+  initialExpanded = true,
 }: RetrospectiveChecklistSectionProps) {
   const itemsByCategory = getItemsGroupedByCategory(raceType, phase);
   const categories = getCategoriesForPhase(raceType, phase);
@@ -740,6 +742,7 @@ function RetrospectiveChecklistSection({
       iconColor={IOS_COLORS.blue}
       title="Race Checklist"
       expandable={true}
+      initialExpanded={initialExpanded}
       summary={
         <View style={styles.retroSummary}>
           <Text style={styles.retroSummaryText}>
@@ -910,100 +913,9 @@ export function OnWaterContent({
     { id: 'rules', label: 'Reviewed start rules', done: false },
   ];
 
-  // Check if race is significantly past (2+ hours since start)
-  const isRaceCompleted = timeUntilRace < -2 * 60 * 60 * 1000;
-
   // ==========================================================================
   // RENDER
   // ==========================================================================
-
-  // For completed races, show rich historical reflection view
-  if (isRaceCompleted) {
-    // Get demo race details for results, analysis, weather
-    const demoDetails = DemoRaceService.isDemoRace(race.id)
-      ? DemoRaceService.getDemoRaceDetails(race.id)
-      : null;
-
-    const hasResults = !!demoDetails?.results;
-    const hasAnalysis = !!demoDetails?.analysis;
-    const hasWeather = !!demoDetails?.weather;
-    const hasRacePlan = !!intentions.strategyBrief?.raceIntention;
-
-    return (
-      <View style={styles.container}>
-        {/* Subtle Completion Badge */}
-        <View style={styles.completionBadge}>
-          <CheckCircle size={14} color={IOS_COLORS.green} />
-          <Text style={styles.completionBadgeText}>Completed</Text>
-        </View>
-
-        <View style={styles.historicalContent}>
-          {/* Race Result Card - Primary focus */}
-          {hasResults && demoDetails?.results && (
-            <RaceResultCard results={demoDetails.results} />
-          )}
-
-          {/* Conditions Card */}
-          {hasWeather && demoDetails?.weather && (
-            <ConditionsCard weather={demoDetails.weather} />
-          )}
-
-          {/* Race Plan Card - Show pre-race strategy for reflection */}
-          {hasRacePlan && intentions.strategyBrief?.raceIntention && (
-            <RacePlanCard
-              intention={intentions.strategyBrief.raceIntention}
-              strategyNotes={intentions.strategyNotes}
-            />
-          )}
-
-          {/* Performance Analysis Card */}
-          {hasAnalysis && demoDetails?.analysis && (
-            <PerformanceCard analysis={demoDetails.analysis} />
-          )}
-
-          {/* Race Info Summary - only show if VHF/Course available */}
-          {(vhfChannel || courseNumber) && (
-            <HistoricalSummaryCard
-              icon={Radio}
-              iconColor={IOS_COLORS.blue}
-              title="Race Info"
-              expandable={false}
-              summary={
-                <View style={styles.historicalInfoRow}>
-                  {vhfChannel && (
-                    <DataStatement label="VHF" value={`Ch ${vhfChannel}`} />
-                  )}
-                  {courseNumber && (
-                    <DataStatement label="Course" value={courseNumber} />
-                  )}
-                </View>
-              }
-            />
-          )}
-
-          {/* Retrospective Checklist - Condensed */}
-          <RetrospectiveChecklistSection
-            raceType={raceType}
-            phase="on_water"
-            completions={intentions.checklistCompletions}
-          />
-
-          {/* Review Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.reviewButton,
-              pressed && styles.reviewButtonPressed,
-            ]}
-            onPress={onSwitchToReview}
-          >
-            <Clock size={18} color={IOS_COLORS.blue} />
-            <Text style={styles.reviewButtonText}>Add your reflection</Text>
-            <ChevronRight size={16} color={IOS_COLORS.gray} />
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>

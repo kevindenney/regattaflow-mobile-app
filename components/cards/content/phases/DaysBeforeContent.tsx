@@ -72,8 +72,9 @@ import { RaceDocumentsDisplay } from '@/components/races/RaceDocumentsDisplay';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 
 // SSI document display
-import { SSIUploadSection, VHFQuickReference } from '@/components/documents/ssi';
+import { VHFQuickReference } from '@/components/documents/ssi';
 import { useRaceSSI } from '@/hooks/useSSIUpload';
+import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 
 // Historical view components
 import {
@@ -335,12 +336,14 @@ interface RetrospectiveChecklistSectionProps {
   raceType: RaceType;
   phase: 'days_before' | 'race_morning' | 'on_water';
   completions: Record<string, { completedAt: string; notes?: string }> | undefined;
+  initialExpanded?: boolean;
 }
 
 function RetrospectiveChecklistSection({
   raceType,
   phase,
   completions,
+  initialExpanded = true,
 }: RetrospectiveChecklistSectionProps) {
   const itemsByCategory = getItemsGroupedByCategory(raceType, phase);
   const categories = getCategoriesForPhase(raceType, phase);
@@ -358,6 +361,7 @@ function RetrospectiveChecklistSection({
       iconColor={IOS_COLORS.blue}
       title="Preparation Checklist"
       expandable={true}
+      initialExpanded={initialExpanded}
       summary={
         <View style={styles.retroSummary}>
           <Text style={styles.retroSummaryText}>
@@ -672,6 +676,7 @@ export function DaysBeforeContent({
   const {
     displayDocuments,
     isLoading: isDocumentsLoading,
+    refresh: refreshDocuments,
   } = useRaceDocuments({
     raceId: race.id,
     includeClubDocs: true,
@@ -704,234 +709,6 @@ export function DaysBeforeContent({
   // ==========================================================================
   // RENDER
   // ==========================================================================
-
-  // For past races, show historical data view
-  if (timeContext.isPast) {
-    // Get historical data summaries
-    const categorySummaries = summarizeChecklistCompletions(
-      intentions.checklistCompletions,
-      'days_before',
-      raceType
-    );
-    const forecastSummary = formatForecastSummary(intentions.forecastCheck);
-    const forecastEvolution = getForecastEvolution(intentions.forecastCheck);
-    const arrivalTime = formatArrivalTime(intentions);
-    const completedItems = getCompletedItems(
-      intentions.checklistCompletions,
-      'days_before',
-      raceType
-    );
-    const hasData = hasPhaseData(intentions, 'days_before');
-
-    if (isPreparationLoading) {
-      return (
-        <View style={styles.container}>
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading preparation data...</Text>
-          </View>
-        </View>
-      );
-    }
-
-    // Format race conditions from race object (always available)
-    const windData = race.wind;
-    const tideData = race.tide;
-    const hasRaceConditions = !!(windData || tideData);
-
-    // Format wind summary
-    const windSummary = windData
-      ? `${windData.direction || ''} ${windData.speedMin || 0}-${windData.speedMax || 0}kt`.trim()
-      : null;
-
-    // Format tide summary
-    const tideSummary = tideData?.state
-      ? `${tideData.state.charAt(0).toUpperCase() + tideData.state.slice(1)}${tideData.height ? ` (${tideData.height}m)` : ''}`
-      : null;
-
-    // Format time badge text - handle "Completed" case specially
-    const timeBadgeText = timeContext.value === 'Completed'
-      ? 'Completed'
-      : `${timeContext.value} ago`;
-
-    return (
-      <View style={styles.container}>
-        {/* Subtle Time Badge */}
-        <View style={styles.historicalBadge}>
-          <Clock size={12} color={IOS_COLORS.gray} />
-          <Text style={styles.historicalBadgeText}>
-            {timeBadgeText}
-          </Text>
-        </View>
-
-        <View style={styles.historicalContent}>
-          {/* Race Conditions - Always show from race object */}
-          {hasRaceConditions && (
-            <HistoricalSummaryCard
-              icon={CloudSun}
-              iconColor={IOS_COLORS.blue}
-              title="Race Conditions"
-              expandable={false}
-              summary={
-                <View style={styles.conditionsRow}>
-                  {windSummary && (
-                    <View style={styles.conditionItem}>
-                      <Wind size={14} color={IOS_COLORS.secondaryLabel} />
-                      <Text style={styles.conditionText}>{windSummary}</Text>
-                    </View>
-                  )}
-                  {tideSummary && (
-                    <View style={styles.conditionItem}>
-                      <Waves size={14} color={IOS_COLORS.secondaryLabel} />
-                      <Text style={styles.conditionText}>{tideSummary}</Text>
-                    </View>
-                  )}
-                </View>
-              }
-            />
-          )}
-
-          {/* Race Info - Venue, Type, Date */}
-          <HistoricalSummaryCard
-            icon={Compass}
-            iconColor={IOS_COLORS.green}
-            title="Race Info"
-            expandable={false}
-            summary={
-              <View style={styles.raceInfoContainer}>
-                {race.venue && (
-                  <DataStatement label="Venue" value={race.venue} />
-                )}
-                <DataStatement
-                  label="Type"
-                  value={raceType.charAt(0).toUpperCase() + raceType.slice(1)}
-                />
-                <DataStatement
-                  label="Date"
-                  value={new Date(race.date).toLocaleDateString()}
-                />
-              </View>
-            }
-          />
-
-          {/* User-Captured Preparation Data (if any) */}
-          {hasData && (
-            <>
-              {/* Checklist Completion Summary */}
-              {categorySummaries.length > 0 && (
-                <HistoricalSummaryCard
-                  icon={ListChecks}
-                  iconColor={IOS_COLORS.blue}
-                  title="Your Preparation"
-                  summary={
-                    <CompletionMeter
-                      categories={categorySummaries.map((cat) => ({
-                        id: cat.id,
-                        name: cat.name,
-                        completed: cat.completed,
-                        total: cat.total,
-                        color: cat.color,
-                      }))}
-                      variant="compact"
-                    />
-                  }
-                  details={
-                    completedItems.length > 0 ? (
-                      <View style={styles.historicalDetailsList}>
-                        <Text style={styles.historicalDetailsHeader}>
-                          Completed Items ({completedItems.length})
-                        </Text>
-                        {completedItems.slice(0, 10).map((item) => (
-                          <View key={item.id} style={styles.historicalDetailItem}>
-                            <Text style={styles.historicalDetailLabel}>
-                              {item.label}
-                            </Text>
-                            <Text style={styles.historicalDetailSubtext}>
-                              {formatRelativeTime(item.completedAt)}
-                            </Text>
-                          </View>
-                        ))}
-                        {completedItems.length > 10 && (
-                          <Text style={styles.historicalMoreItems}>
-                            +{completedItems.length - 10} more items
-                          </Text>
-                        )}
-                      </View>
-                    ) : undefined
-                  }
-                />
-              )}
-
-              {/* Weather Forecast Summary - User captured */}
-              {forecastSummary && (
-                <HistoricalSummaryCard
-                  icon={CloudSun}
-                  iconColor={IOS_COLORS.blue}
-                  title="Your Forecast Checks"
-                  summary={
-                    <View style={styles.historicalSummaryRow}>
-                      <Text style={styles.historicalSummaryText}>
-                        {forecastSummary}
-                      </Text>
-                      {forecastEvolution.snapshotCount > 1 && (
-                        <Text style={styles.historicalSummaryMeta}>
-                          {forecastEvolution.snapshotCount} checks
-                        </Text>
-                      )}
-                    </View>
-                  }
-                  details={
-                    forecastEvolution.latestAnalysis ? (
-                      <View style={styles.historicalDetailsList}>
-                        <Text style={styles.historicalDetailsHeader}>
-                          Forecast Evolution
-                        </Text>
-                        <Text style={styles.historicalDetailText}>
-                          {forecastEvolution.latestAnalysis}
-                        </Text>
-                      </View>
-                    ) : undefined
-                  }
-                />
-              )}
-
-              {/* Arrival Time Intention */}
-              {arrivalTime && (
-                <HistoricalSummaryCard
-                  icon={Car}
-                  iconColor={IOS_COLORS.green}
-                  title="Arrival Plan"
-                  expandable={false}
-                  summary={
-                    <Text style={styles.historicalSummaryText}>{arrivalTime}</Text>
-                  }
-                />
-              )}
-            </>
-          )}
-
-          {/* Retrospective Checklist - Show all items with completed/not status */}
-          <RetrospectiveChecklistSection
-            raceType={raceType}
-            phase="days_before"
-            completions={intentions.checklistCompletions}
-          />
-
-          {/* Review Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.reviewButton,
-              pressed && styles.reviewButtonPressed,
-            ]}
-            onPress={onSwitchToReview}
-          >
-            <Clock size={18} color={IOS_COLORS.blue} />
-            <Text style={styles.reviewButtonText}>Review your race</Text>
-            <ChevronRight size={16} color={IOS_COLORS.gray} />
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
 
   if (isLoading) {
     return (
@@ -1149,15 +926,20 @@ export function DaysBeforeContent({
               <VHFQuickReference extraction={ssiExtraction} />
             </View>
           ) : (
-            <SSIUploadSection
-              clubId={race.club_id}
-              raceId={race.id}
-              title=""
-              description="Upload SSI to extract VHF channels, marks, and contacts"
-              showHeader={false}
-              showPrivacyToggle={true}
-              compact
-              onExtractionComplete={() => refetchSSI()}
+            <UnifiedDocumentInput
+              regattaId={race.id}
+              mode="document_management"
+              defaultDocumentType="si"
+              compact={true}
+              initialExpanded={true}
+              raceType={raceType}
+              onExtractionComplete={() => {
+                refetchSSI();
+                refreshDocuments();
+              }}
+              onDocumentAdded={() => {
+                refreshDocuments();
+              }}
             />
           )}
         </View>
