@@ -32,10 +32,6 @@ import {
   ListChecks,
   Info,
   FileText,
-  ChevronRight,
-  Clock,
-  Wind,
-  Waves,
 } from 'lucide-react-native';
 
 import { CardRaceData, getTimeContext } from '../../types';
@@ -67,22 +63,14 @@ import {
 // Pre-race sharing
 import { ShareWithTeamSection } from './ShareWithTeamSection';
 
-// Race documents display (with club document inheritance)
-import { RaceDocumentsDisplay } from '@/components/races/RaceDocumentsDisplay';
-import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 
 // Course positioning
 import { CoursePositionEditor } from '@/components/races/CoursePositionEditor';
-import { CourseMapPreview } from '@/components/races/CourseMapPreview';
 import type { PositionedCourse, CourseType } from '@/types/courses';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
 import { Map } from 'lucide-react-native';
 
-// SSI document display
-import { VHFQuickReference } from '@/components/documents/ssi';
-import { useRaceSSI } from '@/hooks/useSSIUpload';
-import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 
 // Educational Checklists
 import { AccordionSection } from '@/components/races/AccordionSection';
@@ -694,24 +682,6 @@ export function DaysBeforeContent({
     regattaId: race.id,
   });
 
-  // Race documents (with inherited club documents)
-  const {
-    displayDocuments,
-    isLoading: isDocumentsLoading,
-    refresh: refreshDocuments,
-  } = useRaceDocuments({
-    raceId: race.id,
-    includeClubDocs: true,
-  });
-
-  // User-uploaded SSI data for this race
-  const {
-    loading: isSSILoading,
-    extraction: ssiExtraction,
-    hasSSI,
-    refetch: refetchSSI,
-  } = useRaceSSI(race.id, race.club_id);
-
   // Course positioning state
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
   const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
@@ -987,90 +957,6 @@ export function DaysBeforeContent({
           />
         );
       })}
-
-      {/* Race Documents Section (with inherited club SSI) */}
-      {!isDocumentsLoading && (displayDocuments.raceDocuments.length > 0 || displayDocuments.clubDocuments.length > 0) && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <FileText size={16} color={IOS_COLORS.blue} />
-            <Text style={styles.sectionLabel}>DOCUMENTS</Text>
-          </View>
-          <RaceDocumentsDisplay
-            raceDocuments={displayDocuments.raceDocuments}
-            clubDocuments={displayDocuments.clubDocuments}
-            showEmptyState={false}
-            compact={!isExpanded}
-          />
-        </View>
-      )}
-
-      {/* SSI Quick Reference Section */}
-      {!isSSILoading && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <FileText size={16} color={IOS_COLORS.blue} />
-            <Text style={styles.sectionLabel}>SAILING INSTRUCTIONS</Text>
-          </View>
-          {hasSSI && ssiExtraction ? (
-            <View style={styles.ssiContainer}>
-              {/* VHF Quick Reference */}
-              <VHFQuickReference extraction={ssiExtraction} />
-            </View>
-          ) : (
-            <UnifiedDocumentInput
-              regattaId={race.id}
-              mode="document_management"
-              defaultDocumentType="si"
-              compact={true}
-              initialExpanded={true}
-              raceType={raceType}
-              onExtractionComplete={() => {
-                refetchSSI();
-                refreshDocuments();
-              }}
-              onDocumentAdded={() => {
-                refreshDocuments();
-              }}
-            />
-          )}
-        </View>
-      )}
-
-      {/* Course Map Section */}
-      {coords && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Map size={16} color={IOS_COLORS.blue} />
-            <Text style={styles.sectionLabel}>COURSE MAP</Text>
-          </View>
-
-          {positionedCourse ? (
-            <View style={styles.courseMapContainer}>
-              <CourseMapPreview
-                course={positionedCourse}
-                height={160}
-                showControls={true}
-                compact={true}
-                onEdit={() => setShowCoursePositionEditor(true)}
-              />
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.positionCourseButton}
-              onPress={() => setShowCoursePositionEditor(true)}
-            >
-              <Map size={18} color={IOS_COLORS.orange} />
-              <View style={styles.positionCourseButtonContent}>
-                <Text style={styles.positionCourseButtonText}>Position Course on Map</Text>
-                <Text style={styles.positionCourseButtonSubtext}>
-                  Place start line and marks on the race area
-                </Text>
-              </View>
-              <ChevronRight size={18} color={IOS_COLORS.gray3} />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
 
       {/* Educational Checklists */}
       <View style={styles.educationalChecklistsContainer}>
@@ -1757,43 +1643,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOS_COLORS.gray,
     letterSpacing: 1,
-  },
-
-  // SSI Container
-  ssiContainer: {
-    backgroundColor: '#F0F7FF',
-    borderRadius: 10,
-    padding: 12,
-    gap: 8,
-  },
-
-  // Course Map Section
-  courseMapContainer: {
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  positionCourseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: `${IOS_COLORS.orange}10`,
-    borderRadius: 10,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: `${IOS_COLORS.orange}30`,
-  },
-  positionCourseButtonContent: {
-    flex: 1,
-    gap: 2,
-  },
-  positionCourseButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: IOS_COLORS.orange,
-  },
-  positionCourseButtonSubtext: {
-    fontSize: 12,
-    color: IOS_COLORS.gray,
   },
 
   // Carryover
