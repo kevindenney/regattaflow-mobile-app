@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { RaceCollaborator } from '@/types/raceCollaboration';
+import { isUuid } from '@/utils/uuid';
 
 interface UseRaceCollaboratorsResult {
   collaborators: RaceCollaborator[];
@@ -25,7 +26,7 @@ export function useRaceCollaborators(regattaId: string | null): UseRaceCollabora
   } = useQuery({
     queryKey: ['race-collaborators', regattaId],
     queryFn: () => RaceCollaborationService.getCollaborators(regattaId!),
-    enabled: !!regattaId,
+    enabled: !!regattaId && isUuid(regattaId), // Only query for valid UUIDs
     staleTime: 30000, // 30 seconds - collaborators don't change often
     gcTime: 5 * 60 * 1000, // 5 minutes cache time
   });

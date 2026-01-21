@@ -12,6 +12,7 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isUuid } from '@/utils/uuid';
 import {
   RaceCollaborator,
   RaceMessage,
@@ -105,6 +106,12 @@ class RaceCollaborationServiceClass {
    * Fetches basic collaborator data, then enriches with profile info
    */
   async getCollaborators(regattaId: string): Promise<RaceCollaborator[]> {
+    // Skip query if regattaId is not a valid UUID (e.g., demo-race)
+    if (!isUuid(regattaId)) {
+      logger.debug('Skipping getCollaborators for non-UUID regattaId:', regattaId);
+      return [];
+    }
+
     // First, get the basic collaborator data
     const { data: collaborators, error } = await supabase
       .from('race_collaborators')
@@ -279,6 +286,77 @@ class RaceCollaborationServiceClass {
   }
 
   /**
+   * Accept a pending invite (changes status from 'pending' to 'accepted')
+   */
+  async acceptInvite(collaboratorId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .update({
+        status: 'accepted',
+        joined_at: new Date().toISOString(),
+      })
+      .eq('id', collaboratorId);
+
+    if (error) {
+      logger.error('Failed to accept invite:', error);
+      throw error;
+    }
+
+    logger.info('Accepted invite', { collaboratorId });
+  }
+
+  /**
+   * Decline a pending invite (changes status from 'pending' to 'declined')
+   */
+  async declineInvite(collaboratorId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .update({
+        status: 'declined',
+      })
+      .eq('id', collaboratorId);
+
+    if (error) {
+      logger.error('Failed to decline invite:', error);
+      throw error;
+    }
+
+    logger.info('Declined invite', { collaboratorId });
+  }
+
+  /**
+   * Directly invite a specific user to a race
+   * Creates a pending invite that appears in their timeline
+   */
+  async inviteUser(
+    regattaId: string,
+    targetUserId: string,
+    accessLevel: AccessLevel = 'view'
+  ): Promise<{ collaboratorId: string; inviteCode: string }> {
+    const { data, error } = await supabase.rpc('create_direct_invite', {
+      p_regatta_id: regattaId,
+      p_target_user_id: targetUserId,
+      p_access_level: accessLevel,
+    });
+
+    if (error) {
+      logger.error('Failed to invite user:', error);
+      throw error;
+    }
+
+    const result = data as { success: boolean; error?: string; collaborator_id?: string; invite_code?: string };
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to invite user');
+    }
+
+    logger.info('Invited user to race', { regattaId, targetUserId, collaboratorId: result.collaborator_id });
+    return {
+      collaboratorId: result.collaborator_id!,
+      inviteCode: result.invite_code!,
+    };
+  }
+
+  /**
    * Check if current user has access to a race
    */
   async checkAccess(regattaId: string): Promise<{
@@ -287,6 +365,12 @@ class RaceCollaborationServiceClass {
     isOwner: boolean;
     collaboratorId?: string;
   }> {
+    // Skip query if regattaId is not a valid UUID (e.g., demo-race)
+    if (!isUuid(regattaId)) {
+      logger.debug('checkAccess: Skipping for non-UUID regattaId:', regattaId);
+      return { hasAccess: false, isOwner: false };
+    }
+
     const { data: user } = await supabase.auth.getUser();
     if (!user?.user) {
       logger.debug('checkAccess: No authenticated user');
@@ -351,6 +435,12 @@ class RaceCollaborationServiceClass {
    * Get messages for a race
    */
   async getMessages(regattaId: string, limit: number = 100): Promise<RaceMessage[]> {
+    // Skip query if regattaId is not a valid UUID (e.g., demo-race)
+    if (!isUuid(regattaId)) {
+      logger.debug('Skipping getMessages for non-UUID regattaId:', regattaId);
+      return [];
+    }
+
     const { data: messages, error } = await supabase
       .from('race_messages')
       .select('*')
@@ -475,6 +565,12 @@ class RaceCollaborationServiceClass {
     regattaId: string,
     callback: (collaborators: RaceCollaborator[]) => void
   ): () => void {
+    // Skip subscription if regattaId is not a valid UUID (e.g., demo-race)
+    if (!isUuid(regattaId)) {
+      logger.debug('Skipping subscribeToCollaborators for non-UUID regattaId:', regattaId);
+      return () => {}; // No-op unsubscribe
+    }
+
     const channel = supabase
       .channel(`race-collaborators:${regattaId}`)
       .on(
@@ -506,6 +602,12 @@ class RaceCollaborationServiceClass {
     regattaId: string,
     callback: (messages: RaceMessage[]) => void
   ): () => void {
+    // Skip subscription if regattaId is not a valid UUID (e.g., demo-race)
+    if (!isUuid(regattaId)) {
+      logger.debug('Skipping subscribeToMessages for non-UUID regattaId:', regattaId);
+      return () => {}; // No-op unsubscribe
+    }
+
     const channel = supabase
       .channel(`race-messages:${regattaId}`)
       .on(

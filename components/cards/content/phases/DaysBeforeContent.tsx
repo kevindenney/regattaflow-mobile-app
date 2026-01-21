@@ -84,6 +84,14 @@ import { VHFQuickReference } from '@/components/documents/ssi';
 import { useRaceSSI } from '@/hooks/useSSIUpload';
 import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 
+// Educational Checklists
+import { AccordionSection } from '@/components/races/AccordionSection';
+import { EducationalChecklist } from '@/components/checklist-tools/EducationalChecklist';
+import {
+  PRE_RACE_PREPARATION_CONFIG,
+  COURSE_INTELLIGENCE_CONFIG,
+} from '@/lib/educationalChecklistConfig';
+
 // Historical view components
 import {
   HistoricalSummaryCard,
@@ -479,6 +487,12 @@ export function DaysBeforeContent({
 
   // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
   const coords = venueCoordinates || metadataCoords;
+
+  // Memoize location object for CoursePositionEditor to prevent unnecessary re-renders
+  const memoizedLocation = useMemo(() =>
+    coords ? { lat: coords.lat, lng: coords.lng } : undefined,
+    [coords?.lat, coords?.lng]
+  );
 
   // Create a minimal venue object that the weather services can use
   const venueForForecast = coords ? {
@@ -1058,6 +1072,33 @@ export function DaysBeforeContent({
         </View>
       )}
 
+      {/* Educational Checklists */}
+      <View style={styles.educationalChecklistsContainer}>
+        <AccordionSection
+          title="Pre-Race Preparation"
+          icon={<FileText size={16} color={IOS_COLORS.blue} />}
+          defaultExpanded
+          subtitle="Documents & communications"
+        >
+          <EducationalChecklist
+            config={PRE_RACE_PREPARATION_CONFIG}
+            raceId={race.id}
+          />
+        </AccordionSection>
+
+        <AccordionSection
+          title="Course Intelligence"
+          icon={<Map size={16} color={IOS_COLORS.green} />}
+          defaultExpanded
+          subtitle="Course analysis & strategy"
+        >
+          <EducationalChecklist
+            config={COURSE_INTELLIGENCE_CONFIG}
+            raceId={race.id}
+          />
+        </AccordionSection>
+      </View>
+
       {/* Share with Team Section */}
       <ShareWithTeamSection race={race} />
 
@@ -1344,8 +1385,9 @@ export function DaysBeforeContent({
           onRequestClose={() => setShowCoursePositionEditor(false)}
         >
           <CoursePositionEditor
+            visible={true}
             regattaId={race.id}
-            initialLocation={{ lat: coords.lat, lng: coords.lng }}
+            initialLocation={memoizedLocation}
             courseType={raceType === 'fleet' ? 'windward_leeward' : 'custom'}
             onSave={(course) => {
               setPositionedCourse(course);
@@ -1421,6 +1463,15 @@ export function DaysBeforeContent({
 const styles = StyleSheet.create({
   container: {
     gap: 16,
+  },
+
+  // Educational Checklists
+  educationalChecklistsContainer: {
+    marginTop: 16,
+    gap: 8,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 
   // Time Context

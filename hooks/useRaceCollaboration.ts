@@ -17,6 +17,7 @@ import {
   MessageType,
 } from '@/types/raceCollaboration';
 import { createLogger } from '@/lib/utils/logger';
+import { isUuid } from '@/utils/uuid';
 
 const logger = createLogger('useRaceCollaboration');
 
@@ -52,7 +53,8 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
 
   // Fetch all data
   const fetchData = useCallback(async () => {
-    if (!regattaId) {
+    // Skip for null/undefined or non-UUID regattaIds (e.g., demo-race)
+    if (!regattaId || !isUuid(regattaId)) {
       setIsLoading(false);
       return;
     }
@@ -96,7 +98,8 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
 
   // Initial fetch and subscribe to changes
   useEffect(() => {
-    if (!regattaId) return;
+    // Skip for null/undefined or non-UUID regattaIds (e.g., demo-race)
+    if (!regattaId || !isUuid(regattaId)) return;
 
     fetchData();
 
