@@ -707,7 +707,10 @@ export function DaysBeforeContent({
   useEffect(() => {
     async function fetchPositionedCourse() {
       // Skip query for demo races or invalid UUIDs to prevent 400 errors
-      if (!race.id || !isUuid(race.id)) return;
+      if (!race.id || !isUuid(race.id)) {
+        setPositionedCourseLoading(false);
+        return;
+      }
 
       setPositionedCourseLoading(true);
       try {
@@ -721,7 +724,14 @@ export function DaysBeforeContent({
           .maybeSingle();
 
         if (error) {
-          // No positioned course found, that's okay
+          // Log the error for debugging
+          console.error('[DaysBeforeContent] Error fetching positioned course:', {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            raceId: race.id,
+          });
           setPositionedCourse(null);
         } else if (data) {
           // Convert database format to PositionedCourse
@@ -742,9 +752,13 @@ export function DaysBeforeContent({
             createdAt: data.created_at,
             updatedAt: data.updated_at,
           });
+        } else {
+          // No positioned course found, that's okay
+          setPositionedCourse(null);
         }
       } catch (err) {
-        console.error('Error fetching positioned course:', err);
+        console.error('[DaysBeforeContent] Exception fetching positioned course:', err);
+        setPositionedCourse(null);
       } finally {
         setPositionedCourseLoading(false);
       }

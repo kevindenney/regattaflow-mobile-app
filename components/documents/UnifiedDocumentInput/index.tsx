@@ -25,7 +25,7 @@ import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRac
 import { IOS_COLORS } from '@/components/cards/constants';
 
 import { InputMethodTabs, type InputMethod } from './InputMethodTabs';
-import { URLInput } from './URLInput';
+import { URLInput, type InputContentType } from './URLInput';
 import { PasteInput } from './PasteInput';
 import { PDFUpload, type SelectedFile } from './PDFUpload';
 import { DocumentTypeSelector, type DocumentType } from './DocumentTypeSelector';
@@ -154,6 +154,39 @@ async function hashContent(content: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Document types that need COURSE extraction (marks, sequence, not race details)
+const COURSE_DOCUMENT_TYPES = ['course_diagram', 'courses'];
+
+// Helper function to count extracted course fields
+function countCourseFields(data: any): number {
+  if (!data) return 0;
+
+  let count = 0;
+
+  // Multiple courses format
+  if (data.courses && Array.isArray(data.courses)) {
+    for (const course of data.courses) {
+      if (course.name) count++;
+      if (course.marks?.length) count += course.marks.length;
+      if (course.sequence?.length) count++;
+      if (course.courseType) count++;
+      if (course.laps) count++;
+    }
+    if (data.windDirection) count++;
+    return count;
+  }
+
+  // Single course format
+  if (data.marks?.length) count += data.marks.length;
+  if (data.sequence?.length) count++;
+  if (data.windDirection) count++;
+  if (data.courseType) count++;
+  if (data.laps) count++;
+  if (data.notes?.length) count += data.notes.length;
+
+  return count;
+}
+
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -182,6 +215,10 @@ export function UnifiedDocumentInput({
   // Multi-URL tracking
   const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+
+  // URL input content type tracking (urls vs pasted text)
+  const [urlInputContentType, setUrlInputContentType] = useState<InputContentType>('empty');
+  const [urlInputTextContent, setUrlInputTextContent] = useState<string>('');
 
   // Extraction states
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle');
@@ -221,13 +258,27 @@ export function UnifiedDocumentInput({
     setDetectedUrls(urls);
   }, []);
 
+  // Handle text content detected in URL input (user pasted document text instead of URLs)
+  const handleTextContentDetected = useCallback((text: string) => {
+    setUrlInputTextContent(text);
+  }, []);
+
+  // Handle content type change in URL input
+  // Only update the content type state - let the individual handlers clear their respective states
+  const handleContentTypeChange = useCallback((type: InputContentType) => {
+    setUrlInputContentType(type);
+  }, []);
+
   // Check if we can extract
   const canExtract = useCallback(() => {
-    if (activeMethod === 'url') return detectedUrls.length > 0;
+    if (activeMethod === 'url') {
+      // Allow extraction if we have URLs OR substantial text content pasted
+      return detectedUrls.length > 0 || (urlInputContentType === 'text' && urlInputTextContent.trim().length > 20);
+    }
     if (activeMethod === 'paste') return pasteValue.trim().length >= 20;
     if (activeMethod === 'upload') return selectedFile !== null;
     return false;
-  }, [activeMethod, detectedUrls, pasteValue, selectedFile]);
+  }, [activeMethod, detectedUrls, pasteValue, selectedFile, urlInputContentType, urlInputTextContent]);
 
   // Check for duplicates before extraction
   const checkForDuplicate = useCallback(async (source: DocumentSource): Promise<ServiceRaceSourceDocument | null> => {
@@ -323,9 +374,322 @@ export function UnifiedDocumentInput({
     }
   }, []);
 
+  // Handler for course diagram/courses extraction using vision
+  const handleCourseExtraction = useCallback(async (source: DocumentSource) => {
+    setExtractionStatus('fetching');
+    setExtractionError(null);
+    setBatchProgress(null);
+
+    try {
+      let base64Data: string = '';
+      let isPdf = false;
+      let fileName = 'course document';
+
+      if (source.type === 'url') {
+        // Fetch document and convert to base64
+        const url = source.url!;
+        fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'course.pdf');
+        isPdf = url.toLowerCase().includes('.pdf') ||
+                url.toLowerCase().includes('pdf=') ||
+                url.includes('_files/ugd/');
+
+        // Use pdf-proxy to fetch the document (GET request with URL param)
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const proxyUrl = `${supabaseUrl}/functions/v1/pdf-proxy?url=${encodeURIComponent(url)}`;
+
+        const proxyResponse = await fetch(proxyUrl, {
+          headers: {
+            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+        });
+
+        if (!proxyResponse.ok) {
+          // Check if response is JSON with error message
+          const contentType = proxyResponse.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            const errorData = await proxyResponse.json();
+            throw new Error(errorData.error || `Failed to fetch document: ${proxyResponse.status}`);
+          }
+          throw new Error(`Failed to fetch document: ${proxyResponse.status}`);
+        }
+
+        // Check if response is PDF based on header
+        const responseContentType = proxyResponse.headers.get('content-type') || '';
+        const isPdfHeader = proxyResponse.headers.get('x-pdf-detected') === 'true';
+        if (responseContentType.includes('pdf') || isPdfHeader) {
+          isPdf = true;
+        }
+
+        // Convert binary response to base64
+        const arrayBuffer = await proxyResponse.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+
+        // Convert to base64 - handle both web and native
+        if (Platform.OS === 'web') {
+          // Web: use btoa with binary string
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          base64Data = btoa(binary);
+        } else {
+          // Native: use Buffer or manual conversion
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+          let result = '';
+          for (let i = 0; i < bytes.length; i += 3) {
+            const a = bytes[i];
+            const b = bytes[i + 1] ?? 0;
+            const c = bytes[i + 2] ?? 0;
+            result += chars[a >> 2];
+            result += chars[((a & 3) << 4) | (b >> 4)];
+            result += i + 1 < bytes.length ? chars[((b & 15) << 2) | (c >> 6)] : '=';
+            result += i + 2 < bytes.length ? chars[c & 63] : '=';
+          }
+          base64Data = result;
+        }
+      } else if (source.type === 'upload' && source.file) {
+        // Read uploaded file as base64
+        fileName = source.file.name;
+        isPdf = source.file.mimeType?.includes('pdf') ||
+                source.file.name.toLowerCase().endsWith('.pdf');
+
+        // Read file using fetch for web or FileSystem for native
+        if (Platform.OS === 'web') {
+          const response = await fetch(source.file.uri);
+          const blob = await response.blob();
+          base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              // Remove data URL prefix if present
+              const base64 = result.includes('base64,')
+                ? result.split('base64,')[1]
+                : result;
+              resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } else {
+          // Native - use expo-file-system
+          const FileSystem = require('expo-file-system/legacy');
+          base64Data = await FileSystem.readAsStringAsync(source.file.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        }
+      } else {
+        throw new Error('Paste input not supported for course extraction - please use URL or upload');
+      }
+
+      console.log('[UnifiedDocumentInput] Course extraction:', { fileName, isPdf, dataLength: base64Data.length });
+
+      setExtractionStatus('extracting');
+
+      // Call extract-course-image edge function with PDF or image
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const extractUrl = `${supabaseUrl}/functions/v1/extract-course-image`;
+
+      const requestBody = isPdf
+        ? { pdfBase64: base64Data }
+        : { imageBase64: base64Data, mediaType: source.file?.mimeType || 'image/png' };
+
+      const extractResponse = await fetch(extractUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const result = await extractResponse.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Course extraction failed');
+      }
+
+      setExtractionStatus('completed');
+      setExtractionComplete(true);
+
+      // Count extracted fields
+      const fieldCount = countCourseFields(result.data);
+      setExtractedFieldCount(fieldCount);
+
+      console.log('[UnifiedDocumentInput] Course extraction complete:', {
+        fieldCount,
+        data: result.data,
+      });
+
+      // Store the source for provenance
+      setCurrentSource(source);
+
+      // Notify parent with course data
+      if (onDocumentAdded) {
+        onDocumentAdded({
+          id: crypto.randomUUID(),
+          regattaId,
+          sourceType: source.type,
+          sourceUrl: source.url,
+          documentType,
+          title: fileName,
+          extractionStatus: 'completed',
+          extractedData: result.data,
+        });
+      }
+
+      // Collapse after short delay
+      setTimeout(() => setExpanded(false), 500);
+
+    } catch (err) {
+      console.error('[UnifiedDocumentInput] Course extraction error:', err);
+      setExtractionStatus('failed');
+      setExtractionError(err instanceof Error ? err.message : 'Course extraction failed');
+    }
+  }, [regattaId, documentType, onDocumentAdded]);
+
+  // Document types that don't need any extraction - just save the document
+  const NON_RACE_DOCUMENT_TYPES = ['appendix', 'other'];
+
   // Main extraction handler
   const handleExtract = useCallback(async (skipDuplicateCheck = false) => {
     if (!canExtract() || extractionStatus === 'fetching' || extractionStatus === 'extracting') {
+      return;
+    }
+
+    // Route course document types to course-specific extraction (uses vision for PDFs/images)
+    if (COURSE_DOCUMENT_TYPES.includes(documentType)) {
+      // Build the source for course extraction
+      let source: DocumentSource;
+      if (activeMethod === 'url') {
+        source = { type: 'url', url: detectedUrls[0] || urlValue.trim() };
+      } else if (activeMethod === 'upload' && selectedFile) {
+        source = { type: 'upload', file: selectedFile };
+      } else if (activeMethod === 'paste') {
+        // Course extraction doesn't support paste
+        setExtractionError('Paste input is not supported for course documents. Please use URL or upload.');
+        setExtractionStatus('failed');
+        return;
+      } else {
+        return;
+      }
+
+      await handleCourseExtraction(source);
+      return;
+    }
+
+    // Skip AI extraction for non-race document types - just save the document
+    if (NON_RACE_DOCUMENT_TYPES.includes(documentType)) {
+      // Build the source for provenance
+      let source: DocumentSource;
+      if (activeMethod === 'url') {
+        source = { type: 'url', url: detectedUrls[0] || urlValue.trim() };
+      } else if (activeMethod === 'paste') {
+        const hash = await hashContent(pasteValue.trim());
+        source = { type: 'paste', pastedContent: pasteValue.trim(), contentHash: hash };
+      } else if (activeMethod === 'upload' && selectedFile) {
+        source = { type: 'upload', file: selectedFile };
+      } else {
+        return;
+      }
+
+      setCurrentSource(source);
+      setExtractionStatus('completed');
+      setExtractionComplete(true);
+      setExtractedFieldCount(0);
+
+      // Notify parent that document was added (without race data)
+      if (onDocumentAdded) {
+        onDocumentAdded({
+          id: crypto.randomUUID(),
+          regattaId,
+          sourceType: source.type,
+          sourceUrl: source.url,
+          documentType,
+          title: source.file?.name || source.url || 'Document',
+          extractionStatus: 'completed',
+        });
+      }
+
+      // Collapse after short delay
+      setTimeout(() => setExpanded(false), 500);
+      return;
+    }
+
+    // Handle text content pasted into URL input (treat like paste input)
+    if (activeMethod === 'url' && urlInputContentType === 'text' && urlInputTextContent.trim()) {
+      const textContent = urlInputTextContent.trim();
+      const hash = await hashContent(textContent);
+      const source: DocumentSource = { type: 'paste', pastedContent: textContent, contentHash: hash };
+
+      // Check for duplicates (unless explicitly skipped)
+      if (!skipDuplicateCheck && regattaId && mode === 'document_management') {
+        const existing = await checkForDuplicate(source);
+        if (existing) {
+          setDuplicateDocument(existing);
+          setPendingSource(source);
+          return;
+        }
+      }
+
+      setExtractionStatus('extracting');
+      setExtractionError(null);
+      setBatchProgress(null);
+      setCurrentSource(source);
+
+      try {
+        const agent = new ComprehensiveRaceExtractionAgent();
+        const result = await agent.extractRaceDetails(textContent);
+
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Failed to extract race details');
+        }
+
+        // Check for multi-race detection
+        if (result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
+          if (onMultiRaceDetected) {
+            const enrichedData = {
+              ...result.data,
+              sourceTracking: {
+                documentType,
+                sourceType: source.type,
+              },
+            };
+            setExtractionStatus('completed');
+            setExtractionComplete(true);
+            onMultiRaceDetected(enrichedData as MultiRaceExtractedData);
+            return;
+          }
+        }
+
+        // Single race extraction
+        const raceData = result.data.races?.[0] || result.data;
+        const extractedData = transformExtractionResult(raceData, raceType);
+
+        // Count extracted fields
+        const fieldCount = Object.values(extractedData)
+          .flat()
+          .filter((f: any) => f.value && f.confidence !== 'missing').length;
+        setExtractedFieldCount(fieldCount);
+
+        setExtractionStatus('completed');
+        setExtractionComplete(true);
+
+        if (onExtractionComplete) {
+          onExtractionComplete(extractedData, {
+            ...raceData,
+            sourceTracking: {
+              documentType,
+              sourceType: source.type,
+            },
+          });
+        }
+
+        setTimeout(() => setExpanded(false), 500);
+      } catch (err) {
+        console.error('[UnifiedDocumentInput] Text extraction error:', err);
+        setExtractionStatus('failed');
+        setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
+      }
       return;
     }
 
@@ -591,10 +955,14 @@ export function UnifiedDocumentInput({
     raceType,
     onExtractionComplete,
     onMultiRaceDetected,
+    onDocumentAdded,
     checkForDuplicate,
     regattaId,
     mode,
     extractFromUrl,
+    handleCourseExtraction,
+    urlInputContentType,
+    urlInputTextContent,
   ]);
 
   // Reset handler
@@ -607,6 +975,8 @@ export function UnifiedDocumentInput({
     setDuplicateDocument(null);
     setPendingSource(null);
     setBatchProgress(null);
+    setUrlInputContentType('empty');
+    setUrlInputTextContent('');
   }, []);
 
   // Duplicate warning handlers
@@ -704,6 +1074,8 @@ export function UnifiedDocumentInput({
               disabled={isProcessing}
               onAutoDetect={handleUrlAutoDetect}
               onUrlsDetected={handleUrlsDetected}
+              onTextContentDetected={handleTextContentDetected}
+              onContentTypeChange={handleContentTypeChange}
             />
           )}
 
@@ -761,7 +1133,9 @@ export function UnifiedDocumentInput({
               <Text style={styles.extractButtonText}>
                 {activeMethod === 'url' && detectedUrls.length > 1
                   ? `Extract from ${detectedUrls.length} URLs`
-                  : 'Extract Race Details'}
+                  : activeMethod === 'url' && urlInputContentType === 'text'
+                    ? 'Extract from Pasted Text'
+                    : 'Extract Race Details'}
               </Text>
             </Pressable>
           )}
