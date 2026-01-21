@@ -6,9 +6,11 @@
 
 import { createLogger } from '@/lib/utils/logger';
 import { supabase } from '@/services/supabase';
-import type { RaceCourse } from '@/types/courses';
+import { isUuid } from '@/utils/uuid';
+import type { CourseType, PositionedCourse, RaceCourse } from '@/types/courses';
+import type { RaceDisplayDocument } from '@/types/documents';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -20,7 +22,11 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { CourseMapPreview } from './CourseMapPreview';
+import { CoursePositionEditor } from './CoursePositionEditor';
 import { CourseSelector } from './CourseSelector';
+import { RaceDocumentsDisplay } from './RaceDocumentsDisplay';
+import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 
 interface RaceDetailsViewProps {
   raceData: any;
@@ -151,6 +157,15 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
   const [showCourseSelector, setShowCourseSelector] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<RaceCourse | null>(null);
 
+  // Race Documents
+  const [raceDocuments, setRaceDocuments] = useState<RaceDisplayDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+
+  // Course Position Editor
+  const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
+  const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+  const [positionedCourseLoading, setPositionedCourseLoading] = useState(false);
+
   // Sync state with raceData when it changes (e.g., after loading from database)
   useEffect(() => {
     setRaceName(raceData.name || '');
@@ -240,6 +255,111 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
     setSkipperBriefingTime(raceData.skipper_briefing_time || '');
   }, [raceData]); // Re-sync whenever raceData changes
 
+  // Fetch race documents from race_source_documents table
+  const fetchRaceDocuments = useCallback(async () => {
+    // Skip query for demo races or invalid UUIDs to prevent 400 errors
+    if (!raceData.id || !isUuid(raceData.id)) return;
+
+    setDocumentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('race_source_documents')
+        .select('*')
+        .eq('regatta_id', raceData.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('[RaceDetailsView] Error fetching documents:', error);
+        return;
+      }
+
+      // Transform to RaceDisplayDocument format
+      const documents: RaceDisplayDocument[] = (data || []).map((doc) => ({
+        id: doc.id,
+        source: 'race' as const,
+        documentType: mapDocumentType(doc.document_type),
+        title: doc.title,
+        description: doc.description,
+        url: doc.file_path,
+        externalUrl: doc.source_url,
+        uploadedAt: doc.created_at,
+        hasAIExtraction: doc.extraction_status === 'completed',
+      }));
+
+      setRaceDocuments(documents);
+    } catch (err) {
+      logger.error('[RaceDetailsView] Error fetching documents:', err);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [raceData.id]);
+
+  // Map document_type from database to RaceDocumentType
+  const mapDocumentType = (type: string): string => {
+    const typeMap: Record<string, string> = {
+      'nor': 'nor',
+      'si': 'sailing_instructions',
+      'amendment': 'amendment',
+      'appendix': 'appendix',
+      'course_diagram': 'course_diagram',
+      'other': 'other',
+    };
+    return typeMap[type] || 'other';
+  };
+
+  // Fetch positioned course for this race
+  const fetchPositionedCourse = useCallback(async () => {
+    // Skip query for demo races or invalid UUIDs to prevent 400 errors
+    if (!raceData.id || !isUuid(raceData.id)) return;
+
+    setPositionedCourseLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('race_positioned_courses')
+        .select('*')
+        .eq('regatta_id', raceData.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        logger.error('[RaceDetailsView] Error fetching positioned course:', error);
+        return;
+      }
+
+      if (data) {
+        const course: PositionedCourse = {
+          id: data.id,
+          regattaId: data.regatta_id,
+          sourceDocumentId: data.source_document_id,
+          userId: data.user_id,
+          courseType: data.course_type as CourseType,
+          marks: data.marks,
+          startLine: {
+            pin: { lat: data.start_pin_lat, lng: data.start_pin_lng },
+            committee: { lat: data.start_committee_lat, lng: data.start_committee_lng },
+          },
+          windDirection: data.wind_direction,
+          legLengthNm: parseFloat(data.leg_length_nm),
+          hasManualAdjustments: data.has_manual_adjustments,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+        setPositionedCourse(course);
+      }
+    } catch (err) {
+      logger.error('[RaceDetailsView] Error fetching positioned course:', err);
+    } finally {
+      setPositionedCourseLoading(false);
+    }
+  }, [raceData.id]);
+
+  // Fetch documents and positioned course on mount and when race ID changes
+  useEffect(() => {
+    fetchRaceDocuments();
+    fetchPositionedCourse();
+  }, [fetchRaceDocuments, fetchPositionedCourse]);
+
   // Auto-expand sections that have data
   useEffect(() => {
     const sectionsWithData = new Set<string>();
@@ -294,8 +414,13 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
       sectionsWithData.add('registration');
     }
 
+    // Race Documents - show if any documents exist
+    if (raceDocuments.length > 0) {
+      sectionsWithData.add('documents');
+    }
+
     setExpandedSections(sectionsWithData);
-  }, [raceData.id]); // Re-run when race data changes
+  }, [raceData.id, raceDocuments.length]); // Re-run when race data changes or documents load
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -653,6 +778,42 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
               <MaterialCommunityIcons name="chevron-right" size={20} color="#2196F3" />
             </TouchableOpacity>
 
+            {/* Position Course on Map Button */}
+            {raceData.metadata?.latitude && raceData.metadata?.longitude && (
+              <TouchableOpacity
+                style={[styles.courseSelectorButton, positionedCourse && { borderColor: '#22c55e' }]}
+                onPress={() => setShowCoursePositionEditor(true)}
+              >
+                <MaterialCommunityIcons
+                  name={positionedCourse ? 'map-check' : 'map-marker-radius'}
+                  size={20}
+                  color={positionedCourse ? '#22c55e' : '#f97316'}
+                />
+                <Text style={[styles.courseSelectorButtonText, positionedCourse && { color: '#22c55e' }]}>
+                  {positionedCourse
+                    ? `Course Positioned (${positionedCourse.marks.length} marks)`
+                    : 'Position Course on Map'}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color={positionedCourse ? '#22c55e' : '#f97316'}
+                />
+              </TouchableOpacity>
+            )}
+
+            {/* Positioned Course Preview */}
+            {positionedCourse && Platform.OS === 'web' && (
+              <View style={{ marginBottom: 16 }}>
+                <CourseMapPreview
+                  course={positionedCourse}
+                  height={180}
+                  showControls={true}
+                  onEdit={() => setShowCoursePositionEditor(true)}
+                />
+              </View>
+            )}
+
             {renderField('Start Area Name', startAreaName, setStartAreaName, { placeholder: 'Starting Area A' })}
             {renderField('Start Area Description', startAreaDescription, setStartAreaDescription, { placeholder: 'Detailed location', multiline: true })}
             {renderField('Start Line Length (m)', startLineLength, setStartLineLength, { placeholder: '100', keyboardType: 'numeric' })}
@@ -684,6 +845,58 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
                 {specialRules.map((rule, idx) => (
                   <Text key={idx} style={styles.specialRuleItem}>• {rule}</Text>
                 ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Race Documents */}
+        {renderSectionHeader('Race Documents', 'file-document-multiple-outline', 'documents')}
+        {expandedSections.has('documents') && (
+          <View style={styles.sectionContent}>
+            {/* Loading state */}
+            {documentsLoading && (
+              <View style={styles.documentsLoadingContainer}>
+                <ActivityIndicator size="small" color="#0284c7" />
+                <Text style={styles.documentsLoadingText}>Loading documents...</Text>
+              </View>
+            )}
+
+            {/* Display existing documents */}
+            {!documentsLoading && (
+              <RaceDocumentsDisplay
+                raceDocuments={raceDocuments}
+                clubDocuments={[]}
+                showEmptyState={!editMode}
+                compact={false}
+                onDocumentSelect={(doc) => {
+                  logger.debug('[RaceDetailsView] Document selected:', doc.title);
+                }}
+              />
+            )}
+
+            {/* Add document input (in edit mode or when no documents) */}
+            {(editMode || raceDocuments.length === 0) && !documentsLoading && (
+              <View style={styles.addDocumentSection}>
+                {raceDocuments.length === 0 && !editMode && (
+                  <Text style={styles.noDocumentsHint}>
+                    Add sailing instructions, course diagrams, or other race documents
+                  </Text>
+                )}
+                <UnifiedDocumentInput
+                  regattaId={raceData.id}
+                  mode="document_management"
+                  compact={true}
+                  initialExpanded={raceDocuments.length === 0}
+                  onDocumentAdded={() => {
+                    fetchRaceDocuments();
+                  }}
+                  onExtractionComplete={(extractedData, rawData, documentId) => {
+                    logger.debug('[RaceDetailsView] Extraction complete:', { documentId });
+                    fetchRaceDocuments();
+                    onUpdate?.();
+                  }}
+                />
               </View>
             )}
           </View>
@@ -764,8 +977,42 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
         venueId={raceData.metadata?.venue_id}
         clubId={raceData.metadata?.club_id}
       />
+
+      {/* Course Position Editor Modal */}
+      <CoursePositionEditor
+        visible={showCoursePositionEditor}
+        regattaId={raceData.id}
+        initialCourseType={mapCourseTypeForPositioning(potentialCourses[0] || '')}
+        initialLocation={
+          raceData.metadata?.latitude && raceData.metadata?.longitude
+            ? { lat: raceData.metadata.latitude, lng: raceData.metadata.longitude }
+            : undefined
+        }
+        initialWindDirection={
+          raceData.expected_wind_direction || raceData.metadata?.wind?.direction
+        }
+        onSave={(course) => {
+          setPositionedCourse(course);
+          setShowCoursePositionEditor(false);
+          fetchPositionedCourse(); // Refresh to get the saved version
+          logger.debug('[RaceDetailsView] Course positioned:', course.marks.length, 'marks');
+        }}
+        onCancel={() => setShowCoursePositionEditor(false)}
+      />
     </View>
   );
+}
+
+// Helper to map course type string to CourseType enum
+function mapCourseTypeForPositioning(courseType: string): CourseType {
+  const typeMap: Record<string, CourseType> = {
+    'windward/leeward': 'windward_leeward',
+    'windward_leeward': 'windward_leeward',
+    'triangle': 'triangle',
+    'olympic': 'olympic',
+    'trapezoid': 'trapezoid',
+  };
+  return typeMap[courseType?.toLowerCase()] || 'windward_leeward';
 }
 
 const styles = StyleSheet.create({
@@ -961,5 +1208,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2196F3',
+  },
+  documentsLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  documentsLoadingText: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  addDocumentSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  noDocumentsHint: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 12,
   },
 });

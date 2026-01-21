@@ -13,7 +13,7 @@
  * - Team collaboration for team racing
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, Pressable, TouchableOpacity, Modal, Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import {
@@ -70,6 +70,14 @@ import { ShareWithTeamSection } from './ShareWithTeamSection';
 // Race documents display (with club document inheritance)
 import { RaceDocumentsDisplay } from '@/components/races/RaceDocumentsDisplay';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
+
+// Course positioning
+import { CoursePositionEditor } from '@/components/races/CoursePositionEditor';
+import { CourseMapPreview } from '@/components/races/CourseMapPreview';
+import type { PositionedCourse, CourseType } from '@/types/courses';
+import { supabase } from '@/services/supabase';
+import { isUuid } from '@/utils/uuid';
+import { Map } from 'lucide-react-native';
 
 // SSI document display
 import { VHFQuickReference } from '@/components/documents/ssi';
@@ -690,6 +698,61 @@ export function DaysBeforeContent({
     refetch: refetchSSI,
   } = useRaceSSI(race.id, race.club_id);
 
+  // Course positioning state
+  const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
+  const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+  const [positionedCourseLoading, setPositionedCourseLoading] = useState(false);
+
+  // Fetch positioned course if available
+  useEffect(() => {
+    async function fetchPositionedCourse() {
+      // Skip query for demo races or invalid UUIDs to prevent 400 errors
+      if (!race.id || !isUuid(race.id)) return;
+
+      setPositionedCourseLoading(true);
+      try {
+        // Fetch positioned course for this regatta
+        const { data, error } = await supabase
+          .from('race_positioned_courses')
+          .select('*')
+          .eq('regatta_id', race.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          // No positioned course found, that's okay
+          setPositionedCourse(null);
+        } else if (data) {
+          // Convert database format to PositionedCourse
+          setPositionedCourse({
+            id: data.id,
+            regattaId: data.regatta_id,
+            sourceDocumentId: data.source_document_id,
+            userId: data.user_id,
+            courseType: data.course_type as CourseType,
+            marks: data.marks || [],
+            startLine: {
+              pin: { lat: data.start_pin_lat, lng: data.start_pin_lng },
+              committee: { lat: data.start_committee_lat, lng: data.start_committee_lng },
+            },
+            windDirection: data.wind_direction,
+            legLengthNm: parseFloat(data.leg_length_nm),
+            hasManualAdjustments: data.has_manual_adjustments,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching positioned course:', err);
+      } finally {
+        setPositionedCourseLoading(false);
+      }
+    }
+
+    fetchPositionedCourse();
+  }, [race.id]);
+
   // Categories to show based on expansion state
   const visibleCategories = useMemo(() => {
     if (isExpanded) {
@@ -941,6 +1004,42 @@ export function DaysBeforeContent({
                 refreshDocuments();
               }}
             />
+          )}
+        </View>
+      )}
+
+      {/* Course Map Section */}
+      {coords && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Map size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.sectionLabel}>COURSE MAP</Text>
+          </View>
+
+          {positionedCourse ? (
+            <View style={styles.courseMapContainer}>
+              <CourseMapPreview
+                course={positionedCourse}
+                height={160}
+                showControls={true}
+                compact={true}
+                onEdit={() => setShowCoursePositionEditor(true)}
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.positionCourseButton}
+              onPress={() => setShowCoursePositionEditor(true)}
+            >
+              <Map size={18} color={IOS_COLORS.orange} />
+              <View style={styles.positionCourseButtonContent}>
+                <Text style={styles.positionCourseButtonText}>Position Course on Map</Text>
+                <Text style={styles.positionCourseButtonSubtext}>
+                  Place start line and marks on the race area
+                </Text>
+              </View>
+              <ChevronRight size={18} color={IOS_COLORS.gray3} />
+            </TouchableOpacity>
           )}
         </View>
       )}
@@ -1221,6 +1320,27 @@ export function DaysBeforeContent({
         onComplete={handleToolComplete}
         onCancel={handleToolCancel}
       />
+
+      {/* Course Position Editor Modal */}
+      {showCoursePositionEditor && coords && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={() => setShowCoursePositionEditor(false)}
+        >
+          <CoursePositionEditor
+            regattaId={race.id}
+            initialLocation={{ lat: coords.lat, lng: coords.lng }}
+            courseType={raceType === 'fleet' ? 'windward_leeward' : 'custom'}
+            onSave={(course) => {
+              setPositionedCourse(course);
+              setShowCoursePositionEditor(false);
+            }}
+            onCancel={() => setShowCoursePositionEditor(false)}
+          />
+        </Modal>
+      )}
 
       {/* Learning Tooltip Modal */}
       <Modal
@@ -1580,6 +1700,35 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     gap: 8,
+  },
+
+  // Course Map Section
+  courseMapContainer: {
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  positionCourseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${IOS_COLORS.orange}10`,
+    borderRadius: 10,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.orange}30`,
+  },
+  positionCourseButtonContent: {
+    flex: 1,
+    gap: 2,
+  },
+  positionCourseButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.orange,
+  },
+  positionCourseButtonSubtext: {
+    fontSize: 12,
+    color: IOS_COLORS.gray,
   },
 
   // Carryover

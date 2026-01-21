@@ -11,10 +11,16 @@
  * - Marginalia-style inline editing for user plans
  * - Progress indicators showing planning completion
  *
+ * Supports race-type-specific strategy sections:
+ * - Fleet racing: START, UPWIND, DOWNWIND, MARK ROUNDING, FINISH
+ * - Distance racing: Passage planning, weather routing, crew management, leg-by-leg strategy
+ * - Match racing: Pre-start, dial-up, control, coverage tactics
+ * - Team racing: Team coordination, combinations, passing plays
+ *
  * "Above all else show the data" - Edward Tufte
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   Animated,
   LayoutChangeEvent,
@@ -24,31 +30,32 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from '@/components/ui/safe-area-view';
 import { TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { CourseMapPreview } from '@/components/races/CourseMapPreview';
+import type { PositionedCourse, CourseType } from '@/types/courses';
+import { supabase } from '@/services/supabase';
+import { isUuid } from '@/utils/uuid';
 import {
-  STRATEGY_SECTIONS,
-  getSectionsForPhase,
-  type StrategyPhase,
   type StrategySectionId,
   type RaceStrategyNotes,
   type StrategySectionNote,
+  type RaceType,
+  type PhaseInfo,
+  type StrategySectionMeta,
+  type DynamicPhaseKey,
+  type StrategyPhase,
 } from '@/types/raceStrategy';
+import { getSectionsForPhaseFromList } from '@/lib/strategy';
 import { useAuth } from '@/providers/AuthProvider';
 import { useStrategyRecommendations } from '@/hooks/useStrategyRecommendations';
 import { useRaceStrategyNotes } from '@/hooks/useRaceStrategyNotes';
+import { useRaceTypeStrategy } from '@/hooks/useRaceTypeStrategy';
 import { TufteAccordionPhaseHeader } from './TufteAccordionPhaseHeader';
 import { TufteStrategySection } from './TufteStrategySection';
-
-// Phase display order and labels
-const PHASES: { key: StrategyPhase; label: string }[] = [
-  { key: 'start', label: 'START' },
-  { key: 'upwind', label: 'UPWIND' },
-  { key: 'downwind', label: 'DOWNWIND' },
-  { key: 'markRounding', label: 'MARK ROUNDING' },
-  { key: 'finish', label: 'FINISH' },
-];
 
 // Tufte-inspired colors
 const COLORS = {
@@ -72,6 +79,8 @@ export interface TufteStrategyScreenProps {
   venueName?: string;
   /** Expected wind speed for condition-based recommendations */
   windSpeed?: number;
+  /** Override race type (if not provided, will be fetched from database) */
+  raceType?: RaceType;
 }
 
 /**
@@ -84,30 +93,40 @@ function formatHeaderDate(date?: Date): string {
 
 /**
  * Get the note for a specific section from the strategy notes
+ * Works with both legacy fleet racing notes and dynamic section IDs
  */
 function getSectionNote(
-  sectionId: StrategySectionId,
+  sectionId: string,
   notes?: RaceStrategyNotes
 ): StrategySectionNote | undefined {
   if (!notes) return undefined;
 
-  const [phase, field] = sectionId.split('.') as [keyof RaceStrategyNotes, string];
-  const phaseNotes = notes[phase];
-  if (!phaseNotes || typeof phaseNotes !== 'object') return undefined;
+  // Legacy fleet racing: section ID is 'phase.field' format
+  const parts = sectionId.split('.');
+  if (parts.length === 2) {
+    const [phase, field] = parts as [keyof RaceStrategyNotes, string];
+    const phaseNotes = notes[phase];
+    if (phaseNotes && typeof phaseNotes === 'object') {
+      return (phaseNotes as Record<string, StrategySectionNote>)[field];
+    }
+  }
 
-  return (phaseNotes as Record<string, StrategySectionNote>)[field];
+  // For dynamic sections (leg.1.navigation, peak.lantau.climb, etc.)
+  // These won't have pre-existing notes in the legacy structure
+  return undefined;
 }
 
 /**
  * Count items with user plans for a phase
  */
 function getPlannedCount(
-  phase: StrategyPhase,
+  phaseKey: string,
+  allSections: StrategySectionMeta[],
   localNotes: Record<string, string>,
   savedPlans: Record<string, string>,
   strategyNotes?: RaceStrategyNotes
 ): number {
-  const sections = getSectionsForPhase(phase);
+  const sections = getSectionsForPhaseFromList(phaseKey, allSections);
   return sections.filter((section) => {
     const localPlan = localNotes[section.id];
     const persistedPlan = savedPlans[section.id];
@@ -122,43 +141,54 @@ function getPlannedCount(
 
 /**
  * Hook to manage phase expansion with animations
+ * Supports dynamic phases for different race types
  */
-function usePhaseAnimations(defaultExpanded: StrategyPhase[] = ['start']) {
-  const [expandedPhases, setExpandedPhases] = useState<Set<StrategyPhase>>(
-    new Set(defaultExpanded)
+function useDynamicPhaseAnimations(
+  phases: PhaseInfo[],
+  defaultExpandedKey?: string
+) {
+  // Expand first phase by default
+  const defaultExpanded = defaultExpandedKey || (phases[0]?.key as string);
+
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(
+    new Set([defaultExpanded])
   );
 
-  // Create animation values for each phase
-  const animations = useRef<Record<StrategyPhase, Animated.Value>>({
-    start: new Animated.Value(defaultExpanded.includes('start') ? 1 : 0),
-    upwind: new Animated.Value(defaultExpanded.includes('upwind') ? 1 : 0),
-    downwind: new Animated.Value(defaultExpanded.includes('downwind') ? 1 : 0),
-    markRounding: new Animated.Value(defaultExpanded.includes('markRounding') ? 1 : 0),
-    finish: new Animated.Value(defaultExpanded.includes('finish') ? 1 : 0),
-  }).current;
+  // Dynamic animation values - keyed by phase key string
+  const animationsRef = useRef<Record<string, Animated.Value>>({});
+  const contentHeightsRef = useRef<Record<string, number>>({});
 
-  // Content heights for each phase
-  const contentHeights = useRef<Record<StrategyPhase, number>>({
-    start: 0,
-    upwind: 0,
-    downwind: 0,
-    markRounding: 0,
-    finish: 0,
-  }).current;
+  // Initialize animations for new phases
+  useEffect(() => {
+    phases.forEach((phase) => {
+      const key = phase.key as string;
+      if (!animationsRef.current[key]) {
+        animationsRef.current[key] = new Animated.Value(
+          expandedPhases.has(key) ? 1 : 0
+        );
+        contentHeightsRef.current[key] = 0;
+      }
+    });
+  }, [phases, expandedPhases]);
 
-  const togglePhase = useCallback((phase: StrategyPhase) => {
+  const togglePhase = useCallback((phaseKey: string) => {
     setExpandedPhases((prev) => {
       const next = new Set(prev);
-      const isExpanding = !next.has(phase);
+      const isExpanding = !next.has(phaseKey);
 
       if (isExpanding) {
-        next.add(phase);
+        next.add(phaseKey);
       } else {
-        next.delete(phase);
+        next.delete(phaseKey);
+      }
+
+      // Ensure animation value exists
+      if (!animationsRef.current[phaseKey]) {
+        animationsRef.current[phaseKey] = new Animated.Value(0);
       }
 
       // Animate
-      Animated.spring(animations[phase], {
+      Animated.spring(animationsRef.current[phaseKey], {
         toValue: isExpanding ? 1 : 0,
         useNativeDriver: false,
         tension: 100,
@@ -167,42 +197,49 @@ function usePhaseAnimations(defaultExpanded: StrategyPhase[] = ['start']) {
 
       return next;
     });
-  }, [animations]);
+  }, []);
 
-  const setContentHeight = useCallback(
-    (phase: StrategyPhase, height: number) => {
-      if (height > 0 && height !== contentHeights[phase]) {
-        contentHeights[phase] = height;
-      }
-    },
-    [contentHeights]
-  );
+  const setContentHeight = useCallback((phaseKey: string, height: number) => {
+    if (height > 0 && height !== contentHeightsRef.current[phaseKey]) {
+      contentHeightsRef.current[phaseKey] = height;
+    }
+  }, []);
 
-  const getContentStyle = useCallback(
-    (phase: StrategyPhase) => {
-      // Use measured height + extra padding to ensure all content including inputs is visible
-      const measuredHeight = contentHeights[phase] || 600;
-      const maxHeight = animations[phase].interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, measuredHeight + 40], // Extra 40px for padding and input fields
-      });
+  const getContentStyle = useCallback((phaseKey: string) => {
+    // Ensure animation value exists
+    if (!animationsRef.current[phaseKey]) {
+      animationsRef.current[phaseKey] = new Animated.Value(0);
+    }
 
-      const opacity = animations[phase].interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: [0, 0, 1],
-      });
+    const animation = animationsRef.current[phaseKey];
+    const measuredHeight = contentHeightsRef.current[phaseKey] || 600;
 
-      return { maxHeight, opacity };
-    },
-    [animations, contentHeights]
-  );
+    const maxHeight = animation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, measuredHeight + 40],
+    });
+
+    const opacity = animation.interpolate({
+      inputRange: [0, 0.5, 1],
+      outputRange: [0, 0, 1],
+    });
+
+    return { maxHeight, opacity };
+  }, []);
+
+  const getAnimationValue = useCallback((phaseKey: string) => {
+    if (!animationsRef.current[phaseKey]) {
+      animationsRef.current[phaseKey] = new Animated.Value(0);
+    }
+    return animationsRef.current[phaseKey];
+  }, []);
 
   return {
     expandedPhases,
-    animations,
     togglePhase,
     setContentHeight,
     getContentStyle,
+    getAnimationValue,
   };
 }
 
@@ -214,9 +251,21 @@ export function TufteStrategyScreen({
   onUpdateSection,
   venueName,
   windSpeed,
+  raceType: propRaceType,
 }: TufteStrategyScreenProps) {
   // Get current user for recommendations
   const { user } = useAuth();
+
+  // Fetch race type and generate phases/sections
+  const {
+    raceType,
+    phases,
+    sections,
+    isLoading: isLoadingRaceType,
+  } = useRaceTypeStrategy(raceId, raceName);
+
+  // Use prop race type if provided, otherwise use fetched type
+  const effectiveRaceType = propRaceType || raceType;
 
   // Fetch personalized recommendations based on past race performance
   const { sectionData: recommendationData } = useStrategyRecommendations(
@@ -238,14 +287,80 @@ export function TufteStrategyScreen({
   // Local state for immediate UI feedback (before debounced save completes)
   const [localNotes, setLocalNotes] = useState<Record<string, string>>({});
 
-  // Phase expansion state and animations
+  // Positioned course for map overlay
+  const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+  const [positionedCourseLoading, setPositionedCourseLoading] = useState(false);
+
+  // Fetch positioned course if available
+  useEffect(() => {
+    async function fetchPositionedCourse() {
+      // Skip query for demo races or invalid UUIDs to prevent 400 errors
+      if (!raceId || !isUuid(raceId)) return;
+
+      setPositionedCourseLoading(true);
+      try {
+        // Get the regatta_id for this race
+        const { data: raceData, error: raceError } = await supabase
+          .from('races')
+          .select('regatta_id')
+          .eq('id', raceId)
+          .single();
+
+        if (raceError || !raceData?.regatta_id) {
+          setPositionedCourseLoading(false);
+          return;
+        }
+
+        // Fetch positioned course for this regatta
+        const { data, error } = await supabase
+          .from('race_positioned_courses')
+          .select('*')
+          .eq('regatta_id', raceData.regatta_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          // No positioned course found, that's okay
+          setPositionedCourse(null);
+        } else if (data) {
+          // Convert database format to PositionedCourse
+          setPositionedCourse({
+            id: data.id,
+            regattaId: data.regatta_id,
+            sourceDocumentId: data.source_document_id,
+            userId: data.user_id,
+            courseType: data.course_type as CourseType,
+            marks: data.marks || [],
+            startLine: {
+              pin: { lat: data.start_pin_lat, lng: data.start_pin_lng },
+              committee: { lat: data.start_committee_lat, lng: data.start_committee_lng },
+            },
+            windDirection: data.wind_direction,
+            legLengthNm: parseFloat(data.leg_length_nm),
+            hasManualAdjustments: data.has_manual_adjustments,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching positioned course:', err);
+      } finally {
+        setPositionedCourseLoading(false);
+      }
+    }
+
+    fetchPositionedCourse();
+  }, [raceId]);
+
+  // Phase expansion state and animations - using dynamic phases
   const {
     expandedPhases,
-    animations,
     togglePhase,
     setContentHeight,
     getContentStyle,
-  } = usePhaseAnimations(['start']);
+    getAnimationValue,
+  } = useDynamicPhaseAnimations(phases);
 
   const handleUpdatePlan = useCallback(
     (sectionId: StrategySectionId, plan: string) => {
@@ -260,12 +375,24 @@ export function TufteStrategyScreen({
   );
 
   const handleContentLayout = useCallback(
-    (phase: StrategyPhase) => (event: LayoutChangeEvent) => {
+    (phaseKey: string) => (event: LayoutChangeEvent) => {
       const height = event.nativeEvent.layout.height;
-      setContentHeight(phase, height);
+      setContentHeight(phaseKey, height);
     },
     [setContentHeight]
   );
+
+  // Show loading state while fetching race type
+  if (isLoadingRaceType) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.text} />
+          <Text style={styles.loadingText}>Loading strategy...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -291,22 +418,42 @@ export function TufteStrategyScreen({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-        {PHASES.map((phase, phaseIndex) => {
-          const sections = getSectionsForPhase(phase.key);
-          const isExpanded = expandedPhases.has(phase.key);
-          const plannedCount = getPlannedCount(phase.key, localNotes, savedPlans, strategyNotes);
-          const contentStyle = getContentStyle(phase.key);
+          {/* Course Map Section */}
+          {positionedCourse && (
+            <View style={styles.courseMapSection}>
+              <Text style={styles.courseMapLabel}>COURSE MAP</Text>
+              <CourseMapPreview
+                course={positionedCourse}
+                height={180}
+                showControls={true}
+                compact={false}
+              />
+            </View>
+          )}
+
+        {phases.map((phase, phaseIndex) => {
+          const phaseKey = phase.key as string;
+          const phaseSections = getSectionsForPhaseFromList(phaseKey, sections);
+          const isExpanded = expandedPhases.has(phaseKey);
+          const plannedCount = getPlannedCount(
+            phaseKey,
+            sections,
+            localNotes,
+            savedPlans,
+            strategyNotes
+          );
+          const contentStyle = getContentStyle(phaseKey);
 
           return (
-            <View key={phase.key} style={styles.phaseContainer}>
+            <View key={phaseKey} style={styles.phaseContainer}>
               <TufteAccordionPhaseHeader
                 phase={phase.label}
                 isExpanded={isExpanded}
-                onToggle={() => togglePhase(phase.key)}
+                onToggle={() => togglePhase(phaseKey)}
                 plannedCount={plannedCount}
-                totalCount={sections.length}
+                totalCount={phaseSections.length}
                 isFirst={phaseIndex === 0}
-                animationValue={animations[phase.key]}
+                animationValue={getAnimationValue(phaseKey)}
               />
 
               {/* Animated collapsible content */}
@@ -321,9 +468,9 @@ export function TufteStrategyScreen({
               >
                 <View
                   style={styles.contentInner}
-                  onLayout={handleContentLayout(phase.key)}
+                  onLayout={handleContentLayout(phaseKey)}
                 >
-                  {sections.map((section) => {
+                  {phaseSections.map((section) => {
                     const savedNote = getSectionNote(section.id, strategyNotes);
                     const recommendation = recommendationData[section.id];
                     const localPlan = localNotes[section.id];
@@ -342,7 +489,7 @@ export function TufteStrategyScreen({
                         key={section.id}
                         section={section}
                         note={mergedNote}
-                        onUpdatePlan={(plan) => handleUpdatePlan(section.id, plan)}
+                        onUpdatePlan={(plan) => handleUpdatePlan(section.id as StrategySectionId, plan)}
                       />
                     );
                   })}
@@ -364,6 +511,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: TUFTE_BACKGROUND,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
   },
   header: {
     paddingHorizontal: 16,
@@ -416,6 +573,20 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 120, // Extra space for keyboard and scrolling past last item
+  },
+  courseMapSection: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  courseMapLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.tertiaryText,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 12,
   },
 });
 
