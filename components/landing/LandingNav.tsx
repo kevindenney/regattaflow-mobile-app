@@ -517,10 +517,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logoText: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontFamily: 'Manrope_600SemiBold',
+    fontWeight: '600',
     color: '#3E92CC',
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
   logoTextMobile: {
     fontSize: 18,

@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Background -->
-  <rect width="32" height="32" rx="6" fill="#0066CC"/>
-  
-  <!-- Sailboat -->
-  <g transform="translate(5, 4)">
-    <!-- Main sail (mainsail) -->
-    <path d="M11 3 L11 19 L4 19 Q4 10 11 3Z" fill="white"/>
-    
-    <!-- Jib sail -->
-    <path d="M11 6 L11 16 L16 16 Q16 11 11 6Z" fill="white" opacity="0.85"/>
-    
-    <!-- Hull -->
-    <path d="M3 20 L19 20 L17 24 L5 24 Z" fill="white"/>
+  <!-- Navy background -->
+  <rect width="32" height="32" rx="6" fill="#0a1832"/>
+
+  <!-- R mark with circle and wave -->
+  <g transform="translate(16, 16)">
+    <!-- Circle -->
+    <circle r="11" stroke="white" stroke-width="1.5" fill="none"/>
+
+    <!-- R letter -->
+    <text x="0" y="3" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="white">R</text>
+
+    <!-- Wave -->
+    <path d="M-6 5 Q-3 3.5 0 5 Q3 6.5 6 5" stroke="white" stroke-width="1" fill="none" stroke-linecap="round"/>
   </g>
 </svg>

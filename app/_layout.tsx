@@ -11,7 +11,12 @@ import { initializeBoatMutationHandlers } from '@/services/SailorBoatService';
 import { initializeMutationQueueHandlers } from '@/services/userManualClubsService';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import * as Font from 'expo-font';
+import {
+  useFonts,
+  Manrope_400Regular,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+} from '@expo-google-fonts/manrope';
 import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -168,24 +173,12 @@ function StackWithSplash() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, setFontsLoaded] = useState(false);
-
-  // Load custom fonts
-  useEffect(() => {
-    async function loadFonts() {
-      try {
-        await Font.loadAsync({
-          'Manrope-Bold': require('@/assets/fonts/Manrope-Bold.ttf'),
-        });
-        setFontsLoaded(true);
-      } catch (error) {
-        // Font loading failed, continue with system fonts
-        console.warn('Failed to load Manrope font:', error);
-        setFontsLoaded(true);
-      }
-    }
-    loadFonts();
-  }, []);
+  // Load Manrope font family from Google Fonts
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+  });
 
   // Initialize image cache and inject global CSS for web
   useEffect(() => {
@@ -223,8 +216,8 @@ export default function RootLayout() {
       `;
       document.head.appendChild(style);
 
-      // Set custom sailboat favicon (using data URI for reliable loading)
-      const sailboatSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230066CC"/><g transform="translate(5,4)"><path d="M11 3 L11 19 L4 19 Q4 10 11 3Z" fill="white"/><path d="M11 6 L11 16 L16 16 Q16 11 11 6Z" fill="white" opacity="0.85"/><path d="M3 20 L19 20 L17 24 L5 24 Z" fill="white"/></g></svg>`;
+      // Set custom RegattaFlow R mark favicon (using data URI for reliable loading)
+      const regattaFlowSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230a1832"/><g transform="translate(16,16)"><circle r="11" stroke="white" stroke-width="1.5" fill="none"/><text x="0" y="3" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="white">R</text><path d="M-6 5 Q-3 3.5 0 5 Q3 6.5 6 5" stroke="white" stroke-width="1" fill="none" stroke-linecap="round"/></g></svg>`;
       const existingFavicon = document.querySelector('link[rel="icon"]');
       if (existingFavicon) {
         existingFavicon.remove();
@@ -232,7 +225,7 @@ export default function RootLayout() {
       const favicon = document.createElement('link');
       favicon.rel = 'icon';
       favicon.type = 'image/svg+xml';
-      favicon.href = `data:image/svg+xml,${sailboatSvg}`;
+      favicon.href = `data:image/svg+xml,${regattaFlowSvg}`;
       document.head.appendChild(favicon);
 
       // Register Service Worker for offline bathymetry tile caching (prod only)

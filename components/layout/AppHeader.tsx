@@ -440,9 +440,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   logoText: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontFamily: 'Manrope_600SemiBold',
+    fontWeight: '600',
     color: '#0066CC',
+    letterSpacing: -0.5,
   },
   titleText: {
     fontSize: 20,
@@ -578,8 +580,10 @@ const styles = StyleSheet.create({
   },
   mobileLogoText: {
     fontSize: 18,
-    fontWeight: '800',
+    fontFamily: 'Manrope_600SemiBold',
+    fontWeight: '600',
     color: '#0066CC',
+    letterSpacing: -0.5,
   },
   mobileTitleText: {
     fontSize: 18,
