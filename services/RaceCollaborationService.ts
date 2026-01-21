@@ -1,0 +1,424 @@
+/**
+ * RaceCollaborationService
+ *
+ * Service for managing race card collaboration:
+ * - Inviting crew members to races
+ * - Managing collaborator access levels
+ * - Real-time chat between collaborators
+ * - Subscription to changes
+ *
+ * Follows the TeamRaceEntryService.ts pattern.
+ */
+
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+import {
+  RaceCollaborator,
+  RaceMessage,
+  RaceCollaboratorRow,
+  RaceMessageRow,
+  AccessLevel,
+  MessageType,
+  JoinRaceResult,
+  CreateInviteResult,
+  rowToRaceCollaborator,
+  rowToRaceMessage,
+} from '@/types/raceCollaboration';
+
+const logger = createLogger('RaceCollaborationService');
+
+/**
+ * Service for managing race collaboration
+ */
+class RaceCollaborationServiceClass {
+  // =========================================================================
+  // COLLABORATOR CRUD
+  // =========================================================================
+
+  /**
+   * Create an invite for a race (owner only)
+   * Uses RPC function to handle invite code generation
+   */
+  async createInvite(
+    regattaId: string,
+    accessLevel: AccessLevel = 'view',
+    displayName?: string,
+    role?: string
+  ): Promise<{ collaboratorId: string; inviteCode: string }> {
+    const { data, error } = await supabase.rpc('create_race_collaborator_invite', {
+      p_regatta_id: regattaId,
+      p_access_level: accessLevel,
+      p_display_name: displayName || null,
+      p_role: role || null,
+    });
+
+    if (error) {
+      logger.error('Failed to create invite:', error);
+      throw error;
+    }
+
+    const result = data as CreateInviteResult;
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create invite');
+    }
+
+    logger.info('Created invite', { regattaId, inviteCode: result.invite_code });
+    return {
+      collaboratorId: result.collaborator_id!,
+      inviteCode: result.invite_code!,
+    };
+  }
+
+  /**
+   * Join a race via invite code
+   */
+  async joinByInviteCode(
+    inviteCode: string,
+    displayName?: string,
+    role?: string
+  ): Promise<{ regattaId: string; collaboratorId: string }> {
+    const { data, error } = await supabase.rpc('join_race_by_invite_code', {
+      p_invite_code: inviteCode.toUpperCase(),
+      p_display_name: displayName || null,
+      p_role: role || null,
+    });
+
+    if (error) {
+      logger.error('Failed to join race:', error);
+      throw error;
+    }
+
+    const result = data as JoinRaceResult;
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to join race');
+    }
+
+    logger.info('Joined race', { inviteCode, regattaId: result.regatta_id });
+    return {
+      regattaId: result.regatta_id!,
+      collaboratorId: result.collaborator_id!,
+    };
+  }
+
+  /**
+   * Get all collaborators for a race
+   * Includes profile data with avatar info
+   */
+  async getCollaborators(regattaId: string): Promise<RaceCollaborator[]> {
+    const { data, error } = await supabase
+      .from('race_collaborators')
+      .select(`
+        *,
+        profiles:user_id(full_name, avatar_url, email),
+        sailor_profiles:user_id(avatar_emoji, avatar_color)
+      `)
+      .eq('regatta_id', regattaId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      logger.error('Failed to get collaborators:', error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      ...rowToRaceCollaborator(row as RaceCollaboratorRow),
+      profile: row.profiles || row.sailor_profiles
+        ? {
+            fullName: row.profiles?.full_name,
+            avatarEmoji: row.sailor_profiles?.avatar_emoji,
+            avatarColor: row.sailor_profiles?.avatar_color,
+            email: row.profiles?.email,
+          }
+        : undefined,
+    }));
+  }
+
+  /**
+   * Get a single collaborator by ID
+   */
+  async getCollaborator(collaboratorId: string): Promise<RaceCollaborator | null> {
+    const { data, error } = await supabase
+      .from('race_collaborators')
+      .select(`
+        *,
+        profiles:user_id(full_name, avatar_url, email),
+        sailor_profiles:user_id(avatar_emoji, avatar_color)
+      `)
+      .eq('id', collaboratorId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      logger.error('Failed to get collaborator:', error);
+      throw error;
+    }
+
+    return {
+      ...rowToRaceCollaborator(data as RaceCollaboratorRow),
+      profile: data.profiles || data.sailor_profiles
+        ? {
+            fullName: data.profiles?.full_name,
+            avatarEmoji: data.sailor_profiles?.avatar_emoji,
+            avatarColor: data.sailor_profiles?.avatar_color,
+            email: data.profiles?.email,
+          }
+        : undefined,
+    };
+  }
+
+  /**
+   * Update collaborator access level (owner only)
+   */
+  async updateAccessLevel(collaboratorId: string, accessLevel: AccessLevel): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .update({ access_level: accessLevel })
+      .eq('id', collaboratorId);
+
+    if (error) {
+      logger.error('Failed to update access level:', error);
+      throw error;
+    }
+
+    logger.info('Updated access level', { collaboratorId, accessLevel });
+  }
+
+  /**
+   * Update collaborator display name or role
+   */
+  async updateCollaborator(
+    collaboratorId: string,
+    updates: { displayName?: string; role?: string }
+  ): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .update({
+        display_name: updates.displayName,
+        role: updates.role,
+      })
+      .eq('id', collaboratorId);
+
+    if (error) {
+      logger.error('Failed to update collaborator:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a collaborator (owner or self)
+   */
+  async removeCollaborator(collaboratorId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .delete()
+      .eq('id', collaboratorId);
+
+    if (error) {
+      logger.error('Failed to remove collaborator:', error);
+      throw error;
+    }
+
+    logger.info('Removed collaborator', { collaboratorId });
+  }
+
+  /**
+   * Check if current user has access to a race
+   */
+  async checkAccess(regattaId: string): Promise<{
+    hasAccess: boolean;
+    accessLevel?: AccessLevel;
+    isOwner: boolean;
+    collaboratorId?: string;
+  }> {
+    const { data: user } = await supabase.auth.getUser();
+    if (!user?.user) {
+      return { hasAccess: false, isOwner: false };
+    }
+
+    // Check if user is owner
+    const { data: regatta } = await supabase
+      .from('regattas')
+      .select('created_by')
+      .eq('id', regattaId)
+      .single();
+
+    if (regatta?.created_by === user.user.id) {
+      return { hasAccess: true, accessLevel: 'full', isOwner: true };
+    }
+
+    // Check if user is collaborator
+    const { data: collaborator } = await supabase
+      .from('race_collaborators')
+      .select('id, access_level, status')
+      .eq('regatta_id', regattaId)
+      .eq('user_id', user.user.id)
+      .single();
+
+    if (collaborator && collaborator.status === 'accepted') {
+      return {
+        hasAccess: true,
+        accessLevel: collaborator.access_level as AccessLevel,
+        isOwner: false,
+        collaboratorId: collaborator.id,
+      };
+    }
+
+    return { hasAccess: false, isOwner: false };
+  }
+
+  // =========================================================================
+  // MESSAGING
+  // =========================================================================
+
+  /**
+   * Get messages for a race
+   */
+  async getMessages(regattaId: string, limit: number = 100): Promise<RaceMessage[]> {
+    const { data, error } = await supabase
+      .from('race_messages')
+      .select(`
+        *,
+        profiles:user_id(full_name),
+        sailor_profiles:user_id(avatar_emoji, avatar_color)
+      `)
+      .eq('regatta_id', regattaId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) {
+      logger.error('Failed to get messages:', error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      ...rowToRaceMessage(row as RaceMessageRow),
+      profile: row.profiles || row.sailor_profiles
+        ? {
+            fullName: row.profiles?.full_name,
+            avatarEmoji: row.sailor_profiles?.avatar_emoji,
+            avatarColor: row.sailor_profiles?.avatar_color,
+          }
+        : undefined,
+    }));
+  }
+
+  /**
+   * Send a message
+   */
+  async sendMessage(
+    regattaId: string,
+    message: string,
+    messageType: MessageType = 'text'
+  ): Promise<RaceMessage> {
+    const { data: user } = await supabase.auth.getUser();
+    if (!user?.user) {
+      throw new Error('Not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .from('race_messages')
+      .insert({
+        regatta_id: regattaId,
+        user_id: user.user.id,
+        message,
+        message_type: messageType,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Failed to send message:', error);
+      throw error;
+    }
+
+    logger.info('Sent message', { regattaId, messageType });
+    return rowToRaceMessage(data as RaceMessageRow);
+  }
+
+  /**
+   * Delete a message (own messages only)
+   */
+  async deleteMessage(messageId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_messages')
+      .delete()
+      .eq('id', messageId);
+
+    if (error) {
+      logger.error('Failed to delete message:', error);
+      throw error;
+    }
+  }
+
+  // =========================================================================
+  // REALTIME SUBSCRIPTIONS
+  // =========================================================================
+
+  /**
+   * Subscribe to collaborator changes for real-time updates
+   * Returns unsubscribe function
+   */
+  subscribeToCollaborators(
+    regattaId: string,
+    callback: (collaborators: RaceCollaborator[]) => void
+  ): () => void {
+    const channel = supabase
+      .channel(`race-collaborators:${regattaId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_collaborators',
+          filter: `regatta_id=eq.${regattaId}`,
+        },
+        async () => {
+          // Refetch all collaborators on any change
+          const collaborators = await this.getCollaborators(regattaId);
+          callback(collaborators);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+
+  /**
+   * Subscribe to message changes for real-time chat
+   * Returns unsubscribe function
+   */
+  subscribeToMessages(
+    regattaId: string,
+    callback: (messages: RaceMessage[]) => void
+  ): () => void {
+    const channel = supabase
+      .channel(`race-messages:${regattaId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'race_messages',
+          filter: `regatta_id=eq.${regattaId}`,
+        },
+        async () => {
+          // Refetch all messages on any change
+          const messages = await this.getMessages(regattaId);
+          callback(messages);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+}
+
+// Export singleton instance
+export const RaceCollaborationService = new RaceCollaborationServiceClass();
+
+// Export type for dependency injection
+export type RaceCollaborationServiceType = typeof RaceCollaborationService;

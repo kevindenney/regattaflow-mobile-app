@@ -33,6 +33,8 @@ import { RaceTypeBadge, type RaceType } from './RaceTypeSelector';
 import { TruncatedText } from '@/components/ui/TruncatedText';
 import { ExpandedContentZone } from './ExpandedContentZone';
 import { getCurrentPhaseForRace, CardRaceData } from '@/components/cards/types';
+import { CrewAvatarStack } from './CrewAvatarStack';
+import { RaceCollaborator } from '@/types/raceCollaboration';
 
 // Results data for completed races
 export interface RaceResultData {
@@ -107,6 +109,10 @@ export interface RaceCardProps {
   isExpanded?: boolean;
   /** Header offset for expanded card (e.g., header height above the card) */
   expandedHeaderOffset?: number;
+  /** Crew collaborators for this race */
+  collaborators?: RaceCollaborator[];
+  /** Callback when crew avatars are pressed */
+  onCollaboratorsPress?: () => void;
 }
 
 export function RaceCard({
@@ -146,6 +152,8 @@ export function RaceCard({
   forecastNowIndex,
   isExpanded = false,
   expandedHeaderOffset = 120,
+  collaborators,
+  onCollaboratorsPress,
 }: RaceCardProps) {
   // Debug: Log VHF channel data sources
   React.useEffect(() => {
@@ -356,6 +364,16 @@ export function RaceCard({
           <View style={styles.raceCountBadge}>
             <Text style={styles.raceCountBadgeText}>{numberOfRaces} {numberOfRaces === 1 ? 'race' : 'races'}</Text>
           </View>
+        )}
+
+        {/* Crew Avatars */}
+        {collaborators && collaborators.length > 0 && (
+          <CrewAvatarStack
+            collaborators={collaborators}
+            maxVisible={3}
+            size="xs"
+            onPress={onCollaboratorsPress}
+          />
         )}
       </View>
 
