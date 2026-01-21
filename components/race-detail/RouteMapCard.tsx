@@ -52,7 +52,6 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
   const containerRefCallback = useCallback((node: HTMLDivElement | null) => {
     mapContainerRef.current = node;
     if (node) {
-      console.log('[RouteMapView] Container mounted via callback ref');
       setContainerReady(true);
     }
   }, []);
@@ -60,24 +59,18 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
   // Also use useLayoutEffect as fallback to detect container after render
   useLayoutEffect(() => {
     if (Platform.OS === 'web' && mapContainerRef.current && !containerReady) {
-      console.log('[RouteMapView] Container detected via useLayoutEffect');
       setContainerReady(true);
     }
   }, [containerReady]);
 
   useEffect(() => {
-    console.log('[RouteMapView] useEffect triggered, Platform:', Platform.OS, 'containerReady:', containerReady, 'mapRef:', !!mapRef.current, 'waypoints:', waypoints?.length);
-    
     if (Platform.OS !== 'web') {
-      console.log('[RouteMapView] Not web platform, skipping');
       return;
     }
     if (!containerReady || !mapContainerRef.current) {
-      console.log('[RouteMapView] Container not ready yet, waiting...');
       return;
     }
     if (mapRef.current) {
-      console.log('[RouteMapView] Map already exists, skipping');
       return;
     }
 
@@ -98,11 +91,8 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
       }, 15000);
       
       try {
-        console.log('[RouteMapView] Starting map initialization...');
-        
         // Dynamic import of maplibre-gl
         const maplibreModule = await import('maplibre-gl');
-        console.log('[RouteMapView] MapLibre module loaded:', Object.keys(maplibreModule));
         
         // Load CSS dynamically via link element (more reliable than webpack import)
         if (typeof document !== 'undefined' && !document.getElementById('maplibre-gl-css-route')) {
@@ -114,7 +104,6 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
           // Wait a bit for CSS to load
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-        console.log('[RouteMapView] CSS loaded');
         
         // Get the Map constructor - handle both default and named exports
         const MapConstructor = maplibreModule.default?.Map || maplibreModule.Map;
@@ -123,16 +112,12 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
         if (!MapConstructor) {
           throw new Error('Could not find Map constructor in maplibre-gl module');
         }
-        
-        console.log('[RouteMapView] Map constructor found');
 
         // Calculate bounds from waypoints
         const lngs = waypoints.map(w => w.longitude);
         const lats = waypoints.map(w => w.latitude);
         const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
         const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-        
-        console.log('[RouteMapView] Center calculated:', centerLng, centerLat);
 
         // Use a simple raster tile style that's more reliable
         const map = new MapConstructor({
@@ -165,8 +150,6 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
           zoom: 11,
           attributionControl: false,
         });
-        
-        console.log('[RouteMapView] Map instance created');
 
         // Wait for map to load
         await new Promise<void>((resolve, reject) => {
@@ -176,7 +159,6 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
           }, 10000);
           
           map.on('load', () => {
-            console.log('[RouteMapView] Map loaded successfully');
             clearTimeout(timeout);
             resolve();
           });
@@ -237,8 +219,6 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
           waypoints.forEach(w => bounds.extend([w.longitude, w.latitude]));
           map.fitBounds(bounds, { padding: 40 });
         }
-        
-        console.log('[RouteMapView] Map setup complete with', waypoints.length, 'waypoints');
       } catch (error: any) {
         if (initTimeoutId) clearTimeout(initTimeoutId); // Clear overall timeout on error
         console.error('[RouteMapView] Error initializing map:', error);
@@ -279,7 +259,6 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
         ref={(node) => {
           mapContainerRef.current = node;
           if (node && !containerReady) {
-            console.log('[RouteMapView] Container set via inline ref');
             setContainerReady(true);
           }
         }}

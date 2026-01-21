@@ -109,7 +109,6 @@ class FleetSocialService {
   resetFleetSocialState(): void {
     this.fleetSocialEnabled = true;
     this.fleetSocialWarningLogged = false;
-    console.log('[FleetSocialService] Fleet social features re-enabled');
   }
 
   // ==========================================

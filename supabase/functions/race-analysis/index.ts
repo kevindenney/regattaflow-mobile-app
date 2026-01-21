@@ -18,33 +18,14 @@ interface RaceAnalysisRequest {
  * and triggers AI-powered race analysis using Claude with Skills.
  */
 Deno.serve(async (req: Request) => {
-  console.log('Race analysis request received');
-
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log('=== Race Analysis Request ===');
-    console.log('Method:', req.method);
-    console.log('URL:', req.url);
-
-    // Log all headers (sanitized)
-    const headers: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      if (key.toLowerCase() === 'authorization') {
-        headers[key] = value ? `Bearer ${value.substring(7, 27)}...` : 'missing';
-      } else {
-        headers[key] = value;
-      }
-    });
-    console.log('Headers:', JSON.stringify(headers, null, 2));
-
     // Extract authorization token
     const authHeader = req.headers.get('authorization');
-    console.log('Auth header present:', !!authHeader);
-    console.log('Auth header value (first 30 chars):', authHeader?.substring(0, 30));
 
     if (!authHeader) {
       console.error('Missing authorization header');
@@ -60,10 +41,6 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-
-    console.log('Supabase URL:', supabaseUrl);
-    console.log('Anon key present:', !!supabaseAnonKey);
-    console.log('Service key present:', !!supabaseServiceKey);
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
       console.error('Missing Supabase environment variables');
@@ -84,7 +61,6 @@ Deno.serve(async (req: Request) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify user authentication
-    console.log('Verifying user authentication...');
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
 
@@ -97,11 +73,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('User authenticated:', user.id);
-
     // Parse request body
     const { timerSessionId, force = false }: RaceAnalysisRequest = await req.json();
-    console.log('Request body parsed - timerSessionId:', timerSessionId, 'force:', force);
 
     if (!timerSessionId) {
       console.error('Missing timerSessionId in request body');
@@ -187,8 +160,6 @@ Deno.serve(async (req: Request) => {
     // Merge course data into raceData for prompt
     const enrichedRaceData = { ...raceData, race_courses: courseData };
 
-    console.log('Race data fetched successfully');
-
     // Fetch sailor's past learnings for personalized analysis
     const { data: pastLearnings } = await supabaseAdmin
       .from('learnable_events')
@@ -199,8 +170,6 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    console.log('Fetched past learnings:', pastLearnings?.length || 0);
-
     // Call Claude API for race analysis
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!anthropicApiKey) {
@@ -209,8 +178,6 @@ Deno.serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('Calling Claude API for race analysis...');
 
     const prompt = buildRaceAnalysisPrompt(enrichedRaceData, pastLearnings || []);
 
@@ -240,8 +207,6 @@ Deno.serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('Claude API response received');
 
     const claudeResult = await claudeResponse.json();
     const analysisText = claudeResult.content?.[0]?.text || '';
@@ -284,8 +249,6 @@ Deno.serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('Analysis saved successfully:', savedAnalysis?.id);
 
     // Mark session as analyzed
     await supabaseAdmin

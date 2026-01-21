@@ -101,10 +101,6 @@ export function StrategyBrief({
 
   // Sync local intention when external changes
   useEffect(() => {
-    console.log('[StrategyBrief] useEffect sync - intention changed', {
-      newIntention: intention,
-      currentLocalIntention: localIntention
-    });
     setLocalIntention(intention);
   }, [intention]);
 
@@ -117,11 +113,6 @@ export function StrategyBrief({
 
   // Handle intention save on blur or submit
   const handleIntentionSave = useCallback(() => {
-    console.log('[StrategyBrief] handleIntentionSave called', {
-      localIntention,
-      intention,
-      willSave: localIntention !== intention
-    });
     if (localIntention !== intention) {
       setIntention(localIntention);
     }
@@ -190,15 +181,12 @@ export function StrategyBrief({
                 style={styles.intentionInput}
                 value={localIntention}
                 onChangeText={(text) => {
-                  console.log('[StrategyBrief] onChangeText', { text });
                   setLocalIntention(text);
                 }}
                 onBlur={() => {
-                  console.log('[StrategyBrief] onBlur fired');
                   handleIntentionSave();
                 }}
                 onSubmitEditing={() => {
-                  console.log('[StrategyBrief] onSubmitEditing fired');
                   handleIntentionSave();
                 }}
                 placeholder="What's your one key focus for today?"

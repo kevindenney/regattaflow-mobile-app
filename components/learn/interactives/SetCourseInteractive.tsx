@@ -147,7 +147,6 @@ export function SetCourseInteractive({
           }
         `;
         document.head.appendChild(style);
-        console.log('[SetCourseInteractive] ✅ CSS transitions injected');
       }
     }
   }, []);
@@ -159,19 +158,13 @@ export function SetCourseInteractive({
 
 
   const handleNext = () => {
-    console.log('[SetCourseInteractive] 👆 Next button clicked');
-    console.log('[SetCourseInteractive] 📍 Current index:', currentStepIndex);
     if (currentStepIndex < SET_COURSE_SEQUENCE_STEPS.length - 1) {
       const nextIndex = currentStepIndex + 1;
-      console.log('[SetCourseInteractive] ➡️ Moving to index:', nextIndex);
       setCurrentStepIndex(nextIndex);
       onStepChange?.(SET_COURSE_SEQUENCE_STEPS[nextIndex]);
     } else {
-      console.log('[SetCourseInteractive] ✅ Complete! onComplete defined:', !!onComplete);
       if (onComplete) {
         onComplete();
-      } else {
-        console.log('[SetCourseInteractive] ⚠️ onComplete is undefined!');
       }
     }
   };

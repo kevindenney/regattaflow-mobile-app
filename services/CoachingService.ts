@@ -544,7 +544,6 @@ class CoachingService {
   async getClients(coachId: string, status?: 'active' | 'inactive' | 'completed'): Promise<CoachingClient[]> {
     // WORKAROUND: Until foreign keys are added to coaching_clients table,
     // fetch clients and users separately, then join in code
-    console.log('[CoachingService.getClients] coachId:', coachId, 'status:', status);
 
     let clientsQuery = supabase
       .from('coaching_clients')
@@ -557,8 +556,6 @@ class CoachingService {
     }
 
     const { data: clients, error: clientsError } = await clientsQuery;
-
-    console.log('[CoachingService.getClients] clients query result:', { clientsCount: clients?.length, error: clientsError });
 
     if (clientsError) {
       console.error('Error fetching clients:', clientsError);
@@ -577,13 +574,10 @@ class CoachingService {
     }
 
     // Fetch sailor data separately
-    console.log('[CoachingService.getClients] Fetching sailors for IDs:', sailorIds);
     const { data: sailors, error: sailorsError } = await supabase
       .from('users')
       .select('id, email, full_name')
       .in('id', sailorIds);
-
-    console.log('[CoachingService.getClients] sailors query result:', { sailorsCount: sailors?.length, error: sailorsError });
 
     if (sailorsError) {
       console.error('Error fetching sailors:', sailorsError);
@@ -599,7 +593,6 @@ class CoachingService {
       sailor: client.sailor_id ? sailorMap.get(client.sailor_id) : undefined,
     })) as CoachingClient[];
 
-    console.log('[CoachingService.getClients] Returning', result.length, 'clients');
     return result;
   }
 

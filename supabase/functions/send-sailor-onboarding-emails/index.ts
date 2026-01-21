@@ -431,9 +431,7 @@ serve(async (req) => {
         headers: { 'Content-Type': 'application/json' },
       })
     }
-    
-    console.log(`Processing ${pendingEmails.length} pending emails`)
-    
+
     let sent = 0
     let skipped = 0
     let failed = 0

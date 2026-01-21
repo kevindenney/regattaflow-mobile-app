@@ -122,14 +122,6 @@ class SailorRacePreparationService {
     }
 
     logger.info('Upserting race preparation', { regattaId: preparation.regatta_id, sailorId: preparation.sailor_id });
-    console.log('[SailorRacePreparationService] Upserting:', {
-      regattaId: preparation.regatta_id,
-      sailorId: preparation.sailor_id,
-      hasUserIntentions: !!preparation.user_intentions,
-      checklistKeys: preparation.user_intentions?.checklistCompletions
-        ? Object.keys(preparation.user_intentions.checklistCompletions)
-        : [],
-    });
 
     const { data, error } = await supabase
       .from('sailor_race_preparation')
@@ -161,11 +153,6 @@ class SailorRacePreparationService {
       throw error;
     }
 
-    console.log('[SailorRacePreparationService] Upsert succeeded:', {
-      id: data.id,
-      regattaId: data.regatta_id,
-      hasUserIntentions: !!data.user_intentions,
-    });
     logger.info('Race preparation upserted successfully');
     return data;
   }

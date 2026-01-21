@@ -71,7 +71,6 @@ export default function AICoachDemoScreen() {
   const [position, setPosition] = useState<{ lat: number; lon: number } | undefined>();
 
   const handleSkillInvoked = (skillId: string, advice: any) => {
-    console.log('Skill invoked:', skillId, advice);
     // You could show a toast or update UI here
   };
 

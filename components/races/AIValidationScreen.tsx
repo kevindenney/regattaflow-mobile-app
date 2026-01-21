@@ -232,17 +232,6 @@ export function AIValidationScreen({
   filterToUserClass = false,
 }: AIValidationScreenProps) {
   const [data, setData] = useState<ExtractedData>(extractedData);
-  
-  // Debug logging for start/finish fields
-  useEffect(() => {
-    console.log('[AIValidationScreen] Received extracted data:', {
-      startAreaName: extractedData?.startAreaName,
-      startAreaDescription: extractedData?.startAreaDescription,
-      finishAreaName: extractedData?.finishAreaName,
-      finishAreaDescription: extractedData?.finishAreaDescription,
-      startLines: extractedData?.startLines,
-    });
-  }, [extractedData]);
   const [showMyClassOnly, setShowMyClassOnly] = useState(filterToUserClass);
 
   // Calculate validation statistics

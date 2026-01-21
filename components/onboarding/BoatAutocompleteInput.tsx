@@ -112,17 +112,6 @@ export function BoatAutocompleteInput({
           const limitedSuggestions = newSuggestions.slice(0, 10);
           setSuggestions(limitedSuggestions);
           setShowSuggestions(limitedSuggestions.length > 0);
-          
-          // Debug logging (can be removed later)
-          if (__DEV__) {
-            console.log(`[BoatAutocompleteInput] ${type} suggestions:`, {
-              type,
-              value,
-              boatClassName,
-              suggestionsCount: limitedSuggestions.length,
-              suggestions: limitedSuggestions.slice(0, 3),
-            });
-          }
         }
       } catch (error) {
         console.warn('[BoatAutocompleteInput] Error loading suggestions:', error);

@@ -520,13 +520,11 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
             
             // Insert at the beginning
             newMarks.unshift(startMark);
-            
+
             // Update start_line coordinates if empty
             if (!extraction.start_line.coordinates || extraction.start_line.coordinates.length === 0) {
               enhancedExtraction.start_line.coordinates = [startCoord, startCoord];
             }
-            
-            console.log(`[DocumentParsing] Geocoded start location: ${extraction.start_location_name} -> ${startCoord[0]}, ${startCoord[1]}`);
           }
         } catch (error) {
           console.warn(`[DocumentParsing] Failed to geocode start location: ${extraction.start_location_name}`, error);
@@ -561,8 +559,6 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
             if (!extraction.finish_line.coordinates || extraction.finish_line.coordinates.length === 0) {
               enhancedExtraction.finish_line.coordinates = [finishCoord, finishCoord];
             }
-            
-            console.log(`[DocumentParsing] Geocoded finish location: ${extraction.finish_location_name} -> ${finishCoord[0]}, ${finishCoord[1]}`);
           }
         } catch (error) {
           console.warn(`[DocumentParsing] Failed to geocode finish location: ${extraction.finish_location_name}`, error);

@@ -203,8 +203,6 @@ serve(async (req: Request) => {
 
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
-    console.log(`Payment intent created: ${paymentIntent.id} for amount ${paymentAmount} ${currency}`);
-
     return new Response(
       JSON.stringify({
         clientSecret: paymentIntent.client_secret,

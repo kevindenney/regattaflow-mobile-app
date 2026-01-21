@@ -1,6 +1,114 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 
+/**
+ * Check if bytes represent a valid PDF (starts with %PDF-)
+ */
+function isPdfContent(bytes: Uint8Array): boolean {
+  return bytes.length >= 5 &&
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46 && // F
+    bytes[4] === 0x2D;   // -
+}
+
+/**
+ * Check if bytes represent HTML content
+ */
+function isHtmlContent(bytes: Uint8Array): boolean {
+  const firstChars = new TextDecoder().decode(bytes.slice(0, 500)).toLowerCase();
+  return firstChars.includes('<!doctype') ||
+         firstChars.includes('<html') ||
+         firstChars.includes('<head') ||
+         firstChars.includes('<body');
+}
+
+/**
+ * Generate browser-like headers for fetching PDFs
+ */
+function getBrowserHeaders(url: string, minimal = false): Record<string, string> {
+  const origin = new URL(url).origin;
+
+  if (minimal) {
+    // Minimal headers - some servers reject "too perfect" browser signatures
+    return {
+      'User-Agent': 'Mozilla/5.0 (compatible; PDFBot/1.0)',
+      'Accept': '*/*',
+    };
+  }
+
+  // Full browser headers to mimic real Chrome browser
+  return {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/pdf,application/octet-stream,*/*;q=0.9',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': origin + '/',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+  };
+}
+
+/**
+ * Fetch PDF with retry logic and different header strategies
+ */
+async function fetchPdfWithRetry(url: string): Promise<{
+  success: boolean;
+  buffer?: ArrayBuffer;
+  contentType?: string;
+  error?: string;
+}> {
+  const strategies = [
+    { name: 'full browser headers', minimal: false },
+    { name: 'minimal headers', minimal: true },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const headers = getBrowserHeaders(url, strategy.minimal);
+      const response = await fetch(url, {
+        headers,
+        redirect: 'follow',
+      });
+
+      const contentType = response.headers.get('content-type') || 'unknown';
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const buffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      if (isPdfContent(bytes)) {
+        return { success: true, buffer, contentType: 'application/pdf' };
+      }
+
+      if (isHtmlContent(bytes)) {
+        continue;
+      }
+
+      // Not PDF and not HTML - might be a different binary format, return it anyway
+      return { success: true, buffer, contentType };
+
+    } catch (fetchError) {
+      continue;
+    }
+  }
+
+  return {
+    success: false,
+    error: 'Could not fetch PDF. The server may be blocking automated requests or returning a login/error page. Try downloading the PDF manually and uploading it directly.'
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -46,91 +154,32 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[pdf-proxy] Fetching: ${targetUrl}`)
+    // Fetch PDF with retry logic
+    const result = await fetchPdfWithRetry(targetUrl);
 
-    // Fetch the PDF from the target URL with browser-like headers
-    const response = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/pdf,application/octet-stream,*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      },
-      redirect: 'follow', // Follow redirects
-    })
-
-    if (!response.ok) {
-      console.error(`[pdf-proxy] Fetch failed: ${response.status} ${response.statusText}`)
+    if (!result.success || !result.buffer) {
       return new Response(
         JSON.stringify({
-          error: `Failed to fetch PDF: ${response.status} ${response.statusText}`
+          error: result.error || 'Failed to fetch PDF',
+          hint: 'Try downloading the PDF manually and uploading it directly.',
         }),
         {
-          status: response.status,
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
-      )
+      );
     }
 
-    // Get the content type from the response
-    const contentType = response.headers.get('content-type') || ''
-    console.log(`[pdf-proxy] Response content-type: ${contentType}`)
-
-    // Get the response as array buffer first
-    const arrayBuffer = await response.arrayBuffer()
-    const bytes = new Uint8Array(arrayBuffer)
-    
-    console.log(`[pdf-proxy] Fetched ${arrayBuffer.byteLength} bytes`)
-    
-    // Check if it's actually a PDF by looking at the magic bytes
-    // PDF files start with "%PDF-"
-    const isPdf = bytes.length >= 5 && 
-      bytes[0] === 0x25 && // %
-      bytes[1] === 0x50 && // P
-      bytes[2] === 0x44 && // D
-      bytes[3] === 0x46 && // F
-      bytes[4] === 0x2D    // -
-
-    // Log first 100 bytes for debugging
-    const firstBytes = Array.from(bytes.slice(0, 100))
-      .map(b => String.fromCharCode(b))
-      .join('')
-    console.log(`[pdf-proxy] First 100 chars: ${firstBytes.substring(0, 100)}`)
-
-    if (!isPdf) {
-      // Check if it's HTML (common for login pages, errors, redirects)
-      const isHtml = firstBytes.includes('<!DOCTYPE') || 
-                     firstBytes.includes('<html') || 
-                     firstBytes.includes('<HTML')
-      
-      if (isHtml) {
-        console.error('[pdf-proxy] Received HTML instead of PDF - likely a login page or redirect')
-        return new Response(
-          JSON.stringify({
-            error: 'The server returned an HTML page instead of a PDF. This usually means the PDF requires authentication or the URL redirects to a login page.',
-            hint: 'Try downloading the PDF manually and uploading it directly.',
-            receivedContentType: contentType,
-            firstChars: firstBytes.substring(0, 200),
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          }
-        )
-      }
-      
-      // Not a PDF and not HTML - might be binary but corrupt
-      console.warn('[pdf-proxy] Response does not appear to be a valid PDF')
-    }
+    const bytes = new Uint8Array(result.buffer);
+    const isPdf = isPdfContent(bytes);
 
     // Return the data
-    return new Response(arrayBuffer, {
+    return new Response(result.buffer, {
       status: 200,
       headers: {
         ...corsHeaders,
-        'Content-Type': isPdf ? 'application/pdf' : (contentType || 'application/octet-stream'),
-        'Content-Length': arrayBuffer.byteLength.toString(),
+        'Content-Type': result.contentType || 'application/octet-stream',
+        'Content-Length': result.buffer.byteLength.toString(),
         'X-PDF-Detected': isPdf ? 'true' : 'false',
       },
     })

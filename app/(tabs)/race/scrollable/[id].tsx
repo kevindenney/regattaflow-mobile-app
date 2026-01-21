@@ -528,29 +528,6 @@ export default function RaceDetailScrollable() {
     marineConditions?.surfaceCurrents,
   ]);
 
-  // DEBUG: Log weather data structure (once per change) - reduced frequency
-  const weatherLogRef = useRef<string>('');
-  useEffect(() => {
-    const logKey = JSON.stringify({
-      hasWeather: !!weather,
-      windMin: weather?.wind?.speedMin,
-      windMax: weather?.wind?.speedMax,
-    });
-    if (logKey !== weatherLogRef.current) {
-      weatherLogRef.current = logKey;
-      console.log('[RaceDetail] 🌤️ Weather data check:', {
-        hasWeather: !!weather,
-        hasRaw: !!weather?.raw,
-        hasForecast: !!weather?.raw?.forecast,
-        forecastLength: weather?.raw?.forecast?.length,
-        hasMarineConditions: !!weather?.raw?.marineConditions,
-        windMin: weather?.wind?.speedMin,
-        windMax: weather?.wind?.speedMax,
-        averageWindSpeed,
-      });
-    }
-  }, [weather, averageWindSpeed]);
-
   const {
     recommendation: tuningRecommendation,
     loading: tuningLoading,

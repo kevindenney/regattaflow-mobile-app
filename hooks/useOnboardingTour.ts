@@ -50,7 +50,6 @@ export function useOnboardingTour(tourType: TourType) {
     try {
       await AsyncStorage.setItem(TOUR_STORAGE_KEYS[tourType], 'true');
       setHasSeenTour(true);
-      console.log(`[OnboardingTour] Tour completed: ${tourType}`);
     } catch (error) {
       console.warn('[OnboardingTour] Failed to save tour status:', error);
     }
@@ -61,7 +60,6 @@ export function useOnboardingTour(tourType: TourType) {
     try {
       await AsyncStorage.removeItem(TOUR_STORAGE_KEYS[tourType]);
       setHasSeenTour(false);
-      console.log(`[OnboardingTour] Tour reset: ${tourType}`);
     } catch (error) {
       console.warn('[OnboardingTour] Failed to reset tour:', error);
     }

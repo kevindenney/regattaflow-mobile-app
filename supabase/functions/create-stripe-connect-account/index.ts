@@ -129,8 +129,6 @@ serve(async (req: Request) => {
       if (updateError) {
         console.error('Failed to save Stripe account ID:', updateError);
       }
-
-      console.log(`Created Stripe Connect account ${accountId} for coach ${coach_id}`);
     }
 
     // Create account onboarding link
@@ -143,8 +141,6 @@ serve(async (req: Request) => {
       type: 'account_onboarding',
       collect: 'eventually_due',
     });
-
-    console.log(`Generated onboarding link for account ${accountId}`);
 
     return new Response(
       JSON.stringify({

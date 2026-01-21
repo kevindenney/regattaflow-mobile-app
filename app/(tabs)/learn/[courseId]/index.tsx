@@ -47,7 +47,6 @@ export default function CourseDetailScreen() {
   // Check enrollment when user, courseId, or course data changes
   useEffect(() => {
     if (courseId && user?.id && course?.id) {
-      console.log('[CourseDetail] Checking enrollment for user:', user.id, 'course:', course.id);
       checkEnrollment();
     }
   }, [courseId, user?.id, course?.id]);
@@ -87,7 +86,6 @@ export default function CourseDetailScreen() {
           if (dbCourse && dbCourse.id) {
             dbCourseId = dbCourse.id; // Use the database UUID
             courseExistsInDb = true;
-            console.log('[CourseDetail] Found course in database with UUID:', dbCourseId);
           } else {
             console.warn('[CourseDetail] Course not found in database. Course needs to be seeded.');
             // Course doesn't exist in database yet - we'll use null to indicate this
@@ -200,13 +198,11 @@ export default function CourseDetailScreen() {
 
   const checkEnrollment = async () => {
     if (!courseId || !user?.id) {
-      console.log('[CourseDetail] Cannot check enrollment - missing courseId or user');
       return;
     }
-    
+
     // Wait for course to load so we have the actual UUID
     if (!course?.id) {
-      console.log('[CourseDetail] Course not loaded yet, waiting...');
       return;
     }
     
@@ -217,7 +213,6 @@ export default function CourseDetailScreen() {
     // Even if marked as catalog-only, the course might exist in DB (previous lookup may have timed out)
     // So we should try to find it by slug and check enrollment
     if ((course as any)._catalogOnly) {
-      console.log('[CourseDetail] Course marked as catalog-only, but checking database by slug for enrollment...');
       
         // Try to find the course in database by slug (maybe previous lookup timed out)
         const courseSlug = course.slug || courseId;
@@ -230,20 +225,17 @@ export default function CourseDetailScreen() {
           ]) as LearningCourse | null;
         
         if (dbCourse?.id) {
-          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
           actualCourseId = dbCourse.id;
           // Update course state to remove catalog-only flag
           setCourse({ ...course, id: dbCourse.id, _catalogOnly: false } as any);
         } else {
           // Course not found, but check if user is enrolled by slug (enrollment might exist even if course lookup fails)
-          console.log('[CourseDetail] Course not found in database, checking enrollment by slug...');
           const isEnrolledBySlug = await Promise.race([
             LearningService.isEnrolledBySlug(user.id, courseSlug),
             new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
           ]);
           
           if (isEnrolledBySlug) {
-            console.log('[CourseDetail] User is enrolled (found by slug), but course not in database');
             setEnrolled(true);
             // Still try to load subscription status
             try {
@@ -255,7 +247,6 @@ export default function CourseDetailScreen() {
             }
             return;
           } else {
-            console.log('[CourseDetail] Course truly not in database and user not enrolled');
             setEnrolled(false);
             return;
           }
@@ -283,7 +274,6 @@ export default function CourseDetailScreen() {
         ]) as LearningCourse | null;
         
         if (dbCourse?.id) {
-          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
           actualCourseId = dbCourse.id;
         } else {
           console.warn('[CourseDetail] Course ID is not a valid UUID and course not found in database');
@@ -296,28 +286,25 @@ export default function CourseDetailScreen() {
         return;
       }
     }
-    
+
     try {
-      console.log('[CourseDetail] Checking enrollment with course ID:', actualCourseId);
       
       // Run both queries in PARALLEL with 30-second timeout (was 10s, too short for slow connections)
       const QUERY_TIMEOUT = 30000;
       
       const subscriptionPromise = Promise.race([
         LearningService.checkSubscriptionAccess(user.id),
-        new Promise<{ hasProAccess: boolean; tier: string; timedOut?: boolean }>((resolve) => 
+        new Promise<{ hasProAccess: boolean; tier: string; timedOut?: boolean }>((resolve) =>
           setTimeout(() => {
-            console.warn('[CourseDetail] Subscription check timed out after 30s');
             resolve({ hasProAccess: false, tier: 'free', timedOut: true });
           }, QUERY_TIMEOUT)
         )
       ]);
-      
+
       const enrollmentPromise = Promise.race([
         LearningService.isEnrolled(user.id, actualCourseId).then(result => ({ isEnrolled: result, timedOut: false })),
-        new Promise<{ isEnrolled: boolean; timedOut: boolean }>((resolve) => 
+        new Promise<{ isEnrolled: boolean; timedOut: boolean }>((resolve) =>
           setTimeout(() => {
-            console.warn('[CourseDetail] Enrollment check timed out after 30s');
             resolve({ isEnrolled: false, timedOut: true });
           }, QUERY_TIMEOUT)
         )
@@ -332,11 +319,8 @@ export default function CourseDetailScreen() {
       const { hasProAccess, tier } = subscriptionResult;
       setHasProSubscription(hasProAccess);
       setUserSubscriptionTier(tier);
-      console.log('[CourseDetail] Subscription status - tier:', tier, 'hasProAccess:', hasProAccess, 
-        'timedOut' in subscriptionResult ? `(timedOut: ${subscriptionResult.timedOut})` : '');
-      
-      const { isEnrolled, timedOut } = enrollmentResult;
-      console.log('[CourseDetail] Enrollment status:', isEnrolled, timedOut ? '(TIMED OUT - may have access)' : '');
+
+      const { isEnrolled } = enrollmentResult;
       setEnrolled(isEnrolled);
       
       // If enrolled or has Pro access, load progress (non-blocking)
@@ -395,11 +379,8 @@ export default function CourseDetailScreen() {
   const [purchasing, setPurchasing] = useState(false);
 
   const handleEnroll = async () => {
-    console.log('[CourseDetail] handleEnroll called', { courseId, course: course?.id, userId: user?.id, hasProSubscription });
-
     // Check if user is authenticated - redirect to sign-in if not
     if (!user?.id) {
-      console.log('[CourseDetail] User not authenticated - redirecting to sign-in');
       if (Platform.OS === 'web') {
         // On web, navigate to login page
         router.push('/login');
@@ -418,7 +399,6 @@ export default function CourseDetailScreen() {
     }
 
     if (!courseId || !course?.id) {
-      console.log('[CourseDetail] Missing courseId or course.id');
       Alert.alert('Error', 'Course information is missing. Please try refreshing the page.');
       return;
     }
@@ -429,7 +409,6 @@ export default function CourseDetailScreen() {
     // Check if course is catalog-only (not in database)
     // Even if marked as catalog-only, try to find it in database (maybe previous lookup timed out)
     if ((course as any)._catalogOnly) {
-      console.log('[CourseDetail] Course marked as catalog-only, but trying to find in database for enrollment...');
       
           // Try to find the course in database by slug (maybe previous lookup timed out)
           const courseSlug = course.slug || courseId;
@@ -442,26 +421,22 @@ export default function CourseDetailScreen() {
             ]) as LearningCourse | null;
         
         if (dbCourse?.id) {
-          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
           actualCourseId = dbCourse.id;
           // Update course state to remove catalog-only flag
           setCourse({ ...course, id: dbCourse.id, _catalogOnly: false } as any);
         } else {
           // Course not found, but check if user is already enrolled (enrollment might exist even if course lookup fails)
-          console.log('[CourseDetail] Course not found in database, checking if user is already enrolled by slug...');
           const isAlreadyEnrolled = await Promise.race([
             LearningService.isEnrolledBySlug(user.id, courseSlug),
             new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
           ]);
           
           if (isAlreadyEnrolled) {
-            console.log('[CourseDetail] User is already enrolled (found by slug), updating enrollment status');
             setEnrolled(true);
             await loadLessonProgress();
             Alert.alert('Success', 'You are already enrolled in this course!');
             return;
           } else {
-            console.error('[CourseDetail] Course truly not in database and user not enrolled, cannot enroll');
             Alert.alert(
               'Course Not Available', 
               'This course has not been set up in the database yet. Please contact support or try again later.'
@@ -482,7 +457,6 @@ export default function CourseDetailScreen() {
     // Validate that we have a UUID (not a catalog string ID)
     const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actualCourseId);
     if (!isValidUUID) {
-      console.error('[CourseDetail] Course ID is not a valid UUID, trying to find by slug...');
       
       // Last resort: try to find course by slug
       const courseSlug = course.slug || courseId;
@@ -495,10 +469,8 @@ export default function CourseDetailScreen() {
         ]) as LearningCourse | null;
         
         if (dbCourse?.id) {
-          console.log('[CourseDetail] Found course in database with UUID:', dbCourse.id);
           actualCourseId = dbCourse.id;
         } else {
-          console.error('[CourseDetail] Course ID is not a valid UUID and course not found in database');
           Alert.alert(
             'Course Not Available', 
             'This course has not been set up in the database yet. Please contact support or try again later.'
@@ -517,10 +489,9 @@ export default function CourseDetailScreen() {
     
     try {
       setPurchasing(true);
-      
+
       // Pro subscribers get free access
       if (hasProSubscription) {
-        console.log('[CourseDetail] Pro subscriber - enrolling for free');
         const success = await LearningService.enrollProSubscriber(user.id, actualCourseId);
         if (success) {
           setEnrolled(true);
@@ -531,18 +502,14 @@ export default function CourseDetailScreen() {
         }
         return;
       }
-      
-      console.log('[CourseDetail] Starting purchase flow', { price_cents: course?.price_cents });
-      
+
       // Check if course requires payment
       if (course?.price_cents && course.price_cents > 0) {
-        console.log('[CourseDetail] Initiating Stripe checkout...');
         // Initiate Stripe checkout
         const result = await coursePaymentService.purchaseCourse(
           user.id,
           actualCourseId
         );
-        console.log('[CourseDetail] Purchase result:', result);
 
         if (result.error) {
           Alert.alert('Error', result.error);
@@ -572,7 +539,6 @@ export default function CourseDetailScreen() {
         }
       } else {
         // Free course - enroll directly using the actual UUID
-        console.log('[CourseDetail] Enrolling in free course with ID:', actualCourseId);
         await LearningService.enrollInCourse(user.id, actualCourseId);
         setEnrolled(true);
         await loadLessonProgress();

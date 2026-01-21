@@ -76,8 +76,6 @@ serve(async (req: Request) => {
     const body: VerifyPurchaseRequest = await req.json();
     const { platform, transactionId, productId, purchaseToken, receipt } = body;
 
-    console.log(`Verifying ${platform} purchase: ${productId} for user ${user.id}`);
-
     let verified = false;
     let expiresAt: Date | null = null;
     let purchaseData: any = null;
@@ -101,7 +99,6 @@ serve(async (req: Request) => {
     }
 
     if (!verified) {
-      console.log(`Purchase verification failed for ${transactionId}`);
       return new Response(
         JSON.stringify({ 
           verified: false, 
@@ -157,8 +154,6 @@ serve(async (req: Request) => {
       }, {
         onConflict: 'user_id',
       });
-
-    console.log(`Purchase verified successfully for user ${user.id}: ${tier}`);
 
     return new Response(
       JSON.stringify({

@@ -31,13 +31,11 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
 
   const loadCrew = async () => {
     if (!user?.id) {
-      console.log('[CrewEquipmentCard] No user ID, skipping load');
       setLoading(false);
       return;
     }
 
     if (!raceId) {
-      console.log('[CrewEquipmentCard] No raceId, skipping load');
       setLoading(false);
       setCrew([]);
       return;
@@ -45,7 +43,6 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
 
     try {
       setLoading(true);
-      console.log('[CrewEquipmentCard] Loading crew for:', { userId: user.id, classId, raceId });
 
       // Add timeout to prevent infinite loading
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -61,12 +58,9 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
       // Get crew with assignment status for this race
       const crewMembers = await Promise.race([crewPromise, timeoutPromise]);
 
-      console.log('[CrewEquipmentCard] Loaded crew members:', crewMembers.length);
-
       // Show both active AND pending crew (pending = invited but not yet accepted)
       // This helps sailors see their full crew roster including pending invites
       const relevantCrew = crewMembers.filter((c) => c.status === 'active' || c.status === 'pending');
-      console.log('[CrewEquipmentCard] Relevant crew (active + pending):', relevantCrew.length);
       setCrew(relevantCrew);
       
       // Auto-expand "Available crew" section if there are unassigned crew members

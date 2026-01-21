@@ -326,7 +326,6 @@ export function RaceDetailMapHero({
       console.warn('[RaceDetailMapHero] Cannot save - not enough points:', currentPointCount, currentPoints.length);
       return; // Should never happen due to disabled state, but safety check
     }
-    console.log('[RaceDetailMapHero] Saving racing area with points:', currentPoints);
     setIsDrawingMode(false);
     // Pass the points directly to ensure they're available for saving
     onSaveRacingArea?.(currentPoints);

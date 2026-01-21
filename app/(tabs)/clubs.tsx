@@ -251,15 +251,6 @@ export default function ClubsScreen() {
     refetch: refetchDirectory,
   } = useClubDirectory();
 
-  // DEBUG: Log club directory state
-  useEffect(() => {
-    console.log('[ClubsScreen] Club Directory Debug:', {
-      loading: directoryLoading,
-      error: directoryError?.message,
-      dataLength: clubDirectory?.length,
-      data: clubDirectory,
-    });
-  }, [clubDirectory, directoryLoading, directoryError]);
   const { mutateAsync: joinClub } = useJoinClub();
   const {
     snapshots,
@@ -367,12 +358,6 @@ export default function ClubsScreen() {
   );
 
   const enrichedDirectory = useMemo(() => {
-    console.log('[ClubsScreen] Enriching directory:', {
-      hasClubDirectory: !!clubDirectory,
-      clubDirectoryLength: clubDirectory?.length,
-      clubDirectorySample: clubDirectory?.[0],
-    });
-
     if (!clubDirectory) return [];
 
     return (clubDirectory as any[]).map((club) => {
@@ -416,14 +401,6 @@ export default function ClubsScreen() {
       const matchesRegion = regionFilter === 'all' || club.region === regionFilter;
 
       return matchesQuery && matchesRegion;
-    });
-
-    console.log('[ClubsScreen] Filtered directory:', {
-      enrichedLength: enrichedDirectory.length,
-      filteredLength: filtered.length,
-      searchQuery,
-      regionFilter,
-      sampleFiltered: filtered[0],
     });
 
     return filtered;

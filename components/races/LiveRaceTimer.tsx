@@ -78,7 +78,6 @@ export function LiveRaceTimer({
         if (started) {
           setGpsSessionId(sessionId);
           onTrackingStart?.(sessionId);
-          console.log('[LiveRaceTimer] GPS tracking started');
         }
       } catch (error) {
         console.error('[LiveRaceTimer] Failed to start GPS tracking:', error);
@@ -107,7 +106,6 @@ export function LiveRaceTimer({
         await gpsTracker.stopTracking();
         setGpsSessionId(null);
         onTrackingStop?.();
-        console.log('[LiveRaceTimer] GPS tracking stopped and saved');
       } catch (error) {
         console.error('[LiveRaceTimer] Failed to stop GPS tracking:', error);
       }

@@ -34,20 +34,7 @@ export function RaceSuggestionsDrawer({
 }: RaceSuggestionsDrawerProps) {
   const [expandedSection, setExpandedSection] = useState<string | null>('club');
 
-  // Debug logging
-  console.log('[RaceSuggestionsDrawer] Rendering with:', {
-    loading,
-    suggestions: suggestions ? {
-      total: suggestions.total,
-      clubRaces: suggestions.clubRaces.length,
-      fleetRaces: suggestions.fleetRaces.length,
-      patterns: suggestions.patterns.length,
-      templates: suggestions.templates.length,
-    } : null
-  });
-
   if (loading) {
-    console.log('[RaceSuggestionsDrawer] Showing loading state');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="small" color="#3B82F6" />
@@ -57,7 +44,6 @@ export function RaceSuggestionsDrawer({
   }
 
   if (!suggestions || suggestions.total === 0) {
-    console.log('[RaceSuggestionsDrawer] Showing empty state');
     return (
       <View style={styles.emptyContainer}>
         <MaterialCommunityIcons name="lightbulb-outline" size={40} color="#94A3B8" />
@@ -68,8 +54,6 @@ export function RaceSuggestionsDrawer({
       </View>
     );
   }
-
-  console.log('[RaceSuggestionsDrawer] Showing suggestions drawer');
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);

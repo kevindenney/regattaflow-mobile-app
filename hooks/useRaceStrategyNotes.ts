@@ -163,7 +163,6 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
 
       // Handle non-UUID race IDs (demo races) with local storage
       if (isDemoRace) {
-        console.log('[useRaceStrategyNotes] Saving to AsyncStorage for demo race');
         try {
           const userId = user?.id || 'guest';
           const key = `${STORAGE_KEY_PREFIX}${raceId}_${userId}`;

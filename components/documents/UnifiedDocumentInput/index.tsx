@@ -481,8 +481,6 @@ export function UnifiedDocumentInput({
         throw new Error('Paste input not supported for course extraction - please use URL or upload');
       }
 
-      console.log('[UnifiedDocumentInput] Course extraction:', { fileName, isPdf, dataLength: base64Data.length });
-
       setExtractionStatus('extracting');
 
       // Call extract-course-image edge function with PDF or image
@@ -514,11 +512,6 @@ export function UnifiedDocumentInput({
       // Count extracted fields
       const fieldCount = countCourseFields(result.data);
       setExtractedFieldCount(fieldCount);
-
-      console.log('[UnifiedDocumentInput] Course extraction complete:', {
-        fieldCount,
-        data: result.data,
-      });
 
       // Store the source for provenance
       setCurrentSource(source);
@@ -686,7 +679,6 @@ export function UnifiedDocumentInput({
 
         setTimeout(() => setExpanded(false), 500);
       } catch (err) {
-        console.error('[UnifiedDocumentInput] Text extraction error:', err);
         setExtractionStatus('failed');
         setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
       }
@@ -939,7 +931,6 @@ export function UnifiedDocumentInput({
       }, 500);
 
     } catch (err) {
-      console.error('[UnifiedDocumentInput] Extraction error:', err);
       setExtractionStatus('failed');
       setExtractionError(err instanceof Error ? err.message : 'Extraction failed');
     }

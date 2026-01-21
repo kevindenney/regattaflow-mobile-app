@@ -64,8 +64,6 @@ export default function CoursesScreen() {
         userId: user.id,
       });
 
-      console.log('[Courses] Loaded courses from API:', remoteCourses.length);
-
       // Combine remote courses with fallback courses (deduplicating by id)
       const courseMap = new Map<string, RaceCourse>();
       
@@ -117,16 +115,6 @@ export default function CoursesScreen() {
     const shouldUpdate = editingCourseId && isUUID;
     const shouldCreate = user?.id && (!editingCourseId || !isUUID);
 
-    console.log('[Courses] handleSaveCourse called:', { 
-      editingCourseId, 
-      isUUID,
-      shouldUpdate,
-      shouldCreate,
-      scope, 
-      clubId, 
-      userId: user?.id 
-    });
-
     try {
       let persisted: RaceCourse | null = null;
 
@@ -136,31 +124,23 @@ export default function CoursesScreen() {
       });
 
       if (shouldUpdate) {
-        console.log('[Courses] Updating existing course:', editingCourseId);
         const updatePayload = buildUpdatePayloadFromDraft(draft, clubId);
-        console.log('[Courses] Update payload:', JSON.stringify(updatePayload, null, 2));
         persisted = await Promise.race([
           CourseLibraryService.updateCourse(editingCourseId, updatePayload),
           timeoutPromise,
         ]);
-        console.log('[Courses] Update result:', persisted);
       } else if (shouldCreate) {
-        console.log('[Courses] Creating new course for user:', user?.id, '(editingCourseId was non-UUID mock ID:', editingCourseId, ')');
         const createPayload = buildCreatePayloadFromDraft(draft, clubId);
-        console.log('[Courses] Create payload:', JSON.stringify(createPayload, null, 2));
         persisted = await Promise.race([
           CourseLibraryService.saveCourse(createPayload, scope, user!.id),
           timeoutPromise,
         ]);
-        console.log('[Courses] Create result:', persisted);
       } else {
         console.warn('[Courses] No user.id - cannot save to database');
       }
 
       const fallbackCourse = draftToRaceCourse(draft, editingCourseId);
       const nextCourse = persisted ?? fallbackCourse;
-
-      console.log('[Courses] Save completed, updating state with:', nextCourse.id);
 
       setSavedCourses((prev) => {
         const copy = [...prev];
@@ -199,7 +179,6 @@ export default function CoursesScreen() {
       setEditingDraft(undefined);
       setEditingCourseId(undefined);
     } finally {
-      console.log('[Courses] Setting saving to false');
       setSaving(false);
     }
   };

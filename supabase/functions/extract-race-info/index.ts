@@ -33,8 +33,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[extract-race-info] Processing text, length:', text.length, 'type:', type);
-
     // Use a quick, focused prompt for fast extraction
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -103,12 +101,6 @@ Return ONLY valid JSON, no other text.`,
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('[extract-race-info] Extracted:', {
-      raceName: extracted.raceName,
-      date: extracted.date,
-      location: extracted.location,
-    });
 
     return new Response(
       JSON.stringify({

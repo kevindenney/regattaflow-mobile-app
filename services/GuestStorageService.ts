@@ -96,7 +96,6 @@ export class GuestStorageService {
     try {
       const guestRace = await this.getGuestRace();
       if (!guestRace) {
-        console.log('[GuestStorageService] No guest race to migrate');
         return null;
       }
 
@@ -129,7 +128,6 @@ export class GuestStorageService {
       // Clear local guest data after successful migration
       await this.clearGuestData();
 
-      console.log('[GuestStorageService] Successfully migrated race:', data.id);
       return data.id;
     } catch (error) {
       console.error('[GuestStorageService] Migration failed:', error);
@@ -152,7 +150,6 @@ export class GuestStorageService {
         created_at: race.created_at || new Date().toISOString(),
       };
       await AsyncStorage.setItem(PENDING_RACE_KEY, JSON.stringify(raceWithId));
-      console.log('[GuestStorageService] Saved pending race:', raceWithId.name);
     } catch (error) {
       console.error('[GuestStorageService] Error saving pending race:', error);
       throw new Error('Failed to save pending race');
@@ -194,7 +191,6 @@ export class GuestStorageService {
     try {
       const pendingRace = await this.getPendingRace();
       if (!pendingRace) {
-        console.log('[GuestStorageService] No pending race to migrate');
         return null;
       }
 
@@ -227,7 +223,6 @@ export class GuestStorageService {
       // Clear pending race data after successful migration
       await this.clearPendingRace();
 
-      console.log('[GuestStorageService] Successfully migrated pending race:', data.id);
       return data.id;
     } catch (error) {
       console.error('[GuestStorageService] Pending race migration failed:', error);

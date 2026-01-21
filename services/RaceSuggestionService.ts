@@ -83,35 +83,23 @@ class RaceSuggestionService {
    */
   async getSuggestionsForUser(userId: string): Promise<CategorizedSuggestions> {
     try {
-      console.log('🎯 [RaceSuggestionService] getSuggestionsForUser called for:', userId);
       logger.debug('[getSuggestionsForUser] Fetching suggestions for user:', userId);
 
       // Check cache first
-      console.log('💾 [RaceSuggestionService] Checking cache...');
       const cached = await this.getCachedSuggestions(userId);
-      console.log('💾 [RaceSuggestionService] Cache check result:', {
-        total: cached.total,
-        hasData: cached.total > 0
-      });
 
       if (cached.total > 0) {
-        console.log('✅ [RaceSuggestionService] Returning cached suggestions:', cached);
         logger.debug('[getSuggestionsForUser] Returning cached suggestions:', cached.total);
         return cached;
       }
 
       // Generate fresh suggestions
-      console.log('🔨 [RaceSuggestionService] No valid cache, generating fresh suggestions');
       logger.debug('[getSuggestionsForUser] No valid cache, generating fresh suggestions');
       const suggestions = await this.generateFreshSuggestions(userId);
-      console.log('🔨 [RaceSuggestionService] Generated suggestions:', suggestions);
 
       // Cache the results
-      console.log('💾 [RaceSuggestionService] Caching suggestions...');
       const cacheSuccess = await this.cacheSuggestions(userId, suggestions);
-      if (cacheSuccess) {
-        console.log('✅ [RaceSuggestionService] Suggestions cached successfully');
-      } else {
+      if (!cacheSuccess) {
         console.warn('⚠️ [RaceSuggestionService] Unable to cache suggestions (see logs above)');
       }
 
@@ -139,9 +127,6 @@ class RaceSuggestionService {
    * Get cached suggestions if they exist and are not expired
    */
   private async getCachedSuggestions(userId: string): Promise<CategorizedSuggestions> {
-    console.log('📦 [getCachedSuggestions] Querying cache for user:', userId);
-    console.log('📦 [getCachedSuggestions] Current timestamp:', new Date().toISOString());
-
     const { data, error } = await supabase
       .from('race_suggestions_cache')
       .select('*')
@@ -151,8 +136,6 @@ class RaceSuggestionService {
       .is('accepted_at', null)
       .order('confidence_score', { ascending: false });
 
-    console.log('📦 [getCachedSuggestions] Query result:', { data, error });
-
     if (error) {
       console.error('❌ [getCachedSuggestions] Error fetching cached suggestions:', error);
       logger.error('[getCachedSuggestions] Error fetching cached suggestions:', error);
@@ -160,11 +143,9 @@ class RaceSuggestionService {
     }
 
     if (!data || data.length === 0) {
-      console.log('📦 [getCachedSuggestions] No cached data found');
       return { clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 };
     }
 
-    console.log('✅ [getCachedSuggestions] Found', data.length, 'cached suggestions');
     // Categorize suggestions
     return this.categorizeSuggestions(data.map(this.mapCachedSuggestion));
   }
@@ -173,21 +154,12 @@ class RaceSuggestionService {
    * Generate fresh suggestions from all sources
    */
   private async generateFreshSuggestions(userId: string): Promise<CategorizedSuggestions> {
-    console.log('🔨 [generateFreshSuggestions] Starting parallel fetch for user:', userId);
-
     const [clubRaces, fleetRaces, patterns, templates] = await Promise.all([
       this.getClubUpcomingRaces(userId),
       this.getFleetUpcomingRaces(userId),
       this.getPatternBasedSuggestions(userId),
       this.getTemplateSuggestions(userId),
     ]);
-
-    console.log('🔨 [generateFreshSuggestions] Results:', {
-      clubRaces: clubRaces.length,
-      fleetRaces: fleetRaces.length,
-      patterns: patterns.length,
-      templates: templates.length
-    });
 
     return {
       clubRaces,

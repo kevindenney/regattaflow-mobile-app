@@ -52,12 +52,14 @@ import { BoatSelector } from '@/components/races/AddRaceDialog/BoatSelector';
 import { CourseSelector } from '@/components/races/AddRaceDialog/CourseSelector';
 import { ExtractedDetailsData, ExtractedDetailsSummary } from '@/components/races/AddRaceDialog/ExtractedDetailsSummary';
 import type { ExtractedData, MultiRaceExtractedData } from '@/components/races/AIValidationScreen';
+import { CoursePositionEditor } from '@/components/races/CoursePositionEditor';
 import { DistanceRouteMap } from '@/components/races/DistanceRouteMap';
 import { LocationMapPicker } from '@/components/races/LocationMapPicker';
+import type { CourseType as PositionedCourseType, PositionedCourse } from '@/types/courses';
 import { MultiRaceSelectionScreen } from '@/components/races/MultiRaceSelectionScreen';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
-import { SSIUploadSection } from '@/components/documents/ssi';
+import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { geocodeExtractedLocations, geocodeSingleLocation } from '@/services/location/geocodeExtractedLocations';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
@@ -91,6 +93,18 @@ const RACE_TYPE_CONFIG: Record<RaceType, { label: string; icon: any; color: stri
   match: { label: 'Match', icon: Trophy, color: '#7C3AED', description: '1v1 racing' },
   team: { label: 'Team', icon: Users, color: '#DC2626', description: 'Team vs team' },
 };
+
+// Helper function to map course type string to PositionedCourseType
+function mapCourseTypeToPositionedType(courseType: string): PositionedCourseType {
+  const typeMap: Record<string, PositionedCourseType> = {
+    'windward/leeward': 'windward_leeward',
+    'windward_leeward': 'windward_leeward',
+    'triangle': 'triangle',
+    'olympic': 'olympic',
+    'trapezoid': 'trapezoid',
+  };
+  return typeMap[courseType.toLowerCase()] || 'windward_leeward';
+}
 
 // =============================================================================
 // TYPES
@@ -229,6 +243,10 @@ export default function AddRaceScreen() {
   // SSI document state
   const [ssiDocumentId, setSsiDocumentId] = useState<string | null>(null);
 
+  // Course position editor state
+  const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
+  const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+
   // Reset form when screen is focused
   useFocusEffect(
     useCallback(() => {
@@ -239,6 +257,8 @@ export default function AddRaceScreen() {
       setCalculatedDistance(null);
       setShowRouteMap(false);
       setSsiDocumentId(null);
+      setShowCoursePositionEditor(false);
+      setPositionedCourse(null);
       logger.debug('[AddRaceScreen] Form reset on focus');
 
       // Load club suggestion
@@ -320,7 +340,6 @@ export default function AddRaceScreen() {
   // Handle AI extraction
   const handleExtract = useCallback(async () => {
     logger.debug('[AddRaceScreen] handleExtract called, isExtracting:', isExtracting);
-    console.log('[AddRaceScreen] EXTRACT BUTTON CLICKED - v4');
 
     if (isExtracting) return;
 
@@ -692,11 +711,7 @@ export default function AddRaceScreen() {
 
   // Handle multi-race selection confirmation
   const handleMultiRaceConfirm = useCallback(async (selectedRaces: ExtractedData[]) => {
-    console.log('[handleMultiRaceConfirm] Called with', selectedRaces.length, 'races');
-    console.log('[handleMultiRaceConfirm] user?.id:', user?.id, 'isGuest:', isGuest);
-
     if (!selectedRaces.length) {
-      console.log('[handleMultiRaceConfirm] No races selected, closing modal');
       setShowMultiRaceModal(false);
       return;
     }
@@ -727,7 +742,6 @@ export default function AddRaceScreen() {
 
     // Multiple races selected - create all in database
     if (!user?.id || isGuest) {
-      console.log('[handleMultiRaceConfirm] Auth check failed - user?.id:', user?.id, 'isGuest:', isGuest);
       if (Platform.OS === 'web') {
         window.alert('Please sign up to create multiple races at once.');
       } else {
@@ -742,7 +756,6 @@ export default function AddRaceScreen() {
       }
       return;
     }
-    console.log('[handleMultiRaceConfirm] Auth check passed, proceeding to create races');
 
     setIsCreatingMultiple(true);
     try {
@@ -866,8 +879,6 @@ export default function AddRaceScreen() {
           races_per_day: race.racesPerDay,
         };
 
-        console.log('[handleMultiRaceConfirm] Creating race:', race.raceName, 'with', Object.keys(raceData).length, 'fields');
-
         const { data: newRace, error } = await supabase
           .from('regattas')
           .insert(raceData)
@@ -881,7 +892,6 @@ export default function AddRaceScreen() {
         }
       }
 
-      console.log('[handleMultiRaceConfirm] Created multiple races:', createdRaces.length);
       logger.debug('[AddRaceScreen] Created multiple races:', createdRaces.length);
 
       if (createdRaces.length > 0) {
@@ -896,8 +906,6 @@ export default function AddRaceScreen() {
             [{ text: 'View Races', onPress: () => router.replace('/(tabs)/races') }]
           );
         }
-      } else {
-        console.log('[handleMultiRaceConfirm] No races were created successfully');
       }
     } catch (err) {
       console.error('[handleMultiRaceConfirm] Multi-race creation failed:', err);
@@ -1278,116 +1286,79 @@ export default function AddRaceScreen() {
             </View>
           </View>
 
-          {/* AI Extraction Section */}
-          <View style={styles.section}>
-            <Pressable
-              style={styles.sectionHeader}
-              onPress={() => updateField('aiExpanded', !form.aiExpanded)}
-            >
-              <View style={styles.sectionHeaderLeft}>
-                <Sparkles size={14} color={COLORS.accent} />
-                <Text style={styles.sectionLabel}>AI EXTRACTION</Text>
-                {form.extractionComplete && (
-                  <CheckCircle size={14} color={COLORS.success} style={{ marginLeft: 4 }} />
-                )}
-              </View>
-              <ChevronDown
-                size={18}
-                color={COLORS.secondary}
-                style={{ transform: [{ rotate: form.aiExpanded ? '180deg' : '0deg' }] }}
-              />
-            </Pressable>
+          {/* Unified Document Input - AI Extraction with source tracking */}
+          <UnifiedDocumentInput
+            mode="race_creation"
+            defaultDocumentType="nor"
+            onExtractionComplete={(data, rawData, documentId) => {
+              // Apply extracted data to form
+              const aiFields = new Set<string>();
+              const updates: Partial<FormState> = {};
 
-            {form.aiExpanded && (
-              <View style={styles.aiContent}>
-                {/* Input Method Tabs */}
-                <View style={styles.methodTabs}>
-                  {(['paste', 'upload', 'url'] as const).map((method) => (
-                    <Pressable
-                      key={method}
-                      style={[styles.methodTab, form.aiInputMethod === method && styles.methodTabActive]}
-                      onPress={() => updateField('aiInputMethod', method)}
-                    >
-                      {method === 'upload' ? (
-                        <FileText size={14} color={form.aiInputMethod === method ? COLORS.accent : COLORS.tertiary} />
-                      ) : method === 'url' ? (
-                        <Link size={14} color={form.aiInputMethod === method ? COLORS.accent : COLORS.tertiary} />
-                      ) : null}
-                      <Text style={[styles.methodTabText, form.aiInputMethod === method && styles.methodTabTextActive]}>
-                        {method === 'paste' ? 'Paste' : method === 'upload' ? 'PDF' : 'URL'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+              if (rawData?.raceName) { updates.name = rawData.raceName; aiFields.add('name'); }
+              if (rawData?.raceDate || rawData?.date) { updates.date = rawData.raceDate || rawData.date; aiFields.add('date'); }
+              if (rawData?.warningSignalTime || rawData?.startTime) { updates.time = rawData.warningSignalTime || rawData.startTime; aiFields.add('time'); }
+              if (rawData?.venue || rawData?.location) { updates.location = rawData.venue || rawData.location; aiFields.add('location'); }
+              if (rawData?.raceType && ['fleet', 'distance', 'match', 'team'].includes(rawData.raceType)) {
+                updates.raceType = rawData.raceType as RaceType;
+                aiFields.add('raceType');
+              }
 
-                {/* Input Area */}
-                {form.aiInputMethod === 'paste' && (
-                  <TextInput
-                    style={styles.textArea}
-                    value={form.aiInputText}
-                    onChangeText={(text) => updateField('aiInputText', text)}
-                    placeholder="Paste race notice, sailing instructions, or any text..."
-                    placeholderTextColor={COLORS.tertiary}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                )}
+              // VHF Channel
+              if (rawData?.vhfChannels?.length > 0) {
+                updates.vhfChannel = rawData.vhfChannels[0].channel?.toString() || '';
+                aiFields.add('vhfChannel');
+              }
 
-                {form.aiInputMethod === 'upload' && (
-                  <Pressable style={styles.uploadArea} onPress={handleFilePick}>
-                    <FileText size={24} color={COLORS.secondary} />
-                    <Text style={styles.uploadText}>
-                      {form.aiSelectedFile ? form.aiSelectedFile.name : 'Tap to select PDF'}
-                    </Text>
-                  </Pressable>
-                )}
+              // Distance-specific
+              if (rawData?.totalDistanceNm) { updates.totalDistanceNm = rawData.totalDistanceNm.toString(); aiFields.add('totalDistanceNm'); }
+              if (rawData?.timeLimitHours) { updates.timeLimitHours = rawData.timeLimitHours.toString(); aiFields.add('timeLimitHours'); }
+              if (rawData?.courseDescription) { updates.routeDescription = rawData.courseDescription; aiFields.add('routeDescription'); }
 
-                {form.aiInputMethod === 'url' && (
-                  <TextInput
-                    style={styles.urlInput}
-                    value={form.aiInputText}
-                    onChangeText={(text) => updateField('aiInputText', text)}
-                    placeholder="https://example.com/notice-of-race.pdf"
-                    placeholderTextColor={COLORS.tertiary}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="url"
-                  />
-                )}
+              // Fleet-specific
+              if (rawData?.courseType) { updates.courseType = rawData.courseType; aiFields.add('courseType'); }
+              if (rawData?.boatClass) { updates.boatClass = rawData.boatClass; aiFields.add('boatClass'); }
 
-                {/* Extract Button */}
-                <Pressable
-                  style={[styles.extractButton, (!canExtract || isExtracting) && styles.extractButtonDisabled]}
-                  onPress={handleExtract}
-                  disabled={!canExtract || isExtracting}
-                >
-                  {isExtracting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Sparkles size={16} color="#FFFFFF" />
-                      <Text style={styles.extractButtonText}>Extract Race Details</Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
-            )}
-          </View>
+              // Build extracted details for display
+              const extractedDetails: ExtractedDetailsData = {
+                schedule: rawData?.schedule,
+                minimumCrew: rawData?.minimumCrew,
+                crewRequirements: rawData?.crewRequirements,
+                minorSailorRules: rawData?.minorSailorRules,
+                prohibitedAreas: rawData?.prohibitedAreas?.map((a: any) => ({
+                  name: a.name,
+                  description: a.description,
+                })),
+                startAreaName: rawData?.startAreaName,
+                startAreaDescription: rawData?.startAreaDescription,
+                finishAreaName: rawData?.finishAreaName,
+                finishAreaDescription: rawData?.finishAreaDescription,
+                vhfChannels: rawData?.vhfChannels,
+                organizingAuthority: rawData?.organizingAuthority,
+                eventWebsite: rawData?.eventWebsite,
+                safetyRequirements: rawData?.safetyRequirements,
+              };
 
-          {/* Sailing Instructions Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>SAILING INSTRUCTIONS</Text>
-            <SSIUploadSection
-              clubId={undefined}
-              raceId={undefined}
-              title="Upload SSI"
-              description="Upload the Sailing Instructions PDF to extract VHF channels, marks, and emergency contacts."
-              showHeader={false}
-              showPrivacyToggle={false}
-              compact={false}
-              onDocumentUploaded={setSsiDocumentId}
-            />
-          </View>
+              setForm(prev => ({
+                ...prev,
+                ...updates,
+                aiExtractedFields: aiFields,
+                extractionComplete: true,
+                extractedDetails,
+              }));
+
+              if (documentId) {
+                setSsiDocumentId(documentId);
+              }
+            }}
+            onMultiRaceDetected={(data) => {
+              setMultiRaceData(data);
+              setShowMultiRaceModal(true);
+            }}
+            compact={false}
+            raceType={form.raceType}
+            initialExpanded={true}
+          />
 
           {/* Essentials Section */}
           <View style={styles.section}>
@@ -1464,6 +1435,21 @@ export default function AddRaceScreen() {
                   aiExtracted={form.aiExtractedFields.has('courseType')}
                 />
               </View>
+
+              {/* Position Course on Map Button */}
+              {form.courseType && form.latitude && form.longitude && (
+                <Pressable
+                  style={[styles.mapToggle, { marginBottom: 16 }]}
+                  onPress={() => setShowCoursePositionEditor(true)}
+                >
+                  <Map size={16} color={positionedCourse ? COLORS.success : COLORS.accent} />
+                  <Text style={[styles.mapToggleText, positionedCourse && { color: COLORS.success }]}>
+                    {positionedCourse ? 'Course Positioned on Map' : 'Position Course on Map'}
+                  </Text>
+                  <ChevronRight size={18} color={positionedCourse ? COLORS.success : COLORS.accent} />
+                </Pressable>
+              )}
+
               <View style={styles.row}>
                 <FieldRow
                   label="Laps"
@@ -1691,6 +1677,20 @@ export default function AddRaceScreen() {
         raceType={form.raceType}
         initialLocation={form.latitude && form.longitude ? { lat: form.latitude, lng: form.longitude } : null}
         initialName={form.location}
+      />
+
+      {/* Course Position Editor Modal */}
+      <CoursePositionEditor
+        visible={showCoursePositionEditor}
+        regattaId="" // Will be set after race is created
+        initialCourseType={mapCourseTypeToPositionedType(form.courseType)}
+        initialLocation={form.latitude && form.longitude ? { lat: form.latitude, lng: form.longitude } : undefined}
+        onSave={(course) => {
+          setPositionedCourse(course);
+          setShowCoursePositionEditor(false);
+          logger.debug('[AddRaceScreen] Course positioned:', course.marks.length, 'marks');
+        }}
+        onCancel={() => setShowCoursePositionEditor(false)}
       />
 
       {/* Multi-Race Selection Modal */}

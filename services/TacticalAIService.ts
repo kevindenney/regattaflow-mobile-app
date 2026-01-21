@@ -78,7 +78,6 @@ class TacticalAIServiceClass {
     const cacheKey = this.getCacheKey(context);
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-      console.log('[TacticalAIService] Returning cached recommendations');
       return cached.chips;
     }
 
@@ -89,8 +88,6 @@ class TacticalAIServiceClass {
     }
 
     try {
-      console.log('[TacticalAIService] Fetching fresh recommendations from skills...');
-
       // Call multiple skills in parallel
       const [
         tidalOpportunism,
@@ -126,7 +123,6 @@ class TacticalAIServiceClass {
         timestamp: Date.now()
       });
 
-      console.log(`[TacticalAIService] Generated ${prioritized.length} recommendations`);
       return prioritized;
     } catch (error) {
       console.error('[TacticalAIService] Failed to get recommendations:', error);
@@ -485,7 +481,6 @@ class TacticalAIServiceClass {
    */
   clearCache() {
     this.cache.clear();
-    console.log('[TacticalAIService] Cache cleared');
   }
 }
 

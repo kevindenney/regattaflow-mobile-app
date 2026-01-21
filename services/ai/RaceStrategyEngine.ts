@@ -187,18 +187,16 @@ export class RaceStrategyEngine {
 
       if (this.customSkillId || this.distanceSkillId) {
         this.skillInitialized = true;
-        console.log(`✅ RaceStrategyEngine: Skills initialized`);
-        if (this.customSkillId) console.log(`   • Fleet racing: ${this.customSkillId}`);
-        if (this.distanceSkillId) console.log(`   • Distance/offshore: ${this.distanceSkillId}`);
+        logger.debug('RaceStrategyEngine: Skills initialized', {
+          fleet: this.customSkillId,
+          distance: this.distanceSkillId
+        });
       } else {
         logger.debug('ℹ️  No skills found - using full prompt mode (still excellent quality)');
-        console.log('ℹ️  RaceStrategyEngine: No Claude Skills found - strategies will use full prompts');
-        console.log('   This is totally fine! Strategies are still comprehensive and high-quality.');
       }
     } catch (error) {
       logger.error('Skill initialization failed:', error);
       console.warn('⚠️ RaceStrategyEngine: Skill initialization failed, continuing without skills');
-      console.log('   Strategies will still work great using full prompts instead of skills');
     }
   }
 
@@ -681,9 +679,6 @@ CRITICAL OUTPUT RULES:
         }]
       });
 
-      console.log('✅ Anthropic API call successful');
-      console.log('Response type:', response.content[0].type);
-
       const textBlocks = (response.content as Array<{ type: string; text?: string }>)
         .filter(block => block.type === 'text' && typeof block.text === 'string')
         .map(block => block.text!.trim())
@@ -701,7 +696,6 @@ CRITICAL OUTPUT RULES:
       }
 
       const strategy = JSON.parse(jsonMatch[0]);
-      console.log('✅ Strategy parsed successfully');
       return strategy;
 
     } catch (error) {

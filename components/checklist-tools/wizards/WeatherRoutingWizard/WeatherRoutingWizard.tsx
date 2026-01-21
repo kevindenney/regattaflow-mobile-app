@@ -100,15 +100,6 @@ export function WeatherRoutingWizard({
 }: WeatherRoutingWizardProps) {
   const router = useRouter();
 
-  // Debug: Log incoming props
-  console.log('[WeatherRoutingWizard] Props:', {
-    regattaId,
-    routeWaypointsLength: routeWaypoints?.length ?? 0,
-    routeWaypoints: routeWaypoints?.slice(0, 2), // Just first 2 for brevity
-    raceDate,
-    raceName,
-  });
-
   // Parse start time
   const startTimeString = useMemo(() => {
     if (!raceDate) return null;

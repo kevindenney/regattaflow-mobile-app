@@ -296,7 +296,6 @@ export class CourseLibraryService {
     venueId?: string;
     raceType?: 'fleet' | 'distance';
   } = {}): Promise<RaceCourse[]> {
-    console.log('[CourseLibraryService] fetchDiscoverableCourses called with:', options);
     try {
       // Build a query that gets:
       // 1. User's own courses (any visibility)
@@ -307,7 +306,6 @@ export class CourseLibraryService {
       let currentUserId = options.userId;
       
       if (!currentUserId) {
-        console.log('[CourseLibraryService] Getting current user from session...');
         try {
           // Use getSession instead of getUser - it's synchronous if session exists
           const { data: sessionData } = await Promise.race([
@@ -317,15 +315,11 @@ export class CourseLibraryService {
             )
           ]);
           currentUserId = sessionData?.session?.user?.id;
-          console.log('[CourseLibraryService] Got user from session:', currentUserId);
         } catch (authError) {
           console.warn('[CourseLibraryService] Auth lookup failed/timed out, continuing without user filter:', authError);
         }
       }
-      
-      console.log('[CourseLibraryService] Using userId:', currentUserId);
-      console.log('[CourseLibraryService] Building query...');
-      
+
       let query = supabase
         .from('race_courses')
         .select('*');
@@ -345,9 +339,7 @@ export class CourseLibraryService {
       
       // Include public courses
       orConditions.push('visibility.eq.public');
-      
-      console.log('[CourseLibraryService] OR conditions:', orConditions);
-      
+
       if (orConditions.length > 0) {
         query = query.or(orConditions.join(','));
       }
@@ -360,9 +352,7 @@ export class CourseLibraryService {
       query = query
         .order('last_used_date', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
-      
-      console.log('[CourseLibraryService] Executing query...');
-      
+
       // Retry logic with exponential backoff
       let lastError: Error | null = null;
       const maxRetries = 2;
@@ -370,7 +360,6 @@ export class CourseLibraryService {
       
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         if (attempt > 0) {
-          console.log(`[CourseLibraryService] Retry attempt ${attempt}/${maxRetries}...`);
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // exponential backoff
         }
         
@@ -394,8 +383,6 @@ export class CourseLibraryService {
         }
         
         if (!didTimeout && result.data !== null) {
-          console.log('[CourseLibraryService] Query result:', { dataCount: result.data?.length, error: result.error });
-          
           if (result.error) {
             console.error('[CourseLibraryService] Query returned error:', result.error);
             lastError = result.error;

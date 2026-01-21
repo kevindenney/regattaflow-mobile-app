@@ -40,8 +40,6 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('[RefreshSuggestions] Starting refresh job...');
-
     // Get active users (users who have club or fleet memberships)
     const { data: clubMembers } = await supabase
       .from('club_members')
@@ -61,7 +59,6 @@ serve(async (req) => {
     const activeUsers = Array.from(userIds).map(id => ({ id })).slice(0, 1000);
 
     if (activeUsers.length === 0) {
-      console.log('[RefreshSuggestions] No active users found');
       return new Response(
         JSON.stringify({ success: true, stats, message: 'No active users to process' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -75,10 +72,8 @@ serve(async (req) => {
     }
 
     stats.totalUsers = activeUsers?.length || 0;
-    console.log(`[RefreshSuggestions] Found ${stats.totalUsers} active users`);
 
     if (!activeUsers || activeUsers.length === 0) {
-      console.log('[RefreshSuggestions] No active users to process');
       return new Response(
         JSON.stringify({ success: true, stats, message: 'No active users to process' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -87,13 +82,11 @@ serve(async (req) => {
 
     // Clean up expired suggestions first
     const { data: cleanupResult } = await supabase.rpc('clean_expired_suggestions');
-    console.log(`[RefreshSuggestions] Cleaned up ${cleanupResult || 0} expired suggestions`);
 
     // Process each user
     for (const user of activeUsers) {
       try {
         const userId = user.id;
-        console.log(`[RefreshSuggestions] Processing user: ${userId}`);
 
         // Delete existing non-expired suggestions for this user
         await supabase
@@ -118,11 +111,9 @@ serve(async (req) => {
           } else {
             stats.successCount++;
             stats.totalSuggestions += suggestions.length;
-            console.log(`[RefreshSuggestions] Generated ${suggestions.length} suggestions for user ${userId}`);
           }
         } else {
           stats.successCount++;
-          console.log(`[RefreshSuggestions] No suggestions generated for user ${userId}`);
         }
       } catch (userError) {
         console.error(`[RefreshSuggestions] Error processing user ${user.id}:`, userError);
@@ -131,8 +122,6 @@ serve(async (req) => {
     }
 
     stats.processingTimeMs = Date.now() - startTime;
-
-    console.log('[RefreshSuggestions] Job complete:', stats);
 
     return new Response(
       JSON.stringify({

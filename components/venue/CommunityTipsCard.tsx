@@ -365,8 +365,6 @@ function AddTipModal({ visible, onClose, onSuccess, venueId, venueName }: AddTip
   };
 
   const handleSubmit = async () => {
-    console.log('[CommunityTipsCard] handleSubmit called', { title, description, venueId, category });
-    
     if (!title.trim() || !description.trim()) {
       Alert.alert('Required Fields', 'Please enter a title and description.');
       return;
@@ -374,7 +372,6 @@ function AddTipModal({ visible, onClose, onSuccess, venueId, venueName }: AddTip
 
     try {
       setSubmitting(true);
-      console.log('[CommunityTipsCard] Creating tip...');
 
       const input: CreateTipInput = {
         venue_id: venueId,
@@ -389,10 +386,8 @@ function AddTipModal({ visible, onClose, onSuccess, venueId, venueName }: AddTip
         season: season !== 'any' ? season : undefined,
       };
 
-      console.log('[CommunityTipsCard] Input:', input);
       const result = await venueCommunityTipsService.createTip(input);
-      console.log('[CommunityTipsCard] Tip created successfully:', result);
-      
+
       // Alert doesn't work well on web, so just close and reset
       if (Platform.OS === 'web') {
         window.alert('Tip Shared! 🎉\n\nThanks for sharing your local knowledge. Other sailors will benefit from your experience!');
@@ -427,7 +422,6 @@ function AddTipModal({ visible, onClose, onSuccess, venueId, venueName }: AddTip
           <Text style={styles.modalTitle}>Share Local Knowledge</Text>
           <Pressable
             onPress={() => {
-              console.log('[CommunityTipsCard] Share button pressed!');
               handleSubmit();
             }}
             disabled={submitting || !title.trim() || !description.trim()}

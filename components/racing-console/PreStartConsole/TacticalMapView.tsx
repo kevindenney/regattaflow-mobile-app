@@ -58,33 +58,6 @@ export function TacticalMapView({
   const course = useRaceConditions(selectCourse);
   const depth = useRaceConditions(selectDepth);
 
-  // 🐛 DEBUG: Log all store data on mount and changes
-  useEffect(() => {
-    console.log('[TacticalMapView] 🐛 DEBUG STORE DATA:', {
-      position,
-      wind: {
-        raw: wind,
-        hasSpeed: wind?.speed !== undefined,
-        hasTrueSpeed: wind?.trueSpeed !== undefined,
-        speedValue: wind?.speed,
-        trueSpeedValue: wind?.trueSpeed,
-        direction: wind?.direction,
-        trueDirection: wind?.trueDirection
-      },
-      current: {
-        raw: current,
-        hasSpeed: current?.speed !== undefined,
-        speedValue: current?.speed,
-        direction: current?.direction
-      },
-      depth: {
-        raw: depth,
-        current: depth?.current
-      },
-      course: course ? { id: course.id, hasStartLine: !!course.startLine } : null,
-      tacticalZonesCount: tacticalZones?.length || 0
-    });
-  }, [position, wind, current, depth, course, tacticalZones]);
 
   // Load MapLibre GL from CDN
   useEffect(() => {
@@ -97,14 +70,12 @@ export function TacticalMapView({
       link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
       document.head.appendChild(link);
-      console.log('[TacticalMapView] ✅ MapLibre CSS injected');
     }
 
     // Check if already loaded
     if (typeof window !== 'undefined' && window.maplibregl) {
       maplibregl = window.maplibregl;
       setMapLibLoaded(true);
-      console.log('[TacticalMapView] ✅ MapLibre GL already available');
       return;
     }
 
@@ -117,7 +88,6 @@ export function TacticalMapView({
       script.onload = () => {
         maplibregl = window.maplibregl;
         setMapLibLoaded(true);
-        console.log('[TacticalMapView] ✅ MapLibre GL loaded from CDN');
       };
       script.onerror = () => {
         setError('Failed to load MapLibre GL from CDN');
@@ -134,8 +104,6 @@ export function TacticalMapView({
     }
 
     try {
-      console.log('[TacticalMapView] 🗺️ Creating map instance...');
-
       // Calculate initial center
       const initialCenter = course?.startLine?.centerLon && course?.startLine?.centerLat
         ? [course.startLine.centerLon, course.startLine.centerLat]
@@ -153,7 +121,6 @@ export function TacticalMapView({
       });
 
       map.on('load', () => {
-        console.log('[TacticalMapView] ✅ Map loaded successfully');
         setMapLoaded(true);
       });
 
@@ -165,7 +132,6 @@ export function TacticalMapView({
       mapRef.current = map;
 
       return () => {
-        console.log('[TacticalMapView] 🧹 Cleaning up map');
         map.remove();
         mapRef.current = null;
       };
@@ -213,8 +179,6 @@ export function TacticalMapView({
               'line-dasharray': [2, 2]
             }
           });
-
-          console.log('[TacticalMapView] ✅ Start line added');
         }
       }
 
@@ -281,8 +245,6 @@ export function TacticalMapView({
               'line-dasharray': [2, 1]
             }
           });
-
-          console.log('[TacticalMapView] ✅ Tactical zones added:', tacticalZones.length);
         }
       }
 
@@ -316,8 +278,6 @@ export function TacticalMapView({
             .setLngLat([mark.position.lng, mark.position.lat])
             .addTo(map);
         });
-
-        console.log('[TacticalMapView] ✅ Course marks added:', course.marks.length);
       }
 
       // Add position marker
@@ -333,8 +293,6 @@ export function TacticalMapView({
         new maplibregl.Marker({ element: positionEl })
           .setLngLat([position.longitude, position.latitude])
           .addTo(map);
-
-        console.log('[TacticalMapView] ✅ Position marker added');
       }
     } catch (e) {
       console.error('[TacticalMapView] ❌ Error updating layers:', e);

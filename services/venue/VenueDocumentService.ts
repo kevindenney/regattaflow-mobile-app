@@ -308,7 +308,6 @@ class VenueDocumentServiceClass {
 
       // Call edge function for extraction (if available)
       // For now, mark as pending - extraction will happen via edge function or manual process
-      console.log(`[VenueDocumentService] Extraction triggered for ${documentId}`);
 
       // TODO: Implement actual extraction via edge function
       // const { data, error } = await supabase.functions.invoke('extract-document-insights', {

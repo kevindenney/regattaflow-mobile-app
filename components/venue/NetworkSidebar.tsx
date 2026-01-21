@@ -69,7 +69,6 @@ export function NetworkSidebar({
       // Early exit: Check if user is authenticated
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log('[NetworkSidebar] No authenticated user, skipping saved places fetch');
         setSavedPlaces([]);
         setIsLoadingSaved(false);
         return;

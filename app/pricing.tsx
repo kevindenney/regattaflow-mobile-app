@@ -174,7 +174,6 @@ export default function PricingScreen() {
         router.push(`/(auth)/signup?plan=${planId}`);
       } else {
         // TODO: Connect to Stripe payment flow
-        console.log('[Pricing] Upgrade to:', planId);
       }
     }
   };

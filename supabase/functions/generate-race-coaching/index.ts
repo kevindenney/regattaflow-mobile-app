@@ -43,9 +43,6 @@ serve(async (req) => {
       );
     }
 
-    console.log('[generate-race-coaching] Generating coaching for race:', race.name);
-    console.log('[generate-race-coaching] Analysis fields:', Object.keys(analysis));
-
     // Analyze each framework
     const feedback = [];
     const scores = {};
@@ -152,9 +149,6 @@ serve(async (req) => {
         : 50;
 
     scores.overall_framework_adoption = overallScore;
-
-    console.log('[generate-race-coaching] Generated', feedback.length, 'coaching items');
-    console.log('[generate-race-coaching] Overall score:', overallScore);
 
     return new Response(
       JSON.stringify({

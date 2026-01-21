@@ -188,7 +188,6 @@ export function StartingSequenceInteractive({
   // Play horn sound - supports single blast, long blast, or series of short blasts
   const playHorn = useCallback(async (hornType: 'short' | 'long' | 'series' = 'short') => {
     if (Platform.OS !== 'web' || !audioContextRef.current) {
-      console.log('Horn sound (native not implemented)');
       return;
     }
 
@@ -206,15 +205,12 @@ export function StartingSequenceInteractive({
           const startTime = now + i * (blastDuration + gapDuration);
           playSingleHorn(ctx, blastDuration, startTime);
         }
-        console.log('Horn sound played (series of short blasts)');
       } else if (hornType === 'long') {
         // Long blast (1.2 seconds) for 1-minute signal
         playSingleHorn(ctx, 1.2, now);
-        console.log('Horn sound played (long blast)');
       } else {
         // Single short blast (0.5 seconds) for warning, prep, and start
         playSingleHorn(ctx, 0.5, now);
-        console.log('Horn sound played (single short blast)');
       }
     } catch (error) {
       console.error('Error playing horn:', error);
@@ -336,8 +332,6 @@ export function StartingSequenceInteractive({
   }, [isPlaying]);
 
   const runAnimationForEvent = useCallback(async (event: SequenceStep) => {
-    console.log(`[Event] ${event.label} at ${event.time}s`);
-    
     // Play horn sound for key timing signals
     if (event.soundSignal?.includes('horn')) {
       let hornType: 'short' | 'long' | 'series' = 'short';

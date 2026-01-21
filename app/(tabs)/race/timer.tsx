@@ -763,7 +763,6 @@ const RaceTimerProScreen = () => {
             weather: windData,
           }}
           onSkillInvoked={(skillId, advice) => {
-            console.log('Timer screen - Skill invoked:', skillId, advice);
           }}
         />
       </View>

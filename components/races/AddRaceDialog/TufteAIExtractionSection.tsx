@@ -25,6 +25,7 @@ import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from './tufteFormStyles';
 import { IOS_COLORS } from '@/components/cards/constants';
 import type { RaceType } from '../RaceTypeSelector';
 import type { ExtractedRaceData, ExtractedField } from '../ExtractionResults';
+import type { MultiRaceExtractedData } from '../AIValidationScreen';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
 
@@ -181,6 +182,8 @@ export interface TufteAIExtractionSectionProps {
   onToggle: () => void;
   /** Callback when extraction completes successfully */
   onExtracted: (data: ExtractedRaceData, rawData?: any) => void;
+  /** Callback when multiple races are detected in document */
+  onMultiRaceDetected?: (data: MultiRaceExtractedData) => void;
   /** Currently selected race type */
   raceType: RaceType;
   /** Whether extraction is in progress (controlled externally) */
@@ -195,6 +198,7 @@ export function TufteAIExtractionSection({
   expanded,
   onToggle,
   onExtracted,
+  onMultiRaceDetected,
   raceType,
   isExtracting: externalIsExtracting,
   setIsExtracting: externalSetIsExtracting,
@@ -239,7 +243,9 @@ export function TufteAIExtractionSection({
   }, [activeMethod, pasteContent, urlContent, selectedFile]);
 
   const handleExtract = useCallback(async () => {
-    if (!canExtract() || isExtracting) return;
+    if (!canExtract() || isExtracting) {
+      return;
+    }
 
     setIsExtracting(true);
     setError(null);
@@ -329,11 +335,32 @@ export function TufteAIExtractionSection({
         throw new Error(result.error || 'Failed to extract race details');
       }
 
-      // Transform result to ExtractedRaceData format
-      const extractedData = transformExtractionResult(result.data, raceType);
+      // Check for multi-race detection
+      if (result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
+        // Multiple races detected - call multi-race callback instead of single-race flow
+        if (onMultiRaceDetected) {
+          setExtractionComplete(true);
+          // IMPORTANT: Set isExtracting to false BEFORE calling the callback
+          // to prevent the button from getting stuck in loading state
+          setIsExtracting(false);
+          onMultiRaceDetected(result.data as MultiRaceExtractedData);
+          // Collapse section
+          setTimeout(() => {
+            onToggle();
+          }, 500);
+          return; // Exit early - multi-race flow will handle the rest
+        }
+        // Fallback: if no multi-race handler, use first race
+        console.warn('[TufteAIExtractionSection] Multiple races detected but no handler - using first race');
+      }
+
+      // Single race or fallback: Transform result to ExtractedRaceData format
+      // If multi-race structure, extract the first race
+      const raceData = result.data.races?.[0] || result.data;
+      const extractedData = transformExtractionResult(raceData, raceType);
 
       setExtractionComplete(true);
-      onExtracted(extractedData, result.data);
+      onExtracted(extractedData, raceData);
 
       // Collapse after short delay to show success state
       setTimeout(() => {
@@ -344,7 +371,7 @@ export function TufteAIExtractionSection({
     } finally {
       setIsExtracting(false);
     }
-  }, [canExtract, isExtracting, setIsExtracting, onExtracted, onToggle, activeMethod, pasteContent, urlContent, selectedFile, raceType]);
+  }, [canExtract, isExtracting, setIsExtracting, onExtracted, onMultiRaceDetected, onToggle, activeMethod, pasteContent, urlContent, selectedFile, raceType]);
 
   return (
     <View style={styles.container}>
@@ -450,7 +477,9 @@ export function TufteAIExtractionSection({
           {/* Extract Button */}
           <Pressable
             style={[styles.extractButton, (!canExtract() || isExtracting) && styles.extractButtonDisabled]}
-            onPress={handleExtract}
+            onPress={() => {
+              handleExtract();
+            }}
             disabled={!canExtract() || isExtracting}
           >
             {isExtracting ? (
@@ -458,7 +487,7 @@ export function TufteAIExtractionSection({
             ) : (
               <>
                 <Sparkles size={16} color="#FFFFFF" />
-                <Text style={styles.extractButtonText}>Extract Race Details</Text>
+                <Text style={styles.extractButtonText}>🔥 EXTRACT v3 🔥</Text>
               </>
             )}
           </Pressable>

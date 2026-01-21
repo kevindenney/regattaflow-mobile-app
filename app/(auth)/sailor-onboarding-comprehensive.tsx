@@ -470,7 +470,6 @@ export default function SailorOnboardingComprehensive() {
       }
 
       if (data?.success && data?.extracted) {
-        console.log('[SailorOnboarding] Extracted SI/NOR data:', data.extracted);
         setExtractedSiNorData(data.extracted);
         setExtractionError(null); // Clear any previous errors
         
@@ -640,12 +639,9 @@ export default function SailorOnboardingComprehensive() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const handleSubmit = async () => {
-    console.log('[SailorOnboarding] handleSubmit called');
     const validation = validateForm();
-    console.log('[SailorOnboarding] Validation result:', validation);
 
     if (!validation.valid) {
-      console.log('[SailorOnboarding] Validation failed:', validation.errors);
       setValidationErrors(validation.errors);
       // Use window.alert as fallback on web where Alert.alert may not work
       if (typeof window !== 'undefined' && window.alert) {
@@ -662,7 +658,6 @@ export default function SailorOnboardingComprehensive() {
     setValidationErrors([]);
 
     if (!user?.id) {
-      console.log('[SailorOnboarding] No user ID');
       if (typeof window !== 'undefined' && window.alert) {
         window.alert('User not authenticated. Please sign in.');
       } else {
@@ -671,7 +666,6 @@ export default function SailorOnboardingComprehensive() {
       return;
     }
 
-    console.log('[SailorOnboarding] Starting submission for user:', user.id);
     setSubmitting(true);
 
     try {
@@ -687,8 +681,6 @@ export default function SailorOnboardingComprehensive() {
         profileUpdates.full_name = fullName.trim();
       }
 
-      console.log('[SailorOnboarding] Updating user profile:', profileUpdates);
-
       const { error: userUpdateError } = await supabase
         .from('users')
         .update(profileUpdates)
@@ -699,13 +691,9 @@ export default function SailorOnboardingComprehensive() {
         throw userUpdateError;
       }
 
-      console.log('[SailorOnboarding] Profile updated successfully');
-      
       // Save boats to sailor_boats table if any valid boats provided
       const validBoats = boats.filter(b => b.className.trim() && b.sailNumber.trim());
       if (validBoats.length > 0) {
-        console.log('[SailorOnboarding] Saving boats:', validBoats.length);
-        
         for (let i = 0; i < validBoats.length; i++) {
           const boat = validBoats[i];
           try {
@@ -753,17 +741,13 @@ export default function SailorOnboardingComprehensive() {
             // Continue with other boats even if one fails
           }
         }
-        console.log('[SailorOnboarding] Boats saved');
       }
 
       // Refresh the auth context so it picks up the new user_type
-      console.log('[SailorOnboarding] Refreshing user profile in auth context');
       await fetchUserProfile(user.id);
-      console.log('[SailorOnboarding] Auth context refreshed');
 
       // Only navigate if component is still mounted
       if (isMounted) {
-        console.log('[SailorOnboarding] Navigating to races');
         router.replace('/(tabs)/races');
       }
     } catch (error: any) {
@@ -1731,10 +1715,7 @@ export default function SailorOnboardingComprehensive() {
         }}
       >
         <TouchableOpacity
-          onPress={() => {
-            console.log('[SailorOnboarding] Sticky button pressed!');
-            handleSubmit();
-          }}
+          onPress={handleSubmit}
           disabled={submitting}
           activeOpacity={0.8}
           style={[

@@ -113,7 +113,6 @@ export function useFeatureGate(): UseFeatureGateReturn {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(event);
     }
-    console.log('[FeatureGate] Upgrade prompt triggered', { feature, context, tier });
   }, [tier]);
 
   /**
@@ -126,7 +125,6 @@ export function useFeatureGate(): UseFeatureGateReturn {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(event);
     }
-    console.log('[FeatureGate] Sign-up prompt triggered', { context });
   }, []);
 
   /**

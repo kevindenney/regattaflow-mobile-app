@@ -286,7 +286,7 @@ export default function RaceCommitteeConsole() {
           sound.unloadAsync();
         }, duration);
       } catch (soundError) {
-        console.log('Sound playback not available, using vibration fallback');
+        // Sound playback not available, using vibration fallback
       }
 
       // Multiple horns

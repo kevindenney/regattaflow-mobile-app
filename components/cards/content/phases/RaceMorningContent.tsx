@@ -352,14 +352,6 @@ export function RaceMorningContent({
   isExpanded = true,
   onSwitchToReview,
 }: RaceMorningContentProps) {
-  // Debug: Log race data to trace route_waypoints
-  console.log('[RaceMorningContent] race.route_waypoints:', {
-    hasWaypoints: !!(race as any).route_waypoints,
-    waypointCount: (race as any).route_waypoints?.length ?? 0,
-    raceId: race.id,
-    raceName: race.name,
-  });
-
   const raceType = getRaceType(race);
 
   // User settings for quick tips visibility

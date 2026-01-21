@@ -208,16 +208,6 @@ export function RaceTimelineLayout({
 
   // Render individual race card
   const renderItem = useCallback(({ item, index }: { item: any; index: number }) => {
-    const isNextRace = index === nextRaceIndex;
-
-    // Debug: Always log to see what's happening
-    console.log('⭐⭐⭐ [RaceTimelineLayout] renderItem ⭐⭐⭐', {
-      index,
-      nextRaceIndex,
-      isNextRace,
-      itemName: item?.data?.name || item?.name || 'unknown',
-    });
-
     return (
       <View style={[styles.cardContainer, { width: cardWidth }]}>
         {/* Tufte: Trust the timeline metaphor - position indicates next race */}

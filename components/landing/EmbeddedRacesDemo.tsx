@@ -2892,10 +2892,6 @@ export function EmbeddedRacesDemo({
                     element.style.maxWidth = `${demoWidth}px`;
                     element.style.left = `${demoLeft}px`;
                     element.style.transform = 'none'; // Remove centering transform
-                    console.log('[EmbeddedRacesDemo] TabBarContainer positioned:', {
-                      width: demoWidth,
-                      left: demoLeft
-                    });
                   } else {
                     // Fallback: center with transform
                     element.style.left = '50%';
@@ -2908,73 +2904,6 @@ export function EmbeddedRacesDemo({
                   const parentRect = parent?.getBoundingClientRect();
                   const parentComputedStyle = parent ? window.getComputedStyle(parent) : null;
                   
-                  // Check overflow chain
-                  let current: any = element;
-                  const overflowChain: any[] = [];
-                  while (current && current !== document.body) {
-                    const style = window.getComputedStyle(current);
-                    overflowChain.push({
-                      tagName: current.tagName,
-                      className: current.className || '',
-                      overflow: style.overflow,
-                      overflowX: style.overflowX,
-                      overflowY: style.overflowY,
-                      position: style.position,
-                      width: style.width,
-                      maxWidth: style.maxWidth,
-                    });
-                    current = current.parentElement;
-                  }
-                  
-                  console.log('[EmbeddedRacesDemo] TabBarContainer:', {
-                    clientWidth: element.clientWidth,
-                    offsetWidth: element.offsetWidth,
-                    scrollWidth: element.scrollWidth,
-                    boundingRect: {
-                      left: rect.left,
-                      right: rect.right,
-                      top: rect.top,
-                      bottom: rect.bottom,
-                      width: rect.width,
-                      height: rect.height,
-                    },
-                    parent: parentRect ? {
-                      clientWidth: parent?.clientWidth,
-                      boundingRect: {
-                        left: parentRect.left,
-                        right: parentRect.right,
-                        width: parentRect.width,
-                        height: parentRect.height,
-                      },
-                      computedStyle: {
-                        overflow: parentComputedStyle?.overflow,
-                        overflowX: parentComputedStyle?.overflowX,
-                        overflowY: parentComputedStyle?.overflowY,
-                        position: parentComputedStyle?.position,
-                        width: parentComputedStyle?.width,
-                        maxWidth: parentComputedStyle?.maxWidth,
-                      },
-                    } : null,
-                    computedStyle: {
-                      position: computedStyle.position,
-                      bottom: computedStyle.bottom,
-                      left: computedStyle.left,
-                      right: computedStyle.right,
-                      width: computedStyle.width,
-                      maxWidth: computedStyle.maxWidth,
-                      overflow: computedStyle.overflow,
-                      overflowX: computedStyle.overflowX,
-                      overflowY: computedStyle.overflowY,
-                      zIndex: computedStyle.zIndex,
-                    },
-                    overflowChain,
-                    children: Array.from(element.children).map((child: any) => ({
-                      tagName: child.tagName,
-                      clientWidth: child.clientWidth,
-                      offsetWidth: child.offsetWidth,
-                      offsetLeft: child.offsetLeft,
-                    })),
-                  });
                 }
               }, 100);
             }
@@ -3009,7 +2938,6 @@ export function EmbeddedRacesDemo({
                       // Constrain the tabBar itself
                       element.style.width = `${demoWidth}px`;
                       element.style.maxWidth = `${demoWidth}px`;
-                      console.log('[EmbeddedRacesDemo] TabBar width constrained to:', demoWidth);
                     } else {
                       // Fallback: constrain to parent
                       const parent = element.parentElement;
@@ -3022,99 +2950,6 @@ export function EmbeddedRacesDemo({
                       }
                     }
                     
-                    if (element.clientWidth) {
-                    const computedStyle = window.getComputedStyle(element);
-                    console.log('[EmbeddedRacesDemo] TabBar (web):', {
-                      clientWidth: element.clientWidth,
-                      scrollWidth: element.scrollWidth,
-                      children: element.children?.length || 0,
-                        needsScroll: element.scrollWidth > element.clientWidth,
-                      computedStyle: {
-                        width: computedStyle.width,
-                        maxWidth: computedStyle.maxWidth,
-                        minWidth: computedStyle.minWidth,
-                        overflow: computedStyle.overflow,
-                        overflowX: computedStyle.overflowX,
-                        overflowY: computedStyle.overflowY,
-                        display: computedStyle.display,
-                        flexDirection: computedStyle.flexDirection,
-                        justifyContent: computedStyle.justifyContent,
-                      },
-                    });
-                    // Log each child tab with detailed visibility analysis
-                    if (element.children) {
-                      const tabInfo = Array.from(element.children).map((child: any, index: number) => {
-                        const childStyle = window.getComputedStyle(child);
-                        const tabRect = child.getBoundingClientRect();
-                        const parentRect = element.getBoundingClientRect();
-                        const isVisible = tabRect.left >= parentRect.left && tabRect.right <= parentRect.right;
-                        const isPartiallyVisible = tabRect.left < parentRect.right && tabRect.right > parentRect.left;
-                        const isClipped = child.offsetLeft + child.offsetWidth > element.clientWidth;
-                        
-                        return {
-                          index,
-                          label: child.textContent?.trim() || `Tab ${index}`,
-                          dimensions: {
-                            clientWidth: child.clientWidth,
-                            offsetWidth: child.offsetWidth,
-                            offsetLeft: child.offsetLeft,
-                            offsetRight: child.offsetLeft + child.offsetWidth,
-                            boundingRect: {
-                              left: tabRect.left,
-                              right: tabRect.right,
-                              width: tabRect.width,
-                            },
-                          },
-                          parent: {
-                            clientWidth: element.clientWidth,
-                            scrollWidth: element.scrollWidth,
-                            boundingRect: {
-                              left: parentRect.left,
-                              right: parentRect.right,
-                              width: parentRect.width,
-                            },
-                          },
-                          visibility: {
-                            isVisible,
-                            isPartiallyVisible,
-                            isClipped,
-                            wouldBeVisible: child.offsetLeft + child.offsetWidth <= element.clientWidth,
-                          },
-                          computedStyle: {
-                            width: childStyle.width,
-                            maxWidth: childStyle.maxWidth,
-                            minWidth: childStyle.minWidth,
-                            flex: childStyle.flex,
-                            flexGrow: childStyle.flexGrow,
-                            flexShrink: childStyle.flexShrink,
-                            flexBasis: childStyle.flexBasis,
-                            display: childStyle.display,
-                            visibility: childStyle.visibility,
-                            opacity: childStyle.opacity,
-                          },
-                        };
-                      });
-                      
-                      console.log('[EmbeddedRacesDemo] Tab Visibility Analysis:', JSON.stringify({
-                        totalTabs: tabInfo.length,
-                        visibleTabs: tabInfo.filter(t => t.visibility.isVisible).length,
-                        partiallyVisibleTabs: tabInfo.filter(t => t.visibility.isPartiallyVisible).length,
-                        clippedTabs: tabInfo.filter(t => t.visibility.isClipped).length,
-                        tabs: tabInfo,
-                        viewport: {
-                          width: window.innerWidth,
-                          height: window.innerHeight,
-                        },
-                        browserInfo: {
-                          userAgent: navigator.userAgent,
-                          isChrome: /Chrome/.test(navigator.userAgent) && !/Edge/.test(navigator.userAgent),
-                          isFirefox: /Firefox/.test(navigator.userAgent),
-                          isSafari: /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent),
-                          isEdge: /Edge/.test(navigator.userAgent),
-                        },
-                      }));
-                      }
-                    }
                   }
                 }, 150);
               }

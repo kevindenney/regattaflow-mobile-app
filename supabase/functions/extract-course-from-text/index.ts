@@ -140,8 +140,6 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log('[extract-course-text] Processing text of length:', text.length);
-
     // Limit content size
     const cleanContent = text.slice(0, 30000);
 
@@ -151,8 +149,6 @@ serve(async (req: Request) => {
       ? 'This is a DISTANCE/OFFSHORE race. Look for route waypoints, turning marks, islands, headlands, and course coordinates that define a long-distance sailing route.'
       : 'This is a FLEET race. Look for windward/leeward marks, gate marks, start/finish lines, and buoy racing course elements.';
 
-    console.log('[extract-course-text] Calling Claude API...');
-    
     const response = await anthropic.messages.create({
       model: 'claude-3-haiku-20240307',
       max_tokens: 4096,
@@ -163,15 +159,11 @@ serve(async (req: Request) => {
         },
       ],
     });
-    
-    console.log('[extract-course-text] Claude API responded');
 
     const responseText = response.content
       .filter((block: any) => block.type === 'text')
       .map((block: any) => block.text)
       .join('\n');
-
-    console.log('[extract-course-text] Response preview:', responseText.substring(0, 300));
 
     // Parse JSON from response
     let result: any;
@@ -221,14 +213,7 @@ serve(async (req: Request) => {
     // Check if we have start/finish waypoints already
     const hasStart = validWaypoints.some(wp => wp.type === 'start');
     const hasFinish = validWaypoints.some(wp => wp.type === 'finish');
-    
-    console.log('[extract-course-text] Start/finish detection:', { 
-      hasStart, 
-      hasFinish, 
-      validWaypointsCount: validWaypoints.length,
-      raceType 
-    });
-    
+
     // Add start point
     if (hasStart) {
       // Start already in waypoints, add it first
@@ -269,7 +254,6 @@ serve(async (req: Request) => {
           passingSide: null,
           notes: 'Starting Line (inferred from course sequence)',
         });
-        console.log('[extract-course-text] Added inferred START waypoint');
       }
     }
     
@@ -319,7 +303,6 @@ serve(async (req: Request) => {
           passingSide: null,
           notes: 'Finishing Line (inferred from course sequence)',
         });
-        console.log('[extract-course-text] Added inferred FINISH waypoint');
       }
     }
 
@@ -338,10 +321,6 @@ serve(async (req: Request) => {
       // Otherwise maintain relative order
       return 0;
     });
-    
-    console.log('[extract-course-text] Final waypoints order:', finalWaypoints.map(wp => ({ name: wp.name, type: wp.type })));
-
-    console.log('[extract-course-text] Final waypoints:', finalWaypoints.length);
 
     return new Response(
       JSON.stringify({

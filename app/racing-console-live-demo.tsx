@@ -206,7 +206,6 @@ export default function RacingConsoleLiveDemo() {
         boatLength={10}
         draft={2.5}
         onChipExpand={(chip) => {
-          console.log('Chip expanded:', chip.title);
         }}
       />
     </View>

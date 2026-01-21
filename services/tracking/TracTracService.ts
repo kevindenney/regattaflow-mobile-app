@@ -170,7 +170,6 @@ export class TracTracService {
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
-        console.log('TracTrac WebSocket connected');
         this.reconnectAttempts = 0;
         this.config.onStatusChange?.('connected');
 
@@ -204,7 +203,6 @@ export class TracTracService {
       };
 
       this.ws.onclose = () => {
-        console.log('TracTrac WebSocket closed');
         this.config.onStatusChange?.('disconnected');
         this.attemptReconnect(eventId, raceId);
       };
@@ -265,7 +263,6 @@ export class TracTracService {
         this.handlePositionUpdate(data);
         break;
       case 'race_status':
-        console.log('Race status update:', data.status);
         break;
       case 'boat_status':
         this.handleBoatStatusUpdate(data);
@@ -274,7 +271,7 @@ export class TracTracService {
         console.error('TracTrac error:', data.message);
         break;
       default:
-        console.log('Unknown TracTrac message type:', data.type);
+        break;
     }
   }
 
@@ -337,16 +334,13 @@ export class TracTracService {
 
   private attemptReconnect(eventId: string, raceId?: string): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('Max reconnect attempts reached, falling back to polling');
       this.startPolling(eventId, raceId);
       return;
     }
 
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    
-    console.log(`Reconnecting to TracTrac in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    
+
     setTimeout(() => {
       this.connect(eventId, raceId);
     }, delay);

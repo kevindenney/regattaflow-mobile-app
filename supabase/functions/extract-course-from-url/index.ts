@@ -78,8 +78,6 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log('[extract-course-url] Fetching URL:', url);
-
     // Fetch the URL content
     let pageContent: string;
     let contentType: string;
@@ -107,7 +105,6 @@ serve(async (req: Request) => {
       
       // PDFs cannot be processed via URL - use document upload instead
       if (contentType.includes('pdf')) {
-        console.log('[extract-course-url] PDF detected, returning instructions to upload');
         return new Response(
           JSON.stringify({ 
             error: 'PDF files cannot be processed via URL. Please use the Upload tab to upload the PDF directly.',
@@ -146,16 +143,12 @@ serve(async (req: Request) => {
       cleanContent = cleanContent.substring(0, 50000);
     }
 
-    console.log('[extract-course-url] Content length:', cleanContent.length);
-
     const anthropic = new Anthropic({ apiKey });
     
     const raceContext = raceType === 'distance' 
       ? 'This is a DISTANCE/OFFSHORE race. Look for route waypoints, turning marks, and course coordinates that define a long-distance sailing route.'
       : 'This is a FLEET race. Look for windward/leeward marks, gate marks, start/finish lines, and buoy racing course elements.';
 
-    console.log('[extract-course-url] Calling Claude API...');
-    
     // Use haiku for faster response
     const response = await anthropic.messages.create({
       model: 'claude-3-haiku-20240307',
@@ -167,15 +160,11 @@ serve(async (req: Request) => {
         },
       ],
     });
-    
-    console.log('[extract-course-url] Claude API responded');
 
     const responseText = response.content
       .filter((block: any) => block.type === 'text')
       .map((block: any) => block.text)
       .join('\n');
-
-    console.log('[extract-course-url] Response:', responseText.substring(0, 500));
 
     // Parse JSON from response
     let result: any;
@@ -202,8 +191,6 @@ serve(async (req: Request) => {
         wp.longitude >= -180 && wp.longitude <= 180
       );
     });
-
-    console.log('[extract-course-url] Valid waypoints:', validWaypoints.length);
 
     return new Response(
       JSON.stringify({

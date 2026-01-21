@@ -74,7 +74,6 @@ async function geocodeStartFinishLocations(
           
           // Insert at the beginning (point 0)
           waypoints.unshift(startWaypoint);
-          console.log(`[extract-course] Geocoded start: ${startLocationName} -> ${startWaypoint.latitude}, ${startWaypoint.longitude}`);
         }
       }
     } catch (error) {
@@ -115,7 +114,6 @@ async function geocodeStartFinishLocations(
           
           // Add at the end (last point)
           waypoints.push(finishWaypoint);
-          console.log(`[extract-course] Geocoded finish: ${finishLocationName} -> ${finishWaypoint.latitude}, ${finishWaypoint.longitude}`);
         }
       }
     } catch (error) {
@@ -255,8 +253,6 @@ serve(async (req: Request) => {
       });
     }
 
-    console.log('[extract-course] Processing document:', fileName, fileType);
-
     // Call Claude for extraction
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -274,8 +270,6 @@ serve(async (req: Request) => {
       .filter((block: any) => block.type === 'text')
       .map((block: any) => block.text)
       .join('\n');
-
-    console.log('[extract-course] Raw response:', responseText.substring(0, 500));
 
     // Parse JSON from response
     let result: ExtractionResult;
@@ -313,8 +307,6 @@ serve(async (req: Request) => {
       passingSide: wp.passingSide || undefined,
       notes: wp.notes || undefined,
     }));
-
-    console.log('[extract-course] Extracted waypoints:', validWaypoints.length);
 
     // Geocode start/finish location names if provided
     const finalWaypoints = await geocodeStartFinishLocations(

@@ -32,8 +32,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[generate-race-briefing] Generating briefing for:', race.name, 'Type:', raceType);
-
     // Build context for the AI
     const raceContext = buildRaceContext(race, weather, raceType);
 
@@ -146,8 +144,6 @@ Return ONLY valid JSON, no other text.`,
         warnings: ['Always maintain situational awareness'],
       };
     }
-
-    console.log('[generate-race-briefing] Strategy generated successfully');
 
     return new Response(
       JSON.stringify({ strategy }),

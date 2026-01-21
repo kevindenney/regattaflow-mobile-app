@@ -205,11 +205,8 @@ export function UpwindStrategyCard({
       if (beatsRef.current.length === 0 && !loadingRef.current && pollCountRef.current < MAX_POLLS) {
         pollCountRef.current += 1;
         const nextDelay = Math.min(2000 + pollCountRef.current * 1000, 10000); // 2s to 10s max
-        console.log(`[UpwindStrategyCard] Polling for strategy updates... (${pollCountRef.current}/${MAX_POLLS}, next in ${nextDelay/1000}s)`);
         loadUpwindStrategy();
         pollInterval = setTimeout(pollWithBackoff, nextDelay);
-      } else if (pollCountRef.current >= MAX_POLLS) {
-        console.log('[UpwindStrategyCard] Max poll attempts reached, stopping polling');
       }
     };
     // Start polling after initial delay (give StartStrategyCard time to begin generating)

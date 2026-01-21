@@ -91,16 +91,15 @@ export default function CrewScreen() {
 
   const handleAddMember = async () => {
     if (isAddingMember) return; // Prevent double-clicks
-    
+
     try {
       setIsAddingMember(true);
-      console.log('handleAddMember called', { newMember, crewMembers });
-      
+
       if (!newMember.name.trim() || !newMember.role.trim()) {
         Alert.alert('Validation Error', 'Please enter both name and role');
         return;
       }
-      
+
       const member: SailorCrewMember = {
         id: generateMemberId(),
         name: newMember.name.trim(),
@@ -110,8 +109,7 @@ export default function CrewScreen() {
         communicationMethods: newMember.communicationMethods,
         hasAccess: newMember.hasAccess,
       };
-      
-      console.log('Adding member:', member);
+
       const updatedMembers = [...crewMembers, member];
       
       // Update local state first for immediate feedback

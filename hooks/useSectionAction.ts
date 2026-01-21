@@ -100,8 +100,6 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
 
   const handleSectionAction = useCallback(
     (action: TemplateSectionAction, sectionId: string) => {
-      console.log('[useSectionAction] Action triggered:', { action, sectionId, raceId });
-
       switch (action.type) {
         case 'tool': {
           const toolConfig = action.toolId ? TOOL_ROUTES[action.toolId] : null;

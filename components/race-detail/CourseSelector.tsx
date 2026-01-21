@@ -317,18 +317,15 @@ export function CourseSelector({
   }, [autoSelectCourseId]);
 
   const loadCourses = useCallback(async () => {
-    console.log('[CourseSelector] loadCourses called, venueId:', venueId, 'raceType:', raceType);
     try {
       setLoading(true);
 
       // Fetch discoverable courses (user's own + venue shared + public)
       let fetchedCourses: RaceCourse[] = [];
-      console.log('[CourseSelector] Calling fetchDiscoverableCourses...');
       fetchedCourses = await CourseLibraryService.fetchDiscoverableCourses({
         venueId,
         raceType,
       });
-      console.log('[CourseSelector] Got courses:', fetchedCourses.length);
       
       // Also apply wind filtering if specified
       if (currentWindDirection !== undefined || currentWindSpeed !== undefined) {

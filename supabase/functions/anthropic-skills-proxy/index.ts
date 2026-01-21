@@ -18,8 +18,6 @@ async function callAnthropicAPI(
   isMultipart: boolean = false
 ): Promise<any> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  console.log('API Key present:', !!apiKey);
-  console.log('API Key starts with:', apiKey?.substring(0, 10));
 
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY not configured');
@@ -30,8 +28,6 @@ async function callAnthropicAPI(
     'anthropic-beta': 'code-execution-2025-08-25,skills-2025-10-02,files-api-2025-04-14',
     'x-api-key': apiKey,
   };
-
-  console.log('Calling Anthropic API:', method, endpoint);
 
   if (!isMultipart) {
     headers['Content-Type'] = 'application/json';
@@ -47,8 +43,6 @@ async function callAnthropicAPI(
   }
 
   const response = await fetch(`${ANTHROPIC_API_BASE}${endpoint}`, options);
-
-  console.log('Anthropic response status:', response.status);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -128,8 +122,6 @@ ${params.content}`;
           word.charAt(0).toUpperCase() + word.slice(1)
         ).join(' ');
 
-        console.log('Creating ZIP archive for skill:', params.name);
-
         // Import JSZip for creating ZIP files
         // @deno-types="npm:@types/jszip"
         const JSZip = (await import('npm:jszip@3.10.1')).default;
@@ -146,9 +138,6 @@ ${params.content}`;
         // Generate ZIP as Uint8Array
         const zipBlob = await zip.generateAsync({ type: 'uint8array' });
 
-        console.log('ZIP size:', zipBlob.length, 'bytes');
-        console.log('ZIP structure: ', params.name, '/SKILL.md');
-
         // Create multipart form data with ZIP file
         const formData = new FormData();
         formData.append('display_title', displayTitle);
@@ -156,8 +145,6 @@ ${params.content}`;
         // Add the ZIP file
         const zipFile = new Blob([zipBlob], { type: 'application/zip' });
         formData.append('files[]', zipFile, 'skill.zip');
-
-        console.log('Uploading skill ZIP for:', params.name);
 
         // Call Anthropic API
         const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -182,7 +169,6 @@ ${params.content}`;
         }
 
         result = await response.json();
-        console.log('✅ Skill uploaded successfully:', result.id);
         break;
 
       default:

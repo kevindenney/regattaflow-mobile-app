@@ -42,11 +42,7 @@ export default function WeatherTestScreen() {
     setWeatherData(null);
 
     try {
-      console.log('[WeatherTest] Fetching weather for:', testVenue.name);
-
       const weather = await regionalWeatherService.getVenueWeather(testVenue, 24);
-
-      console.log('[WeatherTest] Weather data received:', weather);
 
       if (weather) {
         setWeatherData(weather);

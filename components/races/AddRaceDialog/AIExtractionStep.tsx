@@ -87,7 +87,6 @@ export function AIExtractionStep({
 
         if (isPdfUrl) {
           // Use pdf-proxy edge function to fetch PDF (avoids CORS issues)
-          console.log('[AIExtractionStep] Detected PDF URL, using pdf-proxy...');
           try {
             const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
             const proxyUrl = `${supabaseUrl}/functions/v1/pdf-proxy?url=${encodeURIComponent(content)}`;
@@ -109,7 +108,6 @@ export function AIExtractionStep({
             const blobUrl = URL.createObjectURL(pdfBlob);
 
             setExtractionProgress(20);
-            console.log('[AIExtractionStep] PDF fetched, extracting text...');
 
             // Extract text from PDF using PDFExtractionService
             const pdfResult = await PDFExtractionService.extractText(blobUrl, {
@@ -125,7 +123,6 @@ export function AIExtractionStep({
             }
 
             textContent = pdfResult.text;
-            console.log('[AIExtractionStep] PDF text extracted, length:', textContent.length);
           } catch (pdfError: any) {
             console.error('[AIExtractionStep] PDF extraction failed:', pdfError);
             // Provide helpful error message

@@ -129,22 +129,6 @@ export function RaceCardWithTuning({
     return mapTuningToCardFormat(tuningSettings);
   }, [tuningSettings]);
 
-  // Debug logging to understand what data we're receiving
-  React.useEffect(() => {
-    console.log(`🏎️ [RaceCardWithTuning] ${raceCardProps.name}:`, {
-      classId,
-      className,
-      hasWind: !!wind,
-      windSpeed: wind ? `${wind.speedMin}-${wind.speedMax}` : 'none',
-      vhfChannel: critical_details?.vhf_channel,
-      hasCriticalDetails: !!critical_details,
-      shouldFetchTuning,
-      tuningSettingsCount: tuningSettings?.length || 0,
-      tuningLoading,
-      rigTuning: rigTuning ? 'present' : 'absent',
-    });
-  }, [raceCardProps.name, classId, className, wind, critical_details, shouldFetchTuning, tuningSettings, tuningLoading, rigTuning]);
-
   return (
     <RaceCard
       {...raceCardProps}

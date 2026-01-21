@@ -566,20 +566,11 @@ const isMissingRelation = (error: any) =>
 export const clubsApi = {
   async getClubs(userId: string) {
     try {
-      console.log('🔍 [getClubs] Starting with userId:', userId);
-
       // Check current auth session
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('🔐 [getClubs] Current session:', {
-        hasSession: !!session,
-        userId: session?.user?.id,
-        email: session?.user?.email,
-        matchesProvidedUserId: session?.user?.id === userId
-      });
 
       // Try joining with the clubs table (UUID-based)
       // Note: Using clubs(...) syntax instead of clubs!club_id to avoid foreign key requirement
-      console.log('🔍 [getClubs] Querying club_members with clubs join...');
       const { data, error } = await supabase
         .from('club_members')
         .select(`
@@ -604,15 +595,6 @@ export const clubsApi = {
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false, nullsFirst: false });
-
-      console.log('📊 [getClubs] clubs join result:', {
-        hasData: !!data,
-        dataLength: data?.length,
-        hasError: !!error,
-        errorMessage: error?.message,
-        errorDetails: error?.details,
-        errorHint: error?.hint
-      });
 
       if (error) {
         console.warn('⚠️ [getClubs] Primary query failed, checking error type...');
@@ -649,15 +631,7 @@ export const clubsApi = {
             .eq('user_id', userId)
             .order('created_at', { ascending: false, nullsFirst: false });
 
-          console.log('📊 [getClubs] yacht_clubs join result:', {
-            hasData: !!yachtResult.data,
-            dataLength: yachtResult.data?.length,
-            hasError: !!yachtResult.error,
-            errorMessage: yachtResult.error?.message
-          });
-
           if (!yachtResult.error) {
-            console.log('✅ [getClubs] Successfully returned data from yacht_clubs join');
             return { data: yachtResult.data, error: null, loading: false };
           }
         }
@@ -670,13 +644,6 @@ export const clubsApi = {
             .eq('user_id', userId)
             .order('joined_at', { ascending: false });
 
-          console.log('📊 [getClubs] legacy club_memberships result:', {
-            hasData: !!legacyResult.data,
-            dataLength: legacyResult.data?.length,
-            hasError: !!legacyResult.error,
-            errorMessage: legacyResult.error?.message
-          });
-
           if (
             legacyResult.error &&
             (legacyResult.error.message?.includes('relation') ||
@@ -686,7 +653,6 @@ export const clubsApi = {
             return { data: [], error: null, loading: false };
           }
 
-          console.log('✅ [getClubs] Returning legacy club_memberships data');
           return { data: legacyResult.data, error: legacyResult.error, loading: false };
         }
 
@@ -694,10 +660,6 @@ export const clubsApi = {
         return { data: [], error, loading: false };
       }
 
-      console.log('✅ [getClubs] Successfully returning data from clubs join:', {
-        count: data?.length,
-        clubs: data?.map((m: any) => m.club?.name)
-      });
       return {
         data,
         error: null,
@@ -711,19 +673,10 @@ export const clubsApi = {
 
   async getClubDirectory() {
     try {
-      console.log('[apiService] Fetching club directory...');
       const { data, error } = await supabase
         .from('clubs')
         .select('*')
         .order('name', { ascending: true });
-
-      console.log('[apiService] Club directory response:', {
-        hasData: !!data,
-        dataLength: data?.length,
-        error: error?.message,
-        errorCode: error?.code,
-        sampleClub: data?.[0],
-      });
 
       return { data, error, loading: false };
     } catch (error) {

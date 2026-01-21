@@ -99,8 +99,6 @@ serve(async (req: Request) => {
       coachProfile.stripe_account_id
     );
 
-    console.log(`Generated dashboard link for account ${coachProfile.stripe_account_id}`);
-
     return new Response(
       JSON.stringify({
         url: loginLink.url,

@@ -66,7 +66,6 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
 
   const loadParticipants = async () => {
     if (!user?.id || !raceId) {
-      console.log('[FleetRacersCard] Missing user or raceId, skipping load', { userId: user?.id, raceId });
       setLoading(false);
       setParticipants([]);
       return;
@@ -74,7 +73,6 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
 
     try {
       setLoading(true);
-      console.debug('[FleetRacersCard] loading competitors', { raceId, userId: user.id });
       
       // Add timeout to prevent infinite loading
       const timeoutPromise = new Promise<[]>((_, reject) => {
@@ -99,7 +97,6 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
         visibility: c.visibility,
       }));
 
-      console.debug('[FleetRacersCard] competitors result', { raceId, count: mapped.length });
       setParticipants(mapped);
     } catch (error: any) {
       console.error('[FleetRacersCard] Error loading participants:', error);

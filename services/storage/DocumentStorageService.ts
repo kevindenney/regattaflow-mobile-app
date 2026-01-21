@@ -71,7 +71,6 @@ export class DocumentStorageService {
 
       // Call document picker
       logger.debug('Opening document picker...');
-      console.log('📄 DocumentStorageService: Opening document picker');
 
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
@@ -80,7 +79,6 @@ export class DocumentStorageService {
       });
 
       logger.debug('Document picker result', { canceled: result.canceled, assetCount: result.assets?.length });
-      console.log('📄 DocumentStorageService: Picker result', result);
 
       if (result.canceled) {
         this.isPickerOpen = false;

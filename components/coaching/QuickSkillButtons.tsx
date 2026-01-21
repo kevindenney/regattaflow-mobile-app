@@ -36,15 +36,11 @@ export function QuickSkillButtons({
     setLoadingSkill(skill.id);
 
     try {
-      console.log(`🎯 Invoking skill: ${skill.label}`);
-
       // Build simple context for quick query
       const context = buildQuickContext(skill.id, raceData);
 
       // Invoke the actual skill
       const advice = await invokeSkill(skill.id, context);
-
-      console.log(`✅ Got advice:`, advice);
 
       // Format the message
       const message = advice.primary + (advice.details ? `\n\n${advice.details}` : '');

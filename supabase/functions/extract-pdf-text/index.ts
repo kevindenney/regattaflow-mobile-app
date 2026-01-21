@@ -11,6 +11,125 @@ import { Buffer } from "node:buffer";
  * Fetches a PDF from URL and extracts text using pdf-parse library
  */
 
+/**
+ * Check if bytes represent a valid PDF (starts with %PDF-)
+ */
+function isPdfContent(bytes: Uint8Array): boolean {
+  return bytes.length >= 5 &&
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46 && // F
+    bytes[4] === 0x2D;   // -
+}
+
+/**
+ * Check if bytes represent HTML content
+ */
+function isHtmlContent(bytes: Uint8Array): boolean {
+  const firstChars = new TextDecoder().decode(bytes.slice(0, 500)).toLowerCase();
+  return firstChars.includes('<!doctype') ||
+         firstChars.includes('<html') ||
+         firstChars.includes('<head') ||
+         firstChars.includes('<body');
+}
+
+/**
+ * Generate browser-like headers for fetching PDFs
+ */
+function getBrowserHeaders(url: string, minimal = false): Record<string, string> {
+  const origin = new URL(url).origin;
+
+  if (minimal) {
+    // Minimal headers - some servers reject "too perfect" browser signatures
+    return {
+      'User-Agent': 'Mozilla/5.0 (compatible; PDFBot/1.0)',
+      'Accept': '*/*',
+    };
+  }
+
+  // Full browser headers to mimic real Chrome browser
+  return {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/pdf,application/octet-stream,*/*;q=0.9',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': origin + '/',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+  };
+}
+
+/**
+ * Fetch PDF with retry logic and different header strategies
+ */
+async function fetchPdfWithRetry(url: string): Promise<{
+  success: boolean;
+  buffer?: ArrayBuffer;
+  error?: string;
+  finalUrl?: string;
+  contentType?: string;
+}> {
+  const strategies = [
+    { name: 'full browser headers', minimal: false },
+    { name: 'minimal headers', minimal: true },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const headers = getBrowserHeaders(url, strategy.minimal);
+      const response = await fetch(url, {
+        headers,
+        redirect: 'follow',
+      });
+
+      const finalUrl = response.url;
+      const contentType = response.headers.get('content-type') || 'unknown';
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const buffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      if (isPdfContent(bytes)) {
+        return { success: true, buffer, finalUrl, contentType };
+      }
+
+      if (isHtmlContent(bytes)) {
+        continue;
+      }
+
+      // Not PDF and not HTML - might be a different binary format, check content-type
+      if (contentType.includes('pdf') || contentType.includes('octet-stream')) {
+        return {
+          success: false,
+          error: `Server returned content-type "${contentType}" but file doesn't appear to be a valid PDF.`,
+          finalUrl,
+          contentType
+        };
+      }
+
+      continue;
+
+    } catch (fetchError) {
+      continue;
+    }
+  }
+
+  return {
+    success: false,
+    error: 'Could not fetch PDF. The server may be blocking automated requests or returning a login/error page. Try downloading the PDF manually and uploading it directly.'
+  };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -27,62 +146,35 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[extract-pdf-text] Fetching PDF from:', url);
+    // Fetch the PDF with retry logic
+    const fetchResult = await fetchPdfWithRetry(url);
 
-    // Fetch the PDF
-    const pdfResponse = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/pdf,*/*',
-      },
-    });
-
-    if (!pdfResponse.ok) {
-      return new Response(
-        JSON.stringify({ success: false, error: `Failed to fetch PDF: ${pdfResponse.status}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Get PDF as ArrayBuffer
-    const pdfBuffer = await pdfResponse.arrayBuffer();
-    const pdfBytes = new Uint8Array(pdfBuffer);
-
-    // Check if it's actually a PDF
-    const isPdf = pdfBytes.length >= 5 &&
-      pdfBytes[0] === 0x25 && // %
-      pdfBytes[1] === 0x50 && // P
-      pdfBytes[2] === 0x44 && // D
-      pdfBytes[3] === 0x46 && // F
-      pdfBytes[4] === 0x2D;   // -
-
-    if (!isPdf) {
-      const firstChars = new TextDecoder().decode(pdfBytes.slice(0, 200));
-      const isHtml = firstChars.includes('<!DOCTYPE') || firstChars.includes('<html');
-
+    if (!fetchResult.success || !fetchResult.buffer) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: isHtml
-            ? 'URL returned an HTML page instead of PDF. Try downloading and uploading manually.'
-            : 'URL did not return a valid PDF file.'
+          error: fetchResult.error || 'Failed to fetch PDF',
+          details: {
+            requestedUrl: url,
+            finalUrl: fetchResult.finalUrl,
+            contentType: fetchResult.contentType,
+          }
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[extract-pdf-text] PDF size:', pdfBytes.length, 'bytes');
+    // Get PDF as ArrayBuffer
+    const pdfBuffer = fetchResult.buffer;
+    const pdfBytes = new Uint8Array(pdfBuffer)
 
     // Extract text using pdf-parse
     // Convert Uint8Array to Buffer for pdf-parse
     const buffer = Buffer.from(pdfBuffer);
 
-    console.log('[extract-pdf-text] Parsing PDF with pdf-parse...');
     const data = await pdf(buffer);
 
     const extractedText = data.text || '';
-    console.log('[extract-pdf-text] Extracted text length:', extractedText.length);
-    console.log('[extract-pdf-text] Number of pages:', data.numpages);
 
     if (!extractedText || extractedText.trim().length < 10) {
       return new Response(

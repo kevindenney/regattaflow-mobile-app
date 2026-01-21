@@ -154,9 +154,6 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
   const preferClubCreation = userRecord?.user_type === 'club';
 
   const findExistingClub = async () => {
-    // 🔍 DEBUG: Log lookup attempts
-    console.log('[club/workspace] findExistingClub for userId:', userId);
-
     // Attempt 1: club_profiles where contact_email matches user email (owner lookup)
     // Note: club_profiles doesn't have user_id, so we check via club_staff
     
@@ -167,12 +164,8 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       .eq('user_id', userId)
       .limit(10);
 
-    console.log('[club/workspace] club_staff lookup result:', staff.data, staff.error);
-
     if (staff.data && staff.data.length > 0) {
       const activeStaff = staff.data.find((row: any) => row.active !== false && row.is_active !== false) ?? staff.data[0];
-      console.log('[club/workspace] Found active staff record:', activeStaff);
-      
       if (activeStaff?.club_id) {
         // club_staff.club_id references club_profiles.id (not clubs.id!)
         const club = await supabase
@@ -180,8 +173,6 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
           .select('*')
           .eq('id', activeStaff.club_id)
           .maybeSingle();
-
-        console.log('[club/workspace] club_profiles lookup result:', club.data, club.error);
 
         if (club.data) {
           return {
@@ -201,8 +192,6 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       .select('*')
       .eq('email', userRecord?.email)
       .maybeSingle();
-
-    console.log('[club/workspace] clubs table lookup result:', owned.data, owned.error);
 
     if (owned.data) {
       return { club: owned.data, membership: { role: 'admin', source: 'owner' as const } };
@@ -239,7 +228,6 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       }
     }
 
-    console.log('[club/workspace] No club found for user');
     return { club: null, membership: null };
   };
 
@@ -266,8 +254,6 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
       updated_at: now,
     };
 
-    console.log('[club/workspace] Creating new club_profile:', insertPayload);
-
     const insertion = await supabase
       .from('club_profiles')
       .insert(insertPayload)
@@ -292,7 +278,6 @@ const handler = async (req: AuthenticatedRequest, res: VercelResponse) => {
     } else {
       club = insertion.data ?? null;
       created = !!club;
-      console.log('[club/workspace] Created new club_profile:', club);
     }
 
     if (club) {

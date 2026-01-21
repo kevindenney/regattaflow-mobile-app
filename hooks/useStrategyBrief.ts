@@ -161,11 +161,6 @@ export function useStrategyBrief({
   // Update overall intention
   const setIntention = useCallback(
     (value: string) => {
-      console.log('[useStrategyBrief] setIntention called', {
-        value,
-        regattaId,
-        currentIntention: intentions?.strategyBrief?.raceIntention
-      });
       updateIntentions({
         strategyBrief: {
           ...intentions?.strategyBrief,

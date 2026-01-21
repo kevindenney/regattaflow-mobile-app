@@ -57,8 +57,7 @@ export default function LessonPlayerScreen() {
 
       const loadAllData = async () => {
         // Load course with modules and lessons
-        console.log('[LessonPlayer] Loading course...');
-        
+
         // First, try to load from JSON catalog (single source of truth)
         let catalogCourse: CatalogCourse | undefined;
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
@@ -89,7 +88,6 @@ export default function LessonPlayerScreen() {
             if (dbCourse && dbCourse.id) {
               dbCourseId = dbCourse.id; // Use the database UUID
               courseExistsInDb = true;
-              console.log('[LessonPlayer] Found course in database with UUID:', dbCourseId);
             } else {
               console.warn('[LessonPlayer] Course not found in database. Course needs to be seeded.');
               dbCourseId = null;
@@ -183,8 +181,6 @@ export default function LessonPlayerScreen() {
           ?.flatMap((module) => module.learning_lessons || [])
           .find((l) => l.id === lessonId);
 
-        console.log('[LessonPlayer] Found lesson:', foundLesson?.title, 'is_free_preview:', foundLesson?.is_free_preview);
-
         if (!foundLesson) {
           throw new Error('Lesson not found');
         }
@@ -233,7 +229,6 @@ export default function LessonPlayerScreen() {
             ]) as LearningCourse | null;
             
             if (dbCourse?.id) {
-              console.log('[LessonPlayer] Found course in database with UUID:', dbCourse.id);
               enrollmentCourseId = dbCourse.id;
             } else {
               console.warn('[LessonPlayer] Course not found in database, cannot check enrollment');
@@ -243,13 +238,11 @@ export default function LessonPlayerScreen() {
           }
         }
         
-        console.log('[LessonPlayer] Checking enrollment with course ID:', enrollmentCourseId);
         const enrollmentPromise = Promise.race([
           LearningService.isEnrolled(user.id, enrollmentCourseId),
           new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
         ]);
         let isEnrolled = await enrollmentPromise;
-        console.log('[LessonPlayer] Enrolled:', isEnrolled);
 
         // Auto-enroll for Race Preparation Mastery course (accessed from checklist learning links)
         const isRacePrep = courseData.slug === 'race-preparation-mastery' ||
@@ -259,11 +252,9 @@ export default function LessonPlayerScreen() {
         if (!isEnrolled && isRacePrep && enrollmentCourseId) {
           const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(enrollmentCourseId);
           if (isValidUUID) {
-            console.log('[LessonPlayer] Auto-enrolling user in Race Preparation Mastery course...');
             try {
               await LearningService.enrollInCourse(user.id, enrollmentCourseId);
               isEnrolled = true;
-              console.log('[LessonPlayer] Auto-enrollment successful!');
             } catch (enrollErr) {
               console.warn('[LessonPlayer] Auto-enrollment failed:', enrollErr);
               // Continue anyway - maybe they have Pro access
@@ -274,7 +265,6 @@ export default function LessonPlayerScreen() {
         setEnrolled(isEnrolled);
 
         // Check subscription access
-        console.log('[LessonPlayer] Checking subscription...');
         const subscriptionPromise = Promise.race([
           LearningService.checkSubscriptionAccess(user.id),
           new Promise<{ hasProAccess: boolean }>((resolve) => 
@@ -282,7 +272,6 @@ export default function LessonPlayerScreen() {
           )
         ]);
         const { hasProAccess } = await subscriptionPromise;
-        console.log('[LessonPlayer] Pro access:', hasProAccess);
 
         // Check if this is a catalog-only course (not in database)
         // Race Preparation Mastery and similar courses from JSON catalog should be freely accessible
@@ -294,7 +283,6 @@ export default function LessonPlayerScreen() {
         // Check if user can access (enrolled, has Pro subscription, free preview, or catalog-only course)
         // Catalog-only courses (like Race Preparation Mastery) are freely accessible since content comes from JSON
         const hasAccess = isEnrolled || hasProAccess || foundLesson.is_free_preview || isCatalogOnlyCourse || isRacePrepCourse;
-        console.log('[LessonPlayer] Access check - isEnrolled:', isEnrolled, 'hasProAccess:', hasProAccess, 'is_free_preview:', foundLesson.is_free_preview, 'isCatalogOnlyCourse:', isCatalogOnlyCourse, 'isRacePrepCourse:', isRacePrepCourse, 'hasAccess:', hasAccess);
         setCanAccess(hasAccess);
 
         if (!hasAccess) {
@@ -302,20 +290,17 @@ export default function LessonPlayerScreen() {
         }
 
         // Mark lesson as started - don't block on this
-        console.log('[LessonPlayer] Marking lesson started...');
         LessonProgressService.markLessonStarted(user.id, lessonId).catch((err) => {
           console.warn('[LessonPlayer] Failed to mark lesson started:', err);
         });
 
         // Check completion status with timeout
-        console.log('[LessonPlayer] Getting progress...');
         const progressPromise = Promise.race([
           LessonProgressService.getLessonProgress(user.id, lessonId),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
         ]);
         const progress = await progressPromise;
         setIsCompleted(progress?.is_completed || false);
-        console.log('[LessonPlayer] Progress loaded - isCompleted:', progress?.is_completed);
       };
 
       await Promise.race([loadAllData(), timeoutPromise]);
@@ -330,7 +315,6 @@ export default function LessonPlayerScreen() {
   // Find the next lesson in the course
   const getNextLesson = useCallback(() => {
     if (!course || !lessonId) {
-      console.log('[LessonPlayer] getNextLesson - missing course or lessonId', { course: !!course, lessonId });
       return null;
     }
     
@@ -345,19 +329,14 @@ export default function LessonPlayerScreen() {
         }
         return (a.order_index || 0) - (b.order_index || 0);
       }) || [];
-    
-    console.log('[LessonPlayer] getNextLesson - all lessons:', allLessons.map(l => ({ id: l.id, title: l.title, order: l.order_index })));
-    
+
     const currentIndex = allLessons.findIndex(l => l.id === lessonId);
-    console.log('[LessonPlayer] getNextLesson - current lesson index:', currentIndex, 'total lessons:', allLessons.length);
-    
+
     if (currentIndex >= 0 && currentIndex < allLessons.length - 1) {
       const nextLesson = allLessons[currentIndex + 1];
-      console.log('[LessonPlayer] getNextLesson - found next lesson:', nextLesson.id, nextLesson.title);
       return nextLesson;
     }
-    
-    console.log('[LessonPlayer] getNextLesson - no next lesson found');
+
     return null;
   }, [course, lessonId]);
 
@@ -454,19 +433,10 @@ export default function LessonPlayerScreen() {
   // Handle navigation to next lesson when interactive component completes
   const handleLessonComplete = useCallback(() => {
     const nextLesson = getNextLesson();
-    console.log('[LessonPlayer] handleLessonComplete - nextLesson:', nextLesson);
-    console.log('[LessonPlayer] handleLessonComplete - current lessonId:', lessonId);
-    console.log('[LessonPlayer] handleLessonComplete - course modules:', course?.learning_modules?.map(m => ({
-      id: m.id,
-      title: m.title,
-      lessons: m.learning_lessons?.map(l => ({ id: l.id, title: l.title }))
-    })));
-    
+
     if (nextLesson && nextLesson.id) {
-      console.log('[LessonPlayer] Navigating to next lesson:', nextLesson.id, nextLesson.title);
       router.push(`/(tabs)/learn/${courseId}/player?lessonId=${nextLesson.id}`);
     } else {
-      console.log('[LessonPlayer] No next lesson found, navigating back to course');
       // No more lessons, go back to course
       router.push(`/(tabs)/learn/${courseId}`);
     }

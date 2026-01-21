@@ -289,14 +289,6 @@ export function useRacePreparation({
         ...pendingChangesRef.current,
       };
 
-      console.log('[useRacePreparation] Saving to Supabase:', {
-        regattaId,
-        sailorId: user.id,
-        hasIntentions: !!updates.user_intentions,
-        checklistKeys: updates.user_intentions?.checklistCompletions
-          ? Object.keys(updates.user_intentions.checklistCompletions)
-          : [],
-      });
       logger.info('Saving race preparation to Supabase', { regattaId, hasIntentions: !!updates.user_intentions });
       const result = await sailorRacePreparationService.upsertPreparation(updates);
 

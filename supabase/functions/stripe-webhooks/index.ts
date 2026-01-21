@@ -42,8 +42,6 @@ serve(async (req: Request) => {
       return new Response('Invalid signature', { status: 400 });
     }
 
-    console.log(`Processing webhook event: ${event.type}`);
-
     // Handle different event types
     switch (event.type) {
       // Payment Intent Events
@@ -93,7 +91,7 @@ serve(async (req: Request) => {
         break;
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        // Unhandled event type
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -113,7 +111,6 @@ serve(async (req: Request) => {
  * Handle successful payment intent
  */
 async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
-  console.log(`Payment succeeded: ${paymentIntent.id}`);
   const metadata = paymentIntent.metadata;
 
   if (metadata.type === 'race_entry' && metadata.entry_id) {
@@ -133,8 +130,6 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     if (error) {
       console.error('Failed to update race entry:', error);
     } else {
-      console.log(`Race entry ${metadata.entry_id} marked as paid`);
-      
       // Trigger confirmation email
       await triggerConfirmationEmail(metadata.entry_id, 'race_entry');
     }
@@ -155,8 +150,6 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     if (error) {
       console.error('Failed to update coaching session:', error);
     } else {
-      console.log(`Coaching session ${metadata.session_id} marked as paid`);
-      
       // Trigger notification to coach
       await triggerConfirmationEmail(metadata.session_id, 'coaching_session');
     }
@@ -197,8 +190,6 @@ async function handleCoursePurchaseSuccess(
   paymentIntentId: string,
   amountPaid: number
 ) {
-  console.log(`Course purchase succeeded: course=${courseId}, user=${userId}`);
-
   // Create enrollment record
   const { data: enrollment, error: enrollError } = await supabase
     .from('learning_enrollments')
@@ -219,8 +210,6 @@ async function handleCoursePurchaseSuccess(
     console.error('Failed to create enrollment:', enrollError);
     return;
   }
-
-  console.log(`Enrollment created: ${enrollment?.id}`);
 
   // Get course and user info for email
   const { data: course } = await supabase
@@ -263,7 +252,6 @@ async function handleCoursePurchaseSuccess(
  * Handle failed payment intent
  */
 async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
-  console.log(`Payment failed: ${paymentIntent.id}`);
   const metadata = paymentIntent.metadata;
   const failureMessage = paymentIntent.last_payment_error?.message || 'Payment failed';
 
@@ -291,13 +279,10 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
  * Handle checkout session completed
  */
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
-  console.log(`Checkout session completed: ${session.id}`);
   const metadata = session.metadata || {};
 
   // Handle course purchase checkout
   if (metadata.type === 'course_purchase' && metadata.course_id && metadata.user_id) {
-    console.log(`Course checkout completed: course=${metadata.course_id}, user=${metadata.user_id}`);
-    
     // Create enrollment - checkout.session.completed is the primary event for course purchases
     await handleCoursePurchaseSuccess(
       metadata.course_id,
@@ -321,8 +306,6 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
  * Handle subscription updates
  */
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
-  console.log(`Subscription updated: ${subscription.id}, status: ${subscription.status}`);
-  
   const customerId = subscription.customer as string;
   
   // Find user by Stripe customer ID
@@ -406,8 +389,6 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
  * Handle subscription deletion
  */
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  console.log(`Subscription deleted: ${subscription.id}`);
-  
   const customerId = subscription.customer as string;
   
   const { data: user } = await supabase
@@ -441,8 +422,6 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
  * Handle paid invoice
  */
 async function handleInvoicePaid(invoice: Stripe.Invoice) {
-  console.log(`Invoice paid: ${invoice.id}`);
-  
   const customerId = invoice.customer as string;
   
   const { data: user } = await supabase
@@ -474,8 +453,6 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
  * Handle failed invoice payment
  */
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  console.log(`Invoice payment failed: ${invoice.id}`);
-  
   const customerId = invoice.customer as string;
   
   const { data: user } = await supabase
@@ -516,8 +493,6 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
  * Handle Stripe Connect account updates
  */
 async function handleAccountUpdated(account: Stripe.Account) {
-  console.log(`Connected account updated: ${account.id}`);
-  
   // Update coach profile with account status
   const { error } = await supabase
     .from('coach_profiles')
@@ -538,8 +513,6 @@ async function handleAccountUpdated(account: Stripe.Account) {
  * Handle transfer created (platform to connected account)
  */
 async function handleTransferCreated(transfer: Stripe.Transfer) {
-  console.log(`Transfer created: ${transfer.id}, amount: ${transfer.amount}`);
-  
   // Log transfer for accounting
   const { error } = await supabase
     .from('platform_transfers')
@@ -560,8 +533,6 @@ async function handleTransferCreated(transfer: Stripe.Transfer) {
  * Handle payout to connected account
  */
 async function handlePayoutPaid(payout: Stripe.Payout, accountId?: string) {
-  console.log(`Payout completed: ${payout.id}, amount: ${payout.amount}`);
-  
   if (accountId) {
     // Find coach by Stripe account
     const { data: coach } = await supabase

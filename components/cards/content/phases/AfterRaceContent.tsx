@@ -175,23 +175,14 @@ export function AfterRaceContent({
   // Save equipment note
   const saveEquipmentNote = useCallback(async () => {
     const trimmedNote = equipmentNotes.trim();
-    console.log('[AfterRaceContent] saveEquipmentNote called:', {
-      trimmedNote,
-      userId,
-      raceId: race.id,
-      raceName: race.name,
-    });
 
     if (!trimmedNote) {
-      console.log('[AfterRaceContent] No note to save, skipping');
       return;
     }
 
     setIsSavingEquipment(true);
     try {
-      console.log('[AfterRaceContent] Calling addIssue...');
       await addIssue(trimmedNote, 'medium', race.id, race.name);
-      console.log('[AfterRaceContent] addIssue succeeded');
       setEquipmentNotes(''); // Clear after successful save
 
       // Show confirmation animation

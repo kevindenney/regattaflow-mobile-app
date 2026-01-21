@@ -28,8 +28,6 @@ export function AIRaceStrategy({ race, weatherData, tidalData }: AIRaceStrategyP
     setError(null);
 
     try {
-      console.log('🧠 Generating AI race strategy...');
-
       // Build comprehensive prompt
       const prompt = `Analyze this race and provide a complete tactical strategy:
 
@@ -82,9 +80,6 @@ Be specific, actionable, and reference the proven frameworks from your knowledge
         enableCodeExecution: true,
         maxTokens: 4096,
       });
-
-      console.log('✅ Strategy generated!');
-      console.log('Tokens used:', response.tokensIn + response.tokensOut);
 
       setStrategy(response.text);
 

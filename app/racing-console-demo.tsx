@@ -29,7 +29,7 @@ export default function RacingConsoleDemo() {
         boatLength={10}
         draft={2.5}
         onChipExpand={(chip) => {
-          console.log('Chip expanded:', chip);
+          // Chip expanded callback
         }}
       />
     </View>

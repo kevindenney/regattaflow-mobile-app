@@ -156,7 +156,6 @@ export default function PracticeDetailScreen() {
     if (!session) return;
     try {
       // Update drill completion (would call service in production)
-      console.log('Complete drill:', drillId);
       refresh();
     } catch (err) {
       console.error('Failed to complete drill:', err);
@@ -167,7 +166,6 @@ export default function PracticeDetailScreen() {
     if (!session) return;
     try {
       // Update drill rating (would call service in production)
-      console.log('Rate drill:', drillId, rating, notes);
       refresh();
     } catch (err) {
       console.error('Failed to rate drill:', err);
@@ -183,14 +181,12 @@ export default function PracticeDetailScreen() {
     if (!session) return;
     try {
       // Update session reflection (would call service in production)
-      console.log('Update reflection:', reflection);
     } catch (err) {
       console.error('Failed to update reflection:', err);
     }
   }, [session]);
 
   const handleLogEquipmentIssue = useCallback(async (issue: string) => {
-    console.log('Log equipment issue:', issue);
     // Would persist to carryover system
   }, []);
 

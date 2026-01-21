@@ -104,7 +104,6 @@ Deno.serve(async (req) => {
     let documentText = text;
 
     if (!documentText && url) {
-      console.log('[extract-race-details] Fetching document from URL:', url);
       try {
         const urlResponse = await fetch(url, {
           headers: {
@@ -122,7 +121,6 @@ Deno.serve(async (req) => {
         }
 
         const contentType = urlResponse.headers.get('content-type') || '';
-        console.log('[extract-race-details] URL content-type:', contentType);
 
         if (contentType.includes('application/pdf')) {
           // PDF handling - for now, return an error suggesting text extraction
@@ -137,7 +135,6 @@ Deno.serve(async (req) => {
         }
 
         documentText = await urlResponse.text();
-        console.log('[extract-race-details] Fetched document length:', documentText.length);
 
         // Clean up HTML if the content appears to be HTML
         if (contentType.includes('text/html') || documentText.trim().startsWith('<!DOCTYPE') || documentText.trim().startsWith('<html')) {
@@ -154,7 +151,6 @@ Deno.serve(async (req) => {
             .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num)))
             .replace(/\s+/g, ' ')                              // Normalize whitespace
             .trim();
-          console.log('[extract-race-details] Cleaned HTML, new length:', documentText.length);
         }
       } catch (fetchError) {
         console.error('[extract-race-details] Error fetching URL:', fetchError);
@@ -178,8 +174,6 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log('[extract-race-details] Processing text, length:', documentText.length);
 
     // Call Claude API with enhanced multi-race detection prompt
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -458,6 +452,46 @@ Return a JSON object with this EXACT structure:
       ] | null,
       "raceOfficer": string | null,  // Principal Race Officer name
 
+      // === CLASS FLAGS (CRITICAL for Race Tab - shows which flag to watch for starts) ===
+      "classFlags": [  // Array mapping boat classes to their International Code Flags
+        {
+          "className": string,  // Boat class name (e.g., "Dragon", "Etchells", "J/80", "Big Boats")
+          "flag": string,       // International Code Flag letter/number (e.g., "D", "G", "W", "Naval 6")
+          "flagDescription": string | null  // Optional description if not a standard letter flag
+        }
+      ] | null,
+
+      // === PROTEST PROCEDURES (CRITICAL for Post-Race Tab) ===
+      "protestProcedures": {
+        "protestTimeLimit": string | null,         // e.g., "90 minutes after last boat finishes", "within 2 hours"
+        "protestFormLocation": string | null,      // Where to get/submit forms (e.g., "Race Office", "Online via SailSys")
+        "protestHearingLocation": string | null,   // Where hearings are held
+        "protestCommitteeContact": string | null,  // Contact info
+        "protestFee": string | null,               // Fee if applicable
+        "specialProcedures": string | null         // Any RRS modifications or special procedures
+      } | null,
+
+      // === POST-RACE REQUIREMENTS ===
+      "postRaceRequirements": {
+        "signOffRequired": boolean | null,         // Whether boats must sign off after racing
+        "signOffMethod": string | null,            // How to sign off (e.g., "via SailSys", "at Race Office")
+        "retirementNotification": string | null,   // How to notify if retiring (e.g., "Notify Race Committee on VHF 77")
+        "resultsPostingLocation": string | null,   // Where results will be posted
+        "resultsPostingTime": string | null        // When results will be available
+      } | null,
+
+      // === SIGNALS MADE ASHORE (CRITICAL for Race Morning) ===
+      "signalsMadeAshore": {
+        "location": string | null,                 // Where signals are displayed (e.g., "RHKYC Shelter Cove flagpoles")
+        "apFlagMeaning": string | null,            // What AP flag means (e.g., "not less than 30 minutes" delay)
+        "otherSignals": [
+          {
+            "signal": string,   // Signal name/flag
+            "meaning": string   // What it means
+          }
+        ] | null
+      } | null,
+
       // === CONFIDENCE SCORES ===
       "confidenceScores": {
         "raceName": number,  // 0.0 to 1.0
@@ -699,6 +733,43 @@ IMPORTANT INSTRUCTIONS:
       - Include passing side requirements (port/starboard)
     - The ORDER matters - extract waypoints in the sequence they must be visited!
 
+29. **CLASS FLAGS** (CRITICAL for Race Tab - extract ALL class/flag mappings):
+    - Look for section titled "CLASS FLAGS", "FLAGS", or similar
+    - Extract EVERY class-to-flag mapping mentioned:
+      - className: The boat class name (e.g., "Dragon", "Etchells", "J/80", "All Boats", "Big Boats")
+      - flag: The International Code Flag (e.g., "D", "G", "J", "W", "E", "Naval 6")
+      - flagDescription: For non-standard flags like "Naval 6", include description
+    - Example from document: "Dragon - D", "Etchells - G", "Flying Fifteen - Naval 6", "Impala - K"
+    - This is ESSENTIAL for Race Tab - sailors need to know which flag signals their class start!
+
+30. **PROTEST PROCEDURES** (CRITICAL for Post-Race Tab):
+    - Look for sections titled "PROTESTS", "HEARINGS", "PROTESTS AND REQUESTS FOR REDRESS"
+    - Extract:
+      - protestTimeLimit: Time limit for filing (e.g., "90 minutes after last boat finishes", "within protest time limit as posted")
+      - protestFormLocation: Where to get/submit forms (e.g., "Race Office", "Online via SailSys")
+      - protestHearingLocation: Where hearings are held
+      - protestFee: Any fee required
+      - specialProcedures: Any RRS modifications (e.g., "Arbitration available per ISAF Addendum Q")
+    - This is ESSENTIAL for Post-Race Tab - sailors need to know how and when to file protests!
+
+31. **POST-RACE REQUIREMENTS**:
+    - Look for sections on "FINISHING", "AFTER RACING", "SIGN-OFF", "RETIREMENT"
+    - Extract:
+      - signOffRequired: Whether boats must sign off after racing
+      - signOffMethod: How to sign off (e.g., "via SailSys", "at Race Office")
+      - retirementNotification: How to notify if retiring (e.g., "Notify Race Committee on VHF 77")
+      - resultsPostingLocation: Where results will be posted (e.g., "Online Notice Board", "Race Office")
+      - resultsPostingTime: When results will be available
+
+32. **SIGNALS MADE ASHORE** (CRITICAL for Race Morning):
+    - Look for section titled "SIGNALS MADE ASHORE" or "SIGNALS"
+    - Extract:
+      - location: Where signals are displayed (e.g., "RHKYC Shelter Cove flagpoles", "Club flagpole")
+      - apFlagMeaning: What AP (Answering Pennant) flag means - often modified from standard
+        - Example: "When flag AP is displayed ashore, '1 minute' is replaced with 'not less than 30 minutes'"
+      - otherSignals: Any other shore signals and their meanings
+    - This is ESSENTIAL for Race Morning - tells sailors where to look for postponement/cancellation signals!
+
 Return ONLY the JSON object, no additional text.`,
           },
         ],
@@ -722,9 +793,6 @@ Return ONLY the JSON object, no additional text.`,
     }
 
     const result = await response.json();
-    console.log('[extract-race-details] Claude response received');
-    console.log('[extract-race-details] Claude stop_reason:', result.stop_reason);
-    console.log('[extract-race-details] Claude usage:', JSON.stringify(result.usage));
 
     // Validate Claude response structure
     if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
@@ -758,9 +826,6 @@ Return ONLY the JSON object, no additional text.`,
 
     // Extract the JSON from Claude's response
     let content = result.content[0].text;
-    console.log('[extract-race-details] Raw content length:', content.length);
-    console.log('[extract-race-details] Content preview:', content.substring(0, 200));
-    console.log('[extract-race-details] Content end preview:', content.substring(Math.max(0, content.length - 200)));
 
     // Claude sometimes wraps JSON in markdown code blocks, so clean it up
     // Remove markdown code fences if present
@@ -772,8 +837,6 @@ Return ONLY the JSON object, no additional text.`,
     }
     content = content.trim();
 
-    console.log('[extract-race-details] Cleaned content preview:', content.substring(0, 200));
-
     // Parse the JSON - try multiple strategies
     let extractedData;
     let parseAttempts = [];
@@ -781,7 +844,6 @@ Return ONLY the JSON object, no additional text.`,
     // Attempt 1: Direct parse
     try {
       extractedData = JSON.parse(content);
-      console.log('[extract-race-details] JSON parsed successfully on first attempt');
     } catch (parseError1) {
       parseAttempts.push({ attempt: 1, error: parseError1.message });
 
@@ -790,7 +852,6 @@ Return ONLY the JSON object, no additional text.`,
       if (jsonMatch) {
         try {
           extractedData = JSON.parse(jsonMatch[0]);
-          console.log('[extract-race-details] JSON parsed after extracting object from text');
         } catch (parseError2) {
           parseAttempts.push({ attempt: 2, error: parseError2.message });
         }
@@ -811,7 +872,6 @@ Return ONLY the JSON object, no additional text.`,
             const openBraces = (truncated.match(/\{/g) || []).length;
             const closeBraces = (truncated.match(/\}/g) || []).length;
             if (openBraces > closeBraces) {
-              console.log('[extract-race-details] JSON appears truncated - missing', openBraces - closeBraces, 'closing braces');
               parseAttempts.push({ attempt: 3, error: `JSON truncated: ${openBraces} open braces, ${closeBraces} close braces` });
             }
           }
@@ -850,35 +910,8 @@ Return ONLY the JSON object, no additional text.`,
       );
     }
 
-    // Enhanced logging for debugging start/finish extraction
-    const firstRace = extractedData.races?.[0];
-    console.log('[extract-race-details] Extracted data summary:', {
-      multipleRaces: extractedData.multipleRaces,
-      raceCount: extractedData.races?.length || 0,
-      documentType: extractedData.documentType,
-    });
-    console.log('[extract-race-details] First race start/finish info:', {
-      raceName: firstRace?.raceName,
-      raceType: firstRace?.raceType,
-      startAreaName: firstRace?.startAreaName,
-      startAreaDescription: firstRace?.startAreaDescription,
-      startLines: firstRace?.startLines ? `${firstRace.startLines.length} start line(s)` : 'none',
-      startLinesDetails: firstRace?.startLines?.map((sl: any) => ({
-        name: sl.name,
-        description: sl.description,
-        classes: sl.classes?.length || 0,
-      })),
-      finishAreaName: firstRace?.finishAreaName,
-      finishAreaDescription: firstRace?.finishAreaDescription,
-      warningSignalTime: firstRace?.warningSignalTime,
-    });
-
     // Build source tracking information for provenance
     const sourceTracking = buildSourceTracking(extractedData, url);
-    console.log('[extract-race-details] Source tracking:', {
-      sourceType: sourceTracking.sourceType,
-      extractedFieldCount: sourceTracking.extractedFields.length,
-    });
 
     // Return the extracted data with source tracking
     return new Response(

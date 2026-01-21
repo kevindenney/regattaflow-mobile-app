@@ -685,11 +685,10 @@ Format your response as JSON:
 
       // If we have the skill ID, use it
       if (tidalSkillId) {
-        console.log(`🎯 BathymetricTidalService: Using tidal-opportunism-analyst skill (${tidalSkillId})`);
         messageParams.betas = ['skills-2025-10-02'];
         messageParams.skills = [{ type: 'custom', id: tidalSkillId }];
       } else {
-        console.warn('⚠️ BathymetricTidalService: tidal-opportunism-analyst skill not found, proceeding without skill');
+        console.warn('BathymetricTidalService: tidal-opportunism-analyst skill not found, proceeding without skill');
       }
 
       const response = await this.anthropic.messages.create(messageParams);

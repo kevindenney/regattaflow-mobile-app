@@ -591,7 +591,6 @@ export function SailInventory({ boatId }: SailInventoryProps) {
               onInspect={() => handleInspect(sail)}
               onPress={() => {
                 // TODO: Navigate to sail detail
-                console.log('Sail pressed:', sail.equipment_id);
               }}
             />
           ))

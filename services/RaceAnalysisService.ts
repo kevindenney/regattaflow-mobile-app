@@ -223,8 +223,6 @@ export class RaceAnalysisService {
       throw new Error(data.error);
     }
 
-    console.log('Edge Function success, data:', data);
-
     return (data?.analysis ?? null) as AnalysisResult | null;
   }
 }

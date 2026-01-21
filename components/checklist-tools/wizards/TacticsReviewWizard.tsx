@@ -303,7 +303,6 @@ export function TacticsReviewWizard({
       };
 
       // TODO: Save to sailor_race_preparation.user_intentions via service
-      console.log('Saving tactical intention:', intention);
 
       onComplete();
     } catch (error) {
