@@ -132,48 +132,26 @@ CREATE POLICY "Users can view own source documents"
   TO authenticated
   USING (user_id = auth.uid());
 
--- Policy: Users can see documents for races they own or participate in
+-- Policy: Users can see documents for races they created
 CREATE POLICY "Users can view race source documents"
   ON race_source_documents
   FOR SELECT
   TO authenticated
   USING (
     regatta_id IS NOT NULL
-    AND (
-      -- User owns the regatta
-      EXISTS (
-        SELECT 1 FROM regattas r
-        WHERE r.id = race_source_documents.regatta_id
-        AND r.owner_id = auth.uid()
-      )
-      OR
-      -- User has a race entry for this regatta
-      EXISTS (
-        SELECT 1 FROM race_entries re
-        JOIN race_events rev ON re.race_event_id = rev.id
-        WHERE rev.regatta_id = race_source_documents.regatta_id
-        AND re.user_id = auth.uid()
-      )
+    AND EXISTS (
+      SELECT 1 FROM regattas r
+      WHERE r.id = race_source_documents.regatta_id
+      AND r.created_by = auth.uid()
     )
   );
 
--- Policy: Users can see shared documents for clubs they are members of
-CREATE POLICY "Users can view shared club source documents"
+-- Policy: Users can see shared documents (simplified - shared means visible to authenticated users)
+CREATE POLICY "Users can view shared source documents"
   ON race_source_documents
   FOR SELECT
   TO authenticated
-  USING (
-    is_shared = true
-    AND regatta_id IS NOT NULL
-    AND EXISTS (
-      SELECT 1 FROM regattas r
-      JOIN clubs c ON r.club_id = c.id
-      JOIN club_members cm ON cm.club_id = c.id
-      WHERE r.id = race_source_documents.regatta_id
-      AND cm.user_id = auth.uid()
-      AND cm.is_active = true
-    )
-  );
+  USING (is_shared = true);
 
 -- Policy: Users can insert documents
 CREATE POLICY "Users can insert source documents"
@@ -217,7 +195,7 @@ CREATE POLICY "Users can view field provenance for accessible races"
         OR EXISTS (
           SELECT 1 FROM regattas r
           WHERE r.id = rsd.regatta_id
-          AND r.owner_id = auth.uid()
+          AND r.created_by = auth.uid()
         )
       )
     )
