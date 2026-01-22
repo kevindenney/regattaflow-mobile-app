@@ -17,3 +17,8 @@ export { WindShiftStrategyWizard } from './WindShiftStrategyWizard';
 export { StartPlannerWizard } from './StartPlannerWizard';
 export { FirstBeatStrategyWizard } from './FirstBeatStrategyWizard';
 export { FourPeaksScheduleWizard } from './FourPeaksScheduleWizard';
+export { WeatherRoutingWizard } from './WeatherRoutingWizard';
+export { VHFInputWizard } from './VHFInputWizard';
+export { StartLineAnalyzerWizard } from './StartLineAnalyzerWizard';
+export { StrategyNotesWizard } from './StrategyNotesWizard';
+export { PostRaceReviewWizard } from './PostRaceReviewWizard';
