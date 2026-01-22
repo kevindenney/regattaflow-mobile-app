@@ -571,7 +571,16 @@ export function PostRaceInterview({
       {analysisResult?.overall_summary && (
         <View style={styles.insightCard}>
           <Text style={styles.insightText}>
-            {analysisResult.overall_summary.split('.').slice(0, 2).join('.')}
+            {(() => {
+              // Safely extract first 2 sentences, handling edge cases
+              const summary = analysisResult.overall_summary.trim();
+              if (!summary || summary === '.' || /^\.+$/.test(summary)) {
+                return 'Analysis saved.';
+              }
+              const result = summary.split('.').slice(0, 2).join('.');
+              // Ensure we don't return just a period or empty string
+              return result && result.trim() !== '' && result !== '.' ? result : 'Analysis saved.';
+            })()}
           </Text>
         </View>
       )}

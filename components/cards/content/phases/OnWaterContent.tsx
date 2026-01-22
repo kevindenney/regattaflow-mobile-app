@@ -826,14 +826,25 @@ function formatStrategyLabel(key: string): string {
     'finish.lineBias': 'Line Bias',
     'finish.finalApproach': 'Final Approach',
   };
-  const result = labels[key] || key.split('.').pop()?.replace(/_/g, ' ').toUpperCase() || key;
+
+  // Handle edge cases: empty key, just a period, or key that only contains periods
+  if (!key || key.trim() === '' || key === '.' || /^\.+$/.test(key)) {
+    return 'Unknown';
+  }
+
+  const splitResult = key.split('.').pop();
+  const fallback = splitResult && splitResult.trim() !== ''
+    ? splitResult.replace(/_/g, ' ').toUpperCase()
+    : 'Unknown';
+
+  const result = labels[key] || fallback;
 
   // DEBUG: Log strategy label formatting
   if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
-    (window as any).__PERIOD_DEBUG__.log('formatStrategyLabel', result, { key, hasLabel: !!labels[key], splitResult: key.split('.').pop() });
+    (window as any).__PERIOD_DEBUG__.log('formatStrategyLabel', result, { key, hasLabel: !!labels[key], splitResult });
     // Warn if result looks suspicious
     if (result === '.' || result === '' || !result) {
-      console.warn('⚠️ formatStrategyLabel produced suspicious result:', { key, result, splitPop: key.split('.').pop() });
+      console.warn('⚠️ formatStrategyLabel produced suspicious result:', { key, result, splitPop: splitResult });
     }
   }
 
