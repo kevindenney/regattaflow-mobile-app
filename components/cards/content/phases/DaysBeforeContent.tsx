@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, Pressable, TouchableOpacity, Modal, Alert } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import {
   Wrench,
   Users,
@@ -32,17 +32,35 @@ import {
   ListChecks,
   Info,
   FileText,
+  Pencil,
 } from 'lucide-react-native';
 
-import { CardRaceData, getTimeContext } from '../../types';
+import { CardRaceData } from '../../types';
 import { useRaceChecklist, ChecklistItemWithState } from '@/hooks/useRaceChecklist';
 import { useTeamRaceEntry, useTeamChecklist } from '@/hooks';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
+import { useRegattaContent } from '@/hooks/useRegattaContent';
 import { useAuth } from '@/providers/AuthProvider';
 import { sailorBoatService, SailorBoat } from '@/services/SailorBoatService';
+import { SailInspectionService, type SailWithHealth } from '@/services/SailInspectionService';
 import { SailInspectionWizard } from '@/components/sail-inspection';
 import { QuickTipsPanel } from '@/components/checklist-tools/QuickTipsPanel';
-import { SafetyGearWizard, RiggingInspectionWizard, WatchScheduleWizard, ForecastCheckWizard, DocumentReviewWizard, CourseMapWizard, PreRaceBriefingWizard } from '@/components/checklist-tools/wizards';
+import {
+  SafetyGearWizard,
+  RiggingInspectionWizard,
+  WatchScheduleWizard,
+  ForecastCheckWizard,
+  DocumentReviewWizard,
+  CourseMapWizard,
+  PreRaceBriefingWizard,
+  StartPlannerWizard,
+  WindShiftStrategyWizard,
+  FirstBeatStrategyWizard,
+  TideStrategyWizard,
+  RigTuningWizard,
+  SailSelectionWizard,
+  TacticsReviewWizard,
+} from '@/components/checklist-tools/wizards';
 import { ElectronicsChecklist } from '@/components/checklist-tools/checklists/ElectronicsChecklist';
 import { InteractiveChecklist } from '@/components/checklist-tools/InteractiveChecklist';
 import { PositionAssignmentPanel, MeetingPointPicker } from '@/components/checklist-tools/crew';
@@ -60,9 +78,6 @@ import {
   SharedChecklistItem,
 } from '@/components/team';
 
-// Pre-race sharing
-import { ShareWithTeamSection } from './ShareWithTeamSection';
-
 
 // Course positioning
 import { CoursePositionEditor } from '@/components/races/CoursePositionEditor';
@@ -72,14 +87,6 @@ import { isUuid } from '@/utils/uuid';
 import { Map } from 'lucide-react-native';
 
 
-// Educational Checklists
-import { AccordionSection } from '@/components/races/AccordionSection';
-import { EducationalChecklist } from '@/components/checklist-tools/EducationalChecklist';
-import {
-  PRE_RACE_PREPARATION_CONFIG,
-  COURSE_INTELLIGENCE_CONFIG,
-} from '@/lib/educationalChecklistConfig';
-
 // Historical view components
 import {
   HistoricalSummaryCard,
@@ -87,6 +94,7 @@ import {
   DataStatement,
   type CategoryProgress,
 } from './historical';
+
 import {
   summarizeChecklistCompletions,
   formatForecastSummary,
@@ -161,7 +169,7 @@ function getToolIcon(toolType: string | undefined) {
 }
 
 /**
- * Render a single checklist item
+ * Render a single checklist item - Simple row layout with checkbox + label + badges
  */
 function ChecklistItem({
   item,
@@ -234,13 +242,25 @@ function ChecklistItem({
         )}
         {/* Tool action badge - tappable */}
         {hasAction && onAction ? (
-          <Pressable
-            style={styles.actionBadge}
-            onPress={onAction}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            {getToolIcon(item.toolType)}
-          </Pressable>
+          item.isCompleted ? (
+            // Completed: Show "Edit" badge (orange pencil)
+            <Pressable
+              style={styles.editBadge}
+              onPress={onAction}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Pencil size={14} color={IOS_COLORS.orange} />
+            </Pressable>
+          ) : (
+            // Not completed: Show tool icon (blue)
+            <Pressable
+              style={styles.actionBadge}
+              onPress={onAction}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {getToolIcon(item.toolType)}
+            </Pressable>
+          )
         ) : item.priority === 'high' && !hasLearningLink ? (
           <View style={styles.priorityBadge}>
             <Text style={styles.priorityText}>!</Text>
@@ -252,7 +272,7 @@ function ChecklistItem({
 }
 
 /**
- * Render a category section with its items
+ * Render a category section with its items - Flat header pattern
  */
 function CategorySection({
   category,
@@ -453,9 +473,13 @@ export function DaysBeforeContent({
   // State for team invite modal
   const [showInviteModal, setShowInviteModal] = useState(false);
 
-  // State for sail inspection (legacy - kept for specific sail inspection)
+  // State for sail inspection
   const [showSailInspection, setShowSailInspection] = useState(false);
+  const [showSailPicker, setShowSailPicker] = useState(false);
   const [userBoat, setUserBoat] = useState<SailorBoat | null>(null);
+  const [boatSails, setBoatSails] = useState<SailWithHealth[]>([]);
+  const [selectedSail, setSelectedSail] = useState<SailWithHealth | null>(null);
+  const [loadingSails, setLoadingSails] = useState(false);
 
   // State for generic tool launcher
   const [activeTool, setActiveTool] = useState<ChecklistItemWithState | null>(null);
@@ -476,6 +500,26 @@ export function DaysBeforeContent({
   // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
   const coords = venueCoordinates || metadataCoords;
 
+  // Debug logging for strategy wizard coordinate issues
+  console.log('[DaysBeforeContent] Venue & Date debug:', {
+    raceId: race.id,
+    raceName: race.name,
+    raceDate: race.date,
+    raceStartTime: race.startTime,
+    venueName,
+    venueCoordinates,
+    metadataCoords,
+    coords,
+    hasCoords: !!coords,
+    venueForForecastWillBeNull: !coords,
+    metadata: {
+      venue_id: metadata.venue_id,
+      start_coordinates: metadata.start_coordinates,
+      venue_coordinates: metadata.venue_coordinates,
+      racing_area_coordinates: metadata.racing_area_coordinates,
+    },
+  });
+
   // Memoize location object for CoursePositionEditor to prevent unnecessary re-renders
   const memoizedLocation = useMemo(() =>
     coords ? { lat: coords.lat, lng: coords.lng } : undefined,
@@ -494,32 +538,29 @@ export function DaysBeforeContent({
     coordinates_lng: String(coords.lng),
   } : null;
 
-  // Fetch user's primary boat for sail inspection
-  // Use useFocusEffect to refresh when returning from adding a boat
+  // Fetch user's primary boat for sail inspection on mount (not on every tab focus)
   // Note: sailor_boats.sailor_id = auth.uid() (user.id), not sailor_profiles.id
-  useFocusEffect(
-    useCallback(() => {
-      const fetchUserBoat = async () => {
-        if (!user?.id) return;
+  useEffect(() => {
+    const fetchUserBoat = async () => {
+      if (!user?.id) return;
 
-        try {
-          // Get boats for this user (ordered by is_primary)
-          // sailor_boats uses user.id as sailor_id (matches auth.uid() in RLS)
-          const boats = await sailorBoatService.listBoatsForSailor(user.id);
-          if (boats.length > 0) {
-            setUserBoat(boats[0]); // First one is primary
-          } else {
-            setUserBoat(null); // Clear if no boats found
-          }
-        } catch (error) {
-          console.error('[DaysBeforeContent] Failed to fetch user boat:', error);
-          setUserBoat(null);
+      try {
+        // Get boats for this user (ordered by is_primary)
+        // sailor_boats uses user.id as sailor_id (matches auth.uid() in RLS)
+        const boats = await sailorBoatService.listBoatsForSailor(user.id);
+        if (boats.length > 0) {
+          setUserBoat(boats[0]); // First one is primary
+        } else {
+          setUserBoat(null); // Clear if no boats found
         }
-      };
+      } catch (error) {
+        console.error('[DaysBeforeContent] Failed to fetch user boat:', error);
+        setUserBoat(null);
+      }
+    };
 
-      fetchUserBoat();
-    }, [user?.id])
-  );
+    fetchUserBoat();
+  }, [user?.id]);
 
   // Check if this is a demo race (no carryover for demo races)
   const isDemo = race.isDemo === true;
@@ -532,7 +573,8 @@ export function DaysBeforeContent({
     totalCount,
     progress,
     toggleItem,
-    isLoading,
+    isInitialLoading,
+    hasData,
   } = useRaceChecklist({
     regattaId: race.id,
     raceName: race.name,
@@ -548,25 +590,89 @@ export function DaysBeforeContent({
     return itemsWithTools.map(item => item.id);
   }, [itemsByCategory]);
 
-  // Handle checklist item actions (launch tools)
-  const handleItemAction = useCallback((itemId: string) => {
-    // Special handling for sails - requires boat
-    if (itemId === 'sails') {
-      if (userBoat) {
-        setShowSailInspection(true);
-      } else {
+  // Derive existingIntention for RigTuningWizard from intentions.rigIntentions
+  // Converts from RigIntentions format to RigTuningIntention format
+  const rigTuningExistingIntention = useMemo(() => {
+    if (!intentions?.rigIntentions) return undefined;
+
+    const { settings, overallNotes } = intentions.rigIntentions;
+
+    // Convert RigIntentions.settings (Record<string, { status, value, notes }>)
+    // to RigTuningIntention.plannedSettings (Record<string, string>)
+    const plannedSettings: Record<string, string> = {};
+    if (settings) {
+      Object.entries(settings).forEach(([key, setting]) => {
+        if (setting.status === 'adjusted' && setting.value) {
+          plannedSettings[key] = setting.value;
+        }
+      });
+    }
+
+    return {
+      recommendations: [],
+      conditionsSummary: '',
+      userNotes: overallNotes || '',
+      plannedSettings,
+      savedAt: intentions.updatedAt || new Date().toISOString(),
+    };
+  }, [intentions?.rigIntentions, intentions?.updatedAt]);
+
+  // Fetch sails for the boat and show picker or inspection
+  const handleSailsAction = useCallback(async () => {
+    if (!userBoat) {
+      Alert.alert(
+        'Add a Boat First',
+        'To inspect your sails, you need to add a boat to your profile.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add Boat', onPress: () => router.push('/boat/add') },
+        ]
+      );
+      return;
+    }
+
+    setLoadingSails(true);
+    try {
+      const sails = await SailInspectionService.getSailInventory(userBoat.id);
+      setBoatSails(sails);
+
+      if (sails.length === 0) {
         Alert.alert(
-          'Add a Boat First',
-          'To inspect your sails, you need to add a boat to your profile.',
+          'No Sails Found',
+          'Add sails to your boat to start inspecting them.',
           [
             { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Add Boat',
-              onPress: () => router.push('/(tabs)/boat/add'),
-            },
+            { text: 'Add Sail', onPress: () => router.push(`/boat/${userBoat.id}`) },
           ]
         );
+      } else if (sails.length === 1) {
+        // Single sail - go directly to inspection
+        setSelectedSail(sails[0]);
+        setShowSailInspection(true);
+      } else {
+        // Multiple sails - show picker
+        setShowSailPicker(true);
       }
+    } catch (error) {
+      console.error('[DaysBeforeContent] Failed to fetch sails:', error);
+      Alert.alert('Error', 'Failed to load your sails. Please try again.');
+    } finally {
+      setLoadingSails(false);
+    }
+  }, [userBoat]);
+
+  // Handle sail selection from picker
+  const handleSailSelect = useCallback((sail: SailWithHealth) => {
+    setSelectedSail(sail);
+    setShowSailPicker(false);
+    setShowSailInspection(true);
+  }, []);
+
+  // Handle checklist item actions (launch tools)
+  const handleItemAction = useCallback((itemId: string) => {
+    // Special handling for sails - requires boat and sails
+    if (itemId === 'sails') {
+      handleSailsAction();
       return;
     }
 
@@ -635,6 +741,7 @@ export function DaysBeforeContent({
   // Handle sail inspection completion
   const handleSailInspectionComplete = useCallback(() => {
     setShowSailInspection(false);
+    setSelectedSail(null);
     // Mark the sails item as completed
     toggleItem('sails');
   }, [toggleItem]);
@@ -674,13 +781,73 @@ export function DaysBeforeContent({
     phase: 'days_before',
   });
 
-  // Time context (handles past and future races)
-  const timeContext = getTimeContext(race.date, race.startTime);
-
-  // Race preparation data (for historical view)
-  const { intentions, isLoading: isPreparationLoading } = useRacePreparation({
+  // Race preparation data (for historical view and rig tuning persistence)
+  const { intentions, isLoading: isPreparationLoading, updateStrategyNote, updateRigIntentions } = useRacePreparation({
     regattaId: race.id,
   });
+
+  // Regatta content for fleet sharing
+  const { savePreRaceContent } = useRegattaContent({
+    regattaId: race.id,
+  });
+
+  // Format strategy notes into a shareable summary for fleet
+  const formatStrategyForSharing = useCallback((strategyNotes: Record<string, string>): string => {
+    const parts: string[] = [];
+
+    // Start strategy
+    const startNotes = [strategyNotes['start.lineBias'], strategyNotes['start.favoredEnd'], strategyNotes['start.timingApproach']]
+      .filter(Boolean);
+    if (startNotes.length > 0) {
+      parts.push(`Start: ${startNotes.join(' | ')}`);
+    }
+
+    // First beat strategy
+    const upwindNotes = [strategyNotes['upwind.favoredTack'], strategyNotes['upwind.shiftStrategy'], strategyNotes['upwind.laylineApproach']]
+      .filter(Boolean);
+    if (upwindNotes.length > 0) {
+      parts.push(`First Beat: ${upwindNotes.join(' | ')}`);
+    }
+
+    // Tide strategy
+    const tideNotes = [strategyNotes['tide.flow'], strategyNotes['tide.favoredSide']]
+      .filter(Boolean);
+    if (tideNotes.length > 0) {
+      parts.push(`Tide: ${tideNotes.join(' | ')}`);
+    }
+
+    // Wind shift strategy
+    const windNotes = [strategyNotes['upwind.shiftStrategy'], strategyNotes['wind.thermal']]
+      .filter(Boolean);
+    if (windNotes.length > 0 && !parts.some(p => p.includes('shift'))) {
+      parts.push(`Wind: ${windNotes.join(' | ')}`);
+    }
+
+    return parts.join('\n');
+  }, []);
+
+  // Handler to capture strategy data from wizards and save to intentions
+  const handleStrategyCapture = useCallback((strategyData: Record<string, string>) => {
+    // Update local strategy notes
+    Object.entries(strategyData).forEach(([key, value]) => {
+      if (value) {
+        updateStrategyNote(key, value);
+      }
+    });
+
+    // Sync formatted strategy to fleet (merged with existing notes)
+    const mergedNotes = {
+      ...(intentions?.strategyNotes || {}),
+      ...strategyData,
+    };
+    const formattedSummary = formatStrategyForSharing(mergedNotes);
+    if (formattedSummary) {
+      savePreRaceContent({
+        prepNotes: formattedSummary,
+        contentVisibility: 'fleet',
+      });
+    }
+  }, [updateStrategyNote, intentions?.strategyNotes, formatStrategyForSharing, savePreRaceContent]);
 
   // Course positioning state
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
@@ -752,26 +919,54 @@ export function DaysBeforeContent({
   }, [race.id]);
 
   // Categories to show based on expansion state
+  // Order: DOCUMENTS first, then WEATHER, EQUIPMENT, SAFETY, CREW
   const visibleCategories = useMemo(() => {
+    // Define the preferred order for categories
+    const categoryOrder: ChecklistCategory[] = [
+      'documents',
+      'weather',
+      'equipment',
+      'safety',
+      'crew',
+      'logistics',
+      'navigation',
+      'tactics',
+      'team_coordination',
+      'rules',
+    ];
+
+    // Sort categories by the defined order
+    const sortedCategories = [...categories].sort((a, b) => {
+      const aIndex = categoryOrder.indexOf(a);
+      const bIndex = categoryOrder.indexOf(b);
+      // If not in the order list, put at the end
+      const aOrder = aIndex === -1 ? 999 : aIndex;
+      const bOrder = bIndex === -1 ? 999 : bIndex;
+      return aOrder - bOrder;
+    });
+
     if (isExpanded) {
-      return categories;
+      return sortedCategories;
     }
     // In collapsed state, show main categories only
     const mainCategories: ChecklistCategory[] = [
+      'documents',
       'equipment',
       'safety',
       'crew',
       'team_coordination',
       'tactics',
     ];
-    return categories.filter((cat) => mainCategories.includes(cat));
+    return sortedCategories.filter((cat) => mainCategories.includes(cat));
   }, [categories, isExpanded]);
 
   // ==========================================================================
   // RENDER
   // ==========================================================================
 
-  if (isLoading) {
+  // Only show loading skeleton on initial load - when we have no cached data yet
+  // On subsequent tab switches, show existing data immediately (background refresh if needed)
+  if (isInitialLoading && !hasData) {
     return (
       <View style={[styles.container, { flex: 1 }]}>
         <View style={[styles.loadingContainer, { flex: 1 }]}>
@@ -801,14 +996,6 @@ export function DaysBeforeContent({
     if (!teamEntry) {
       return (
         <View style={styles.container}>
-          {/* Time Context */}
-          <View style={styles.timeContext}>
-            <Text style={styles.timeContextValue}>{timeContext.value}</Text>
-            {timeContext.label && (
-              <Text style={styles.timeContextLabel}>{timeContext.label}</Text>
-            )}
-          </View>
-
           <TeamSetupCard
             raceName={race.name}
             onCreateTeam={createTeamEntry}
@@ -828,14 +1015,6 @@ export function DaysBeforeContent({
 
     return (
       <View style={styles.container}>
-        {/* Time Context */}
-        <View style={styles.timeContext}>
-          <Text style={styles.timeContextValue}>{timeContext.value}</Text>
-          {timeContext.label && (
-            <Text style={styles.timeContextLabel}>{timeContext.label}</Text>
-          )}
-        </View>
-
         {/* Team Header */}
         <View style={styles.teamHeader}>
           <View style={styles.teamInfo}>
@@ -921,14 +1100,6 @@ export function DaysBeforeContent({
 
   return (
     <View style={styles.container}>
-      {/* Time Context */}
-      <View style={styles.timeContext}>
-        <Text style={styles.timeContextValue}>{timeContext.value}</Text>
-        {timeContext.label && (
-          <Text style={styles.timeContextLabel}>{timeContext.label}</Text>
-        )}
-      </View>
-
       {/* Race Type Badge (for non-fleet races) */}
       {raceType !== 'fleet' && (
         <View style={styles.raceTypeBadge}>
@@ -938,7 +1109,7 @@ export function DaysBeforeContent({
         </View>
       )}
 
-      {/* Category Sections */}
+      {/* Category Sections - Flat headers with simple checklist items */}
       {visibleCategories.map((category) => {
         const items = itemsByCategory[category];
         if (!items || items.length === 0) return null;
@@ -958,36 +1129,6 @@ export function DaysBeforeContent({
         );
       })}
 
-      {/* Educational Checklists */}
-      <View style={styles.educationalChecklistsContainer}>
-        <AccordionSection
-          title="Pre-Race Preparation"
-          icon={<FileText size={16} color={IOS_COLORS.blue} />}
-          defaultExpanded
-          subtitle="Documents & communications"
-        >
-          <EducationalChecklist
-            config={PRE_RACE_PREPARATION_CONFIG}
-            raceId={race.id}
-          />
-        </AccordionSection>
-
-        <AccordionSection
-          title="Course Intelligence"
-          icon={<Map size={16} color={IOS_COLORS.green} />}
-          defaultExpanded
-          subtitle="Course analysis & strategy"
-        >
-          <EducationalChecklist
-            config={COURSE_INTELLIGENCE_CONFIG}
-            raceId={race.id}
-          />
-        </AccordionSection>
-      </View>
-
-      {/* Share with Team Section */}
-      <ShareWithTeamSection race={race} />
-
       {/* Progress Summary */}
       <View style={styles.progressContainer}>
         <Text style={styles.progressLabel}>
@@ -1003,8 +1144,49 @@ export function DaysBeforeContent({
         </View>
       </View>
 
+      {/* Sail Picker Modal */}
+      <Modal
+        visible={showSailPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSailPicker(false)}
+      >
+        <View style={styles.sailPickerContainer}>
+          <View style={styles.sailPickerHeader}>
+            <TouchableOpacity onPress={() => setShowSailPicker(false)}>
+              <Text style={styles.sailPickerCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.sailPickerTitle}>Select Sail</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <View style={styles.sailPickerContent}>
+            <Text style={styles.sailPickerSubtitle}>
+              Choose which sail to inspect
+            </Text>
+            {boatSails.map((sail) => (
+              <TouchableOpacity
+                key={sail.equipment_id}
+                style={styles.sailPickerItem}
+                onPress={() => handleSailSelect(sail)}
+              >
+                <View style={styles.sailPickerItemContent}>
+                  <Text style={styles.sailPickerItemName}>
+                    {sail.name || sail.sail_type || 'Sail'}
+                  </Text>
+                  <Text style={styles.sailPickerItemMeta}>
+                    {sail.sailmaker ? `${sail.sailmaker} • ` : ''}
+                    {sail.condition_score != null ? `${sail.condition_score}% condition` : 'Not inspected'}
+                  </Text>
+                </View>
+                <Sailboat size={20} color="#007AFF" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
       {/* Sail Inspection Modal */}
-      {userBoat && (
+      {selectedSail && userBoat && (
         <Modal
           visible={showSailInspection}
           animationType="slide"
@@ -1012,12 +1194,15 @@ export function DaysBeforeContent({
           onRequestClose={() => setShowSailInspection(false)}
         >
           <SailInspectionWizard
-            equipmentId={userBoat.id}
+            equipmentId={selectedSail.equipment_id}
             boatId={userBoat.id}
-            sailName={userBoat.name || 'Main Sail'}
+            sailName={selectedSail.name || selectedSail.sail_type || 'Sail'}
             inspectionType="pre_race"
             onComplete={handleSailInspectionComplete}
-            onCancel={() => setShowSailInspection(false)}
+            onCancel={() => {
+              setShowSailInspection(false);
+              setSelectedSail(null);
+            }}
           />
         </Modal>
       )}
@@ -1169,10 +1354,164 @@ export function DaysBeforeContent({
         >
           <PreRaceBriefingWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             raceName={race.name}
             raceDate={race.date}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Start Planner Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'start_planner' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <StartPlannerWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+            onStrategyCapture={handleStrategyCapture}
+          />
+        </Modal>
+      )}
+
+      {/* Wind Shift Strategy Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'wind_shift_strategy' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <WindShiftStrategyWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+            onStrategyCapture={handleStrategyCapture}
+          />
+        </Modal>
+      )}
+
+      {/* First Beat Strategy Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'first_beat_strategy' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <FirstBeatStrategyWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+            onStrategyCapture={handleStrategyCapture}
+          />
+        </Modal>
+      )}
+
+      {/* Tide Strategy Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'tide_strategy' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <TideStrategyWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            venue={venueForForecast}
+            raceDate={race.date}
+            raceName={race.name}
+            raceStartTime={race.startTime}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+            onStrategyCapture={handleStrategyCapture}
+          />
+        </Modal>
+      )}
+
+      {/* Rig Tuning Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'rig_tuning_wizard' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <RigTuningWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            classId={userBoat?.class_id}
+            boatClass={userBoat?.boat_class?.name}
+            venue={venueForForecast}
+            raceDate={race.date}
+            existingIntention={rigTuningExistingIntention}
+            updateRigIntentions={updateRigIntentions}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Sail Selection Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'sail_selection_wizard' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <SailSelectionWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            onComplete={handleToolComplete}
+            onCancel={handleToolCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Tactics Review Wizard */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'tactics_review_wizard' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <TacticsReviewWizard
+            item={activeTool}
+            regattaId={race.id}
+            boatId={userBoat?.id}
+            venueId={venueId}
+            venueName={venueName}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -1349,34 +1688,6 @@ export function DaysBeforeContent({
 const styles = StyleSheet.create({
   container: {
     gap: 16,
-  },
-
-  // Educational Checklists
-  educationalChecklistsContainer: {
-    marginTop: 16,
-    gap: 8,
-    backgroundColor: IOS_COLORS.gray6,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-
-  // Time Context
-  timeContext: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    marginBottom: 4,
-  },
-  timeContextValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: IOS_COLORS.blue,
-    fontVariant: ['tabular-nums'],
-  },
-  timeContextLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
   },
 
   // Loading
@@ -1629,7 +1940,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Section
+  // Section - Flat header pattern
   section: {
     gap: 10,
   },
@@ -1643,6 +1954,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOS_COLORS.gray,
     letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 
   // Carryover
@@ -1673,7 +1985,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Checklist
+  // Checklist - Simple row layout (no card backgrounds)
   checklistContainer: {
     gap: 10,
   },
@@ -1696,6 +2008,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  // Square checkbox (22x22 with rounded corners)
   checkbox: {
     width: 22,
     height: 22,
@@ -1742,6 +2055,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  // Action badge - circular icon button
   actionBadge: {
     width: 24,
     height: 24,
@@ -1755,6 +2069,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  // Edit badge - orange pencil for completed items with tools
+  editBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: `${IOS_COLORS.orange}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Learn badge - purple book icon button
   learnBadge: {
     width: 20,
     height: 20,
@@ -1918,6 +2242,61 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+
+  // Sail Picker Styles
+  sailPickerContainer: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.systemBackground,
+  },
+  sailPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  sailPickerCancel: {
+    fontSize: 17,
+    color: IOS_COLORS.blue,
+  },
+  sailPickerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  sailPickerContent: {
+    padding: 16,
+  },
+  sailPickerSubtitle: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 16,
+  },
+  sailPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  sailPickerItemContent: {
+    flex: 1,
+  },
+  sailPickerItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: 2,
+  },
+  sailPickerItemMeta: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
   },
 });
 

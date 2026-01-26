@@ -84,6 +84,10 @@ interface UseRacePreparationReturn {
   raceBriefData: RaceBriefData | null;
   intentions: RaceIntentions;
   isLoading: boolean;
+  /** True only on the first load (before any data is available) */
+  isInitialLoading: boolean;
+  /** True if we have cached/loaded data (even if currently refreshing) */
+  hasData: boolean;
   isSaving: boolean;
 
   // Actions
@@ -129,9 +133,11 @@ export function useRacePreparation({
   const [raceBriefData, setRaceBriefData] = useState<RaceBriefData | null>(null);
   const [intentions, setIntentions] = useState<RaceIntentions>(DEFAULT_INTENTIONS);
 
-  // Refs for debouncing
+  // Refs for debouncing and tracking load state
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const pendingChangesRef = useRef<Partial<SailorRacePreparation>>({});
+  /** Tracks if we've completed initial load - used to prevent loading flicker on subsequent refreshes */
+  const hasLoadedOnceRef = useRef(false);
 
 
 
@@ -142,6 +148,15 @@ export function useRacePreparation({
     if (!regattaId) {
       setIsLoading(false);
       return;
+    }
+
+    // Clear any pending changes to prevent race conditions where an in-flight
+    // save (from unmount cleanup) could overwrite freshly loaded data
+    pendingChangesRef.current = {};
+
+    // Only show loading UI on first load - background refresh keeps existing data visible
+    if (!hasLoadedOnceRef.current) {
+      setIsLoading(true);
     }
 
     // Handle non-UUID race IDs (demo races) with local storage
@@ -211,12 +226,12 @@ export function useRacePreparation({
         console.error('[useRacePreparation] loadPreparation - AsyncStorage failed', error);
       } finally {
         setIsLoading(false);
+        hasLoadedOnceRef.current = true;
       }
       return;
     }
 
     try {
-      setIsLoading(true);
       const data = await sailorRacePreparationService.getPreparation(regattaId, user.id);
 
       if (data) {
@@ -237,6 +252,7 @@ export function useRacePreparation({
       logger.error('Failed to load race preparation:', error);
     } finally {
       setIsLoading(false);
+      hasLoadedOnceRef.current = true;
     }
   }, [regattaId, user?.id]);
 
@@ -548,6 +564,10 @@ export function useRacePreparation({
     };
   }, [saveChanges]);
 
+  // Compute derived state for loading optimization
+  const isInitialLoading = isLoading && !hasLoadedOnceRef.current;
+  const hasData = !!intentions?.updatedAt || hasLoadedOnceRef.current;
+
   return {
     // State
     rigNotes,
@@ -556,6 +576,8 @@ export function useRacePreparation({
     raceBriefData,
     intentions,
     isLoading,
+    isInitialLoading,
+    hasData,
     isSaving,
 
     // Actions

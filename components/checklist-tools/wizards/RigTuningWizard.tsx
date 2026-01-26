@@ -39,8 +39,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { TinySparkline } from '@/components/shared/charts';
 import { getSettingLearning } from '@/data/rig-setting-learning';
 import { useAllWindRangeSections } from '@/hooks/useRaceTuningRecommendation';
+import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
+import type { SailingVenue } from '@/lib/types/global-venues';
 import type { RigTuningIntention } from '@/types/morningChecklist';
+import type { RigIntentions } from '@/types/raceIntentions';
 
 // iOS System Colors (Consistent with SailSelectionWizard)
 const IOS_COLORS = {
@@ -62,9 +65,63 @@ const IOS_COLORS = {
   separator: '#3C3C4349',
 };
 
+// Generic tuning guidance for when no class-specific data is available
+const GENERIC_TUNING_GUIDANCE = {
+  light: {
+    guideId: 'generic-light',
+    guideTitle: 'General Tuning Guide',
+    guideSource: 'General Principles',
+    sectionTitle: 'Light Air (0-8 knots)',
+    settings: [
+      { key: 'upper_shrouds', label: 'Upper Shrouds', value: 'Base tension', reasoning: 'Maintain base rig tension to keep mast straight and preserve power' },
+      { key: 'lower_shrouds', label: 'Lower Shrouds', value: 'Slightly loose', reasoning: 'Looser lowers allow mast to flex and create more power in light air' },
+      { key: 'mast_rake', label: 'Mast Rake', value: 'More rake aft for power', reasoning: 'Raking the mast aft in light air opens the leech and creates more power' },
+      { key: 'forestay_tension', label: 'Forestay', value: 'Loose for fuller jib', reasoning: 'A looser forestay allows the jib to be fuller, generating more power in light air' },
+      { key: 'backstay_tension', label: 'Backstay', value: 'Minimal tension', reasoning: 'Less backstay keeps the mast straight, maintaining power in the main' },
+      { key: 'outhaul', label: 'Outhaul', value: 'Eased 2-3 inches', reasoning: 'Easing the outhaul creates a fuller sail shape for more power' },
+      { key: 'cunningham', label: 'Cunningham', value: 'Off completely', reasoning: 'No cunningham keeps draft forward for maximum power' },
+      { key: 'vang', label: 'Vang', value: 'Light tension only', reasoning: 'Just enough vang to keep the boom from rising, allowing twist for acceleration' },
+    ],
+  },
+  medium: {
+    guideId: 'generic-medium',
+    guideTitle: 'General Tuning Guide',
+    guideSource: 'General Principles',
+    sectionTitle: 'Medium Air (8-16 knots)',
+    settings: [
+      { key: 'upper_shrouds', label: 'Upper Shrouds', value: 'Base tension +1-2 turns', reasoning: 'Slightly increase uppers to control mast bend as wind builds' },
+      { key: 'lower_shrouds', label: 'Lower Shrouds', value: 'Base tension', reasoning: 'Return lowers to base to balance the rig for pointing' },
+      { key: 'mast_rake', label: 'Mast Rake', value: 'Moderate - balanced setup', reasoning: 'Balanced rake for pointing ability and speed' },
+      { key: 'forestay_tension', label: 'Forestay', value: 'Medium tension', reasoning: 'Moderate forestay tension flattens the jib entry for pointing' },
+      { key: 'backstay_tension', label: 'Backstay', value: 'Moderate tension', reasoning: 'Add backstay to flatten the main and open the leech as wind builds' },
+      { key: 'outhaul', label: 'Outhaul', value: 'Near band', reasoning: 'Flatten the foot of the main as power builds' },
+      { key: 'cunningham', label: 'Cunningham', value: 'Light to moderate', reasoning: 'Pull draft forward as wind increases to depower' },
+      { key: 'vang', label: 'Vang', value: 'Moderate tension', reasoning: 'Control leech twist to balance the rig' },
+    ],
+  },
+  heavy: {
+    guideId: 'generic-heavy',
+    guideTitle: 'General Tuning Guide',
+    guideSource: 'General Principles',
+    sectionTitle: 'Heavy Air (16+ knots)',
+    settings: [
+      { key: 'upper_shrouds', label: 'Upper Shrouds', value: 'Tight - max tension', reasoning: 'Maximum upper tension to prevent excessive mast bend and support the rig' },
+      { key: 'lower_shrouds', label: 'Lower Shrouds', value: 'Tight to control bend', reasoning: 'Tighter lowers limit lower mast bend and help depower' },
+      { key: 'mast_rake', label: 'Mast Rake', value: 'Maximum rake for helm balance', reasoning: 'More rake reduces weather helm and helps keep the boat flat' },
+      { key: 'forestay_tension', label: 'Forestay', value: 'Tight for flat jib', reasoning: 'Maximum tension flattens jib entry for depowering' },
+      { key: 'backstay_tension', label: 'Backstay', value: 'Maximum - bend the mast', reasoning: 'Pull hard to bend mast, flatten main, and depower' },
+      { key: 'outhaul', label: 'Outhaul', value: 'Maximum - to band', reasoning: 'Flatten the foot completely to reduce power' },
+      { key: 'cunningham', label: 'Cunningham', value: 'Maximum tension', reasoning: 'Pull hard to move draft forward and open the leech' },
+      { key: 'vang', label: 'Vang', value: 'Heavy tension', reasoning: 'Control twist to prevent upper leech from hooking' },
+    ],
+  },
+};
+
 interface RigTuningWizardProps extends ChecklistToolProps {
   boatClass?: string | null;
   classId?: string | null;
+  venue?: SailingVenue | null;
+  raceDate?: string | null;
   wind?: {
     direction?: string;
     speedMin?: number;
@@ -74,6 +131,8 @@ interface RigTuningWizardProps extends ChecklistToolProps {
   waveHeight?: string | null;
   existingIntention?: RigTuningIntention | null;
   windForecast?: number[]; // For sparkline
+  /** Callback to persist rig intentions to race preparation data */
+  updateRigIntentions?: (rig: RigIntentions) => void;
 }
 
 export function RigTuningWizard({
@@ -84,12 +143,54 @@ export function RigTuningWizard({
   onCancel,
   boatClass,
   classId,
-  wind,
-  waveHeight,
+  venue,
+  raceDate,
+  wind: windProp,
+  waveHeight: waveHeightProp,
   existingIntention,
-  windForecast,
+  windForecast: windForecastProp,
+  updateRigIntentions,
 }: RigTuningWizardProps) {
   const router = useRouter();
+
+  // Fetch weather data if venue and raceDate are provided
+  const { data: weatherData } = useRaceWeatherForecast(
+    venue,
+    raceDate,
+    !!(venue && raceDate) // Only fetch if both venue and raceDate are provided
+  );
+
+  // Derive wind data from either props or fetched weather data
+  const wind = useMemo(() => {
+    if (windProp) return windProp;
+    if (weatherData?.raceWindow) {
+      return {
+        direction: weatherData.raceWindow.windDirectionAtStart,
+        speedMin: Math.min(weatherData.raceWindow.windAtStart, weatherData.raceWindow.windAtEnd),
+        speedMax: Math.max(weatherData.raceWindow.windAtStart, weatherData.raceWindow.windAtEnd),
+        average: (weatherData.raceWindow.windAtStart + weatherData.raceWindow.windAtEnd) / 2,
+      };
+    }
+    return null;
+  }, [windProp, weatherData?.raceWindow]);
+
+  // Derive waveHeight from props or weather data
+  const waveHeight = useMemo(() => {
+    if (waveHeightProp) return waveHeightProp;
+    if (weatherData?.raceWindow?.waveHeightAtStart) {
+      return `${weatherData.raceWindow.waveHeightAtStart.toFixed(1)}m`;
+    }
+    return null;
+  }, [waveHeightProp, weatherData?.raceWindow]);
+
+  // Derive windForecast from props or weather data
+  const windForecast = useMemo(() => {
+    if (windForecastProp) return windForecastProp;
+    if (weatherData?.sparklines?.wind) {
+      return weatherData.sparklines.wind;
+    }
+    return null;
+  }, [windForecastProp, weatherData?.sparklines]);
 
   // Calculate average wind
   const averageWind = useMemo(() => {
@@ -100,7 +201,10 @@ export function RigTuningWizard({
     return wind?.speedMin || wind?.speedMax || null;
   }, [wind]);
 
-  // Fetch all wind range sections
+  // Check if we have class info to fetch class-specific tuning data
+  const hasClassInfo = !!(classId || boatClass);
+
+  // Fetch all wind range sections (only if we have class info)
   const {
     data: windRanges,
     loading,
@@ -111,7 +215,7 @@ export function RigTuningWizard({
     className: boatClass || undefined,
     boatId: boatId || undefined,
     averageWindSpeed: averageWind,
-    enabled: true,
+    enabled: hasClassInfo, // Only fetch if we have class info
   });
 
   // State
@@ -123,6 +227,10 @@ export function RigTuningWizard({
   // UI State for selected wind range tab
   const [selectedRange, setSelectedRange] = useState<'light' | 'medium' | 'heavy'>('medium');
 
+  // Check if we have class-specific data or need to use generic guidance
+  const hasClassSpecificData = !!(windRanges.light || windRanges.medium || windRanges.heavy);
+  const usingGenericGuidance = !hasClassSpecificData && !loading;
+
   // Initialize selected range properly when data loads
   useEffect(() => {
     if (windRanges.currentRange) {
@@ -131,9 +239,14 @@ export function RigTuningWizard({
   }, [windRanges.currentRange]);
 
   // Get current recommendation to display based on selected tab
+  // Fall back to generic guidance if no class-specific data
   const displayedRecommendation = useMemo(() => {
-    return windRanges[selectedRange];
-  }, [windRanges, selectedRange]);
+    if (hasClassSpecificData) {
+      return windRanges[selectedRange];
+    }
+    // Use generic guidance as fallback
+    return GENERIC_TUNING_GUIDANCE[selectedRange] as any;
+  }, [windRanges, selectedRange, hasClassSpecificData]);
 
   // Initialize planned settings
   useEffect(() => {
@@ -165,14 +278,32 @@ export function RigTuningWizard({
         plannedSettings,
         savedAt: new Date().toISOString(),
       };
-      // TODO: Persist intention to sailor_race_preparation
+
+      // Persist to sailor_race_preparation via updateRigIntentions
+      if (updateRigIntentions) {
+        // Convert plannedSettings (flat Record<string, string>) to RigIntentions format
+        // RigIntentions.settings is Record<string, { status, value, notes }>
+        const rigIntentions: RigIntentions = {
+          settings: Object.fromEntries(
+            Object.entries(plannedSettings)
+              .filter(([_, value]) => value && value.trim() !== '')
+              .map(([key, value]) => [
+                key,
+                { status: 'adjusted' as const, value, notes: '' }
+              ])
+          ),
+          overallNotes: userNotes || undefined,
+        };
+        updateRigIntentions(rigIntentions);
+      }
+
       onComplete();
     } catch (error) {
       console.error('Failed to save rig tuning intention:', error);
     } finally {
       setIsSaving(false);
     }
-  }, [displayedRecommendation, conditionsSummary, userNotes, plannedSettings, onComplete]);
+  }, [displayedRecommendation, conditionsSummary, userNotes, plannedSettings, onComplete, updateRigIntentions]);
 
   // Helper to render wind range tab
   const renderTab = (range: 'light' | 'medium' | 'heavy', label: string, sublabel: string) => {
@@ -206,8 +337,8 @@ export function RigTuningWizard({
     );
   };
 
-  // Loading state
-  if (loading) {
+  // Loading state (only show if we're fetching class-specific data)
+  if (loading && hasClassInfo) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -225,32 +356,8 @@ export function RigTuningWizard({
     );
   }
 
-  // Error state
-  if (error || (!windRanges.light && !windRanges.medium && !windRanges.heavy)) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable style={styles.closeButton} onPress={onCancel}>
-            <X size={24} color={IOS_COLORS.gray} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Rig Tuning</Text>
-          <View style={styles.headerRight} />
-        </View>
-        <ScrollView contentContainerStyle={styles.errorScrollContent}>
-          <View style={styles.errorContainer}>
-            <AlertTriangle size={48} color={IOS_COLORS.orange} />
-            <Text style={styles.errorTitle}>No Tuning Guide Found</Text>
-            <Text style={styles.errorDescription}>
-              We couldn't find a tuning guide for {boatClass || 'this boat class'}.
-            </Text>
-            <Pressable style={styles.retryButton} onPress={() => refresh()}>
-              <Text style={styles.retryButtonText}>Try again</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+  // Note: We no longer show an error state for missing class data
+  // Instead, we fall back to GENERIC_TUNING_GUIDANCE above
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -302,7 +409,12 @@ export function RigTuningWizard({
               <Text style={styles.guideSource}>
                 {displayedRecommendation.guideTitle}
               </Text>
-              {windRanges.equipmentContext?.boatName && (
+              {usingGenericGuidance && (
+                <Text style={styles.genericGuidanceNote}>
+                  Add a boat to your profile for class-specific guidance
+                </Text>
+              )}
+              {!usingGenericGuidance && windRanges.equipmentContext?.boatName && (
                 <Text style={styles.equipmentContext}>
                   • {windRanges.equipmentContext.boatName}
                 </Text>
@@ -587,6 +699,12 @@ const styles = StyleSheet.create({
   equipmentContext: {
     fontSize: 13,
     color: IOS_COLORS.gray,
+  },
+  genericGuidanceNote: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: IOS_COLORS.orange,
+    marginTop: 4,
   },
 
   // Tabs
