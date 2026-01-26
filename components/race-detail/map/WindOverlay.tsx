@@ -86,7 +86,7 @@ const WindArrow: React.FC<WindArrowProps> = ({ direction, speed }) => {
         stroke={colors.wind}
         strokeWidth={2}
         strokeLinecap="round"
-        transform={`rotate(${direction} 15 15)`}
+        transform={`rotate(${(direction + 180) % 360} 15 15)`}
         opacity={opacity}
       />
     </Svg>

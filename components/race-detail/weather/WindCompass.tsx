@@ -84,7 +84,7 @@ export const WindCompass: React.FC<WindCompassProps> = ({ direction, size = 120 
           stroke={colors.wind}
           strokeWidth={3}
           strokeLinecap="round"
-          transform={`rotate(${direction} ${center} ${center})`}
+          transform={`rotate(${(direction + 180) % 360} ${center} ${center})`}
         />
       </Svg>
 

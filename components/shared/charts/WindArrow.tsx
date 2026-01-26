@@ -31,7 +31,7 @@ export function WindArrow({
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
-        transform={`rotate(${direction}, 12, 12)`}
+        transform={`rotate(${(direction + 180) % 360}, 12, 12)`}
       />
     </Svg>
   );

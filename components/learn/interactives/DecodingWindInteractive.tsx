@@ -421,7 +421,7 @@ function WindVisualization({
       )}
 
       {/* Wind arrow */}
-      <G transform={`translate(150, 150) rotate(${windDirection})`}>
+      <G transform={`translate(150, 150) rotate(${(windDirection + 180) % 360})`}>
         <Line x1="0" y1="-45" x2="0" y2="45" stroke="#1E293B" strokeWidth="4" />
         <Polygon points="0,-55 -8,-40 8,-40" fill="#1E293B" />
         <Circle cx="0" cy="0" r="8" fill="#8B5CF6" stroke="#1E293B" strokeWidth="2" />
