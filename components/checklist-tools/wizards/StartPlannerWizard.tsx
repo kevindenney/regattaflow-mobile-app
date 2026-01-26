@@ -80,6 +80,7 @@ interface StartPlannerWizardProps extends ChecklistToolProps {
   raceName?: string;
   raceStartTime?: string;
   raceDurationHours?: number;
+  onStrategyCapture?: (data: Record<string, string>) => void;
 }
 
 // Start position types
@@ -103,6 +104,7 @@ export function StartPlannerWizard({
   raceName,
   raceStartTime,
   raceDurationHours,
+  onStrategyCapture,
 }: StartPlannerWizardProps) {
   const router = useRouter();
 
@@ -127,6 +129,12 @@ export function StartPlannerWizard({
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [startPlan, setStartPlan] = useState<string | null>(null);
 
+  // Manual bias input - user must observe and record bias on the water
+  const [observedBias, setObservedBias] = useState<{
+    favoredEnd: 'pin' | 'boat' | 'even' | null;
+    boatLengths: number;
+  }>({ favoredEnd: null, boatLengths: 0 });
+
   // Determine initial step once forecast loads
   useEffect(() => {
     if (!isLoadingForecast && currentForecast) {
@@ -136,77 +144,39 @@ export function StartPlannerWizard({
     }
   }, [isLoadingForecast, currentForecast]);
 
-  // Calculate line bias from wind direction
-  const lineBias = useMemo((): {
-    favoredEnd: 'pin' | 'boat' | 'even';
-    boatLengths: number;
-    windDirection: string;
-    description: string;
-    recommendation: string;
-  } => {
+  // Get wind info from forecast for context display (not for bias calculation)
+  const forecastWind = useMemo(() => {
     if (!currentForecast?.raceWindow) {
-      return {
-        favoredEnd: 'even',
-        boatLengths: 0,
-        windDirection: 'N',
-        description: 'Unable to calculate bias without forecast data',
-        recommendation: 'Check wind direction on the water before committing',
-      };
+      return { direction: null, speed: null };
     }
-
-    const windDir = currentForecast.raceWindow.windDirectionAtStart;
-
-    // Simplified bias calculation - in reality this would need actual line bearing
-    // For demo, assume typical W-E line orientation
-    const cardinalMap: Record<string, number> = {
-      'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
-      'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
-      'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
-      'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5,
-    };
-
-    const windDeg = cardinalMap[windDir] || 0;
-
-    // Assume line perpendicular to average wind
-    // If wind is more from right, boat end favored; from left, pin favored
-    const deviation = ((windDeg % 180) - 90);
-    const boatLengthsAdvantage = Math.abs(deviation) / 10; // Rough estimate
-
-    let favoredEnd: 'pin' | 'boat' | 'even';
-    let description: string;
-    let recommendation: string;
-
-    if (Math.abs(deviation) < 5) {
-      favoredEnd = 'even';
-      description = 'Line appears square to the wind';
-      recommendation = 'Choose position based on first beat strategy, not line bias';
-    } else if (deviation > 0) {
-      favoredEnd = 'boat';
-      description = `Boat end favored by ~${boatLengthsAdvantage.toFixed(1)} boat lengths`;
-      recommendation = 'Consider boat end start, but check on water to confirm';
-    } else {
-      favoredEnd = 'pin';
-      description = `Pin end favored by ~${boatLengthsAdvantage.toFixed(1)} boat lengths`;
-      recommendation = 'Consider pin end start, but check on water to confirm';
-    }
-
     return {
-      favoredEnd,
-      boatLengths: boatLengthsAdvantage,
-      windDirection: windDir,
-      description,
-      recommendation,
+      direction: currentForecast.raceWindow.windDirectionAtStart,
+      speed: currentForecast.raceWindow.windSpeedAtStart,
     };
   }, [currentForecast]);
 
-  // Fleet clustering prediction
+  // Fleet clustering prediction based on observed bias
   const fleetPrediction = useMemo((): {
     pinCrowding: 'low' | 'medium' | 'high';
     middleCrowding: 'low' | 'medium' | 'high';
     boatCrowding: 'low' | 'medium' | 'high';
     recommendations: string[];
   } => {
-    const bias = lineBias.favoredEnd;
+    const bias = observedBias.favoredEnd;
+
+    // If no bias observed yet, show neutral predictions
+    if (!bias) {
+      return {
+        pinCrowding: 'medium',
+        middleCrowding: 'medium',
+        boatCrowding: 'medium',
+        recommendations: [
+          'Check line bias on the water before the start',
+          'Fleet will cluster at whichever end is favored',
+          'Clear air becomes easier on a square line',
+        ],
+      };
+    }
 
     if (bias === 'pin') {
       return {
@@ -242,7 +212,7 @@ export function StartPlannerWizard({
         ],
       };
     }
-  }, [lineBias]);
+  }, [observedBias]);
 
   // Escape routes for each position
   const escapeRoutes = useMemo((): EscapeRoute[] => [
@@ -253,7 +223,7 @@ export function StartPlannerWizard({
         'Bear away below fleet if pinned',
         'Bail early (30 sec) if too crowded',
       ],
-      riskLevel: lineBias.favoredEnd === 'pin' ? 'high' : 'medium',
+      riskLevel: observedBias.favoredEnd === 'pin' ? 'high' : 'medium',
     },
     {
       position: 'pin_third',
@@ -289,9 +259,9 @@ export function StartPlannerWizard({
         'Tack immediately if fouled by committee boat',
         'Dial up if needed to protect position',
       ],
-      riskLevel: lineBias.favoredEnd === 'boat' ? 'high' : 'medium',
+      riskLevel: observedBias.favoredEnd === 'boat' ? 'high' : 'medium',
     },
-  ], [lineBias]);
+  ], [observedBias]);
 
   // Generate start plan
   const generateStartPlan = useCallback(async () => {
@@ -312,6 +282,16 @@ export function StartPlannerWizard({
       boat: 'Boat End',
     };
 
+    // Build bias description from observed data
+    let biasDescription: string;
+    if (!observedBias.favoredEnd) {
+      biasDescription = 'No bias observed - check line before start';
+    } else if (observedBias.favoredEnd === 'even') {
+      biasDescription = 'You observed line is square';
+    } else {
+      biasDescription = `You observed ${observedBias.favoredEnd === 'pin' ? 'Pin' : 'Boat'} end favored by ~${observedBias.boatLengths} boat length${observedBias.boatLengths !== 1 ? 's' : ''}`;
+    }
+
     const plan = `## Start Plan Card
 
 **Primary Position:** ${positionLabels[primaryPos]}
@@ -319,8 +299,8 @@ export function StartPlannerWizard({
 **Aggression Level:** ${aggressionLevel.charAt(0).toUpperCase() + aggressionLevel.slice(1)}
 
 ### Line Bias
-${lineBias.description}
-Wind Direction: ${lineBias.windDirection}
+${biasDescription}
+${forecastWind.direction ? `Forecast Wind: ${forecastWind.direction}${forecastWind.speed ? ` at ${forecastWind.speed} kts` : ''}` : ''}
 
 ### Timing Plan
 
@@ -363,7 +343,7 @@ Moderate competition expected. Stay alert but execute your plan.
 
     setStartPlan(plan);
     setIsGeneratingPlan(false);
-  }, [selectedPosition, backupPosition, aggressionLevel, lineBias, escapeRoutes]);
+  }, [selectedPosition, backupPosition, aggressionLevel, observedBias, forecastWind, escapeRoutes]);
 
   // Navigate to learn module
   const handleLearnMore = useCallback(() => {
@@ -428,6 +408,53 @@ Moderate competition expected. Stay alert but execute your plan.
     }
   }, []);
 
+  // Format position label for display
+  const formatPositionLabel = (pos: StartPosition | null): string => {
+    if (!pos) return '';
+    const labels: Record<StartPosition, string> = {
+      'pin': 'Pin end',
+      'pin_third': 'Pin third',
+      'middle': 'Middle',
+      'boat_third': 'Boat third',
+      'boat': 'Boat end',
+    };
+    return labels[pos];
+  };
+
+  // Handle completion with strategy capture
+  const handleComplete = useCallback(() => {
+    // Capture strategy data before completing
+    if (onStrategyCapture) {
+      const strategyData: Record<string, string> = {};
+
+      // Line bias - use observed bias from user input
+      if (!observedBias.favoredEnd) {
+        strategyData['start.lineBias'] = 'Line bias not checked - verify on water before start';
+      } else if (observedBias.favoredEnd === 'even') {
+        strategyData['start.lineBias'] = 'You observed line is square';
+      } else {
+        strategyData['start.lineBias'] = `You observed ${observedBias.favoredEnd === 'pin' ? 'Pin' : 'Boat'} end favored by ~${observedBias.boatLengths} boat length${observedBias.boatLengths !== 1 ? 's' : ''}`;
+      }
+
+      // Favored end / position
+      if (selectedPosition) {
+        strategyData['start.favoredEnd'] = formatPositionLabel(selectedPosition);
+      }
+
+      // Timing approach based on aggression
+      const timingApproaches: Record<typeof aggressionLevel, string> = {
+        'conservative': 'Conservative approach - safe start, clear air priority',
+        'moderate': 'Balanced approach - good position with manageable risk',
+        'aggressive': 'Aggressive approach - maximum advantage, higher risk',
+      };
+      strategyData['start.timingApproach'] = timingApproaches[aggressionLevel];
+
+      onStrategyCapture(strategyData);
+    }
+
+    onComplete();
+  }, [onStrategyCapture, onComplete, observedBias, selectedPosition, aggressionLevel]);
+
   // Render loading state
   const renderLoading = () => (
     <View style={styles.loadingContainer}>
@@ -436,116 +463,163 @@ Moderate competition expected. Stay alert but execute your plan.
     </View>
   );
 
-  // Render line bias step
+  // Render line bias step with educational content and manual input
   const renderLineBias = () => {
-    if (!currentForecast?.raceWindow) {
-      return (
-        <View style={styles.errorContainer}>
-          <AlertTriangle size={48} color={IOS_COLORS.orange} />
-          <Text style={styles.errorTitle}>Forecast Unavailable</Text>
-          <Text style={styles.errorDescription}>
-            Unable to calculate line bias without wind forecast.
-          </Text>
-          {regattaId && (
-            <Pressable style={styles.editRaceButton} onPress={handleEditRace}>
-              <Text style={styles.editRaceButtonText}>Edit Race</Text>
-              <ArrowRight size={16} color={IOS_COLORS.blue} />
-            </Pressable>
-          )}
-        </View>
-      );
-    }
+    const boatLengthOptions = [0, 1, 2, 3, 4, 5];
 
     return (
       <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-        {/* Bias Overview Card */}
-        <View style={styles.biasCard}>
-          <View style={styles.biasHeader}>
-            <View style={[
-              styles.biasIconContainer,
-              lineBias.favoredEnd === 'pin' && { backgroundColor: `${IOS_COLORS.green}20` },
-              lineBias.favoredEnd === 'boat' && { backgroundColor: `${IOS_COLORS.blue}20` },
-            ]}>
-              <Flag size={32} color={
-                lineBias.favoredEnd === 'pin' ? IOS_COLORS.green :
-                lineBias.favoredEnd === 'boat' ? IOS_COLORS.blue :
-                IOS_COLORS.gray
-              } />
-            </View>
-            <View style={styles.biasInfo}>
-              <Text style={styles.biasTitle}>
-                {lineBias.favoredEnd === 'pin' ? 'Pin End Favored' :
-                 lineBias.favoredEnd === 'boat' ? 'Boat End Favored' :
-                 'Line Appears Square'}
-              </Text>
-              <Text style={styles.biasSubtitle}>
-                Wind from {lineBias.windDirection}
-              </Text>
-            </View>
+        {/* Educational Explanation Card */}
+        <View style={styles.educationalCard}>
+          <View style={styles.educationalHeader}>
+            <BookOpen size={24} color={IOS_COLORS.purple} />
+            <Text style={styles.educationalTitle}>Understanding Line Bias</Text>
           </View>
-
-          <Text style={styles.biasDescription}>{lineBias.description}</Text>
-        </View>
-
-        {/* Visual Line Representation */}
-        <View style={styles.lineVisualization}>
-          <View style={styles.lineContainer}>
-            {/* Pin end */}
-            <View style={styles.lineEnd}>
-              <View style={[
-                styles.lineMarker,
-                lineBias.favoredEnd === 'pin' && styles.lineMarkerFavored
-              ]}>
-                <Anchor size={20} color={
-                  lineBias.favoredEnd === 'pin' ? IOS_COLORS.secondaryBackground : IOS_COLORS.gray
-                } />
-              </View>
-              <Text style={styles.lineLabel}>PIN</Text>
-              {lineBias.favoredEnd === 'pin' && (
-                <Text style={styles.favoredLabel}>+{lineBias.boatLengths.toFixed(1)} BL</Text>
-              )}
-            </View>
-
-            {/* Line */}
-            <View style={styles.startLine} />
-
-            {/* Boat end */}
-            <View style={styles.lineEnd}>
-              <View style={[
-                styles.lineMarker,
-                lineBias.favoredEnd === 'boat' && styles.lineMarkerFavored
-              ]}>
-                <Sailboat size={20} color={
-                  lineBias.favoredEnd === 'boat' ? IOS_COLORS.secondaryBackground : IOS_COLORS.gray
-                } />
-              </View>
-              <Text style={styles.lineLabel}>BOAT</Text>
-              {lineBias.favoredEnd === 'boat' && (
-                <Text style={styles.favoredLabel}>+{lineBias.boatLengths.toFixed(1)} BL</Text>
-              )}
-            </View>
-          </View>
-
-          {/* Wind arrow */}
-          <View style={styles.windIndicator}>
-            <Compass size={16} color={IOS_COLORS.blue} />
-            <Text style={styles.windText}>{lineBias.windDirection}</Text>
-          </View>
-        </View>
-
-        {/* Recommendation */}
-        <View style={styles.recommendationCard}>
-          <Text style={styles.cardTitle}>Recommendation</Text>
-          <Text style={styles.recommendationText}>{lineBias.recommendation}</Text>
-        </View>
-
-        {/* Caution */}
-        <View style={styles.cautionCard}>
-          <AlertTriangle size={20} color={IOS_COLORS.orange} />
-          <Text style={styles.cautionText}>
-            Always verify line bias on the water. Wind can shift between now and race start.
+          <Text style={styles.educationalText}>
+            The race committee sets the start line perpendicular to the wind direction.
+            The favored end depends on how accurately (or intentionally) the committee sets it.
+          </Text>
+          <Text style={[styles.educationalText, { marginTop: 8, fontWeight: '600' }]}>
+            You must check the line on the water before the start.
           </Text>
         </View>
+
+        {/* Forecast Wind Display (for context) */}
+        {forecastWind.direction && (
+          <View style={styles.windContextCard}>
+            <Compass size={24} color={IOS_COLORS.blue} />
+            <View style={styles.windContextContent}>
+              <Text style={styles.windContextTitle}>Forecast Wind</Text>
+              <Text style={styles.windContextValue}>
+                {forecastWind.direction}
+                {forecastWind.speed ? ` at ${forecastWind.speed} kts` : ''}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Manual Bias Input */}
+        <View style={styles.biasInputCard}>
+          <Text style={styles.cardTitle}>Record Observed Bias</Text>
+          <Text style={styles.cardSubtitle}>
+            What did you observe on the water?
+          </Text>
+
+          {/* Bias End Selector */}
+          <View style={styles.biasEndSelector}>
+            <Pressable
+              style={[
+                styles.biasEndOption,
+                observedBias.favoredEnd === 'pin' && styles.biasEndOptionSelectedPin,
+              ]}
+              onPress={() => setObservedBias(prev => ({ ...prev, favoredEnd: 'pin' }))}
+            >
+              <Anchor size={20} color={observedBias.favoredEnd === 'pin' ? IOS_COLORS.secondaryBackground : IOS_COLORS.gray} />
+              <Text style={[
+                styles.biasEndLabel,
+                observedBias.favoredEnd === 'pin' && styles.biasEndLabelSelected,
+              ]}>
+                Pin
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.biasEndOption,
+                observedBias.favoredEnd === 'even' && styles.biasEndOptionSelectedEven,
+              ]}
+              onPress={() => setObservedBias({ favoredEnd: 'even', boatLengths: 0 })}
+            >
+              <Target size={20} color={observedBias.favoredEnd === 'even' ? IOS_COLORS.secondaryBackground : IOS_COLORS.gray} />
+              <Text style={[
+                styles.biasEndLabel,
+                observedBias.favoredEnd === 'even' && styles.biasEndLabelSelected,
+              ]}>
+                Square
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.biasEndOption,
+                observedBias.favoredEnd === 'boat' && styles.biasEndOptionSelectedBoat,
+              ]}
+              onPress={() => setObservedBias(prev => ({ ...prev, favoredEnd: 'boat' }))}
+            >
+              <Sailboat size={20} color={observedBias.favoredEnd === 'boat' ? IOS_COLORS.secondaryBackground : IOS_COLORS.gray} />
+              <Text style={[
+                styles.biasEndLabel,
+                observedBias.favoredEnd === 'boat' && styles.biasEndLabelSelected,
+              ]}>
+                Boat
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Boat Lengths Selector (only show if pin or boat is selected) */}
+          {observedBias.favoredEnd && observedBias.favoredEnd !== 'even' && (
+            <View style={styles.boatLengthsSection}>
+              <Text style={styles.boatLengthsTitle}>Boat lengths advantage</Text>
+              <View style={styles.boatLengthsSelector}>
+                {boatLengthOptions.map((bl) => (
+                  <Pressable
+                    key={bl}
+                    style={[
+                      styles.boatLengthOption,
+                      observedBias.boatLengths === bl && styles.boatLengthOptionSelected,
+                    ]}
+                    onPress={() => setObservedBias(prev => ({ ...prev, boatLengths: bl }))}
+                  >
+                    <Text style={[
+                      styles.boatLengthLabel,
+                      observedBias.boatLengths === bl && styles.boatLengthLabelSelected,
+                    ]}>
+                      {bl === 5 ? '5+' : bl}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Current Selection Summary */}
+        {observedBias.favoredEnd && (
+          <View style={styles.selectionSummary}>
+            <CheckCircle2 size={20} color={IOS_COLORS.green} />
+            <Text style={styles.selectionSummaryText}>
+              {observedBias.favoredEnd === 'even'
+                ? 'You observed the line is square'
+                : `You observed ${observedBias.favoredEnd === 'pin' ? 'Pin' : 'Boat'} end favored by ~${observedBias.boatLengths} boat length${observedBias.boatLengths !== 1 ? 's' : ''}`}
+            </Text>
+          </View>
+        )}
+
+        {/* Tip on How to Check Bias */}
+        <View style={styles.tipCard}>
+          <View style={styles.tipHeader}>
+            <Target size={20} color={IOS_COLORS.teal} />
+            <Text style={styles.tipTitle}>How to Check Line Bias</Text>
+          </View>
+          <Text style={styles.tipDescription}>
+            Luff head-to-wind on the line and sight along it to both marks.
+            The end that appears further upwind is favored.
+          </Text>
+          <Text style={[styles.tipDescription, { marginTop: 8 }]}>
+            Alternatively, reach along the line on port tack. If you can fetch the pin, the boat end is favored.
+            If you cannot fetch the pin, the pin end is favored.
+          </Text>
+        </View>
+
+        {/* Reminder if no bias observed */}
+        {!observedBias.favoredEnd && (
+          <View style={styles.reminderCard}>
+            <AlertTriangle size={20} color={IOS_COLORS.orange} />
+            <Text style={styles.reminderText}>
+              Check line bias on the water before the start. You can continue without recording now and update later.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     );
   };
@@ -587,7 +661,7 @@ Moderate competition expected. Stay alert but execute your plan.
                 ]}>
                   {pos.label}
                 </Text>
-                {lineBias.favoredEnd === pos.id.replace('_third', '').replace('_', '') && (
+                {observedBias.favoredEnd && observedBias.favoredEnd !== 'even' && observedBias.favoredEnd === pos.id.replace('_third', '').replace('_', '') && (
                   <View style={styles.favoredBadge}>
                     <Text style={styles.favoredBadgeText}>Favored</Text>
                   </View>
@@ -948,7 +1022,7 @@ Moderate competition expected. Stay alert but execute your plan.
               <ChevronRight size={20} color={IOS_COLORS.secondaryBackground} />
             </Pressable>
           ) : (
-            <Pressable style={styles.doneButton} onPress={onComplete}>
+            <Pressable style={styles.doneButton} onPress={handleComplete}>
               <CheckCircle2 size={20} color={IOS_COLORS.secondaryBackground} />
               <Text style={styles.doneButtonText}>Done</Text>
             </Pressable>
@@ -1553,5 +1627,170 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: IOS_COLORS.secondaryBackground,
+  },
+  // New styles for educational line bias step
+  educationalCard: {
+    backgroundColor: `${IOS_COLORS.purple}10`,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  educationalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  educationalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.purple,
+  },
+  educationalText: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+  },
+  windContextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  windContextContent: {
+    flex: 1,
+  },
+  windContextTitle: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  windContextValue: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    marginTop: 2,
+  },
+  biasInputCard: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  biasEndSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+  },
+  biasEndOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: IOS_COLORS.background,
+    gap: 8,
+  },
+  biasEndOptionSelectedPin: {
+    backgroundColor: IOS_COLORS.green,
+  },
+  biasEndOptionSelectedEven: {
+    backgroundColor: IOS_COLORS.gray,
+  },
+  biasEndOptionSelectedBoat: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+  biasEndLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  biasEndLabelSelected: {
+    color: IOS_COLORS.secondaryBackground,
+    fontWeight: '600',
+  },
+  boatLengthsSection: {
+    marginTop: 20,
+  },
+  boatLengthsTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 12,
+  },
+  boatLengthsSelector: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  boatLengthOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+  },
+  boatLengthOptionSelected: {
+    backgroundColor: IOS_COLORS.pink,
+  },
+  boatLengthLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  boatLengthLabelSelected: {
+    color: IOS_COLORS.secondaryBackground,
+  },
+  selectionSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${IOS_COLORS.green}10`,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    gap: 10,
+  },
+  selectionSummaryText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.green,
+    lineHeight: 20,
+  },
+  tipCard: {
+    backgroundColor: `${IOS_COLORS.teal}10`,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  tipTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.teal,
+  },
+  tipDescription: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+  },
+  reminderCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: `${IOS_COLORS.orange}10`,
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  reminderText: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.orange,
+    lineHeight: 18,
   },
 });
