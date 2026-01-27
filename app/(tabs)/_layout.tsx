@@ -1,5 +1,7 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
+import FloatingTabBar, { FLOATING_TAB_BAR_BOTTOM_MARGIN, FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
+import GlobalSearchOverlay from '@/components/search/GlobalSearchOverlay';
 import { useBoats } from '@/hooks/useData';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
@@ -10,8 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type TabConfig = {
   name: string;
@@ -67,13 +69,13 @@ const getTabsForUserType = (
 
   // Sailors (including sailors with coaching capability)
   if (userType === 'sailor' || userType === 'coach') {
-    // Base sailor tabs - iOS HIG style: SF Symbol icons (filled when active)
-    // 5 tabs: Races, Sailors (discover), Venue, Learn, More
+    // Base sailor tabs - floating pill tab bar
+    // 4 navigation tabs + Search (rendered by FloatingTabBar, not a route)
+    // Learn moved to More menu
     const tabs: TabConfig[] = [
       { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
       { name: 'discover', title: 'Sailors', icon: 'people-outline', iconFocused: 'people' },
       { name: 'venue', title: 'Venue', icon: 'location-outline', iconFocused: 'location' },
-      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
     ];
 
     // Add coaching tabs if user has coaching capability
@@ -105,6 +107,7 @@ function TabLayoutInner() {
   // Sailors with coaching capability will see both sailor and coach tabs
   const tabs = getTabsForUserType(userType ?? null, isGuest, capabilities);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
 
@@ -183,6 +186,11 @@ function TabLayoutInner() {
       });
     }
 
+    // Learn - moved from tab bar to More menu
+    items.push(
+      { key: 'learn', label: 'Learn', icon: 'book-outline', route: '/(tabs)/learn' }
+    );
+
     // Progress - Excellence Framework Dashboard (top priority for sailors)
     items.push(
       { key: 'progress', label: 'Progress', icon: 'trending-up-outline', route: '/(tabs)/progress' }
@@ -206,6 +214,11 @@ function TabLayoutInner() {
         route: '/(tabs)/coaching',
       });
     }
+
+    // Race Detail - browse races and view scrollable detail
+    items.push(
+      { key: 'race-browser', label: 'Race Detail', icon: 'flag-outline', route: '/(tabs)/race-browser' }
+    );
 
     // Tuning Guides merged into Boats tab - removed from menu
     items.push(
@@ -392,6 +405,15 @@ function TabLayoutInner() {
       {/* Hide navigation header on all tabs - each tab renders its own content */}
       <NavigationHeader backgroundColor="#F8FAFC" showDrawer={false} hidden={true} />
       <Tabs
+        tabBar={isSailorUser ? (props) => (
+          <FloatingTabBar
+            {...props}
+            visibleTabs={tabs}
+            onOpenMenu={() => setMenuVisible(true)}
+            onOpenSearch={() => setSearchVisible(true)}
+            pathname={pathname}
+          />
+        ) : undefined}
         screenOptions={({ route }) => {
           const visible = isTabVisible(route.name);
           const tab = findTab(route.name);
@@ -403,20 +425,21 @@ function TabLayoutInner() {
             tabBarLabelPosition: 'below-icon',
             tabBarActiveTintColor: tabBarActiveColor,
             tabBarInactiveTintColor: tabBarInactiveColor,
-            // Show iOS standard tab bar for sailors
+            // Floating tab bar for sailors (rendered via tabBar prop above),
+            // standard tab bar for club users
             tabBarStyle: isSailorUser
-              ? {
-                  ...styles.tabBarBase,
-                  ...styles.tabBarDefault,
-                  display: 'flex',
-                }
+              ? { display: 'none' } // Hidden; FloatingTabBar renders instead
               : isClubUser
                 ? {
-                    ...styles.tabBarBase,
-                    ...styles.tabBarClub,
-                    display: 'flex',
-                  }
+                  ...styles.tabBarBase,
+                  ...styles.tabBarClub,
+                  display: 'flex',
+                }
                 : { display: 'none' },
+            // Add bottom padding for sailor users to prevent content from being hidden behind floating bar
+            sceneStyle: isSailorUser
+              ? { paddingBottom: FLOATING_TAB_BAR_HEIGHT + FLOATING_TAB_BAR_BOTTOM_MARGIN + 20 }
+              : undefined,
             tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
             tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
             tabBarItemStyle: visible
@@ -803,6 +826,12 @@ function TabLayoutInner() {
             href: null,
           }}
         />
+        <Tabs.Screen
+          name="race-browser"
+          options={{
+            href: null,
+          }}
+        />
 
         {/* Coach Tabs */}
         <Tabs.Screen
@@ -850,6 +879,14 @@ function TabLayoutInner() {
         {/* Tab 5: More - MUST BE LAST VISIBLE TAB */}
         <Tabs.Screen
           name="more"
+          listeners={{
+            tabPress: (e) => {
+              // Prevent navigating to the more screen - it's only a menu trigger
+              e.preventDefault();
+              triggerHaptic('selection');
+              setMenuVisible(true);
+            },
+          }}
           options={{
             title: moreTab?.title ?? 'More',
             tabBarButton: showMenuTrigger ? renderHamburgerButton : () => null,
@@ -867,61 +904,74 @@ function TabLayoutInner() {
         />
       </Tabs>
 
-      {showMenuTrigger && (
-        <Modal
-          transparent
-          visible={menuVisible}
-          animationType="fade"
-          onRequestClose={() => setMenuVisible(false)}
-        >
-          <View style={styles.menuOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
-            <View style={styles.menuContainer}>
-              {menuItems.map((item, index) => (
+      {showMenuTrigger && menuVisible && (
+        <View style={styles.menuOverlayAbsolute}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
+          <View
+            style={[
+              styles.menuContainer,
+              isSailorUser && {
+                marginBottom: FLOATING_TAB_BAR_HEIGHT + FLOATING_TAB_BAR_BOTTOM_MARGIN + 24,
+              },
+            ]}
+          >
+            {menuItems.length === 0 ? (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#6B7280', fontSize: 16 }}>No menu items available</Text>
+              </View>
+            ) : (
+              menuItems.map((item, index) => (
                 <React.Fragment key={item.key}>
-                  <Pressable
+                  <TouchableOpacity
                     onPress={() => {
                       triggerHaptic('selection');
                       handleMenuItemPress(item.route);
                     }}
-                    style={({ pressed }) => ({
+                    activeOpacity={0.7}
+                    style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      paddingVertical: 11,
+                      paddingVertical: 14,
                       paddingHorizontal: 16,
-                      backgroundColor: pressed ? '#E5E5EA' : ((item as any).isWarning ? '#FFF5F5' : '#FFFFFF'),
-                    })}
+                      backgroundColor: (item as any).isWarning ? '#FEF2F2' : '#FFFFFF',
+                    }}
                   >
-                    <View style={{ width: 28, alignItems: 'center' }}>
-                      <Ionicons
-                        name={item.icon as any}
-                        size={22}
-                        color={(item as any).isWarning ? '#FF3B30' : '#007AFF'}
-                      />
-                    </View>
+                    <Ionicons
+                      name={item.icon as any}
+                      size={22}
+                      color={(item as any).isWarning ? '#EF4444' : '#007AFF'}
+                      style={{ width: 28, textAlign: 'center' }}
+                    />
                     <Text style={{
                       flex: 1,
                       fontSize: 17,
-                      color: (item as any).isWarning ? '#FF3B30' : '#000000',
+                      color: (item as any).isWarning ? '#EF4444' : '#1F2937',
+                      fontWeight: '500',
                       marginLeft: 12,
                     }}>
                       {item.label}
                     </Text>
                     <Ionicons
                       name="chevron-forward"
-                      size={18}
-                      color="#C7C7CC"
+                      size={20}
+                      color="#9CA3AF"
                     />
-                  </Pressable>
+                  </TouchableOpacity>
                   {index < menuItems.length - 1 && (
-                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#C6C6C8', marginLeft: 56 }} />
+                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#E5E7EB', marginLeft: 56 }} />
                   )}
                 </React.Fragment>
-              ))}
-            </View>
+              ))
+            )}
           </View>
-        </Modal>
+        </View>
       )}
+
+      {/* Global Search Overlay */}
+      <GlobalSearchOverlay
+        visible={searchVisible}
+        onClose={() => setSearchVisible(false)}
+      />
     </View>
   );
 }
@@ -1179,19 +1229,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '500',
   },
-  menuOverlay: {
-    flex: 1,
+  menuOverlayAbsolute: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
     alignItems: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    zIndex: 9999,
   },
   menuContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    marginRight: 12,
+    marginRight: 16,
     marginBottom: Platform.OS === 'ios' ? 100 : 80,
     minWidth: 200,
-    overflow: 'hidden',
     ...Platform.select({
       web: {
         boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)',
