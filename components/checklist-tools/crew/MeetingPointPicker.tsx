@@ -86,7 +86,7 @@ export function MeetingPointPicker({
           .from('race_events')
           .select('meeting_location, start_time')
           .eq('id', raceEventId)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
 
