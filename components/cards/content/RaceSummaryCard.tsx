@@ -942,6 +942,7 @@ export function RaceSummaryCard({
       selectedValue={selectedPhase}
       onValueChange={handlePhaseChange}
       size="regular"
+      style={{ marginTop: 12, marginBottom: 12 }}
     />
   );
 
@@ -1159,6 +1160,9 @@ export function RaceSummaryCard({
           <Text style={styles.simpleDetailText}>{formatFullDate(race.date, race.startTime)}</Text>
         </View>
 
+        {/* Pill-style Phase Tabs (Prep/Race/Review) */}
+        {renderPhaseTabs()}
+
         {/* Collaboration indicators (keep these as they provide important context) */}
         {!isOwner && isCollaborator && (
           <View style={styles.sharedBadge}>
@@ -1195,8 +1199,7 @@ export function RaceSummaryCard({
           </View>
         )}
 
-        {/* Pill-style Phase Tabs (Prep/Race/Review) - keep for navigation */}
-        {renderPhaseTabs()}
+        {/* Pill-style Phase Tabs moved above date row */}
 
         {/* Race Start Info Bar - VHF, races, start sequence (only on Race tab for upcoming races) */}
         {!countdown.isPast && selectedPhase === 'on_water' && (

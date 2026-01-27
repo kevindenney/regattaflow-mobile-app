@@ -1,16 +1,8 @@
-import React, { useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, LayoutChangeEvent, ViewStyle } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import {
   IOS_COLORS,
-  IOS_TYPOGRAPHY,
-  IOS_SPACING,
-  IOS_ANIMATIONS,
-  IOS_TOUCH,
+  IOS_SHADOWS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 
@@ -50,23 +42,6 @@ export function IOSSegmentedControl<T extends string = string>({
   style,
   disabled = false,
 }: IOSSegmentedControlProps<T>) {
-  const selectedIndex = segments.findIndex((s) => s.value === selectedValue);
-  const translateX = useSharedValue(0);
-  const segmentWidths = useSharedValue<number[]>([]);
-  const containerWidth = useSharedValue(0);
-
-  const sizeStyles = getSizeStyles(size);
-
-  useEffect(() => {
-    if (segmentWidths.value.length > 0 && selectedIndex >= 0) {
-      let offset = 0;
-      for (let i = 0; i < selectedIndex; i++) {
-        offset += segmentWidths.value[i] || 0;
-      }
-      translateX.value = withSpring(offset, IOS_ANIMATIONS.spring.snappy);
-    }
-  }, [selectedIndex, segmentWidths.value]);
-
   const handleSegmentPress = useCallback(
     (value: T) => {
       if (disabled) return;
@@ -76,64 +51,29 @@ export function IOSSegmentedControl<T extends string = string>({
     [disabled, onValueChange]
   );
 
-  const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
-    containerWidth.value = event.nativeEvent.layout.width;
-  }, []);
-
-  const handleSegmentLayout = useCallback(
-    (index: number, event: LayoutChangeEvent) => {
-      const width = event.nativeEvent.layout.width;
-      segmentWidths.value = [...segmentWidths.value];
-      segmentWidths.value[index] = width;
-    },
-    []
-  );
-
-  const animatedIndicatorStyle = useAnimatedStyle(() => {
-    const currentWidth = segmentWidths.value[selectedIndex] || 0;
-    return {
-      transform: [{ translateX: translateX.value }],
-      width: currentWidth,
-    };
-  });
+  const segmentWidthPercent = `${(100 / segments.length).toFixed(2)}%` as `${number}%`;
 
   return (
     <View
       style={[
-        styles.container,
-        sizeStyles.container,
-        filled && styles.filledContainer,
+        styles.segmentedControl,
         disabled && styles.disabledContainer,
         style,
       ]}
-      onLayout={handleContainerLayout}
     >
-      {/* Animated selection indicator */}
-      {filled && (
-        <Animated.View
-          style={[
-            styles.indicator,
-            sizeStyles.indicator,
-            animatedIndicatorStyle,
-          ]}
-        />
-      )}
-
-      {/* Segment buttons */}
-      {segments.map((segment, index) => {
+      {segments.map((segment) => {
         const isSelected = segment.value === selectedValue;
         return (
           <Pressable
             key={segment.value}
-            style={({ pressed }) => [
-              styles.segment,
-              sizeStyles.segment,
-              !filled && isSelected && styles.selectedSegmentUnfilled,
-              pressed && !disabled && { opacity: 0.5 },
+            style={[
+              styles.tab,
+              { width: segmentWidthPercent },
+              isSelected && filled && styles.tabActive,
+              isSelected && !filled && styles.selectedSegmentUnfilled,
+              disabled && styles.tabDisabled,
             ]}
-            hitSlop={sizeStyles.hitSlop}
             onPress={() => handleSegmentPress(segment.value)}
-            onLayout={(e) => handleSegmentLayout(index, e)}
             disabled={disabled}
           >
             {segment.icon && (
@@ -141,9 +81,8 @@ export function IOSSegmentedControl<T extends string = string>({
             )}
             <Text
               style={[
-                styles.segmentText,
-                sizeStyles.text,
-                isSelected && styles.selectedText,
+                styles.label,
+                isSelected ? styles.labelActive : styles.labelInactive,
                 disabled && styles.disabledText,
               ]}
               numberOfLines={1}
@@ -157,74 +96,37 @@ export function IOSSegmentedControl<T extends string = string>({
   );
 }
 
-function getSizeStyles(size: 'small' | 'regular' | 'large') {
-  const minTarget = IOS_TOUCH.minHeight; // 44pt
-  switch (size) {
-    case 'small': {
-      const vPad = (minTarget - 28) / 2;
-      return {
-        container: { height: 28, borderRadius: 7 },
-        indicator: { borderRadius: 6 },
-        segment: { paddingHorizontal: IOS_SPACING.md },
-        text: { fontSize: 13 },
-        hitSlop: { top: vPad, bottom: vPad, left: 0, right: 0 },
-      };
-    }
-    case 'large': {
-      const vPad = (minTarget - 40) / 2;
-      return {
-        container: { height: 40, borderRadius: 9 },
-        indicator: { borderRadius: 8 },
-        segment: { paddingHorizontal: IOS_SPACING.lg },
-        text: { fontSize: 15 },
-        hitSlop: { top: vPad, bottom: vPad, left: 0, right: 0 },
-      };
-    }
-    case 'regular':
-    default: {
-      const vPad = (minTarget - 32) / 2;
-      return {
-        container: { height: 32, borderRadius: 8 },
-        indicator: { borderRadius: 7 },
-        segment: { paddingHorizontal: IOS_SPACING.md },
-        text: { fontSize: 13 },
-        hitSlop: { top: vPad, bottom: vPad, left: 0, right: 0 },
-      };
-    }
-  }
-}
-
 const styles = StyleSheet.create({
-  container: {
+  segmentedControl: {
     flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  filledContainer: {
-    backgroundColor: IOS_COLORS.systemGray4,
+    backgroundColor: IOS_COLORS.systemGray5,
+    borderRadius: 8.91,
     padding: 2,
+    height: 32,
+    width: '100%',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   disabledContainer: {
     opacity: 0.5,
   },
-  indicator: {
-    position: 'absolute',
-    top: 2,
-    left: 2,
-    bottom: 2,
-    backgroundColor: IOS_COLORS.systemBackground,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
+  tab: {
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
+    borderRadius: 6.93,
+    flexDirection: 'row',
+  },
+  tabActive: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    ...IOS_SHADOWS.sm,
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  tabDisabled: {
+    opacity: 0.5,
   },
   selectedSegmentUnfilled: {
     backgroundColor: IOS_COLORS.systemBlue,
@@ -233,14 +135,17 @@ const styles = StyleSheet.create({
   segmentIcon: {
     marginRight: 4,
   },
-  segmentText: {
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-    textAlign: 'center',
+  label: {
+    fontSize: 13,
+    letterSpacing: -0.08,
   },
-  selectedText: {
+  labelActive: {
     fontWeight: '600',
     color: IOS_COLORS.label,
+  },
+  labelInactive: {
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
   },
   disabledText: {
     color: IOS_COLORS.tertiaryLabel,

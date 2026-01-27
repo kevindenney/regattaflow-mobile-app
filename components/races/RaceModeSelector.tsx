@@ -1,12 +1,18 @@
 /**
  * Race Mode Selector Component
- * Tab navigation between Plan, Race, and Debrief modes
+ * Tab navigation between Prep, Race, and Review modes
+ * Follows Apple HIG Segmented Control patterns
  */
 
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Calendar, Navigation, TrendingUp } from 'lucide-react-native';
+import {
+  IOS_COLORS,
+  IOS_SHADOWS,
+  IOS_SPACING
+} from '@/lib/design-tokens-ios';
+import { triggerHaptic } from '@/lib/haptics';
 import type { RacePhase } from '@/services/ai/SkillManagementService';
+import { BarChart2, Calendar, CheckCircle, Flag } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export type RaceMode = 'plan' | 'race' | 'debrief';
 
@@ -21,30 +27,26 @@ interface ModeConfig {
   id: RaceMode;
   label: string;
   icon: typeof Calendar;
-  color: string;
   description: string;
 }
 
 const MODE_CONFIGS: ModeConfig[] = [
   {
     id: 'plan',
-    label: 'Plan',
-    icon: Calendar,
-    color: '#3b82f6', // blue-500
+    label: 'Prep',
+    icon: CheckCircle,
     description: 'Shore preparation & strategy',
   },
   {
     id: 'race',
     label: 'Race',
-    icon: Navigation,
-    color: '#10b981', // green-500
+    icon: Flag,
     description: 'On-water execution',
   },
   {
     id: 'debrief',
-    label: 'Debrief',
-    icon: TrendingUp,
-    color: '#8b5cf6', // purple-500
+    label: 'Review',
+    icon: BarChart2,
     description: 'Post-race analysis',
   },
 ];
@@ -78,18 +80,37 @@ export function RaceModeSelector({
 }: RaceModeSelectorProps) {
   const phaseIndicator = getPhaseIndicator(racePhase);
 
+  console.log('[RaceModeSelector] Render. Current Mode:', currentMode);
+
+  // Animation for the sliding indicator
+  // Note: In a full implementation we would measure layout, but for 3 fixed tabs
+  // we can use percentages or flex basis.
+  // Using simple conditional styling for reliability first, animation next.
+
+  const handleModeChange = (mode: RaceMode) => {
+    console.log('[RaceModeSelector] Mode change requested:', mode);
+    if (disabled || mode === currentMode) return;
+    triggerHaptic('selection');
+    onModeChange(mode);
+  };
+
   return (
     <View style={styles.container}>
-      {/* Mode Tabs */}
-      <View style={styles.tabContainer}>
-        {MODE_CONFIGS.map((mode) => {
+      <View style={styles.segmentedControl}>
+        {/* Active Indicator Background - Absolute positioned for animation effect
+            For simpler implementation without complex layout measurement, 
+            we color the active tab background directly. 
+        */}
+
+        {MODE_CONFIGS.map((mode, index) => {
           const isActive = currentMode === mode.id;
           const IconComponent = mode.icon;
+          const isRaceMode = mode.id === 'race';
 
           return (
             <Pressable
               key={mode.id}
-              onPress={() => !disabled && onModeChange(mode.id)}
+              onPress={() => handleModeChange(mode.id)}
               disabled={disabled}
               style={[
                 styles.tab,
@@ -98,112 +119,106 @@ export function RaceModeSelector({
               ]}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive, disabled }}
-              accessibilityLabel={`${mode.label} mode: ${mode.description}`}
+              accessibilityLabel={`${mode.label} mode`}
             >
-              {/* Icon */}
-              <IconComponent
-                size={20}
-                color={isActive ? mode.color : '#9ca3af'}
-                style={styles.icon}
-              />
-
-              {/* Label */}
-              <Text
-                style={[
-                  styles.label,
-                  isActive && styles.labelActive,
-                  { color: isActive ? mode.color : '#6b7280' },
-                ]}
-              >
-                {mode.label}
-              </Text>
-
-              {/* Phase Badge (for RACE mode only) */}
-              {mode.id === 'race' && phaseIndicator && isActive && (
-                <View style={styles.phaseBadge}>
-                  <Text style={styles.phaseBadgeText}>{phaseIndicator}</Text>
-                </View>
-              )}
-
-              {/* Active Indicator Bar */}
-              {isActive && (
-                <View
-                  style={[styles.activeBar, { backgroundColor: mode.color }]}
+              <View style={styles.tabContent}>
+                <IconComponent
+                  size={16}
+                  color={isActive ? IOS_COLORS.label : IOS_COLORS.secondaryLabel}
+                  style={styles.icon}
+                  strokeWidth={2.5}
                 />
-              )}
+
+                <Text
+                  style={[
+                    styles.label,
+                    isActive ? styles.labelActive : styles.labelInactive,
+                  ]}
+                >
+                  {mode.label}
+                </Text>
+
+                {/* Phase Badge (Compact) */}
+                {isRaceMode && phaseIndicator && (
+                  <View style={styles.phaseBadge}>
+                    <Text style={styles.phaseBadgeText}>{phaseIndicator}</Text>
+                  </View>
+                )}
+              </View>
             </Pressable>
           );
         })}
       </View>
-
-      {/* Mode Description (Optional - for larger screens) */}
-      {/* <Text style={styles.description}>
-        {MODE_CONFIGS.find((m) => m.id === currentMode)?.description}
-      </Text> */}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.md,
+    backgroundColor: 'transparent',
+    width: '100%',
+    alignSelf: 'stretch',
   },
-  tabContainer: {
+  segmentedControl: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    backgroundColor: IOS_COLORS.tertiarySystemFill, // Apple standard gray background
+    borderRadius: 8.91,
+    padding: 2,
+    height: 32,
+    width: '100%',
+    justifyContent: 'space-between', // Distribute tabs
+    alignItems: 'center',
   },
   tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: '33.33%', // Force equal width
+    height: '100%', // Ensure it fills height
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    position: 'relative',
+    alignItems: 'center',
+    borderRadius: 6.93,
+    marginHorizontal: 0,
   },
   tabActive: {
-    // Active state styling handled by text color and bar
+    backgroundColor: IOS_COLORS.systemBackground,
+    ...IOS_SHADOWS.sm,
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
   tabDisabled: {
     opacity: 0.5,
   },
+  tabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    width: '100%',
+  },
   icon: {
-    marginRight: 6,
+    // Icon styles if needed
   },
   label: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontSize: 13,
+    letterSpacing: -0.08,
   },
   labelActive: {
-    fontWeight: '700',
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  labelInactive: {
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
   },
   phaseBadge: {
-    marginLeft: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
+    marginLeft: 2,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 4,
+    paddingHorizontal: 2,
   },
   phaseBadgeText: {
-    fontSize: 12,
-  },
-  activeBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-  },
-  description: {
-    fontSize: 13,
-    color: '#6b7280',
-    textAlign: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    fontSize: 10,
   },
 });
