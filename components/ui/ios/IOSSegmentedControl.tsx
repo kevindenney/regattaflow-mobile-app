@@ -199,10 +199,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     position: 'relative',
-    overflow: 'hidden',
   },
   filledContainer: {
-    backgroundColor: IOS_COLORS.systemGray5,
+    backgroundColor: IOS_COLORS.systemGray4,
     padding: 2,
   },
   disabledContainer: {
@@ -211,13 +210,14 @@ const styles = StyleSheet.create({
   indicator: {
     position: 'absolute',
     top: 2,
+    left: 2,
     bottom: 2,
     backgroundColor: IOS_COLORS.systemBackground,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   segment: {
     flex: 1,

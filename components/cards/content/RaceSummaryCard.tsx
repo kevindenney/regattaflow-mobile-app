@@ -941,7 +941,7 @@ export function RaceSummaryCard({
       segments={phaseTabs}
       selectedValue={selectedPhase}
       onValueChange={handlePhaseChange}
-      size="small"
+      size="regular"
     />
   );
 
