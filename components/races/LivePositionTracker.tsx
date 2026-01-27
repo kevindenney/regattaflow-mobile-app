@@ -15,7 +15,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Navigation, Signal, Battery } from 'lucide-react-native';
-import * as Location from 'expo-location';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 interface Position {
   latitude: number;
@@ -49,7 +61,7 @@ export function LivePositionTracker({
   const [trail, setTrail] = useState<Position[]>([]);
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'unknown'>('unknown');
   const [isTracking, setIsTracking] = useState(false);
-  const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const subscriptionRef = useRef<any | null>(null);
 
   // Request location permissions
   useEffect(() => {
@@ -61,6 +73,11 @@ export function LivePositionTracker({
 
     (async () => {
       try {
+        const Location = await getLocationModule();
+        if (!Location) {
+          setPermissionStatus('denied');
+          return;
+        }
         const { status } = await Location.requestForegroundPermissionsAsync();
         setPermissionStatus(status === 'granted' ? 'granted' : 'denied');
       } catch (error) {
@@ -76,6 +93,9 @@ export function LivePositionTracker({
     if (permissionStatus !== 'granted') return;
 
     const startTracking = async () => {
+      const Location = await getLocationModule();
+      if (!Location) return;
+
       try {
         // Start location updates
         subscriptionRef.current = await Location.watchPositionAsync(

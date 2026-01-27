@@ -4,9 +4,22 @@
  * Records GPS track points and race conditions
  */
 
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
-import * as Location from 'expo-location';
 import { createLogger } from '@/lib/utils/logger';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 export interface GPSTrackPoint {
   timestamp: string;
@@ -54,6 +67,12 @@ export class RaceTimerService {
     regattaId?: string,
     conditions?: RaceConditions
   ): Promise<RaceTimerSession | null> {
+    const Location = await getLocationModule();
+    if (!Location) {
+      console.error('Location tracking not available on web');
+      return null;
+    }
+
     try {
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -107,6 +126,9 @@ export class RaceTimerService {
    * Record a GPS track point
    */
   private static async recordGPSPoint(): Promise<void> {
+    const Location = await getLocationModule();
+    if (!Location) return;
+
     try {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,

@@ -4,8 +4,21 @@
  * Records GPS coordinates, speed, heading during races
  */
 
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 export interface GPSTrackPoint {
   lat: number;
@@ -29,7 +42,7 @@ export interface RaceTimerSession {
 }
 
 class GPSTrackerService {
-  private subscription: Location.LocationSubscription | null = null;
+  private subscription: any | null = null;
   private trackPoints: GPSTrackPoint[] = [];
   private currentSessionId: string | null = null;
   private isTracking = false;
@@ -38,6 +51,12 @@ class GPSTrackerService {
    * Request location permissions
    */
   async requestPermissions(): Promise<boolean> {
+    const Location = await getLocationModule();
+    if (!Location) {
+      console.error('Location module not available on web');
+      return false;
+    }
+
     try {
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
 
@@ -66,6 +85,12 @@ class GPSTrackerService {
   async startTracking(sessionId: string): Promise<boolean> {
     if (this.isTracking) {
       console.warn('GPS tracking already in progress');
+      return false;
+    }
+
+    const Location = await getLocationModule();
+    if (!Location) {
+      console.error('GPS tracking not available on web');
       return false;
     }
 
@@ -104,7 +129,7 @@ class GPSTrackerService {
   /**
    * Record a GPS track point
    */
-  private recordTrackPoint(location: Location.LocationObject): void {
+  private recordTrackPoint(location: any): void {
     const trackPoint: GPSTrackPoint = {
       lat: location.coords.latitude,
       lng: location.coords.longitude,

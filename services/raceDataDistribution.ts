@@ -7,8 +7,6 @@
  */
 
 import { supabase } from '@/services/supabase';
-import * as Notifications from 'expo-notifications';
-import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 interface RaceDataPackage {
@@ -364,7 +362,8 @@ export class RaceDataDistributionService {
       const cacheKey = `race_data_${raceData.race_id}`;
       localStorage.setItem(cacheKey, JSON.stringify(raceData));
     } else {
-      // Mobile: Use file system
+      // Mobile: Use file system (dynamic import to avoid NativeEventEmitter on web)
+      const FileSystem = await import('expo-file-system/legacy');
       const cacheDir = `${FileSystem.documentDirectory}race_cache/`;
       const cacheFile = `${cacheDir}${raceData.race_id}.json`;
 
@@ -383,7 +382,14 @@ export class RaceDataDistributionService {
     sailor: { full_name: string; push_token: string },
     raceData: RaceDataPackage
   ): Promise<void> {
+    // Skip notifications on web (no push notification support)
+    if (Platform.OS === 'web') {
+      return;
+    }
+
     try {
+      // Dynamic import to avoid NativeEventEmitter error on web
+      const Notifications = await import('expo-notifications');
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '🌊 Race Data Ready',

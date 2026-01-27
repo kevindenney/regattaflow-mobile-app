@@ -25,7 +25,6 @@ import { QuickAccessPanel } from '@/components/venue/QuickAccessPanel';
 import { MapControls, MapLayers } from '@/components/venue/MapControls';
 import { VenueDetailsSheet } from '@/components/venue/VenueDetailsSheet';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
-import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { VenueHeroCard } from '@/components/venue/VenueHeroCard';
 import { TravelResourceChips } from '@/components/venue/TravelResourceChips';
@@ -191,6 +190,20 @@ export default function VenueIntelligenceScreen() {
     try {
       setIsDetectingVenue(true);
       setAiVenueResult(null); // Clear previous result
+
+      // Skip location detection on web (expo-location not available)
+      if (Platform.OS === 'web') {
+        setIsDetectingVenue(false);
+        Alert.alert(
+          'Not Available',
+          'Location detection is not available on web. Please use the mobile app for automatic venue detection.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Dynamic import to avoid NativeEventEmitter error on web
+      const Location = await import('expo-location');
 
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();

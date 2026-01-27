@@ -4,8 +4,21 @@
  * Integrates with existing SupabaseVenueService for data operations
  */
 
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { supabaseVenueService } from '@/services/venue/SupabaseVenueService';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 import { offlineService } from '@/services/offlineService';
 import type {
   SailingVenue,
@@ -74,7 +87,7 @@ const CURRENCY_BY_COUNTRY: Record<string, string> = {
 
 export class VenueService {
   private static currentVenue: SailingVenue | null = null;
-  private static locationSubscription: Location.LocationSubscription | null = null;
+  private static locationSubscription: any | null = null;
 
   /**
    * Detect venue from current GPS position
@@ -83,8 +96,12 @@ export class VenueService {
     userId: string,
     radiusKm: number = 50
   ): Promise<VenueDetectionResult> {
-    try {
+    const Location = await getLocationModule();
+    if (!Location) {
+      throw new Error('Location detection not available on web');
+    }
 
+    try {
       // Request location permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -206,8 +223,12 @@ export class VenueService {
     userId: string,
     onVenueDetected: (result: VenueDetectionResult) => void
   ): Promise<void> {
-    try {
+    const Location = await getLocationModule();
+    if (!Location) {
+      throw new Error('Auto-detection not available on web');
+    }
 
+    try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         throw new Error('Location permission denied');

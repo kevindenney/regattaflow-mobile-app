@@ -13,7 +13,7 @@
 
 import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Share } from 'react-native';
+import { Platform } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';
 import { ClubRole } from '@/types/club';
 
@@ -520,17 +520,31 @@ class ClubMemberService {
         new Date().toISOString().split('T')[0]
       }.csv`;
 
-      // Save to file system
-      const fileUri = FileSystem.documentDirectory + fileName;
-      await FileSystem.writeAsStringAsync(fileUri, csv, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      if (Platform.OS === 'web') {
+        // Web fallback: download the CSV file
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        // Native: Save to file system and share
+        const fileUri = FileSystem.documentDirectory + fileName;
+        await FileSystem.writeAsStringAsync(fileUri, csv, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
 
-      // Share the file
-      await Share.share({
-        url: fileUri,
-        title: `${clubName} Member List`,
-      });
+        // Dynamically import Share to avoid NativeEventEmitter error on web
+        const { Share } = await import('react-native');
+        await Share.share({
+          url: fileUri,
+          title: `${clubName} Member List`,
+        });
+      }
     } catch (error) {
       console.error('Error sharing exported members:', error);
       throw error;

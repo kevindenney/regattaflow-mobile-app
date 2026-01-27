@@ -17,7 +17,19 @@ import {
   isHongKongVenue,
 } from '@/services/HongKongVenueIntelligence';
 import { supabase } from '@/services/supabase';
-import * as Location from 'expo-location';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Anchor,
@@ -291,7 +303,10 @@ export default function SailorOnboardingComprehensive() {
   useEffect(() => {
     const detectLocation = async () => {
       if (homeVenue || Platform.OS === 'web') return;
-      
+
+      const Location = await getLocationModule();
+      if (!Location) return;
+
       try {
         setDetectingLocation(true);
         const { status } = await Location.requestForegroundPermissionsAsync();

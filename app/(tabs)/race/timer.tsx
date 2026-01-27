@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Dimensions, Platform } from 'react-native';
-import * as Location from 'expo-location';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 import {
   Play,
   Pause,
@@ -79,7 +91,7 @@ const RaceTimerProScreen = () => {
     accuracy: 0,
   });
   const [gpsTrackPoints, setGpsTrackPoints] = useState<any[]>([]);
-  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const locationSubscription = useRef<any | null>(null);
 
   // Database state
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -177,6 +189,12 @@ const RaceTimerProScreen = () => {
 
   // Request location permissions
   const requestLocationPermission = async () => {
+    const Location = await getLocationModule();
+    if (!Location) {
+      Alert.alert('Not Available', 'GPS tracking is not available on web.');
+      return false;
+    }
+
     try {
       // Request foreground permission first
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
@@ -213,6 +231,9 @@ const RaceTimerProScreen = () => {
 
   // Start GPS tracking
   const startGPSTracking = async () => {
+    const Location = await getLocationModule();
+    if (!Location) return;
+
     try {
       // Stop any existing subscription
       if (locationSubscription.current) {

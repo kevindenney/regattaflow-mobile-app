@@ -7,8 +7,21 @@
  * - Post-race analysis
  */
 
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 // ==================== Type Definitions ====================
 
@@ -72,15 +85,19 @@ export interface TrackAnalysis {
 export class GPSTrackingService {
   private static trackingInterval: ReturnType<typeof setInterval> | null = null;
   private static currentTrack: RaceTrack | null = null;
-  private static locationSubscription: Location.LocationSubscription | null = null;
+  private static locationSubscription: any | null = null;
   private static windDirection: number = 0; // True wind direction
 
   /**
    * Start GPS tracking at 1Hz
    */
   static async startTracking(userId: string, raceId?: string): Promise<void> {
-    try {
+    const Location = await getLocationModule();
+    if (!Location) {
+      throw new Error('GPS tracking is not available on web');
+    }
 
+    try {
       // Request permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -172,7 +189,7 @@ export class GPSTrackingService {
   /**
    * Record a GPS point
    */
-  private static recordGPSPoint(location: Location.LocationObject): void {
+  private static recordGPSPoint(location: any): void {
     if (!this.currentTrack) return;
 
     const point: GPSPoint = {

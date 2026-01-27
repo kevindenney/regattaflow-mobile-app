@@ -1,7 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
 import type { SailingVenue } from '@/lib/types/global-venues';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 interface VenueDetectionResult {
   currentVenue: SailingVenue | null;
@@ -9,7 +22,7 @@ interface VenueDetectionResult {
   confidence: number;
   error: string | null;
   detectVenue: () => Promise<void>;
-  permissionStatus: Location.PermissionStatus | null;
+  permissionStatus: string | null;
 }
 
 export function useVenueDetection(): VenueDetectionResult {
@@ -17,12 +30,18 @@ export function useVenueDetection(): VenueDetectionResult {
   const [isDetecting, setIsDetecting] = useState(false);
   const [confidence, setConfidence] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<string | null>(null);
 
   // Create agent instance once using useMemo to avoid recreation on every render
   const agent = React.useMemo(() => new VenueIntelligenceAgent(), []);
 
   const detectVenue = useCallback(async () => {
+    const Location = await getLocationModule();
+    if (!Location) {
+      setError('Location detection is not available on web.');
+      return;
+    }
+
     setIsDetecting(true);
     setError(null);
 

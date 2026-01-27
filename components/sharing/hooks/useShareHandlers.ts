@@ -4,7 +4,7 @@
  */
 
 import { useCallback } from 'react';
-import { Alert, Linking, Platform, Share } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as MailComposer from 'expo-mail-composer';
 import { createLogger } from '@/lib/utils/logger';
@@ -72,10 +72,24 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
         ? `Race Strategy - ${content.raceName}`
         : `Race Analysis - ${content.raceName}`;
 
-      await Share.share({
-        message: text,
-        title,
-      });
+      if (Platform.OS === 'web') {
+        // Web fallback: use navigator.share or clipboard
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title, text });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(text);
+        } else {
+          throw new Error('Sharing not supported on this browser');
+        }
+      } else {
+        // Native: dynamically import Share to avoid NativeEventEmitter error on web
+        const { Share } = await import('react-native');
+        await Share.share({
+          message: text,
+          title,
+        });
+      }
 
       const result: ShareResult = { success: true, channel: 'native' };
       onShareComplete?.(result);
@@ -171,6 +185,7 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
         }
 
         // Fallback: Use native share sheet (user can pick Mail from there)
+        const { Share } = await import('react-native');
         await Share.share({
           message: text,
           title: subject,

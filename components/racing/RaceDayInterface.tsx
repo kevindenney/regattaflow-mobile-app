@@ -18,9 +18,21 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as KeepAwake from 'expo-keep-awake';
-import * as Location from 'expo-location';
 import { raceStrategyEngine, type RaceStrategy, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import { venueDetectionService, type SailingVenue } from '@/services/location/VenueDetectionService';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 interface RaceTimer {
   startTime: Date | null;
@@ -149,6 +161,18 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
   };
 
   const initializeGPSTracking = async () => {
+    const Location = await getLocationModule();
+    if (!Location) {
+      setGpsPermission('denied');
+      addTacticalAlert({
+        type: 'gps_alert',
+        priority: 'important',
+        title: '📍 GPS Not Available',
+        message: 'GPS tracking is not available on web platform.',
+      });
+      return;
+    }
+
     try {
       // Request permission for location access
       const { status } = await Location.requestForegroundPermissionsAsync();

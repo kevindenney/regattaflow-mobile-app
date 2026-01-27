@@ -17,8 +17,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { useAuth } from '@/providers/AuthProvider';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 import { RaceTimerService } from '@/services/RaceTimerService';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
@@ -76,7 +88,7 @@ export default function RaceTimerScreen() {
   const [trackPointCount, setTrackPointCount] = useState(0);
 
   // GPS & Position
-  const [currentPosition, setCurrentPosition] = useState<Location.LocationObject | null>(null);
+  const [currentPosition, setCurrentPosition] = useState<any | null>(null);
   const [currentSpeed, setCurrentSpeed] = useState<number>(0); // knots
   const [currentHeading, setCurrentHeading] = useState<number>(0);
 
@@ -151,6 +163,9 @@ export default function RaceTimerScreen() {
   };
 
   const updatePosition = async () => {
+    const Location = await getLocationModule();
+    if (!Location) return;
+
     try {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
@@ -174,6 +189,12 @@ export default function RaceTimerScreen() {
   };
 
   const startCountdown = async (minutes: number = 5) => {
+    const Location = await getLocationModule();
+    if (!Location) {
+      Alert.alert('Not Available', 'GPS tracking is not available on web');
+      return;
+    }
+
     try {
       // Request location permission
       const { status } = await Location.requestForegroundPermissionsAsync();

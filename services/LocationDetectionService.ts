@@ -4,8 +4,21 @@
  * Called by OnboardingAgent tools
  */
 
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
-import * as Location from 'expo-location';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 export interface GPSCoordinates {
   lat: number;
@@ -41,6 +54,12 @@ export class LocationDetectionService {
     confidence: 'high' | 'medium' | 'low';
     coordinates: GPSCoordinates;
   } | null> {
+    const Location = await getLocationModule();
+    if (!Location) {
+      console.warn('Location detection not available on web');
+      return null;
+    }
+
     try {
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();

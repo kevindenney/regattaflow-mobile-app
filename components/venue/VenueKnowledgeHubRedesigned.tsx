@@ -33,7 +33,19 @@ import {
   type CreateCommunityAreaParams,
 } from '@/services/venue/CommunityVenueCreationService';
 import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
-import * as Location from 'expo-location';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 // Helper to convert wind degrees to compass text
 function getWindDirectionText(degrees: number): string {
@@ -104,6 +116,9 @@ export function VenueKnowledgeHubRedesigned({
 
   // Check for unknown area
   const checkUnknownArea = useCallback(async () => {
+    const Location = await getLocationModule();
+    if (!Location) return;
+
     try {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return;

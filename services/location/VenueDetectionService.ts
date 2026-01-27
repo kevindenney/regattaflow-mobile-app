@@ -6,8 +6,21 @@
  * the user is currently at and switches to venue-specific intelligence
  */
 
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Dynamic import helper for expo-location to avoid NativeEventEmitter error on web
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 export interface SailingVenue {
   id: string;
@@ -68,8 +81,8 @@ export interface LocationUpdate {
 export class VenueDetectionService {
   private venueDatabase: Map<string, SailingVenue> = new Map();
   private currentVenue: SailingVenue | null = null;
-  private lastKnownLocation: Location.LocationObject | null = null;
-  private locationWatcher: Location.LocationSubscription | null = null;
+  private lastKnownLocation: any | null = null; // expo-location LocationObject
+  private locationWatcher: any | null = null; // expo-location LocationSubscription
   private listeners: Array<(update: LocationUpdate) => void> = [];
   private isInitialized = false;
 
@@ -82,6 +95,13 @@ export class VenueDetectionService {
    */
   async initialize(): Promise<boolean> {
     try {
+      // Skip on web - no native location support
+      const Location = await getLocationModule();
+      if (!Location) {
+        console.log('[VenueDetectionService] Skipping initialization on web');
+        return false;
+      }
+
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
 
@@ -138,6 +158,9 @@ export class VenueDetectionService {
    */
   private async startLocationMonitoring(): Promise<void> {
     try {
+      const Location = await getLocationModule();
+      if (!Location) return;
+
       this.locationWatcher = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -178,7 +201,7 @@ export class VenueDetectionService {
   /**
    * Detect venue from GPS location
    */
-  private async detectVenueFromLocation(location: Location.LocationObject): Promise<VenueDetectionResult> {
+  private async detectVenueFromLocation(location: any): Promise<VenueDetectionResult> {
     const venues = Array.from(this.venueDatabase.values());
     const results: Array<{ venue: SailingVenue; distance: number; confidence: number }> = [];
 

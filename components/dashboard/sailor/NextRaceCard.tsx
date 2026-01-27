@@ -2,8 +2,20 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Animated, Vibration, Platform, Alert, ActivityIndicator } from 'react-native';
-import * as Location from 'expo-location';
 import { createLogger } from '@/lib/utils/logger';
+
+// Dynamic import helper for expo-location (native only)
+let LocationModule: typeof import('expo-location') | null = null;
+
+async function getLocationModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!LocationModule) {
+    LocationModule = await import('expo-location');
+  }
+  return LocationModule;
+}
 
 interface NextRaceCardProps {
   raceId: string;
@@ -48,7 +60,7 @@ export function NextRaceCard({
   const [pulseAnim] = useState(new Animated.Value(1));
   const [isTracking, setIsTracking] = useState(false);
   const [trackPoints, setTrackPoints] = useState<Array<{ latitude: number; longitude: number; timestamp: number; speed?: number }>>([]);
-  const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
+  const [locationSubscription, setLocationSubscription] = useState<any | null>(null);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -101,6 +113,12 @@ export function NextRaceCard({
   const startGPSTracking = async () => {
     if (Platform.OS === 'web') {
       logger.debug('GPS tracking not available on web');
+      return;
+    }
+
+    const Location = await getLocationModule();
+    if (!Location) {
+      logger.debug('Location module not available');
       return;
     }
 
